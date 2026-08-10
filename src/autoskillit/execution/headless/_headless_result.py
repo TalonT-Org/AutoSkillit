@@ -314,11 +314,7 @@ def _build_skill_result(
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
 
-    lifecycle_gate_enabled = (
-        result.lifecycle_observation_enabled
-        and bool(skill_command)
-        and (backend.capabilities.supports_task_lifecycle_events)
-    )
+    lifecycle_gate_enabled = result.lifecycle_observation_enabled
     obligation_pending = result.pending_task_ids
     obligation_wakeup = result.schedule_wakeup_violation
     observation_complete = result.lifecycle_observation_complete
@@ -335,8 +331,8 @@ def _build_skill_result(
                 backend.stream_parser(completion_marker=completion_marker),
             )
             observation_complete = True
-            obligation_pending = defensive_pending
-            obligation_wakeup = defensive_wakeup
+            obligation_pending = tuple(sorted(set(obligation_pending) | set(defensive_pending)))
+            obligation_wakeup = obligation_wakeup or defensive_wakeup
 
     obligation_failure = lifecycle_gate_enabled and (
         not observation_complete

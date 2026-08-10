@@ -119,6 +119,27 @@ def test_pending_lifecycle_obligation_preempts_success() -> None:
     assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
 
 
+def test_lifecycle_result_flag_is_authoritative_for_obligation_gate() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("owned",),
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
 def test_observed_empty_lifecycle_preserves_success() -> None:
     result = SubprocessResult(
         returncode=0,
@@ -246,6 +267,27 @@ def test_defensive_fold_rejects_pending_task_from_available_output(
 
     assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
     assert "pending=defensive-task" in skill_result.result
+
+
+def test_defensive_fold_preserves_existing_pending_evidence() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        pending_task_ids=("channel-b-owned",),
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+    assert "pending=channel-b-owned" in skill_result.result
 
 
 def _stale_result(

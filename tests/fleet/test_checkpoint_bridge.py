@@ -189,7 +189,6 @@ class TestLoadDispatchProgress:
         finally:
             lease.close_preserving()
 
-        assert len(result) == 4
         sidecar_file, entries, checkpoint, authority_error = result
         assert sidecar_file == sidecar_path(dispatch_id, tmp_path)
         assert entries == []

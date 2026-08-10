@@ -42,17 +42,19 @@ class RecipeExemptionFitnessError(RecipeDeliveryBudgetError):
         *,
         recipe: str,
         surface: str,
+        backend: str,
         rendered_bytes: int,
         ceiling_bytes: int,
         margin_bytes: int,
     ) -> None:
         self.recipe = recipe
         self.surface = surface
+        self.backend = backend
         self.rendered_bytes = rendered_bytes
         self.ceiling_bytes = ceiling_bytes
         self.margin_bytes = margin_bytes
         super().__init__(
-            f"{recipe}/{surface}: rendered delivery is {rendered_bytes} bytes; "
+            f"{recipe}/{surface}/{backend}: rendered delivery is {rendered_bytes} bytes; "
             f"the {ceiling_bytes}-byte exemption requires {margin_bytes} bytes of margin"
         )
 

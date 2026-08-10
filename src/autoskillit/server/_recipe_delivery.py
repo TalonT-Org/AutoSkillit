@@ -40,6 +40,7 @@ from autoskillit.core import (
     RecipeDeliveryRequest,
     RecipeExecutionId,
     RecipeExecutionSnapshot,
+    RecipeExemptionFitnessError,
     RecipeFlowGeneration,
     atomic_write,
     build_recipe_execution_credential,
@@ -758,19 +759,54 @@ def _initialization_requirements(
             )
         )
     compiled = tuple(requirements)
-    planned_calls = 1 + sum(item.total_parts for item in compiled) + int(completion_required)
-    calibrated_bound = bound_bytes > OutputBudgetConfig().response_max_bytes
-    if calibrated_bound and (
-        any(item.total_parts > _MAX_PAGES_PER_INITIALIZATION_SECTION for item in compiled)
+    validate_compiled_recipe_delivery_budget(
+        recipe=generation.recipe_name,
+        backend=backend_name,
+        section_page_counts=tuple(item.total_parts for item in compiled),
+    )
+    return compiled
+
+
+def validate_compiled_recipe_delivery_budget(
+    *,
+    recipe: str,
+    backend: str,
+    section_page_counts: tuple[int, ...],
+) -> None:
+    """Reject a compiled bounded delivery that exceeds its fixed call budget."""
+    planned_calls = 1 + sum(section_page_counts) + 1
+    if (
+        any(parts > _MAX_PAGES_PER_INITIALIZATION_SECTION for parts in section_page_counts)
         or planned_calls > _MAX_BOUNDED_RECIPE_CALLS
     ):
         raise BoundedDeliveryRoundTripBudgetExceededError(
-            recipe=generation.recipe_name,
-            backend=backend_name,
+            recipe=recipe,
+            backend=backend,
             planned_calls=planned_calls,
             budget=_MAX_BOUNDED_RECIPE_CALLS,
         )
-    return compiled
+
+
+def validate_recipe_exemption_fitness(
+    *,
+    recipe: str,
+    surface: str,
+    backend: str,
+    ordinary_rendered: str,
+    ceiling_bytes: int,
+) -> None:
+    """Reject inline packaging that has consumed its reserved ten-percent margin."""
+    rendered_bytes = len(ordinary_rendered.encode("utf-8"))
+    admitted_bytes = ceiling_bytes * 9 // 10
+    if rendered_bytes > admitted_bytes:
+        raise RecipeExemptionFitnessError(
+            recipe=recipe,
+            surface=surface,
+            backend=backend,
+            rendered_bytes=rendered_bytes,
+            ceiling_bytes=ceiling_bytes,
+            margin_bytes=ceiling_bytes - admitted_bytes,
+        )
 
 
 def _conservative_token_upper_bound(rendered: str) -> int:
@@ -949,6 +985,9 @@ def finalize_recipe_delivery(
         ensure_ascii=False,
         separators=(",", ":"),
     )
+    backend_name = (
+        getattr(tool_ctx.backend, "name", None) or capabilities.process_name or "unknown"
+    )
     candidate_evidence = supported_evidence if surface_definition.negotiation_eligible else None
     candidate_attestation = attestation if surface_definition.negotiation_eligible else None
     candidate_request = delivery_request if surface_definition.negotiation_eligible else None
@@ -982,6 +1021,8 @@ def finalize_recipe_delivery(
         now_unix=now_unix,
     )
     response_budget = getattr(getattr(tool_ctx, "config", None), "output_budget", None)
+    if response_budget is None:
+        response_budget = OutputBudgetConfig()
     response_max_bytes = getattr(response_budget, "response_max_bytes", None)
     page_max_bytes = getattr(response_budget, "page_max_bytes", None)
     response_ceiling_bytes = (
@@ -1074,7 +1115,7 @@ def finalize_recipe_delivery(
         )
         if (
             _exemption is not None
-            and len(ordinary_rendered.encode("utf-8")) <= _exemption.max_utf8_bytes
+            and len(ordinary_rendered.encode("utf-8")) <= _exemption.max_utf8_bytes * 9 // 10
         ):
             decision = replace(
                 decision,
@@ -1086,6 +1127,15 @@ def finalize_recipe_delivery(
 
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
     if decision.mode is RecipeDeliveryMode.ORDINARY_INLINE:
+        exemption = surface_definition.response_exemption
+        if exemption is not None:
+            validate_recipe_exemption_fitness(
+                recipe=recipe_name,
+                surface=surface,
+                backend=backend_name,
+                ordinary_rendered=ordinary_rendered,
+                ceiling_bytes=exemption.max_utf8_bytes,
+            )
         rendered = ordinary_rendered
     elif decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
         rendered = high_rendered
@@ -1104,11 +1154,7 @@ def finalize_recipe_delivery(
                 entrypoint=finalized_projection.entrypoint,
                 bound_bytes=section_response_bound_bytes,
                 initialization_id=initialization_id,
-                backend_name=(
-                    getattr(tool_ctx.backend, "name", None)
-                    or capabilities.process_name
-                    or "unknown"
-                ),
+                backend_name=backend_name,
                 completion_required=surface_definition.initialization_activating,
                 flow_generation=flow_generation,
                 execution_snapshot=execution_snapshot,
@@ -1128,6 +1174,8 @@ def finalize_recipe_delivery(
                 ensure_ascii=False,
                 separators=(",", ":"),
             )
+        except BoundedDeliveryRoundTripBudgetExceededError:
+            raise
         except Exception:
             get_logger(__name__).error(
                 "recipe initialization manifest planning failed",
@@ -1441,4 +1489,6 @@ __all__ = [
     "prepare_recipe_delivery_generation",
     "recipe_pull_producers",
     "retire_recipe_artifacts",
+    "validate_compiled_recipe_delivery_budget",
+    "validate_recipe_exemption_fitness",
 ]

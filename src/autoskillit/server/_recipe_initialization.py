@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -34,6 +35,7 @@ from autoskillit.server._recipe_execution import (
     RecipeExecutionAdmissionError,
     install_recipe_execution,
     prepare_recipe_execution,
+    ready_recipe_execution_state,
 )
 from autoskillit.server._state import _get_ctx_or_none
 
@@ -52,6 +54,8 @@ __all__ = [
     "complete_initialization_response",
     "complete_section_response",
     "matches_recipe_initialization_requirement",
+    "recipe_initialization_receipt",
+    "replay_terminal_section_response",
     "stage_recipe_initialization",
 ]
 
@@ -120,10 +124,19 @@ def build_recipe_envelope(
     raise ValueError("delivery bound is too small for a JSON object")
 
 
-def _receipt(initialization_id: str, artifact: RecipeArtifactGeneration) -> str:
+_TERMINAL_RESPONSE_RETENTION_SECONDS = 24 * 60 * 60
+
+
+def recipe_initialization_receipt(
+    initialization_id: str,
+    artifact: RecipeArtifactGeneration,
+    *,
+    content_sha256: str | None = None,
+) -> str:
     material = json.dumps(
         {
             "artifact": artifact.pull_identity(),
+            "content_sha256": content_sha256,
             "initialization_id": initialization_id,
         },
         ensure_ascii=False,
@@ -133,6 +146,20 @@ def _receipt(initialization_id: str, artifact: RecipeArtifactGeneration) -> str:
     return (
         "sha256:"
         + hashlib.sha256(b"autoskillit.recipe-initialization-receipt.v1\0" + material).hexdigest()
+    )
+
+
+def _receipt(
+    initialization_id: str,
+    artifact: RecipeArtifactGeneration,
+    *,
+    content_sha256: str | None = None,
+) -> str:
+    """Compatibility alias for the server-owned receipt derivation."""
+    return recipe_initialization_receipt(
+        initialization_id,
+        artifact,
+        content_sha256=content_sha256,
     )
 
 
@@ -147,6 +174,7 @@ class FinalizedRecipeSectionResponse:
     section: str
     page_plan_sha256: str
     part: int
+    content_sha256: str
     completion_receipt: str | None = None
 
 
@@ -298,6 +326,18 @@ def complete_section_response(
                 {"success": False, "error": "recipe_initialization_stale"},
                 separators=(",", ":"),
             )
+        terminal = finalized.completion_receipt is not None
+        if terminal:
+            expected_receipt = recipe_initialization_receipt(
+                finalized.initialization_id,
+                finalized.artifact_generation,
+                content_sha256=finalized.content_sha256,
+            )
+            if finalized.completion_receipt != expected_receipt:
+                return json.dumps(
+                    {"success": False, "error": "recipe_initialization_receipt_content_mismatch"},
+                    separators=(",", ":"),
+                )
         try:
             updated = record_initialization_page(
                 state,
@@ -307,43 +347,69 @@ def complete_section_response(
                 part=finalized.part,
             )
             assert isinstance(updated, InitializingRecipe)
-            tool_ctx.recipe_initialization_state = updated
         except ValueError:
             return json.dumps(
                 {"success": False, "error": "recipe_initialization_page_rejected"},
                 separators=(",", ":"),
             )
-        terminal = finalized.completion_receipt is not None and initialization_is_complete(updated)
-        staged_snapshot = updated.staged_snapshot
-    if not terminal:
-        return enforced
-    try:
-        prepared = prepare_recipe_execution(tool_ctx, snapshot=staged_snapshot)
-    except Exception:
-        logger.error("terminal recipe execution preparation failed", exc_info=True)
-        return json.dumps(
-            {"success": False, "error": "recipe_execution_install_failed"},
-            separators=(",", ":"),
-        )
-    with tool_ctx.recipe_execution_lock:
-        state = tool_ctx.recipe_initialization_state
-        if not isinstance(state, InitializingRecipe) or not initialization_is_complete(state):
-            return json.dumps(
-                {"success": False, "error": "recipe_initialization_stale"},
-                separators=(",", ":"),
-            )
+        terminal = terminal and initialization_is_complete(updated)
+        if not terminal:
+            tool_ctx.recipe_initialization_state = updated
+            return enforced
+        assert finalized.completion_receipt is not None
         try:
-            install_recipe_execution(
+            prepared = prepare_recipe_execution(tool_ctx, snapshot=updated.staged_snapshot)
+            ready = ready_recipe_execution_state(
                 tool_ctx,
+                updated,
                 prepared_execution=prepared,
                 completion_receipt=finalized.completion_receipt,
             )
-        except RecipeExecutionAdmissionError:
+        except (RecipeExecutionAdmissionError, ValueError):
+            logger.error("terminal recipe execution preparation failed", exc_info=True)
             return json.dumps(
                 {"success": False, "error": "recipe_execution_install_failed"},
                 separators=(",", ":"),
             )
+        tool_ctx.recipe_initialization_state = ready
+        now = time.monotonic()
+        expired = [
+            key
+            for key, (expires_at, _, _) in tool_ctx.recipe_terminal_response_cache.items()
+            if expires_at <= now
+        ]
+        for key in expired:
+            del tool_ctx.recipe_terminal_response_cache[key]
+        tool_ctx.recipe_terminal_response_cache[(finalized.initialization_id, finalized.part)] = (
+            now + _TERMINAL_RESPONSE_RETENTION_SECONDS,
+            finalized.content_sha256,
+            enforced,
+        )
     return enforced
+
+
+def replay_terminal_section_response(
+    tool_ctx: ToolContext,
+    *,
+    initialization_id: str,
+    part: int,
+    content_sha256: str,
+) -> str | None:
+    """Return a non-expired byte-identical terminal response for exact replay."""
+    with tool_ctx.recipe_execution_lock:
+        record = tool_ctx.recipe_terminal_response_cache.get((initialization_id, part))
+        if record is None:
+            return None
+        expires_at, cached_content_sha256, rendered = record
+        if expires_at <= time.monotonic():
+            del tool_ctx.recipe_terminal_response_cache[(initialization_id, part)]
+            return None
+        if cached_content_sha256 != content_sha256:
+            return json.dumps(
+                {"success": False, "error": "recipe_initialization_receipt_content_mismatch"},
+                separators=(",", ":"),
+            )
+        return rendered
 
 
 def complete_initialization_response(

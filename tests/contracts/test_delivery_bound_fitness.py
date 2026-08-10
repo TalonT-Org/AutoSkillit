@@ -209,8 +209,6 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
             "flow_records",
             projection.entrypoint,
         ]
-        if any(item["total_parts"] > MAX_PAGES_PER_SECTION for item in required_sections):
-            pytest.xfail("#4414 architectural gap — calibrated page bound lands in Part C")
         assert all(
             item["compiled_page_count"] == item["total_parts"] <= MAX_PAGES_PER_SECTION
             and item["compiled_bytes"] > 0
@@ -225,8 +223,6 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     else:
         assert envelope["flow_records"] == list(prepared.flow_generation.records)
         exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
-        if len(finalized.rendered.encode("utf-8")) > exemption.max_utf8_bytes * 9 // 10:
-            pytest.xfail("#4414 architectural gap — exemption margin is not enforced yet")
         assert len(finalized.rendered.encode("utf-8")) <= exemption.max_utf8_bytes * 9 // 10
 
 

@@ -27,11 +27,12 @@ from autoskillit.server._recipe_execution import build_recipe_execution_snapshot
 from autoskillit.server._recipe_initialization import (
     FinalizedRecipeInitializationResponse,
     FinalizedRecipeSectionResponse,
-    _receipt,
     admit_registered_tool_during_initialization,
     build_completion_response,
     complete_initialization_response,
     complete_section_response,
+    recipe_initialization_receipt,
+    replay_terminal_section_response,
     stage_recipe_initialization,
 )
 
@@ -154,7 +155,12 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
 
 def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_path) -> None:
     state = _stage(minimal_ctx, tmp_path)
-    receipt = _receipt("initialization", state.artifact_generation)
+    content_sha256 = _hash("terminal-content")
+    receipt = recipe_initialization_receipt(
+        "initialization",
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
     rendered = json.dumps({"success": True, "completion_receipt": receipt})
     finalized = FinalizedRecipeSectionResponse(
         rendered=rendered,
@@ -164,6 +170,7 @@ def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_
         section="flow_records",
         page_plan_sha256=_hash("flow-plan"),
         part=0,
+        content_sha256=content_sha256,
         completion_receipt=receipt,
     )
 
@@ -171,6 +178,47 @@ def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_
     ready = minimal_ctx.recipe_initialization_state
     assert isinstance(ready, ReadyRecipe)
     assert ready.completion_receipt == receipt
+    assert (
+        replay_terminal_section_response(
+            minimal_ctx,
+            initialization_id="initialization",
+            part=0,
+            content_sha256=content_sha256,
+        )
+        == rendered
+    )
+
+
+def test_terminal_page_replay_rejects_changed_content_digest(minimal_ctx, tmp_path) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    content_sha256 = _hash("terminal-content")
+    receipt = recipe_initialization_receipt(
+        "initialization",
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id="initialization",
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=content_sha256,
+        completion_receipt=receipt,
+    )
+    assert complete_section_response(finalized, rendered) == rendered
+
+    replay = replay_terminal_section_response(
+        minimal_ctx,
+        initialization_id="initialization",
+        part=0,
+        content_sha256=_hash("tampered"),
+    )
+    assert replay is not None
+    assert json.loads(replay)["error"] == "recipe_initialization_receipt_content_mismatch"
 
 
 def test_completion_rejects_stale_or_altered_initialization_id(

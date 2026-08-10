@@ -63,6 +63,7 @@ from autoskillit.server._recipe_initialization import (
     FinalizedRecipeSectionResponse,
     build_completion_response,
     matches_recipe_initialization_requirement,
+    replay_terminal_section_response,
 )
 from autoskillit.server._recipe_section_pagination import (
     RecipeSectionBoundError,
@@ -717,9 +718,21 @@ async def get_recipe_section(
             if continuation != expected_continuation:
                 return _recipe_section_failure("invalid_recipe_section_continuation")
             rendered = render_recipe_section_page(page_plan, part)
-            if active_initialization is None or isinstance(active_initialization, ReadyRecipe):
-                return rendered
             rendered_payload = json.loads(rendered)
+            content_sha256 = rendered_payload.get("content_sha256")
+            if isinstance(active_initialization, ReadyRecipe):
+                if isinstance(content_sha256, str):
+                    replayed = replay_terminal_section_response(
+                        tool_ctx,
+                        initialization_id=active_initialization.initialization_id,
+                        part=part,
+                        content_sha256=content_sha256,
+                    )
+                    if replayed is not None:
+                        return replayed
+                return rendered
+            if active_initialization is None:
+                return rendered
             completion_receipt = rendered_payload.get("completion_receipt")
             return cast(
                 str,
@@ -731,6 +744,7 @@ async def get_recipe_section(
                     section=section,
                     page_plan_sha256=page_plan.page_plan_sha256,
                     part=part,
+                    content_sha256=(content_sha256 if isinstance(content_sha256, str) else ""),
                     completion_receipt=(
                         completion_receipt if isinstance(completion_receipt, str) else None
                     ),

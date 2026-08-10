@@ -13,9 +13,11 @@ from anyio import ClosedResourceError as _ClosedResource
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    ASCII_YAML_POLICY,
     RESERVED_LOG_RECORD_KEYS,
     BackendCapabilities,
     RecipeDeliveryMode,
+    Utf8ByteLimit,
     get_logger,
     resolve_general_output_token_limit,
 )
@@ -186,7 +188,11 @@ def track_response_size(
                 temp_dir / "responses" / tool_name if isinstance(temp_dir, Path) else None
             )
             selected_result_token_limit: int | None = None
-            if finalized is not None:
+            if tool_name == "get_recipe_section" and budget.page_max_bytes is not None:
+                selected_result_token_limit = ASCII_YAML_POLICY.to_tokens(
+                    Utf8ByteLimit(budget.page_max_bytes)
+                ).value
+            elif finalized is not None:
                 selected_result_token_limit = finalized.decision.selected_result_token_limit
             elif ctx is not None:
                 backend = getattr(ctx, "backend", None)

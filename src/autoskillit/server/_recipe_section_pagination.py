@@ -25,6 +25,7 @@ from autoskillit.core import (
     recipe_section_element_digest,
     recipe_section_plan_digest,
 )
+from autoskillit.server._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server.recipe_section._contracts import (
     PlannedRecipeSectionPage,
     RecipeSectionBoundError,
@@ -367,7 +368,16 @@ def _render_candidate(
         body["completed_parts"] = part + 1
         body["calls_remaining"] = total_parts - part - 1
     if terminal and selected.completion_response is not None:
-        body.update(selected.completion_response)
+        completion_response = dict(selected.completion_response)
+        content_sha256 = page.descriptor.page_content_sha256
+        completion_response["content_sha256"] = content_sha256
+        assert selected.initialization_id is not None
+        completion_response["completion_receipt"] = recipe_initialization_receipt(
+            selected.initialization_id,
+            generation,
+            content_sha256=content_sha256,
+        )
+        body.update(completion_response)
     if not terminal:
         body["next_part"] = part + 1
         body["continuation"] = recipe_section_continuation_binding(

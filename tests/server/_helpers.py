@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from autoskillit.core import (
     RECIPE_SECTION_PAGINATION_VERSION,
@@ -20,6 +23,8 @@ from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
 if TYPE_CHECKING:
+    import pytest
+
     from autoskillit.config.settings import AgentBackendConfig
 
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
@@ -84,6 +89,83 @@ def _configure_admitted_recipe(ctx: Any, path: Path) -> None:
     ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
 
 
+@dataclass
+class McpCallCounter:
+    """Record one session-start MCP sequence with initialization identity."""
+
+    calls: list[tuple[str, str | None]] = field(default_factory=list)
+
+    def record(self, tool_name: str, initialization_id: str | None = None) -> None:
+        self.calls.append((tool_name, initialization_id))
+
+    def __len__(self) -> int:
+        return len(self.calls)
+
+
+def mode_for(recipe_name: str, backend_name: str) -> str:
+    """Resolve the actual open-kitchen delivery mode for a packaged recipe."""
+    from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+    from autoskillit.recipe import load_and_validate
+    from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
+
+    capabilities = BACKEND_REGISTRY[backend_name]().capabilities
+    if capabilities.recipe_delivery_budget is not None:
+        return "codex_bounded"
+    project_root = Path(__file__).resolve().parents[2]
+    payload = load_and_validate(
+        recipe_name,
+        project_dir=project_root,
+        ingredient_overrides={
+            "task": "test task",
+            "issue_url": "https://github.com/test/test/issues/1",
+            "source_dir": str(project_root),
+        },
+    )
+    rendered = json.dumps(
+        build_open_kitchen_recipe_payload(dict(payload), version="0.0.0"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
+    return (
+        "claude_code_inline"
+        if len(rendered.encode("utf-8")) <= exemption.max_utf8_bytes * 9 // 10
+        else "claude_code_bounded"
+    )
+
+
+async def simulate_session_start(
+    recipe_name: str,
+    backend_name: str,
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+) -> McpCallCounter:
+    """Drive open plus every required page and record the exact MCP call sequence."""
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+    from autoskillit.server._state import _get_ctx_or_none
+
+    tool_ctx = _get_ctx_or_none()
+    assert tool_ctx is not None
+    from autoskillit.pipeline import closed_kitchen_open_state
+    from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
+
+    monkeypatch.setattr(tool_ctx, "backend", BACKEND_REGISTRY[backend_name]())
+    tool_ctx.kitchen_open_state = closed_kitchen_open_state()
+    tool_ctx.recipe_initialization_state = NoActiveRecipe()
+    counter = McpCallCounter()
+    counter.record("open_kitchen")
+    try:
+        envelope = await _open_kitchen_patched(recipe_name, {}, monkeypatch)
+    except ValueError:
+        pytest.skip(f"recipe is not startable under the active feature scope: {recipe_name}")
+    if envelope.get("success") is not True:
+        pytest.skip(f"recipe is not startable under the active feature scope: {recipe_name}")
+    if envelope.get("delivery_bound_spill") is True:
+        await _credit_initialization_sections(envelope, counter=counter)
+    return counter
+
+
 def _bundled_backend() -> AgentBackendConfig:
     """Load the bundled backend defaults shared by backend-override tests."""
     from autoskillit.config.settings import AgentBackendConfig
@@ -122,7 +204,11 @@ async def _open_kitchen_patched(name, overrides, monkeypatch):
                     )
 
 
-async def _credit_initialization_sections(envelope: dict[str, Any]) -> None:
+async def _credit_initialization_sections(
+    envelope: dict[str, Any],
+    *,
+    counter: McpCallCounter | None = None,
+) -> None:
     """Page every required section of a bounded envelope through the real pull tool.
 
     Passes ``initialization_id`` and ``page_plan_sha256`` so each page is credited to the
@@ -135,6 +221,8 @@ async def _credit_initialization_sections(envelope: dict[str, Any]) -> None:
     for requirement in envelope["required_sections"]:
         continuation: str | None = None
         for part in range(requirement["total_parts"]):
+            if counter is not None:
+                counter.record("get_recipe_section", initialization_id)
             response = json.loads(
                 await get_recipe_section(
                     section=requirement["section"],
@@ -146,7 +234,7 @@ async def _credit_initialization_sections(envelope: dict[str, Any]) -> None:
                 )
             )
             assert response.get("success") is True, f"pull failed: {response}"
-            assert response["page_plan_sha256"] == requirement["page_plan_sha256"]
+            assert response.get("page_plan_sha256") == requirement["page_plan_sha256"], response
             continuation = response.get("continuation")
 
 

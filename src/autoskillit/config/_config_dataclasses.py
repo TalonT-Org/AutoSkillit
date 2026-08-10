@@ -383,7 +383,7 @@ class OutputBudgetConfig:
     head_chars: int = 2500
     tail_chars: int = 2500
     response_max_bytes: int = 90_000
-    page_max_bytes: int | None = None
+    page_max_bytes: int | None = 195_000
     guard_enabled: bool = True
     shell_max_inline_bytes: int = 12_000
     capture_capacity: dict[str, int] | None = None

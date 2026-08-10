@@ -137,7 +137,7 @@ output_budget:
   head_chars: 2500
   tail_chars: 2500
   response_max_bytes: 90000
-  page_max_bytes:
+  page_max_bytes: 195000
   guard_enabled: true
   shell_max_inline_bytes: 12000
 

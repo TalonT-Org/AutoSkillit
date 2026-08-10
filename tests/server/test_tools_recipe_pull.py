@@ -1438,6 +1438,39 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     assert "".join(chunks) == expected_content
 
 
+@pytest.mark.parametrize("continuation", [None, "wrong-continuation"])
+async def test_pull_tool_rejects_missing_or_wrong_continuation(
+    tool_ctx_kitchen_open,
+    continuation: str | None,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-continuation-rejection"
+    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload("x" * 50_000),
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    first = json.loads(await get_recipe_section(section="content", **kwargs))
+    assert first["next_part"] == 1
+
+    response = json.loads(
+        await get_recipe_section(
+            section="content",
+            part=1,
+            page_plan_sha256=first["page_plan_sha256"],
+            continuation=continuation,
+            **kwargs,
+        )
+    )
+
+    assert response["error"] == "invalid_recipe_section_continuation"
+
+
 def _assert_section_response_bound(rendered: str, tool_ctx) -> None:
     bound = resolve_recipe_section_bound_bytes(
         tool_ctx.config.output_budget.response_max_bytes,

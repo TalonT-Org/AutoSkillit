@@ -53,7 +53,10 @@ def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
     # what was targeted exists even if signaling wedges.
     for o in orphans:
         iso = datetime.fromtimestamp(o.started_at, tz=UTC).isoformat()
-        print(f"orphan: pid={o.pid} started={iso} fd0={o.fd0_target} exe={o.exe_target or '?'}")
+        print(
+            f"orphan: pid={o.pid} started={iso} fd0={o.fd0_target} exe={o.exe_target or '?'}",
+            flush=reap,
+        )
 
     if not reap:
         print(
@@ -61,10 +64,6 @@ def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
             " (persisted session data is not deleted; resume later with codex resume)"
         )
         return
-
-    import sys
-
-    sys.stdout.flush()
 
     results = reap_orphaned_codex_processes(orphans)
     for r in results:

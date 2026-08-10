@@ -991,7 +991,9 @@ def finalize_recipe_delivery(
         separators=(",", ":"),
     )
     backend_name = (
-        getattr(tool_ctx.backend, "name", None) or capabilities.process_name or "unknown"
+        (tool_ctx.backend.name if tool_ctx.backend is not None else None)
+        or capabilities.process_name
+        or "unknown"
     )
     candidate_evidence = supported_evidence if surface_definition.negotiation_eligible else None
     candidate_attestation = attestation if surface_definition.negotiation_eligible else None

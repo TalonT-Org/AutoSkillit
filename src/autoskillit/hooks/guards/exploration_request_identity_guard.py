@@ -14,6 +14,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _exploration_request_record import (  # type: ignore[import-not-found]  # noqa: E402
+    SUPPORTED_EXPLORATION_REQUEST_TOOLS,
     write_exploration_request_record,
 )
 from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
@@ -21,8 +22,7 @@ from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  
 EXPLORATION_REQUEST_IDENTITY_DENY_TRIGGER = "EXPLORATION REQUEST IDENTITY UNAVAILABLE"
 _TOKEN_PARAM = "_autoskillit_exploration_request_token"
 _TOOL_NAME = re.compile(
-    r"mcp__.*autoskillit.*__(enable_exploration|submit_exploration_query|"
-    r"get_exploration_page|resume_exploration_context)\Z"
+    rf"mcp__.*autoskillit.*__({'|'.join(sorted(SUPPORTED_EXPLORATION_REQUEST_TOOLS))})\Z"
 )
 
 

@@ -23,7 +23,7 @@ _TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 _MAX_RECORD_BYTES = 512
 _REQUEST_TTL_SECONDS = 30.0
 _MAX_CLEANUP_ENTRIES = 256
-_SUPPORTED_TOOLS = frozenset(
+SUPPORTED_EXPLORATION_REQUEST_TOOLS = frozenset(
     {
         "enable_exploration",
         "submit_exploration_query",
@@ -39,7 +39,7 @@ _WRITE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEX
 
 
 def _valid_tool_name(tool_name: object) -> bool:
-    return isinstance(tool_name, str) and tool_name in _SUPPORTED_TOOLS
+    return isinstance(tool_name, str) and tool_name in SUPPORTED_EXPLORATION_REQUEST_TOOLS
 
 
 def _valid_session_id(session_id: object) -> bool:

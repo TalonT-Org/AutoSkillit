@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hooks._exploration_request_record import (
+    SUPPORTED_EXPLORATION_REQUEST_TOOLS,
     consume_exploration_request_record,
 )
 
@@ -184,13 +185,11 @@ def test_registry_matcher_is_decorated_name_tolerant_and_exact() -> None:
         if "guards/exploration_request_identity_guard.py" in definition.scripts
     )
     matcher = re.compile(hook.matcher)
+    alternatives = re.search(r"__\(([^()]+)\)\$$", hook.matcher)
 
-    for short_name in (
-        "enable_exploration",
-        "submit_exploration_query",
-        "get_exploration_page",
-        "resume_exploration_context",
-    ):
+    assert alternatives is not None
+    assert frozenset(alternatives.group(1).split("|")) == SUPPORTED_EXPLORATION_REQUEST_TOOLS
+    for short_name in SUPPORTED_EXPLORATION_REQUEST_TOOLS:
         assert matcher.fullmatch(f"mcp__dev_autoskillit_v2__{short_name}")
     assert not matcher.fullmatch("mcp__autoskillit__open_kitchen")
     assert not matcher.fullmatch("mcp__autoskillit__enable_exploration_extra")

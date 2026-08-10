@@ -580,7 +580,6 @@ def _resolve_skip_guards_in_content(
         "on_context_limit",
         "on_rate_limit",
         "on_exhausted",
-        "on_skip",
         "route",
     }
     for index, (name_node, step_node) in enumerate(entries):
@@ -618,9 +617,7 @@ def _resolve_skip_guards_in_content(
                     key = str(getattr(key_node, "value", ""))
                     scalar = getattr(value_node, "value", None)
                     is_legacy_route = parent_key == "routes"
-                    if isinstance(scalar, str) and (
-                        (key in route_fields and key != "on_skip") or is_legacy_route
-                    ):
+                    if isinstance(scalar, str) and (key in route_fields or is_legacy_route):
                         replacement = redirects.get(scalar)
                         if replacement is not None:
                             style = getattr(value_node, "style", None)

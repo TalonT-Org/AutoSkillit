@@ -9,7 +9,11 @@ import pytest
 
 from autoskillit.server.tools.tools_recipe import list_recipes as list_recipes_tool
 from autoskillit.server.tools.tools_recipe import validate_recipe
-from tests.server._helpers import _PATCHED_DEFAULTS, _with_finalized_projection
+from tests.server._helpers import (
+    _PATCHED_DEFAULTS,
+    _configure_admitted_recipe,
+    _with_finalized_projection,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -549,8 +553,7 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(
         "diagram": None,
         "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
     }
-    tool_ctx_kitchen_open.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
-    tool_ctx_kitchen_open.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
     with patch(
@@ -586,8 +589,7 @@ async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_op
             "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
         ),
     }
-    tool_ctx_kitchen_open.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
-    tool_ctx_kitchen_open.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
     with patch(
@@ -633,8 +635,7 @@ async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_ope
     )
     tool_ctx_kitchen_open.recipes = MagicMock()
     tool_ctx_kitchen_open.recipes.load_and_validate.return_value = _load_result
-    tool_ctx_kitchen_open.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
-    tool_ctx_kitchen_open.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
     tool_ctx_kitchen_open.recipes.apply_triage_gate = AsyncMock(return_value=_load_result)
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 

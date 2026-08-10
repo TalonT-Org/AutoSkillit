@@ -14,7 +14,7 @@ from autoskillit.pipeline import (
     claim_kitchen_request,
     release_kitchen_request,
 )
-from tests.server._helpers import _with_finalized_projection
+from tests.server._helpers import _configure_admitted_recipe, _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -370,8 +370,7 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = MagicMock(path=recipes_dir / "test-recipe.yaml")
-    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    _configure_admitted_recipe(mock_ctx, recipes_dir / "test-recipe.yaml")
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -401,8 +400,7 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
-    mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "nonexistent.yaml")
-    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    _configure_admitted_recipe(mock_ctx, tmp_path / "nonexistent.yaml")
     mock_ctx.recipes.load_and_validate.side_effect = RecipeNotFoundError(
         "No recipe named 'nonexistent' found"
     )
@@ -683,8 +681,7 @@ async def test_sous_chef_discipline_not_in_open_kitchen_result(tmp_path, monkeyp
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "implementation.yaml")
-    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    _configure_admitted_recipe(mock_ctx, tmp_path / "implementation.yaml")
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -724,8 +721,7 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "implementation.yaml")
-    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    _configure_admitted_recipe(mock_ctx, tmp_path / "implementation.yaml")
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):

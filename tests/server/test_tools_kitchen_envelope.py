@@ -11,17 +11,12 @@ import pytest
 from tests.server._helpers import (
     _PATCHED_DEFAULTS,
     _SERVER_ONLY_KEYS,
+    _configure_admitted_recipe,
     _with_finalized_projection,
 )
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _configure_admitted_recipe(mock_ctx, path: Path) -> None:
-    mock_ctx.recipes.find.return_value = MagicMock(path=path)
-    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
-
 
 # ---------------------------------------------------------------------------
 # Group E — hook drift / diagnostic warnings

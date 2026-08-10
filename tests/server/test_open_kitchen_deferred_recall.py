@@ -12,7 +12,7 @@ from autoskillit.core import RecipeExecutionId
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.server._recipe_execution import get_recipe_execution
-from tests.server._helpers import _with_finalized_projection
+from tests.server._helpers import _configure_admitted_recipe, _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -73,9 +73,8 @@ async def test_recipe_open_atomically_installs_compiled_execution(
     tool_ctx.kitchen_id = f"test-open-{deferred_recall}"
     tool_ctx.recipe_name = "test-recipe" if deferred_recall else ""
     recipes = MagicMock()
-    recipes.find.return_value = MagicMock(path=Path("/fake/test-recipe.yaml"))
-    recipes.load.return_value = MagicMock(steps={}, ingredients={})
     tool_ctx.recipes = recipes
+    _configure_admitted_recipe(tool_ctx, Path("/fake/test-recipe.yaml"))
     request_ctx = MagicMock()
     request_ctx.enable_components = AsyncMock()
     request_ctx.disable_components = AsyncMock()

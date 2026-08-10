@@ -1148,7 +1148,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
     ),
     "fleet/_api.py": (
-        1575,
+        1590,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them. Bumped to 1200 by the "
@@ -1158,7 +1158,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "post-start crash persistence; those checkpoints must remain adjacent to the "
         "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
         "shell lineage decision and provenance snapshot remain on the same dispatch "
-        "transaction boundary after conflict resolution.",
+        "transaction boundary after conflict resolution. Bumped to 1590 for shared "
+        "tracker-authority retention and cleanup on every dispatch outcome boundary.",
     ),
     "server/_recipe_delivery.py": (
         1500,

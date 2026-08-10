@@ -69,11 +69,6 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Closing the kitchen removes only an inactive project-owned review gate state; "
         "an active review loop is detected and preserved.",
     ),
-    ("server/tools/tools_execution.py", "run_skill", "shutil.rmtree"): (
-        2,
-        "Best-effort finalization removes only the exact per-session directory under "
-        "the configured ephemeral or Codex session root after skill execution.",
-    ),
     ("execution/session_log.py", "flush_session_log", "shutil.rmtree"): (
         2,
         "The exclusive session-index transaction removes only abandoned summary-less "

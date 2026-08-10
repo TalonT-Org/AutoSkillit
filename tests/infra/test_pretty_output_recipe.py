@@ -1009,6 +1009,7 @@ def _served_content(
     return result.get("content")
 
 
+@pytest.mark.timeout(120)
 def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypatch):
     """compact_recipe_display() must not alter any parsed value except the
     explicitly allowlisted presentation-only fields, for every runtime-discoverable
@@ -1044,6 +1045,7 @@ def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypa
     assert remediation_note_checked, "remediation recipe was not exercised by this test"
 
 
+@pytest.mark.timeout(120)
 def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, monkeypatch):
     """Measure the same pre-backstop string in characters and UTF-8 bytes."""
 

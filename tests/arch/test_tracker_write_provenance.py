@@ -14,6 +14,14 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
+_PATH_MUTATION_METHODS = {"write_text", "write_bytes", "replace", "unlink", "rmdir"}
+_QUALIFIED_MUTATION_CALLS = {
+    ("os", "remove"),
+    ("os", "replace"),
+    ("os", "rmdir"),
+    ("os", "write"),
+    ("shutil", "rmtree"),
+}
 
 
 def _has_tracker_reference(tree: ast.Module) -> bool:
@@ -25,21 +33,40 @@ def _has_tracker_reference(tree: ast.Module) -> bool:
     return False
 
 
+def _looks_path_like(node: ast.expr) -> bool:
+    """Recognize the path-valued receiver shapes used by hook scripts."""
+    if isinstance(node, ast.Name):
+        name = node.id.lower()
+        return name in {"path", "file", "directory"} or name.endswith(
+            ("_path", "_file", "_dir", "_directory")
+        )
+    if isinstance(node, ast.Attribute):
+        return _looks_path_like(ast.Name(id=node.attr))
+    if isinstance(node, ast.Call):
+        func = node.func
+        return (isinstance(func, ast.Name) and func.id == "Path") or (
+            isinstance(func, ast.Attribute)
+            and func.attr in {"joinpath", "resolve", "with_name", "with_suffix"}
+        )
+    return False
+
+
 def _has_file_mutation(tree: ast.Module) -> list[int]:
     """Find lines with file-write or destructive operations."""
     violations = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
-            # Check method calls like path.write_text(), open(..., "w"), os.replace()
             if isinstance(node.func, ast.Attribute):
-                if node.func.attr in (
-                    "write_text",
-                    "write_bytes",
-                    "replace",
-                    "unlink",
-                    "rmdir",
-                    "remove",
-                    "rmtree",
+                qualified_call = (
+                    (
+                        node.func.value.id,
+                        node.func.attr,
+                    )
+                    if isinstance(node.func.value, ast.Name)
+                    else None
+                )
+                if qualified_call in _QUALIFIED_MUTATION_CALLS or (
+                    node.func.attr in _PATH_MUTATION_METHODS and _looks_path_like(node.func.value)
                 ):
                     violations.append(node.lineno)
             # Check calls to open() with write mode
@@ -52,17 +79,22 @@ def _has_file_mutation(tree: ast.Module) -> list[int]:
                     ):
                         violations.append(node.lineno)
                         break
-            # Check os.write(fd, ...) — the retired hook's raw fd-write pattern.
-            # Deliberately narrower than "any .write attribute call" to avoid
-            # false positives on sys.stdout.write()/logger writes/etc.
-            if (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr == "write"
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "os"
-            ):
-                violations.append(node.lineno)
     return violations
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ('value.replace("old", "new")', []),
+        ('items.remove("value")', []),
+        ("tracker_path.unlink()", [1]),
+        ("os.replace(source, destination)", [1]),
+        ('Path("tracker.json").write_text("{}")', [1]),
+    ],
+    ids=["string-replace", "list-remove", "path-unlink", "os-replace", "path-write"],
+)
+def test_file_mutation_detection_qualifies_receivers(source: str, expected: list[int]) -> None:
+    assert _has_file_mutation(ast.parse(source)) == expected
 
 
 def test_hooks_never_write_pipeline_tracker_files():

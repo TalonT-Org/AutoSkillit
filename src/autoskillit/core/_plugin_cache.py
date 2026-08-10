@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import math
 import os
 import shutil
 import uuid
@@ -737,6 +738,21 @@ class KitchenProcessIdentity:
     create_time: float
     project_path: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.kitchen_id, str) or not self.kitchen_id:
+            raise ValueError("kitchen_id must be a nonempty string")
+        if isinstance(self.pid, bool) or not isinstance(self.pid, int) or self.pid <= 0:
+            raise ValueError("pid must be a positive integer")
+        if (
+            isinstance(self.create_time, bool)
+            or not isinstance(self.create_time, (int, float))
+            or not math.isfinite(self.create_time)
+            or self.create_time <= 0
+        ):
+            raise ValueError("create_time must be a finite positive number")
+        if not isinstance(self.project_path, str) or not self.project_path:
+            raise ValueError("project_path must be a nonempty string")
+
 
 def sample_kitchen_process_identity(
     kitchen_id: str,
@@ -755,7 +771,7 @@ def sample_kitchen_process_identity(
 
 def _identity_from_entry(entry: object) -> KitchenProcessIdentity:
     if not isinstance(entry, dict) or frozenset(entry) != _ACTIVE_KITCHEN_FIELDS:
-        raise ValueError("active kitchen entry does not match the exact v2 schema")
+        raise ValueError("active kitchen entry does not match the supported schema")
     kitchen_id = entry.get("kitchen_id")
     pid = entry.get("pid")
     create_time = entry.get("create_time")
@@ -768,6 +784,7 @@ def _identity_from_entry(entry: object) -> KitchenProcessIdentity:
     if (
         isinstance(create_time, bool)
         or not isinstance(create_time, (int, float))
+        or not math.isfinite(create_time)
         or create_time <= 0
     ):
         raise ValueError("active kitchen create_time must be a positive number")
@@ -782,7 +799,7 @@ def _read_active_kitchens_unlocked(path: Path) -> list[dict[str, object]]:
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict) or frozenset(raw) != {"schema_version", "kitchens"}:
-        raise ValueError("active kitchen registry does not match the exact v2 schema")
+        raise ValueError("active kitchen registry does not match the supported schema")
     schema_version = raw.get("schema_version")
     if schema_version not in {1, _ACTIVE_KITCHENS_SCHEMA_VERSION}:
         raise ValueError("active kitchen registry schema is unsupported")

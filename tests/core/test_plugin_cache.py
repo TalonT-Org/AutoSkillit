@@ -23,6 +23,7 @@ from autoskillit.core._plugin_cache import (
     any_kitchen_open,
     append_retiring_record,
     migrate_retiring_cache_v1,
+    read_active_kitchens_registry,
     read_retiring_cache,
     register_active_kitchen,
     sample_kitchen_process_identity,
@@ -48,6 +49,43 @@ def test_kitchen_identity_samples_process_incarnation_once(monkeypatch, tmp_path
 
     assert identity == KitchenProcessIdentity("kitchen", 42, 123.5, str(tmp_path.resolve()))
     assert calls == [42]
+
+
+@pytest.mark.parametrize(
+    ("kitchen_id", "pid", "create_time", "project_path", "message"),
+    [
+        ("", 42, 123.5, "/project", "kitchen_id"),
+        ("kitchen", 0, 123.5, "/project", "pid"),
+        ("kitchen", 42, 0.0, "/project", "create_time"),
+        ("kitchen", 42, float("inf"), "/project", "create_time"),
+        ("kitchen", 42, 123.5, "", "project_path"),
+    ],
+)
+def test_kitchen_identity_rejects_invalid_fields(
+    kitchen_id: str,
+    pid: int,
+    create_time: float,
+    project_path: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        KitchenProcessIdentity(kitchen_id, pid, create_time, project_path)
+
+
+def test_kitchen_identity_rejects_nonpositive_sampled_create_time(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class Process:
+        def __init__(self, _pid: int) -> None:
+            pass
+
+        def create_time(self) -> float:
+            return 0.0
+
+    monkeypatch.setattr("autoskillit.core._plugin_cache.psutil.Process", Process)
+
+    with pytest.raises(ValueError, match="create_time"):
+        sample_kitchen_process_identity("kitchen", 42, tmp_path)
 
 
 def test_repeated_exact_registration_does_not_grow_registry(monkeypatch, tmp_path: Path) -> None:
@@ -77,7 +115,57 @@ def test_registration_migrates_valid_v1_active_kitchens(monkeypatch, tmp_path: P
 
     migrated = json.loads(registry_path.read_text(encoding="utf-8"))
     assert migrated["schema_version"] == 2
-    assert [entry["kitchen_id"] for entry in migrated["kitchens"]] == ["legacy", "current"]
+    assert migrated["kitchens"][0] == legacy_entry
+    assert migrated["kitchens"][1]["kitchen_id"] == "current"
+
+
+@pytest.mark.parametrize(
+    "malformed_entry",
+    [
+        {
+            "kitchen_id": "legacy",
+            "pid": 42,
+            "create_time": 123.5,
+            "project_path": "/project",
+            "opened_at": "2026-08-09T00:00:00+00:00",
+            "extra": True,
+        },
+        {
+            "kitchen_id": "legacy",
+            "pid": 42,
+            "create_time": 123.5,
+            "project_path": "/project",
+        },
+        {
+            "kitchen_id": "legacy",
+            "pid": "42",
+            "create_time": 123.5,
+            "project_path": "/project",
+            "opened_at": "2026-08-09T00:00:00+00:00",
+        },
+    ],
+)
+def test_v2_active_kitchen_registry_rejects_malformed_entries(
+    monkeypatch, tmp_path: Path, malformed_entry: dict[str, object]
+) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
+    _make_kitchen_file(registry_path, schema_version=2, kitchens=[malformed_entry])
+
+    with pytest.raises(ValueError):
+        read_active_kitchens_registry()
+
+
+def test_v1_active_kitchen_registry_skips_malformed_entries(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
+    _make_kitchen_file(
+        registry_path,
+        schema_version=1,
+        kitchens=[{"kitchen_id": "legacy", "pid": 42}],
+    )
+
+    assert read_active_kitchens_registry() == []
 
 
 def test_scoped_kitchen_lookup_canonicalizes_project_path(monkeypatch, tmp_path: Path) -> None:

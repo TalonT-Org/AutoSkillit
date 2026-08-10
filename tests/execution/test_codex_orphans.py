@@ -224,6 +224,11 @@ def test_reap_kill_escalation_for_term_ignoring_child(tmp_path):
 
         assert len(results) == 1
         assert results[0].action == "terminated"
+
+        deadline = time.monotonic() + 5
+        while psutil.pid_exists(child.pid) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert not psutil.pid_exists(child.pid)
     finally:
         with contextlib.suppress(ProcessLookupError, ChildProcessError, OSError):
             child.kill()

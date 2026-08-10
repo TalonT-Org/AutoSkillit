@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import Counter
-from datetime import UTC, date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -547,8 +547,6 @@ def _check_orphaned_codex_processes() -> list[DoctorResult]:
 
     if not orphans:
         return [DoctorResult(Severity.OK, check_name, "no orphaned codex processes")]
-
-    from datetime import datetime
 
     return [
         DoctorResult(

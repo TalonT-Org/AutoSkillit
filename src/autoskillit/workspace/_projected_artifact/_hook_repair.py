@@ -315,18 +315,8 @@ def repair_broken_projection_hooks(
 ) -> tuple[PluginHookRepairOutcome, ...]:
     """Repair broken hooks in ``~/.autoskillit/plugin-projections/*``.
 
-    Mirrors :func:`repair_broken_plugin_cache_hooks` for the projection scope.
-    Each projection's exclusive ``ArtifactLease`` is acquired with
-    skip-on-contention — repair never blocks a live binding and never mutates
-    under a reader (the same discipline as the cache repair and the AGENTS.md
-    lock-ordering rule).
-
-    The repair transaction is fully transactional with the projection's sidecar
-    manifest: hooks.json is rewritten, the manifest is republished so
-    ``projected_plugin_artifact_digest`` agrees, and the result is revalidated
-    before REPAIRED is reported.  A hooks-only rewrite that left the manifest
-    stale would cause ``_validate_published_plugin_artifact`` to reject the
-    "repaired" incarnation at the next bind.
+    Contended projections are skipped. Hooks and the sidecar digest are updated
+    as one rollback-protected transaction and revalidated before success.
     """
     if projections_root is None:
         projections_root = Path.home() / ".autoskillit" / "plugin-projections"
@@ -361,8 +351,6 @@ def repair_broken_projection_hooks(
                         json.dumps(fresh, indent=2) + "\n",
                         strict_durability=True,
                     )
-                    # Republish the manifest so the tree digest stays consistent.
-                    # Read the current identity, recompute the digest, and rewrite.
                     if manifest_path.is_file():
                         manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
                         new_digest = projected_plugin_artifact_digest(projection_dir)

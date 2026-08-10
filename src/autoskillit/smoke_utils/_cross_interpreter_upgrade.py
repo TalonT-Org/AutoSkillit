@@ -217,7 +217,7 @@ def _assert_projected_artifact_relocatable(
     (c) one command executes literally with python3 from PATH, exit ≠ 2
     """
     from autoskillit.core import PluginLoadMode
-    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.execution import ClaudeCodeBackend
     from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
 
     # The workspace module uses Path.home() for projection storage, and our

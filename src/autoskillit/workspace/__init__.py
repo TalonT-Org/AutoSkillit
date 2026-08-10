@@ -42,6 +42,7 @@ from autoskillit.workspace._projected_artifact import (
     public_plugin_asset_digest,
     repair_broken_plugin_cache_hooks,
     repair_broken_projection_hooks,
+    validate_staged_plugin_hooks,
 )
 from autoskillit.workspace._projected_artifact._generation_publication import (
     publish_generation,
@@ -252,6 +253,7 @@ __all__ = [
     "read_skill_frontmatter",
     "repair_broken_plugin_cache_hooks",
     "repair_broken_projection_hooks",
+    "validate_staged_plugin_hooks",
     "validate_skill_tier_roles",
     "validate_skill_capability_authenticity",
     "validate_skill_capability_declarations",

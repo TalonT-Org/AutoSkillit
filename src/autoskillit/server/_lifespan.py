@@ -220,7 +220,7 @@ def run_startup_hook_health_check() -> list[str]:
 
     # Codex config hook detection — detection-only (repair happens at sync time).
     try:
-        from autoskillit.execution.backends._codex_hooks import find_broken_codex_hook_commands
+        from autoskillit.execution import find_broken_codex_hook_commands
 
         codex_broken = find_broken_codex_hook_commands()
         if codex_broken:

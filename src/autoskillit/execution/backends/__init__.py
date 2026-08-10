@@ -23,6 +23,7 @@ from ._codex_config import (
 from ._codex_execution_identity import extract_codex_execution_identity
 from ._codex_hooks import (
     _is_autoskillit_hook_entry,
+    find_broken_codex_hook_commands,
     generate_codex_hooks_config,
     sync_hooks_to_codex_config,
 )
@@ -93,6 +94,7 @@ __all__ = [
     "CODEX_TOP_LEVEL_ONLY_FLAGS",
     "CompositeSessionLocator",
     "_is_autoskillit_hook_entry",
+    "find_broken_codex_hook_commands",
     "generate_codex_hooks_config",
     "sync_hooks_to_codex_config",
     "ClaudeCodeBackend",

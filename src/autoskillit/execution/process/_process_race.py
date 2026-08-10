@@ -562,9 +562,10 @@ async def _watch_session_log(
     if on_session_id_resolved is not None and monitor_result.session_id:
         on_session_id_resolved(monitor_result.session_id)
     channel_b_ready.set()
-    if monitor_result.status is ChannelBStatus.COMPLETION and acc.lifecycle_observation_enabled:
-        acc.channel_b_candidate_at = anyio.current_time()
-        acc.completion_candidate_event.set()
+    if monitor_result.status is ChannelBStatus.COMPLETION:
+        if acc.lifecycle_observation_enabled:
+            acc.channel_b_candidate_at = anyio.current_time()
+            acc.completion_candidate_event.set()
     else:
         trigger.set()
 

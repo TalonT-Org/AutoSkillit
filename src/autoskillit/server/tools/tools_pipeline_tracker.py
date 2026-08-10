@@ -432,8 +432,9 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
     )
     tracker_authority = read_tracker_authority(target, lease)
     if tracker_authority.data is None:
+        assert tracker_authority.error is not None
         _release_context_tracker(ctx, key)
-        identity_error = tracker_authority.error or "tracker identity is unavailable"
+        identity_error = tracker_authority.error
         return json.dumps(
             deny_envelope(
                 f"record_pipeline_step: failed to read tracker identity: {identity_error}",
@@ -574,8 +575,9 @@ def mark_step_complete(
             retriable=False,
         )
     if authority.data is None:
+        assert authority.error is not None
         return deny_envelope(
-            authority.error or "mark_step_complete: tracker authority unavailable",
+            authority.error,
             stage="mark_step_complete",
             retriable=False,
         )

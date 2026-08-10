@@ -944,7 +944,8 @@ steps:
     message: d
 """
 
-    assert _validate_route_consistency(raw, recipe)
+    errors = _validate_route_consistency(raw, recipe)
+    assert any("declared routes" in error for error in errors)
 
 
 def test_route_consistency_rejects_reordered_same_source_conditions() -> None:

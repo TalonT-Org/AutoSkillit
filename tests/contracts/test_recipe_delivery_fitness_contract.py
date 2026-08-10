@@ -25,16 +25,14 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 def test_bundled_recipe_ordinary_rendered_admits_exemption_with_margin(
     recipe_path: Path,
 ) -> None:
+    validated = 0
     for surface in ALL_DELIVERY_SURFACES:
         definition = RECIPE_DELIVERY_SURFACE_REGISTRY[surface]
         if definition.response_exemption is None:
             continue
         for backend_name in BACKEND_REGISTRY:
             rendered = compile_recipe(recipe_path, surface, backend_name)
-            if (
-                backend_forces_bounded(backend_name, surface)
-                or len(rendered.encode("utf-8")) > definition.response_exemption.max_utf8_bytes
-            ):
+            if backend_forces_bounded(backend_name, surface):
                 continue
             validate_recipe_exemption_fitness(
                 recipe=recipe_path.stem,
@@ -43,6 +41,8 @@ def test_bundled_recipe_ordinary_rendered_admits_exemption_with_margin(
                 ordinary_rendered=rendered,
                 ceiling_bytes=definition.response_exemption.max_utf8_bytes,
             )
+            validated += 1
+    assert validated > 0
 
 
 @pytest.mark.parametrize("recipe_path", BUNDLED_RECIPE_PATHS, ids=lambda path: path.stem)

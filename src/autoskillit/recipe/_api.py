@@ -381,10 +381,7 @@ def load_and_validate(
 
             # Stage: sub-recipe composition (lazy-loaded prefixes)
             active_recipe, combined_recipe = _build_active_recipe(
-                dataclasses.replace(
-                    recipe,
-                    steps={name: dataclasses.replace(step) for name, step in recipe.steps.items()},
-                ),
+                source_recipe,
                 ingredient_overrides,
                 _pdir,
                 _temp_relpath,

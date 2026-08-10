@@ -78,6 +78,7 @@ from autoskillit.pipeline import (
     commit_kitchen_response,
     confirm_kitchen_effect,
     create_background_task,
+    get_kitchen_process_identity,
     kitchen_state_payload,
     mark_kitchen_effect_ambiguous,
     new_kitchen_open_state,
@@ -614,7 +615,7 @@ def _retain_kitchen_tracker_authority(
         expected=False,
     )
     with tool_ctx.tracker_leases_lock:
-        identity = tool_ctx.get_kitchen_process_identity()
+        identity = get_kitchen_process_identity(tool_ctx)
         key = TrackerParticipantKey(
             target=target,
             owner_kind="kitchen",

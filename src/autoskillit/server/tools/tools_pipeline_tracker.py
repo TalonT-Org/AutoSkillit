@@ -30,7 +30,7 @@ from autoskillit.core import (
     release_tracker_lease,
     retain_tracker_lease,
 )
-from autoskillit.pipeline import canonical_step_name
+from autoskillit.pipeline import canonical_step_name, get_kitchen_process_identity
 from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 
 if TYPE_CHECKING:
@@ -56,8 +56,6 @@ class _TrackerCtx(Protocol):
     active_recipe_steps: dict[str, object] | None
     tracker_leases: dict[TrackerParticipantKey, ArtifactLease]
     tracker_leases_lock: threading.RLock
-
-    def get_kitchen_process_identity(self, owner_id: str = "") -> KitchenProcessIdentity: ...
 
 
 def read_tracker_identity(
@@ -100,7 +98,7 @@ def _retain_context_tracker(
     owner_id: str,
 ) -> tuple[TrackerParticipantKey, ArtifactLease]:
     with tool_ctx.tracker_leases_lock:
-        identity = tool_ctx.get_kitchen_process_identity(owner_id)
+        identity = get_kitchen_process_identity(tool_ctx, owner_id)
         key = TrackerParticipantKey(
             target=target,
             owner_kind=owner_kind,

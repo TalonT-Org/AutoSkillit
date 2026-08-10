@@ -20,7 +20,7 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
-from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline.context import ToolContext, get_kitchen_process_identity
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
 )
@@ -320,8 +320,8 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
 def test_kitchen_process_identity_is_sampled_once_with_owner_fallback(tmp_path):
     ctx = _make_ctx(tmp_path)
 
-    first = ctx.get_kitchen_process_identity("manual-owner")
-    second = ctx.get_kitchen_process_identity("different-owner")
+    first = get_kitchen_process_identity(ctx, "manual-owner")
+    second = get_kitchen_process_identity(ctx, "different-owner")
 
     assert first is second
     assert first.kitchen_id == "manual-owner"

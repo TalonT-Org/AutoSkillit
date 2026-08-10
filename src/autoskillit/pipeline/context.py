@@ -12,7 +12,7 @@ import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
@@ -87,6 +87,7 @@ __all__ = [
     "ToolContext",
     "current_order_id",
     "current_step_name",
+    "get_kitchen_process_identity",
 ]
 
 # Must-supply-or-raise: fields defaulting to _MISSING are required by __post_init__.
@@ -100,6 +101,12 @@ class TerminalRecipeResponseCacheEntry:
     expires_at: float
     content_sha256: str
     rendered: str
+
+
+class _KitchenIdentityContext(Protocol):
+    kitchen_id: str
+    kitchen_process_identity: KitchenProcessIdentity | None
+    project_dir: Path
 
 
 @dataclass
@@ -351,20 +358,24 @@ class ToolContext:
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)
 
-    def get_kitchen_process_identity(self, owner_id: str = "") -> KitchenProcessIdentity:
-        """Return the cached process identity, sampling it on first use."""
-        identity = self.kitchen_process_identity
-        if identity is None:
-            identity = sample_kitchen_process_identity(
-                self.kitchen_id or owner_id,
-                os.getpid(),
-                self.project_dir,
-            )
-            self.kitchen_process_identity = identity
-        return identity
-
     @property
     def default_ci_scope(self) -> CIRunScope:
         """Build the default CI scope from config. Used by handlers as fallback when
         the caller does not supply a workflow argument."""
         return CIRunScope(workflow=self.config.ci.workflow, event=self.config.ci.event)
+
+
+def get_kitchen_process_identity(
+    tool_ctx: _KitchenIdentityContext,
+    owner_id: str = "",
+) -> KitchenProcessIdentity:
+    """Return the context's cached process identity, sampling it on first use."""
+    identity = tool_ctx.kitchen_process_identity
+    if identity is None:
+        identity = sample_kitchen_process_identity(
+            tool_ctx.kitchen_id or owner_id,
+            os.getpid(),
+            tool_ctx.project_dir,
+        )
+        tool_ctx.kitchen_process_identity = identity
+    return identity

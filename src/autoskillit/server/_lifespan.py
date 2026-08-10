@@ -66,6 +66,7 @@ from autoskillit.pipeline import (
     OwnerBoundExplorationContextStore,
     confirm_kitchen_effect,
     create_background_task,
+    get_kitchen_process_identity,
     new_kitchen_open_state,
     start_kitchen_effect,
 )
@@ -86,7 +87,7 @@ logger = get_logger(__name__)
 
 
 def _context_kitchen_identity(ctx: Any) -> Any:
-    return ctx.get_kitchen_process_identity()
+    return get_kitchen_process_identity(ctx)
 
 
 def _retain_context_tracker_authority(ctx: Any) -> None:

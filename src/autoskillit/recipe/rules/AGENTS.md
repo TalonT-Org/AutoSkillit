@@ -13,8 +13,6 @@ registers them through the `@semantic_rule` decorator.
 | `dataflow/` | 4 rules | Dataflow capture, callable, handoff, multipart, callable verdict routing completeness |
 | `graph/` | 5 rules | Graph cycles, output, review, routes, summary-vs-graph divergence |
 
-See each subdirectory's AGENTS.md for details.
-
 ## Architecture Notes
 
 Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

@@ -5,6 +5,9 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 
 The package initializer remains import-free.
 
+The `_capture` primitives remain stdlib-only and importable in standalone mode when the
+hooks directory alone is supplied on `sys.path`.
+
 ## Architecture Notes
 
 `_dispatch.py` must never be renamed — every published hooks.json references it via the

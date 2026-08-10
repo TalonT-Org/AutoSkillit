@@ -173,7 +173,7 @@ class TestPublicationGateIntegration:
     def test_regressed_renderer_refuses_publication(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.core import PluginLoadMode
+        from autoskillit.core import PluginArtifactPublicationError, PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
@@ -218,7 +218,7 @@ class TestPublicationGateIntegration:
         )
         projections_root = tmp_path / ".autoskillit" / "plugin-projections"
         dirs_before = set(projections_root.iterdir()) if projections_root.is_dir() else set()
-        with pytest.raises(Exception):
+        with pytest.raises(PluginArtifactPublicationError):
             authority.acquire_launch_binding(
                 backend=ClaudeCodeBackend(),
                 load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,

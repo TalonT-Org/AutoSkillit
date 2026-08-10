@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
 from tests.server._helpers import _with_finalized_projection
+from tests.server._pipeline_test_helpers import _grant_success_credit
 from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -104,6 +105,7 @@ class TestRecordPipelineStepInit:
         initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
         assert initialized["success"] is True
         assert [key.owner_kind for key in self.ctx.tracker_leases] == ["manual"]
+        _grant_success_credit(self.ctx, self.tmp_path, "review", pipeline_id="AB")
 
         completed = json.loads(
             await record_pipeline_step(pipeline_id="AB", op="complete", step_name="review")
@@ -139,6 +141,7 @@ class TestRecordPipelineStepInit:
         self.ctx.active_recipe_steps = {"review": {}}
         initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
         assert initialized["success"] is True
+        _grant_success_credit(self.ctx, self.tmp_path, "review", pipeline_id="AB")
 
         def raise_from_marker(*_args, **_kwargs):
             raise OSError("marker failed")

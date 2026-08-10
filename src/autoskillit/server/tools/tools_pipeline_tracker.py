@@ -16,10 +16,10 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
-    RunSkillCompletionAuthority,
     ArtifactLease,
     AuditIdentityReservation,
     KitchenProcessIdentity,
+    RunSkillCompletionAuthority,
     TrackerAuthorityReadResult,
     TrackerAuthorityTarget,
     TrackerParticipantKey,
@@ -422,8 +422,20 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
         owner_kind="manual",
         owner_id=target.target_order_id,
     )
-    tracker_identity = read_tracker_identity(target, lease)
-    if tracker_identity is None:
+    tracker_authority = read_tracker_authority(target, lease)
+    if tracker_authority.data is None:
+        _release_context_tracker(ctx, key)
+        identity_error = tracker_authority.error or "tracker identity is unavailable"
+        return json.dumps(
+            deny_envelope(
+                f"record_pipeline_step: failed to read tracker identity: {identity_error}",
+                stage="preflight:pipeline_tracker",
+                retriable=identity_error.startswith("Cannot read pipeline tracker"),
+            )
+        )
+    tracker_kitchen_id = tracker_authority.data.get("kitchen_id")
+    tracker_incarnation_id = tracker_authority.data.get("tracker_incarnation_id")
+    if not isinstance(tracker_kitchen_id, str) or not isinstance(tracker_incarnation_id, str):
         _release_context_tracker(ctx, key)
         return json.dumps(
             deny_envelope(
@@ -432,7 +444,6 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
                 retriable=False,
             )
         )
-    tracker_kitchen_id, tracker_incarnation_id = tracker_identity
     authority = ctx.run_skill_completion
     if authority is None:
         _release_context_tracker(ctx, key)

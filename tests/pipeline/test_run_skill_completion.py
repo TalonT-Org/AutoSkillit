@@ -242,6 +242,42 @@ def test_success_credit_is_retained_until_tracker_completes() -> None:
         )
 
 
+def test_omitted_receipt_id_consumes_oldest_matching_credit() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    receipts = [_publish(authority), _publish(authority)]
+    for receipt in receipts:
+        authority.acknowledge(
+            receipt.receipt_id,
+            kitchen_id="kitchen",
+            request_session_id="session",
+        )
+    oldest, remaining = sorted(receipt.receipt_id for receipt in receipts)
+    binding = {
+        "tracker_order_id": "order",
+        "tracker_path": "/tracker.json",
+        "tracker_kitchen_id": "kitchen",
+        "tracker_incarnation_id": "incarnation",
+        "step_name": "investigate",
+    }
+
+    authority.apply_tracker_credit(
+        **binding,
+        effect=lambda: {"success": True, "status": "complete"},
+    )
+
+    with pytest.raises(ValueError, match="no acknowledged success credit"):
+        authority.apply_tracker_credit(
+            **binding,
+            receipt_id=oldest,
+            effect=lambda: {"success": True, "status": "complete"},
+        )
+    authority.apply_tracker_credit(
+        **binding,
+        receipt_id=remaining,
+        effect=lambda: {"success": True, "status": "complete"},
+    )
+
+
 def test_acknowledgement_and_two_repairs_consume_credit_exactly_once() -> None:
     authority = DefaultRunSkillCompletionAuthority()
     receipt = authority.draft(
@@ -349,7 +385,9 @@ def test_clear_is_denied_while_active_and_removes_idle_credit() -> None:
         success=True,
         result_digest="digest",
     )
+    assert authority.clear_if_idle() is False
     authority.publish(receipt.receipt_id)
+    assert authority.clear_if_idle() is False
     authority.acknowledge(
         receipt.receipt_id,
         kitchen_id="kitchen",

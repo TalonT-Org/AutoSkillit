@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC = _REPO_ROOT / "src" / "autoskillit"
@@ -51,6 +54,82 @@ _PROJECT_TEMP_CLEANUP_DEBT = {
 
 def _source(relative: str) -> str:
     return (_SRC / relative).read_text(encoding="utf-8")
+
+
+def test_capture_modules_import_with_hooks_directory_alone(tmp_path: Path) -> None:
+    hooks_dir = _SRC / "hooks"
+    capture_dir = hooks_dir / "_capture"
+    assert importlib.util.find_spec("autoskillit") is not None
+
+    stems = sorted(path.stem for path in capture_dir.glob("*.py"))
+    assert stems, f"no standalone capture modules found in {capture_dir}"
+
+    child_code = r"""
+import importlib
+import pathlib
+import sys
+
+repo_root = pathlib.Path(sys.argv[1]).resolve()
+hooks_dir = pathlib.Path(sys.argv[2]).resolve()
+stem = sys.argv[3]
+
+def is_repo_path(path):
+    return path == repo_root or repo_root in path.parents
+
+assert all(sys.path), sys.path
+initial_paths = [pathlib.Path(entry).resolve(strict=False) for entry in sys.path]
+assert not any(is_repo_path(path) for path in initial_paths), initial_paths
+
+sys.path.insert(0, str(hooks_dir))
+repo_paths = [
+    pathlib.Path(entry).resolve(strict=False)
+    for entry in sys.path
+    if is_repo_path(pathlib.Path(entry).resolve(strict=False))
+]
+assert repo_paths == [hooks_dir], repo_paths
+
+capture_dir = hooks_dir / "_capture"
+try:
+    import autoskillit
+except ModuleNotFoundError as exc:
+    assert exc.name == "autoskillit", exc
+else:
+    raise AssertionError("autoskillit unexpectedly imported before standalone target")
+
+module = importlib.import_module(f"_capture.{stem}")
+assert pathlib.Path(module.__file__).resolve() == capture_dir / f"{stem}.py"
+
+try:
+    import autoskillit
+except ModuleNotFoundError as exc:
+    assert exc.name == "autoskillit", exc
+else:
+    raise AssertionError("autoskillit unexpectedly imported after standalone target")
+"""
+
+    for stem in stems:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-S",  # -I disables user site, but system-site .pth files still need exclusion.
+                "-B",
+                "-c",
+                child_code,
+                str(_REPO_ROOT.resolve()),
+                str(hooks_dir.resolve()),
+                stem,
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, (
+            f"standalone import failed for {stem}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
 
 
 def _render_string_node(node: ast.Constant | ast.JoinedStr) -> str:

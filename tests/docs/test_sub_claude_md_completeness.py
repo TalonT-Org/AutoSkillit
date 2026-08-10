@@ -12,8 +12,6 @@ pytestmark = pytest.mark.medium
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src" / "autoskillit"
-_CAPTURE_GUIDE = "src/autoskillit/hooks/_capture/AGENTS.md"
-_CAPTURE_ADAPTER = "src/autoskillit/hooks/_capture/CLAUDE.md"
 
 
 def _load_tracked_guidance_paths(repo_root: Path = REPO_ROOT) -> frozenset[str]:
@@ -178,14 +176,11 @@ def test_tracked_guidance_families_partition_all_paths() -> None:
 
 
 def test_guide_adapter_sibling_contract() -> None:
-    expected_adapters = {_sibling(guide, "CLAUDE.md") for guide in ALL_GUIDES - {_CAPTURE_GUIDE}}
+    expected_adapters = {_sibling(guide, "CLAUDE.md") for guide in ALL_GUIDES}
     expected_guides = {_sibling(adapter, "AGENTS.md") for adapter in ALL_ADAPTERS}
 
     assert ALL_ADAPTERS == expected_adapters
-    assert ALL_GUIDES - {_CAPTURE_GUIDE} == expected_guides
-    assert _CAPTURE_GUIDE in ALL_GUIDES
-    assert _CAPTURE_ADAPTER not in ALL_ADAPTERS
-    assert not (REPO_ROOT / _CAPTURE_ADAPTER).exists()
+    assert ALL_GUIDES == expected_guides
 
 
 def test_non_root_adapters_are_exact_thin_shims() -> None:
@@ -297,14 +292,6 @@ def test_channel_b_defined_in_process_agents_md() -> None:
         assert marker in content, f"Channel B contract must retain {marker!r}"
 
 
-def test_capture_guide_retains_isolated_import_contract() -> None:
-    capture_guide = REPO_ROOT / _CAPTURE_GUIDE
-    assert capture_guide.is_file()
-    content = capture_guide.read_text(encoding="utf-8")
-    for marker in ("stdlib-only", "hooks directory alone", "`sys.path`"):
-        assert marker in content, f"_capture guide must retain {marker!r}"
-
-
 @pytest.mark.parametrize(
     ("guide", "markers"),
     [
@@ -339,6 +326,10 @@ def test_capture_guide_retains_isolated_import_contract() -> None:
                 "settings.json",
                 "contracts/",
             ),
+        ),
+        (
+            "src/autoskillit/hooks/AGENTS.md",
+            ("stdlib-only", "hooks directory alone", "`sys.path`"),
         ),
         (
             "src/autoskillit/recipe/rules/AGENTS.md",

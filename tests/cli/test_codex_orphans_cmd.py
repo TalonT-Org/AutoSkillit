@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from autoskillit.execution.process._codex_orphans import (
+from autoskillit.execution import (
     CodexOrphanReapResult,
     OrphanedCodexProcess,
 )

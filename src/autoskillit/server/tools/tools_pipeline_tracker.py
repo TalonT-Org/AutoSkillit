@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -55,7 +56,7 @@ class _TrackerCtx(Protocol):
     run_skill_completion: RunSkillCompletionAuthority | None
     active_recipe_steps: dict[str, object] | None
     tracker_leases: dict[TrackerParticipantKey, ArtifactLease]
-    tracker_leases_lock: Any
+    tracker_leases_lock: threading.RLock
 
 
 def read_tracker_identity(
@@ -185,7 +186,7 @@ def _restore_reserved_tracker_authority(
     return target, read_tracker_authority(target, lease), key, lease
 
 
-def _has_active_deps(authority: TrackerAuthorityReadResult | None) -> bool:
+def _authority_blocks_dependency_check(authority: TrackerAuthorityReadResult | None) -> bool:
     return bool(
         authority is not None
         and (authority.error is not None or (authority.data or {}).get("dependencies"))

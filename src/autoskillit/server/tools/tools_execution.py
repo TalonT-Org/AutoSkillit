@@ -201,7 +201,7 @@ from autoskillit.server.tools._native_shell_capture import (
 from autoskillit.server.tools._overlay_state import OverlayStateError, read_overlay
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 from autoskillit.server.tools.tools_pipeline_tracker import (
-    _has_active_deps,
+    _authority_blocks_dependency_check,
     _release_context_tracker,
     _restore_reserved_tracker_authority,
     _select_tracker_authority,
@@ -1163,7 +1163,7 @@ async def run_skill(
                     ) is not None:
                         return _plan_path_denial
                 elif _ambiguous:
-                    if _has_active_deps(_tracker_authority):
+                    if _authority_blocks_dependency_check(_tracker_authority):
                         return json.dumps(
                             deny_envelope(
                                 (
@@ -1188,7 +1188,7 @@ async def run_skill(
                             retriable=False,
                         )
                     )
-                elif _has_active_deps(_tracker_authority):
+                elif _authority_blocks_dependency_check(_tracker_authority):
                     return json.dumps(
                         deny_envelope(
                             (

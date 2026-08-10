@@ -982,7 +982,8 @@ steps:
     message: done
 """
 
-    assert _validate_route_consistency(raw, recipe)
+    errors = _validate_route_consistency(raw, recipe)
+    assert any("declared routes" in error for error in errors)
 
 
 @pytest.mark.parametrize(

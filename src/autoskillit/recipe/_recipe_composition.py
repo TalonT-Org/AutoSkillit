@@ -485,7 +485,7 @@ def _prune_skipped_steps(
 def _resolve_skip_guards_in_content(
     raw: str,
     resolutions: dict[str, bool | None],
-    original_steps: dict[str, Any],
+    original_steps: dict[str, RecipeStep],
 ) -> str:
     """Apply skip_when_false resolution decisions to the raw YAML content string.
 

@@ -1412,6 +1412,7 @@ class CodexBackend(BackendCmdBuilderBase):
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
             channel_b_capable=False,
+            supports_task_lifecycle_events=False,
             pty_required=False,
             session_resume_capable=True,
             skill_injection_capable=True,

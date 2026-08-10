@@ -8,6 +8,7 @@ record types without false-fires on embedded marker text.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -17,8 +18,31 @@ from autoskillit.execution.process import (
     _jsonl_last_record_type,
     _marker_is_standalone,
 )
+from autoskillit.execution.process._process_jsonl import EventCursor
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def test_event_cursor_preserves_partial_utf8_record(tmp_path: Path) -> None:
+    path = tmp_path / "session.jsonl"
+    encoded = '{"text":"café"}\n'.encode()
+    split = encoded.index(b"\xc3") + 1
+    path.write_bytes(encoded[:split])
+    cursor = EventCursor(path)
+    assert cursor.read_complete_lines() == ()
+    with path.open("ab") as stream:
+        stream.write(encoded[split:])
+    assert cursor.read_complete_lines() == ('{"text":"café"}',)
+    assert cursor.read_complete_lines() == ()
+
+
+def test_event_cursor_starts_at_resume_boundary(tmp_path: Path) -> None:
+    path = tmp_path / "session.jsonl"
+    path.write_bytes(b'{"old":true}\n')
+    cursor = EventCursor(path, run_boundary=path.stat().st_size)
+    with path.open("ab") as stream:
+        stream.write(b'{"new":true}\n')
+    assert cursor.read_complete_lines() == ('{"new":true}',)
 
 
 class TestJsonlContainsMarker:

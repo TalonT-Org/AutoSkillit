@@ -9,9 +9,11 @@ import anyio
 import pytest
 
 from autoskillit.core.types import (
+    BackendEventKind,
     ChannelBStatus,
     ChannelConfirmation,
     InspectorVerdict,
+    SessionEvent,
     TerminationReason,
 )
 from autoskillit.execution.process._process_race import (
@@ -250,8 +252,8 @@ class TestRaceSignalsFieldCount:
     """Sentinel test: breaks when RaceSignals fields change."""
 
     def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 11, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 11). "
+        assert len(dataclasses.fields(RaceSignals)) == 17, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 17). "
             "Update tests to cover the new field."
         )
 
@@ -283,9 +285,44 @@ class TestRaceAccumulatorFieldCount:
 
     def test_race_accumulator_field_count(self) -> None:
         n = len(dataclasses.fields(RaceAccumulator))
-        assert n == 11, (
-            f"RaceAccumulator has {n} fields (expected 11). Update tests for new fields."
+        assert n == 23, (
+            f"RaceAccumulator has {n} fields (expected 23). Update tests for new fields."
         )
+
+
+def test_lifecycle_reducer_is_terminal_dominant_and_freezes_sorted() -> None:
+    acc = RaceAccumulator(lifecycle_observation_enabled=True)
+    for task_id in ("b", "a"):
+        acc.observe_event(
+            SessionEvent(
+                kind=BackendEventKind.TASK_LIFECYCLE,
+                is_terminal=False,
+                has_marker=False,
+                task_id=task_id,
+                task_active=True,
+            )
+        )
+    acc.observe_event(
+        SessionEvent(
+            kind=BackendEventKind.TASK_LIFECYCLE,
+            is_terminal=False,
+            has_marker=False,
+            task_id="a",
+            task_active=False,
+        )
+    )
+    acc.observe_event(
+        SessionEvent(
+            kind=BackendEventKind.TASK_LIFECYCLE,
+            is_terminal=False,
+            has_marker=False,
+            task_id="a",
+            task_active=True,
+        )
+    )
+    signals = acc.to_race_signals()
+    assert signals.pending_task_ids == ("b",)
+    assert signals.terminal_task_ids == ("a",)
 
 
 class TestResolveTerminationInspector:

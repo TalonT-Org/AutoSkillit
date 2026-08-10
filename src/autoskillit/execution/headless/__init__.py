@@ -447,6 +447,7 @@ async def run_headless_core(
                 model_identity=model_identity,
                 marker_dir=marker_dir,
                 session_id=caller_session_id,
+                backend_resume_session_id=resume_session_id,
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
                 execution_identity=execution_identity,

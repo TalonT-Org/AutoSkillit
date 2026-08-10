@@ -147,6 +147,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        backend_resume_session_id: str = "",
+        lifecycle_observation_enabled: bool = False,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -187,6 +189,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     on_session_id_resolved=on_session_id_resolved,
                     child_deferral_ceiling=child_deferral_ceiling,
                     capture_dir=capture_dir,
+                    backend_resume_session_id=backend_resume_session_id,
+                    lifecycle_observation_enabled=lifecycle_observation_enabled,
                 )
 
             # Non-Codex, non-PTY with step_name: run inner + record summary.
@@ -216,6 +220,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 on_session_id_resolved=on_session_id_resolved,
                 child_deferral_ceiling=child_deferral_ceiling,
                 capture_dir=capture_dir,
+                backend_resume_session_id=backend_resume_session_id,
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
             )
             _head = (result.stdout or "")[:500] if not capture_dir else "(capture mode)"
             self.recorder.record_non_session_step(
@@ -255,6 +261,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
+            backend_resume_session_id=backend_resume_session_id,
+            lifecycle_observation_enabled=lifecycle_observation_enabled,
         )
 
     async def _record_session(
@@ -334,6 +342,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        backend_resume_session_id: str = "",
+        lifecycle_observation_enabled: bool = False,
     ) -> SubprocessResult:
         """Record an FD-aware inner-runner session via cassette files."""
         result = await self._inner(
@@ -362,6 +372,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
+            backend_resume_session_id=backend_resume_session_id,
+            lifecycle_observation_enabled=lifecycle_observation_enabled,
         )
 
         if self._scenario_dir is None:
@@ -473,8 +485,10 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        backend_resume_session_id: str = "",
+        lifecycle_observation_enabled: bool = False,
     ) -> SubprocessResult:
-        del pass_fds
+        del pass_fds, backend_resume_session_id, lifecycle_observation_enabled
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if not step_name:

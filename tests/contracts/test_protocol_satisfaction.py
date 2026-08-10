@@ -451,6 +451,8 @@ class TestGroupDApiContractPreservation:
             "child_deferral_ceiling",
             "capture_dir",
             "pass_fds",
+            "backend_resume_session_id",
+            "lifecycle_observation_enabled",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -526,6 +528,8 @@ class TestGroupDApiContractPreservation:
             "child_deferral_ceiling",
             "capture_dir",
             "pass_fds",
+            "backend_resume_session_id",
+            "lifecycle_observation_enabled",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

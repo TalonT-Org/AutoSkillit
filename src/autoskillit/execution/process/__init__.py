@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING, assert_never, cast
 
 import anyio
 import anyio.abc
@@ -40,10 +40,12 @@ from autoskillit.execution.process._process_io import (
     summarize_capture,
 )
 from autoskillit.execution.process._process_jsonl import (
+    EventCursor,
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,
     _marker_is_standalone,
+    fold_event_cursor,
 )
 from autoskillit.execution.process._process_kill import (
     _wait_process_dead,
@@ -63,6 +65,7 @@ from autoskillit.execution.process._process_race import (
     RaceSignals,
     _extract_stdout_session_id,
     _watch_child_activity,
+    _watch_completion_eligibility,
     _watch_heartbeat,
     _watch_process,
     _watch_session_log,
@@ -279,6 +282,8 @@ async def run_managed_async(
     on_session_id_resolved: Callable[[str], None] | None = None,
     child_deferral_ceiling: float = 0.0,
     capture_dir: Path | None = None,
+    backend_resume_session_id: str = "",
+    lifecycle_observation_enabled: bool = False,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -291,6 +296,7 @@ async def run_managed_async(
     6. read_temp_output for results
     7. cleanup temp files via context manager
     """
+    lifecycle_observation_enabled = lifecycle_observation_enabled and stream_parser is not None
     # Capture workload basename before PTY wrapping rewrites cmd (#806)
     _workload_basename = Path(cmd[0]).name if cmd else ""
     _inherited_fds = _normalize_pass_fds(pass_fds)
@@ -323,6 +329,15 @@ async def run_managed_async(
             # Capturing it after open_process() creates a race: under CI load
             # the subprocess writes its JSONL before time.time() is evaluated,
             # causing st_ctime < spawn_time and Phase 1 to never find the file.
+            resume_cursor: EventCursor | None = None
+            if session_log_dir is not None and backend_resume_session_id:
+                resume_path = session_log_dir / f"{backend_resume_session_id}.jsonl"
+                try:
+                    resume_boundary = resume_path.stat().st_size
+                except OSError:
+                    resume_boundary = 0
+                if resume_path.is_file():
+                    resume_cursor = EventCursor(resume_path, run_boundary=resume_boundary)
             _spawn_time = time.time()
             proc = await anyio.open_process(
                 cmd,
@@ -334,6 +349,7 @@ async def run_managed_async(
                 start_new_session=True,
                 pass_fds=_inherited_fds,
             )
+            process_group_id = proc.pid
 
             # Resolve the workload TraceTarget — the PID that should be observed.
             # anyio.open_process returns the spawn PID, which in PTY mode is the
@@ -393,7 +409,17 @@ async def run_managed_async(
                 session_monitor_enabled=session_log_dir is not None,
             )
 
-            acc = RaceAccumulator()
+            if lifecycle_observation_enabled:
+                assert stream_parser is not None
+            lifecycle_parser = cast("StreamParser", stream_parser)
+            acc = RaceAccumulator(
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
+                stdout_cursor=(
+                    EventCursor(stdout_path) if lifecycle_observation_enabled else None
+                ),
+                channel_b_cursor=resume_cursor,
+                process_group_id=process_group_id,
+            )
             trigger = anyio.Event()
             channel_b_ready = anyio.Event()
             stdout_session_id_ready = anyio.Event()
@@ -444,6 +470,18 @@ async def run_managed_async(
                         marker_dir,
                         session_id,
                         on_session_id_resolved,
+                        backend_resume_session_id,
+                    )
+                if lifecycle_observation_enabled:
+                    tg.start_soon(
+                        _watch_completion_eligibility,
+                        acc,
+                        trigger,
+                        channel_b_ready,
+                        completion_drain_timeout,
+                        child_deferral_ceiling,
+                        lifecycle_parser,
+                        session_log_dir is not None,
                     )
                 if idle_output_timeout is not None and idle_output_timeout > 0:
                     tg.start_soon(
@@ -458,6 +496,11 @@ async def run_managed_async(
                             max_suppression_seconds=max_suppression_seconds or 1800.0,
                             inspector_callback=inspector_callback,
                             timeout_scope_ref=timeout_scope_ref,
+                            has_pending_tasks=(
+                                acc.has_unresolved_obligations
+                                if lifecycle_observation_enabled
+                                else None
+                            ),
                         ),
                     )
                 tracing_handle = None
@@ -479,6 +522,11 @@ async def run_managed_async(
                             trigger,
                             marker_dir=marker_dir,
                             session_id=session_id,
+                            has_pending_tasks=(
+                                acc.has_unresolved_obligations
+                                if lifecycle_observation_enabled
+                                else None
+                            ),
                         ),
                     )
                 timeout_scope: anyio.CancelScope | None
@@ -508,6 +556,12 @@ async def run_managed_async(
                     )
                 tg.cancel_scope.cancel()
 
+            if lifecycle_observation_enabled:
+                if acc.stdout_cursor is not None:
+                    fold_event_cursor(acc.stdout_cursor, lifecycle_parser, acc.observe_event)
+                if acc.channel_b_cursor is not None:
+                    fold_event_cursor(acc.channel_b_cursor, lifecycle_parser, acc.observe_event)
+                acc.lifecycle_observation_complete = True
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
 
@@ -733,6 +787,8 @@ class DefaultSubprocessRunner:
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        backend_resume_session_id: str = "",
+        lifecycle_observation_enabled: bool = False,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -762,4 +818,6 @@ class DefaultSubprocessRunner:
             workload_basenames=workload_basenames,
             on_session_id_resolved=on_session_id_resolved,
             capture_dir=capture_dir,
+            backend_resume_session_id=backend_resume_session_id,
+            lifecycle_observation_enabled=lifecycle_observation_enabled,
         )

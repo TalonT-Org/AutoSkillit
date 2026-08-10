@@ -218,4 +218,6 @@ class SubprocessRunner(Protocol):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        backend_resume_session_id: str = "",
+        lifecycle_observation_enabled: bool = False,
     ) -> Awaitable[SubprocessResult]: ...

@@ -130,6 +130,8 @@ async def _run_headless_attempt(
     session_id: str | None,
     on_session_id_resolved: Callable[[str], None] | None,
     stream_parser: StreamParser,
+    backend_resume_session_id: str,
+    lifecycle_observation_enabled: bool,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
@@ -200,6 +202,8 @@ async def _run_headless_attempt(
             inspector_callback=None,
             workload_basenames=backend.capabilities.process_name_aliases or None,
             pass_fds=spec.inherited_fds,
+            backend_resume_session_id=backend_resume_session_id,
+            lifecycle_observation_enabled=lifecycle_observation_enabled,
         )
         return result, spec
 

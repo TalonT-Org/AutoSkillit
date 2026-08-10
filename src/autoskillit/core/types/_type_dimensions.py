@@ -39,6 +39,8 @@ class BytesToTokensPolicy:
     ASCII_YAML_POLICY: ClassVar[BytesToTokensPolicy]
 
     def __post_init__(self) -> None:
+        if not isinstance(self.utf8_bytes_per_token, Fraction):
+            raise TypeError("utf8_bytes_per_token must be a Fraction")
         if self.utf8_bytes_per_token <= 0:
             raise ValueError("utf8_bytes_per_token must be positive")
 

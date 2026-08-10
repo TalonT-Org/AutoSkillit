@@ -1,6 +1,7 @@
 """Dimension-safe output-budget value objects."""
 
 from fractions import Fraction
+from typing import cast
 
 import pytest
 
@@ -24,3 +25,8 @@ def test_bytes_to_tokens_conversion_uses_exact_explicit_policy() -> None:
 
     assert policy.utf8_bytes_per_token == Fraction(27, 10)
     assert policy.to_tokens(Utf8ByteLimit(100_000)) == TokenLimit(37_038)
+
+
+def test_bytes_to_tokens_policy_rejects_non_fraction_ratio() -> None:
+    with pytest.raises(TypeError, match="must be a Fraction"):
+        BytesToTokensPolicy(cast(Fraction, 2.7))

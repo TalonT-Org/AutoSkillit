@@ -420,9 +420,8 @@ if _UNREGISTERED_INVALIDITY_KINDS:
 # artifact with a lifetime exceeding the writing process under a relocatability
 # or machine-local-detection obligation.  See ``tests/contracts/
 # test_durable_artifact_relocatability.py`` for the per-writer contracts.
-#
-# Naming: ``*Def`` convention — static definition of a registered entity.
-# Import-time assertion at bottom prevents shipping an unregistered writer.
+# Import-time validation rejects duplicate writers and machine-local entries
+# that omit their required staleness detector.
 # ---------------------------------------------------------------------------
 
 

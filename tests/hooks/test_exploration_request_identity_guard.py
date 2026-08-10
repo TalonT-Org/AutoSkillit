@@ -33,7 +33,11 @@ def _project(tmp_path: Path) -> Path:
 
 
 def _run(
-    payload: object, root: Path, *, headless: bool = False
+    payload: object,
+    root: Path,
+    *,
+    headless: bool = False,
+    backend: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["AUTOSKILLIT_STATE_ROOT"] = str(root)
@@ -41,7 +45,10 @@ def _run(
         env["AUTOSKILLIT_HEADLESS"] = "1"
     else:
         env.pop("AUTOSKILLIT_HEADLESS", None)
-    env.pop("AUTOSKILLIT_AGENT_BACKEND", None)
+    if backend is None:
+        env.pop("AUTOSKILLIT_AGENT_BACKEND", None)
+    else:
+        env["AUTOSKILLIT_AGENT_BACKEND"] = backend
     return subprocess.run(
         [sys.executable, str(_SCRIPT)],
         input=payload if isinstance(payload, str) else json.dumps(payload),
@@ -174,6 +181,22 @@ def test_guard_skips_headless_events(tmp_path: Path) -> None:
     )
 
     assert result.stdout == ""
+
+
+def test_guard_skips_codex_events(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    result = _run(
+        {
+            "tool_name": "mcp__autoskillit__enable_exploration",
+            "session_id": "native-session",
+            "tool_input": {},
+        },
+        root,
+        backend="codex",
+    )
+
+    assert result.stdout == ""
+    assert not (root / ".autoskillit" / "temp" / "exploration-requests").exists()
 
 
 def test_registry_matcher_is_decorated_name_tolerant_and_exact() -> None:

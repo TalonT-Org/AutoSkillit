@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
@@ -19,7 +19,11 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.core import fast_loads as _fast_loads
-from autoskillit.execution.process._process_jsonl import EventCursor, fold_event_cursor
+from autoskillit.execution.process._process_jsonl import (
+    EventCursor,
+    fold_event_cursor,
+    fold_event_lines,
+)
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
     _has_active_child_processes,
@@ -161,6 +165,17 @@ class RaceAccumulator:
             completion_ceiling_expired=self.completion_ceiling_expired,
             process_group_id=self.process_group_id,
         )
+
+
+def fold_lifecycle_evidence(
+    lines: Sequence[str],
+    parser: StreamParser,
+) -> tuple[tuple[str, ...], bool]:
+    """Reduce lifecycle records to pending-task and wakeup evidence."""
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+    fold_event_lines(list(lines), parser, accumulator.observe_event)
+    signals = accumulator.to_race_signals()
+    return signals.pending_task_ids, signals.schedule_wakeup_violation
 
 
 async def _watch_process(

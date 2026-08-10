@@ -1020,29 +1020,17 @@ def finalize_recipe_delivery(
         supported_evidence=candidate_evidence,
         now_unix=now_unix,
     )
-    response_budget = getattr(getattr(tool_ctx, "config", None), "output_budget", None)
-    if response_budget is None:
-        response_budget = OutputBudgetConfig()
-    response_max_bytes = getattr(response_budget, "response_max_bytes", None)
-    page_max_bytes = getattr(response_budget, "page_max_bytes", None)
-    response_ceiling_bytes = (
-        response_max_bytes
-        if isinstance(response_max_bytes, int) and response_max_bytes > 0
-        else None
-    )
+    response_budget = tool_ctx.config.output_budget
+    response_ceiling_bytes = response_budget.response_max_bytes
+    page_max_bytes = response_budget.page_max_bytes
     section_response_bound_bytes = resolve_recipe_section_bound_bytes(
-        (
-            response_ceiling_bytes
-            if response_ceiling_bytes is not None
-            else OutputBudgetConfig().response_max_bytes
-        ),
+        response_ceiling_bytes,
         ordinary_limit,
-        page_max_bytes if isinstance(page_max_bytes, int) else None,
+        page_max_bytes,
     )
     if (
         decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
         and surface_definition.response_exemption_tool is None
-        and response_ceiling_bytes is not None
         and len(ordinary_rendered.encode("utf-8")) > response_ceiling_bytes
     ):
         decision = replace(
@@ -1141,10 +1129,7 @@ def finalize_recipe_delivery(
         rendered = high_rendered
     else:
         envelope_bound_bytes = envelope_byte_limit
-        if (
-            surface_definition.response_exemption_tool is None
-            and response_ceiling_bytes is not None
-        ):
+        if surface_definition.response_exemption_tool is None:
             envelope_bound_bytes = min(envelope_bound_bytes, response_ceiling_bytes)
         try:
             initialization_requirements = _initialization_requirements(

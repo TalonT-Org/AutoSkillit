@@ -461,11 +461,13 @@ async def enable_exploration(
             repository_root=repository_root,
             source_identity=f"interactive:{session_id}",
         )
+        exploration_enabled = False
         try:
             await ctx.enable_components(tags={"exploration"})
-        except Exception:
-            store.cleanup_session(session_id)
-            raise
+            exploration_enabled = True
+        finally:
+            if not exploration_enabled:
+                store.cleanup_session(session_id)
         return json.dumps(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import anyio
 import pytest
@@ -15,6 +14,7 @@ from autoskillit.core.types import ChannelConfirmation
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.pipeline.audit import FailureRecord
 from autoskillit.pipeline.gate import DefaultGateState
+from autoskillit.recipe.schema import RecipeStep
 from autoskillit.server.tools.tools_execution import run_skill
 from autoskillit.server.tools.tools_status import (
     get_pipeline_report,
@@ -57,22 +57,10 @@ def _failed_session_json() -> str:
     )
 
 
-def _dependency_recipe_steps() -> dict[str, SimpleNamespace]:
-    def step(name: str, on_success: str | None = None) -> SimpleNamespace:
-        return SimpleNamespace(
-            name=name,
-            action=None,
-            on_success=on_success,
-            on_failure=None,
-            on_context_limit=None,
-            on_rate_limit=None,
-            on_exhausted=None,
-            on_result=SimpleNamespace(routes={}, conditions=[]),
-        )
-
+def _dependency_recipe_steps() -> dict[str, RecipeStep]:
     return {
-        "rectify": step("rectify", on_success="review_approach"),
-        "review_approach": step("review_approach"),
+        "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+        "review_approach": RecipeStep(name="review_approach"),
     }
 
 

@@ -348,6 +348,13 @@ def complete_section_response(
             )
             assert isinstance(updated, InitializingRecipe)
         except ValueError:
+            logger.error(
+                "recipe initialization page rejected",
+                initialization_id=finalized.initialization_id,
+                section=finalized.section,
+                part=finalized.part,
+                exc_info=True,
+            )
             return json.dumps(
                 {"success": False, "error": "recipe_initialization_page_rejected"},
                 separators=(",", ":"),

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from unittest.mock import Mock
 
 import pytest
 
+import autoskillit.server._recipe_initialization as recipe_initialization
 import autoskillit.server._state as server_state
 from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
@@ -186,6 +188,42 @@ def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_
             content_sha256=content_sha256,
         )
         == rendered
+    )
+
+
+def test_section_rejection_preserves_diagnostic_context(
+    minimal_ctx,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    rendered = json.dumps({"success": True})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=1,
+        content_sha256=_hash("content"),
+        completion_receipt=None,
+    )
+    logger = Mock()
+    monkeypatch.setattr(recipe_initialization, "logger", logger)
+
+    response = complete_section_response(finalized, rendered)
+
+    assert json.loads(response) == {
+        "success": False,
+        "error": "recipe_initialization_page_rejected",
+    }
+    logger.error.assert_called_once_with(
+        "recipe initialization page rejected",
+        initialization_id=state.initialization_id,
+        section="flow_records",
+        part=1,
+        exc_info=True,
     )
 
 

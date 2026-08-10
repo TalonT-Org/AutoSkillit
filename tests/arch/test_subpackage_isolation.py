@@ -978,8 +978,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
-        "cli": 24,  # +_install_contract typed install process boundary (#4409);
-        # +_capture_store capture-store stats/reclaim command
+        "cli": 25,  # +_install_contract typed install process boundary (#4409);
+        # +_capture_store capture-store stats/reclaim; +_codex_orphans (#4536)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);

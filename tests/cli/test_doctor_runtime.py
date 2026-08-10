@@ -377,3 +377,52 @@ class TestCheckSessionIndexProjection:
 
         assert result.severity is Severity.OK
         assert result.message.startswith("1 committed session(s)")
+
+
+def test_orphaned_codex_check_warns_per_orphan(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ``_check_orphaned_codex_processes`` resolves ``find_orphaned_codex_processes``
+    # via a local import inside its own body, so the patch target is the
+    # resolution site (``autoskillit.execution``), not ``_doctor_runtime`` itself.
+    import autoskillit.execution as execution_mod
+    from autoskillit.cli.doctor._doctor_runtime import _check_orphaned_codex_processes
+    from autoskillit.execution.process._codex_orphans import OrphanedCodexProcess
+
+    orphans = [
+        OrphanedCodexProcess(
+            pid=5001,
+            fd0_target="/dev/pts/7 (deleted)",
+            exe_target="/usr/bin/codex",
+            starttime_ticks=111,
+            started_at=1000000.0,
+        ),
+        OrphanedCodexProcess(
+            pid=5002,
+            fd0_target="/dev/pts/8 (deleted)",
+            exe_target="/usr/bin/codex",
+            starttime_ticks=222,
+            started_at=1000001.0,
+        ),
+    ]
+    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
+
+    results = _check_orphaned_codex_processes()
+
+    assert len(results) == 2
+    for result, orphan in zip(results, orphans, strict=True):
+        assert result.severity == Severity.WARNING
+        assert result.check == "orphaned_codex_processes"
+        assert str(orphan.pid) in result.message
+        assert "autoskillit codex-orphans --reap" in result.message
+
+
+def test_orphaned_codex_check_ok_when_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    import autoskillit.execution as execution_mod
+    from autoskillit.cli.doctor._doctor_runtime import _check_orphaned_codex_processes
+
+    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: [])
+
+    results = _check_orphaned_codex_processes()
+
+    assert len(results) == 1
+    assert results[0].check == "orphaned_codex_processes"
+    assert results[0].severity == Severity.OK

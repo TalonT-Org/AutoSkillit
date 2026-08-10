@@ -55,7 +55,7 @@ class TestPipelineDepsAllowsMet:
         assert "DEPENDENCY UNMET" not in result.get("error", "")
 
 
-class TestPipelineDepsFailOpen:
+class TestPipelineDepsFailClosed:
     @pytest.mark.anyio
     async def test_missing_explicit_tracker_denies(self, tool_ctx_kitchen_open, tmp_path):
         _setup_project(tmp_path, tool_ctx_kitchen_open)
@@ -65,6 +65,8 @@ class TestPipelineDepsFailOpen:
         assert result["success"] is False
         assert "Expected pipeline tracker 'ZZ'" in result["error"]
 
+
+class TestPipelineDepsFailOpen:
     @pytest.mark.anyio
     async def test_allows_step_not_in_tracker(self, tool_ctx_kitchen_open, tmp_path):
         _setup_project(tmp_path, tool_ctx_kitchen_open)

@@ -156,7 +156,7 @@ def test_observed_empty_lifecycle_preserves_success() -> None:
         backend=ClaudeCodeBackend(),
     )
     assert skill_result.success is True
-    assert skill_result.retry_reason is not RetryReason.ASYNC_OBLIGATION
+    assert skill_result.retry_reason is RetryReason.NONE
 
 
 def test_unobserved_lifecycle_without_foldable_source_fails_safe() -> None:

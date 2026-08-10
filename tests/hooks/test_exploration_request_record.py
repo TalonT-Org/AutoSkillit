@@ -97,6 +97,35 @@ def test_atomic_claim_has_exactly_one_winner(tmp_path: Path) -> None:
     assert results.count(None) == 1
 
 
+def test_directory_open_failure_attempts_every_descriptor_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    open_failure = FileNotFoundError("missing temp directory")
+    monkeypatch.setattr(records.os, "open", lambda *_args, **_kwargs: 10)
+
+    def open_child(_parent_fd: int, component: str, *, create: bool = False) -> int:
+        del create
+        if component == "temp":
+            raise open_failure
+        return 11
+
+    closed: list[int] = []
+
+    def close(fd: int) -> None:
+        closed.append(fd)
+        if fd == 11:
+            raise OSError("close failed")
+
+    monkeypatch.setattr(records, "_open_child_directory", open_child)
+    monkeypatch.setattr(records.os, "close", close)
+
+    with pytest.raises(FileNotFoundError, match="missing temp directory") as exc_info:
+        records._open_request_directory(tmp_path)
+
+    assert exc_info.value is open_failure
+    assert closed == [11, 10]
+
+
 def test_cleanup_is_limited_to_expired_request_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

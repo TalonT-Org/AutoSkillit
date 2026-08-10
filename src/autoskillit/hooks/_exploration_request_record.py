@@ -72,7 +72,10 @@ def _open_request_directory(project_root: Path) -> int:
         request_fd = _open_child_directory(opened[-1], _REQUEST_DIRECTORY, create=True)
     except Exception:
         for fd in reversed(opened):
-            os.close(fd)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         raise
     for fd in reversed(opened):
         os.close(fd)

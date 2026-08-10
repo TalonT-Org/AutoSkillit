@@ -20,7 +20,8 @@ def _make_mock_recipes(load_result: dict) -> MagicMock:
     if load_result.get("valid") is True:
         load_result = _with_finalized_projection(load_result)
     mock.load_and_validate.return_value = load_result
-    mock.find.return_value = None
+    mock.find.return_value = MagicMock(path=Path("/fake/test-recipe.yaml"))
+    mock.load.return_value = MagicMock(steps={}, ingredients={})
     mock.list_all.return_value = {"recipes": [], "count": 0}
     return mock
 
@@ -29,12 +30,15 @@ def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     from threading import RLock
 
     from autoskillit.config import OutputBudgetConfig
-    from autoskillit.core import InstallationVersion
+    from autoskillit.core import InstallationVersion, SkillResolver
     from autoskillit.pipeline import NoActiveRecipe
     from autoskillit.server._factory import make_recipe_execution
 
     mock_ctx = MagicMock()
     mock_ctx.recipes = recipes
+    mock_ctx.skill_resolver = MagicMock(spec=SkillResolver)
+    mock_ctx.skill_resolver.resolve_effective.return_value = None
+    mock_ctx.project_dir = temp_dir
     mock_ctx.temp_dir = temp_dir
     mock_ctx.kitchen_id = "test-mcp-overrides"
     mock_ctx.config.migration.suppressed = []

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -75,6 +76,12 @@ BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES = (
         "agent_backend.recipe_overrides.research-review.run_experiment_lenses",
     ),
 )
+
+
+def _configure_admitted_recipe(ctx: Any, path: Path) -> None:
+    """Admit a recipe and load it with empty steps and ingredients by default."""
+    ctx.recipes.find.return_value = MagicMock(path=path)
+    ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
 
 
 def _bundled_backend() -> AgentBackendConfig:

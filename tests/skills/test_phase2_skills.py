@@ -36,6 +36,9 @@ def test_open_kitchen_skill_respects_host_declared_visibility() -> None:
     assert "promotion remains valid even when the tools are pre-revealed" in content
     assert "name=" in content
     assert "close_kitchen" in content and "reopen" in content
+    assert "$<name>" in content and "/<name>" in content
+    assert "skill name" in content and "recipe identities only" in content
+    assert "defined as both" in content and "rejected" in content
 
 
 def test_close_kitchen_skill_has_disable_model_invocation() -> None:

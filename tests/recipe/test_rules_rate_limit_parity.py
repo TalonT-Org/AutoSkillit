@@ -82,7 +82,7 @@ class TestRateLimitRuleFiring:
         dataclass instance.
 
         Recipes without any run_skill steps (e.g. consolidate-health-reports,
-        research-archive, promote-to-main, research-campaign) are inherently
+        research-archive, promote-to-main-campaign, research-campaign) are inherently
         compliant — the rule has nothing to flag and zero findings is correct.
         """
         stem = recipe_path.stem

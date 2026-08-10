@@ -544,7 +544,7 @@ class TestCampaignStateFieldCompleteness:
 
 
 # ---------------------------------------------------------------------------
-# Test 11: resume chain for promote-to-main shape
+# Test 11: resume chain for promote-to-main-campaign shape
 # ---------------------------------------------------------------------------
 
 

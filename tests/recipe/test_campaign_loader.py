@@ -260,27 +260,27 @@ def test_bundled_example_campaign_parseable():
 
 
 # ---------------------------------------------------------------------------
-# promote-to-main campaign
+# promote-to-main-campaign campaign
 # ---------------------------------------------------------------------------
 
 
 def test_promote_to_main_campaign_parseable():
-    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main-campaign.yaml"
     recipe = load_recipe(path)
-    assert recipe.name == "promote-to-main"
+    assert recipe.name == "promote-to-main-campaign"
     assert recipe.kind == RecipeKind.CAMPAIGN
     assert recipe.recipe_version == "1.0.0"
 
 
 def test_promote_to_main_campaign_passes_validation():
-    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main-campaign.yaml"
     recipe = load_recipe(path)
     findings = validate_recipe_structure(recipe)
     assert findings == [], f"Unexpected findings: {findings}"
 
 
 def test_promote_to_main_campaign_dispatch_chain():
-    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main-campaign.yaml"
     recipe = load_recipe(path)
     names = [d.name for d in recipe.dispatches]
     assert names == [
@@ -305,14 +305,14 @@ def test_promote_to_main_campaign_in_list_campaign_recipes(tmp_path: Path):
     result = list_campaign_recipes(tmp_path)
     assert result.errors == []
     names = [r.name for r in result.items]
-    assert "promote-to-main" in names
+    assert "promote-to-main-campaign" in names
 
 
 def test_campaign_dispatch_capture_value_type_checked() -> None:
     """dispatch-capture-type-matches-contract-optionality: string on optional field → ERROR."""
     import dataclasses
 
-    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main-campaign.yaml"
     recipe = load_recipe(path)
     project_dir = pkg_root() / "recipes"
     available_recipes = frozenset(p.stem for p in project_dir.glob("*.yaml"))
@@ -361,7 +361,8 @@ def test_campaign_dispatch_capture_value_type_checked() -> None:
         and f.severity == Severity.ERROR
     ]
     assert not fixed_findings, (
-        "promote-to-main.yaml must not trigger dispatch-capture-type-matches-contract-optionality "
+        "promote-to-main-campaign.yaml must not trigger "
+        "dispatch-capture-type-matches-contract-optionality "
         "after the optional_string fix: " + "; ".join(f.message for f in fixed_findings)
     )
 

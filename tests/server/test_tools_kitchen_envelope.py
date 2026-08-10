@@ -11,12 +11,12 @@ import pytest
 from tests.server._helpers import (
     _PATCHED_DEFAULTS,
     _SERVER_ONLY_KEYS,
+    _configure_admitted_recipe,
     _with_finalized_projection,
 )
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
 
 # ---------------------------------------------------------------------------
 # Group E — hook drift / diagnostic warnings
@@ -48,7 +48,7 @@ async def test_named_delivery_preserves_finalized_bytes_across_anonymous_guidanc
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = None
+    _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
     finalized = FinalizedRecipeResponse(
         rendered=f"{delivery_mode}:byte-identical",
@@ -350,7 +350,7 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = None
+    _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -388,7 +388,7 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
         "diagram": None,
         "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
     }
-    mock_ctx.recipes.find.return_value = None
+    _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
 
@@ -440,7 +440,7 @@ async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path
         "diagram": None,
         "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
     }
-    mock_ctx.recipes.find.return_value = None
+    _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
 
@@ -544,7 +544,7 @@ async def test_open_kitchen_config_authority_overrides_caller(tmp_path, monkeypa
             "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
         ),
     }
-    mock_ctx.recipes.find.return_value = None
+    _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
     mock_ctx.config.linux_tracing.log_dir = ""
@@ -962,7 +962,7 @@ async def test_open_kitchen_apply_triage_gate_raises_returns_failure_envelope(
         "valid": True,
         "suggestions": [],
     }
-    mock_ctx.recipes.find.return_value = None
+    _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
 
     async def raise_apply(*a, **kw):

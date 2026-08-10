@@ -7,6 +7,37 @@ import pytest
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
+def test_model_facing_recipe_surfaces_define_namespace_boundary():
+    import inspect
+
+    from autoskillit.server.tools.tools_kitchen import get_recipe, open_kitchen
+    from autoskillit.server.tools.tools_recipe import load_recipe, migrate_recipe
+
+    for surface in (open_kitchen, load_recipe, migrate_recipe, get_recipe):
+        doc = inspect.getdoc(surface) or ""
+        assert "$<name>" in doc and "/<name>" in doc
+        assert "skill name" in doc and "those surfaces accept recipe identities only" in doc
+        for recipe_surface in ("open_kitchen", "load_recipe", "migrate_recipe", "recipe://"):
+            assert recipe_surface in doc
+        assert "defined as both" in doc and "rejected" in doc
+
+
+def test_bundled_recipe_and_skill_names_are_disjoint() -> None:
+    from pathlib import Path
+
+    from autoskillit.recipe import all_validated_recipe_names
+    from autoskillit.workspace import DefaultSkillResolver
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    recipe_names = set(all_validated_recipe_names(project_root))
+    skill_names = {skill.name for skill in DefaultSkillResolver().list_all()}
+
+    assert recipe_names.isdisjoint(skill_names), (
+        "Bundled recipe and skill names must be disjoint; collisions: "
+        f"{sorted(recipe_names & skill_names)}"
+    )
+
+
 def test_load_recipe_instructs_step_name_exact_yaml_key():
     """
     The load_recipe docstring must explicitly instruct that step_name

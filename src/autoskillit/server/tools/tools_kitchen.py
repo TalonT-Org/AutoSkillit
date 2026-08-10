@@ -34,6 +34,7 @@ from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     ProcessStaleError,
     RecipeDeliveryRequest,
+    RecipeLoadError,
     _collect_disabled_feature_tags,
     atomic_write,
     clear_kitchens_for_pid,
@@ -127,6 +128,7 @@ from autoskillit.server.tools._preflight import (
     filter_steps_by_post_prune,
 )
 from autoskillit.server.tools._serve_helpers import (
+    _admit_recipe_name,
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
     pop_finalized_recipe_projection,
@@ -988,23 +990,27 @@ def _close_kitchen_handler() -> None:
 
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
-    """Return composed recipe YAML for the orchestrating agent to follow."""
+    """Return composed recipe YAML for the orchestrating agent to follow.
+
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not pass
+    a skill name to ``open_kitchen``, ``load_recipe``, ``migrate_recipe``, or
+    ``recipe://``; those surfaces accept recipe identities only.
+    A name defined as both a recipe and a skill is rejected until one artifact
+    is renamed.
+    """
     from autoskillit.server._state import _get_ctx_or_none  # circular-break
 
     ctx = _get_ctx_or_none()
     if ctx is None or ctx.recipes is None:
         return json.dumps({"error": "Kitchen not open."})
-    match = ctx.recipes.find(name, ctx.project_dir)
-    if match is None:
-        return json.dumps({"error": f"No recipe named '{name}'."})
-
-    _defaults = resolve_ingredient_defaults(ctx.project_dir)
-    _config_layer = build_config_authoritative_layer(_defaults)
-    _session_overrides: dict[str, str] = {
-        "kitchen_id": ctx.kitchen_id,
-        "diagnostics_log_dir": str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
-    }
     try:
+        match = _admit_recipe_name(ctx, name)
+        _defaults = resolve_ingredient_defaults(ctx.project_dir)
+        _config_layer = build_config_authoritative_layer(_defaults)
+        _session_overrides: dict[str, str] = {
+            "kitchen_id": ctx.kitchen_id,
+            "diagnostics_log_dir": str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
+        }
         _raw_recipe = ctx.recipes.load(match.path)
         _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
             _raw_recipe.steps,
@@ -1035,6 +1041,8 @@ def get_recipe(name: str) -> str:
     except ProcessStaleError:
         logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
         return json.dumps({"error": f"Recipe '{name}' composition failed — process stale."})
+    except RecipeLoadError as exc:
+        return json.dumps({"error": str(exc)})
     except Exception:
         logger.warning("get_recipe_failure", recipe=name, stage="load_and_validate", exc_info=True)
         return json.dumps({"error": f"Recipe '{name}' composition failed."})
@@ -1161,6 +1169,12 @@ async def open_kitchen(
     When ``name`` is provided, the kitchen is opened AND the named recipe is
     loaded in a single call, reducing terminal noise from two tool calls to one.
 
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not pass
+    a skill name to ``open_kitchen``, ``load_recipe``, ``migrate_recipe``, or
+    ``recipe://``; those surfaces accept recipe identities only.
+    A name defined as both a recipe and a skill is rejected until one artifact
+    is renamed.
+
     Args:
         name: Optional recipe name to load immediately after opening.
         overrides: Optional dict of ingredient name → value to override recipe defaults.
@@ -1197,9 +1211,31 @@ async def open_kitchen(
 
         from autoskillit.server import _get_ctx  # circular-break
 
-        disabled_subsets = _get_ctx().config.subsets.disabled
-
         _ctx_pre = _get_ctx()
+        _admitted_recipe_info = None
+        if name is not None:
+            if _ctx_pre.recipes is None or _ctx_pre.skill_resolver is None:
+                missing_service = (
+                    "recipe repository" if _ctx_pre.recipes is None else "skill resolver"
+                )
+                return _kitchen_failure_envelope(
+                    RuntimeError(f"{missing_service} is not configured"),
+                    stage="recipe_context",
+                    user_hint=(
+                        "open_kitchen cannot load a recipe because the server is not "
+                        "initialized. Run 'autoskillit doctor' to diagnose."
+                    ),
+                )
+            try:
+                _admitted_recipe_info = _admit_recipe_name(_ctx_pre, name)
+            except RecipeLoadError as exc:
+                return _kitchen_failure_envelope(
+                    exc,
+                    stage="recipe_namespace",
+                    user_hint=str(exc),
+                )
+
+        disabled_subsets = _ctx_pre.config.subsets.disabled
         _skip_handler = _ctx_pre.gate_infrastructure_ready
         tool_ctx = _get_ctx()
 
@@ -1354,14 +1390,9 @@ async def open_kitchen(
                 )
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
-            try:
-                _recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
-            except Exception:
-                logger.warning("open_kitchen_early_find_failed", recipe=name, exc_info=True)
-                _recipe_info = None
-            _raw_recipe = (
-                tool_ctx.recipes.load(_recipe_info.path) if _recipe_info is not None else None
-            )
+            assert _admitted_recipe_info is not None
+            _recipe_info = _admitted_recipe_info
+            _raw_recipe = tool_ctx.recipes.load(_recipe_info.path)
             _session_overrides: dict[str, str] = {
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
@@ -1436,32 +1467,19 @@ async def open_kitchen(
                 tool_ctx.recipe_content_hash = result.get("content_hash", "")
                 tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
                 tool_ctx.recipe_version = result.get("recipe_version") or ""
-                recipe_info = None
+                recipe_info = _recipe_info
                 _deferred_recipe_obj = None
                 try:
-                    recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+                    recipe_obj = tool_ctx.recipes.load(recipe_info.path)
+                    _deferred_recipe_obj = recipe_obj
+                    tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
+                        recipe_obj.steps, result.get("post_prune_step_names", [])
+                    )
+                    tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
                 except Exception:
-                    logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
+                    logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
                     tool_ctx.active_recipe_steps = None
                     tool_ctx.active_recipe_ingredients = None
-                else:
-                    if recipe_info is not None:
-                        try:
-                            recipe_obj = tool_ctx.recipes.load(recipe_info.path)
-                            _deferred_recipe_obj = recipe_obj
-                            tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
-                                recipe_obj.steps, result.get("post_prune_step_names", [])
-                            )
-                            tool_ctx.active_recipe_ingredients = frozenset(
-                                recipe_obj.ingredients.keys()
-                            )
-                        except Exception:
-                            logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
-                            tool_ctx.active_recipe_steps = None
-                            tool_ctx.active_recipe_ingredients = None
-                    else:
-                        tool_ctx.active_recipe_steps = None
-                        tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
                     transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
@@ -1601,26 +1619,18 @@ async def open_kitchen(
             if rerun_suggestion:
                 result.setdefault("suggestions", []).append(rerun_suggestion)
 
-            try:
-                recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
-            except Exception as exc:
-                logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
-                return _kitchen_failure_envelope(exc, stage="recipe_find")
+            recipe_info = _recipe_info
 
             _normal_recipe_obj = None
-            if recipe_info is not None:
-                try:
-                    recipe_obj = tool_ctx.recipes.load(recipe_info.path)
-                    _normal_recipe_obj = recipe_obj
-                    tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
-                        recipe_obj.steps, result.get("post_prune_step_names", [])
-                    )
-                    tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
-                except Exception:
-                    logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
-                    tool_ctx.active_recipe_steps = None
-                    tool_ctx.active_recipe_ingredients = None
-            else:
+            try:
+                recipe_obj = tool_ctx.recipes.load(recipe_info.path)
+                _normal_recipe_obj = recipe_obj
+                tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
+                    recipe_obj.steps, result.get("post_prune_step_names", [])
+                )
+                tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
+            except Exception:
+                logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
                 tool_ctx.active_recipe_steps = None
                 tool_ctx.active_recipe_ingredients = None
 

@@ -288,6 +288,9 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
     assert "explicitly requests activation or promotion" in guidance
     assert "open_kitchen(name=...)" in guidance
     assert "after close_kitchen()" in guidance
+    assert "$<name>" in guidance and "/<name>" in guidance
+    assert "skill name" in guidance and "recipe identities only" in guidance
+    assert "defined as both" in guidance and "rejected" in guidance
 
 
 def test_notification_capable_cook_has_no_pre_reveal_guidance(

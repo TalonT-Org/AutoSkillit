@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -233,6 +233,21 @@ class TestMigrateRecipe:
 
         mock_headless.assert_not_called()
         assert result.get("status") == "up_to_date"
+
+    @pytest.mark.anyio
+    async def test_suppressed_skill_name_is_rejected_before_suppression(self, tool_ctx):
+        tool_ctx.config.migration.suppressed = ["suppressed-skill"]
+        tool_ctx.recipes = MagicMock()
+        tool_ctx.recipes.find.return_value = None
+        tool_ctx.skill_resolver = MagicMock()
+        tool_ctx.skill_resolver.resolve_effective.return_value = object()
+        tool_ctx.migrations = AsyncMock()
+
+        result = json.loads(await migrate_recipe(name="suppressed-skill"))
+
+        assert "skill" in result["error"].lower()
+        assert result["name"] == "suppressed-skill"
+        tool_ctx.migrations.migrate.assert_not_awaited()
 
     # LR8
     @pytest.mark.anyio

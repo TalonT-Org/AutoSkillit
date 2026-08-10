@@ -145,7 +145,7 @@ def _make_mock_ctx(config=None) -> MagicMock:
     from threading import RLock
 
     from autoskillit.config import AutomationConfig, OutputBudgetConfig, QuotaGuardConfig
-    from autoskillit.core import InstallationVersion
+    from autoskillit.core import InstallationVersion, SkillResolver
     from autoskillit.pipeline import NoActiveRecipe
     from autoskillit.server._factory import make_recipe_execution
 
@@ -163,6 +163,8 @@ def _make_mock_ctx(config=None) -> MagicMock:
     )
     ctx.project_dir = ctx.temp_dir / "project"
     ctx.project_dir.mkdir(parents=True, exist_ok=True)
+    ctx.skill_resolver = MagicMock(spec=SkillResolver)
+    ctx.skill_resolver.resolve_effective.return_value = None
     ctx.kitchen_id = f"test-{uuid4().hex}"
     ctx.config.output_budget = OutputBudgetConfig()
     ctx.config.quota_guard = QuotaGuardConfig()
@@ -254,6 +256,7 @@ def build_ctx(tmp_path):
     from autoskillit.core import (
         AuditAdmissionStoreAuthority,
         ContextAdmissionStoreAuthority,
+        SkillResolver,
     )
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
@@ -334,6 +337,8 @@ def build_ctx(tmp_path):
             ),
             run_skill_completion=DefaultRunSkillCompletionAuthority(),
         )
+        ctx.skill_resolver = MagicMock(spec=SkillResolver)
+        ctx.skill_resolver.resolve_effective.return_value = None
         for field_name, value in overrides.items():
             setattr(ctx, field_name, value)
         return ctx

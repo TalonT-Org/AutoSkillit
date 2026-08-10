@@ -1,5 +1,5 @@
 {
-  "name": "promote-to-main",
+  "name": "promote-to-main-campaign",
   "description": "Full promotion lifecycle: audit integration branch, human review gate, implement audit findings with BEM-guided distribution, promote to main.",
   "kind": "campaign",
   "recipe_version": "1.0.0",

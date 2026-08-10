@@ -123,9 +123,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # same rationale and format as the _lifespan.py site above)
     ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 178),
     # tools_kitchen.py — hook config, quota guard, and git_ops_policy
-    ("src/autoskillit/server/tools/tools_kitchen.py", 546),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 565),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 597),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 548),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 567),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 599),
     # _overlay_state.py — session-scoped hook config overlay (not schema-versioned)
     ("src/autoskillit/server/tools/_overlay_state.py", 114),
     # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write

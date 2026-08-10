@@ -155,6 +155,7 @@ def test_observed_empty_lifecycle_preserves_success() -> None:
         skill_command="/plan",
         backend=ClaudeCodeBackend(),
     )
+    assert skill_result.success is True
     assert skill_result.retry_reason is not RetryReason.ASYNC_OBLIGATION
 
 

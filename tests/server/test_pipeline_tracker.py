@@ -515,6 +515,8 @@ class TestCheckPipelineDepsImmutableTarget:
             "",
         )
         result = _check_pipeline_deps("b", authority)
+        assert _target is not None
+        assert _target.target_order_id == "kitchen-xyz"
         if key is not None:
             from autoskillit.server.tools.tools_pipeline_tracker import (
                 _release_context_tracker,

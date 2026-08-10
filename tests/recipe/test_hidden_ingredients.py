@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from autoskillit.recipe._api import format_ingredients_table
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
@@ -945,6 +947,211 @@ steps:
     assert _validate_route_consistency(raw, recipe)
 
 
+def test_route_consistency_rejects_reordered_same_source_conditions() -> None:
+    from autoskillit.recipe._recipe_composition import _validate_route_consistency
+    from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
+
+    recipe = Recipe(
+        name="ordered-results",
+        description="ordered-results",
+        steps={
+            "router": RecipeStep(
+                tool="run_cmd",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(when="first", route="done"),
+                        StepResultCondition(when="second", route="done"),
+                    ]
+                ),
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+    raw = """name: ordered-results
+steps:
+  router:
+    tool: run_cmd
+    on_result:
+    - when: second
+      route: done
+    - when: first
+      route: done
+  done:
+    action: stop
+    message: done
+"""
+
+    assert _validate_route_consistency(raw, recipe)
+
+
+@pytest.mark.parametrize(
+    ("raw_route", "model_step", "expected_fragment"),
+    [
+        (
+            "on_result:\n    - when: ok\n      route: stale",
+            RecipeStep(tool="run_cmd", on_success="done"),
+            "declared routes",
+        ),
+        (
+            "on_result:\n      field: status\n      routes:\n        ok: stale",
+            RecipeStep(tool="run_cmd", on_success="done"),
+            "declared routes",
+        ),
+        ("on_failure: done", RecipeStep(tool="run_cmd"), "declared routes"),
+        ("on_success: done", RecipeStep(tool="run_cmd", on_failure="done"), "declared routes"),
+    ],
+)
+def test_route_consistency_rejects_remaining_edge_drift(
+    raw_route: str,
+    model_step: RecipeStep,
+    expected_fragment: str,
+) -> None:
+    from autoskillit.recipe._recipe_composition import _validate_route_consistency
+
+    recipe = Recipe(
+        name="edge-drift",
+        description="edge-drift",
+        steps={
+            "router": model_step,
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+    raw = f"""name: edge-drift
+steps:
+  router:
+    tool: run_cmd
+    {raw_route}
+  done:
+    action: stop
+    message: done
+"""
+
+    errors = _validate_route_consistency(raw, recipe)
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_route_consistency_rejects_step_order_drift() -> None:
+    from autoskillit.recipe._recipe_composition import _validate_route_consistency
+
+    recipe = Recipe(
+        name="order-drift",
+        description="order-drift",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+    raw = """name: order-drift
+steps:
+  done:
+    action: stop
+    message: done
+  entry:
+    tool: run_cmd
+    on_success: done
+"""
+
+    errors = _validate_route_consistency(raw, recipe)
+    assert any("step order" in error for error in errors)
+
+
+@given(
+    chain_length=st.integers(min_value=1, max_value=4),
+    route_style=st.sampled_from(("scalar", "conditions", "legacy")),
+)
+def test_guarded_chain_pruning_matches_independent_oracle(
+    chain_length: int,
+    route_style: str,
+) -> None:
+    from autoskillit.core import load_yaml
+    from autoskillit.recipe._recipe_composition import (
+        _prune_skipped_steps,
+        _resolve_skip_guards_in_content,
+        _validate_route_consistency,
+    )
+    from autoskillit.recipe.io import _parse_recipe
+    from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
+
+    guarded_names = [f"guard_{index}" for index in range(chain_length)]
+    expected_target = "survivor"
+    if route_style == "scalar":
+        entry_step = RecipeStep(tool="run_cmd", on_success=guarded_names[0])
+        raw_entry_route = f"    on_success: {guarded_names[0]}"
+    elif route_style == "conditions":
+        entry_step = RecipeStep(
+            tool="run_cmd",
+            on_result=StepResultRoute(
+                conditions=[StepResultCondition(when="ok", route=guarded_names[0])]
+            ),
+        )
+        raw_entry_route = f"    on_result:\n    - when: ok\n      route: {guarded_names[0]}"
+    else:
+        entry_step = RecipeStep(
+            tool="run_cmd",
+            on_result=StepResultRoute(field="status", routes={"ok": guarded_names[0]}),
+        )
+        raw_entry_route = (
+            f"    on_result:\n      field: status\n      routes:\n        ok: {guarded_names[0]}"
+        )
+
+    guarded_steps = {
+        name: RecipeStep(
+            tool="run_cmd",
+            skip_when_false="false",
+            on_skip=guarded_names[index + 1] if index + 1 < chain_length else expected_target,
+        )
+        for index, name in enumerate(guarded_names)
+    }
+    recipe = Recipe(
+        name="generated-chain",
+        description="generated-chain",
+        steps={
+            "entry": entry_step,
+            **guarded_steps,
+            expected_target: RecipeStep(tool="run_cmd", on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+    guarded_yaml = "".join(
+        f"  {name}:\n"
+        "    tool: run_cmd\n"
+        "    skip_when_false: false\n"
+        "    on_skip: "
+        f"{guarded_names[index + 1] if index + 1 < chain_length else expected_target}\n"
+        for index, name in enumerate(guarded_names)
+    )
+    raw = (
+        "name: generated-chain\n"
+        "description: generated-chain\n"
+        "steps:\n"
+        "  entry:\n"
+        "    tool: run_cmd\n"
+        f"{raw_entry_route}\n"
+        f"{guarded_yaml}"
+        "  survivor:\n"
+        "    tool: run_cmd\n"
+        "    on_success: done\n"
+        "  done:\n"
+        "    action: stop\n"
+        "    message: done\n"
+    )
+
+    pruned, resolutions = _prune_skipped_steps(recipe)
+    repaired = _resolve_skip_guards_in_content(raw, resolutions, recipe.steps)
+    reparsed = _parse_recipe(load_yaml(repaired))
+
+    assert tuple(pruned.steps) == ("entry", expected_target, "done")
+    assert all(name not in pruned.steps for name in guarded_names)
+    if route_style == "scalar":
+        assert pruned.steps["entry"].on_success == expected_target
+    elif route_style == "conditions":
+        assert pruned.steps["entry"].on_result.conditions[0].route == expected_target
+    else:
+        assert pruned.steps["entry"].on_result.routes["ok"] == expected_target
+    assert tuple(reparsed.steps) == tuple(pruned.steps)
+    assert not _validate_route_consistency(repaired, pruned)
+
+
 def test_load_and_validate_clears_content_on_dangling_routes(tmp_path: Path) -> None:
     """load_and_validate blocks content when pruning produces dangling route references."""
     from autoskillit.recipe import load_and_validate
@@ -992,9 +1199,77 @@ steps:
         project_dir=tmp_path,
         ingredient_overrides={"flag": "false"},
     )
-    assert result["valid"] is False
+    # Invalid skip contracts surface findings before any pruning is attempted.
     assert result["valid"] is False
     assert any("on_skip" in error for error in result["errors"])
+    assert result["content"] == yaml_text
+
+
+def test_research_parity_precedes_active_rate_limit_derivation() -> None:
+    from autoskillit.recipe import load_and_validate
+
+    result = load_and_validate("research", include_finalized_projection=True)
+
+    assert result["valid"] is True, result["errors"]
+    assert not any("declared routes differ" in error for error in result["errors"])
+    edges = result["_finalized_projection"].ordered_flow_edges
+    context_limit_edges = {
+        (edge.source, edge.target) for edge in edges if edge.edge_type == "context_limit"
+    }
+    rate_limit_edges = {
+        (edge.source, edge.target) for edge in edges if edge.edge_type == "rate_limit"
+    }
+    assert rate_limit_edges & context_limit_edges
+
+
+def test_guarded_first_step_redirects_every_recipe_representation(tmp_path: Path) -> None:
+    from autoskillit.core import load_yaml
+    from autoskillit.recipe import load_and_validate
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+    from autoskillit.recipe.io import load_recipe
+
+    recipe_dir = tmp_path / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True)
+    recipe_path = recipe_dir / "non-next-entry.yaml"
+    recipe_path.write_text(
+        """name: non-next-entry
+description: guarded entry
+kitchen_rules: [test]
+steps:
+  guarded:
+    tool: run_cmd
+    skip_when_false: "false"
+    on_skip: chosen
+  declared_next:
+    tool: run_cmd
+    on_success: done
+  chosen:
+    tool: run_cmd
+    on_success: declared_next
+  done:
+    action: stop
+    message: done
+""",
+        encoding="utf-8",
+    )
+
+    source_recipe = load_recipe(recipe_path)
+    pruned_source, _ = _prune_skipped_steps(source_recipe)
+    pruned_active, _ = _prune_skipped_steps(source_recipe)
+    result = load_and_validate(
+        "non-next-entry",
+        project_dir=tmp_path,
+        include_finalized_projection=True,
+    )
+    served_steps = load_yaml(result["content"])["steps"]
+
+    assert result["errors"] == []
+    assert tuple(pruned_source.steps) == ("chosen", "declared_next", "done")
+    assert tuple(pruned_active.steps) == tuple(pruned_source.steps)
+    assert tuple(served_steps) == tuple(pruned_source.steps)
+    projection = result["_finalized_projection"]
+    assert projection.entrypoint == "chosen"
+    assert projection.ordered_step_names == tuple(pruned_source.steps)
 
 
 def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
@@ -1054,6 +1329,7 @@ def test_remediation_audit_skip_routes_to_commit_guard() -> None:
     result = load_and_validate(
         "remediation",
         ingredient_overrides={"audit_impl": "false"},
+        include_finalized_projection=True,
     )
     assert result["valid"] is True
     parsed = load_yaml(result["content"])
@@ -1061,6 +1337,14 @@ def test_remediation_audit_skip_routes_to_commit_guard() -> None:
     assert "audit_impl" not in steps
     assert steps["test"]["on_success"] == "commit_guard"
     assert steps["merge_gate_test"]["on_success"] == "commit_guard"
+    assert "audit_impl" not in result["post_prune_step_names"]
+    projection = result["_finalized_projection"]
+    assert "audit_impl" not in projection.ordered_step_names
+    projected_routes = {
+        (edge.source, edge.edge_type, edge.target) for edge in projection.ordered_flow_edges
+    }
+    assert ("test", "success", "commit_guard") in projected_routes
+    assert ("merge_gate_test", "success", "commit_guard") in projected_routes
 
 
 def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:

@@ -398,7 +398,7 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     try:
         overlay = read_overlay(ctx.project_dir)
     except (OSError, OverlayStateError) as exc:
-        storage_error = isinstance(exc, OSError)
+        storage_error = isinstance(exc, OSError) or isinstance(exc.__cause__, OSError)
         error_kind = "Unable to read" if storage_error else "Invalid"
         return json.dumps(
             deny_envelope(

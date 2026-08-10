@@ -261,8 +261,22 @@ def test_agent_definition_frontmatter_valid():
             parts = content.split("---", 2)
             assert len(parts) >= 3, f"{md_file.name}: missing YAML frontmatter"
             frontmatter = load_yaml(parts[1])
-            for field in ("name", "description", "tools", "model", "maxTurns"):
+            for field in ("name", "description", "tools", "maxTurns"):
                 assert field in frontmatter, f"{md_file.name}: missing frontmatter field '{field}'"
+
+
+def test_web_evidence_researcher_omits_model_and_is_packless() -> None:
+    from autoskillit.core import pkg_root
+    from autoskillit.core.io import load_yaml
+    from autoskillit.server.tools.tools_agents import get_plan_review_agent
+
+    content = (pkg_root() / "agents" / "web-evidence-researcher.md").read_text()
+    frontmatter = load_yaml(content.split("---", 2)[1])
+    assert "model" not in frontmatter
+    assert frontmatter["name"] == "web-evidence-researcher"
+
+    with pytest.raises(ResourceError, match="Unknown agent"):
+        get_plan_review_agent("web-evidence-researcher")
 
 
 def test_overengineering_agent_frontmatter_is_read_only() -> None:

@@ -13,10 +13,11 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   logical_roles:
-  - name: delegated-worker
-    purpose: perform the named independent responsibility and return bounded evidence
+  - name: autoskillit:web-evidence-researcher
+    purpose: collect bounded external web evidence for one runtime research topic
   child_spawns:
-  - role: delegated-worker
+  - role: autoskillit:web-evidence-researcher
+    for_each: research_topics
   concurrency:
     required: true
   join:
@@ -24,9 +25,6 @@ semantic_requirements:
   evidence:
     required: true
     independent: true
-  child_model_policies:
-  - role: delegated-worker
-    model_class: sonnet
 ---
 
 # Review Approach Skill
@@ -57,12 +55,15 @@ failure, not something to work around.
 
 - Modify any source code files
 - Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-approach}`
+- Launch more than five top-level children or allow a child to launch Agent or Skill children
+- Exceed eight web searches for one child or forty web searches across the review
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
-- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Spawn every topic child as `autoskillit:web-evidence-researcher`; do not pass a model or reasoning-effort override
+- Track every selected topic and exact child ID to a terminal result
 - Keep findings concise and actionable
 - Present options with trade-offs
 - Make recommendations based on technical merit and project fit
@@ -81,7 +82,9 @@ failure, not something to work around.
 
 ### Step 1: Extract Research Targets
 
-From the plan file path argument (or, outside pipeline context, the report/conversation context provided), identify the core problems and proposed features that need external research. Break them into distinct research topics.
+From the plan file path argument (or, outside pipeline context, the report/conversation context provided), identify the core problems and proposed features that need external research. Select at most five distinct research topics. The limits below are a total-work budget, not only a concurrency limit: at most five top-level children, zero nested Agent or Skill launches, at most eight web searches per child and forty total.
+
+Create one ledger row for every selected topic before dispatch. Each row records the topic, dispatch state, exact child ID once spawned, terminal verdict, citations, unknowns, and coverage. A row starts as `pending`; after dispatch it may be `running` only until its child is joined.
 
 ### Step 2: Launch Parallel Web Search Subagents (SINGLE MESSAGE)
 
@@ -89,14 +92,17 @@ From the plan file path argument (or, outside pipeline context, the report/conve
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn general-purpose subagents (with web search) for each research topic. Each subagent should investigate:
+Spawn all topic children concurrently through `autoskillit:web-evidence-researcher`, then join every child before synthesis. The source skill must not pass a Claude or Codex model override.
 
-- What modern solutions exist for this problem class
-- How mature projects and frameworks approach it
-- Recent developments, libraries, or patterns worth considering
-- Known pitfalls and trade-offs of common approaches
+Each self-contained task packet contains:
 
-Tailor the search queries to the specific technologies and constraints of the project.
+- the selected topic;
+- why that topic matters to the reviewed plan;
+- two or three suggested search angles tailored to the project's technologies and constraints;
+- a pointer to the named role's common `Verdict: answered | partial | blocked` return format; and
+- the explicit boundary `do not research adjacent topics`.
+
+The named role owns only bounded evidence collection for its packet and must not launch Agent or Skill children. Topic selection, cross-topic comparison, project-level recommendations, synthesis, report writing, and `review_path` remain parent responsibilities. Nested delegation is a contract violation handled by the role's common blocked envelope. After joining, accept only the three exact verdict values, treat a missing or malformed terminal `Verdict:` as `blocked`, preserve each child's source URLs, freshness, coverage, conflicts, unusable sources, and unknowns, and update each row exactly once to its terminal result. Joined, failed, and completed work must never be described as active.
 
 ### Step 3: Synthesize
 
@@ -107,6 +113,16 @@ Consolidate subagent findings into a concise review. For each research topic:
 - **Relevance**: How each option relates to the proposed direction
 
 Drop anything that doesn't meaningfully inform the decision.
+
+Apply these deterministic completion rules and include the terminal ledger in the report:
+
+- **all-success:** when every row is `answered`, synthesize normally.
+- **partial-success:** when at least one row has usable cited evidence, synthesize every usable cited result, name every coverage gap and unknown, and do not convert unsupported material into a finding.
+- **all-failed:** when all rows are `blocked`, write an honest bounded review containing the failure evidence and terminal ledger; do not invent a recommendation.
+- **nested-delegation-attempt:** nested delegation is a contract violation; treat the affected row as `blocked` as specified above, then apply the partial-success or all-failed rule.
+- **incomplete-evidence:** when the available evidence cannot support an honest bounded review, return a structured retryable failure naming `insufficient_evidence`, the gaps, and the complete terminal ledger.
+
+Every completion branch, including retryable failure, writes the review report and emits the literal `review_path` output token. No branch returns while a ledger row is non-terminal or silently omits the report.
 
 ### Step 4: Write Review
 

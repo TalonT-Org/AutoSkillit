@@ -66,4 +66,13 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         ),
         parity_fixture=None,
     ),
+    "AUTOSKILLIT_WEB_AGENT_LIVE_GATE": HarnessEnvOverride(
+        var="AUTOSKILLIT_WEB_AGENT_LIVE_GATE",
+        value="1",
+        justification=(
+            "Enables only the authenticated live-web AgentDef conformance test; "
+            "ordinary test tasks leave the production gate disabled."
+        ),
+        parity_fixture=None,
+    ),
 }

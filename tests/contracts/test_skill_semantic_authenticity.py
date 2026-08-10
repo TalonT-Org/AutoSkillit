@@ -64,7 +64,8 @@ def test_bundled_parallel_child_instructions_have_semantic_plans() -> None:
             assert parsed.is_valid, path
             if any(marker in parsed.body for marker in markers):
                 data = parsed.data or {}
-                if data.get("semantic_version") is None:
+                has_exploration_plan = (path.parent / "exploration.yaml").is_file()
+                if data.get("semantic_version") is None and not has_exploration_plan:
                     violations.append(path.parent.name)
     assert not violations, "parallel child instructions without semantic plans:\n" + "\n".join(
         violations

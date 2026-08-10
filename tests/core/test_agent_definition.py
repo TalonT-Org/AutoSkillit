@@ -14,6 +14,7 @@ from autoskillit.core import (
     EXPLORATION_TOOLS,
     REPOSITORY_IMPACT_PROFILER_ROLE,
     SEMANTIC_CODE_NAVIGATOR_ROLE,
+    WEB_EVIDENCE_RESEARCHER_ROLE,
     AgentDef,
     AgentDefinitionError,
     CodexAgentProjectionDef,
@@ -57,6 +58,43 @@ def test_specialized_explorers_are_terminal_luna_broker_roles(
     assert "spawn peers" in definition.body
     assert "synthesis" in definition.body
     assert "select a backend" in definition.body
+
+
+def test_web_evidence_researcher_is_a_terminal_live_web_leaf() -> None:
+    definition = load_agent_definition(
+        pkg_root() / "agents" / f"{WEB_EVIDENCE_RESEARCHER_ROLE}.md"
+    )
+    explorer = load_agent_definition(pkg_root() / "agents" / f"{SEMANTIC_CODE_NAVIGATOR_ROLE}.md")
+
+    assert definition.tools == ("WebSearch", "WebFetch")
+    assert definition.model is None
+    assert definition.max_turns == 80
+    assert definition.codex.model == "gpt-5.6-luna"
+    assert definition.codex.reasoning_effort == "xhigh"
+    assert definition.codex.sandbox_mode == "read-only"
+    assert definition.codex.web_search == "live"
+    assert definition.codex.agents_enabled is False
+    assert set(definition.codex.disabled_features) == (
+        set(explorer.codex.disabled_features) - {"standalone_web_search"}
+    )
+    assert not (set(RETIRED_CODEX_FEATURES) & set(definition.codex.disabled_features))
+    for contract in (
+        "Never construct, complete, or guess a URL",
+        "SOURCE_UNREACHABLE",
+        "explicit source conflicts",
+        "Verdict: answered | partial | blocked",
+        "stop only further search/fetch calls",
+        "view_image",
+        "Never actually call a shell or terminal tool",
+        "mutate repository or other files",
+        "control a browser or computer",
+        "spawn another agent",
+    ):
+        assert contract in definition.body
+    assert "First verify" not in definition.body
+    assert "effective surface includes" not in definition.body
+    assert "inventory or inspect advertised tools" not in definition.body
+    assert "unrelated tools are visible" not in definition.body
 
 
 def test_bundled_agent_catalog_loads_with_unique_digests() -> None:
@@ -162,15 +200,27 @@ def test_invalid_native_projection_fails_closed(projection: tuple[str, str, str]
         CodexAgentProjectionDef(*projection)
 
 
-@pytest.mark.parametrize("web_search", ["enabled", False, 1])
+@pytest.mark.parametrize("web_search", ["enabled", "LIVE", False, 1])
 def test_invalid_web_search_policy_fails_closed(web_search: object) -> None:
-    with pytest.raises(AgentDefinitionError, match="web_search must be 'disabled'"):
+    with pytest.raises(AgentDefinitionError, match="web_search must be one of"):
         CodexAgentProjectionDef(
             "gpt-5.6-luna",
             "max",
             "read-only",
             web_search=web_search,  # type: ignore[arg-type]
         )
+
+
+@pytest.mark.parametrize("web_search", ["disabled", "cached", "indexed", "live"])
+def test_valid_codex_web_search_modes(web_search: str) -> None:
+    projection = CodexAgentProjectionDef(
+        "gpt-5.6-luna",
+        "max",
+        "read-only",
+        web_search=web_search,  # type: ignore[arg-type]
+    )
+
+    assert projection.web_search == web_search
 
 
 def test_web_search_policy_is_optional_and_positional_arguments_remain_stable() -> None:
@@ -350,8 +400,25 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
             web_search="disabled",
         ),
     )
+    changed_live_web_search = AgentDef(
+        name=definition.name,
+        description=definition.description,
+        tools=definition.tools,
+        model=definition.model,
+        max_turns=definition.max_turns,
+        body=definition.body,
+        codex=CodexAgentProjectionDef(
+            "gpt-5.6-luna",
+            "max",
+            "read-only",
+            web_search="live",
+        ),
+    )
     assert digest.startswith("sha256:")
     assert digest != agent_definition_digest(changed)
     assert digest != agent_definition_digest(changed_features)
     assert digest != agent_definition_digest(changed_agents_enabled)
     assert digest != agent_definition_digest(changed_web_search)
+    assert agent_definition_digest(changed_web_search) != agent_definition_digest(
+        changed_live_web_search
+    )

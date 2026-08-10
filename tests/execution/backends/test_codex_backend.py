@@ -22,6 +22,7 @@ from autoskillit.core import (
     MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
+    WEB_EVIDENCE_RESEARCHER_ROLE,
     AgentDef,
     BackendCapabilities,
     BackendConventions,
@@ -1764,6 +1765,10 @@ class TestCodexBackendSetupSessionDir:
     def test_agent_toml_required_fields_present_and_nonempty(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
+        definitions = {
+            definition.name: definition
+            for definition in load_agent_definitions(pkg_root() / "agents")
+        }
         for toml_path in sorted((self.session_dir / "agents").glob("*.toml")):
             data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
             assert data["name"], f"{toml_path.name}: name empty"
@@ -1780,15 +1785,7 @@ class TestCodexBackendSetupSessionDir:
                 .endswith(codex_discipline_suffix().rstrip())
             )
             assert "AutoSkillit agent definition digest: sha256:" in data["developer_instructions"]
-            expected_sandbox = (
-                "read-only"
-                if toml_path.stem
-                in {
-                    "pr-review-auditor-reachability",
-                    "pr-review-auditor-abstraction-surface",
-                }
-                else "workspace-write"
-            )
+            expected_sandbox = definitions[toml_path.stem].codex.sandbox_mode
             assert data["sandbox_mode"] == expected_sandbox, (
                 f"{toml_path.name}: wrong sandbox_mode"
             )
@@ -1796,13 +1793,15 @@ class TestCodexBackendSetupSessionDir:
     def test_read_only_agent_tools_project_to_read_only_sandbox(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
-        # Explorer roles (semantic-code-navigator, repository-impact-profiler)
-        # are excluded from unbound generation — verify only the always-present
-        # read-only roles.
-        for name in (
-            "pr-review-auditor-reachability",
-            "pr-review-auditor-abstraction-surface",
-        ):
+        definitions = load_agent_definitions(pkg_root() / "agents")
+        read_only_names = {
+            definition.name
+            for definition in definitions
+            if definition.name not in BUNDLED_EXPLORER_ROLES
+            and definition.codex.sandbox_mode == "read-only"
+        }
+        assert WEB_EVIDENCE_RESEARCHER_ROLE in read_only_names
+        for name in read_only_names:
             data = tomllib.loads(
                 (self.session_dir / "agents" / f"{name}.toml").read_text(encoding="utf-8")
             )
@@ -2408,6 +2407,33 @@ class TestCodexBackendSetupSessionDir:
         assert parsed["agents"] == {"enabled": False}
         assert generated_text.index("developer_instructions") < generated_text.index("[agents]")
 
+    def test_web_evidence_role_renders_live_web_leaf_policy(self) -> None:
+        definition = next(
+            definition
+            for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name == WEB_EVIDENCE_RESEARCHER_ROLE
+        )
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=(definition,),
+        )
+
+        generated = self.session_dir / "agents" / f"{WEB_EVIDENCE_RESEARCHER_ROLE}.toml"
+        generated_text = generated.read_text(encoding="utf-8")
+        parsed = tomllib.loads(generated_text)
+        assert parsed["model"] == "gpt-5.6-luna"
+        assert parsed["model_reasoning_effort"] == "xhigh"
+        assert parsed["sandbox_mode"] == "read-only"
+        assert parsed["web_search"] == "live"
+        assert parsed["agents"] == {"enabled": False}
+        assert parsed["features"] == {
+            feature: False for feature in definition.codex.disabled_features
+        }
+        assert agent_definition_digest(definition) in generated_text
+        assert generated_text.index('web_search = "live"') < generated_text.index("[features]")
+        assert generated_text.index('web_search = "live"') < generated_text.index("[agents]")
+
     def test_injected_luna_definition_rejects_writable_parent_before_mutation(self) -> None:
         self._write_all_source_files()
         config_path = self.session_dir / "config.toml"
@@ -2462,9 +2488,13 @@ class TestCodexBackendSetupSessionDir:
 
     @pytest.mark.parametrize(
         "role",
-        ("semantic-code-navigator", "repository-impact-profiler"),
+        (
+            "semantic-code-navigator",
+            "repository-impact-profiler",
+            WEB_EVIDENCE_RESEARCHER_ROLE,
+        ),
     )
-    def test_bundled_explorer_ambient_collision_fails_before_mutation(self, role: str) -> None:
+    def test_protected_bundled_agent_collision_fails_before_mutation(self, role: str) -> None:
         (self.session_dir / "config.toml").write_text(
             f'[agents."{role}"]\n'
             'description = "ambient explorer"\n'

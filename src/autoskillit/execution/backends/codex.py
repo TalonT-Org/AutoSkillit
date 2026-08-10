@@ -50,6 +50,7 @@ from autoskillit.core import (
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
+    WEB_EVIDENCE_RESEARCHER_ROLE,
     AgentDef,
     BackendCapabilities,
     BackendConventions,
@@ -889,7 +890,11 @@ def _preflight_agent_projection(
     configured_agents = config.get("agents", {})
     if not isinstance(configured_agents, dict):
         raise ValueError("Codex config agents table must be a mapping")
-    protected_names = set(names) if exact_definitions else set(BUNDLED_EXPLORER_ROLES)
+    protected_names = (
+        set(names)
+        if exact_definitions
+        else {*BUNDLED_EXPLORER_ROLES, WEB_EVIDENCE_RESEARCHER_ROLE}
+    )
     ambient_collisions = sorted(set(names) & set(configured_agents) & protected_names)
     if ambient_collisions:
         raise ValueError(f"ambient Codex agent name collision: {ambient_collisions}")
@@ -2261,11 +2266,18 @@ class CodexBackend(BackendCmdBuilderBase):
                 policy_text += f", model={model_id!r}"
             if effort:
                 policy_text += f", reasoning_effort={effort!r}"
-            fragments.append(
-                f"Call spawn_agent {spawn.count} time{'s' if spawn.count != 1 else ''} "
-                f"with agent_type={native_role!r}, fork_turns='none'{policy_text}; "
-                "retain every returned child ID."
-            )
+            if spawn.for_each is not None:
+                fragments.append(
+                    "Call spawn_agent once per runtime item in "
+                    f"{spawn.for_each!r} with agent_type={native_role!r}, "
+                    f"fork_turns='none'{policy_text}; retain every returned child ID."
+                )
+            else:
+                fragments.append(
+                    f"Call spawn_agent {spawn.count} time{'s' if spawn.count != 1 else ''} "
+                    f"with agent_type={native_role!r}, fork_turns='none'{policy_text}; "
+                    "retain every returned child ID."
+                )
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Spawn all independent children before awaiting any result.")
         if plan.join is not None and plan.join.required:

@@ -67,6 +67,35 @@ def test_skill_semantic_plan_is_frozen_slotted_and_derives_operations() -> None:
     )
 
     assert plan.operations == frozenset(SkillSemanticOperation)
+
+
+def test_child_spawn_for_each_is_dynamic_and_mutually_exclusive_with_count() -> None:
+    from autoskillit.core import (
+        ChildSpawnSpec,
+        LogicalRoleSpec,
+        SkillContractError,
+        SkillSemanticPlan,
+    )
+
+    dynamic = ChildSpawnSpec(role="researcher", for_each="research_topics")
+    logical_roles = (LogicalRoleSpec(name="researcher", purpose="research one topic"),)
+    plan = SkillSemanticPlan(
+        schema_version=1, child_spawns=(dynamic,), logical_roles=logical_roles
+    )
+
+    assert plan.canonical_payload["child_spawns"] == (
+        {"role": "researcher", "count": 1, "for_each": "research_topics"},
+    )
+    fixed = SkillSemanticPlan(
+        schema_version=1,
+        child_spawns=(ChildSpawnSpec(role="researcher"),),
+        logical_roles=logical_roles,
+    )
+    assert "for_each" not in fixed.canonical_payload["child_spawns"][0]
+    with pytest.raises(SkillContractError, match="for_each must be non-empty"):
+        ChildSpawnSpec(role="researcher", for_each=" ")
+    with pytest.raises(SkillContractError, match="non-default count"):
+        ChildSpawnSpec(role="researcher", count=2, for_each="research_topics")
     assert not hasattr(plan, "__dict__")
     with pytest.raises(FrozenInstanceError):
         plan.schema_version = 2  # type: ignore[misc]

@@ -132,6 +132,7 @@ def run_live_codex_parent(
     stderr: Any,
     text: bool,
     resume_thread_id: str | None = None,
+    extra_overrides: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess[Any]:
     """Execute or resume the common real-Codex parent used by both live gates."""
     invocation = [
@@ -143,6 +144,8 @@ def run_live_codex_parent(
         "--model",
         model,
     ]
+    for override in extra_overrides:
+        invocation.extend(("-c", override))
     if resume_thread_id is not None:
         if not resume_thread_id.strip():
             raise ValueError("resume_thread_id must be a non-empty string")

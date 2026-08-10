@@ -7,7 +7,7 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 ## Layout
 
 Each `.md` file defines one agent with YAML frontmatter (`name`, `description`,
-`tools`, `model`, `maxTurns`) and a markdown body containing the agent's system prompt.
+`tools`, optional `model`, `maxTurns`) and a markdown body containing the agent's system prompt.
 
 ## Invocation
 
@@ -43,6 +43,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 | _(none)_ | _(none)_ | `audit-impl-slice-auditor` | audit-impl Step 3 (subagent_type-only) |
 | _(none)_ | _(none)_ | `audit-impl-deviation-evaluator` | audit-impl Step 3.5 (subagent_type-only) |
 | _(none)_ | _(none)_ | `semantic-code-navigator`, `repository-impact-profiler` | L1 exploration parent (subagent_type-only) |
+| _(none)_ | _(none)_ | `web-evidence-researcher` | review-approach (subagent_type-only) |
 
 ## Adding Agents
 
@@ -59,7 +60,11 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 Current packless agents: `wp-elaborator`, `pipeline-health-scanner`, `audit-impl-slice-auditor`,
 `pr-review-auditor-baseline`, `pr-review-auditor-v1-precision`, `pr-review-auditor-v2-contrastive`,
 `pr-review-auditor-v3-simulation`, `pr-review-auditor-reachability`,
-`pr-review-auditor-abstraction-surface`, `audit-impl-deviation-evaluator`.
+`pr-review-auditor-abstraction-surface`, `audit-impl-deviation-evaluator`,
+`web-evidence-researcher`.
+The web-evidence role's Codex definition owns its Luna/xhigh/read-only/live-web/no-descendants
+policy; callers do not pass model or permission overrides. Claude inherits the configured/default
+child model because this definition omits the top-level `model` key.
 The specialized explorers `semantic-code-navigator` and `repository-impact-profiler` are also
 packless terminal leaves. Their fixed Luna/max/read-only policy is documented in
 `docs/execution/explorer-agents.md`; do not add model or permission overrides to callers.

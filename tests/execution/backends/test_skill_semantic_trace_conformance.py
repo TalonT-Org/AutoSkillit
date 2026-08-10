@@ -365,6 +365,53 @@ def test_codex_semantic_policy_matches_generated_native_role_toml(tmp_path: Path
     )
 
 
+def test_dynamic_child_spawn_adapters_preserve_runtime_cardinality() -> None:
+    role = "autoskillit:web-evidence-researcher"
+    plan = SkillSemanticPlan(
+        schema_version=1,
+        logical_roles=(LogicalRoleSpec(name=role, purpose="research one topic"),),
+        child_spawns=(ChildSpawnSpec(role=role, for_each="research_topics"),),
+    )
+
+    claude = ClaudeCodeBackend().adapt_skill_semantics(plan)
+    codex = CodexBackend().adapt_skill_semantics(plan)
+
+    claude_text = "\n".join(claude.instruction_fragments)
+    codex_text = "\n".join(codex.instruction_fragments)
+    assert "per runtime item in 'research_topics'" in claude_text
+    assert "subagent_type='autoskillit:web-evidence-researcher'" in claude_text
+    assert "model=" not in claude_text
+    assert "once per runtime item in 'research_topics'" in codex_text
+    assert "agent_type='web-evidence-researcher'" in codex_text
+    assert "fork_turns='none'" in codex_text
+    assert "model=" not in codex_text
+    assert "reasoning_effort=" not in codex_text
+
+
+def test_review_approach_projects_the_real_named_web_role() -> None:
+    skill_md = pkg_root() / "skills_extended" / "review-approach" / "SKILL.md"
+    info = _skill_info_from_frontmatter("review-approach", SkillSource.BUNDLED, skill_md)
+
+    assert not info.invalidities
+    assert info.semantic_plan is not None
+    plan = info.semantic_plan
+    role = "autoskillit:web-evidence-researcher"
+    assert tuple(item.name for item in plan.logical_roles) == (role,)
+    assert plan.child_spawns == (ChildSpawnSpec(role=role, for_each="research_topics"),)
+    assert not plan.child_model_policies
+
+    claude_text = "\n".join(ClaudeCodeBackend().adapt_skill_semantics(plan).instruction_fragments)
+    codex_text = "\n".join(CodexBackend().adapt_skill_semantics(plan).instruction_fragments)
+    assert "subagent_type='autoskillit:web-evidence-researcher'" in claude_text
+    assert "per runtime item in 'research_topics'" in claude_text
+    assert "model=" not in claude_text
+    assert "agent_type='web-evidence-researcher'" in codex_text
+    assert "once per runtime item in 'research_topics'" in codex_text
+    assert "fork_turns='none'" in codex_text
+    assert "model=" not in codex_text
+    assert "reasoning_effort=" not in codex_text
+
+
 @pytest.mark.parametrize("skill_name", ["review-pr", "enrich-issues"])
 def test_real_semantic_skill_materializes_through_codex_adapter(skill_name: str) -> None:
     skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"

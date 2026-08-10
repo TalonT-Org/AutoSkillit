@@ -947,10 +947,16 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 if spawn_policy is not None and spawn_policy.reasoning_effort is not None
                 else ""
             )
-            fragments.append(
-                f"Issue {spawn.count} Agent(subagent_type={spawn.role!r}{model_arg}) "
-                f"call{'s' if spawn.count != 1 else ''}{effort_text}."
-            )
+            if spawn.for_each is not None:
+                fragments.append(
+                    f"Issue one Agent(subagent_type={spawn.role!r}{model_arg}) call per "
+                    f"runtime item in {spawn.for_each!r}{effort_text}."
+                )
+            else:
+                fragments.append(
+                    f"Issue {spawn.count} Agent(subagent_type={spawn.role!r}{model_arg}) "
+                    f"call{'s' if spawn.count != 1 else ''}{effort_text}."
+                )
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Issue all independent child calls in one message so they overlap.")
         if plan.join is not None and plan.join.required:

@@ -299,7 +299,7 @@ tasks:
           echo "Explorer gate did not produce one non-skipped pass"
           PYTEST_EXIT=1
         fi
-        if [[ $PYTEST_EXIT -eq 0 ]] && { [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v6.json" ]] || [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v6.json.sha256" ]]; }; then
+        if [[ $PYTEST_EXIT -eq 0 ]] && { [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v7.json" ]] || [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v7.json.sha256" ]]; }; then
           echo "Explorer gate did not publish its attestation and digest sidecar"
           PYTEST_EXIT=1
         fi
@@ -323,7 +323,7 @@ tasks:
         ).stdout
         if attestation.model_catalog_digest != project_codex_luna_catalog(catalog).projected_sha256:
             raise ValueError("published explorer attestation catalog does not match Codex")
-        ' "$ATTESTATION_DIR/codex-explorer-conformance-v6.json" || PYTEST_EXIT=1
+        ' "$ATTESTATION_DIR/codex-explorer-conformance-v7.json" || PYTEST_EXIT=1
         fi
         echo "Codex explorer gate output saved to: $TEST_OUTPUT"
         exit $PYTEST_EXIT
@@ -374,6 +374,55 @@ tasks:
           exit 1
         fi
         $PYTHON_CMD -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-production-shared-explorer-principal-v2","principal_role":"shared-explorer-session","authenticated_resume":"denied"}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live explorer evidence: {data!r}" if bad else 0)' "$EVIDENCE"
+
+  test-smoke-codex-web-agent-live-gate:
+    desc: Run the pinned, uncached live-web Luna child conformance gate
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      CODEX_SMOKE_TEST: "1"
+      AUTOSKILLIT_WEB_AGENT_LIVE_GATE: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    preconditions:
+      - sh: command -v codex >/dev/null 2>&1
+        msg: "Codex CLI must be installed"
+      - sh: test "$(codex --version 2>/dev/null)" = "codex-cli 0.147.0"
+        msg: "Codex CLI must be exactly codex-cli 0.147.0"
+      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
+        msg: "Codex authentication required: set OPENAI_API_KEY or CODEX_API_KEY, or run 'codex login'"
+    cmds:
+      - |
+        if [[ -d ".venv" ]]; then
+          PYTHON_CMD=".venv/bin/python"
+        else
+          PYTHON_CMD="python"
+        fi
+        ARTIFACT_DIR=".autoskillit/temp/conformance/live-web-agent-gate"
+        EVIDENCE="$ARTIFACT_DIR/live-web-agent-gate.json"
+        TEST_OUTPUT="$ARTIFACT_DIR/pytest-output.txt"
+        JUNIT_REPORT="$ARTIFACT_DIR/pytest-report.xml"
+        mkdir -p "$ARTIFACT_DIR"
+        rm -f "$EVIDENCE" "$TEST_OUTPUT" "$JUNIT_REPORT"
+        export AUTOSKILLIT_WEB_AGENT_LIVE_GATE_ARTIFACT_DIR="$ARTIFACT_DIR"
+        set +e
+        $PYTHON_CMD -m pytest tests/execution/backends/test_web_agent_live_gate.py \
+          -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --junitxml="$JUNIT_REPORT" >"$TEST_OUTPUT" 2>&1
+        PYTEST_EXIT=$?
+        set -e
+        tail -c 16000 "$TEST_OUTPUT"
+        if [[ $PYTEST_EXIT -ne 0 ]]; then
+          echo "Live web-agent gate failed; bounded output is saved to: $TEST_OUTPUT"
+          exit $PYTEST_EXIT
+        fi
+        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); bad=len(cases) != 1 or skipped; sys.exit(f"live web-agent gate requires exactly one non-skipped test, got tests={len(cases)} skipped={skipped}" if bad else 0)' "$JUNIT_REPORT"
+        if [[ ! -s "$EVIDENCE" ]]; then
+          echo "Live web-agent gate did not publish fresh evidence: $EVIDENCE"
+          exit 1
+        fi
+        $PYTHON_CMD -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-web-agent-codex-0.147.0","cli_version":"codex-cli 0.147.0","parent_web_search":"disabled","child_web_search":"live","child_model":"gpt-5.6-luna","child_reasoning_effort":"xhigh","child_sandbox_mode":"read-only","child_agents_enabled":False}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live web-agent evidence: {data!r}" if bad else 0)' "$EVIDENCE"
 
   test-smoke-claude-explorer-live-gate:
     desc: Run the Claude session-scoped explorer conformance gate

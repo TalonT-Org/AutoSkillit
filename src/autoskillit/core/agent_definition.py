@@ -7,7 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias, get_args
 
 from .io import load_yaml
 from .paths import pkg_root
@@ -26,6 +26,7 @@ __all__ = [
     "CODEX_EXPLORER_IDENTITY",
     "REPOSITORY_IMPACT_PROFILER_ROLE",
     "SEMANTIC_CODE_NAVIGATOR_ROLE",
+    "WEB_EVIDENCE_RESEARCHER_ROLE",
     "AgentDef",
     "AgentDefinitionError",
     "CodexAgentProjectionDef",
@@ -42,6 +43,7 @@ CODEX_DISABLED_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
 CODEX_EXPLORER_IDENTITY: tuple[str, str] = ("gpt-5.6-luna", "max")
 SEMANTIC_CODE_NAVIGATOR_ROLE: str = "semantic-code-navigator"
 REPOSITORY_IMPACT_PROFILER_ROLE: str = "repository-impact-profiler"
+WEB_EVIDENCE_RESEARCHER_ROLE: str = "web-evidence-researcher"
 BUNDLED_EXPLORER_ROLES: frozenset[str] = frozenset(
     {SEMANTIC_CODE_NAVIGATOR_ROLE, REPOSITORY_IMPACT_PROFILER_ROLE}
 )
@@ -75,6 +77,8 @@ _CODEX_DISABLEABLE_FEATURES = (
     "unified_exec_zsh_fork",
 )
 _CODEX_DISABLEABLE_FEATURE_SET = frozenset(_CODEX_DISABLEABLE_FEATURES)
+_CodexWebSearchMode: TypeAlias = Literal["disabled", "cached", "indexed", "live"]
+_CODEX_WEB_SEARCH_MODES: frozenset[str] = frozenset(get_args(_CodexWebSearchMode))
 
 
 class AgentDefinitionError(ValueError):
@@ -102,7 +106,7 @@ class CodexAgentProjectionDef:
     sandbox_mode: str
     disabled_features: tuple[str, ...] = ()
     agents_enabled: bool = True
-    web_search: Literal["disabled"] | None = None
+    web_search: _CodexWebSearchMode | None = None
 
     def __post_init__(self) -> None:
         if self.model is not None and self.model not in CODEX_VALID_MODEL_IDS:
@@ -133,10 +137,9 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError("Codex disabled_features must use canonical order")
         if type(self.agents_enabled) is not bool:
             raise AgentDefinitionError("Codex agents_enabled must be a boolean")
-        if self.web_search is not None and self.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
-            raise AgentDefinitionError(
-                f"Codex web_search must be {CODEX_DISABLED_WEB_SEARCH_POLICY!r}"
-            )
+        if self.web_search is not None and self.web_search not in _CODEX_WEB_SEARCH_MODES:
+            allowed = ", ".join(repr(mode) for mode in sorted(_CODEX_WEB_SEARCH_MODES))
+            raise AgentDefinitionError(f"Codex web_search must be one of {allowed}")
 
 
 @dataclass(frozen=True, slots=True)

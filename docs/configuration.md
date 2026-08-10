@@ -110,6 +110,12 @@ registered role definition and is not controlled by `model.default`, `model.over
 project configuration setting. An L1 parent owns routing and synthesis; callers must not add
 per-role model, permission, or delegation overrides. See [Explorer agents](execution/explorer-agents.md).
 
+`web-evidence-researcher` is likewise definition-owned on Codex: it always launches as a
+`gpt-5.6-luna`/xhigh, read-only terminal child with live web search and no descendant-agent
+capability. `model.default` and `model.override` select neither that Codex child identity nor
+its permissions. On Claude, the same packless role omits a model override and therefore
+inherits the configured/default child model.
+
 ## Worktree Setup
 
 Command to run after creating a git worktree (e.g. to install dependencies).

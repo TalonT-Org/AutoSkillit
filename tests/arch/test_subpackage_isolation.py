@@ -1260,7 +1260,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2371,
+        2383,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1305,10 +1305,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "prompt-injection composition (+14 net lines)"
         "; #4488/#4489/#4492 explorer surface authority: setup_session_dir gains "
         "explorer-role TOML exclusion filter for unbound sessions (+7 net lines) and "
-        "explicit session-scoped capability disposition (+1 net line)",
+        "explicit session-scoped capability disposition (+1 net line); #4507 adds runtime "
+        "child cardinality rendering and protects the live-web bundled role (+12 net lines)",
     ),
     "execution/backends/claude.py": (
-        1108,
+        1114,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
@@ -1318,13 +1319,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "parent sandbox authority through the shared no-op setup boundary and explorer "
         "dispatch rendering preserves the same backend-owned syntax authority; #4480 adds "
         "the plugin_dir launch-binding validation parameter for cross-backend signature "
-        "parity.",
+        "parity; #4507 renders one named child per runtime topic (+6 net lines).",
     ),
     "workspace/skill_capabilities.py": (
-        1100,
+        1104,
         "REQ-SEM-SCHEMA-001: versioned semantic declarations, closed-operation parsing, "
         "retired-key rejection, and precise per-skill diagnostics remain co-located at "
-        "the sole skill-frontmatter validation boundary.",
+        "the sole skill-frontmatter validation boundary; #4507 parses runtime child "
+        "cardinality at that same boundary (+4 net lines).",
     ),
     "workspace/skills.py": (
         1550,

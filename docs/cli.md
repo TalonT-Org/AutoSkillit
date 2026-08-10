@@ -97,9 +97,42 @@ script binary, claude binary, codex MCP timeouts, codex graduation, CLI conforma
 codex NDJSON drift, codex model-alias staleness, standing backend pin feasibility,
 local recipe validity, codex limits pin freshness, bundled skill capability
 authenticity, capture-store statistics, project-local skill contracts, and
-retained session-index projection consistency (including the 6 fleet checks
-24–29). See
+retained session-index projection consistency, and orphaned codex processes
+(including the 6 fleet checks 24–29). See
 [installation.md](installation.md#post-install-verification) for the full table.
+
+---
+
+## autoskillit codex-orphans
+
+    autoskillit codex-orphans [--reap] [--output-json]
+
+**Flags:**
+- `--reap` — Terminate detected orphans (default: report only)
+- `--output-json` — Output as JSON
+
+Reports orphaned interactive codex TUI processes — those whose fd 0 resolves to
+`/dev/pts/<digits> (deleted)`, the signature of a codex process that survived
+destruction of its controlling pty (e.g. VS Code window reload). Linux-only;
+same-user scoped (never targets other users' processes). Live-pty codex sessions
+and autoskillit-managed headless sessions are excluded by construction (headless
+sessions bind stdin to `DEVNULL` or a temp file, never a pty).
+
+With `--reap`, each orphan is re-verified immediately before signaling: starttime
+ticks must still match and fd 0 must still be a deleted pty. Termination uses
+SIGTERM→SIGKILL process-tree escalation via `kill_process_tree`. Per-target
+outcomes:
+- **terminated** — root process confirmed gone after escalation
+- **skipped** — no longer matches the orphan signature (state-agnostic)
+- **incomplete** — escalation left survivors or hit access-denied pids (carried on
+  the result)
+
+Reap is signal-only: persisted `~/.codex/sessions` rollouts are never deleted and
+remain eligible for `codex resume`. Flushing of an in-flight turn to disk is not
+guaranteed by hard termination.
+
+Doctor Check 44 (`orphaned_codex_processes`) surfaces the same detection
+read-only and points to this command.
 
 ---
 

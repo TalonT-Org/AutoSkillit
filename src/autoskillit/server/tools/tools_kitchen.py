@@ -1214,6 +1214,18 @@ async def open_kitchen(
         _ctx_pre = _get_ctx()
         _admitted_recipe_info = None
         if name is not None:
+            if _ctx_pre.recipes is None or _ctx_pre.skill_resolver is None:
+                missing_service = (
+                    "recipe repository" if _ctx_pre.recipes is None else "skill resolver"
+                )
+                return _kitchen_failure_envelope(
+                    RuntimeError(f"{missing_service} is not configured"),
+                    stage="recipe_context",
+                    user_hint=(
+                        "open_kitchen cannot load a recipe because the server is not "
+                        "initialized. Run 'autoskillit doctor' to diagnose."
+                    ),
+                )
             try:
                 _admitted_recipe_info = _admit_recipe_name(_ctx_pre, name)
             except RecipeLoadError as exc:
@@ -1221,15 +1233,6 @@ async def open_kitchen(
                     exc,
                     stage="recipe_namespace",
                     user_hint=str(exc),
-                )
-            except RuntimeError as exc:
-                return _kitchen_failure_envelope(
-                    exc,
-                    stage="recipe_context",
-                    user_hint=(
-                        "open_kitchen cannot load a recipe because the server is not "
-                        "initialized. Run 'autoskillit doctor' to diagnose."
-                    ),
                 )
 
         disabled_subsets = _ctx_pre.config.subsets.disabled

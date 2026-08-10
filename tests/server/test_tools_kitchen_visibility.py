@@ -495,6 +495,24 @@ async def test_open_kitchen_rejects_non_recipe_before_operational_mutation(
 
 
 @pytest.mark.anyio
+async def test_open_kitchen_does_not_misclassify_resolver_runtime_error(tmp_path, monkeypatch):
+    """A resolver failure is not reported as missing server configuration."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.skill_resolver.resolve_effective.side_effect = RuntimeError("resolver failed")
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        result = json.loads(await open_kitchen(name="broken-recipe", ctx=mock_ctx))
+
+    assert result["stage"] == "unhandled"
+    assert result["error"] == "RuntimeError: resolver failed"
+
+
+@pytest.mark.anyio
 async def test_open_kitchen_without_recipe_bypasses_namespace_admission(tmp_path, monkeypatch):
     """open_kitchen(name=None) activates without consulting recipe or skill names."""
     monkeypatch.chdir(tmp_path)

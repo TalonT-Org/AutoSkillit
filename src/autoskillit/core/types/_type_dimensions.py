@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import ClassVar
 
 __all__ = ["ASCII_YAML_POLICY", "BytesToTokensPolicy", "TokenLimit", "Utf8ByteLimit"]
 
@@ -36,7 +35,6 @@ class BytesToTokensPolicy:
     """Explicit exact-rational conversion between byte and token domains."""
 
     utf8_bytes_per_token: Fraction
-    ASCII_YAML_POLICY: ClassVar[BytesToTokensPolicy]
 
     def __post_init__(self) -> None:
         if not isinstance(self.utf8_bytes_per_token, Fraction):
@@ -55,4 +53,3 @@ class BytesToTokensPolicy:
 
 
 ASCII_YAML_POLICY = BytesToTokensPolicy(Fraction(27, 10))
-BytesToTokensPolicy.ASCII_YAML_POLICY = ASCII_YAML_POLICY

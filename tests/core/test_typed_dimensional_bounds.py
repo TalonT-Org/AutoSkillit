@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from autoskillit.core import BytesToTokensPolicy, TokenLimit, Utf8ByteLimit
+from autoskillit.core import ASCII_YAML_POLICY, BytesToTokensPolicy, TokenLimit, Utf8ByteLimit
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -21,7 +21,7 @@ def test_token_and_utf8_byte_limits_are_distinct_positive_types() -> None:
 
 
 def test_bytes_to_tokens_conversion_uses_exact_explicit_policy() -> None:
-    policy = BytesToTokensPolicy.ASCII_YAML_POLICY
+    policy = ASCII_YAML_POLICY
 
     assert policy.utf8_bytes_per_token == Fraction(27, 10)
     assert policy.to_tokens(Utf8ByteLimit(100_000)) == TokenLimit(37_038)

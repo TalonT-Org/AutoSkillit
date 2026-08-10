@@ -106,14 +106,6 @@ class TrackerAuthorityReadResult:
     def target_order_id(self) -> str:
         return self.target.target_order_id
 
-    @property
-    def path(self) -> Path:
-        return self.target.path
-
-    @property
-    def expected(self) -> bool:
-        return self.target.expected
-
 
 @dataclass(frozen=True, slots=True)
 class TrackerParticipantKey:

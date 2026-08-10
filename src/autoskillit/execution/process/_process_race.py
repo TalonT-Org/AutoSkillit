@@ -546,15 +546,6 @@ async def _watch_session_log(
         session_record_types,
         **_monitor_kwargs,  # type: ignore[arg-type]
     )
-    if (
-        monitor_result.status == ChannelBStatus.COMPLETION
-        and not acc.lifecycle_observation_enabled
-    ):
-        # Drain-wait: give Channel A a window to confirm before Channel B wins.
-        # move_on_after absorbs timeout; trigger may already be set if A fired.
-        with anyio.move_on_after(completion_drain_timeout):
-            await trigger.wait()
-        logger.debug("channel_b_drain_complete", trigger_was_set=trigger.is_set())
     logger.debug(
         "channel_b_result",
         status=monitor_result.status,

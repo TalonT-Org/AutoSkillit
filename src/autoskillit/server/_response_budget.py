@@ -81,6 +81,8 @@ def _estimated_tokens(original_size: int) -> int:
     transport-layer estimate, not a tokenizer count. Used to compare
     payload size against ``selected_result_token_limit``.
     """
+    if original_size == 0:
+        return 0
     return ASCII_YAML_POLICY.to_tokens(Utf8ByteLimit(original_size)).value
 
 

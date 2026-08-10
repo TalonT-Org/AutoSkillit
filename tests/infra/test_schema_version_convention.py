@@ -124,16 +124,16 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 352),
     ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 361),
     # tools_kitchen.py — hook config, quota guard, and git_ops_policy
-    ("src/autoskillit/server/tools/tools_kitchen.py", 551),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 570),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 602),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 552),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 571),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 603),
     # _overlay_state.py — session-scoped hook config overlay (not schema-versioned)
     ("src/autoskillit/server/tools/_overlay_state.py", 114),
     # pipeline_tracker.py — locked tracker init/merge/mutation writes centralize the existing
     # unversioned tracker file schema.
-    ("src/autoskillit/core/pipeline_tracker.py", 279),
-    ("src/autoskillit/core/pipeline_tracker.py", 301),
-    ("src/autoskillit/core/pipeline_tracker.py", 317),
+    ("src/autoskillit/core/pipeline_tracker.py", 281),
+    ("src/autoskillit/core/pipeline_tracker.py", 303),
+    ("src/autoskillit/core/pipeline_tracker.py", 319),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 558),
     # tools_github.py — bug report dict (non-blocking report-bug status file)

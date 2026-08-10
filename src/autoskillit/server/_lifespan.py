@@ -45,7 +45,11 @@ from autoskillit.core import (
 from autoskillit.core import (
     session_type as _resolve_session_type,
 )
-from autoskillit.execution import BACKEND_REGISTRY, RecordingSubprocessRunner
+from autoskillit.execution import (
+    BACKEND_REGISTRY,
+    RecordingSubprocessRunner,
+    find_broken_codex_hook_commands,
+)
 from autoskillit.fleet import (
     discover_campaign_state_files,
     reap_stale_dispatches_async,
@@ -220,8 +224,6 @@ def run_startup_hook_health_check() -> list[str]:
 
     # Codex config hook detection — detection-only (repair happens at sync time).
     try:
-        from autoskillit.execution import find_broken_codex_hook_commands
-
         codex_broken = find_broken_codex_hook_commands()
         if codex_broken:
             broken.extend(codex_broken)

@@ -233,7 +233,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_install_detect": frozenset({"core", "cli", "config"}),
     "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
     "_type_plugin_source": frozenset(
-        {"core", "execution", "pipeline", "server", "cli", "workspace"}
+        {"core", "execution", "pipeline", "server", "cli", "workspace", "smoke_utils"}
     ),
     "kitchen_state": frozenset({"core", "server"}),
     "session_provenance": frozenset({"core", "execution"}),
@@ -799,6 +799,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "workspace",
             "migration",
             "server/test_recipe_namespace_admission.py",
+            "smoke_utils",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
             "recipe/test_recipe_backend_composition_matrix.py",
@@ -1022,6 +1023,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # +workspace: _hook_repair repairs a broken plugin-cache hooks.json by
             # calling find_broken_hook_scripts/generate_hooks_json directly.
             "workspace",
+            # +smoke_utils: _cross_interpreter_upgrade imports PLUGIN_ROOT_TOKEN
+            "smoke_utils",
             # server/ narrowed to 4 files
             "server/test_tools_kitchen_envelope.py",
             "server/test_tools_kitchen_preflight.py",

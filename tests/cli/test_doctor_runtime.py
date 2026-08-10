@@ -428,6 +428,19 @@ def test_orphaned_codex_check_ok_when_none(monkeypatch: pytest.MonkeyPatch) -> N
     assert results[0].severity == Severity.OK
 
 
+def test_orphaned_codex_check_skips_non_linux(monkeypatch: pytest.MonkeyPatch) -> None:
+    import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
+
+    monkeypatch.setattr(doctor_runtime.sys, "platform", "darwin")
+
+    results = doctor_runtime._check_orphaned_codex_processes()
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.OK
+    assert results[0].check == "orphaned_codex_processes"
+    assert results[0].message == "Skipped (Linux only)"
+
+
 def test_orphaned_codex_check_reports_scan_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     import autoskillit.execution as execution_mod
     from autoskillit.cli.doctor._doctor_runtime import _check_orphaned_codex_processes

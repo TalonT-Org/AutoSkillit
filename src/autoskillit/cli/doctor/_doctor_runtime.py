@@ -6,6 +6,7 @@ import json
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections import Counter
 from datetime import UTC, date, datetime
@@ -531,9 +532,12 @@ def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
 
 def _check_orphaned_codex_processes() -> list[DoctorResult]:
     """Check for orphaned interactive codex TUI processes (fd 0 → deleted pty)."""
+    check_name = "orphaned_codex_processes"
+    if sys.platform != "linux":
+        return [DoctorResult(Severity.OK, check_name, "Skipped (Linux only)")]
+
     from autoskillit.execution import find_orphaned_codex_processes
 
-    check_name = "orphaned_codex_processes"
     try:
         orphans = find_orphaned_codex_processes()
     except Exception as exc:

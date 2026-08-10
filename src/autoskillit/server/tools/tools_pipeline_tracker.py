@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -143,8 +143,8 @@ def _select_tracker_authority(
     key, lease = _retain_context_tracker(
         tool_ctx,
         target,
-        owner_kind="kitchen",
-        owner_id=tool_ctx.kitchen_id or target_order_id,
+        owner_kind="manual",
+        owner_id=f"selection:{uuid.uuid4().hex}",
     )
     try:
         authority = read_tracker_authority(target, lease)
@@ -293,13 +293,21 @@ async def record_pipeline_step(
         )
 
         if op == "init":
-            result = _handle_init(ctx, target, lease, dependencies)
+            try:
+                result = _handle_init(ctx, target, lease, dependencies)
+            except Exception:
+                _release_context_tracker(ctx, key)
+                raise
             if not json.loads(result).get("success"):
                 _release_context_tracker(ctx, key)
             return result
 
         if op == "status":
-            result = _handle_status(target, lease)
+            try:
+                result = _handle_status(target, lease)
+            except Exception:
+                _release_context_tracker(ctx, key)
+                raise
             if not json.loads(result).get("success"):
                 _release_context_tracker(ctx, key)
             return result
@@ -430,11 +438,14 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
         owner_kind="manual",
         owner_id=target.target_order_id,
     )
-    tracker_authority = read_tracker_authority(target, lease)
-    if tracker_authority.data is None:
-        assert tracker_authority.error is not None
+    try:
+        tracker_authority = read_tracker_authority(target, lease)
+    except Exception:
         _release_context_tracker(ctx, key)
-        identity_error = tracker_authority.error
+        raise
+    if tracker_authority.data is None:
+        _release_context_tracker(ctx, key)
+        identity_error = cast(str, tracker_authority.error)
         return json.dumps(
             deny_envelope(
                 f"record_pipeline_step: failed to read tracker identity: {identity_error}",
@@ -575,9 +586,8 @@ def mark_step_complete(
             retriable=False,
         )
     if authority.data is None:
-        assert authority.error is not None
         return deny_envelope(
-            authority.error,
+            cast(str, authority.error),
             stage="mark_step_complete",
             retriable=False,
         )
@@ -688,36 +698,45 @@ async def complete_run_skill_result(
         )
         tracker_result: Mapping[str, object] | None = None
         if receipt.tracker_incarnation_id:
-            target = TrackerAuthorityTarget(
-                target_order_id=receipt.tracker_order_id,
-                path=Path(receipt.tracker_path),
-                expected=True,
-            )
-            key, lease = _retain_context_tracker(
-                tool_ctx,
-                target,
-                owner_kind="manual",
-                owner_id=target.target_order_id,
-            )
             try:
-                if receipt.success:
-                    tracker_result = authority.apply_tracker_credit(
-                        tracker_order_id=receipt.tracker_order_id,
-                        tracker_path=receipt.tracker_path,
-                        tracker_kitchen_id=receipt.tracker_kitchen_id,
-                        tracker_incarnation_id=receipt.tracker_incarnation_id,
-                        step_name=receipt.step_name,
-                        receipt_id=receipt.receipt_id,
-                        effect=lambda: mark_step_complete(
-                            target,
-                            lease,
-                            receipt.step_name,
-                            expected_tracker_kitchen_id=receipt.tracker_kitchen_id,
-                            expected_tracker_incarnation_id=receipt.tracker_incarnation_id,
-                        ),
-                    )
-            finally:
-                _release_context_tracker(tool_ctx, key)
+                target = TrackerAuthorityTarget(
+                    target_order_id=receipt.tracker_order_id,
+                    path=Path(receipt.tracker_path),
+                    expected=True,
+                )
+                key, lease = _retain_context_tracker(
+                    tool_ctx,
+                    target,
+                    owner_kind="manual",
+                    owner_id=f"receipt:{receipt.receipt_id}",
+                )
+                try:
+                    if receipt.success:
+                        tracker_result = authority.apply_tracker_credit(
+                            tracker_order_id=receipt.tracker_order_id,
+                            tracker_path=receipt.tracker_path,
+                            tracker_kitchen_id=receipt.tracker_kitchen_id,
+                            tracker_incarnation_id=receipt.tracker_incarnation_id,
+                            step_name=receipt.step_name,
+                            receipt_id=receipt.receipt_id,
+                            effect=lambda: mark_step_complete(
+                                target,
+                                lease,
+                                receipt.step_name,
+                                expected_tracker_kitchen_id=receipt.tracker_kitchen_id,
+                                expected_tracker_incarnation_id=receipt.tracker_incarnation_id,
+                            ),
+                        )
+                finally:
+                    _release_context_tracker(tool_ctx, key)
+            except Exception:
+                logger.exception("complete_run_skill_result_tracker_credit_deferred")
+                tracker_result = deny_envelope(
+                    "complete_run_skill_result: tracker credit was not applied; use "
+                    "record_pipeline_step(op='complete') to repair it.",
+                    stage="tracker_credit",
+                    retriable=True,
+                )
         return json.dumps(
             {
                 "success": True,

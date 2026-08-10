@@ -33,6 +33,7 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
     ArtifactLease,
+    KitchenProcessIdentity,
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
@@ -2130,8 +2131,6 @@ def _register_active_recipe_kitchen(ctx: ToolContext) -> None:
     """Publish one kitchen to both process and recipe-generation lifecycles."""
     from autoskillit.server._recipe_generation import activate_kitchen  # circular-break
 
-    identity = ctx.kitchen_process_identity
-    if identity is None:
-        raise RuntimeError("kitchen process identity must be retained before registration")
+    identity = cast(KitchenProcessIdentity, ctx.kitchen_process_identity)
     register_active_kitchen(identity)
     activate_kitchen(identity.kitchen_id)

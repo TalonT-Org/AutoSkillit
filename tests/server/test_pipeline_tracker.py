@@ -6,7 +6,10 @@ import json
 
 import pytest
 
-from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
+from autoskillit.server.tools.tools_pipeline_tracker import (
+    complete_run_skill_result,
+    record_pipeline_step,
+)
 from tests.server._helpers import _with_finalized_projection
 from tests.server._pipeline_test_helpers import _grant_success_credit
 from tests.server.conftest import _set_mock_kitchen_transition
@@ -178,6 +181,21 @@ class TestRecordPipelineStepInit:
         assert self.ctx.tracker_leases == {}
 
     @pytest.mark.anyio
+    async def test_completion_identity_read_exception_releases_manual_lease(self, monkeypatch):
+        from autoskillit.server.tools import tools_pipeline_tracker
+
+        def fail_read(*_args, **_kwargs):
+            raise OSError("identity read failed")
+
+        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_authority", fail_read)
+        completed = json.loads(
+            await record_pipeline_step(pipeline_id="AB", op="complete", step_name="review")
+        )
+
+        assert completed["success"] is False
+        assert self.ctx.tracker_leases == {}
+
+    @pytest.mark.anyio
     async def test_manual_init_preserves_existing_corrupt_bytes_and_releases_lease(self):
         tracker_path = self.tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
         tracker_path.parent.mkdir(parents=True)
@@ -189,6 +207,22 @@ class TestRecordPipelineStepInit:
         assert tracker_path.read_bytes() == b"{not-json"
         assert self.ctx.tracker_leases == {}
 
+    @pytest.mark.parametrize(
+        ("op", "handler"), [("init", "_handle_init"), ("status", "_handle_status")]
+    )
+    @pytest.mark.anyio
+    async def test_handler_exception_releases_new_manual_lease(self, monkeypatch, op, handler):
+        from autoskillit.server.tools import tools_pipeline_tracker
+
+        def fail(*_args, **_kwargs):
+            raise OSError("handler failed")
+
+        monkeypatch.setattr(tools_pipeline_tracker, handler, fail)
+        result = json.loads(await record_pipeline_step(pipeline_id="AB", op=op))
+
+        assert result["success"] is False
+        assert self.ctx.tracker_leases == {}
+
 
 class TestRecordPipelineStepGateClosed:
     @pytest.mark.anyio
@@ -198,6 +232,60 @@ class TestRecordPipelineStepGateClosed:
         tool_ctx.active_recipe_steps = {"step_a": {}}
         result = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
         assert result["success"] is False
+
+
+class TestCompleteRunSkillResult:
+    @pytest.mark.anyio
+    async def test_tracker_preparation_failure_keeps_acknowledged_credit_repairable(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        from autoskillit.server.tools import tools_pipeline_tracker
+
+        authority = tool_ctx_kitchen_open.run_skill_completion
+        assert authority is not None
+        tracker_path = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
+        invocation_id = authority.begin(
+            kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+            request_session_id="request-session",
+            tracker_order_id="AB",
+            tracker_path=str(tracker_path.resolve()),
+            tracker_kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+            tracker_incarnation_id="incarnation",
+            step_name="review",
+        )
+        receipt = authority.draft(
+            invocation_id,
+            classification="success",
+            success=True,
+            result_digest="digest",
+        )
+        authority.publish(receipt.receipt_id)
+
+        def fail_retain(*_args, **_kwargs):
+            raise OSError("lease unavailable")
+
+        monkeypatch.setattr(tools_pipeline_tracker, "_retain_context_tracker", fail_retain)
+        result = json.loads(
+            await complete_run_skill_result(
+                receipt.receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),
+            )
+        )
+
+        assert result["success"] is True
+        assert result["tracker_repairable"] is True
+        repaired = authority.apply_tracker_credit(
+            tracker_order_id="AB",
+            tracker_path=str(tracker_path.resolve()),
+            tracker_kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+            tracker_incarnation_id="incarnation",
+            step_name="review",
+            receipt_id=receipt.receipt_id,
+            effect=lambda: {"success": True},
+        )
+        assert repaired["success"] is True
 
 
 class TestRecordPipelineStepStatus:
@@ -566,6 +654,53 @@ class TestSelectTrackerAuthority:
             tools_pipeline_tracker._select_tracker_authority(tool_ctx_kitchen_open, "")
 
         assert retained["lease"].closed
+        assert tool_ctx_kitchen_open.tracker_leases == {}
+
+    def test_scoped_selection_cannot_release_kitchen_lifetime_lease(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        from autoskillit.server.tools import tools_kitchen, tools_pipeline_tracker
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        kitchen_key, kitchen_lease = tools_kitchen._retain_kitchen_tracker_authority(
+            tool_ctx_kitchen_open
+        )
+
+        _target, _authority, scoped_key, scoped_lease = (
+            tools_pipeline_tracker._select_tracker_authority(tool_ctx_kitchen_open, "")
+        )
+        assert scoped_key is not None
+        assert scoped_lease is not None
+        assert scoped_key != kitchen_key
+
+        tools_pipeline_tracker._release_context_tracker(tool_ctx_kitchen_open, scoped_key)
+        assert not kitchen_lease.closed
+        assert tool_ctx_kitchen_open.tracker_leases == {kitchen_key: kitchen_lease}
+        tools_kitchen._release_kitchen_tracker_authority(
+            tool_ctx_kitchen_open, unregister=False, retire=False
+        )
+
+    def test_completion_binding_read_exception_releases_lease(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        from autoskillit.core import TrackerAuthorityTarget
+        from autoskillit.server.tools import tools_execution, tools_pipeline_tracker
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=True)
+        target.path.parent.mkdir(parents=True, exist_ok=True)
+        target.path.write_text(json.dumps({"steps": {}, "dependencies": {}}))
+
+        def fail_read(_target, _lease):
+            raise OSError("identity read failed")
+
+        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_identity", fail_read)
+        with pytest.raises(OSError, match="identity read failed"):
+            tools_execution._completion_tracker_binding(
+                tool_ctx_kitchen_open, "AB", tracker_target=target
+            )
+
         assert tool_ctx_kitchen_open.tracker_leases == {}
 
 

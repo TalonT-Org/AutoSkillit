@@ -540,11 +540,16 @@ def _completion_tracker_binding(
         owner_kind="manual",
         owner_id=target.target_order_id,
     )
-    tracker_identity = read_tracker_identity(target, lease)
+    try:
+        tracker_identity = read_tracker_identity(target, lease)
+    except Exception:
+        _release_context_tracker(tool_ctx, key)
+        raise
     if tracker_identity is None:
         _release_context_tracker(tool_ctx, key)
         return "", "", "", ""
     kitchen_id, incarnation_id = tracker_identity
+    _release_context_tracker(tool_ctx, key)
     return target.target_order_id, str(target.path.resolve()), kitchen_id, incarnation_id
 
 

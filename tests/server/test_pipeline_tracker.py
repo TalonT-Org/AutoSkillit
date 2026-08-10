@@ -103,7 +103,7 @@ class TestRecordPipelineStepInit:
         self.ctx.active_recipe_steps = {"review": {}}
         initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
         assert initialized["success"] is True
-        assert len(self.ctx.tracker_leases) == 1
+        assert [key.owner_kind for key in self.ctx.tracker_leases] == ["manual"]
 
         completed = json.loads(
             await record_pipeline_step(pipeline_id="AB", op="complete", step_name="review")

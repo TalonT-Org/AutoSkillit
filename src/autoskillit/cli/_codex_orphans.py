@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import assert_never
 
 
 def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
@@ -78,3 +79,5 @@ def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
             if r.access_denied_pids:
                 parts.append(f"access denied: {', '.join(str(p) for p in r.access_denied_pids)}")
             print(f"incomplete pid {r.pid} ({'; '.join(parts)})")
+        else:
+            assert_never(r.action)

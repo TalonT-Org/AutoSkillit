@@ -286,17 +286,6 @@ def test_open_retires_unleased_orphan_without_age_inference(monkeypatch, tmp_pat
     assert not (tracker_dir / "K1.json").exists()
 
 
-def test_open_reaps_aged_orphan_tracker(monkeypatch, tmp_path):
-    """A tracker with no registry entry at all, past the grace window, is reaped."""
-    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
-    _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC) - timedelta(hours=24))
-    _write_registry(monkeypatch, tmp_path, [])
-
-    prune_stale_kitchen_state(tmp_path, "K2")
-
-    assert not (tracker_dir / "K1.json").exists()
-
-
 def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_path):
     """Fleet-campaign shape: multiple registry entries share one kitchen_id.
 

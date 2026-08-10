@@ -364,8 +364,13 @@ async def run_managed_async(
                 try:
                     resume_boundary = resume_path.stat().st_size
                 except OSError:
-                    resume_boundary = 0
-                if resume_path.is_file():
+                    logger.warning(
+                        "resume_cursor_stat_failed",
+                        path=str(resume_path),
+                        exc_info=True,
+                    )
+                    resume_boundary = None
+                if resume_boundary is not None and resume_path.is_file():
                     resume_cursor = EventCursor(resume_path, run_boundary=resume_boundary)
             _spawn_time = time.time()
             proc = await anyio.open_process(

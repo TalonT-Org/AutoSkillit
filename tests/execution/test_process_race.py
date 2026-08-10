@@ -398,16 +398,17 @@ async def test_completion_ceiling_preserves_pending_ids_for_adjudication() -> No
     acc.completion_candidate_event.set()
     trigger = anyio.Event()
 
-    await _watch_completion_eligibility(
-        acc,
-        trigger,
-        anyio.Event(),
-        completion_drain_timeout=0,
-        child_deferral_ceiling=0,
-        stream_parser=ClaudeStreamParser(),
-        session_log_enabled=False,
-        _poll_interval=0,
-    )
+    with anyio.fail_after(0.2):
+        await _watch_completion_eligibility(
+            acc,
+            trigger,
+            anyio.Event(),
+            completion_drain_timeout=0,
+            child_deferral_ceiling=0,
+            stream_parser=ClaudeStreamParser(),
+            session_log_enabled=False,
+            _poll_interval=0,
+        )
 
     signals = acc.to_race_signals()
     assert trigger.is_set()

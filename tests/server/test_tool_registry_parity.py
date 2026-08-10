@@ -208,6 +208,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "list_recipes",
             "load_recipe",
             "read_db",
+            "inspect_session_logs",
             "validate_recipe",
         }
         | EXPLORATION_TOOLS,

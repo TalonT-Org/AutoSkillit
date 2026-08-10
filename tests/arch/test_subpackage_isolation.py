@@ -970,7 +970,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 23,  # +_run_skill_completion exact receipt delivery boundary (#4457)
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
-        "execution": 19,
+        "execution": 20,  # +session_index strict byte-bounded retained-index reads (#4514)
         # +agent_definition native-role authority (#4443).
         "core": 31,
         # +GitHub review types, portable launch authority, stable contract,
@@ -998,7 +998,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
-        "server/tools": 35,  # noqa: E501 # +tools_exploration read-only broker endpoints; +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
+        "server/tools": 36,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)

@@ -115,6 +115,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_timing_summary",
             "get_quota_events",
             "analyze_tool_sequences",
+            "inspect_session_logs",
             "record_pipeline_step",
         ),
     ),

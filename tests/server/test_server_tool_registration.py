@@ -65,6 +65,7 @@ class TestToolRegistration:
             "reset_workspace",
             "merge_worktree",
             "read_db",
+            "inspect_session_logs",
             "list_recipes",
             "load_recipe",
             "migrate_recipe",
@@ -131,7 +132,7 @@ class TestToolRegistration:
         """Agent tool declarations must name real FastMCP-registered tools."""
         from autoskillit.server import mcp
 
-        mcp.enable(tags={"exploration"}, components={"tool"})
+        mcp.enable(tags={"exploration", "kitchen-core"}, components={"tool"})
         registered = {tool.name for tool in await mcp.list_tools()}
 
         for definition in load_bundled_agent_definitions():

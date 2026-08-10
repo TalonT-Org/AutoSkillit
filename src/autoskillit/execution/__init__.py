@@ -167,6 +167,7 @@ from autoskillit.execution.session import (
     persist_session_state,
     read_session_state,
 )
+from autoskillit.execution.session_index import read_session_index_rows
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
@@ -328,6 +329,7 @@ __all__ = [
     "AnomalySeverity",
     # session_log
     "flush_session_log",
+    "read_session_index_rows",
     "read_telemetry_clear_marker",
     "recover_crashed_sessions",
     "resolve_log_dir",

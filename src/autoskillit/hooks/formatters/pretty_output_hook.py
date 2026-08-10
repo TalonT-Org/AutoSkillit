@@ -203,6 +203,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "configure_order",  # simple config snapshot dict
         "lock_ingredients",  # simple success/error result
         "record_pipeline_step",  # structured init/status result
+        "inspect_session_logs",  # bounded inspection envelope, generic renders correctly
         "reset_dispatch",  # JSON cleanup report, generic renders correctly
         "get_recipe_section",  # bounded section content with continuation
         "complete_recipe_initialization",  # simple completion receipt

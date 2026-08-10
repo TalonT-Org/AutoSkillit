@@ -12,6 +12,7 @@ from autoskillit.core.path_containment import (
     ContainmentError,
     check_metadata_stable,
     read_stable_contained_bytes,
+    read_stable_contained_range,
     resolve_contained_path,
 )
 
@@ -199,3 +200,66 @@ class TestReadStableContainedBytes:
         with pytest.raises(ContainmentError, match="TOCTOU"):
             read_stable_contained_bytes(artifact, tmp_path)
         assert artifact_stat_calls == 3
+
+
+class TestReadStableContainedRange:
+    def test_reads_small_range_from_sparse_file_above_whole_file_cap(self, tmp_path: Path) -> None:
+        artifact = tmp_path / "large.jsonl"
+        with artifact.open("wb") as handle:
+            handle.write(b'{"first":true}\n')
+            handle.seek(50_000_001)
+            handle.write(b"\n")
+
+        resolved, data, opening = read_stable_contained_range(
+            artifact,
+            tmp_path,
+            offset=0,
+            length=15,
+        )
+
+        assert resolved == artifact
+        assert data == b'{"first":true}\n'
+        assert opening.st_size > 50_000_000
+        with pytest.raises(ContainmentError, match="too large"):
+            read_stable_contained_bytes(artifact, tmp_path)
+
+    def test_secure_open_unavailable_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        monkeypatch.delattr(os, "O_NOFOLLOW")
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "secure_open_unavailable"
+
+    def test_append_during_read_is_bounded_to_opening_snapshot(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "events.jsonl"
+        artifact.write_bytes(b"one\n")
+        real_pread = os.pread
+
+        def appending_pread(fd: int, length: int, offset: int) -> bytes:
+            data = real_pread(fd, length, offset)
+            with artifact.open("ab") as handle:
+                handle.write(b"two\n")
+            return data
+
+        monkeypatch.setattr(os, "pread", appending_pread)
+        _, data, opening = read_stable_contained_range(
+            artifact,
+            tmp_path,
+            offset=0,
+            length=100,
+        )
+
+        assert data == b"one\n"
+        assert opening.st_size == 4
+        assert artifact.stat().st_size == 8

@@ -18,11 +18,38 @@ from autoskillit.core.types._type_results_execution import (
 )
 from autoskillit.execution._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
+from autoskillit.execution.session_index import read_session_index_rows
 from autoskillit.execution.session_log import flush_session_log
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def test_strict_session_index_reader_enforces_shape_and_budget(tmp_path: Path) -> None:
+    index = tmp_path / "sessions.jsonl"
+    index.write_text('{"session_id":"one"}\n')
+    assert read_session_index_rows(index) == [{"session_id": "one"}]
+
+    index.write_text('{"session_id":"one"}\nnot-json\n')
+    with pytest.raises(ValueError, match="Malformed session index row 2"):
+        read_session_index_rows(index)
+
+    index.write_text("[]\n")
+    with pytest.raises(ValueError, match="not an object"):
+        read_session_index_rows(index)
+
+    index.write_text('{"session_id":"one"}\n')
+    with pytest.raises(ValueError, match="byte budget"):
+        read_session_index_rows(index, max_bytes=5)
+
+
+def test_strict_session_index_reader_rejects_partial_suffix(tmp_path: Path) -> None:
+    index = tmp_path / "sessions.jsonl"
+    index.write_text('{"session_id":"one"}')
+
+    with pytest.raises(ValueError, match="incomplete row"):
+        read_session_index_rows(index)
 
 
 # --- recover_crashed_sessions tests ---

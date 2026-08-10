@@ -23,9 +23,8 @@ from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
 if TYPE_CHECKING:
-    import pytest
-
     from autoskillit.config.settings import AgentBackendConfig
+    from autoskillit.pipeline import ToolContext
 
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
 
@@ -139,28 +138,30 @@ async def simulate_session_start(
     recipe_name: str,
     backend_name: str,
     *,
+    tool_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> McpCallCounter:
     """Drive open plus every required page and record the exact MCP call sequence."""
     from autoskillit.execution.backends import BACKEND_REGISTRY
-    from autoskillit.server._state import _get_ctx_or_none
-
-    tool_ctx = _get_ctx_or_none()
-    assert tool_ctx is not None
     from autoskillit.pipeline import closed_kitchen_open_state
     from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 
     monkeypatch.setattr(tool_ctx, "backend", BACKEND_REGISTRY[backend_name]())
-    tool_ctx.kitchen_open_state = closed_kitchen_open_state()
-    tool_ctx.recipe_initialization_state = NoActiveRecipe()
+    monkeypatch.setattr(tool_ctx, "kitchen_open_state", closed_kitchen_open_state())
+    monkeypatch.setattr(tool_ctx, "recipe_initialization_state", NoActiveRecipe())
     counter = McpCallCounter()
     counter.record("open_kitchen")
-    try:
-        envelope = await _open_kitchen_patched(recipe_name, {}, monkeypatch)
-    except ValueError:
-        pytest.skip(f"recipe is not startable under the active feature scope: {recipe_name}")
-    if envelope.get("success") is not True:
-        pytest.skip(f"recipe is not startable under the active feature scope: {recipe_name}")
+    project_root = Path(__file__).resolve().parents[2]
+    envelope = await _open_kitchen_patched(
+        recipe_name,
+        {
+            "task": "test task",
+            "issue_url": "https://github.com/test/test/issues/1",
+            "source_dir": str(project_root),
+        },
+        monkeypatch,
+    )
+    assert envelope.get("success") is True, envelope
     if envelope.get("delivery_bound_spill") is True:
         await _credit_initialization_sections(envelope, counter=counter)
     return counter

@@ -27,6 +27,7 @@ async def test_session_start_round_trip_count_is_bounded(
     counter = await simulate_session_start(
         recipe_name,
         backend_name,
+        tool_ctx=tool_ctx,
         monkeypatch=monkeypatch,
     )
     mode = (

@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,6 +31,7 @@ from autoskillit.workspace import (
     iter_public_plugin_asset_files,
     public_plugin_asset_digest,
 )
+from tests.conftest import production_interpreter_env
 from tests.contracts._projection_helpers import plant_stale_snapshot, session_catalog
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -160,6 +163,67 @@ class TestProjectionFreshness:
             assert binding.plugin_dir.is_relative_to(
                 isolated_home / ".autoskillit" / "plugin-projections"
             )
+        assert binding.closed
+
+    def test_projected_codex_formatter_resolves_runtime_imports(self, isolated_home: Path) -> None:
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends.codex import CodexBackend
+        from autoskillit.workspace import project_default_plugin_authority
+
+        authority = project_default_plugin_authority(
+            cwd=isolated_home,
+            base_branch="main",
+            catalog=session_catalog(),
+        )
+        with authority.acquire_launch_binding(
+            backend=CodexBackend(),
+            load_mode=PluginLoadMode.PROJECTED_HOME,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            assert binding.plugin_dir != pkg_root()
+            assert binding.plugin_dir.is_relative_to(
+                isolated_home / ".autoskillit" / "plugin-projections"
+            )
+
+            subprocess_cwd = isolated_home / "projected-hook-cwd"
+            subprocess_cwd.mkdir()
+            dispatcher = binding.plugin_dir / "hooks" / "_dispatch.py"
+            command = [
+                sys.executable,
+                "-B",
+                str(dispatcher),
+                "formatters/pretty_output_hook",
+            ]
+            input_text = "Kitchen is open. AutoSkillit 1.2.3."
+            event = json.dumps(
+                {
+                    "tool_name": "mcp__autoskillit__open_kitchen",
+                    "tool_response": json.dumps({"result": input_text}),
+                }
+            )
+            env = production_interpreter_env()
+            env.pop("PYTHONPATH", None)
+
+            result = subprocess.run(
+                command,
+                input=event,
+                text=True,
+                capture_output=True,
+                cwd=subprocess_cwd,
+                env=env,
+                timeout=10,
+            )
+
+            assert result.returncode == 0, (
+                f"projected formatter command failed: {command!r}\n{result.stderr}"
+            )
+            assert result.stdout, (
+                f"projected formatter command emitted no output: {command!r}\n{result.stderr}"
+            )
+            output = json.loads(result.stdout)
+            updated_output = output["hookSpecificOutput"]["updatedMCPToolOutput"]
+            assert "## open_kitchen" in updated_output
+            assert input_text in updated_output
         assert binding.closed
 
 

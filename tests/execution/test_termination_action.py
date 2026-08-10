@@ -91,3 +91,21 @@ def test_decide_termination_action_process_exited_yields_no_kill_when_no_timeout
     """process_exited=True with no timeout yields NO_KILL for any termination reason."""
     result = decide_termination_action(termination, timeout_fired=False, process_exited=True)
     assert result == TerminationAction.NO_KILL
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"pending_task_ids": ("task-1",)},
+        {"schedule_wakeup_violation": True},
+        {"completion_ceiling_expired": True},
+    ],
+)
+def test_natural_exit_with_unresolved_obligation_requires_cleanup(kwargs: dict) -> None:
+    result = decide_termination_action(
+        TerminationReason.NATURAL_EXIT,
+        timeout_fired=False,
+        process_exited=True,
+        **kwargs,
+    )
+    assert result is TerminationAction.IMMEDIATE_KILL

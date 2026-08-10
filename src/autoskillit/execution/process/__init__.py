@@ -139,6 +139,9 @@ def decide_termination_action(
     *,
     timeout_fired: bool,
     process_exited: bool,
+    pending_task_ids: tuple[str, ...] = (),
+    schedule_wakeup_violation: bool = False,
+    completion_ceiling_expired: bool = False,
 ) -> TerminationAction:
     """Pure decision function: maps race signals to a TerminationAction.
 
@@ -154,6 +157,10 @@ def decide_termination_action(
     as a pure decision table without any async or process infrastructure.
     """
     if timeout_fired:
+        return TerminationAction.IMMEDIATE_KILL
+    if process_exited and (
+        pending_task_ids or schedule_wakeup_violation or completion_ceiling_expired
+    ):
         return TerminationAction.IMMEDIATE_KILL
     if process_exited:
         return TerminationAction.NO_KILL
@@ -184,6 +191,7 @@ async def execute_termination_action(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     child_deferral_ceiling: float = 0.0,
+    process_group_id: int | None = None,
 ) -> KillReason:
     """Single authorized executor for all kill decisions in run_managed_async.
 
@@ -233,7 +241,10 @@ async def execute_termination_action(
                     )
                     await anyio.sleep(_poll_interval)
             proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
-            await async_kill_process_tree(proc.pid)
+            if process_group_id is None:
+                await async_kill_process_tree(proc.pid)
+            else:
+                await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
             return KillReason.KILL_AFTER_COMPLETION
         case TerminationAction.IMMEDIATE_KILL:
             if pid is not None and _has_active_child_processes(pid):
@@ -241,7 +252,10 @@ async def execute_termination_action(
                     "immediate_kill_with_active_children",
                     pid=pid,
                 )
-            await async_kill_process_tree(proc.pid)
+            if process_group_id is None:
+                await async_kill_process_tree(proc.pid)
+            else:
+                await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
             return KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
@@ -580,6 +594,9 @@ async def run_managed_async(
                 termination,
                 timeout_fired=timeout_scope is not None and timeout_scope.cancelled_caught,
                 process_exited=signals.process_exited,
+                pending_task_ids=signals.pending_task_ids,
+                schedule_wakeup_violation=signals.schedule_wakeup_violation,
+                completion_ceiling_expired=signals.completion_ceiling_expired,
             )
             proc_log.debug(
                 "kill_decision",
@@ -600,6 +617,7 @@ async def run_managed_async(
                 marker_dir=marker_dir,
                 session_id=session_id,
                 child_deferral_ceiling=child_deferral_ceiling,
+                process_group_id=process_group_id,
             )
 
             # Flush and close before reading
@@ -653,8 +671,13 @@ async def run_managed_async(
             with anyio.CancelScope(shield=True):
                 if "tracing_handle" in locals() and tracing_handle is not None:
                     tracing_handle.stop()
-                if "proc" in locals() and proc.returncode is None:
-                    await async_kill_process_tree(proc.pid)
+                if "proc" in locals():
+                    await async_kill_process_tree(
+                        proc.pid,
+                        process_group_id=(
+                            process_group_id if "process_group_id" in locals() else proc.pid
+                        ),
+                    )
             raise
         finally:
             if stdin_handle is not None:

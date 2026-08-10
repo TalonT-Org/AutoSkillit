@@ -108,6 +108,36 @@ class TestKillProcessTreeUnit:
         # Should handle gracefully
         kill_process_tree(pid)
 
+    def test_process_group_cleanup_survives_exited_root(self):
+        import signal
+        import subprocess
+
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import os,time; pid=os.fork(); "
+                    "print(pid, flush=True) if pid else time.sleep(60)"
+                ),
+            ],
+            start_new_session=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        assert proc.stdout is not None
+        child_pid = int(proc.stdout.readline())
+        proc.wait(timeout=5)
+        try:
+            result = kill_process_tree(proc.pid, process_group_id=proc.pid)
+            assert child_pid in result.terminated_pids
+            assert not result.survivor_pids
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
 
 class TestCancellationKillsProcess:
     """Cancellation of run_managed_async kills the subprocess."""

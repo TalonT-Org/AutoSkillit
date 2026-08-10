@@ -19,6 +19,64 @@ from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
+def _plant_stale_projection(
+    home: Path,
+    semantic_key: str,
+) -> tuple[Path, Path, Path, Path, Path]:
+    from autoskillit.workspace._projection_cache import (
+        projected_artifact_lease_path,
+        projected_artifact_manifest_path,
+        projected_plugin_artifact_digest,
+    )
+
+    projections_root = home / ".autoskillit" / "plugin-projections"
+    projection = projections_root / semantic_key
+    hooks_dir = projection / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
+    hooks_path = hooks_dir / "hooks.json"
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Read",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "python3 /deleted/hooks/_dispatch.py foo",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    manifest_path = projected_artifact_manifest_path(projection)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "artifact_kind": "projection",
+                "projection_version": 2,
+                "semantic_key": semantic_key,
+                "incarnation_id": "test-incarnation",
+                "artifact_digest": projected_plugin_artifact_digest(projection),
+                "skills": {},
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    lease_path = projected_artifact_lease_path(projection)
+    lease_path.parent.mkdir(parents=True, exist_ok=True)
+    return projections_root, projection, hooks_path, manifest_path, lease_path
+
+
 class TestValidateStagedPluginHooks:
     """T-B1 (unit level): validate_staged_plugin_hooks rejects broken commands."""
 
@@ -302,69 +360,26 @@ class TestProjectionRepair:
             PluginHookRepairStatus,
             repair_broken_projection_hooks,
         )
-        from autoskillit.workspace._projection_cache import (
-            projected_artifact_lease_path,
-            projected_artifact_manifest_path,
-            projected_plugin_artifact_digest,
-        )
+        from autoskillit.workspace._projection_cache import projected_plugin_artifact_digest
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        projections_root = tmp_path / ".autoskillit" / "plugin-projections"
-        proj = projections_root / "deadbeefcafe0123"
-        hooks_dir = proj / "hooks"
-        hooks_dir.mkdir(parents=True)
-        # Plant the dispatcher script so repair targets exist
-        dispatcher = hooks_dir / "_dispatch.py"
-        dispatcher.write_text("# dispatcher\n")
-        # Plant stale absolute commands
-        stale_hooks = {
-            "hooks": {
-                "PreToolUse": [
-                    {
-                        "matcher": "Read",
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": (
-                                    "python3 /deleted/venv/hooks/_dispatch.py guards/tool_guard"
-                                ),
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
-        (hooks_dir / "hooks.json").write_text(json.dumps(stale_hooks, indent=2) + "\n")
-        # Write an initial manifest so repair can update it
-        manifest_path = projected_artifact_manifest_path(proj)
-        initial_digest = projected_plugin_artifact_digest(proj)
-        manifest_data = {
-            "schema_version": 2,
-            "artifact_kind": "projection",
-            "projection_version": 2,
-            "semantic_key": "deadbeefcafe0123",
-            "incarnation_id": "test-incarnation",
-            "artifact_digest": initial_digest,
-            "skills": {},
-        }
-        manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n")
-        # Ensure lease path directory exists
-        lease_path = projected_artifact_lease_path(proj)
-        lease_path.parent.mkdir(parents=True, exist_ok=True)
+        projections_root, projection, hooks_path, manifest_path, _ = _plant_stale_projection(
+            tmp_path, "deadbeefcafe0123"
+        )
 
         outcomes = repair_broken_projection_hooks(projections_root)
 
         assert len(outcomes) == 1
         assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
         # Verify commands are now relocatable
-        repaired = json.loads((hooks_dir / "hooks.json").read_text())
+        repaired = json.loads(hooks_path.read_text())
         for entries in repaired.get("hooks", {}).values():
             for entry in entries:
                 for hook in entry.get("hooks", []):
                     assert PLUGIN_ROOT_TOKEN in hook["command"]
         # Verify manifest was updated so digest agrees
         updated_manifest = json.loads(manifest_path.read_text())
-        new_digest = projected_plugin_artifact_digest(proj)
+        new_digest = projected_plugin_artifact_digest(projection)
         assert updated_manifest["artifact_digest"] == new_digest
 
     def test_projection_repair_runs_without_cache_broken_or_obligation(
@@ -441,35 +456,12 @@ class TestProjectionRepair:
             PluginHookRepairStatus,
             repair_broken_projection_hooks,
         )
-        from autoskillit.workspace._projection_cache import (
-            projected_artifact_lease_path,
-        )
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        projections_root = tmp_path / ".autoskillit" / "plugin-projections"
-        proj = projections_root / "contended-key"
-        hooks_dir = proj / "hooks"
-        hooks_dir.mkdir(parents=True)
-        (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
-        stale_hooks = {
-            "hooks": {
-                "PreToolUse": [
-                    {
-                        "matcher": "Read",
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": "python3 /deleted/hooks/_dispatch.py foo",
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
-        original_text = json.dumps(stale_hooks, indent=2) + "\n"
-        (hooks_dir / "hooks.json").write_text(original_text)
-        lease_path = projected_artifact_lease_path(proj)
-        lease_path.parent.mkdir(parents=True, exist_ok=True)
+        projections_root, _, hooks_path, _, lease_path = _plant_stale_projection(
+            tmp_path, "contended-key"
+        )
+        original_text = hooks_path.read_text()
 
         # Hold an exclusive lease to simulate contention
         with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
@@ -478,7 +470,7 @@ class TestProjectionRepair:
         assert len(outcomes) == 1
         assert outcomes[0].status is PluginHookRepairStatus.CONTENDED
         # File must be unchanged
-        assert (hooks_dir / "hooks.json").read_text() == original_text
+        assert hooks_path.read_text() == original_text
 
     def test_repair_succeeds_after_contention_clears(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -490,53 +482,11 @@ class TestProjectionRepair:
             PluginHookRepairStatus,
             repair_broken_projection_hooks,
         )
-        from autoskillit.workspace._projection_cache import (
-            projected_artifact_lease_path,
-            projected_artifact_manifest_path,
-            projected_plugin_artifact_digest,
-        )
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        projections_root = tmp_path / ".autoskillit" / "plugin-projections"
-        proj = projections_root / "post-contention"
-        hooks_dir = proj / "hooks"
-        hooks_dir.mkdir(parents=True)
-        (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
-        stale = {
-            "hooks": {
-                "PreToolUse": [
-                    {
-                        "matcher": "Read",
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": "python3 /deleted/hooks/_dispatch.py foo",
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
-        (hooks_dir / "hooks.json").write_text(json.dumps(stale, indent=2) + "\n")
-        manifest_path = projected_artifact_manifest_path(proj)
-        digest = projected_plugin_artifact_digest(proj)
-        manifest_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": 2,
-                    "artifact_kind": "projection",
-                    "projection_version": 2,
-                    "semantic_key": "post-contention",
-                    "incarnation_id": "test",
-                    "artifact_digest": digest,
-                    "skills": {},
-                },
-                indent=2,
-            )
-            + "\n"
+        projections_root, _, hooks_path, _, lease_path = _plant_stale_projection(
+            tmp_path, "post-contention"
         )
-        lease_path = projected_artifact_lease_path(proj)
-        lease_path.parent.mkdir(parents=True, exist_ok=True)
 
         # First run — contended
         with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
@@ -547,7 +497,7 @@ class TestProjectionRepair:
         outcomes = repair_broken_projection_hooks(projections_root)
         assert len(outcomes) == 1
         assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
-        repaired = json.loads((hooks_dir / "hooks.json").read_text())
+        repaired = json.loads(hooks_path.read_text())
         for entries in repaired.get("hooks", {}).values():
             for entry in entries:
                 for hook in entry.get("hooks", []):
@@ -632,49 +582,10 @@ class TestClaudeCodeDoesNotDisableRepair:
             PluginHookRepairStatus,
             repair_broken_projection_hooks,
         )
-        from autoskillit.workspace._projection_cache import (
-            projected_artifact_lease_path,
-            projected_artifact_manifest_path,
-            projected_plugin_artifact_digest,
-        )
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("CLAUDECODE", "1")
-        projections_root = tmp_path / ".autoskillit" / "plugin-projections"
-        proj = projections_root / "claudecode-test"
-        hooks_dir = proj / "hooks"
-        hooks_dir.mkdir(parents=True)
-        (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
-        stale_hooks = {
-            "hooks": {
-                "PreToolUse": [
-                    {
-                        "matcher": "Read",
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": "python3 /deleted/hooks/_dispatch.py foo",
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
-        (hooks_dir / "hooks.json").write_text(json.dumps(stale_hooks, indent=2) + "\n")
-        manifest_path = projected_artifact_manifest_path(proj)
-        initial_digest = projected_plugin_artifact_digest(proj)
-        manifest_data = {
-            "schema_version": 2,
-            "artifact_kind": "projection",
-            "projection_version": 2,
-            "semantic_key": "claudecode-test",
-            "incarnation_id": "test",
-            "artifact_digest": initial_digest,
-            "skills": {},
-        }
-        manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n")
-        lease_path = projected_artifact_lease_path(proj)
-        lease_path.parent.mkdir(parents=True, exist_ok=True)
+        projections_root, _, _, _, _ = _plant_stale_projection(tmp_path, "claudecode-test")
 
         outcomes = repair_broken_projection_hooks(projections_root)
         assert len(outcomes) == 1

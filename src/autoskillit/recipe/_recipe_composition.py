@@ -49,7 +49,7 @@ def _collect_all_route_targets(step: RecipeStep) -> set[str]:
     return targets
 
 
-def _derive_rate_limit_routes(recipe: Any) -> Any:
+def _derive_rate_limit_routes(recipe: Recipe) -> Recipe:
     """Auto-populate on_rate_limit from on_context_limit for run_skill steps.
 
     When a run_skill step declares on_context_limit but not on_rate_limit,

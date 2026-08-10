@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import ClaudeDirectoryConventions
+from autoskillit.core import ClaudeDirectoryConventions, pkg_root
 from tests.fakes import adapt_test_skill_semantics
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
@@ -43,6 +43,7 @@ def _catalog_context(manager, *, backend=None):
         catalog,
         project_root,
         backend=backend,
+        durable_scripts_root=pkg_root(),
     )
     return catalog, context
 

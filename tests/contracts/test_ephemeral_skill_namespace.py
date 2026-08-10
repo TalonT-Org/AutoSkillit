@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ClaudeDirectoryConventions, SkillExecutionRole, SkillSource
+from autoskillit.core import ClaudeDirectoryConventions, SkillExecutionRole, SkillSource, pkg_root
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
@@ -37,7 +37,9 @@ def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -
     catalog = non_exploration_catalog(
         resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
     )
-    context = provider.catalog_projection_context(catalog, tmp_path)
+    context = provider.catalog_projection_context(
+        catalog, tmp_path, durable_scripts_root=pkg_root()
+    )
     session_path = mgr.init_session("ns-check-session", catalog, context)
 
     skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR

@@ -13,14 +13,12 @@ baked into every published hook command caused a total session lockout when
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from autoskillit.core import pkg_root
 from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN, generate_hooks_json
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -35,13 +33,9 @@ def test_generate_hooks_json_commands_are_relocatable() -> None:
     """Every command produced by generate_hooks_json() uses the plugin-root
     token and contains no process-local path segment.
     """
-    forbidden_segments = (
-        "site-packages",
-        "/lib/python",
-        "uv/tools",
-        sys.prefix,
-        str(pkg_root()),
-    )
+    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+
+    forbidden_segments = environment_pinned_path_segments()
     data = generate_hooks_json()
     expected_prefix = f'python3 -B "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" '
     for event_type, entries in data["hooks"].items():
@@ -115,8 +109,9 @@ def test_self_healed_bundled_hooks_json_is_relocatable(
     run_startup_drift_check()
 
     regenerated = (hooks_dir / "hooks.json").read_text()
-    forbidden_segments = ("site-packages", "/lib/python", "uv/tools", sys.prefix)
-    for segment in forbidden_segments:
+    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+
+    for segment in environment_pinned_path_segments():
         assert segment not in regenerated, (
             f"self-healed hooks.json embeds a process-local path segment {segment!r}"
         )
@@ -362,30 +357,6 @@ def test_catalog_projection_context_accepts_durable_scripts_root(tmp_path: Path)
     assert context.substitutions is not None
     assert context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == str(
         durable_root / "recipes" / "scripts"
-    )
-
-
-def test_catalog_projection_context_defaults_to_pkg_root_when_unspecified(
-    tmp_path: Path,
-) -> None:
-    """Without an explicit durable_scripts_root, pkg_root() (the dev-source
-    checkout) remains the fallback — correct for callers with no plugin
-    artifact binding, and keeps every pre-existing caller working unchanged.
-    """
-    from autoskillit.core import SkillExecutionRole, pkg_root
-    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
-
-    provider = SkillsDirectoryProvider(
-        temp_dir_relpath=".autoskillit/temp",
-        default_base_branch="develop",
-    )
-    catalog = EffectiveSkillCatalog(skills=(), execution_role=SkillExecutionRole.SESSION)
-
-    context = provider.catalog_projection_context(catalog, tmp_path)
-
-    assert context.substitutions is not None
-    assert context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == str(
-        pkg_root() / "recipes" / "scripts"
     )
 
 

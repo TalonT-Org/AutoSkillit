@@ -19,6 +19,7 @@ from autoskillit.core import (
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSource,
+    pkg_root,
 )
 from autoskillit.core.io import load_yaml
 from autoskillit.workspace import (
@@ -73,6 +74,7 @@ def _catalog_context(
         catalog,
         project_root,
         backend=backend,
+        durable_scripts_root=pkg_root(),
     )
     return catalog, context
 

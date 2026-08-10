@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SkillExecutionRole
+from autoskillit.core import SkillExecutionRole, pkg_root
 from autoskillit.workspace import EffectiveSkillCatalog, SkillCatalogEntry
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
@@ -214,7 +214,9 @@ def test_init_session_writes_substituted_skill_md_for_real_skill(
         skills=(SkillCatalogEntry.from_skill_info(target),),
         execution_role=SkillExecutionRole.SESSION,
     )
-    context = provider.catalog_projection_context(catalog, tmp_path)
+    context = provider.catalog_projection_context(
+        catalog, tmp_path, durable_scripts_root=pkg_root()
+    )
     validated = mgr.init_session("sess-1", catalog, context)
 
     written = Path(str(validated.path)) / ".claude" / "skills" / target.name / "SKILL.md"

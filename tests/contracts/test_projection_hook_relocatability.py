@@ -11,25 +11,15 @@ import json
 import shlex
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH, PLUGIN_ROOT_TOKEN
+from tests.contracts._relocatability_helpers import environment_pinned_path_segments
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
-
-
-def _forbidden_segments() -> tuple[str, ...]:
-    return (
-        "site-packages",
-        "/lib/python",
-        "uv/tools",
-        str(pkg_root()),
-        sys.prefix,
-    )
 
 
 class TestProjectedHooksAreRelocatable:
@@ -99,7 +89,7 @@ class TestProjectedHooksAreRelocatable:
                         assert PLUGIN_ROOT_TOKEN in cmd, (
                             f"projected hook command lacks relocatable token: {cmd}"
                         )
-                        for segment in _forbidden_segments():
+                        for segment in environment_pinned_path_segments():
                             assert segment not in cmd, (
                                 f"projected command contains forbidden segment {segment!r}: {cmd}"
                             )

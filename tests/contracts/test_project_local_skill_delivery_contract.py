@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, SkillExecutionRole
+from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, SkillExecutionRole, pkg_root
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -40,6 +40,7 @@ def _materialize_project(
         catalog,
         project_root,
         backend=backend,
+        durable_scripts_root=pkg_root(),
     )
     manager = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral_root)
     return manager.init_session(session_id, catalog, context)

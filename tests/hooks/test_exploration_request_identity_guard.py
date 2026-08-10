@@ -31,10 +31,15 @@ def _project(tmp_path: Path) -> Path:
     return root
 
 
-def _run(payload: object, root: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    payload: object, root: Path, *, headless: bool = False
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["AUTOSKILLIT_STATE_ROOT"] = str(root)
-    env.pop("AUTOSKILLIT_HEADLESS", None)
+    if headless:
+        env["AUTOSKILLIT_HEADLESS"] = "1"
+    else:
+        env.pop("AUTOSKILLIT_HEADLESS", None)
     env.pop("AUTOSKILLIT_AGENT_BACKEND", None)
     return subprocess.run(
         [sys.executable, str(_SCRIPT)],
@@ -72,6 +77,7 @@ def test_guard_preserves_input_and_injects_consumable_native_identity(
             },
         },
         root,
+        headless=False,
     )
 
     assert result.returncode == 0
@@ -113,6 +119,28 @@ def test_supported_event_fails_closed_without_valid_identity(
     assert "EXPLORATION REQUEST IDENTITY UNAVAILABLE" in output["permissionDecisionReason"]
 
 
+def test_supported_event_fails_closed_when_record_write_fails(tmp_path: Path) -> None:
+    invalid_root = tmp_path / "not-a-directory"
+    invalid_root.write_text("blocks request-record directory creation")
+
+    result = _run(
+        {
+            "tool_name": "mcp__autoskillit__enable_exploration",
+            "session_id": "native-session",
+            "tool_input": {},
+        },
+        invalid_root,
+    )
+
+    output = json.loads(result.stdout)["hookSpecificOutput"]
+    assert output["hookEventName"] == "PreToolUse"
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"] == (
+        "EXPLORATION REQUEST IDENTITY UNAVAILABLE: "
+        "the correlated one-shot record could not be written"
+    )
+
+
 def test_guard_allows_unparseable_and_unrelated_input(tmp_path: Path) -> None:
     root = _project(tmp_path)
     assert _run("not-json", root).stdout == ""
@@ -127,6 +155,21 @@ def test_guard_allows_unparseable_and_unrelated_input(tmp_path: Path) -> None:
         ).stdout
         == ""
     )
+
+
+def test_guard_skips_headless_events(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    result = _run(
+        {
+            "tool_name": "mcp__autoskillit__enable_exploration",
+            "session_id": "native-session",
+            "tool_input": {},
+        },
+        root,
+        headless=True,
+    )
+
+    assert result.stdout == ""
 
 
 def test_registry_matcher_is_decorated_name_tolerant_and_exact() -> None:

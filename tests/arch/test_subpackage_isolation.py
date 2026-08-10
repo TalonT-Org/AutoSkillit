@@ -990,9 +990,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
         # so it lives at this IL-1 layer rather than splitting further — its 176 lines
         # are one cohesive read/write/clear API with no internal seam to extract)
-        "hooks": 22,  # +_capture_process owned shell process-group boundary;
+        "hooks": 23,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
-        # +context/audit admission ledgers, recipe initialization, and exploration lifecycle
+        # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
+        # and request-correlated exploration identity records
         "pipeline": 18,  # +run_skill_completion server-owned receipt authority (#4457)
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
@@ -1004,8 +1005,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +tools_audit_artifacts.py (typed audit semantic/disposition producers, #4419;
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
-        "hooks/guards": 34,  # +github_mutation_guard (#4432);
+        "hooks/guards": 35,  # +github_mutation_guard (#4432);
         # +fabricated_completion_guard (#4457)
+        # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
@@ -1467,7 +1469,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection, and execution identity in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
-        1100,
+        1150,
         "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
         "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
         "module rather than a sub-package (a package split would change how hook scripts "
@@ -1475,7 +1477,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(${CLAUDE_PLUGIN_ROOT} token generation in _build_hook_command, "
         "relocatable command rendering, and token-aware find_broken_hook_scripts/"
         "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
-        "detection surface.",
+        "detection surface. #4512 adds the exact exploration request-identity hook and "
+        "its lifecycle resource contract to the same canonical registry.",
     ),
     "pipeline/exploration_context.py": (
         1100,

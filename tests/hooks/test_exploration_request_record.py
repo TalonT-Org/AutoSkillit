@@ -135,6 +135,28 @@ def test_claimed_inode_mode_is_validated(tmp_path: Path) -> None:
     assert not _record_path(root, token).exists()
 
 
+def test_claimed_inode_hardlink_is_rejected(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    token = write_exploration_request_record(root, "enable_exploration", "native-session")
+    path = _record_path(root, token)
+    hardlink = tmp_path / "request-record-hardlink.json"
+    os.link(path, hardlink)
+
+    assert consume_exploration_request_record(root, "enable_exploration", token) is None
+    assert not path.exists()
+    assert hardlink.exists()
+
+
+def test_claimed_inode_oversized_payload_is_rejected(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    token = write_exploration_request_record(root, "enable_exploration", "native-session")
+    path = _record_path(root, token)
+    path.write_bytes(b"{" + b" " * records._MAX_RECORD_BYTES + b"}")
+
+    assert consume_exploration_request_record(root, "enable_exploration", token) is None
+    assert not path.exists()
+
+
 def test_record_symlink_substitution_is_rejected(tmp_path: Path) -> None:
     root = _project(tmp_path)
     token = "A" * 43

@@ -54,9 +54,6 @@ def validate_public_plugin_projection(
         raise RuntimeError(
             "refusing to publish invalid marketplace artifact: " + "; ".join(errors)
         )
-    # validate_staged_plugin_hooks raises ProjectedArtifactHooksInvalid (a
-    # subclass of Exception) on broken commands.  We don't need the typed
-    # catch here — the RuntimeError wrapper is what install() propagates.
     try:
         validate_staged_plugin_hooks(public_root)
     except Exception as exc:

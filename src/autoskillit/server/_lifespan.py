@@ -89,15 +89,8 @@ logger = get_logger(__name__)
 def run_startup_drift_check() -> None:
     """Compare on-disk hooks.json bytes vs current render; regenerate if stale.
 
-    Unlike the previous hash-based gate, this byte comparison is
-    content-complete: any difference in the rendered manifest — including
-    command-string changes with a structurally identical registry — triggers
-    a rewrite.  The hash comparison was blind to rendered command drift
-    when the registry structure was unchanged (the Aug 2026 incident shape).
-
-    Called as a background task from the lifespan.  Render and file-I/O
-    failures are caught independently so a renderer regression cannot
-    silently disable self-heal.
+    Any byte difference triggers a rewrite. Render and file-I/O failures are
+    logged and contained because the check runs as a lifespan background task.
     """
     hooks_json_path = _core_paths.pkg_root() / "hooks" / "hooks.json"
     try:

@@ -262,9 +262,7 @@ def _valid_integration_pair(body: str, metadata: dict[str, object]) -> bool:
     if issue_urls != sorted(set(issue_urls)):
         return False
     body_issue_urls = sorted(set(_CLOSING_URL_RE.findall(body)))
-    return body_issue_urls == issue_urls and all(
-        _ISSUE_URL_RE.fullmatch(issue_url) for issue_url in issue_urls
-    )
+    return body_issue_urls == issue_urls
 
 
 def _deny(reason: str) -> None:
@@ -301,7 +299,7 @@ def main() -> None:
         sys.exit(0)
 
     body_path_strs = _extract_create_body_paths(cmd)
-    if body_path_strs is None or not body_path_strs:
+    if not body_path_strs:
         sys.exit(0)
 
     project_root = resolve_state_root(parsed.payload_cwd)

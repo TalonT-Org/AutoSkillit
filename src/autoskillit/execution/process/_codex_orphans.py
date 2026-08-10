@@ -1,4 +1,4 @@
-"""Orphaned interactive codex detection — fd 0 → deleted pty is the incident's observed signature.
+"""Orphaned interactive codex detection — fd 0 → deleted pty is issue #4536's signature.
 
 Same-user scoped; reap is signal-only, so persisted ``~/.codex/sessions``
 rollouts are never deleted.

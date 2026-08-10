@@ -334,8 +334,9 @@ async def load_recipe(
     tool, then follow the YAML steps. Recipes live in .autoskillit/recipes/
     as .yaml files (NOT in .autoskillit/skills/ or any other directory).
 
-    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not
-    pass a skill name to recipe-serving tools; they accept recipe identities only.
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not pass
+    a skill name to ``open_kitchen``, ``load_recipe``, ``migrate_recipe``, or
+    ``recipe://``; those surfaces accept recipe identities only.
     A name defined as both a recipe and a skill is rejected until one artifact
     is renamed.
 
@@ -907,8 +908,9 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     Args:
         name: The recipe name (without .yaml extension) to migrate.
 
-    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not
-    pass a skill name to recipe-serving tools; they accept recipe identities only.
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not pass
+    a skill name to ``open_kitchen``, ``load_recipe``, ``migrate_recipe``, or
+    ``recipe://``; those surfaces accept recipe identities only.
     A name defined as both a recipe and a skill is rejected until one artifact
     is renamed.
 

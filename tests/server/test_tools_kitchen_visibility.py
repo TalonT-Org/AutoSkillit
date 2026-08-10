@@ -9,6 +9,11 @@ import pytest
 
 from autoskillit.core import KITCHEN_GATED_TOOLS, RecipeNotFoundError
 from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
+from autoskillit.pipeline import (
+    bind_kitchen_intent,
+    claim_kitchen_request,
+    release_kitchen_request,
+)
 from tests.server._helpers import _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
@@ -430,12 +435,26 @@ async def test_open_kitchen_rejects_skill_before_operational_mutation(tmp_path, 
     mock_ctx.skill_resolver.resolve_effective.return_value = object()
     mock_ctx.recipe_name = "existing-recipe"
     previous_execution = mock_ctx.recipe_initialization_state
+    previous_quota_task = mock_ctx.quota_refresh_task
 
     handler = AsyncMock()
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
         patch("autoskillit.server.tools.tools_kitchen._open_kitchen_handler", handler),
         patch("autoskillit.server.tools.tools_kitchen.clear_recipe_execution") as clear,
+        patch("autoskillit.server.tools.tools_kitchen.create_background_task") as create_task,
+        patch(
+            "autoskillit.server.tools.tools_kitchen.bind_kitchen_intent",
+            wraps=bind_kitchen_intent,
+        ) as bind_request,
+        patch(
+            "autoskillit.server.tools.tools_kitchen.claim_kitchen_request",
+            wraps=claim_kitchen_request,
+        ) as claim_request,
+        patch(
+            "autoskillit.server.tools.tools_kitchen.release_kitchen_request",
+            wraps=release_kitchen_request,
+        ) as release_request,
         patch("autoskillit.server.tools.tools_kitchen.mcp") as mock_mcp,
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -447,11 +466,20 @@ async def test_open_kitchen_rejects_skill_before_operational_mutation(tmp_path, 
     assert "current session" in result["user_visible_message"].lower()
     handler.assert_not_awaited()
     clear.assert_not_called()
+    create_task.assert_not_called()
     mock_mcp.enable.assert_not_called()
     mock_ctx.recipes.load.assert_not_called()
     mock_ctx.recipes.load_and_validate.assert_not_called()
+    bind_request.assert_called_once()
+    claim_request.assert_called_once()
+    release_request.assert_called_once()
     assert mock_ctx.recipe_name == "existing-recipe"
     assert mock_ctx.recipe_initialization_state is previous_execution
+    assert mock_ctx.quota_refresh_task is previous_quota_task
+    assert mock_ctx.kitchen_open_state.phase.value == "request_bound"
+    assert mock_ctx.kitchen_open_state.request_active is False
+    effects = [(effect.name, effect.phase.value) for effect in mock_ctx.kitchen_open_state.effects]
+    assert effects == [("request_binding", "confirmed")]
 
 
 @pytest.mark.anyio

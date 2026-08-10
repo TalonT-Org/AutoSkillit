@@ -16,7 +16,9 @@ def test_model_facing_recipe_surfaces_define_namespace_boundary():
     for surface in (open_kitchen, load_recipe, migrate_recipe, get_recipe):
         doc = inspect.getdoc(surface) or ""
         assert "$<name>" in doc and "/<name>" in doc
-        assert "skill name" in doc and "recipe identities only" in doc
+        assert "skill name" in doc and "those surfaces accept recipe identities only" in doc
+        for recipe_surface in ("open_kitchen", "load_recipe", "migrate_recipe", "recipe://"):
+            assert recipe_surface in doc
         assert "defined as both" in doc and "rejected" in doc
 
 

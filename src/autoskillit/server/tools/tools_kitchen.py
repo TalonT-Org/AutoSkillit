@@ -992,8 +992,9 @@ def _close_kitchen_handler() -> None:
 def get_recipe(name: str) -> str:
     """Return composed recipe YAML for the orchestrating agent to follow.
 
-    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not
-    pass a skill name to recipe-serving tools; they accept recipe identities only.
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not pass
+    a skill name to ``open_kitchen``, ``load_recipe``, ``migrate_recipe``, or
+    ``recipe://``; those surfaces accept recipe identities only.
     A name defined as both a recipe and a skill is rejected until one artifact
     is renamed.
     """
@@ -1168,8 +1169,9 @@ async def open_kitchen(
     When ``name`` is provided, the kitchen is opened AND the named recipe is
     loaded in a single call, reducing terminal noise from two tool calls to one.
 
-    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not
-    pass a skill name to recipe-serving tools; they accept recipe identities only.
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not pass
+    a skill name to ``open_kitchen``, ``load_recipe``, ``migrate_recipe``, or
+    ``recipe://``; those surfaces accept recipe identities only.
     A name defined as both a recipe and a skill is rejected until one artifact
     is renamed.
 

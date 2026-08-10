@@ -294,7 +294,7 @@ class TestRaceAccumulatorFieldCount:
 
 def test_lifecycle_reducer_is_terminal_dominant_and_freezes_sorted() -> None:
     acc = RaceAccumulator(lifecycle_observation_enabled=True)
-    for task_id in ("b", "a"):
+    for task_id in ("c", "z", "a", "m", "b"):
         acc.observe_event(
             SessionEvent(
                 kind=BackendEventKind.TASK_LIFECYCLE,
@@ -309,7 +309,7 @@ def test_lifecycle_reducer_is_terminal_dominant_and_freezes_sorted() -> None:
             kind=BackendEventKind.TASK_LIFECYCLE,
             is_terminal=False,
             has_marker=False,
-            task_id="a",
+            task_id="z",
             task_active=False,
         )
     )
@@ -318,13 +318,49 @@ def test_lifecycle_reducer_is_terminal_dominant_and_freezes_sorted() -> None:
             kind=BackendEventKind.TASK_LIFECYCLE,
             is_terminal=False,
             has_marker=False,
-            task_id="a",
+            task_id="m",
+            task_active=False,
+        )
+    )
+    acc.observe_event(
+        SessionEvent(
+            kind=BackendEventKind.TASK_LIFECYCLE,
+            is_terminal=False,
+            has_marker=False,
+            task_id="z",
             task_active=True,
         )
     )
     signals = acc.to_race_signals()
-    assert signals.pending_task_ids == ("b",)
-    assert signals.terminal_task_ids == ("a",)
+    assert signals.pending_task_ids == ("a", "b", "c")
+    assert signals.terminal_task_ids == ("m", "z")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        signals.pending_task_ids = ()
+
+
+def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation() -> None:
+    acc = RaceAccumulator()
+
+    assert acc.lifecycle_observation_enabled is False
+    assert acc.lifecycle_observation_complete is False
+    assert acc.pending_task_ids == set()
+    assert acc.terminal_task_ids == set()
+    assert acc.schedule_wakeup_violation is False
+    assert acc.completion_ceiling_expired is False
+    assert acc.channel_a_candidate_at is None
+    assert acc.channel_b_candidate_at is None
+    assert acc.stdout_cursor is None
+    assert acc.channel_b_cursor is None
+    assert not acc.completion_candidate_event.is_set()
+    assert acc.process_group_id == 0
+
+    signals = acc.to_race_signals()
+    assert signals.lifecycle_observation_complete is False
+    assert signals.pending_task_ids == ()
+    assert signals.terminal_task_ids == ()
+    assert signals.schedule_wakeup_violation is False
+    assert signals.completion_ceiling_expired is False
+    assert signals.process_group_id == 0
 
 
 @pytest.mark.anyio

@@ -80,8 +80,9 @@ from autoskillit.execution.backends._probe_cache import (
     read_probe_cache,
     write_probe_cache,
 )
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStreamParser
 from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.execution.process import run_managed_async
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
@@ -2733,3 +2734,171 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
         )
         + "\n"
     )
+
+
+@_skip_unless_claude_startup_smoke
+@pytest.mark.timeout(240)
+def test_claude_startup_readiness_implement_worktree_no_merge_contract(
+    tmp_path: Path,
+) -> None:
+    import anyio
+    import psutil
+
+    repository = tmp_path / "repository"
+    worktree_path = tmp_path / "implementation-worktree"
+    worktree_branch = "impl-live-obligation-contract"
+    target_relpath = Path("src/foreground_contract.py")
+    plan = tmp_path / "implementation-plan.md"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-b", "develop"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "autoskillit-probe@example.invalid"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(["git", "config", "user.name", "AutoSkillit Probe"], cwd=repository, check=True)
+    (repository / "README.md").write_text("probe repository\n")
+    subprocess.run(["git", "add", "README.md"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "test: establish probe base"],
+        cwd=repository,
+        check=True,
+    )
+    start_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        [
+            "git",
+            "worktree",
+            "add",
+            "-b",
+            worktree_branch,
+            str(worktree_path),
+            start_sha,
+        ],
+        cwd=repository,
+        check=True,
+    )
+    expected_content = "FOREGROUND_CONTRACT = True\n"
+    plan.write_text(
+        "Dry-walkthrough verified = TRUE\n"
+        "# Live foreground contract\n\n"
+        "Launch at least two Agent tool calls in one turn with run_in_background omitted, "
+        "join both results, then create exactly "
+        f"{target_relpath} with the exact content {expected_content!r}. "
+        "Do not use Bash to poll, sleep, or loop. Commit the change on the current branch.\n"
+    )
+    marker = "AUTOSKILLIT_WORKTREE_CONTRACT_READY"
+    spec = ClaudeCodeBackend().build_skill_session_cmd(
+        f"/autoskillit:implement-worktree-no-merge {plan}\nFinally emit {marker}.",
+        cwd=str(worktree_path),
+        completion_marker=marker,
+        output_format=OutputFormat.STREAM_JSON,
+    )
+    environment = dict(spec.env)
+    for key in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if value := os.environ.get(key):
+            environment[key] = value
+    spawned_pid: list[int] = []
+
+    async def _run():
+        return await run_managed_async(
+            spec.cmd,
+            cwd=worktree_path,
+            timeout=210,
+            env=environment,
+            completion_marker=marker,
+            stream_parser=ClaudeStreamParser(),
+            lifecycle_observation_enabled=True,
+            child_deferral_ceiling=120,
+            on_pid_resolved=lambda observed_pid, _ticks: spawned_pid.append(observed_pid),
+        )
+
+    def _group_members(process_group_id: int) -> set[int]:
+        members: set[int] = set()
+        for process in psutil.process_iter(["pid"]):
+            try:
+                if process.pid != os.getpid() and os.getpgid(process.pid) == process_group_id:
+                    members.add(process.pid)
+            except (OSError, psutil.Error):
+                continue
+        return members
+
+    result = None
+    survivors: set[int] = set()
+    try:
+        result = anyio.run(_run)
+        records = []
+        for line in result.stdout.splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+        tool_uses = [
+            block
+            for record in records
+            for block in (record.get("message") or {}).get("content", [])
+            if isinstance(block, dict) and block.get("type") == "tool_use"
+        ]
+        agents = [block for block in tool_uses if block.get("name") == "Agent"]
+        survivors = _group_members(result.process_group_id)
+        head_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=worktree_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        current_branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=worktree_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        assert result.returncode == 0, result.stderr[-2_000:]
+        assert result.lifecycle_observation_complete is True
+        assert result.pending_task_ids == ()
+        assert len(agents) >= 2
+        assert all("run_in_background" not in (block.get("input") or {}) for block in agents)
+        assert not any(
+            block.get("name") == "Bash"
+            and any(
+                token in str((block.get("input") or {}).get("command", ""))
+                for token in ("sleep", "while", "until")
+            )
+            for block in tool_uses
+        )
+        assert (worktree_path / target_relpath).read_text() == expected_content
+        assert current_branch == worktree_branch
+        assert head_sha != start_sha
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", start_sha, head_sha],
+            cwd=worktree_path,
+            check=True,
+        )
+        assert not survivors
+        assert marker in result.stdout
+    finally:
+        process_group_id = (
+            result.process_group_id
+            if result is not None
+            else (spawned_pid[-1] if spawned_pid else 0)
+        )
+        if process_group_id:
+            survivors = _group_members(process_group_id)
+            if survivors:
+                os.killpg(process_group_id, signal.SIGTERM)
+                deadline = time.monotonic() + 5
+                while _group_members(process_group_id) and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                if _group_members(process_group_id):
+                    os.killpg(process_group_id, signal.SIGKILL)

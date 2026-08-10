@@ -10,6 +10,7 @@ import dataclasses
 import inspect
 import os
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -602,6 +603,40 @@ class TestGroupDApiContractPreservation:
         assert "asyncio" not in source, (
             "run_managed_sync must not reference asyncio — it is a sync function"
         )
+
+    @pytest.mark.anyio
+    async def test_req_api_003_async_producers_distinguish_unobserved_from_observed_empty(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        unobserved = await run_managed_async(
+            [sys.executable, "-c", "pass"],
+            cwd=tmp_path,
+            timeout=5,
+            lifecycle_observation_enabled=False,
+        )
+        observed_empty = await run_managed_async(
+            [sys.executable, "-c", "pass"],
+            cwd=tmp_path,
+            timeout=5,
+            stream_parser=ClaudeStreamParser(),
+            lifecycle_observation_enabled=True,
+        )
+
+        assert unobserved.lifecycle_observation_complete is False
+        assert observed_empty.lifecycle_observation_complete is True
+        assert observed_empty.pending_task_ids == ()
+
+    def test_req_api_003_sync_producer_records_spawned_process_group(self, tmp_path: Path) -> None:
+        result = run_managed_sync(
+            [sys.executable, "-c", "pass"],
+            cwd=tmp_path,
+            timeout=5,
+        )
+
+        assert result.pid > 0
+        assert result.process_group_id == result.pid
 
     # ------------------------------------------------------------------
     # REQ-API-004: Callers require no new asyncio runtime imports

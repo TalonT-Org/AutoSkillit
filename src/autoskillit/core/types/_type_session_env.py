@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 __all__ = ["FleetSessionEnv", "select_child_session_deadline"]
 
@@ -10,7 +11,8 @@ __all__ = ["FleetSessionEnv", "select_child_session_deadline"]
 def select_child_session_deadline(local_deadline: float, inherited_deadline: str) -> str:
     """Select an inherited positive deadline or the caller's local deadline."""
     try:
-        if inherited_deadline and float(inherited_deadline) > 0:
+        inherited_value = float(inherited_deadline)
+        if inherited_deadline and isfinite(inherited_value) and inherited_value > 0:
             return inherited_deadline
     except ValueError:
         pass

@@ -39,7 +39,6 @@ from autoskillit.core import (
     installed_plugin_cache_dir,
     register_active_kitchen,
     resolve_kitchen_id,
-    sample_kitchen_process_identity,
     write_readiness_sentinel,
 )
 from autoskillit.core import (
@@ -87,15 +86,7 @@ logger = get_logger(__name__)
 
 
 def _context_kitchen_identity(ctx: Any) -> Any:
-    identity = ctx.kitchen_process_identity
-    if identity is None:
-        identity = sample_kitchen_process_identity(
-            ctx.kitchen_id,
-            os.getpid(),
-            ctx.project_dir,
-        )
-        ctx.kitchen_process_identity = identity
-    return identity
+    return ctx.get_kitchen_process_identity()
 
 
 def _retain_context_tracker_authority(ctx: Any) -> None:

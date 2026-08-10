@@ -7,6 +7,7 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
+import os
 import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -68,6 +69,7 @@ from autoskillit.core import (
     WriteExpectedResolver,
     current_order_id,
     current_step_name,
+    sample_kitchen_process_identity,
 )
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.kitchen_transition import (
@@ -348,6 +350,18 @@ class ToolContext:
             )
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)
+
+    def get_kitchen_process_identity(self, owner_id: str = "") -> KitchenProcessIdentity:
+        """Return the cached process identity, sampling it on first use."""
+        identity = self.kitchen_process_identity
+        if identity is None:
+            identity = sample_kitchen_process_identity(
+                self.kitchen_id or owner_id,
+                os.getpid(),
+                self.project_dir,
+            )
+            self.kitchen_process_identity = identity
+        return identity
 
     @property
     def default_ci_scope(self) -> CIRunScope:

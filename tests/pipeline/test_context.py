@@ -317,6 +317,17 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
     )
 
 
+def test_kitchen_process_identity_is_sampled_once_with_owner_fallback(tmp_path):
+    ctx = _make_ctx(tmp_path)
+
+    first = ctx.get_kitchen_process_identity("manual-owner")
+    second = ctx.get_kitchen_process_identity("different-owner")
+
+    assert first is second
+    assert first.kitchen_id == "manual-owner"
+    assert first.project_path == str(tmp_path.resolve())
+
+
 def test_toolcontext_github_client_annotated_with_protocol():
     """github_client annotation must reference GitHubFetcher protocol."""
     hints = get_type_hints(ToolContext)

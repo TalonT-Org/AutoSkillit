@@ -53,7 +53,6 @@ from autoskillit.core import (
     release_tracker_lease,
     resolve_kitchen_id,
     retain_tracker_lease,
-    sample_kitchen_process_identity,
     sweep_stale_markers,
     try_retire_tracker,
     unregister_active_kitchen,
@@ -615,14 +614,7 @@ def _retain_kitchen_tracker_authority(
         expected=False,
     )
     with tool_ctx.tracker_leases_lock:
-        identity = tool_ctx.kitchen_process_identity
-        if identity is None:
-            identity = sample_kitchen_process_identity(
-                tool_ctx.kitchen_id,
-                os.getpid(),
-                tool_ctx.project_dir,
-            )
-            tool_ctx.kitchen_process_identity = identity
+        identity = tool_ctx.get_kitchen_process_identity()
         key = TrackerParticipantKey(
             target=target,
             owner_kind="kitchen",

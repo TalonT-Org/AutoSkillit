@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 from packaging.version import InvalidVersion, Version
 
@@ -220,9 +221,7 @@ def _assert_projected_artifact_relocatable(scratch_home: Path) -> None:
         project_default_plugin_authority,
     )
 
-    original_home = Path.home
-    try:
-        Path.home = staticmethod(lambda: scratch_home)  # type: ignore[assignment]
+    with patch.object(Path, "home", return_value=scratch_home):
         bundled_skills = tuple(
             skill
             for skill in default_skill_resolver().list_all()
@@ -291,5 +290,3 @@ def _assert_projected_artifact_relocatable(scratch_home: Path) -> None:
                     f"cross-interpreter upgrade: {sample_cmd} → "
                     f"{proc.stderr[:500]}"
                 )
-    finally:
-        Path.home = original_home  # type: ignore[assignment]

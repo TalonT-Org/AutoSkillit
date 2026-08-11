@@ -699,11 +699,15 @@ async def complete_run_skill_result(
         tracker_result: Mapping[str, object] | None = None
         if receipt.tracker_incarnation_id:
             try:
-                target = TrackerAuthorityTarget(
-                    target_order_id=receipt.tracker_order_id,
-                    path=Path(receipt.tracker_path),
+                target = TrackerAuthorityTarget.for_project(
+                    tool_ctx.project_dir,
+                    receipt.tracker_order_id,
                     expected=True,
                 )
+                if Path(receipt.tracker_path).resolve() != target.path.resolve():
+                    raise ValueError(
+                        "receipt tracker path is outside the project tracker authority"
+                    )
                 key, lease = _retain_context_tracker(
                     tool_ctx,
                     target,

@@ -314,6 +314,44 @@ class TestCompleteRunSkillResult:
         )
         assert repaired["success"] is True
 
+    @pytest.mark.anyio
+    async def test_receipt_tracker_path_must_use_project_authority(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        authority = tool_ctx_kitchen_open.run_skill_completion
+        assert authority is not None
+        outside_tracker = tmp_path / "outside" / "AB.json"
+        invocation_id = authority.begin(
+            kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+            request_session_id="request-session",
+            tracker_order_id="AB",
+            tracker_path=str(outside_tracker.resolve()),
+            tracker_kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+            tracker_incarnation_id="incarnation",
+            step_name="review",
+        )
+        receipt = authority.draft(
+            invocation_id,
+            classification="success",
+            success=True,
+            result_digest="digest",
+        )
+        authority.publish(receipt.receipt_id)
+
+        result = json.loads(
+            await complete_run_skill_result(
+                receipt.receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),
+            )
+        )
+
+        assert result["success"] is True
+        assert result["tracker"]["stage"] == "tracker_credit"
+        assert result["tracker_repairable"] is True
+        assert not outside_tracker.with_suffix(".lease.lock").exists()
+
 
 class TestRecordPipelineStepStatus:
     @pytest.fixture(autouse=True)

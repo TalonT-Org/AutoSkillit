@@ -12,6 +12,7 @@ Both detectors operate at ##-level section granularity.
 
 from __future__ import annotations
 
+import json
 import re
 import textwrap
 from pathlib import Path
@@ -21,6 +22,11 @@ import pytest
 
 import autoskillit.recipe._skill_helpers as _sh
 from autoskillit.core.paths import pkg_root
+from autoskillit.hooks._command_classification import (
+    GitHubMutationStatus,
+    analyze_github_mutations,
+)
+from autoskillit.hooks.guards.github_mutation_guard import ParsedHookCommand, decide
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
     extract_graphql_blocks,
@@ -35,6 +41,27 @@ pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
 
 _GH_API_GRAPHQL_RE = re.compile(r"gh\s+api\s+graphql\b")
+_GRAPHQL_INPUT_RE = re.compile(r'--input(?:\s+|=)["\']?([^"\'\s]+)')
+
+_INPUT_PAYLOAD_STATUSES: dict[str, GitHubMutationStatus] = {
+    "apply_labels_chunk_0.json": GitHubMutationStatus.SINGLE_RESOLVED,
+    "auto_merge_query.json": GitHubMutationStatus.NONE,
+    "blocker_labels.json": GitHubMutationStatus.SINGLE_RESOLVED,
+    "create_issues_chunk_0.json": GitHubMutationStatus.SINGLE_RESOLVED,
+    "create_missing_labels.json": GitHubMutationStatus.SINGLE_RESOLVED,
+    "label_definitions.json": GitHubMutationStatus.SINGLE_RESOLVED,
+    "merge_queue_query.json": GitHubMutationStatus.NONE,
+    "pr_batch_0.json": GitHubMutationStatus.NONE,
+    "pr_bodies_batch_0.json": GitHubMutationStatus.NONE,
+    "pr_status_batch_0.json": GitHubMutationStatus.NONE,
+    "resolve_threads_chunk_0.json": GitHubMutationStatus.SINGLE_RESOLVED,
+    "thread_query.json": GitHubMutationStatus.NONE,
+    "watermark_query.json": GitHubMutationStatus.NONE,
+}
+_INLINE_GRAPHQL_STATUSES: dict[str, GitHubMutationStatus] = {
+    "resolve-review": GitHubMutationStatus.SINGLE_RESOLVED,
+    "review-pr": GitHubMutationStatus.NONE,
+}
 
 
 def _all_skill_dirs() -> list[Path]:
@@ -43,6 +70,70 @@ def _all_skill_dirs() -> list[Path]:
         if base.exists():
             dirs.extend(d for d in base.iterdir() if d.is_dir())
     return dirs
+
+
+def _materialize_graphql_input(
+    block: str,
+    *,
+    tmp_path: Path,
+) -> tuple[str, GitHubMutationStatus]:
+    substitutions: dict[str, str] = {
+        "{{AUTOSKILLIT_TEMP}}": str(tmp_path),
+        "/absolute/audit-run": str(tmp_path / "audit-run"),
+        "/absolute/project-temp": str(tmp_path),
+    }
+    command = block
+    for placeholder, replacement in substitutions.items():
+        command = command.replace(placeholder, replacement)
+
+    match = _GRAPHQL_INPUT_RE.search(command)
+    assert match is not None
+    payload_path = Path(match.group(1))
+    expected_status = _INPUT_PAYLOAD_STATUSES[payload_path.name]
+    query = (
+        'mutation { deleteIssue(input: {issueId: "I_1"}) { clientMutationId } }'
+        if expected_status is GitHubMutationStatus.SINGLE_RESOLVED
+        else "query { viewer { login } }"
+    )
+    payload_path.parent.mkdir(parents=True, exist_ok=True)
+    payload_path.write_text(json.dumps({"query": query, "variables": {}}), encoding="utf-8")
+    return command, expected_status
+
+
+def test_bundled_graphql_invocations_pass_runtime_guard(tmp_path: Path) -> None:
+    failures: list[str] = []
+
+    for skill_dir in _all_skill_dirs():
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        for block in extract_bash_blocks(skill_md.read_text(encoding="utf-8")):
+            if not _GH_API_GRAPHQL_RE.search(block):
+                continue
+            match = _GRAPHQL_INPUT_RE.search(block)
+            if match is not None:
+                command, expected_status = _materialize_graphql_input(block, tmp_path=tmp_path)
+            else:
+                command = block
+                expected_status = _INLINE_GRAPHQL_STATUSES[skill_dir.name]
+
+            analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+            decision = decide(ParsedHookCommand("bash", command, str(tmp_path), str(tmp_path), ()))
+            expected_count = 1 if expected_status is GitHubMutationStatus.SINGLE_RESOLVED else 0
+            if (
+                analysis.status is not expected_status
+                or analysis.request_count != expected_count
+                or not decision.allow
+            ):
+                failures.append(
+                    f"{skill_dir.name}: status={analysis.status.value}, "
+                    f"count={analysis.request_count}, reason={analysis.reason}, "
+                    f"decision={decision}"
+                )
+
+    assert not failures, "Bundled GraphQL invocations must pass the runtime guard:\n" + "\n".join(
+        f"  - {failure}" for failure in failures
+    )
 
 
 def test_graphql_blocks_have_matching_bash_invocations() -> None:
@@ -260,7 +351,7 @@ class TestProseGraphqlDetection:
         rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
         assert _GRAPHQL_RULE_ID in rule_ids
 
-    def test_prose_graphql_with_invocation_passes(self, tmp_path: Path) -> None:
+    def test_prose_graphql_with_stdin_invocation_fails(self, tmp_path: Path) -> None:
         skill_md = textwrap.dedent("""\
             # graphql-skill
 
@@ -274,7 +365,7 @@ class TestProseGraphqlDetection:
         """)
         findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
         rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
-        assert _GRAPHQL_RULE_ID not in rule_ids
+        assert _GRAPHQL_RULE_ID in rule_ids
 
     def test_prose_graphql_under_h2_heading_detected(self, tmp_path: Path) -> None:
         """Prose GraphQL under a ## heading (not ### Step N) is caught."""

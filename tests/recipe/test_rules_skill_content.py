@@ -3,6 +3,7 @@ hardcoded-origin-remote, and no-autoskillit-import-in-skill-python-block."""
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 from unittest.mock import patch
@@ -1704,7 +1705,7 @@ def test_graphql_rule_fires_for_prose_without_same_section_invocation(tmp_path: 
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
-def test_graphql_rule_does_not_fire_for_prose_with_same_section_invocation(
+def test_graphql_rule_fires_for_prose_with_stdin_invocation(
     tmp_path: Path,
 ) -> None:
     skill_md = textwrap.dedent(
@@ -1722,7 +1723,184 @@ def test_graphql_rule_does_not_fire_for_prose_with_same_section_invocation(
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
     rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_accepts_literal_payload_with_variables_object(tmp_path: Path) -> None:
+    query = (
+        "mutation Create($repo: ID!, $title: String!) { "
+        "createIssue(input: {repositoryId: $repo, title: $title}) { issue { id } } }"
+    )
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Workflow
+
+        Use a file-write tool in a separate completed tool call before invoking the payload.
+
+        ```graphql
+        mutation Create($repo: ID!, $title: String!) {
+          createIssue(input: {repositoryId: $repo, title: $title}) { issue { id } }
+        }
+        ```
+
+        ```json
+        {
+          "query": <QUERY_JSON>,
+          "variables": {"repo": "R_1", "title": "Issue"}
+        }
+        ```
+
+        ```bash
+        gh api graphql --input "/absolute/run/create.json"
+        ```
+        """
+    ).replace("<QUERY_JSON>", json.dumps(query))
+
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+
     assert _GRAPHQL_RULE_ID not in rule_ids
+
+
+@pytest.mark.parametrize(
+    "bash_block",
+    [
+        'echo "$PAYLOAD" | gh api graphql --input -',
+        'QUERY="mutation { deleteIssue(input: {}) { clientMutationId } }"\n'
+        'gh api graphql -f query="$QUERY"',
+        'echo \'{"query":"mutation { deleteIssue(input: {}) { clientMutationId } }"}\' '
+        "> /absolute/run/payload.json && "
+        'gh api graphql --input "/absolute/run/payload.json"',
+        "cp /absolute/run/source.json /absolute/run/payload.json && "
+        'gh api graphql --input "/absolute/run/payload.json"',
+    ],
+    ids=["stdin", "shell-query", "same-command-write", "same-command-copy"],
+)
+def test_graphql_rule_rejects_unsafe_mutation_shapes(
+    tmp_path: Path,
+    bash_block: str,
+) -> None:
+    skill_md = textwrap.dedent(
+        f"""\
+        # graphql-skill
+
+        ## Workflow
+
+        Build a GraphQL mutation, using a separate completed tool call when a file is needed.
+
+        ```bash
+        {bash_block}
+        ```
+        """
+    )
+
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_accepts_fully_literal_inline_mutation(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Workflow
+
+        ```bash
+        gh api graphql \
+          -f query='mutation { deleteIssue(input: {issueId: "I_1"}) { clientMutationId } }'
+        ```
+        """
+    )
+
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+
+    assert _GRAPHQL_RULE_ID not in rule_ids
+
+
+def test_graphql_rule_rejects_generated_named_mutation_with_dynamic_query(
+    tmp_path: Path,
+) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Workflow
+
+        Generate aliased GraphQL `deleteIssue` operations.
+
+        ```bash
+        gh api graphql -f query="$QUERY"
+        ```
+        """
+    )
+
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_does_not_bind_variables_from_json_without_query(
+    tmp_path: Path,
+) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Workflow
+
+        Use a file-write tool in a separate completed tool call before invoking the payload.
+
+        ```graphql
+        mutation Delete($issue: ID!) {
+          deleteIssue(input: {issueId: $issue}) { clientMutationId }
+        }
+        ```
+
+        ```json
+        {"variables": {"issue": "I_1"}}
+        ```
+
+        ```bash
+        gh api graphql --input "/absolute/run/delete.json"
+        ```
+        """
+    )
+
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_rejects_single_variables_blob(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Workflow
+
+        ```graphql
+        query($owner: String!) { repository(owner: $owner, name: "repo") { id } }
+        ```
+
+        ```bash
+        gh api graphql \
+          -f query='query($owner: String!) { repository(owner: $owner, name: "repo") { id } }' \
+          -f variables='{"owner":"o"}'
+        ```
+        """
+    )
+
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+
+    assert _GRAPHQL_RULE_ID in rule_ids
 
 
 def test_graphql_rule_fires_for_prose_in_different_section_than_invocation(

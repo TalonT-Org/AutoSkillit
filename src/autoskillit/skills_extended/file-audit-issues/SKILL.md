@@ -131,11 +131,10 @@ list in the payload's `variables` object:
 ```
 
 For each chunk, use a file-write tool in a separate completed tool call to write the bounded JSON
-payload under the absolute run directory. Invoke it in a later call through the exact literal
-absolute path:
+payload under the absolute run directory. Before every chunk after the first, run `sleep 1` in its
+own tool call. Invoke the payload in a later call through the exact literal absolute path:
 
 ```bash
-sleep 1
 gh api graphql --input "/absolute/audit-run/apply_labels_chunk_0.json"
 ```
 

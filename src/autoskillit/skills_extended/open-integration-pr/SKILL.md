@@ -107,25 +107,17 @@ Read the JSON file. Extract: `prs` array (each: `number`, `title`, `branch`,
 Fetch all PR bodies in a single GraphQL alias query (1 API call instead of N sequential
 REST calls). Chunk into batches of 20 to stay within GraphQL complexity limits.
 
+For each chunk, build one aliased query plus a `variables` object for the owner, repository,
+and PR numbers. Use a file-write tool in a separate completed tool call to write the bounded
+JSON payload to `{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_bodies_batch_0.json`, changing
+numeric suffix for later chunks. Invoke each chunk separately, not from a shell loop:
+
 ```bash
-# Build GraphQL alias query for all PRs
-PR_NUMS=($(echo "$pr_list" | jq -r '.[].number'))
-BODIES_JSON="{}"
-BATCH_SIZE=20
-for batch_start in $(seq 0 $BATCH_SIZE $((${#PR_NUMS[@]} - 1))); do
-    BATCH_NUMS=("${PR_NUMS[@]:$batch_start:$BATCH_SIZE}")
-    QUERY="query { "
-    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
-        NUM="${BATCH_NUMS[$i]}"
-        QUERY="${QUERY} pr${i}: repository(owner: \"${OWNER}\", name: \"${REPO}\") {
-            pullRequest(number: ${NUM}) { number body }
-        }"
-    done
-    QUERY="${QUERY} }"
-    BATCH=$(gh api graphql -f query="${QUERY}" 2>/dev/null || echo "{}")
-    BODIES_JSON=$(echo "${BODIES_JSON} ${BATCH}" | jq -s 'add // {}')
-done
+gh api graphql --input "{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_bodies_batch_0.json"
 ```
+
+Merge each response into `BODIES_JSON`; on a failed chunk, use `{}` and continue so
+`source_issue_urls` remains best-effort. Preserve the existing 20-PR chunk size.
 
 Extract every canonical full URL matching
 `(Closes|Fixes|Resolves)\s+https://github.com/{owner}/{repo}/issues/{number}`

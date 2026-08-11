@@ -20,6 +20,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_blockquote_placeholders,
     extract_blockquote_sections,
     extract_declared_ingredients,
+    extract_fenced_blocks,
     extract_graphql_blocks,
     extract_python_blocks,
     extract_sections,
@@ -835,6 +836,60 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
 
 _GRAPHQL_VARIABLE_RE = re.compile(r"\$([a-zA-Z_]\w*)")
 _GH_API_GRAPHQL_BLOCK_RE = re.compile(r"gh\s+api\s+graphql\b")
+_GRAPHQL_MUTATION_SECTION_RE = re.compile(
+    r"(?i:\bmutation\b)|"
+    r"\b(?:add|close|convert|create|delete|mark|merge|remove|reopen|resolve|submit|"
+    r"unresolve|update)[A-Z]\w*\b"
+)
+_GRAPHQL_INPUT_PATH_RE = re.compile(r"--input(?:\s+|=)(?:\"([^\"]+)\"|'([^']+)'|([^\s]+))")
+_GRAPHQL_INLINE_LITERAL_MUTATION_RE = re.compile(
+    r"(?:-[fF]|--field|--raw-field)\s+query='([^']*\bmutation\b[^']*)'",
+    re.IGNORECASE | re.DOTALL,
+)
+_GRAPHQL_DYNAMIC_TOKEN_RE = re.compile(r"\$|`|\*|\?|\[")
+_GRAPHQL_VARIABLES_BLOB_RE = re.compile(
+    r"(?:-[fF]|--field|--raw-field)\s+variables=",
+    re.IGNORECASE,
+)
+
+
+def _literal_graphql_input_path(block: str) -> str | None:
+    match = _GRAPHQL_INPUT_PATH_RE.search(block)
+    if match is None:
+        return None
+    path = next(value for value in match.groups() if value is not None)
+    if path == "-" or _GRAPHQL_DYNAMIC_TOKEN_RE.search(path):
+        return None
+    if not (path.startswith("/") or path.startswith("{{AUTOSKILLIT_TEMP}}/")):
+        return None
+    prefix = block[: match.start()]
+    if path in prefix:
+        return None
+    return path
+
+
+def _has_guard_compatible_graphql_mutation(section: str, block: str) -> bool:
+    input_path = _literal_graphql_input_path(block)
+    if input_path is not None:
+        return bool(
+            re.search(
+                r"(?:separate|prior|earlier)\s+(?:completed\s+)?tool\s+call",
+                section,
+                re.IGNORECASE,
+            )
+        )
+    match = _GRAPHQL_INLINE_LITERAL_MUTATION_RE.search(block)
+    return bool(match and not _GRAPHQL_DYNAMIC_TOKEN_RE.search(match.group(1)))
+
+
+def _json_payload_binds_variable(section: str, variable: str) -> bool:
+    return any(
+        re.search(r'"query"\s*:', block)
+        and re.search(r'"variables"\s*:', block)
+        and re.search(rf'"{re.escape(variable)}"\s*:', block)
+        for block in extract_fenced_blocks(section, "json")
+    )
+
 
 _SOURCE_PROHIBITION_RE = re.compile(
     r"(?:NOT|NEVER|DO NOT)[\s\S]{0,120}?"
@@ -904,9 +959,9 @@ def _check_source_attribution_directive(ctx: ValidationContext) -> list[RuleFind
     name="graphql-query-requires-shell-invocation",
     description=(
         "A SKILL.md contains a ```graphql block with parameterized $variables "
-        "but no ```bash block with a concrete `gh api graphql` invocation. "
-        "Agents will improvise the invocation and may use the wrong variable-passing "
-        "pattern (-f variables=<json blob> instead of individual -F key=value flags)."
+        "but no guard-compatible `gh api graphql` invocation. Mutations must use either "
+        "a fully literal inline document or a literal inspected JSON payload written in "
+        "a prior tool call; variables use individual fields or that payload's variables object."
     ),
     severity=Severity.ERROR,
 )
@@ -939,6 +994,40 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
             section_graphql = extract_graphql_blocks(section)
             section_bash = extract_bash_blocks(section)
             section_bash_graphql = [b for b in section_bash if _GH_API_GRAPHQL_BLOCK_RE.search(b)]
+            section_is_mutation = (
+                any(_GRAPHQL_MUTATION_SECTION_RE.search(block) for block in section_graphql)
+                if section_graphql
+                else bool(_GRAPHQL_MUTATION_SECTION_RE.search(section))
+            )
+
+            for bash_block in section_bash_graphql:
+                if _GRAPHQL_VARIABLES_BLOB_RE.search(bash_block):
+                    findings.append(
+                        make_finding(
+                            rule_name="graphql-query-requires-shell-invocation",
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{skill_name}' uses a single variables blob binding; "
+                                "use individual fields or a validated JSON payload "
+                                "variables object."
+                            ),
+                        )
+                    )
+                block_is_mutation = bool(_GRAPHQL_MUTATION_SECTION_RE.search(bash_block))
+                if (
+                    block_is_mutation or (section_is_mutation and len(section_bash_graphql) == 1)
+                ) and not _has_guard_compatible_graphql_mutation(section, bash_block):
+                    findings.append(
+                        make_finding(
+                            rule_name="graphql-query-requires-shell-invocation",
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{skill_name}' prescribes a GraphQL mutation that is "
+                                "not guard-compatible: use a fully literal inline mutation or "
+                                "a literal JSON --input path written in a prior tool call."
+                            ),
+                        )
+                    )
 
             for block in section_graphql:
                 if not section_bash_graphql:
@@ -959,7 +1048,10 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
                     flag_found = any(
                         re.search(rf"-[Ff]\s*{re.escape(var)}=", b) for b in section_bash_graphql
                     )
-                    if not flag_found:
+                    payload_found = any(
+                        _literal_graphql_input_path(b) is not None for b in section_bash_graphql
+                    ) and _json_payload_binds_variable(section, var)
+                    if not flag_found and not payload_found:
                         findings.append(
                             make_finding(
                                 rule_name="graphql-query-requires-shell-invocation",

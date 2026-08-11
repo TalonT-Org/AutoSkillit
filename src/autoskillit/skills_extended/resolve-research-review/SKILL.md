@@ -136,16 +136,13 @@ gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate
 ```
 
 Fetch review thread node IDs using cursor-based pagination to handle PRs with more than
-100 threads:
+100 threads. Before each page, use a file-write tool in a separate completed tool call to
+write the bounded parameterized query and its `owner`, `repo`, `number`, and `after`
+variables object to `{{AUTOSKILLIT_TEMP}}/resolve-research-review/thread_query.json`.
+Invoke the exact literal path in a later call:
 
 ```bash
-# Fetch all pages; repeat with after=$endCursor while hasNextPage is true
-gh api graphql \
-  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' \
-  -F owner="$owner" \
-  -F repo="$repo" \
-  -F number=$number \
-  -F after=""
+gh api graphql --input "{{AUTOSKILLIT_TEMP}}/resolve-research-review/thread_query.json"
 ```
 
 Build `comment_id_to_thread_id: dict[int, str]` map. Skip threads where `isResolved`
@@ -359,17 +356,16 @@ When configured, enforce max 3 iteration retry loop before exiting non-zero.
 Batch all thread resolutions into a single GraphQL request using aliased mutations.
 This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
 If `addressed_thread_ids` has more than 50 threads, chunk into batches of 50.
+Do not output prose between payload-write and GitHub calls or between chunks; immediately
+proceed to the next required call. For each chunk, build aliased `resolveReviewThread`
+mutations and a `variables` object containing the actual thread node IDs. Use a file-write
+tool in a separate completed tool call to write the
+bounded JSON payload to
+`{{AUTOSKILLIT_TEMP}}/resolve-research-review/resolve_threads_chunk_0.json`, changing only
+the numeric suffix for later chunks. Invoke each literal path in a later tool call:
 
 ```bash
-# Build aliased mutation query for all addressed threads
-MUTATION_QUERY="mutation {"
-for i in $(seq 0 $((${#ADDRESSED_THREAD_IDS[@]} - 1))); do
-    tid="${ADDRESSED_THREAD_IDS[$i]}"
-    MUTATION_QUERY="${MUTATION_QUERY} resolve${i}: resolveReviewThread(input: {threadId: \"${tid}\"}) { thread { isResolved } }"
-done
-MUTATION_QUERY="${MUTATION_QUERY} }"
-
-gh api graphql -f query="${MUTATION_QUERY}"
+gh api graphql --input "{{AUTOSKILLIT_TEMP}}/resolve-research-review/resolve_threads_chunk_0.json"
 ```
 
 Parse the response: for each `resolve${i}` alias key, check `thread.isResolved`.

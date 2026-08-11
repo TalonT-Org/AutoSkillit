@@ -11,6 +11,7 @@ stdlib-only; no autoskillit imports.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from enum import StrEnum
 from pathlib import Path
@@ -53,6 +54,7 @@ _REVIEW_KINDS: frozenset[GitHubMutationKind] = frozenset(
 )
 
 GITHUB_MUTATION_DENY_TRIGGER: str = "Unsafe raw GitHub mutation is prohibited"
+_LOGGER = logging.getLogger(__name__)  # noqa: TID251 - standalone stdlib guard
 
 
 class DenyTrigger(StrEnum):
@@ -158,7 +160,11 @@ def main() -> None:
     if not isinstance(loaded, dict):
         raise SystemExit(0)
 
-    decision = decide(parse_hook_command(loaded))
+    try:
+        decision = decide(parse_hook_command(loaded))
+    except Exception:
+        _LOGGER.error("GitHub mutation classification failed", exc_info=True)
+        _deny(DenyTrigger.UNRESOLVED_MUTATION)
     if not decision.allow and decision.trigger is not None:
         _deny(decision.trigger)
     raise SystemExit(0)

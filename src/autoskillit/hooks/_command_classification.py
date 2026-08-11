@@ -1480,6 +1480,7 @@ def _analyze_gh_api(
         return (None, "GitHub API method is dynamic")
 
     payload: dict[str, Any] = {}
+    query_from_literal_input = input_value is not None
     if input_value is not None:
         if not input_context_safe:
             return (None, "a prior command may rewrite the inspected GitHub --input file")
@@ -1501,13 +1502,15 @@ def _analyze_gh_api(
 
     if graphql:
         query = payload.get("query")
-        if query is None:
+        if query is None and not query_from_literal_input:
             for field in field_values:
                 key, separator, value = field.partition("=")
                 if separator and key == "query":
                     query = value
                     break
-        if not isinstance(query, str) or _is_dynamic_shell_value(query):
+        if not isinstance(query, str) or (
+            not query_from_literal_input and _is_dynamic_shell_value(query)
+        ):
             return (None, "GraphQL mutation document is unresolved")
         if not re.search(r"\bmutation\b", query):
             return (None, "")
@@ -1543,15 +1546,95 @@ _GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
     {
         "--body",
         "-b",
+        "--body-file",
+        "-F",
         "--add-label",
         "--remove-label",
         "--add-assignee",
         "--remove-assignee",
+        "--add-project",
+        "--remove-project",
+        "--milestone",
+        "-m",
+        "--repo",
+        "-R",
+        "--title",
+        "-t",
         "--reason",
         "--target",
         "--visibility",
     }
 )
+
+_GH_ISSUE_EDIT_LONG_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "--add-assignee",
+        "--add-label",
+        "--add-project",
+        "--body",
+        "--body-file",
+        "--milestone",
+        "--remove-assignee",
+        "--remove-label",
+        "--remove-project",
+        "--repo",
+        "--title",
+    }
+)
+_GH_ISSUE_EDIT_SHORT_VALUE_FLAGS: frozenset[str] = frozenset({"-b", "-F", "-m", "-R", "-t"})
+_GH_ISSUE_URL_RE = re.compile(r"^/[^/\s]+/[^/\s]+/issues/\d+/?$")
+
+
+def _is_static_issue_edit_target(value: str) -> bool:
+    if not value or _is_dynamic_shell_value(value):
+        return False
+    if value.isdecimal():
+        return True
+    parsed = urlsplit(value)
+    return bool(
+        parsed.scheme in {"http", "https"}
+        and parsed.netloc
+        and _GH_ISSUE_URL_RE.fullmatch(parsed.path)
+    )
+
+
+def _issue_edit_request_count(args: Sequence[str]) -> tuple[int | None, str]:
+    targets = 0
+    options_ended = False
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if not options_ended and token == "--":
+            options_ended = True
+            i += 1
+            continue
+        if not options_ended:
+            if token in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS or token in (
+                _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
+            ):
+                if i + 1 >= len(args):
+                    return (None, f"gh issue edit flag {token} is missing a value")
+                i += 2
+                continue
+            if any(token.startswith(f"{flag}=") for flag in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS):
+                i += 1
+                continue
+            if any(
+                token.startswith(flag) and token != flag
+                for flag in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
+            ):
+                i += 1
+                continue
+            if token.startswith("-"):
+                return (None, f"gh issue edit flag {token} is unresolved")
+        if not _is_static_issue_edit_target(token):
+            return (None, "gh issue edit target is unresolved")
+        targets += 1
+        i += 1
+
+    if targets == 0:
+        return (None, "gh issue edit target is missing")
+    return (targets, "")
 
 
 _GH_MUTATION_SUBCOMMANDS: dict[str, frozenset[str]] = {
@@ -1613,6 +1696,20 @@ def _analyze_gh_segment(
                 route="/gh/pr/review",
                 kind=GitHubMutationKind.PULL_REVIEW,
                 request_count=1,
+                review_comment_count=None,
+            ),
+            "",
+        )
+    if args[:2] == ["issue", "edit"]:
+        request_count, reason = _issue_edit_request_count(args[2:])
+        if request_count is None:
+            return (None, reason)
+        return (
+            GitHubMutationRecord(
+                method="POST",
+                route="/gh/issue/edit",
+                kind=GitHubMutationKind.OTHER,
+                request_count=request_count,
                 review_comment_count=None,
             ),
             "",

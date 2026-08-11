@@ -251,6 +251,87 @@ def test_graphql_thread_resolution_remains_a_proven_nonpublication_mutation(
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
 
 
+@pytest.mark.parametrize(
+    ("document", "expected_decision"),
+    [
+        (
+            "mutation Batch($ids: [ID!]!) { first: deleteIssue(input: "
+            "{issueId: $ids}) { clientMutationId } second: deleteIssue(input: "
+            "{issueId: $ids}) { clientMutationId } }",
+            None,
+        ),
+        (
+            "mutation Publish($id: ID!) { submitPullRequestReview(input: "
+            "{pullRequestReviewId: $id, event: COMMENT}) { clientMutationId } }",
+            "deny",
+        ),
+    ],
+    ids=["non-review", "review"],
+)
+def test_literal_graphql_input_file_uses_inspected_document_provenance(
+    document: str,
+    expected_decision: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "graphql.json").write_text(
+        json.dumps({"query": document, "variables": {"ids": ["I1", "I2"]}}),
+        encoding="utf-8",
+    )
+
+    decision = _decision(
+        _run_cmd_event("gh api graphql --input graphql.json", cwd=str(tmp_path)),
+        monkeypatch,
+    )
+
+    assert decision == expected_decision
+
+
+def test_multi_target_issue_edit_is_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    result = _run_hook(
+        _run_cmd_event("gh issue edit 23 34 --add-label bug", cwd=str(tmp_path)),
+        monkeypatch,
+    )
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "multiple_mutations" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_unexpected_classifier_error_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.hooks.guards import github_mutation_guard
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("classifier failed")
+
+    monkeypatch.setattr(github_mutation_guard, "analyze_github_mutations", _raise)
+
+    result = _run_hook(_bash_event("gh issue edit 23 --title x", cwd=str(tmp_path)), monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "unresolved_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("raw", ["{bad", "[]"], ids=["malformed-json", "non-object"])
+def test_malformed_hook_input_remains_fail_open(
+    raw: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.hooks.guards.github_mutation_guard import main
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(raw))
+    stdout = io.StringIO()
+    with pytest.raises(SystemExit), redirect_stdout(stdout):
+        main()
+
+    assert stdout.getvalue() == ""
+
+
 @pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_literal_review_input_file_is_still_denied(
     event_factory,

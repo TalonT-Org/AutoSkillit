@@ -1167,7 +1167,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "tracker-authority retention and cleanup on every dispatch outcome boundary.",
     ),
     "server/_recipe_delivery.py": (
-        1500,
+        1550,
         "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
         "selection, receipt reservation, and compiled-execution publication form one "
         "transactional authority boundary; the snapshot carrier keeps installation before "
@@ -1179,7 +1179,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "for registered non-protected surfaces; #4419's audit installation/finalization fence "
         "and #4425's kitchen-effect transition remain co-located to preserve that single "
         "delivery authority. #4414 adds packaging-time bounded-call and exemption-margin "
-        "fitness checks at this same finalization boundary.",
+        "fitness checks at this same finalization boundary. "
+        "#4557 adds host-attestation transport, char-ceiling threading, and annotation-aware "
+        "inline delivery resolution.",
     ),
     "server/_recipe_section_pagination.py": (
         1030,

@@ -23,6 +23,7 @@ from autoskillit.core import (
     RECIPE_SECTION_MANDATORY_FAILURE_CODES,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RecipeArtifactGeneration,
+    client_serialized_char_len,
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
@@ -303,6 +304,50 @@ def test_terminal_initialization_page_carries_progress_and_completion_receipt() 
     assert page["recipe_execution"] == {"execution_id": "execution"}
 
 
+def test_char_ceiling_accepts_a_page_within_it() -> None:
+    """A char_ceiling at least as large as the exact client-serialized length
+    of every rendered page does not disturb an otherwise-fitting plan."""
+    plan = _build(
+        _payload(orchestration_rules="follow the graph exactly"),
+        "orchestration_rules",
+        bound=_PAGE_TEST_BOUND,
+    )
+    exact_char_ceiling = max(
+        client_serialized_char_len(rendered).value for rendered in plan.rendered_pages
+    )
+
+    replan = build_recipe_section_page_plan(
+        kitchen_id="kitchen-test",
+        generation=_generation(),
+        selected=select_recipe_section(
+            _payload(orchestration_rules="follow the graph exactly"), "orchestration_rules"
+        ),
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
+        char_ceiling=exact_char_ceiling,
+    )
+    assert replan.rendered_pages == plan.rendered_pages
+
+
+def test_char_ceiling_rejects_a_page_that_exceeds_it() -> None:
+    """A char_ceiling one below the exact client-serialized length of a
+    rendered page must fail finalization even though every page satisfies
+    the byte bound — the client gates on serialized chars, not bytes."""
+    payload = _payload(orchestration_rules="follow the graph exactly")
+    plan = _build(payload, "orchestration_rules", bound=_PAGE_TEST_BOUND)
+    exact_char_ceiling = max(
+        client_serialized_char_len(rendered).value for rendered in plan.rendered_pages
+    )
+
+    with pytest.raises(RecipeSectionPaginationError, match="char ceiling"):
+        build_recipe_section_page_plan(
+            kitchen_id="kitchen-test",
+            generation=_generation(),
+            selected=select_recipe_section(payload, "orchestration_rules"),
+            recipe_section_bound_bytes=_PAGE_TEST_BOUND,
+            char_ceiling=exact_char_ceiling - 1,
+        )
+
+
 def test_select_recipe_section_loads_only_recognized_dynamic_content() -> None:
     loaded_sections: list[str] = []
 
@@ -402,7 +447,10 @@ def _decoded_pages(plan: Any, *, bound: int) -> list[dict[str, Any]]:
         assert required_ranges <= page.keys()
         assert not ((_ALL_RANGE_FIELDS - required_ranges) & page.keys())
         assert page["content"] != "" or page["content_format"] == "json-array-page"
-        if page["content_format"] != "raw-text":
+        if page["content_format"] == "json-array-page":
+            # Flat delivery encoding: array-page content arrives pre-parsed.
+            assert isinstance(page["content"], list)
+        elif page["content_format"] != "raw-text":
             json.loads(page["content"])
         decoded_pages.append(page)
 
@@ -460,7 +508,7 @@ def _reconstruct(pages: list[dict[str, Any]]) -> object:
         page = pages[page_cursor]
         if page["content_format"] == "json-array-page":
             assert page["element_start"] == element_cursor
-            values = json.loads(page["content"])
+            values = page["content"]  # already parsed by flat delivery encoding
             assert isinstance(values, list) and values
             assert page["element_end"] - page["element_start"] == len(values)
             result.extend(values)

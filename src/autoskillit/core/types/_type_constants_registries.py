@@ -16,6 +16,9 @@ from ._type_enums import FleetErrorCode, SkillExecutionRole
 from ._type_exceptions import SkillContractError
 
 __all__ = [
+    "ANNOTATION_HARD_CAP_CHARS",
+    "CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS",
+    "CLAUDE_INJECTED_CLIENT_RESULT_TOKENS",
     "PIPELINE_FORBIDDEN_TOOLS",
     "SKILL_TOOLS",
     "GATED_TOOLS",
@@ -232,6 +235,12 @@ RECIPE_RESPONSE_DEFAULT_BYTES = 90_000
 # capability is resolvable. Matches BackendCapabilities.unnegotiated_tool_result_token_limit's
 # dataclass default — the smallest registered backend bound (Codex code-mode).
 CONSERVATIVE_RESULT_TOKEN_FLOOR = 10_000
+
+# Client-gate constants. Binary-verified on Claude Code CLI v2.1.220.
+# Source: inspection of the installed CLI binary's MCP result handling.
+CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS = 25_000
+CLAUDE_INJECTED_CLIENT_RESULT_TOKENS = 50_000
+ANNOTATION_HARD_CAP_CHARS = 500_000
 
 RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = MappingProxyType(
     {

@@ -15,6 +15,7 @@ __all__ = [
     "RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES",
     "RECIPE_ARTIFACT_SCHEMA_VERSION",
     "RECIPE_FLOW_SCHEMA_VERSION",
+    "HostClientAttestation",
     "RecipeArtifactGeneration",
     "RecipeDeliveryAttestation",
     "RecipeDeliveryBudgetDef",
@@ -268,6 +269,17 @@ class RecipeDeliveryAttestation:
     parser_version: int
     evidence_version: int
     evidence_identity: str
+
+
+@dataclass(frozen=True, slots=True)
+class HostClientAttestation:
+    """Launcher-sourced host capabilities, read once at server startup.
+
+    Absent/malformed env → None → conservative defaults (ENVELOPE).
+    """
+
+    attested_client_gate_tokens: int
+    annotation_support: bool
 
 
 @dataclass(frozen=True, slots=True)

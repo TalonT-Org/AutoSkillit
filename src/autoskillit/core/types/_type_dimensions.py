@@ -1,7 +1,8 @@
-"""Dimension-safe token and UTF-8 byte limits."""
+"""Dimension-safe token, UTF-8 byte, and serialized-char limits."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -10,8 +11,10 @@ __all__ = [
     "BytesToTokensPolicy",
     "CLIENT_CHARS_PER_TOKEN_POLICY",
     "CONSERVATIVE_ADMISSION_POLICY",
+    "SerializedChars",
     "TokenLimit",
     "Utf8ByteLimit",
+    "client_serialized_char_len",
 ]
 
 
@@ -35,6 +38,32 @@ class Utf8ByteLimit:
     def __post_init__(self) -> None:
         if type(self.value) is not int or self.value <= 0:
             raise ValueError(f"Utf8ByteLimit must be positive; got {self.value!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class SerializedChars:
+    """Client-measured JSON-serialized character count.
+
+    Not interchangeable with a byte count or a token count.
+    """
+
+    value: int
+
+    def __post_init__(self) -> None:
+        if type(self.value) is not int or self.value < 0:
+            raise ValueError(f"SerializedChars must be non-negative; got {self.value!r}")
+
+
+def client_serialized_char_len(text: str) -> SerializedChars:
+    """Return the client-measured serialized character count.
+
+    The Claude Code client gates MCP tool results by the length of the
+    JSON-serialized response text. For a string response, this equals
+    len(json.dumps(text)) — the raw text plus JSON string encoding
+    (quotes, backslash escapes). Verified against the incident artifact:
+    134,218-byte compiled content → 189,773 serialized chars.
+    """
+    return SerializedChars(len(json.dumps(text)))
 
 
 @dataclass(frozen=True, slots=True)

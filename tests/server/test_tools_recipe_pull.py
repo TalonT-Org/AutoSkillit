@@ -1196,6 +1196,43 @@ def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx)
     assert finalized.decision.reason != "exemption_overrides_envelope"
 
 
+def test_exemption_override_requires_char_ceiling_too(tool_ctx) -> None:
+    """Issue #4557 Stage C: the override must ALSO respect the client-measured
+    serialized-char ceiling, not just the byte ceiling. The server budgets in
+    compiled UTF-8 bytes, but the client gates on JSON-serialized chars — a
+    payload already embedded as an escaped JSON string field doubles again in
+    char count (but not in byte count) when the client's outer transport
+    re-serializes it. Backslash-dense content can therefore stay comfortably
+    under the byte margin while its client-serialized char length blows past
+    the char margin — the override must not fire for such a payload.
+    """
+    tool_ctx.backend = ClaudeCodeBackend()
+    tool_ctx.kitchen_id = "claude-code-char-ceiling"
+
+    exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
+    byte_margin = exemption.max_utf8_bytes * 9 // 10
+    char_margin = exemption.max_chars * 9 // 10
+    # n backslashes cost 2n chars once embedded as an ordinary JSON string
+    # field (each backslash escapes to `\\`), but 4n chars once the client
+    # re-serializes that already-escaped payload as an outer JSON string.
+    oversized_content = "\\" * 50_000
+    embedded_length = len(json.dumps(oversized_content))
+    client_length = len(json.dumps(json.dumps(oversized_content)))
+    assert embedded_length < byte_margin
+    assert client_length > char_margin
+
+    finalized = _finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert finalized.decision.reason != "exemption_overrides_envelope"
+
+
 def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> None:
     """Issue #4399 boundary: get_recipe has no response_exemption_tool registration,
     so the override must not apply — ENVELOPE remains the result.
@@ -1574,7 +1611,12 @@ async def test_pull_tool_distinguishes_missing_none_and_present_empty_sections(
     response = json.loads(rendered)
     assert response["success"] is expected_success
     if expected_success:
-        assert json.loads(response["content"]) == expected_value
+        if section in ("errors", "warnings"):
+            # Array sections (json-array-page) arrive pre-parsed as a list.
+            assert response["content"] == expected_value
+        else:
+            # ingredients_table uses json-scalar-page; content is still a string.
+            assert json.loads(response["content"]) == expected_value
         assert response["has_more"] is False
         assert "next_part" not in response
     else:

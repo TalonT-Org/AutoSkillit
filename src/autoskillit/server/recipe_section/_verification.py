@@ -5,7 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 
-from autoskillit.core import RecipeArtifactGeneration, recipe_section_element_digest
+from autoskillit.core import (
+    RecipeArtifactGeneration,
+    client_serialized_char_len,
+    recipe_section_element_digest,
+)
 from autoskillit.server.recipe_section._contracts import (
     RECIPE_SECTION_PAGE_RANGE_FIELDS,
     PlannedRecipeSectionPage,
@@ -257,6 +261,7 @@ def verify_finalized_recipe_section_plan(
     pagination_policy_sha256: str,
     section_registry_sha256: str,
     section_sha256: str,
+    char_ceiling: int | None = None,
 ) -> None:
     """Validate finalized descriptors and renderings after digest injection."""
     _require(bool(pages), "recipe section plan has no pages")
@@ -276,6 +281,11 @@ def verify_finalized_recipe_section_plan(
             len(rendered.encode("utf-8")) <= bound_bytes,
             "final recipe section page exceeds captured bound",
         )
+        if char_ceiling is not None:
+            _require(
+                client_serialized_char_len(rendered).value <= char_ceiling,
+                "final recipe section page exceeds captured char ceiling",
+            )
         response = _decode(rendered, "final recipe section page is not valid JSON")
         if type(response) is not dict:
             raise _pagination_error("final recipe section page is not a JSON object")
@@ -284,6 +294,10 @@ def verify_finalized_recipe_section_plan(
         actual_ranges = {
             name: response[name] for name in RECIPE_SECTION_PAGE_RANGE_FIELDS if name in response
         }
+        if page.descriptor.content_format == "json-array-page":
+            content_matches = response.get("content") == json.loads(page.content)
+        else:
+            content_matches = response.get("content") == page.content
         _require(
             response.get("success") is True
             and response.get("pagination_version") == pagination_version
@@ -310,7 +324,7 @@ def verify_finalized_recipe_section_plan(
             and response.get("total_parts") == len(pages)
             and response.get("has_more") is not terminal
             and response.get("content_format") == page.descriptor.content_format
-            and response.get("content") == page.content
+            and content_matches
             and actual_ranges == expected_ranges,
             "final recipe section rendering changed plan identity or boundaries",
         )

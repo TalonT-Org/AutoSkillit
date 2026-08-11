@@ -46,6 +46,7 @@ from autoskillit.core import (
     Utf8ByteLimit,
     atomic_write,
     build_recipe_execution_credential,
+    client_serialized_char_len,
     fast_dumps,
     get_logger,
     load_yaml,
@@ -816,6 +817,11 @@ def _recipe_exemption_admitted_bytes(ceiling_bytes: int) -> int:
     return ceiling_bytes * 9 // 10
 
 
+def _exemption_admitted_chars(ceiling_chars: int) -> int:
+    """Return the exemption ceiling in chars after reserving the packaging margin."""
+    return ceiling_chars * 9 // 10
+
+
 def _conservative_token_upper_bound(rendered: str) -> int:
     """Bound tokenizer output via the conservative 1:1 admission policy.
 
@@ -930,7 +936,6 @@ def finalize_recipe_delivery(
     if "success" not in surface_payload:
         surface_payload["success"] = True
     for generation_field in (
-        "finalized_recipe_projection",
         "flow_records",
         RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
         "recipe_flow",
@@ -1117,9 +1122,13 @@ def finalize_recipe_delivery(
         _exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(
             surface_definition.response_exemption_tool
         )
-        if _exemption is not None and len(
-            ordinary_rendered.encode("utf-8")
-        ) <= _recipe_exemption_admitted_bytes(_exemption.max_utf8_bytes):
+        if (
+            _exemption is not None
+            and len(ordinary_rendered.encode("utf-8"))
+            <= _recipe_exemption_admitted_bytes(_exemption.max_utf8_bytes)
+            and client_serialized_char_len(ordinary_rendered).value
+            <= _exemption_admitted_chars(_exemption.max_chars)
+        ):
             decision = replace(
                 decision,
                 mode=RecipeDeliveryMode.ORDINARY_INLINE,

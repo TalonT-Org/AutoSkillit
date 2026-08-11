@@ -333,7 +333,6 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
             assert response["total_parts"] == expected_total_parts
 
         chunk = response.get("content")
-        assert isinstance(chunk, str)
         content_format = response.get("content_format")
         assert content_format in {
             "raw-text",
@@ -341,6 +340,11 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
             "json-scalar-page",
             "json-element-fragment",
         }, f"unknown recipe section format: {content_format!r}"
+        if content_format == "json-array-page":
+            # Flat delivery encoding: array-page content arrives pre-parsed.
+            assert isinstance(chunk, list)
+        else:
+            assert isinstance(chunk, str)
 
         if content_format == "raw-text":
             assert expected_format_family in (None, "raw")
@@ -411,7 +415,7 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
         elif content_format == "json-array-page":
             assert expected_format_family in (None, "array")
             expected_format_family = "array"
-            decoded = json.loads(chunk)
+            decoded = chunk  # already parsed by flat delivery encoding
             assert isinstance(decoded, list)
             assert response["element_start"] == len(elements)
             assert response["element_end"] == response["element_start"] + len(decoded)

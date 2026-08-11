@@ -395,6 +395,11 @@ def _render_candidate(
             next_part=part + 1,
         )
     body.update(page.descriptor.wire_ranges())
+    if page.descriptor.content_format == "json-array-page":
+        # Flatten: parse the canonical array string into a structured list.
+        # The single json.dumps below serializes everything once — the
+        # string-in-string layer disappears here.
+        body["content"] = json.loads(page.content)
     return json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
@@ -877,6 +882,7 @@ def build_recipe_section_page_plan(
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
+    char_ceiling: int | None = None,
 ) -> RecipeSectionPagePlan:
     """Build, finalize, and verify one deterministic immutable page plan."""
     del kitchen_id  # Identity participates in the cache key, not the manifest.
@@ -953,6 +959,7 @@ def build_recipe_section_page_plan(
         pagination_policy_sha256=RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
         section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
         section_sha256=section_sha256,
+        char_ceiling=char_ceiling,
     )
     cache_weight = sum(len(rendered.encode("utf-8")) for rendered in rendered_pages)
     cache_weight += len(canonical_recipe_section_json(manifest).encode("utf-8"))

@@ -9,6 +9,7 @@ import time
 from .types._type_backend import BackendCapabilities
 from .types._type_recipe_delivery import (
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
+    HostClientAttestation,
     RecipeDeliveryAttestation,
     RecipeDeliveryBudgetDef,
     RecipeDeliveryDecision,
@@ -85,6 +86,10 @@ def resolve_recipe_delivery_decision(
     attestation: RecipeDeliveryAttestation | None = None,
     supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     now_unix: int | None = None,
+    # Stage E: annotation-aware inline
+    host_client_attestation: HostClientAttestation | None = None,
+    payload_serialized_chars: int | None = None,
+    exemption_ceiling_chars: int | None = None,
 ) -> RecipeDeliveryDecision:
     """Resolve one recipe response without treating caller claims as authority."""
     ordinary_limit = resolve_general_output_token_limit(capabilities)
@@ -132,6 +137,22 @@ def resolve_recipe_delivery_decision(
             RecipeDeliveryMode.ORDINARY_INLINE,
             selected_limit=ordinary_limit,
             reason="fits_unnegotiated_result_limit",
+            receipt_status="not_required",
+        )
+    # Annotation-aware inline: when the host attests annotation support
+    # and the payload fits within the exemption ceiling, deliver inline
+    # without the protected-delivery machinery.
+    if (
+        host_client_attestation is not None
+        and host_client_attestation.annotation_support
+        and payload_serialized_chars is not None
+        and exemption_ceiling_chars is not None
+        and payload_serialized_chars <= exemption_ceiling_chars
+    ):
+        return _decision(
+            RecipeDeliveryMode.ORDINARY_INLINE,
+            selected_limit=exemption_ceiling_chars,
+            reason="annotation_aware_inline",
             receipt_status="not_required",
         )
     if not capabilities.protected_recipe_delivery_capable:

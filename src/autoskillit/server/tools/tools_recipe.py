@@ -27,6 +27,7 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
     RecipeDeliveryRequest,
     RecipeLoadError,
+    client_serialized_char_len,
     fast_dumps,
     get_logger,
     load_yaml,
@@ -746,6 +747,11 @@ async def get_recipe_section(
                     sort_keys=True,
                 )
                 if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
+                    return _recipe_section_failure("recipe_section_bound_too_small")
+                if (
+                    client_serialized_char_len(rendered).value
+                    > request_state.recipe_section_bound_bytes
+                ):
                     return _recipe_section_failure("recipe_section_bound_too_small")
             content_sha256 = rendered_payload.get("content_sha256")
             if isinstance(active_initialization, ReadyRecipe):

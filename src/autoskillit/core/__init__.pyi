@@ -328,6 +328,7 @@ from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
+from .types import ANNOTATION_HARD_CAP_CHARS as ANNOTATION_HARD_CAP_CHARS
 from .types import ASCII_YAML_POLICY as ASCII_YAML_POLICY
 from .types import (
     AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY as AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY,
@@ -355,6 +356,8 @@ from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIE
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
+from .types import CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS as CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS
+from .types import CLAUDE_INJECTED_CLIENT_RESULT_TOKENS as CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
 from .types import CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR as CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR
 from .types import CLAUDE_MCP_CONNECT_TIMEOUT_MS as CLAUDE_MCP_CONNECT_TIMEOUT_MS
 from .types import CLAUDE_MCP_CONNECTION_NONBLOCKING as CLAUDE_MCP_CONNECTION_NONBLOCKING
@@ -800,6 +803,7 @@ from .types import GitHubReviewRequest as GitHubReviewRequest
 from .types import GitMetadataWriteSpec as GitMetadataWriteSpec
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HookTrustPolicy as HookTrustPolicy
+from .types import HostClientAttestation as HostClientAttestation
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
 from .types import IdempotencyNamespace as IdempotencyNamespace
 from .types import IdempotencyRecord as IdempotencyRecord
@@ -994,6 +998,7 @@ from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
+from .types import SerializedChars as SerializedChars
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
@@ -1087,6 +1092,7 @@ from .types import (
     build_recipe_execution_credential as build_recipe_execution_credential,
 )
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
+from .types import client_serialized_char_len as client_serialized_char_len
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_audit_reference_identity as compute_audit_reference_identity
 from .types import compute_audit_slot_id as compute_audit_slot_id

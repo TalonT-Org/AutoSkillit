@@ -25,6 +25,7 @@ from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     CODEX_COOK_RESERVED_ENV_VARS,
     CODEX_STARTUP_TRACE_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
@@ -48,7 +49,7 @@ if TYPE_CHECKING:
 # 25,000 to 50,000. NOTE: This does NOT control the ~100KB disk-persistence
 # gate — persistence is governed by a separate byte-size threshold in the
 # Claude Code harness (empirically ~100KB on CLI 2.1.197). See issue #4253.
-_MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
+_MAX_MCP_OUTPUT_TOKENS_VALUE: str = str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS)
 
 
 # Baseline env vars injected into EVERY AutoSkillit-launched session. Callers

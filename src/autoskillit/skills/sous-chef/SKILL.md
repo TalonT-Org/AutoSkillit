@@ -867,7 +867,9 @@ every step at full fidelity regardless of session length.
 `optional: true` on a recipe step does NOT mean the step is discretionary. It means:
 - The step is SKIPPED when its `skip_when_false` ingredient resolves to false.
   `skip_when_false` references are resolved server-side — falsy steps are removed
-  entirely; truthy steps appear without `optional:` or `skip_when_false:` fields.
+  entirely through their author-declared `on_skip` configuration continuation;
+  truthy steps appear without `optional:`, `skip_when_false:`, or `on_skip:` fields.
+  `on_skip` is never a runtime result edge.
   Never evaluate `inputs.*` references yourself.
 - When the ingredient evaluates to true, the step is MANDATORY.
 - A running optional step that returns `success: false` MUST follow `on_failure`.

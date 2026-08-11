@@ -17,8 +17,13 @@ def _make_recipe_with_skip_guard(step_name: str, ref: str, default: str | None) 
         ingredients={ingredient_name: RecipeIngredient(description="test", default=default)},
         steps={
             step_name: RecipeStep(
-                name=step_name, tool="some_tool", skip_when_false=ref, optional=True
-            )
+                name=step_name,
+                tool="some_tool",
+                skip_when_false=ref,
+                on_skip="done",
+                optional=True,
+            ),
+            "done": RecipeStep(name="done", action="stop", message="done"),
         },
     )
 
@@ -86,12 +91,14 @@ class TestPruneSkippedStepsDeferral:
         from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
 
         raw = (
-            "steps:\n  review:\n    skip_when_false: inputs.review_approach\n    optional: true\n"
+            "steps:\n  review:\n    skip_when_false: inputs.review_approach\n"
+            "    on_skip: done\n    optional: true\n  done:\n    action: stop\n"
         )
         step_obj = RecipeStep(
             name="review",
             tool="some_tool",
             skip_when_false="inputs.review_approach",
+            on_skip="done",
             optional=True,
         )
         resolutions: dict[str, bool | None] = {"review": None}
@@ -99,6 +106,7 @@ class TestPruneSkippedStepsDeferral:
         result = _resolve_skip_guards_in_content(raw, resolutions, original_steps)
         assert "review:" in result, "Deferred step block was stripped"
         assert "skip_when_false:" not in result, "skip_when_false line not stripped"
+        assert "on_skip:" not in result, "on_skip line not stripped"
         assert "optional: true" in result, "optional: true must be preserved for deferred steps"
 
 

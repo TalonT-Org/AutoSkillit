@@ -293,6 +293,7 @@
         "review_post_state"
       ],
       "skip_when_false": "inputs.review_research_pr",
+      "on_skip": "check_review_posted",
       "on_context_limit": "escalate_stop",
       "on_failure": "escalate_stop",
       "on_result": [
@@ -320,6 +321,7 @@
         }
       },
       "skip_when_false": "inputs.review_research_pr",
+      "on_skip": "audit_claims",
       "on_result": [
         {
           "when": "${{ result.reviews_posted }} == 'false'",
@@ -369,6 +371,7 @@
         "review_post_state"
       ],
       "skip_when_false": "inputs.audit_claims",
+      "on_skip": "check_audit_review_posted",
       "retries": 1,
       "on_exhausted": "escalate_stop",
       "on_context_limit": "escalate_stop",
@@ -398,6 +401,7 @@
         }
       },
       "skip_when_false": "inputs.audit_claims",
+      "on_skip": "route_review_resolve",
       "on_result": [
         {
           "when": "${{ result.reviews_posted }} == 'false'",

@@ -132,6 +132,7 @@ class RecipeStep:
     capture_list: dict[str, CaptureEntrySpec] = field(default_factory=dict)
     optional: bool = False
     skip_when_false: str | None = None
+    on_skip: str | None = None
     model: str | None = None
     provider: str | None = None
     sub_recipe: str | None = None  # Name of sub-recipe file (no extension)

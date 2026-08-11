@@ -429,6 +429,7 @@ steps:
     model: ""
     optional: true
     skip_when_false: "inputs.planner_assess_review_approach"
+    on_skip: validate
     with:
       skill_command: >
         /autoskillit:planner-assess-review-approach

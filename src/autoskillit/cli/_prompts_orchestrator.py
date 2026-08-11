@@ -318,7 +318,9 @@ STEP EXECUTION IS NOT DISCRETIONARY:
   looks simple, or you judge the step unnecessary.
 - skip_when_false ingredient references are resolved server-side before the recipe
   is served. You may see literal "false" values (skip the step) or no
-  skip_when_false field at all (step is mandatory). The LLM never evaluates inputs.*.
+  skip_when_false field at all (step is mandatory). Resolved steps also omit on_skip,
+  which is a configuration continuation rather than a runtime edge. The LLM never
+  evaluates inputs.*.
 - Consequence: skipping PR review steps results in unreviewed code, missing diff
   annotations, and no architectural lens analysis — code reaches main without
   quality gates.

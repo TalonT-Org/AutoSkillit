@@ -149,10 +149,12 @@ steps:
     action: confirm
     message: A
     skip_when_false: inputs.enable_step_a
+    on_skip: step_c
   step_b:
     action: confirm
     message: B
     skip_when_false: inputs.enable_step_b
+    on_skip: step_c
   step_c:
     action: stop
     message: C
@@ -1034,7 +1036,10 @@ def test_drop_sub_recipe_step_preserves_future_fields() -> None:
         name="test",
         description="desc",
         summary="sum",
-        steps={"placeholder": RecipeStep(sub_recipe="sub"), "other": RecipeStep(action="stop")},
+        steps={
+            "placeholder": RecipeStep(sub_recipe="sub", on_success="other"),
+            "other": RecipeStep(action="stop"),
+        },
         kitchen_rules=["rule1"],
         version="0.2.0",
         experimental=True,

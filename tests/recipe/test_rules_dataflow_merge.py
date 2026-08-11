@@ -470,6 +470,7 @@ class TestPushBeforeAuditRule:
                     "tool": "run_skill",
                     "optional": True,
                     "skip_when_false": "inputs.audit",
+                    "on_skip": "compose_pr",
                     "with": {
                         "skill_command": "/autoskillit:audit-impl plan.md",
                         "cwd": "/tmp",
@@ -481,6 +482,7 @@ class TestPushBeforeAuditRule:
                     "tool": "run_skill",
                     "optional": True,
                     "skip_when_false": "inputs.open_pr",
+                    "on_skip": "push",
                     "with": {
                         "skill_command": "/autoskillit:compose-pr",
                         "cwd": "/tmp",

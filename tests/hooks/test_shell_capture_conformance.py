@@ -191,14 +191,22 @@ import sys
 
 mode, host, port = sys.argv[1:]
 parent_read, parent_write = os.pipe()
+ready_read, ready_write = os.pipe()
 pid = os.fork()
 if pid:
     os.close(parent_read)
+    os.close(ready_write)
+    if os.read(ready_read, 1) != b"R":
+        os._exit(2)
+    os.close(ready_read)
     os.write(1, b"early\\n")
     os._exit(0)
 
 os.close(parent_write)
+os.close(ready_read)
 os.setsid()
+os.write(ready_write, b"R")
+os.close(ready_write)
 while os.read(parent_read, 1):
     pass
 os.close(parent_read)

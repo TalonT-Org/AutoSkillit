@@ -22,6 +22,49 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
+@pytest.mark.parametrize(
+    ("skip_when_false", "on_skip", "message"),
+    [
+        ("inputs.enabled", None, "missing required 'on_skip'"),
+        (None, "done", "without 'skip_when_false'"),
+        ("inputs.enabled", "missing", "references unknown step 'missing'"),
+        ("inputs.enabled", "escalate", "references unknown step 'escalate'"),
+    ],
+)
+def test_skip_contract_requires_named_paired_target(
+    skip_when_false: str | None, on_skip: str | None, message: str
+) -> None:
+    recipe = Recipe(
+        name="skip-contract",
+        description="skip contract",
+        kitchen_rules=["test"],
+        ingredients={},
+        steps={
+            "guarded": RecipeStep(
+                name="guarded",
+                tool="run_cmd",
+                skip_when_false=skip_when_false,
+                on_skip=on_skip,
+            ),
+            "done": RecipeStep(name="done", action="stop", message="done"),
+        },
+    )
+    assert any(message in error for error in validate_recipe_structure(recipe))
+
+
+def test_skip_contract_rejects_cycle() -> None:
+    recipe = Recipe(
+        name="skip-cycle",
+        description="skip cycle",
+        kitchen_rules=["test"],
+        steps={
+            "a": RecipeStep(name="a", tool="run_cmd", skip_when_false="false", on_skip="b"),
+            "b": RecipeStep(name="b", tool="run_cmd", skip_when_false="false", on_skip="a"),
+        },
+    )
+    assert any("on_skip cycle" in error for error in validate_recipe_structure(recipe))
+
+
 # ---------------------------------------------------------------------------
 # TestValidateRecipe — migrated from test_recipe_parser.py
 # ---------------------------------------------------------------------------

@@ -147,9 +147,12 @@ def validate_from_path(
             backend_origin_map=backend_origin_map,
         )
         _pre_prune_findings = run_semantic_rules(pre_prune_ctx)
-        recipe, _skip_resolutions = _prune_skipped_steps(
-            recipe, ingredient_overrides, defer_unresolved=False
-        )
+        try:
+            recipe, _skip_resolutions = _prune_skipped_steps(
+                recipe, ingredient_overrides, defer_unresolved=False
+            )
+        except ValueError as exc:
+            errors.append(f"Skip guard resolution failed: {exc}")
     # Auto-derive on_rate_limit from on_context_limit is intentionally NOT
     # run here — validate_from_path is used by recipe validation tests that
     # assert the raw YAML state. The derivation runs only via load_and_validate

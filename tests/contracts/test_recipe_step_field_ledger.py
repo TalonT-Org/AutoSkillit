@@ -87,6 +87,9 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     "on_failure": "composition",
     "on_rate_limit": "composition",
     "on_result": "composition",
+    # Configuration-time continuation consumed by validation, composition,
+    # pruning, and raw/source parity; deliberately absent from runtime edges.
+    "on_skip": "composition",
     "on_success": "composition",
     # Schema/lint-only guard field.
     "optional": "validation-only",

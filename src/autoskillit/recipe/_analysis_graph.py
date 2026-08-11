@@ -222,6 +222,8 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
                 continue
             if edge.target in step_names:
                 graph[name].add(edge.target)
+        if step.skip_when_false and step.on_skip in step_names:
+            graph[name].add(step.on_skip)
 
     # Build predecessor map for bypass edge injection below.
     predecessors: dict[str, set[str]] = {name: set() for name in step_names}
@@ -229,27 +231,13 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
         for s in successors:
             predecessors[s].add(name)
 
-    # For each step with skip_when_false, add bypass edges from all predecessors
-    # directly to the step's routing targets (the steps to route to when skipped).
-    # This makes optional-step bypass paths visible to graph-based rules.
+    # Make the explicit configuration-time continuation visible to skip-sensitive
+    # graph rules without exposing it through runtime edge extraction.
     for name, step in recipe.steps.items():
-        if not step.skip_when_false:
+        if not step.skip_when_false or step.on_skip not in step_names:
             continue
-        # on_success bypass: predecessor → step.on_success
-        if step.on_success and step.on_success in step_names:
-            for pred in predecessors[name]:
-                graph[pred].add(step.on_success)
-        # on_result bypass: predecessor → each on_result condition route target
-        if step.on_result:
-            if step.on_result.routes:
-                for target in step.on_result.routes.values():
-                    if target in step_names:
-                        for pred in predecessors[name]:
-                            graph[pred].add(target)
-            for condition in step.on_result.conditions:
-                if condition.route in step_names:
-                    for pred in predecessors[name]:
-                        graph[pred].add(condition.route)
+        for pred in predecessors[name]:
+            graph[pred].add(step.on_skip)
 
     # For each sub_recipe placeholder step (gate-controlled), add a bypass edge
     # to the next step in YAML order. When the gate is false the step is dropped

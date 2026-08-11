@@ -235,10 +235,12 @@ def test_skip_when_false_field_is_parsed_from_yaml() -> None:
     raw = {
         "tool": "run_skill",
         "skip_when_false": "inputs.open_pr",
+        "on_skip": "next_step",
         "on_success": "next_step",
     }
     step = _parse_step(raw)
     assert step.skip_when_false == "inputs.open_pr"
+    assert step.on_skip == "next_step"
 
 
 def test_phoropter_family_and_skip_when_true_fields_default_to_none() -> None:

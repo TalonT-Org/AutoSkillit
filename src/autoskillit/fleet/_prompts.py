@@ -235,7 +235,8 @@ STEP EXECUTION IS NOT DISCRETIONARY:
   looks simple, or you judge the step unnecessary.
 - skip_when_false ingredient references are resolved server-side before the recipe
   is served. You may see literal "false" values (skip the step) or no
-  skip_when_false field at all (step is mandatory). The LLM never evaluates inputs.*.
+  skip_when_false field at all (step is mandatory). Resolved steps also omit on_skip,
+  which is configuration-only and never a runtime result edge. The LLM never evaluates inputs.*.
 
 {ROUTING_AUTHORITY_CLAUSE}
 

@@ -1,0 +1,34 @@
+from_version: "0.0.0"
+to_version: "0.10.952"
+description: >
+  Guarded recipe steps now require an explicit configuration-time continuation.
+changes:
+  - id: guarded-steps-add-on-skip
+    description: "Add on_skip to steps that declare skip_when_false"
+    instruction: |
+      For each recipe step that declares skip_when_false, add on_skip naming the
+      surviving step that configuration-time absence should continue to. This is
+      an author-selected configuration continuation, not a runtime result route.
+      Do not copy on_success, an on_result default, or another runtime route
+      automatically. If the intended continuation is ambiguous, stop and report
+      the guarded step name for manual author action. Steps without
+      skip_when_false require no field change; update the recipe version normally.
+    detect:
+      missing_field: on_skip
+    example_before: |
+      optional_audit:
+        tool: run_skill
+        skip_when_false: inputs.audit
+        on_result:
+          - when: "${{ result.verdict }} == GO"
+            route: publish
+          - route: audit_failed
+    example_after: |
+      optional_audit:
+        tool: run_skill
+        skip_when_false: inputs.audit
+        on_skip: publish
+        on_result:
+          - when: "${{ result.verdict }} == GO"
+            route: publish
+          - route: audit_failed

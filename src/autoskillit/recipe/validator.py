@@ -103,6 +103,15 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
     ingredient_names = set(recipe.ingredients.keys())
 
     for step_name, step in recipe.steps.items():
+        if step.skip_when_false is not None and step.on_skip is None:
+            errors.append(
+                f"Step '{step_name}' has 'skip_when_false' but is missing required 'on_skip'."
+            )
+        if step.skip_when_false is None and step.on_skip is not None:
+            errors.append(f"Step '{step_name}' has 'on_skip' without 'skip_when_false'.")
+        if step.on_skip is not None and step.on_skip not in step_names:
+            errors.append(f"Step '{step_name}'.on_skip references unknown step '{step.on_skip}'.")
+
         if step.sub_recipe is not None:
             other_discriminators = [
                 d for d in ("tool", "action", "python", "constant") if getattr(step, d) is not None
@@ -251,6 +260,25 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
                         f"'{inner}'; capture values must use the 'result.' namespace."
                         + _SKILL_HINT
                     )
+
+    checked_skip_steps: set[str] = set()
+    for step_name in recipe.steps:
+        if step_name in checked_skip_steps:
+            continue
+        path: list[str] = []
+        path_index: dict[str, int] = {}
+        current = step_name
+        while current in recipe.steps and (target := recipe.steps[current].on_skip) is not None:
+            if current in path_index:
+                cycle = path[path_index[current] :] + [current]
+                errors.append(f"on_skip cycle detected: {' -> '.join(cycle)}.")
+                break
+            if current in checked_skip_steps:
+                break
+            path_index[current] = len(path)
+            path.append(current)
+            current = target
+        checked_skip_steps.update(path)
 
     # Validate input and context references in with_args using iter_steps_with_context
     # sub_recipe steps have no with_args to validate — skip them.

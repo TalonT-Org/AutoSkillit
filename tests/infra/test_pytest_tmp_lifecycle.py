@@ -407,6 +407,17 @@ def test_pid_probe_fails_closed_on_unexpected_oserror(monkeypatch: pytest.Monkey
     assert module._pid_exists(12345)
 
 
+def test_reference_containment_resolves_symlinked_paths(tmp_path: Path) -> None:
+    module = _load_lifecycle_module()
+    real_root = tmp_path / "real"
+    candidate = real_root / "generation"
+    candidate.mkdir(parents=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(real_root, target_is_directory=True)
+
+    assert module._contains_reference(candidate, {alias / "generation" / "tmp"})
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux /proc fail-closed behavior")
 def test_reap_fails_closed_when_liveness_scan_unavailable(tmp_path: Path) -> None:
     platform_root, generation, _, _ = _layout(tmp_path)

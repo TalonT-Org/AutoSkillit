@@ -239,11 +239,21 @@ def _older_than(path: Path, minutes: float) -> bool:
 
 def _contains_reference(candidate: Path, references: set[Path]) -> bool:
     candidate = _absolute(candidate)
+    try:
+        resolved_candidate = candidate.resolve()
+    except (OSError, RuntimeError):
+        return True
     for reference in references:
+        reference = _absolute(reference)
         try:
-            _absolute(reference).relative_to(candidate)
+            reference.relative_to(candidate)
         except ValueError:
-            continue
+            try:
+                reference.resolve().relative_to(resolved_candidate)
+            except ValueError:
+                continue
+            except (OSError, RuntimeError):
+                return True
         return True
     return False
 

@@ -10,6 +10,7 @@ from typing import TypedDict
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
+from autoskillit import consume_exploration_request_record
 from autoskillit.core import (
     ContinuationCursor,
     EvidencePage,
@@ -21,7 +22,6 @@ from autoskillit.core import (
 from autoskillit.core import (
     session_type as _resolve_session_type,
 )
-from autoskillit.hook_registry import consume_exploration_request_record
 from autoskillit.pipeline import (
     EXPLORER_INELIGIBLE_SESSION_TYPES,
     CapabilityResolutionStatus,

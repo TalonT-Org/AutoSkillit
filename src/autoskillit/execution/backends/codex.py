@@ -888,9 +888,10 @@ def _preflight_agent_projection(
     built_in_collisions = sorted(set(names) & _CODEX_BUILT_IN_AGENT_NAMES)
     if built_in_collisions:
         raise ValueError(f"Codex built-in agent name collision: {built_in_collisions}")
-
     config_path = session_dir / "config.toml"
     config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    if exact_definitions and any(map(_direct_agent_mcp_tools, definitions)):
+        _canonical_explorer_mcp_transport(config_path)
     configured_agents = config.get("agents", {})
     if not isinstance(configured_agents, dict):
         raise ValueError("Codex config agents table must be a mapping")
@@ -1002,11 +1003,7 @@ def _generate_agent_tomls(
         exact=agent_defs is not None,
     )
     direct_mcp_transport = _resolve_role_mcp_transport(
-        session_dir,
-        eligible,
-        bindings,
-        explorer_mcp_transport,
-        strict=agent_defs is not None,
+        session_dir, eligible, bindings, explorer_mcp_transport
     )
     rendered = {
         definition.name: _render_agent_toml(

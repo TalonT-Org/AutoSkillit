@@ -55,8 +55,6 @@ def _resolve_role_mcp_transport(
     definitions: tuple[AgentDef, ...],
     bindings: Mapping[str, Mapping[str, str]],
     transport: Mapping[str, object] | None,
-    *,
-    strict: bool,
 ) -> Mapping[str, object] | None:
     if transport is not None:
         return transport
@@ -72,8 +70,6 @@ def _resolve_role_mcp_transport(
     try:
         return _canonical_explorer_mcp_transport(config_path)
     except ValueError:
-        if strict:
-            raise
         return {}
 
 

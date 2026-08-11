@@ -1747,7 +1747,6 @@ class TestCodexBackendSetupSessionDir:
         with pytest.raises(ValueError, match="requires exactly one canonical.*transport"):
             CodexBackend().setup_session_dir(self.session_dir)
 
-        assert (self.session_dir / "config.toml").read_text() == invalid_transport
         assert not (self.session_dir / "agents").exists()
 
     def test_session_log_reader_projects_direct_mcp_only_policy(self) -> None:

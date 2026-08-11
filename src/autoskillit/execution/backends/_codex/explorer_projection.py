@@ -65,7 +65,9 @@ def _resolve_role_mcp_transport(
     if not needs_transport:
         return None
     config_path = session_dir / "config.toml"
-    return _canonical_explorer_mcp_transport(config_path)
+    if not config_path.is_file():
+        return {}
+    return _canonical_explorer_mcp_transport(config_path, allow_absent=True)
 
 
 def _render_role_mcp_lines(
@@ -206,7 +208,11 @@ def _validated_explorer_binding_envs(
     return validated
 
 
-def _canonical_explorer_mcp_transport(config_path: Path) -> dict[str, object]:
+def _canonical_explorer_mcp_transport(
+    config_path: Path,
+    *,
+    allow_absent: bool = False,
+) -> dict[str, object]:
     """Copy the canonical parent transport without copying enabled state or secrets."""
     try:
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -215,6 +221,8 @@ def _canonical_explorer_mcp_transport(config_path: Path) -> dict[str, object]:
     servers = config.get("mcp_servers")
     server = servers.get("autoskillit") if isinstance(servers, dict) else None
     if not isinstance(server, dict):
+        if allow_absent and (not isinstance(servers, dict) or "autoskillit" not in servers):
+            return {}
         raise ValueError("explorer binding requires a canonical autoskillit MCP server")
 
     command = server.get("command")

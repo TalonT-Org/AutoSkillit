@@ -2176,11 +2176,6 @@ class CodexBackend(BackendCmdBuilderBase):
             definitions,
             exact_definitions=agent_defs is not None,
         )
-        if any(
-            _direct_agent_mcp_tools(definition) and definition.name not in explorer_binding_envs
-            for definition in projected_definitions
-        ):
-            _canonical_explorer_mcp_transport(config_path)
         rendered_parent_config = _render_parent_sandbox_config(
             config_path.read_text(encoding="utf-8"),
             parent_sandbox_mode,

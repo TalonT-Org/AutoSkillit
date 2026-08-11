@@ -237,6 +237,43 @@ async def test_read_pages_have_byte_counts_citations_and_authenticated_continuat
 
 
 @pytest.mark.asyncio
+async def test_continuation_is_bound_to_session_and_artifact(retained_logs) -> None:
+    first = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="anomalies",
+            byte_limit=len(b'{"kind":"retry"}\n'),
+        )
+    )
+    continuation = first["next_continuation"]
+
+    artifact_substitution = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="audit",
+            continuation=continuation,
+        )
+    )
+    assert artifact_substitution["reason"] == "continuation_invalid"
+
+    row = json.loads(retained_logs["index"].read_text())
+    row["session_id"] = "session-two"
+    with retained_logs["index"].open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row) + "\n")
+    session_substitution = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-two",
+            artifact="anomalies",
+            continuation=continuation,
+        )
+    )
+    assert session_substitution["reason"] == "continuation_invalid"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["issued", "expires", "offset", "line"])
 async def test_continuation_rejects_boolean_numeric_fields(retained_logs, field) -> None:
     first = json.loads(

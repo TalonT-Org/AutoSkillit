@@ -15,6 +15,7 @@ observe its removal).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -59,3 +60,33 @@ def test_finalized_wire_payload_excludes_projection(
             )
             validated += 1
     assert validated > 0
+
+
+@pytest.mark.parametrize("recipe_path", BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+def test_persisted_artifact_retains_projection(
+    recipe_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The persisted canonical artifact (payload.json) MUST retain the projection.
+
+    Complementary to ``test_finalized_wire_payload_excludes_projection`` above:
+    the projection is excluded from the delivered wire body but must still be
+    written to the content-addressed artifact on disk for audit.
+    """
+    compile_bounded_page_plan(
+        recipe_path,
+        "open_kitchen",
+        "claude-code",
+        temp_dir=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+    payload_paths = list((tmp_path / "recipe-delivery").rglob("payload.json"))
+    assert payload_paths, f"no persisted recipe artifact found for {recipe_path.stem}"
+    found_projection = any(
+        "finalized_recipe_projection" in json.loads(path.read_text(encoding="utf-8"))
+        for path in payload_paths
+    )
+    assert found_projection, (
+        f"finalized_recipe_projection missing from persisted artifact for {recipe_path.stem}"
+    )

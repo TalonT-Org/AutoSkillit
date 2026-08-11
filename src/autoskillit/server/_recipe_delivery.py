@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import functools
 import hashlib
 import json
 import os
@@ -33,7 +34,6 @@ from autoskillit.core import (
     RECIPE_DELIVERY_SURFACE_REGISTRY,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RECIPE_FLOW_SCHEMA_VERSION,
-    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     BoundedDeliveryRoundTripBudgetExceededError,
     FinalizedRecipeProjection,
@@ -47,7 +47,6 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeExemptionFitnessError,
     RecipeFlowGeneration,
-    SerializedChars,
     Utf8ByteLimit,
     atomic_write,
     build_recipe_execution_credential,
@@ -825,11 +824,6 @@ def _recipe_exemption_admitted_bytes(ceiling_bytes: int) -> int:
     return ceiling_bytes * 9 // 10
 
 
-def _exemption_admitted_chars(ceiling_chars: SerializedChars) -> SerializedChars:
-    """Return the exemption ceiling in chars after reserving the packaging margin."""
-    return SerializedChars(ceiling_chars.value * 9 // 10)
-
-
 def _conservative_token_upper_bound(rendered: str) -> int:
     """Bound tokenizer output via the conservative 1:1 admission policy.
 
@@ -870,15 +864,21 @@ def _attested_render(
     )
 
 
+@functools.lru_cache(maxsize=1)
 def _resolve_host_client_attestation() -> HostClientAttestation | None:
     """Read the launcher-injected host client attestation from the environment.
 
-    Every AutoSkillit command builder injects ``AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS``
-    and ``AUTOSKILLIT_ATTESTED_META_SUPPORT`` via ``SHARED_BASELINE_ENV`` — the
-    launcher's attestation of what the connected host client supports. Absent
-    or malformed values conservatively resolve to None, which routes recipe
+    Every Claude-launched AutoSkillit command builder injects
+    ``AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS`` and ``AUTOSKILLIT_ATTESTED_META_SUPPORT``
+    (see ``claude.py``'s ``_CLAUDE_HOST_ATTESTATION_ENV``) — the launcher's
+    attestation of what the connected host client supports. Absent or
+    malformed values conservatively resolve to None, which routes recipe
     delivery decisions to ``RecipeDeliveryMode.ENVELOPE`` rather than trusting
     an unattested per-call claim.
+
+    Cached: these env vars are fixed for the lifetime of the MCP server
+    process (set once by the launcher before the process starts), so this
+    is read once rather than on every recipe-delivery call.
     """
     raw_gate_tokens = os.environ.get(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS)
     raw_meta_support = os.environ.get(AUTOSKILLIT_ATTESTED_META_SUPPORT)
@@ -1145,43 +1145,6 @@ def finalize_recipe_delivery(
             else:
                 receipt_handle = reservation.handle
                 decision = replace(decision, receipt_status="pending")
-
-    # Issue #4399 exemption override: when an exempt surface's ordinary-rendered
-    # payload fits within the registered exemption ceiling, upgrade ENVELOPE back
-    # to ORDINARY_INLINE so the full recipe body survives. Placed after ALL
-    # ENVELOPE-producing branches (initial resolve, response-budget downgrade,
-    # receipt-store-missing downgrade, reservation-failure downgrade) so the
-    # override catches every path. Without this, exempt surfaces like
-    # open_kitchen on Claude Code (protected_recipe_delivery_capable=False) get
-    # ENVELOPE for any payload exceeding the 46.5K ordinary_limit, producing a
-    # degenerate formatter output with no recipe body.
-    #
-    # Scoped to non-protected backends (those without a recipe_delivery_budget,
-    # i.e. Claude Code). Codex has its own recipe_delivery_budget and bounded
-    # envelope semantics — applying the override to Codex would regress
-    # `test_codex_without_supported_host_evidence_uses_bounded_envelope`.
-    if (
-        decision.mode is RecipeDeliveryMode.ENVELOPE
-        and surface_definition.response_exemption_tool is not None
-        and capabilities.recipe_delivery_budget is None
-    ):
-        _exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(
-            surface_definition.response_exemption_tool
-        )
-        if (
-            _exemption is not None
-            and len(ordinary_rendered.encode("utf-8"))
-            <= _recipe_exemption_admitted_bytes(_exemption.max_utf8_bytes)
-            and client_serialized_char_len(ordinary_rendered).value
-            <= _exemption_admitted_chars(SerializedChars(_exemption.max_chars)).value
-        ):
-            decision = replace(
-                decision,
-                mode=RecipeDeliveryMode.ORDINARY_INLINE,
-                selected_result_token_limit=_exemption.max_utf8_bytes // 4,
-                reason="exemption_overrides_envelope",
-                receipt_status="not_required",
-            )
 
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
     if decision.mode is RecipeDeliveryMode.ORDINARY_INLINE:

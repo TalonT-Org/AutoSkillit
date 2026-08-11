@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import regex as re
@@ -17,8 +18,11 @@ from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
+    AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
+    AUTOSKILLIT_ATTESTED_META_SUPPORT,
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR,
     CLAUDE_MCP_CONNECT_TIMEOUT_MS,
     CLAUDE_MCP_CONNECTION_NONBLOCKING,
@@ -99,6 +103,23 @@ from autoskillit.execution.session import parse_session_result
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
+
+# Claude-only host client attestation, layered onto every Claude-launched
+# session env (interactive, resume, skill, food-truck). Carries the launcher's
+# attestation of what the connected Claude Code host client supports to the
+# MCP server — read once at server startup (see server._recipe_delivery) and
+# used as the conservative-default source for recipe-delivery decisions.
+#
+# Deliberately NOT part of SHARED_BASELINE_ENV: Codex has its own
+# receipt-based protected recipe-delivery pipeline and must never be told it
+# has annotation support, which would make it eligible to bypass that
+# pipeline via ordinary inline delivery.
+_CLAUDE_HOST_ATTESTATION_ENV: Mapping[str, str] = MappingProxyType(
+    {
+        AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS: str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
+        AUTOSKILLIT_ATTESTED_META_SUPPORT: "1",
+    }
+)
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
     "Order up! Today's special:",
@@ -621,7 +642,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
             builder.variadic_pair(ClaudeFlags.TOOLS, t)
-        merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | dict(_CLAUDE_HOST_ATTESTATION_ENV)
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
@@ -678,7 +699,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         _apply_output_format(cmd, output_format)
         if plugin_binding is not None:
             cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
-        merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | dict(_CLAUDE_HOST_ATTESTATION_ENV)
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
@@ -784,6 +805,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             scenario_step_name=scenario_step_name,
         )
+        extras.update(_CLAUDE_HOST_ATTESTATION_ENV)
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
@@ -886,6 +908,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             scenario_step_name=scenario_step_name,
         )
+        extras.update(_CLAUDE_HOST_ATTESTATION_ENV)
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:

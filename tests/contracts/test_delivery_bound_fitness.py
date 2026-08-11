@@ -26,6 +26,7 @@ from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     FinalizedRecipeProjection,
+    HostClientAttestation,
     resolve_general_output_token_limit,
     resolve_recipe_envelope_byte_limit,
 )
@@ -178,6 +179,19 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         tool_ctx=tool_ctx,
         finalized_projection=projection,
     )
+    caps = _backend_capabilities()[backend_name]
+    # Annotation-aware inline is Claude-only (recipe_delivery_budget is None):
+    # attest a host client with annotation support so recipes that fit the
+    # exemption ceiling are exercised through that branch, matching a real
+    # attested Claude launch. Backends with their own protected delivery
+    # pipeline (recipe_delivery_budget is not None, e.g. Codex) must never
+    # honor this attestation — see resolve_recipe_delivery_decision's
+    # `budget is None` guard — so this reflects real launch behavior for both.
+    host_client_attestation = (
+        HostClientAttestation(attested_client_gate_tokens=50_000, annotation_support=True)
+        if caps.recipe_delivery_budget is None
+        else None
+    )
     finalized = finalize_recipe_delivery(
         payload,
         surface="open_kitchen",
@@ -188,10 +202,10 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         canonical_artifact_payload=prepared.canonical_artifact_payload,
         execution_snapshot=prepared.execution_snapshot,
         normalized_compile_key=prepared.normalized_compile_key,
+        host_client_attestation=host_client_attestation,
     )
 
-    caps = _backend_capabilities()[backend_name]
-    if finalized.decision.reason == "exemption_overrides_envelope":
+    if finalized.decision.reason == "annotation_aware_inline":
         assert caps.recipe_delivery_budget is None
         bound_bytes = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
     else:

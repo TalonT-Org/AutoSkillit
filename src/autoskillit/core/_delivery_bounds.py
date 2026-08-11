@@ -7,6 +7,7 @@ import json
 import time
 
 from .types._type_backend import BackendCapabilities
+from .types._type_constants_registries import ANNOTATION_HARD_CAP_CHARS
 from .types._type_recipe_delivery import (
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
     HostClientAttestation,
@@ -147,12 +148,18 @@ def resolve_recipe_delivery_decision(
         )
     # Annotation-aware inline: when the host attests annotation support
     # and the payload fits within the exemption ceiling, deliver inline
-    # without the protected-delivery machinery.
+    # without the protected-delivery machinery. Scoped to backends without
+    # a registered recipe_delivery_budget (i.e. Claude Code) — a backend
+    # that owns a protected delivery pipeline (Codex) must always resolve
+    # through that pipeline's receipt-based checks below, never through an
+    # unreceipted annotation shortcut.
     if (
         host_client_attestation is not None
         and host_client_attestation.annotation_support
+        and budget is None
         and payload_serialized_chars is not None
         and exemption_ceiling_chars is not None
+        and exemption_ceiling_chars <= ANNOTATION_HARD_CAP_CHARS
         and payload_serialized_chars <= exemption_ceiling_chars
     ):
         return _decision(

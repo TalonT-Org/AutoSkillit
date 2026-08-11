@@ -138,16 +138,16 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
         )
         if backend_capabilities is not None:
             conservative_limit = resolve_general_output_token_limit(backend_capabilities)
+    _exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["get_recipe_section"]
     return RecipeSectionRequestState(
         admitted=admitted,
         recipe_section_bound_bytes=resolve_recipe_section_bound_bytes(
             response_max_bytes,
             conservative_limit,
             page_max_bytes,
-            exemption_ceiling_bytes=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
-                "get_recipe_section"
-            ].max_utf8_bytes,
+            exemption_ceiling_bytes=_exemption.max_utf8_bytes,
         ),
+        recipe_section_bound_chars=_exemption.max_chars,
     )
 
 
@@ -738,6 +738,11 @@ async def get_recipe_section(
                         part=part,
                     )
                 )
+                # Counter injection: the rendered page carries per-section local
+                # counts from _render_candidate; the global cross-section progress
+                # must replace them. This parse+mutate+dump operates on the outer
+                # envelope only — array-section content is already a parsed list
+                # from Stage D flattening, so no content reserialization occurs.
                 rendered_payload.update(
                     completed_parts=completed_parts,
                     total_parts=total_parts,
@@ -751,15 +756,13 @@ async def get_recipe_section(
                 )
                 if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
                     return _recipe_section_failure("recipe_section_bound_too_small")
-                # Acknowledged limitation: this compares a SerializedChars count
-                # against a byte ceiling (recipe_section_bound_bytes is the only
-                # bound request_state carries). It is sound only because
-                # max_chars == max_utf8_bytes for every current
-                # RESPONSE_BACKSTOP_EXEMPTION_REGISTRY entry. Revisit once the
-                # bound resolver returns both dimensions separately.
+                # Final-form character validation: the post-mutation rendered
+                # string is the actual delivered form; check it against the
+                # independent serialized-character ceiling.
                 if (
-                    client_serialized_char_len(rendered).value
-                    > request_state.recipe_section_bound_bytes
+                    request_state.recipe_section_bound_chars is not None
+                    and client_serialized_char_len(rendered).value
+                    > request_state.recipe_section_bound_chars
                 ):
                     return _recipe_section_failure("recipe_section_bound_too_small")
             content_sha256 = rendered_payload.get("content_sha256")

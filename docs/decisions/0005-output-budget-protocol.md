@@ -187,11 +187,14 @@ page omits `next_part`.
 
 ### Bounded-delivery round-trip budget
 
-Every bounded recipe initialization must be representable in at most four MCP calls,
-including `open_kitchen`, both required section pulls, and completion. Page planning
-records each section's compiled byte and page counts and rejects a plan with more than
-one page per required section. Receivers must not assume that recovery can continue for
-an unbounded number of calls.
+Bounded recipe initialization plans compute page counts from the reconciled
+section bound at plan time. When an operator configures a stricter bound (such
+as `page_max_bytes=None`), sections that exceed a single page produce multiple
+pages rather than raising a hard error. Under the default `OutputBudgetConfig`,
+every bundled recipe completes its bounded delivery in at most four MCP calls —
+one `open_kitchen`, up to one `get_recipe_section` page per required section,
+and one `complete_recipe_initialization`. Non-terminating plans (where the bound
+is below the mandatory floor) still raise `BoundedDeliveryRoundTripBudgetExceededError`.
 
 The reserved inline-exemption margin is a packaging-time fitness invariant enforced by
 the bundled-recipe contract matrix. Runtime delivery mode selection does not repeat that

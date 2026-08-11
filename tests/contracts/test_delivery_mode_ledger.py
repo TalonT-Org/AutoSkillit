@@ -11,7 +11,9 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     FinalizedRecipeProjection,
+    HostClientAttestation,
     RecipeDeliveryMode,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
@@ -26,6 +28,42 @@ from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_pa
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
+# Pinned (recipe stem, backend) → delivery mode. Any change flipping a mode
+# fails CI naming the exact pair — update this table only when the flip is
+# intentional (e.g. a recipe grew/shrank past the delivery threshold).
+_EXPECTED_MODES: dict[tuple[str, str], RecipeDeliveryMode] = {
+    ("bem-wrapper", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("bem-wrapper", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("consolidate-health-reports", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("consolidate-health-reports", "codex"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("full-audit", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("full-audit", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("implement-findings", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("implement-findings", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("implementation-groups", "claude-code"): RecipeDeliveryMode.ENVELOPE,
+    ("implementation-groups", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("implementation", "claude-code"): RecipeDeliveryMode.ENVELOPE,
+    ("implementation", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("merge-prs", "claude-code"): RecipeDeliveryMode.ENVELOPE,
+    ("merge-prs", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("planner", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("planner", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("promote-to-main-wrapper", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("promote-to-main-wrapper", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("remediation", "claude-code"): RecipeDeliveryMode.ENVELOPE,
+    ("remediation", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("research-archive", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("research-archive", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("research-design", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("research-design", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("research-implement", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("research-implement", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("research-review", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("research-review", "codex"): RecipeDeliveryMode.ENVELOPE,
+    ("research", "claude-code"): RecipeDeliveryMode.ENVELOPE,
+    ("research", "codex"): RecipeDeliveryMode.ENVELOPE,
+}
 
 
 def _resolve_mode(
@@ -68,6 +106,16 @@ def _resolve_mode(
         tool_ctx=tool_ctx,
         finalized_projection=projection,
     )
+    # Claude sessions carry host attestation from the launcher; Codex does not.
+    backend = BACKEND_REGISTRY[backend_name]()
+    attestation = (
+        HostClientAttestation(
+            attested_client_gate_tokens=CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+            annotation_support=True,
+        )
+        if backend.capabilities.recipe_delivery_budget is None
+        else None
+    )
     finalized = finalize_recipe_delivery(
         payload,
         surface="open_kitchen",
@@ -78,6 +126,7 @@ def _resolve_mode(
         canonical_artifact_payload=prepared.canonical_artifact_payload,
         execution_snapshot=prepared.execution_snapshot,
         normalized_compile_key=prepared.normalized_compile_key,
+        host_client_attestation=attestation,
     )
     return finalized.decision.mode
 
@@ -92,11 +141,17 @@ def test_delivery_mode_is_pinned(
 ) -> None:
     """Any change flipping a delivery mode must update this ledger."""
     mode = _resolve_mode(recipe_path, backend_name, tmp_path, monkeypatch)
-    # This test records the mode — a flip fails CI naming the exact pair.
-    # The ledger is the test itself: whatever mode each pair resolves to
-    # is the pinned expectation. First run establishes the baseline.
     assert mode in (
         RecipeDeliveryMode.ORDINARY_INLINE,
         RecipeDeliveryMode.ENVELOPE,
         RecipeDeliveryMode.ATTESTED_INLINE,
     ), f"{recipe_path.stem}/{backend_name}: unexpected mode {mode}"
+    expected = _EXPECTED_MODES.get((recipe_path.stem, backend_name))
+    assert expected is not None, (
+        f"{recipe_path.stem}/{backend_name}: no pinned expectation in _EXPECTED_MODES — "
+        "add one when introducing a new bundled recipe or backend"
+    )
+    assert mode == expected, (
+        f"{recipe_path.stem}/{backend_name}: delivery mode changed from "
+        f"{expected} to {mode} — update _EXPECTED_MODES if this flip is intentional"
+    )

@@ -25,6 +25,7 @@ from autoskillit.core import (
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     FinalizedRecipeProjection,
+    HostClientAttestation,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
     RecipeDeliveryAttestation,
@@ -1136,15 +1137,22 @@ def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:
     assert finalized.decision.contract_digest == selected_budget.contract_digest
 
 
-def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx) -> None:
-    """Issue #4399: when an exempt surface's ordinary-rendered payload exceeds the
-    backend's ordinary token limit but fits within the registered exemption ceiling,
-    finalize_recipe_delivery() must upgrade ENVELOPE back to ORDINARY_INLINE so the
-    full recipe body survives.
+_ATTESTED_HOST_CLIENT = HostClientAttestation(
+    attested_client_gate_tokens=50_000,
+    annotation_support=True,
+)
 
-    Claude Code backend: protected_recipe_delivery_capable=False → decision resolver
-    returns ENVELOPE based on ordinary_limit alone. The exemption override added in
-    Issue #4399 must catch this case and re-route to ORDINARY_INLINE.
+
+def test_annotation_aware_inline_for_exempt_surface_within_ceiling(tool_ctx) -> None:
+    """When an attested Claude host client claims annotation support and an exempt
+    surface's ordinary-rendered payload exceeds the backend's ordinary token limit
+    but fits within the registered exemption ceiling, finalize_recipe_delivery()
+    must resolve to ORDINARY_INLINE so the full recipe body survives (superseding
+    the removed Issue #4399 ad-hoc override — this is now handled by the
+    annotation-aware branch in resolve_recipe_delivery_decision).
+
+    Claude Code backend: recipe_delivery_budget=None → decision resolver is
+    eligible for the annotation-aware branch when attestation is present.
     """
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-exemption"
@@ -1163,18 +1171,44 @@ def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
-    assert finalized.decision.reason == "exemption_overrides_envelope"
+    assert finalized.decision.reason == "annotation_aware_inline"
     # Recipe content must be present in the rendered string (not stripped by ENVELOPE).
     assert oversized_content in finalized.rendered
 
 
+def test_annotation_aware_inline_falls_through_without_attestation(tool_ctx) -> None:
+    """Without a host client attestation, the same payload that would qualify for
+    the annotation-aware branch must remain ENVELOPE — never trust an unattested
+    per-call claim."""
+    tool_ctx.backend = ClaudeCodeBackend()
+    tool_ctx.kitchen_id = "claude-code-exemption-unattested"
+
+    ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
+    ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, ordinary_limit + 5_000)
+
+    finalized = _finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+        host_client_attestation=None,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert finalized.decision.reason != "annotation_aware_inline"
+
+
 def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx) -> None:
-    """Issue #4399 boundary: payloads exceeding the 195KB exemption ceiling must
-    remain ENVELOPE — the override only applies when the ordinary-rendered payload
-    fits within the registered exemption.
+    """Boundary: payloads exceeding the 195KB exemption ceiling must remain
+    ENVELOPE even with attestation present — the annotation-aware branch only
+    applies when the ordinary-rendered payload fits within the registered
+    exemption.
     """
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-over-ceiling"
@@ -1190,28 +1224,29 @@ def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx)
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
-    assert finalized.decision.reason != "exemption_overrides_envelope"
+    assert finalized.decision.reason != "annotation_aware_inline"
 
 
 def test_exemption_override_requires_char_ceiling_too(tool_ctx) -> None:
-    """Issue #4557 Stage C: the override must ALSO respect the client-measured
-    serialized-char ceiling, not just the byte ceiling. The server budgets in
-    compiled UTF-8 bytes, but the client gates on JSON-serialized chars — a
-    payload already embedded as an escaped JSON string field doubles again in
-    char count (but not in byte count) when the client's outer transport
-    re-serializes it. Backslash-dense content can therefore stay comfortably
-    under the byte margin while its client-serialized char length blows past
-    the char margin — the override must not fire for such a payload.
+    """Issue #4557 Stage C: the annotation-aware branch must ALSO respect the
+    client-measured serialized-char ceiling, not just the byte ceiling. The
+    server budgets in compiled UTF-8 bytes, but the client gates on
+    JSON-serialized chars — a payload already embedded as an escaped JSON
+    string field doubles again in char count (but not in byte count) when the
+    client's outer transport re-serializes it. Backslash-dense content can
+    therefore stay comfortably under the byte margin while its
+    client-serialized char length blows past the char ceiling — the branch
+    must not fire for such a payload.
     """
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-char-ceiling"
 
     exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
     byte_margin = exemption.max_utf8_bytes * 9 // 10
-    char_margin = exemption.max_chars * 9 // 10
     # n backslashes cost 2n chars once embedded as an ordinary JSON string
     # field (each backslash escapes to `\\`), but 4n chars once the client
     # re-serializes that already-escaped payload as an outer JSON string.
@@ -1219,7 +1254,7 @@ def test_exemption_override_requires_char_ceiling_too(tool_ctx) -> None:
     embedded_length = len(json.dumps(oversized_content))
     client_length = len(json.dumps(json.dumps(oversized_content)))
     assert embedded_length < byte_margin
-    assert client_length > char_margin
+    assert client_length > exemption.max_chars
 
     finalized = _finalize_recipe_delivery(
         _payload(oversized_content),
@@ -1227,15 +1262,17 @@ def test_exemption_override_requires_char_ceiling_too(tool_ctx) -> None:
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
-    assert finalized.decision.reason != "exemption_overrides_envelope"
+    assert finalized.decision.reason != "annotation_aware_inline"
 
 
 def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> None:
-    """Issue #4399 boundary: get_recipe has no response_exemption_tool registration,
-    so the override must not apply — ENVELOPE remains the result.
+    """Boundary: get_recipe has no response_exemption_tool registration, so the
+    annotation-aware branch must not apply — ENVELOPE remains the result even
+    with attestation present.
     """
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-get-recipe"
@@ -1249,10 +1286,38 @@ def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> No
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
-    assert finalized.decision.reason != "exemption_overrides_envelope"
+    assert finalized.decision.reason != "annotation_aware_inline"
+
+
+def test_annotation_aware_inline_not_available_to_protected_backend(tool_ctx) -> None:
+    """A backend with its own recipe_delivery_budget (Codex) must never resolve
+    via the annotation-aware branch, even when handed a host client attestation
+    claiming annotation support — that attestation vector is Claude-only and
+    Codex must resolve exclusively through its receipt-based protected
+    delivery pipeline.
+    """
+    tool_ctx.backend = CodexBackend()
+    tool_ctx.kitchen_id = "codex-annotation-aware-rejected"
+
+    ordinary_limit = CodexBackend().capabilities.unnegotiated_tool_result_token_limit
+    ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, ordinary_limit + 5_000)
+
+    finalized = _finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
+    )
+
+    assert finalized.decision.reason != "annotation_aware_inline"
+    assert finalized.decision.mode is not RecipeDeliveryMode.ORDINARY_INLINE
 
 
 def _request() -> RecipeDeliveryRequest:

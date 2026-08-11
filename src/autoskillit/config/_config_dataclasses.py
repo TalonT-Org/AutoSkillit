@@ -409,6 +409,11 @@ class OutputBudgetConfig:
             raise ValueError(
                 f"page_max_bytes must not exceed {RECIPE_RESPONSE_MAX_UTF8_BYTES} bytes"
             )
+        if self.page_max_bytes is not None and self.response_max_bytes > self.page_max_bytes:
+            raise ValueError(
+                f"response_max_bytes ({self.response_max_bytes}) must not exceed "
+                f"page_max_bytes ({self.page_max_bytes})"
+            )
 
 
 @dataclass

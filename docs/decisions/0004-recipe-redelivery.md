@@ -72,6 +72,11 @@ page carrying `next_part`. They must not guess or repair a malformed continuatio
 
 ### Terminal pages and embedded completion receipts
 
+When the server has a verified host attestation with annotation support and the
+payload fits within the annotation ceiling, the recipe is delivered inline in a
+single `open_kitchen` call without pagination. Terminal-page invariants apply
+only to the ENVELOPE fallback path.
+
 The last required `get_recipe_section` page may carry the deterministic completion
 receipt and recipe-execution credential. The page credit and transition to READY occur
 only after the universal response boundary preserves the exact page bytes. When the

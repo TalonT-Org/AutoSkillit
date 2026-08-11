@@ -53,3 +53,5 @@ def test_inline_payload_has_no_excluded_fields(
         pytest.skip("resolves ENVELOPE — no inline fields to check")
     present_excluded = _EXCLUDED_INLINE_FIELDS & set(envelope)
     assert not present_excluded, f"Excluded fields in inline payload: {sorted(present_excluded)}"
+    present_consumed = _CONSUMED_INLINE_FIELDS & set(envelope)
+    assert present_consumed, f"No consumed fields found in inline payload for {recipe_path.stem}"

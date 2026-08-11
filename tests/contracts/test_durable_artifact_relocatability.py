@@ -124,7 +124,11 @@ class TestNonMachineLocalWritersAreRelocatable:
             },
         )
 
-        _assert_relocatable(audit_path.read_text(encoding="utf-8"))
+        original = audit_path.read_bytes()
+        _assert_relocatable(original.decode())
+        with pytest.raises(FileExistsError, match="already exists"):
+            _write_reconciliation_audit(audit_path, {"replacement": True})
+        assert audit_path.read_bytes() == original
 
     def test_startup_drift_check_output_is_relocatable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

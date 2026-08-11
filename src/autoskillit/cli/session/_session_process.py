@@ -98,14 +98,17 @@ def run_cook_attempt(
                 master_fd = None
                 returncode = process.wait()
         except BaseException as exc:
-            logger.error("cook_attempt_failed", exc_info=True)
+            logger.error("cook_attempt_failed", error_type=type(exc).__name__)
             failures.append(exc)
         finally:
             if slave_fd is not None:
                 try:
                     os.close(slave_fd)
                 except BaseException as exc:
-                    logger.error("cook_slave_fd_close_failed", exc_info=True)
+                    logger.error(
+                        "cook_slave_fd_close_failed",
+                        error_type=type(exc).__name__,
+                    )
                     failures.append(exc)
                 slave_fd = None
             if master_fd is not None:
@@ -115,7 +118,10 @@ def run_cook_attempt(
                     else:
                         observer.close_master(master_fd)
                 except BaseException as exc:
-                    logger.error("cook_master_fd_close_failed", exc_info=True)
+                    logger.error(
+                        "cook_master_fd_close_failed",
+                        error_type=type(exc).__name__,
+                    )
                     failures.append(exc)
                 master_fd = None
 
@@ -125,13 +131,23 @@ def run_cook_attempt(
                     returncode = _terminate_reap_and_verify(process, pgid)
                     cleanup_proved = True
                 except BaseException as exc:
-                    logger.error("cook_process_cleanup_failed", exc_info=True)
+                    logger.error(
+                        "cook_process_cleanup_failed",
+                        error_type=type(exc).__name__,
+                        pid=pid,
+                        pgid=pgid,
+                    )
                     failures.append(exc)
                 if cleanup_proved:
                     try:
                         on_reaped(pid, pgid)
                     except BaseException as exc:
-                        logger.error("cook_reap_callback_failed", exc_info=True)
+                        logger.error(
+                            "cook_reap_callback_failed",
+                            error_type=type(exc).__name__,
+                            pid=pid,
+                            pgid=pgid,
+                        )
                         failures.append(exc)
 
     if failures:

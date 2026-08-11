@@ -256,8 +256,9 @@ copy. Failure blocks the hard-link design for that version.
 TTY logging renders the standard plain traceback. JSON and non-TTY logging retain
 exception type, message, and stack locations but never serialize arbitrary frame
 locals. For Codex attempt cleanup, the lease emits one concise structured event with
-the view ID and exception type, then rethrows; the outer CLI process is the sole owner
-of the user-facing traceback.
+the view ID and exception type, then rethrows. Process-runner failure and cleanup
+events likewise retain structured identity context without attaching their own
+traceback. The outer CLI process is the sole owner of the user-facing traceback.
 
 ### Claude MCP addressability
 

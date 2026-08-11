@@ -106,6 +106,36 @@ async def test_index_returns_only_requested_metadata_and_exact_handles(retained_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "max_index_bytes"),
+    [
+        (b"not-json\n", 100),
+        (b"\xff\n", 100),
+        (b'{"session_id":"one"}', 100),
+        (b"{}\n", 2),
+    ],
+)
+async def test_invalid_session_indexes_are_blocked_at_handler_boundary(
+    retained_logs,
+    monkeypatch: pytest.MonkeyPatch,
+    payload: bytes,
+    max_index_bytes: int,
+) -> None:
+    retained_logs["index"].write_bytes(payload)
+    monkeypatch.setattr(session_logs, "_MAX_INDEX_BYTES", max_index_bytes)
+
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="index",
+            session_ids=["session-one"],
+        )
+    )
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "index_invalid"
+
+
+@pytest.mark.asyncio
 async def test_codex_transcript_resolves_through_backend_locator(
     retained_logs, monkeypatch
 ) -> None:

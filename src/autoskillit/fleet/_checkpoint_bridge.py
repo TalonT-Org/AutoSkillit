@@ -40,7 +40,7 @@ def retain_dispatch_tracker_authority(
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,
         dispatch_id,
-        expected=False,
+        expected=True,
     )
     identity = tool_ctx.kitchen_process_identity or sample_kitchen_process_identity(
         tool_ctx.kitchen_id or dispatch_id,
@@ -186,7 +186,7 @@ def load_dispatch_progress(
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,
         dispatch_id,
-        expected=False,
+        expected=True,
     )
     authority = read_tracker_authority(target, tracker_lease)
     tracker_checkpoint = checkpoint_from_tracker(

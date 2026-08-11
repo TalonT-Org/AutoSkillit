@@ -268,7 +268,7 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
         path: list[str] = []
         path_index: dict[str, int] = {}
         current = step_name
-        while current in recipe.steps and recipe.steps[current].on_skip is not None:
+        while current in recipe.steps and (target := recipe.steps[current].on_skip) is not None:
             if current in path_index:
                 cycle = path[path_index[current] :] + [current]
                 errors.append(f"on_skip cycle detected: {' -> '.join(cycle)}.")
@@ -277,7 +277,7 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
                 break
             path_index[current] = len(path)
             path.append(current)
-            current = recipe.steps[current].on_skip or ""
+            current = target
         checked_skip_steps.update(path)
 
     # Validate input and context references in with_args using iter_steps_with_context

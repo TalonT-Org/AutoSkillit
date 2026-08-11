@@ -104,13 +104,16 @@ def validate_staged_plugin_hooks(staging_root: Path) -> None:
                     raise ProjectedArtifactHooksInvalid(
                         f"staged hook command cannot be parsed: {cmd}"
                     )
-                if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
-                    dispatcher = Path(parts[-2])
-                    if not dispatcher.is_file():
-                        raise ProjectedArtifactHooksInvalid(
-                            f"staged hook dispatcher does not exist: "
-                            f"{dispatcher} (from command: {cmd})"
-                        )
+                if len(parts) < 3 or not parts[-2].endswith("_dispatch.py"):
+                    raise ProjectedArtifactHooksInvalid(
+                        f"staged hook command has invalid dispatcher shape: {cmd}"
+                    )
+                dispatcher = Path(parts[-2])
+                if not dispatcher.is_file():
+                    raise ProjectedArtifactHooksInvalid(
+                        f"staged hook dispatcher does not exist: "
+                        f"{dispatcher} (from command: {cmd})"
+                    )
 
 
 class PluginHookRepairStatus(StrEnum):

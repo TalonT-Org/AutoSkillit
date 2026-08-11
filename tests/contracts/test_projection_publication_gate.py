@@ -136,6 +136,37 @@ class TestValidateStagedPluginHooks:
         (hooks_dir / "hooks.json").write_text(json.dumps(hooks_data))
         validate_staged_plugin_hooks(tmp_path)  # should not raise
 
+    def test_token_form_with_noncanonical_dispatcher_shape_is_rejected(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            ProjectedArtifactHooksInvalid,
+            validate_staged_plugin_hooks,
+        )
+
+        hooks_dir = tmp_path / "hooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
+        hooks_data = {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Read",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": (f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py"'),
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        (hooks_dir / "hooks.json").write_text(json.dumps(hooks_data))
+
+        with pytest.raises(ProjectedArtifactHooksInvalid, match="dispatcher shape"):
+            validate_staged_plugin_hooks(tmp_path)
+
     def test_absolute_commands_are_rejected(self, tmp_path: Path) -> None:
         from autoskillit.workspace._projected_artifact._hook_repair import (
             ProjectedArtifactHooksInvalid,

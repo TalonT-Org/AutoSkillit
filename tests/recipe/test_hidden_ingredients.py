@@ -1059,6 +1059,31 @@ steps:
     assert any("step order" in error for error in errors)
 
 
+@pytest.mark.parametrize(
+    ("steps", "message"),
+    [
+        (
+            {"guarded": RecipeStep(tool="run_cmd", skip_when_false="false")},
+            "has no valid on_skip target",
+        ),
+        (
+            {
+                "first": RecipeStep(tool="run_cmd", skip_when_false="false", on_skip="second"),
+                "second": RecipeStep(tool="run_cmd", skip_when_false="false", on_skip="first"),
+            },
+            "on_skip cycle encountered",
+        ),
+    ],
+)
+def test_prune_rejects_invalid_skip_redirects(steps: dict[str, RecipeStep], message: str) -> None:
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+
+    recipe = Recipe(name="invalid-skip", description="invalid-skip", steps=steps)
+
+    with pytest.raises(ValueError, match=message):
+        _prune_skipped_steps(recipe)
+
+
 @given(
     chain_length=st.integers(min_value=1, max_value=4),
     route_style=st.sampled_from(("scalar", "conditions", "legacy")),

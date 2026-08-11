@@ -12,6 +12,8 @@ from autoskillit.server.tools import tools_session_logs as session_logs
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
+_MAX_BLOCKED_RESPONSE_BYTES = 500
+
 
 @pytest.mark.asyncio
 async def test_inspection_requires_an_open_kitchen(tool_ctx) -> None:
@@ -520,7 +522,7 @@ async def test_invalid_operation_argument_combinations_are_bounded(
     result = json.loads(await session_logs.inspect_session_logs(**kwargs))
     assert result["status"] == "blocked"
     assert result["reason"] == reason
-    assert len(json.dumps(result)) < 500
+    assert len(json.dumps(result)) < _MAX_BLOCKED_RESPONSE_BYTES
 
 
 @pytest.mark.asyncio

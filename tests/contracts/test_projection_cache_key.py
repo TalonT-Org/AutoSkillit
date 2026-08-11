@@ -259,7 +259,6 @@ class TestRenderedHooksDigestChangesTheKey:
             assert first_dir is not None
 
             # Monkeypatch render_hooks_json_text to return different bytes
-            original_render = None
             import autoskillit.hook_registry as _hr
             import autoskillit.workspace._projected_artifact.authority as _auth
 

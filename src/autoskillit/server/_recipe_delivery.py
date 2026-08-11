@@ -22,6 +22,7 @@ from autoskillit._recipe_delivery_framing import (
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
+    CONSERVATIVE_ADMISSION_POLICY,
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES,
@@ -42,6 +43,7 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeExemptionFitnessError,
     RecipeFlowGeneration,
+    Utf8ByteLimit,
     atomic_write,
     build_recipe_execution_credential,
     fast_dumps,
@@ -821,8 +823,6 @@ def _conservative_token_upper_bound(rendered: str) -> int:
     more tokens than the number of input bytes. The CONSERVATIVE_ADMISSION_POLICY
     (1 byte = 1 token) is the named core policy for this bound.
     """
-    from autoskillit.core import CONSERVATIVE_ADMISSION_POLICY, Utf8ByteLimit
-
     return CONSERVATIVE_ADMISSION_POLICY.to_tokens(
         Utf8ByteLimit(len(rendered.encode("utf-8")))
     ).value

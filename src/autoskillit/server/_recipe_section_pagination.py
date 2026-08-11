@@ -24,6 +24,7 @@ from autoskillit.core import (
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
+    resolve_recipe_section_response_bound,
 )
 from autoskillit.server._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server.recipe_section._contracts import (
@@ -244,8 +245,6 @@ def resolve_recipe_section_bound_bytes(
     exemption_ceiling_bytes: int | None = None,
 ) -> int:
     """Delegate to core resolver — thin compatibility wrapper."""
-    from autoskillit.core._delivery_bounds import resolve_recipe_section_response_bound
-
     return resolve_recipe_section_response_bound(
         response_max_bytes=response_max_bytes,
         conservative_general_result_limit=conservative_general_result_limit,

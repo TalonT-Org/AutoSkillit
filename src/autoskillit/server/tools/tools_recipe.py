@@ -107,6 +107,11 @@ class _RecipeSectionError(Exception):
         self.code = code
 
 
+# Canonical fallback when tool_ctx is not yet bound (cancellation-shield
+# state factory runs before the tool body). Matches the BackendCapabilities
+# dataclass default — the smallest registered backend bound (Codex code-mode).
+_DEFAULT_CONSERVATIVE_LIMIT: int = BackendCapabilities().unnegotiated_tool_result_token_limit
+
 _RECIPE_SECTION_REQUEST_STATE: ContextVar[RecipeSectionRequestState] = ContextVar(
     "recipe_section_request_state"
 )
@@ -116,7 +121,7 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
     tool_ctx = _get_ctx_or_none()
     admitted = tool_ctx is not None and tool_ctx.recipes is not None
     response_max_bytes = RECIPE_RESPONSE_DEFAULT_BYTES
-    conservative_limit = BackendCapabilities().unnegotiated_tool_result_token_limit
+    conservative_limit = _DEFAULT_CONSERVATIVE_LIMIT
     page_max_bytes: int | None = None
     if tool_ctx is not None:
         configured_response_max = tool_ctx.config.output_budget.response_max_bytes

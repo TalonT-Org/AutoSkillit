@@ -109,6 +109,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # module-load self-check block (#4351).
         "_type_intake_policy",
         "_type_constants_registries",  # measured response-exemption registry digest
+        "_type_dimensions",  # named conversion policies (BytesToTokensPolicy instances)
         "tool_registry",  # immutable canonical MCP tool definition registry
         # Frozen static ownership and identity-profile definitions are derived once.
         "_type_audit_admission",

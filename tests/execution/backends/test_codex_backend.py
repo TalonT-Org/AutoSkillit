@@ -1720,13 +1720,22 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "config.toml").is_file()
 
     def test_direct_mcp_agent_rejects_malformed_transport_before_mutation(self) -> None:
-        malformed_config = "[mcp_servers.autoskillit\n"
-        (self.session_dir / "config.toml").write_text(malformed_config)
+        invalid_transport = "[mcp_servers.autoskillit]\n"
+        (self.session_dir / "config.toml").write_text(invalid_transport)
+        definition = next(
+            definition
+            for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name == "session-log-reader"
+        )
 
-        with pytest.raises(ValueError, match="invalid Codex MCP configuration"):
-            CodexBackend().setup_session_dir(self.session_dir)
+        with pytest.raises(ValueError, match="requires exactly one canonical.*transport"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=(definition,),
+            )
 
-        assert (self.session_dir / "config.toml").read_text() == malformed_config
+        assert (self.session_dir / "config.toml").read_text() == invalid_transport
         assert not (self.session_dir / "agents").exists()
 
     def test_session_log_reader_projects_direct_mcp_only_policy(self) -> None:

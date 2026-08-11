@@ -1002,7 +1002,11 @@ def _generate_agent_tomls(
         exact=agent_defs is not None,
     )
     direct_mcp_transport = _resolve_role_mcp_transport(
-        session_dir, eligible, bindings, explorer_mcp_transport
+        session_dir,
+        eligible,
+        bindings,
+        explorer_mcp_transport,
+        strict=agent_defs is not None,
     )
     rendered = {
         definition.name: _render_agent_toml(

@@ -55,6 +55,8 @@ def _resolve_role_mcp_transport(
     definitions: tuple[AgentDef, ...],
     bindings: Mapping[str, Mapping[str, str]],
     transport: Mapping[str, object] | None,
+    *,
+    strict: bool,
 ) -> Mapping[str, object] | None:
     if transport is not None:
         return transport
@@ -67,7 +69,12 @@ def _resolve_role_mcp_transport(
     config_path = session_dir / "config.toml"
     if not config_path.is_file():
         return {}
-    return _canonical_explorer_mcp_transport(config_path)
+    try:
+        return _canonical_explorer_mcp_transport(config_path)
+    except ValueError:
+        if strict:
+            raise
+        return {}
 
 
 def _render_role_mcp_lines(

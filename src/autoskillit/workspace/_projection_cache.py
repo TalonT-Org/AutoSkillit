@@ -266,6 +266,10 @@ def iter_public_plugin_asset_files(source_root: Path, *, top_level: bool = True)
             yield entry
 
 
+#: Renderer-owned manifest excluded from the source-asset digest.
+_RENDERED_HOOKS_MANIFEST_RELPATH = "hooks/hooks.json"
+
+
 def public_plugin_asset_digest(source_root: Path) -> str:
     """Digest every byte a projection copies out of *source_root*.
 
@@ -279,10 +283,16 @@ def public_plugin_asset_digest(source_root: Path) -> str:
     A bare ``__version__`` would not do: under an editable install the version
     is static while the files change continuously, pinning a stale projection
     for an entire development cycle.
+
+    ``hooks/hooks.json`` is excluded because its projected bytes come from the
+    renderer (``render_hooks_json_text``), not from the source tree.  Its
+    coverage is provided by ``rendered_hooks_digest`` in the cache key.
     """
     digest = hashlib.sha256()
     for path in iter_public_plugin_asset_files(source_root):
         rel = path.relative_to(source_root).as_posix()
+        if rel == _RENDERED_HOOKS_MANIFEST_RELPATH:
+            continue
         digest.update(rel.encode())
         digest.update(b"\0")
         with path.open("rb") as handle:
@@ -310,6 +320,7 @@ class ProjectionCacheKey:
     adaptation_identity: str
     namespace_identity: str
     asset_digest: str
+    rendered_hooks_digest: str
 
     def digest(self) -> str:
         payload = "\0".join(
@@ -322,6 +333,7 @@ class ProjectionCacheKey:
                 self.adaptation_identity,
                 self.namespace_identity,
                 self.asset_digest,
+                self.rendered_hooks_digest,
             )
         )
         return hashlib.sha256(payload.encode()).hexdigest()[:24]

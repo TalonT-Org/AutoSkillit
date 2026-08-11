@@ -45,7 +45,11 @@ from autoskillit.core import (
 from autoskillit.core import (
     session_type as _resolve_session_type,
 )
-from autoskillit.execution import BACKEND_REGISTRY, RecordingSubprocessRunner
+from autoskillit.execution import (
+    BACKEND_REGISTRY,
+    RecordingSubprocessRunner,
+    find_broken_codex_hook_commands,
+)
 from autoskillit.fleet import (
     discover_campaign_state_files,
     reap_stale_dispatches_async,
@@ -53,11 +57,9 @@ from autoskillit.fleet import (
 )
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
-    HOOK_REGISTRY_HASH,
     find_broken_hook_scripts,
-    generate_hooks_json,
     iter_all_scope_paths,
-    load_hooks_json_hash,
+    render_hooks_json_text,
     validate_plugin_cache_hooks,
 )
 from autoskillit.pipeline import (
@@ -74,6 +76,7 @@ from autoskillit.workspace import (
     PluginHookRepairStatus,
     read_obligation,
     repair_broken_plugin_cache_hooks,
+    repair_broken_projection_hooks,
     verify_install_state,
 )
 
@@ -84,26 +87,28 @@ logger = get_logger(__name__)
 
 
 def run_startup_drift_check() -> None:
-    """Compare on-disk hooks.json hash vs HOOK_REGISTRY_HASH; regenerate if stale.
+    """Compare on-disk hooks.json bytes vs current render; regenerate if stale.
 
-    Called as a background task from the lifespan. Any failure is logged and
-    swallowed — drift must never prevent the server from starting.
+    Any byte difference triggers a rewrite. Render and file-I/O failures are
+    logged and contained because the check runs as a lifespan background task.
     """
+    hooks_json_path = _core_paths.pkg_root() / "hooks" / "hooks.json"
     try:
-        import json
-
-        hooks_json_path = _core_paths.pkg_root() / "hooks" / "hooks.json"
-        on_disk_hash = load_hooks_json_hash(hooks_json_path)
-        if on_disk_hash != HOOK_REGISTRY_HASH:
+        expected = render_hooks_json_text()
+    except Exception:
+        logger.exception("startup_drift_check_render_failed")
+        return
+    try:
+        try:
+            on_disk = hooks_json_path.read_text(encoding="utf-8")
+        except OSError:
+            on_disk = None
+        if on_disk != expected:
             logger.info(
                 "startup_drift_detected",
-                on_disk=on_disk_hash,
-                expected=HOOK_REGISTRY_HASH,
+                reason="content_mismatch",
             )
-            atomic_write(
-                hooks_json_path,
-                json.dumps(generate_hooks_json(), indent=2) + "\n",
-            )
+            atomic_write(hooks_json_path, expected)
             logger.info("hooks_json_self_healed", path=str(hooks_json_path))
         else:
             logger.info("startup_drift_check_ok")
@@ -184,6 +189,45 @@ def run_startup_hook_health_check() -> list[str]:
                     )
         except Exception:
             logger.exception("startup_hook_repair_failed")
+
+    # Projection repair — independent failure domain.  Must run even when the
+    # plugin cache is healthy and no obligation is pending (projection-only
+    # staleness).  NOT inside the cache_broken/pending_obligation gate above.
+    try:
+        for outcome in repair_broken_projection_hooks():
+            if outcome.status is PluginHookRepairStatus.REPAIRED:
+                logger.info(
+                    "projection_hooks_repaired_at_startup",
+                    incarnation=str(outcome.incarnation_dir),
+                )
+            elif outcome.status is PluginHookRepairStatus.CONTENDED:
+                logger.warning(
+                    "projection_hooks_repair_contended_at_startup",
+                    incarnation=str(outcome.incarnation_dir),
+                    reason=outcome.detail,
+                )
+            else:
+                logger.error(
+                    "projection_hooks_repair_failed_at_startup",
+                    incarnation=str(outcome.incarnation_dir),
+                    reason=outcome.detail,
+                )
+    except Exception:
+        logger.exception("startup_projection_hook_repair_failed")
+
+    # Codex config hook detection — detection-only (repair happens at sync time).
+    try:
+        codex_broken = find_broken_codex_hook_commands()
+        if codex_broken:
+            broken.extend(codex_broken)
+            logger.warning(
+                "stale_codex_hook_commands_detected",
+                broken=codex_broken,
+                remediation="Run `autoskillit install` or re-sync Codex hooks",
+            )
+    except Exception:
+        logger.exception("startup_codex_hook_detection_failed")
+
     return broken
 
 

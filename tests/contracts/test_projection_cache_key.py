@@ -44,6 +44,7 @@ def _key(**overrides) -> ProjectionCacheKey:
         "adaptation_identity": "a:adapted",
         "namespace_identity": "a:bundled",
         "asset_digest": "0" * 64,
+        "rendered_hooks_digest": "f" * 64,
     }
     return ProjectionCacheKey(**{**base, **overrides})
 
@@ -62,6 +63,7 @@ class TestEveryFieldChangesTheKey:
             ("adaptation_identity", "a:changed-adaptation"),
             ("namespace_identity", "a:project_local"),
             ("asset_digest", "1" * 64),
+            ("rendered_hooks_digest", "e" * 64),
         ],
     )
     def test_field_participates_in_the_digest(self, field: str, value: object) -> None:
@@ -86,6 +88,7 @@ class TestEveryFieldChangesTheKey:
             "adaptation_identity",
             "namespace_identity",
             "asset_digest",
+            "rendered_hooks_digest",
         }
         assert declared == covered, (
             "ProjectionCacheKey fields changed. Add a parametrized case above for each "
@@ -223,6 +226,75 @@ class TestAssetChangesForceReprojection:
         finally:
             first.close()
         assert first.closed
+
+
+class TestRenderedHooksDigestChangesTheKey:
+    """T-A4: The cache key must change when rendered hook content changes."""
+
+    def test_renderer_change_invalidates_the_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Monkeypatch the renderer to return altered commands;
+        the cache key must differ.
+        """
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        backend = ClaudeCodeBackend()
+        catalog = session_catalog()
+
+        first = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="main",
+            catalog=catalog,
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        try:
+            first_dir = first.plugin_dir
+            assert first_dir is not None
+
+            # Monkeypatch render_hooks_json_text to return different bytes
+            import autoskillit.hook_registry as _hr
+            import autoskillit.workspace._projected_artifact.authority as _auth
+
+            original_render = _hr.render_hooks_json_text
+
+            def altered_render(*args, **kwargs):
+                text = original_render(*args, **kwargs)
+                return text.replace("_dispatch.py", "_dispatch_v2.py")
+
+            monkeypatch.setattr(_hr, "render_hooks_json_text", altered_render)
+            monkeypatch.setattr(_auth, "render_hooks_json_text", altered_render)
+
+            second = project_default_plugin_authority(
+                cwd=tmp_path,
+                base_branch="main",
+                catalog=catalog,
+            ).acquire_launch_binding(
+                backend=backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+            try:
+                assert second.plugin_dir is not None
+                assert second.plugin_dir != first_dir, (
+                    "renderer output changed but the cache key did not — a "
+                    "renderer change would silently reuse a stale projection"
+                )
+            finally:
+                second.close()
+        finally:
+            first.close()
+
+    def test_key_is_stable_when_rendered_hooks_are_unchanged(self) -> None:
+        """Without a render change, the key must be deterministic."""
+        k1 = _key()
+        k2 = _key()
+        assert k1.digest() == k2.digest()
 
 
 class TestOrphanedProjectionRetirementIsLeaseGated:

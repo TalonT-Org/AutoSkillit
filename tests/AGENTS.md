@@ -259,6 +259,16 @@ registered entity must update its retirement registry in the SAME commit:
   repos with no way to see a tightened contract coming; the registry forces every new
   validation to declare a `DETERMINISTIC` migration or `ADVISORY` hint before it can
   ship. `tests/contracts/test_skill_contract_remediations.py` fails otherwise.
+- **Durable-artifact writers** (`src/autoskillit/`): any function that writes an
+  artifact whose lifetime exceeds the writing process must be registered in
+  `DURABLE_ARTIFACT_WRITERS` in `core/types/_type_constants.py` with its
+  relocatability contract (`machine_local=False` → output must contain no
+  environment-pinned segments; `machine_local=True` → must declare a `detection`
+  callable for startup staleness detection).
+  `tests/arch/test_durable_artifact_writers_guard.py` AST-scans `src/` for
+  `atomic_write`/`write_versioned_json` calls and fails on unregistered sites.
+  `tests/contracts/test_durable_artifact_relocatability.py` verifies each
+  registered writer's output against its contract.
 
 ## run_skill Parameter-Role Ledgers (#4402)
 

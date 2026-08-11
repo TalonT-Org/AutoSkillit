@@ -34,12 +34,15 @@ from autoskillit.workspace._projected_artifact import (
     ProjectedPluginArtifactAuthority,
     ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
+    assert_generator_process_fresh,
     iter_public_plugin_asset_files,
     project_default_plugin_authority,
     project_direct_install_authority,
     prune_stale_projections,
     public_plugin_asset_digest,
     repair_broken_plugin_cache_hooks,
+    repair_broken_projection_hooks,
+    validate_staged_plugin_hooks,
 )
 from autoskillit.workspace._projected_artifact._generation_publication import (
     publish_generation,
@@ -118,6 +121,7 @@ from autoskillit.workspace.skill_projection import (
     prepare_skill_projection,
     project_agent_skill_document,
     validate_sanitized_plugin_artifact,
+    write_generated_hooks_json,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -195,6 +199,7 @@ __all__ = [
     "ProjectedPluginRetirementOwner",
     "PluginHookRepairOutcome",
     "PluginHookRepairStatus",
+    "assert_generator_process_fresh",
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
     "iter_public_plugin_asset_files",
@@ -247,9 +252,12 @@ __all__ = [
     "publish_generation",
     "read_skill_frontmatter",
     "repair_broken_plugin_cache_hooks",
+    "repair_broken_projection_hooks",
+    "validate_staged_plugin_hooks",
     "validate_skill_tier_roles",
     "validate_skill_capability_authenticity",
     "validate_skill_capability_declarations",
     "validate_skill_frontmatter",
+    "write_generated_hooks_json",
     "write_installed_plugin_artifact_manifest_locked",
 ]

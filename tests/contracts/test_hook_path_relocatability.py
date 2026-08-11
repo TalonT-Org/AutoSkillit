@@ -13,14 +13,12 @@ baked into every published hook command caused a total session lockout when
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from autoskillit.core import pkg_root
 from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN, generate_hooks_json
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -35,13 +33,9 @@ def test_generate_hooks_json_commands_are_relocatable() -> None:
     """Every command produced by generate_hooks_json() uses the plugin-root
     token and contains no process-local path segment.
     """
-    forbidden_segments = (
-        "site-packages",
-        "/lib/python",
-        "uv/tools",
-        sys.prefix,
-        str(pkg_root()),
-    )
+    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+
+    forbidden_segments = environment_pinned_path_segments()
     data = generate_hooks_json()
     expected_prefix = f'python3 -B "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" '
     for event_type, entries in data["hooks"].items():
@@ -115,12 +109,107 @@ def test_self_healed_bundled_hooks_json_is_relocatable(
     run_startup_drift_check()
 
     regenerated = (hooks_dir / "hooks.json").read_text()
-    forbidden_segments = ("site-packages", "/lib/python", "uv/tools", sys.prefix)
-    for segment in forbidden_segments:
+    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+
+    for segment in environment_pinned_path_segments():
         assert segment not in regenerated, (
             f"self-healed hooks.json embeds a process-local path segment {segment!r}"
         )
     assert PLUGIN_ROOT_TOKEN in regenerated
+
+
+def test_content_complete_drift_healing_catches_hash_matching_staleness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-A2: Drift healing detects stale commands even when the registry hash matches.
+
+    The incident precondition: _autoskillit_registry_hash equals the live
+    HOOK_REGISTRY_HASH but the command strings are absolute-path pinned.
+    The previous hash-only gate was blind to this shape.
+    """
+    import autoskillit.core.paths as _paths
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH, render_hooks_json_text
+    from autoskillit.server._lifespan import run_startup_drift_check
+
+    fake_pkg_root = tmp_path / "pkg"
+    hooks_dir = fake_pkg_root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    # Plant: correct hash, stale absolute commands
+    stale_json = {
+        "_autoskillit_registry_hash": HOOK_REGISTRY_HASH,
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "Read",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                "python3 /deleted/uv/tools/autoskillit/"
+                                "lib/python3.11/site-packages/autoskillit/"
+                                "hooks/_dispatch.py guards/tool_guard"
+                            ),
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+    (hooks_dir / "hooks.json").write_text(json.dumps(stale_json, indent=2) + "\n")
+
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
+
+    run_startup_drift_check()
+
+    regenerated = (hooks_dir / "hooks.json").read_text()
+    expected = render_hooks_json_text()
+    assert regenerated == expected, (
+        "content-complete drift check failed to heal a stale file whose "
+        "registry hash matched but whose commands were absolute"
+    )
+
+
+def test_startup_drift_check_leaves_hooks_json_untouched_on_render_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A-I3: a render_hooks_json_text() failure must not touch the on-disk
+    hooks.json — render and file-I/O are independently guarded (see
+    run_startup_drift_check's own docstring) so a renderer regression cannot
+    silently corrupt or clobber the published artifact.
+    """
+    import structlog
+
+    import autoskillit.core.paths as _paths
+    import autoskillit.server._lifespan as _lifespan_mod
+    from autoskillit.server._lifespan import run_startup_drift_check
+    from tests._helpers import _flush_structlog_proxy_caches
+
+    fake_pkg_root = tmp_path / "pkg"
+    hooks_dir = fake_pkg_root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    original_content = json.dumps({"_autoskillit_registry_hash": "deadbeef", "hooks": {}})
+    (hooks_dir / "hooks.json").write_text(original_content)
+
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
+
+    def _raise_render_failure() -> str:
+        raise RuntimeError("renderer regression")
+
+    monkeypatch.setattr(_lifespan_mod, "render_hooks_json_text", _raise_render_failure)
+
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            run_startup_drift_check()
+    finally:
+        _flush_structlog_proxy_caches()
+
+    assert (hooks_dir / "hooks.json").read_text() == original_content, (
+        "render failure must leave the on-disk hooks.json untouched"
+    )
+    assert any(entry.get("event") == "startup_drift_check_render_failed" for entry in logs), (
+        "render failure must be logged so the regression is observable"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -314,14 +403,9 @@ def test_catalog_projection_context_accepts_durable_scripts_root(tmp_path: Path)
     )
 
 
-def test_catalog_projection_context_defaults_to_pkg_root_when_unspecified(
-    tmp_path: Path,
-) -> None:
-    """Without an explicit durable_scripts_root, pkg_root() (the dev-source
-    checkout) remains the fallback — correct for callers with no plugin
-    artifact binding, and keeps every pre-existing caller working unchanged.
-    """
-    from autoskillit.core import SkillExecutionRole, pkg_root
+def test_catalog_projection_context_requires_durable_scripts_root(tmp_path: Path) -> None:
+    """T-C3: durable_scripts_root is a required keyword — no implicit default."""
+    from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
 
     provider = SkillsDirectoryProvider(
@@ -329,13 +413,23 @@ def test_catalog_projection_context_defaults_to_pkg_root_when_unspecified(
         default_base_branch="develop",
     )
     catalog = EffectiveSkillCatalog(skills=(), execution_role=SkillExecutionRole.SESSION)
+    with pytest.raises(TypeError):
+        provider.catalog_projection_context(catalog, tmp_path)
 
-    context = provider.catalog_projection_context(catalog, tmp_path)
 
-    assert context.substitutions is not None
-    assert context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == str(
-        pkg_root() / "recipes" / "scripts"
+def test_projection_context_requires_durable_scripts_root(tmp_path: Path) -> None:
+    """T-C3: projection_context wrapper cannot re-introduce the removed default."""
+    from autoskillit.workspace import DefaultSkillResolver, SkillsDirectoryProvider
+
+    provider = SkillsDirectoryProvider(
+        temp_dir_relpath=".autoskillit/temp",
+        default_base_branch="develop",
     )
+    skills = DefaultSkillResolver().list_all()
+    if not skills:
+        pytest.skip("no bundled skills available")
+    with pytest.raises(TypeError):
+        provider.projection_context(skills[0], tmp_path)
 
 
 def test_cook_session_passes_behavioral_durable_root_to_projection(

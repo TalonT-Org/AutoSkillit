@@ -116,12 +116,13 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/workspace/clone_registry.py", 89),
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
-    # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
-    ("src/autoskillit/server/_lifespan.py", 103),
-    # _hook_repair.py — same hooks.json self-heal, triggered by the in-process repair
-    # primitive instead of startup drift detection (co-owned with Claude plugin system;
-    # same rationale and format as the _lifespan.py site above)
-    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 178),
+    # _hook_repair.py — hooks.json self-heal for plugin cache and projection scopes,
+    # triggered by the in-process repair primitive instead of startup drift detection
+    # (co-owned with Claude plugin system). Cache repair at line 257; projection repair
+    # at lines 352 (hooks rewrite) and 361 (manifest digest update).
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 257),
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 352),
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 361),
     # tools_kitchen.py — hook config, quota guard, and git_ops_policy
     ("src/autoskillit/server/tools/tools_kitchen.py", 548),
     ("src/autoskillit/server/tools/tools_kitchen.py", 567),

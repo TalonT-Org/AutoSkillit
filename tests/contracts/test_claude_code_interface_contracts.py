@@ -22,7 +22,7 @@ def _materialize_session_catalog(
     session_id: str,
     project_root: Path,
 ):
-    from autoskillit.core import SkillExecutionRole
+    from autoskillit.core import SkillExecutionRole, pkg_root
     from autoskillit.workspace import DefaultSkillResolver
     from tests.contracts._projection_helpers import non_exploration_catalog
 
@@ -32,7 +32,9 @@ def _materialize_session_catalog(
             SkillExecutionRole.SESSION,
         )
     )
-    context = manager._provider.catalog_projection_context(catalog, project_root)
+    context = manager._provider.catalog_projection_context(
+        catalog, project_root, durable_scripts_root=pkg_root()
+    )
     return manager.init_session(session_id, catalog, context)
 
 

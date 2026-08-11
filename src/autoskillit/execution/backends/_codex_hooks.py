@@ -38,8 +38,48 @@ from autoskillit.hook_registry import (
 logger = get_logger(__name__)
 
 
+def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str]:
+    """Detect broken autoskillit hook commands in ``~/.codex/config.toml``.
+
+    Returns a list of broken command strings (empty if all healthy or no
+    autoskillit hooks are present).  Does not modify the config.
+    """
+    if config_path is None:
+        config_path = Path.home() / ".codex" / "config.toml"
+    if not config_path.is_file():
+        return []
+    result = _read_codex_config(config_path)
+    broken: list[str] = []
+    hooks = result.data.get("hooks", [])
+    if not isinstance(hooks, list):
+        return []
+    for entry in hooks:
+        if not isinstance(entry, dict):
+            continue
+        cmd = entry.get("command", "")
+        if not isinstance(cmd, str) or not cmd:
+            continue
+        if "/autoskillit/" not in cmd and "_dispatch.py" not in cmd:
+            continue
+        import shlex
+
+        try:
+            parts = shlex.split(cmd)
+        except ValueError:
+            broken.append(cmd)
+            continue
+        if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
+            if not Path(parts[-2]).is_file():
+                broken.append(cmd)
+        elif len(parts) >= 2:
+            script = parts[-1]
+            if not Path(script).is_file():
+                broken.append(cmd)
+    return broken
+
+
 def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
-    """Select a durable absolute dispatcher root for Codex configuration.
+    """Select an absolute dispatcher root for Codex configuration.
 
     When ``plugin_dir`` is supplied (a session's validated generation path),
     the hooks tree inside that directory is used directly.  When ``None``
@@ -48,8 +88,7 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
     performed through the same generation-store authority as launch binding.
 
     If neither the generation store nor the legacy installed cache supplies a
-    dispatcher, the failure is logged before falling back to ``HOOKS_DIR`` in
-    the development checkout.
+    dispatcher, the dev-checkout ``HOOKS_DIR`` is used as the terminal fallback.
     """
     if plugin_dir is not None:
         candidate = plugin_dir / "hooks"

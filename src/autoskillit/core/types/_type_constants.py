@@ -25,6 +25,8 @@ __all__ = [
     "RETIRED_INTAKE_RULE_IDS",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
     "RetiredArtifactShape",
+    "DurableArtifactWriterDef",
+    "DURABLE_ARTIFACT_WRITERS",
     "SkillContractRemediationDef",
     "SKILL_CONTRACT_REMEDIATIONS",
     "SKILL_COMMAND_PREFIX",
@@ -412,6 +414,139 @@ if _UNREGISTERED_INVALIDITY_KINDS:
         "Every SkillInvalidityKind must have a SKILL_CONTRACT_REMEDIATIONS entry. "
         f"Missing: {_UNREGISTERED_INVALIDITY_KINDS}"
     )
+
+# ---------------------------------------------------------------------------
+# Durable-artifact writer registry — forces every function that writes an
+# artifact with a lifetime exceeding the writing process under a relocatability
+# or machine-local-detection obligation.  See ``tests/contracts/
+# test_durable_artifact_relocatability.py`` for the per-writer contracts.
+# Import-time validation rejects duplicate writers and machine-local entries
+# that omit their required staleness detector.
+# ---------------------------------------------------------------------------
+
+
+class DurableArtifactWriterDef(NamedTuple):
+    """Static definition of a function that writes durable artifacts.
+
+    ``writer``: ``module:qualname`` of the writing function — specifically the
+        function whose body contains the actual persistence call (``atomic_write``,
+        ``write_versioned_json``, …), not an outer public wrapper that merely
+        delegates to it.  This is what lets the AST-based completeness guard
+        (``tests/arch/test_durable_artifact_writers_guard.py``) match registry
+        entries against real call sites without call-graph resolution.
+    ``artifact``: human-readable description of the destination, including the
+        public entry point a reader would recognize (e.g. "via sync_hooks_to_settings()").
+    ``machine_local``: True when the artifact legitimately bakes absolute host
+        paths (e.g. settings.json / config.toml — neither Claude Code's settings
+        file nor Codex's config.toml expands a relocatable ``${CLAUDE_PLUGIN_ROOT}``-
+        style token, unlike hooks.json).  Machine-local writers must declare a
+        ``detection`` callable that detects staleness at startup.
+    ``detection``: ``module:qualname`` of the staleness-detection callable;
+        required when ``machine_local=True``, enforced by the import-time assertion.
+
+    See ``tests/contracts/test_durable_artifact_relocatability.py`` (T-C2) for
+    per-writer resolvability/relocatability contracts.
+    """
+
+    writer: str
+    artifact: str
+    machine_local: bool
+    detection: str | None
+
+
+def _validate_durable_artifact_writer_defs(
+    writers: tuple[DurableArtifactWriterDef, ...],
+) -> None:
+    missing_detection = [
+        writer.writer for writer in writers if writer.machine_local and not writer.detection
+    ]
+    if missing_detection:
+        raise AssertionError(
+            "Every machine_local DurableArtifactWriterDef must have a detection callable. "
+            f"Missing: {missing_detection}"
+        )
+    writer_names = [writer.writer for writer in writers]
+    if len(writer_names) != len(set(writer_names)):
+        raise AssertionError("DURABLE_ARTIFACT_WRITERS contains duplicate writer strings")
+
+
+DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
+    DurableArtifactWriterDef(
+        writer="autoskillit.workspace._projected_artifact.materialization:write_generated_hooks_json",
+        artifact=(
+            "hooks/hooks.json in plugin/projection roots — relocatable "
+            "${CLAUDE_PLUGIN_ROOT}-form commands; written during projection staging, "
+            "marketplace publication, and self-heal republish"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.server._lifespan:run_startup_drift_check",
+        artifact=(
+            "dev-checkout pkg_root()/hooks/hooks.json — self-healed at MCP server "
+            "startup when on-disk bytes drift from render_hooks_json_text()"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer=(
+            "autoskillit.workspace._projected_artifact._hook_repair:"
+            "repair_broken_plugin_cache_hooks"
+        ),
+        artifact="repaired hooks/hooks.json in an installed plugin-cache incarnation",
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer=(
+            "autoskillit.workspace._projected_artifact._hook_repair:repair_broken_projection_hooks"
+        ),
+        artifact="repaired hooks/hooks.json + manifest digest in a plugin-projections incarnation",
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.workspace._projected_artifact._hook_repair:_rollback_repair",
+        artifact=(
+            "rollback restoration of original hooks.json/manifest.json bytes after a "
+            "failed hook-repair transaction"
+        ),
+        machine_local=True,
+        detection="autoskillit.hook_registry:find_broken_hook_scripts",
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.cli._hooks:_write_settings_data",
+        artifact=(
+            "~/.claude/settings.json hook entries (absolute host paths) — via "
+            "sync_hooks_to_settings() / _evict_stale_autoskillit_hooks()"
+        ),
+        machine_local=True,
+        detection="autoskillit.hook_registry:find_broken_hook_scripts",
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.execution.backends._codex_hooks:_upsert_hooks_text",
+        artifact=(
+            "~/.codex/config.toml [[hooks]] blocks (absolute host paths) — the "
+            "foreign-block-preserving text rewrite used by sync_hooks_to_codex_config()"
+        ),
+        machine_local=True,
+        detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.execution.backends._codex_config:_write_codex_config",
+        artifact=(
+            "~/.codex/config.toml — generic TOML writer; persists "
+            "sync_hooks_to_codex_config()'s merged hook entries (absolute host paths) "
+            "as well as MCP server registration"
+        ),
+        machine_local=True,
+        detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
+    ),
+)
+
+_validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(
     {

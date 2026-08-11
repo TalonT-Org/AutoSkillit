@@ -45,6 +45,7 @@ from autoskillit.core import (
     validate_agent_tool_canonical,
     write_versioned_json,
 )
+from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.workspace._projection_cache import is_projected_asset
 from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import (
@@ -565,6 +566,20 @@ def _copy_non_skill_plugin_assets(
             shutil.copy2(entry, target)
         else:
             raise SkillContractError(f"plugin asset must be a regular file or directory: {entry}")
+
+
+def write_generated_hooks_json(plugin_root: Path) -> None:
+    """Write a freshly rendered ``hooks/hooks.json`` into *plugin_root*.
+
+    Only writes when the hooks directory already exists (meaning hook scripts
+    were copied from the source root).  This is the single named operation
+    for "publish current hook manifest into a plugin root" — used by
+    projection staging, marketplace publication, and self-heal republish.
+    """
+    hooks_dir = plugin_root / "hooks"
+    if not hooks_dir.is_dir():
+        return
+    atomic_write(hooks_dir / "hooks.json", render_hooks_json_text())
 
 
 def _manifest_skill_entry(

@@ -504,10 +504,13 @@ class SkillsDirectoryProvider:
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
         Tier 1 skills (which contain no placeholder) are unaffected.
         """
+        # Explicit pkg_root() — get_skill_content has no plugin artifact binding
+        # (it serves the activate/init paths that read from the dev checkout).
         return self.project_skill_info(
             skill_info,
             cwd=cwd,
             gating=True if gated else None,
+            durable_scripts_root=pkg_root(),
         )
 
     def projection_context(
@@ -517,13 +520,13 @@ class SkillsDirectoryProvider:
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
-        durable_scripts_root: Path | None = None,
+        durable_scripts_root: Path,
     ) -> SkillProjectionContext:
         """Build the shared execution-local projection context.
 
-        ``durable_scripts_root`` defaults to ``pkg_root()`` (the dev-source
-        checkout) — correct for this wrapper's callers, none of which hold a
-        plugin artifact binding at call time (see ``catalog_projection_context``).
+        ``durable_scripts_root`` is required — every caller must supply the
+        root whose lifetime exceeds the session's (no implicit ``pkg_root()``
+        default, which would bake a venv-relative path into projected documents).
         """
         catalog = EffectiveSkillCatalog(
             skills=(SkillCatalogEntry.from_skill_info(skill_info),),
@@ -544,7 +547,7 @@ class SkillsDirectoryProvider:
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
-        durable_scripts_root: Path | None = None,
+        durable_scripts_root: Path,
         resolved_exploration_profile: RepositoryProfileId | None = None,
     ) -> SkillProjectionContext:
         """Build one projection context bound to a resolved path-free catalog.
@@ -552,14 +555,13 @@ class SkillsDirectoryProvider:
         ``durable_scripts_root`` is the root a projected document's
         ``{{AUTOSKILLIT_SCRIPTS}}`` placeholder resolves against — it must
         never have a shorter lifetime than the session consuming the
-        projected document. Defaults to ``pkg_root()`` (the dev-source
-        checkout, whose lifetime is not tied to the venv) when the caller has
-        no plugin artifact binding to supply instead; callers that hold a
-        retained plugin-cache incarnation (durable across a mid-session
-        `autoskillit update` via retire-don't-delete) must pass it explicitly
-        rather than relying on this default — see ``cli/session/_session_cook.py``.
+        projected document. Required — no implicit default.  Callers that hold
+        a retained plugin-cache incarnation (durable across a mid-session
+        ``autoskillit update`` via retire-don't-delete) must pass the binding's
+        ``identity.managed_path``; callers operating from the dev checkout pass
+        ``pkg_root()`` explicitly.
         """
-        scripts_root = pkg_root() if durable_scripts_root is None else durable_scripts_root
+        scripts_root = durable_scripts_root
         return SkillProjectionContext(
             cwd=cwd,
             catalog=catalog,
@@ -581,6 +583,7 @@ class SkillsDirectoryProvider:
         cwd: Path,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
+        durable_scripts_root: Path,
     ) -> str:
         """Project one already-resolved exact skill contract."""
         context = self.projection_context(
@@ -588,6 +591,7 @@ class SkillsDirectoryProvider:
             cwd,
             gating=gating,
             backend=backend,
+            durable_scripts_root=durable_scripts_root,
         )
         return project_agent_skill_document(context.skills[0], context).content
 

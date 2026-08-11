@@ -15,6 +15,7 @@ from autoskillit.core import (
     RepositoryProfileId,
     SkillExecutionRole,
     ValidatedAddDir,
+    pkg_root,
 )
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
@@ -79,6 +80,7 @@ def _catalog_context(
         catalog,
         project_root,
         backend=backend,
+        durable_scripts_root=pkg_root(),
         resolved_exploration_profile=resolved_exploration_profile,
     )
     return catalog, context

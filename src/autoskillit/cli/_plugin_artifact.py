@@ -180,6 +180,9 @@ class InstalledPluginArtifactAuthority:
         If validation of the current generation fails, attempts a single
         self-heal republish from source before propagating the error.
         """
+        from autoskillit.workspace import assert_generator_process_fresh
+
+        assert_generator_process_fresh()
         del backend
         if not load_mode.consumes_artifact:
             raise PluginArtifactValidationError(
@@ -214,7 +217,6 @@ class InstalledPluginArtifactAuthority:
             return None
         self._self_healed = True
         try:
-            import json
             import tempfile
 
             from autoskillit import __version__
@@ -224,10 +226,8 @@ class InstalledPluginArtifactAuthority:
                 SkillExecutionRole,
                 SkillSource,
                 _InstallLock,
-                atomic_write,
                 pkg_root,
             )
-            from autoskillit.hooks import generate_hooks_json
             from autoskillit.workspace import (
                 DefaultSkillResolver,
                 EffectiveSkillCatalog,
@@ -235,6 +235,7 @@ class InstalledPluginArtifactAuthority:
                 SkillProjectionContext,
                 materialize_sanitized_plugin_root,
                 publish_generation,
+                write_generated_hooks_json,
             )
 
             source_root = pkg_root()
@@ -256,12 +257,7 @@ class InstalledPluginArtifactAuthority:
                     # prefix reasoning as cli/_marketplace.py:install().
                     mcp_tool_prefix=MARKETPLACE_PREFIX,
                 )
-                hooks_dir = staging_root / "hooks"
-                hooks_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write(
-                    hooks_dir / "hooks.json",
-                    json.JSONEncoder(indent=2).encode(generate_hooks_json()) + "\n",
-                )
+                write_generated_hooks_json(staging_root)
                 with _InstallLock():
                     identity = publish_generation(
                         home=Path.home(),

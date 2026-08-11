@@ -33,13 +33,13 @@ from autoskillit.core import (
     is_git_worktree,
     pkg_root,
 )
-from autoskillit.hooks import generate_hooks_json
 from autoskillit.workspace import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
     SkillCatalogEntry,
     SkillProjectionContext,
     materialize_sanitized_plugin_root,
+    write_generated_hooks_json,
 )
 
 logger = get_logger(__name__)
@@ -134,10 +134,7 @@ def _ensure_marketplace(
         # a different question (host-level registry presence, not load mechanism).
         mcp_tool_prefix=MARKETPLACE_PREFIX,
     )
-    atomic_write(
-        public_plugin_root / "hooks" / "hooks.json",
-        json.JSONEncoder(indent=2).encode(generate_hooks_json()) + "\n",
-    )
+    write_generated_hooks_json(public_plugin_root)
     validate_public_plugin_projection(
         pkg_dir,
         public_plugin_root,

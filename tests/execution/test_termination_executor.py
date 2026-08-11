@@ -58,14 +58,14 @@ class TestDrainWindowPermitsNaturalExit:
             await proc.wait()
             proc_exited_event.set()
 
-        kill_calls: list[int] = []
+        kill_calls: list[tuple[int, int | None]] = []
 
         async def _mock_kill(
             pid: int,
             timeout: float = 2.0,
             process_group_id: int | None = None,
         ) -> None:
-            kill_calls.append(pid)
+            kill_calls.append((pid, process_group_id))
 
         with patch(
             "autoskillit.execution.process.async_kill_process_tree",
@@ -101,14 +101,14 @@ class TestDrainWindowEscalatesToKill:
         proc = await _spawn_script(_EXIT_AFTER_SLEEP, ["10.0"], tmp_path)
         proc_exited_event = anyio.Event()
 
-        kill_calls: list[int] = []
+        kill_calls: list[tuple[int, int | None]] = []
 
         async def _mock_kill(
             pid: int,
             timeout: float = 2.0,
             process_group_id: int | None = None,
         ) -> None:
-            kill_calls.append(pid)
+            kill_calls.append((pid, process_group_id))
             proc.kill()
             await proc.wait()
 
@@ -126,10 +126,11 @@ class TestDrainWindowEscalatesToKill:
                 process_exited_event=proc_exited_event,
                 grace_seconds=0.3,
                 proc_log=proc_log,
+                process_group_id=proc.pid,
             )
 
         assert kill_reason == KillReason.KILL_AFTER_COMPLETION
-        assert len(kill_calls) == 1, f"Expected exactly one kill call, got {kill_calls}"
+        assert kill_calls == [(proc.pid, proc.pid)]
 
 
 class TestImmediateKillSkipsDrain:
@@ -141,7 +142,7 @@ class TestImmediateKillSkipsDrain:
         proc = await _spawn_script(_EXIT_AFTER_SLEEP, ["10.0"], tmp_path)
         proc_exited_event = anyio.Event()
 
-        kill_calls: list[int] = []
+        kill_calls: list[tuple[int, int | None]] = []
         call_time: list[float] = []
 
         async def _mock_kill(
@@ -150,7 +151,7 @@ class TestImmediateKillSkipsDrain:
             process_group_id: int | None = None,
         ) -> None:
             call_time.append(time.monotonic())
-            kill_calls.append(pid)
+            kill_calls.append((pid, process_group_id))
             proc.kill()
             await proc.wait()
 
@@ -169,11 +170,12 @@ class TestImmediateKillSkipsDrain:
                 process_exited_event=proc_exited_event,
                 grace_seconds=3.0,  # large grace, should be ignored
                 proc_log=proc_log,
+                process_group_id=proc.pid,
             )
 
         elapsed = (call_time[0] - start) if call_time else 999.0
         assert kill_reason == KillReason.INFRA_KILL
-        assert len(kill_calls) == 1
+        assert kill_calls == [(proc.pid, proc.pid)]
         assert elapsed < 0.5, f"IMMEDIATE_KILL took {elapsed:.3f}s — should be near-instant"
 
 

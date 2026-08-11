@@ -214,6 +214,13 @@ def _resolve_skip_redirects(
     return redirects
 
 
+def _move_step_to_front(steps: dict[str, RecipeStep], step_name: str) -> dict[str, RecipeStep]:
+    return {
+        step_name: steps[step_name],
+        **{name: step for name, step in steps.items() if name != step_name},
+    }
+
+
 def _drop_sub_recipe_step(recipe: Recipe, step_name: str) -> Recipe:
     """Drop a false-gated placeholder and preserve its attachment point."""
     placeholder = recipe.steps[step_name]
@@ -236,10 +243,7 @@ def _drop_sub_recipe_step(recipe: Recipe, step_name: str) -> Recipe:
         if name != step_name
     }
     if is_entry:
-        new_steps = {
-            continuation: new_steps[continuation],
-            **{name: step for name, step in new_steps.items() if name != continuation},
-        }
+        new_steps = _move_step_to_front(new_steps, continuation)
     return dataclasses.replace(recipe, steps=new_steps)
 
 
@@ -485,10 +489,7 @@ def _prune_skipped_steps(
         entry = redirects[first]
         working = dataclasses.replace(
             working,
-            steps={
-                entry: working.steps[entry],
-                **{name: step for name, step in working.steps.items() if name != entry},
-            },
+            steps=_move_step_to_front(working.steps, entry),
         )
     return working, resolutions
 

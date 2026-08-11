@@ -156,11 +156,7 @@ def read_stable_contained_range(
         opening_stat = os.fstat(fd)
         _check_range_identity(resolved, pre_open_stat, opening_stat)
         read_length = min(length, max(0, opening_stat.st_size - offset))
-        if hasattr(os, "pread"):
-            data = os.pread(fd, read_length, offset)
-        else:
-            os.lseek(fd, offset, os.SEEK_SET)
-            data = os.read(fd, read_length)
+        data = os.pread(fd, read_length, offset)
         post_fd_stat = os.fstat(fd)
     finally:
         os.close(fd)

@@ -369,10 +369,7 @@ def _handle_init(
             {
                 "success": False,
                 "is_error": True,
-                "error": (
-                    f"record_pipeline_step: pipeline '{target.target_order_id}' "
-                    f"has already been initialized. {authority.error}"
-                ),
+                "error": f"record_pipeline_step: {authority.error}",
             }
         )
 

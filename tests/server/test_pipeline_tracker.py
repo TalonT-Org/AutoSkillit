@@ -237,6 +237,8 @@ class TestRecordPipelineStepInit:
         result = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
 
         assert result["success"] is False
+        assert "is invalid" in result["error"]
+        assert "already been initialized" not in result["error"]
         assert tracker_path.read_bytes() == b"{not-json"
         assert self.ctx.tracker_leases == {}
 

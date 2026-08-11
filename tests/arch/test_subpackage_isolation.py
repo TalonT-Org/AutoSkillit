@@ -1339,7 +1339,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "child cardinality rendering and protects the live-web bundled role (+12 net lines)",
     ),
     "execution/backends/claude.py": (
-        1172,
+        1200,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
@@ -1351,7 +1351,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the plugin_dir launch-binding validation parameter for cross-backend signature "
         "parity; #4507 renders one named child per runtime topic (+6 net lines); "
         "#4233 keeps Claude task lifecycle normalization and immutable skill-session "
-        "async hardening beside the backend parser and command builder that own them.",
+        "async hardening beside the backend parser and command builder that own them. "
+        "#4557 adds Claude-only host-attestation env injection at all 4 launch sites.",
     ),
     "execution/headless/_headless_result.py": (
         1033,

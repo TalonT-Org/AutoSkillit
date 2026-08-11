@@ -11,6 +11,7 @@ from autoskillit.core import (
     CompletenessReport,
     EvidencePage,
     ExplorationQuerySpec,
+    RepositorySnapshot,
     SessionType,
 )
 from autoskillit.pipeline.exploration_context import (
@@ -152,10 +153,15 @@ class TestSessionScopedAuthority:
             source_identity="interactive:test-session",
         )
         query = ExplorationQuerySpec(query="needle", max_results=1)
-        snapshot = exploration_snapshot_service.capture_snapshot(tmp_path)
-        context = ExplorationContext(
+        issuance_snapshot = exploration_snapshot_service.capture_snapshot(tmp_path)
+        changed_snapshot = RepositorySnapshot(
+            identity=issuance_snapshot.identity,
+            tree_digest="changed-tree",
+            collector_manifest_digest=issuance_snapshot.collector_manifest_digest,
+        )
+        changed_context = ExplorationContext(
             query=query,
-            snapshot=snapshot,
+            snapshot=changed_snapshot,
             evidence=(),
             completeness=CompletenessReport((), (), True),
         )
@@ -164,9 +170,23 @@ class TestSessionScopedAuthority:
             result_digest="result",
             completeness=CompletenessReport((), (), True),
         )
-        exploration_snapshot_service.collect.return_value = context
+        exploration_snapshot_service.collect.return_value = changed_context
         exploration_snapshot_service.page.return_value = page
 
+        with pytest.raises(ValueError, match="snapshot changed"):
+            store.submit_for_capability(
+                capability=capability,
+                query=query,
+                page_size=1,
+            )
+
+        matching_context = ExplorationContext(
+            query=query,
+            snapshot=issuance_snapshot,
+            evidence=(),
+            completeness=CompletenessReport((), (), True),
+        )
+        exploration_snapshot_service.collect.return_value = matching_context
         replacement, result = store.submit_for_capability(
             capability=capability,
             query=query,

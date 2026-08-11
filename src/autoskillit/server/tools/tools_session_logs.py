@@ -107,7 +107,7 @@ def _artifact_location(
     dir_name = row.get("dir_name")
     if not isinstance(session_id, str) or not isinstance(dir_name, str):
         raise _InspectionError("index_invalid")
-    if not _DIR_NAME_RE.fullmatch(dir_name) or Path(dir_name).name != dir_name:
+    if not _DIR_NAME_RE.fullmatch(dir_name):
         raise _InspectionError("index_invalid")
 
     if artifact != "transcript":

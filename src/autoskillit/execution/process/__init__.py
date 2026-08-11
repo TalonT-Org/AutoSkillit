@@ -79,6 +79,7 @@ from autoskillit.execution.process._process_race import (
     _watch_session_log,
     _watch_stdout_idle,
     fold_lifecycle_evidence,
+    fold_lifecycle_evidence_path,
     resolve_termination,
 )
 
@@ -124,6 +125,7 @@ __all__ = [
     "decide_termination_action",
     "execute_termination_action",
     "fold_lifecycle_evidence",
+    "fold_lifecycle_evidence_path",
     "kill_process_tree",
     "pty_wrap_command",
     "read_temp_output",

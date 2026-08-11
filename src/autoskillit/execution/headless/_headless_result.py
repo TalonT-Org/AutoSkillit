@@ -58,7 +58,10 @@ from autoskillit.execution.headless._headless_recovery import (
     _scan_jsonl_write_paths,
     _synthesize_from_write_artifacts,
 )
-from autoskillit.execution.process import fold_lifecycle_evidence
+from autoskillit.execution.process import (
+    fold_lifecycle_evidence,
+    fold_lifecycle_evidence_path,
+)
 from autoskillit.execution.session._exit_classification import (
     classify_infra_exit,
     has_rate_limit_signal,
@@ -319,22 +322,18 @@ def _build_skill_result(
     obligation_wakeup = result.schedule_wakeup_violation
     observation_complete = result.lifecycle_observation_complete
     if lifecycle_gate_enabled and not observation_complete:
-        source: str | None = result.stdout or None
-        if source is None and result.stdout_path is not None:
-            try:
-                source = result.stdout_path.read_text(errors="replace")
-            except OSError:
-                logger.warning(
-                    "lifecycle_stdout_read_failed",
-                    path=str(result.stdout_path),
-                    exc_info=True,
-                )
-                source = None
-        if source is not None:
-            defensive_pending, defensive_wakeup = fold_lifecycle_evidence(
-                source.splitlines(),
-                backend.stream_parser(completion_marker=completion_marker),
+        parser = backend.stream_parser(completion_marker=completion_marker)
+        defensive_evidence = (
+            fold_lifecycle_evidence(result.stdout.splitlines(), parser)
+            if result.stdout
+            else (
+                fold_lifecycle_evidence_path(result.stdout_path, parser)
+                if result.stdout_path is not None
+                else None
             )
+        )
+        if defensive_evidence is not None:
+            defensive_pending, defensive_wakeup = defensive_evidence
             observation_complete = True
             obligation_pending = tuple(sorted(set(obligation_pending) | set(defensive_pending)))
             obligation_wakeup = obligation_wakeup or defensive_wakeup

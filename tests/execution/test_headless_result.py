@@ -270,6 +270,38 @@ def test_defensive_fold_rejects_pending_task_from_available_output(
     assert "pending=defensive-task" in skill_result.result
 
 
+def test_defensive_fold_streams_artifact_backed_output(tmp_path: Path, monkeypatch) -> None:
+    lifecycle_line = json.dumps({"type": "task_started", "task_id": "streamed-task"})
+    stdout_path = tmp_path / "stdout.jsonl"
+    stdout_path.write_bytes(b"x" * 2_000_000 + b"\n" + lifecycle_line.encode() + b"\n")
+    real_read_text = Path.read_text
+
+    def guarded_read_text(path: Path, *args, **kwargs):
+        if path == stdout_path:
+            raise AssertionError("artifact-backed lifecycle fold must stream bytes")
+        return real_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stdout_path=stdout_path,
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+    assert "pending=streamed-task" in skill_result.result
+
+
 def test_defensive_fold_preserves_existing_pending_evidence() -> None:
     result = SubprocessResult(
         returncode=0,

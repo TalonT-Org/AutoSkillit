@@ -201,6 +201,12 @@ def fold_lifecycle_evidence_path(
                     parser,
                     accumulator.observe_event,
                 )
+            if trailing:
+                fold_event_lines(
+                    [trailing.decode("utf-8", errors="replace")],
+                    parser,
+                    accumulator.observe_event,
+                )
     except OSError:
         logger.warning("lifecycle_stdout_read_failed", path=str(path), exc_info=True)
         return None

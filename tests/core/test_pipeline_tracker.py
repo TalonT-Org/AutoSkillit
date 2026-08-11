@@ -154,6 +154,22 @@ def test_locked_initialization_and_mutation_preserve_invalid_existing_bytes(tmp_
         lease.close()
 
 
+def test_read_rejects_non_object_tracker_steps(tmp_path):
+    target = _target(tmp_path)
+    lease = retain_tracker_lease({}, _key(target, tmp_path))
+    tracker = _tracker()
+    tracker["steps"]["prepare"] = "pending"
+    target.path.parent.mkdir(parents=True, exist_ok=True)
+    target.path.write_text(json.dumps(tracker))
+    try:
+        result = read_tracker_authority(target, lease)
+    finally:
+        lease.close()
+
+    assert result.data is None
+    assert "tracker step 'prepare' must be a JSON object" in (result.error or "")
+
+
 def test_mutation_skips_atomic_replace_when_data_is_unchanged(monkeypatch, tmp_path):
     from autoskillit.core import pipeline_tracker as tracker_module
 

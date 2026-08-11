@@ -200,6 +200,9 @@ def _validate_tracker_data(raw: object) -> TrackerData:
     dependencies = raw.get("dependencies")
     if not isinstance(steps, dict):
         raise ValueError("tracker steps must be a JSON object")
+    for step_name, state in steps.items():
+        if not isinstance(state, dict):
+            raise ValueError(f"tracker step '{step_name}' must be a JSON object")
     if not isinstance(dependencies, dict):
         raise ValueError("tracker dependencies must be a JSON object")
     return dict(raw)

@@ -13,6 +13,7 @@ from autoskillit.server.tools import tools_session_logs as session_logs
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _MAX_BLOCKED_RESPONSE_BYTES = 500
+_INCOMPLETE_THREE_BYTE_UTF8 = b"\xe2\x82"
 
 
 @pytest.mark.asyncio
@@ -478,7 +479,9 @@ async def test_append_and_index_rewrite_expire_continuations(retained_logs) -> N
 
 @pytest.mark.asyncio
 async def test_incomplete_jsonl_suffix_is_disclosed_without_citation(retained_logs) -> None:
-    retained_logs["anomalies"].write_bytes(b'{"complete":true}\n{"split":"\xe2\x82')
+    retained_logs["anomalies"].write_bytes(
+        b'{"complete":true}\n{"split":"' + _INCOMPLETE_THREE_BYTE_UTF8
+    )
 
     result = json.loads(
         await session_logs.inspect_session_logs(

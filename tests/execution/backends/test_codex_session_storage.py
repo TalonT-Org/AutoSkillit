@@ -308,7 +308,7 @@ def test_explicit_reconciliation_lists_and_discards_only_selected_empty_unknown(
     store, view_path = _retained_empty_unknown_view(tmp_path)
     manifest_before = (view_path / "manifest.json").read_bytes()
 
-    assert store.list_attempt_reconciliations() == (
+    assert store.list_retained_attempt_views() == (
         {
             "view_id": view_path.name,
             "state": "finalizing",

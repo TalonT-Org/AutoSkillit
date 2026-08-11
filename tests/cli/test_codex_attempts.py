@@ -42,7 +42,7 @@ def test_codex_attempts_lists_without_recovery_and_renders_json(
         def __init__(self, *, log_dir: object) -> None:
             assert log_dir == "log-root"
 
-        def list_attempt_reconciliations(self) -> tuple[dict[str, object], ...]:
+        def list_retained_attempt_views(self) -> tuple[dict[str, object], ...]:
             return (
                 {
                     "view_id": "0123456789abcdef-1",

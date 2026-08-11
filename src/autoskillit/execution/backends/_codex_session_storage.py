@@ -1332,7 +1332,7 @@ class CodexSessionStore:
             raise RuntimeError(f"Reconciliation audit timestamp lacks timezone for {view_id}")
         return payload
 
-    def list_attempt_reconciliations(self) -> tuple[dict[str, Any], ...]:
+    def list_retained_attempt_views(self) -> tuple[dict[str, Any], ...]:
         """List retained Codex attempt views without recovery or mutation."""
         self._ensure_roots()
         rows: list[dict[str, Any]] = []

@@ -27,7 +27,7 @@ def run_codex_attempts(
         if discard_view is not None and reason is not None
         else None
     )
-    views = store.list_attempt_reconciliations()
+    views = store.list_retained_attempt_views()
     if output_json:
         sys.stdout.write(
             json.dumps(

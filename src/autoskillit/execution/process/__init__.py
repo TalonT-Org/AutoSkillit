@@ -34,6 +34,12 @@ from autoskillit.core import (
     normalize_inherited_fds,
     read_starttime_ticks,
 )
+from autoskillit.execution.process._codex_orphans import (
+    CodexOrphanReapResult,
+    OrphanedCodexProcess,
+    find_orphaned_codex_processes,
+    reap_orphaned_codex_processes,
+)
 from autoskillit.execution.process._process_io import (
     CaptureReadError,
     CaptureSetupError,
@@ -90,11 +96,14 @@ logger = get_logger(__name__)
 # internal sub-module split private — callers import from the facade, not from
 # internal sub-module paths.
 __all__ = [
+    "CodexOrphanReapResult",
     "DefaultSubprocessRunner",
+    "OrphanedCodexProcess",
     "_extract_stdout_session_id",
     "_resolve_session_id",
     "RaceAccumulator",
     "RaceSignals",
+    "find_orphaned_codex_processes",
     "_has_active_api_connection",
     "_has_active_child_processes",
     "_has_active_execution_marker",
@@ -118,6 +127,7 @@ __all__ = [
     "kill_process_tree",
     "pty_wrap_command",
     "read_temp_output",
+    "reap_orphaned_codex_processes",
     "resolve_termination",
     "run_managed_async",
     "run_managed_sync",

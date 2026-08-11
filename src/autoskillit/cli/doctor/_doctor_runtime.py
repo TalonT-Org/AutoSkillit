@@ -6,9 +6,10 @@ import json
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections import Counter
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -29,6 +30,7 @@ from autoskillit.execution import (
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     QUOTA_CACHE_SCHEMA_VERSION,
     CodexBackend,
+    find_orphaned_codex_processes,
     resolve_log_dir,
     session_index_lock_path,
 )
@@ -527,6 +529,41 @@ def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
         check_name,
         "Committed summary/index projection mismatch (" + ", ".join(details) + ")",
     )
+
+
+def _check_orphaned_codex_processes() -> list[DoctorResult]:
+    """Check for orphaned interactive codex TUI processes (fd 0 → deleted pty)."""
+    check_name = "orphaned_codex_processes"
+    if sys.platform != "linux":
+        return [DoctorResult(Severity.OK, check_name, "Skipped (Linux only)")]
+
+    try:
+        orphans = find_orphaned_codex_processes()
+    except Exception as exc:
+        logger.warning("Codex orphan scan failed", exc_info=True)
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                check_name,
+                f"scan failed: {type(exc).__name__}: {exc}",
+            )
+        ]
+
+    if not orphans:
+        return [DoctorResult(Severity.OK, check_name, "no orphaned codex processes")]
+
+    return [
+        DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"orphaned codex TUI pid={o.pid}"
+            f" started={datetime.fromtimestamp(o.started_at, tz=UTC).isoformat()}"
+            f" fd0={o.fd0_target}"
+            f" — spinning after pty loss;"
+            f" run: autoskillit codex-orphans --reap",
+        )
+        for o in orphans
+    ]
 
 
 def _check_codex_model_alias_staleness() -> DoctorResult:

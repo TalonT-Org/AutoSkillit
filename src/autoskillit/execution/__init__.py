@@ -113,10 +113,14 @@ from autoskillit.execution.pr_analysis import (
 from autoskillit.execution.process import (
     CaptureReadError,
     CaptureSetupError,
+    CodexOrphanReapResult,
     DefaultSubprocessRunner,
+    OrphanedCodexProcess,
     _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
+    find_orphaned_codex_processes,
     kill_process_tree,
+    reap_orphaned_codex_processes,
     run_managed_async,
     run_managed_sync,
     summarize_capture,
@@ -187,7 +191,11 @@ __all__ = [
     # process
     "CaptureReadError",
     "CaptureSetupError",
+    "CodexOrphanReapResult",
     "DefaultSubprocessRunner",
+    "OrphanedCodexProcess",
+    "find_orphaned_codex_processes",
+    "reap_orphaned_codex_processes",
     "run_managed_async",
     "run_managed_sync",
     "summarize_capture",

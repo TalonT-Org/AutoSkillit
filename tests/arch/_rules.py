@@ -100,6 +100,7 @@ _PRINT_EXEMPT = frozenset(
         "reset_resume_gate.py",
         "_fmt_recipe.py",
         "_capture_store.py",
+        "_codex_orphans.py",
     }
 )
 

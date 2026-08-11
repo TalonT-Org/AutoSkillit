@@ -343,6 +343,14 @@ def capture_store(*, reclaim: bool = False) -> None:
 
 
 @app.command
+def codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
+    """Report orphaned codex TUI processes (deleted pty), or terminate them with --reap."""
+    from autoskillit.cli._codex_orphans import run_codex_orphans
+
+    run_codex_orphans(reap=reap, output_json=output_json)
+
+
+@app.command
 def migrate(*, check: bool = False, fix: bool = False):
     """Report outdated recipes and stale project-local skills.
 

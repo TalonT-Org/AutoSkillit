@@ -71,6 +71,12 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
     }
 
 
+def _update_index(retained_logs: dict[str, Path], **updates: object) -> None:
+    row = json.loads(retained_logs["index"].read_text())
+    row.update(updates)
+    retained_logs["index"].write_text(json.dumps(row) + "\n")
+
+
 @pytest.mark.asyncio
 async def test_index_returns_only_requested_metadata_and_exact_handles(retained_logs) -> None:
     result = json.loads(
@@ -97,6 +103,93 @@ async def test_index_returns_only_requested_metadata_and_exact_handles(retained_
             },
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_codex_transcript_resolves_through_backend_locator(
+    retained_logs, monkeypatch
+) -> None:
+    _update_index(
+        retained_logs,
+        backend="codex",
+        claude_code_log=None,
+        codex_log=str(retained_logs["transcript"]),
+    )
+    locator = SimpleNamespace(locate_session=lambda _session_id: retained_logs["transcript"])
+    backend = SimpleNamespace(session_locator=lambda: locator)
+    ctx = SimpleNamespace(
+        config=SimpleNamespace(
+            linux_tracing=SimpleNamespace(log_dir=str(retained_logs["log_root"]))
+        ),
+        backend=backend,
+    )
+    monkeypatch.setattr(session_logs, "_get_ctx", lambda: ctx)
+
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="transcript",
+        )
+    )
+
+    assert result["status"] == "answered"
+    assert result["content"] == '{"event":"turn.failed"}\n'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("backend", ["claude-code", "codex"])
+async def test_transcript_locator_mismatch_is_rejected(
+    retained_logs, monkeypatch, backend
+) -> None:
+    wrong_path = retained_logs["transcript"].with_name("different.jsonl")
+    if backend == "claude-code":
+        monkeypatch.setattr(
+            session_logs,
+            "claude_code_log_path",
+            lambda _cwd, _session_id: wrong_path,
+        )
+    else:
+        _update_index(
+            retained_logs,
+            backend="codex",
+            claude_code_log=None,
+            codex_log=str(retained_logs["transcript"]),
+        )
+        locator = SimpleNamespace(locate_session=lambda _session_id: wrong_path)
+        ctx = SimpleNamespace(
+            config=SimpleNamespace(
+                linux_tracing=SimpleNamespace(log_dir=str(retained_logs["log_root"]))
+            ),
+            backend=SimpleNamespace(session_locator=lambda: locator),
+        )
+        monkeypatch.setattr(session_logs, "_get_ctx", lambda: ctx)
+
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="transcript",
+        )
+    )
+
+    assert result["reason"] == "transcript_identity_mismatch"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dir_name", ["../outside", "/outside"])
+async def test_invalid_index_directory_name_is_rejected(retained_logs, dir_name) -> None:
+    _update_index(retained_logs, dir_name=dir_name)
+
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="summary",
+        )
+    )
+
+    assert result["reason"] == "index_invalid"
 
 
 @pytest.mark.asyncio

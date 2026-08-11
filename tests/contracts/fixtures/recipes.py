@@ -64,22 +64,31 @@ def compile_bounded_page_plan(
     *,
     temp_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
+    output_budget: OutputBudgetConfig | SimpleNamespace | None = None,
 ) -> dict[str, Any]:
-    """Compile and return the real envelope manifest for one delivery pair."""
+    """Compile and return the real envelope manifest for one delivery pair.
+
+    ``output_budget`` defaults to the tight stress-test shape (8_192-byte
+    response ceiling) exercised by the existing fitness contracts. Pass an
+    explicit ``OutputBudgetConfig()`` to compile under production defaults.
+    """
     from autoskillit.server import _recipe_generation
 
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
     payload, projection = _payload_and_projection(recipe_path)
+    resolved_output_budget = (
+        output_budget
+        if output_budget is not None
+        else SimpleNamespace(
+            response_max_bytes=8_192,
+            page_max_bytes=OutputBudgetConfig().page_max_bytes,
+        )
+    )
     tool_ctx = cast(
         Any,
         SimpleNamespace(
             backend=BACKEND_REGISTRY[backend_name](),
-            config=SimpleNamespace(
-                output_budget=SimpleNamespace(
-                    response_max_bytes=8_192,
-                    page_max_bytes=OutputBudgetConfig().page_max_bytes,
-                )
-            ),
+            config=SimpleNamespace(output_budget=resolved_output_budget),
             kitchen_id=f"contract-{surface}-{backend_name}-{recipe_path.stem}",
             recipe_execution_lock=threading.RLock(),
             recipe_initialization_state=NoActiveRecipe(),

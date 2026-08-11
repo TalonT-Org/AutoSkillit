@@ -14,7 +14,9 @@ from anyio import ClosedResourceError as _ClosedResource
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     ASCII_YAML_POLICY,
+    CONSERVATIVE_RESULT_TOKEN_FLOOR,
     RESERVED_LOG_RECORD_KEYS,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     RecipeDeliveryMode,
     Utf8ByteLimit,
@@ -36,6 +38,7 @@ from autoskillit.server._recipe_initialization import (
     complete_initialization_response,
     complete_section_response,
 )
+from autoskillit.server._recipe_section_pagination import resolve_recipe_section_bound_bytes
 from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,
@@ -56,6 +59,13 @@ def _get_ctx_or_none() -> ToolContext | None:
     from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn  # circular-break
 
     return _ctx_none_fn()
+
+
+def _resolve_backend_capabilities(ctx: ToolContext | None) -> BackendCapabilities | None:
+    """Extract the resolved backend's capabilities from ``ctx``, if any."""
+    backend = getattr(ctx, "backend", None) if ctx is not None else None
+    caps = getattr(backend, "capabilities", None) if backend is not None else None
+    return caps if isinstance(caps, BackendCapabilities) else None
 
 
 async def _notify(
@@ -188,17 +198,30 @@ def track_response_size(
                 temp_dir / "responses" / tool_name if isinstance(temp_dir, Path) else None
             )
             selected_result_token_limit: int | None = None
-            if tool_name == "get_recipe_section" and budget.page_max_bytes is not None:
+            backend_capabilities = _resolve_backend_capabilities(ctx)
+            if tool_name == "get_recipe_section":
+                conservative_limit = (
+                    resolve_general_output_token_limit(backend_capabilities)
+                    if backend_capabilities is not None
+                    else CONSERVATIVE_RESULT_TOKEN_FLOOR
+                )
+                section_bound_bytes = resolve_recipe_section_bound_bytes(
+                    budget.response_max_bytes,
+                    conservative_limit,
+                    budget.page_max_bytes,
+                    exemption_ceiling_bytes=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
+                        "get_recipe_section"
+                    ].max_utf8_bytes,
+                )
                 selected_result_token_limit = ASCII_YAML_POLICY.to_tokens(
-                    Utf8ByteLimit(budget.page_max_bytes)
+                    Utf8ByteLimit(section_bound_bytes)
                 ).value
             elif finalized is not None:
                 selected_result_token_limit = finalized.decision.selected_result_token_limit
-            elif ctx is not None:
-                backend = getattr(ctx, "backend", None)
-                caps = getattr(backend, "capabilities", None) if backend is not None else None
-                if isinstance(caps, BackendCapabilities):
-                    selected_result_token_limit = resolve_general_output_token_limit(caps)
+            elif backend_capabilities is not None:
+                selected_result_token_limit = resolve_general_output_token_limit(
+                    backend_capabilities
+                )
             kitchen_response_success = False
             if tool_name == "open_kitchen" and ctx is not None:
                 attested_inline_response = (

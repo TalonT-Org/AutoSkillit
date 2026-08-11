@@ -20,6 +20,7 @@ from autoskillit.config import (
     resolve_ingredient_defaults,
 )
 from autoskillit.core import (
+    CONSERVATIVE_RESULT_TOKEN_FLOOR,
     RECIPE_RESPONSE_DEFAULT_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
@@ -107,15 +108,6 @@ class _RecipeSectionError(Exception):
         self.code = code
 
 
-# Canonical fallback when tool_ctx is not yet bound (cancellation-shield
-# state factory runs before the tool body). Mirrors BackendCapabilities
-# dataclass default for unnegotiated_tool_result_token_limit — the smallest
-# registered backend bound (Codex code-mode). Kept as a literal because the
-# construction-site arch guard requires explicit kwargs for every
-# BackendCapabilities() call. Drift guarded by
-# test_resolve_general_output_token_limit_per_backend.
-_DEFAULT_CONSERVATIVE_LIMIT: int = 10_000
-
 _RECIPE_SECTION_REQUEST_STATE: ContextVar[RecipeSectionRequestState] = ContextVar(
     "recipe_section_request_state"
 )
@@ -125,7 +117,7 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
     tool_ctx = _get_ctx_or_none()
     admitted = tool_ctx is not None and tool_ctx.recipes is not None
     response_max_bytes = RECIPE_RESPONSE_DEFAULT_BYTES
-    conservative_limit = _DEFAULT_CONSERVATIVE_LIMIT
+    conservative_limit = CONSERVATIVE_RESULT_TOKEN_FLOOR
     page_max_bytes: int | None = None
     if tool_ctx is not None:
         configured_response_max = tool_ctx.config.output_budget.response_max_bytes

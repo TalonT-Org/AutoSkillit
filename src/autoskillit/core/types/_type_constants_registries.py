@@ -47,6 +47,7 @@ __all__ = [
     "RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST",
     "RECIPE_RESPONSE_MAX_UTF8_BYTES",
     "RECIPE_RESPONSE_DEFAULT_BYTES",
+    "CONSERVATIVE_RESULT_TOKEN_FLOOR",
     "ExecutionInstallSiteDef",
     "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY",
     "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST",
@@ -226,6 +227,11 @@ class RecipeDeliverySurfaceDef(NamedTuple):
 
 RECIPE_RESPONSE_MAX_UTF8_BYTES = 195_000
 RECIPE_RESPONSE_DEFAULT_BYTES = 90_000
+
+# Conservative fallback for the general-output token limit when no backend
+# capability is resolvable. Matches BackendCapabilities.unnegotiated_tool_result_token_limit's
+# dataclass default — the smallest registered backend bound (Codex code-mode).
+CONSERVATIVE_RESULT_TOKEN_FLOOR = 10_000
 
 RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = MappingProxyType(
     {

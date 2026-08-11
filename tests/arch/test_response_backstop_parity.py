@@ -16,6 +16,38 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
+def _iter_server_module_trees() -> list[ast.Module]:
+    """Parse every server module (top-level ``server/`` and ``server/tools/``)."""
+    server_dir = SRC_ROOT / "server"
+    trees = []
+    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
+        trees.append(ast.parse(py_file.read_text(), filename=str(py_file)))
+    return trees
+
+
+def _is_backstop_meta_call(call: ast.expr) -> bool:
+    """True if ``call`` is a ``response_backstop_tool_meta(...)`` call, accepting both
+    bare name and attribute forms of the helper.
+    """
+    if not isinstance(call, ast.Call):
+        return False
+    func = call.func
+    if isinstance(func, ast.Name) and func.id == "response_backstop_tool_meta":
+        return True
+    return isinstance(func, ast.Attribute) and func.attr == "response_backstop_tool_meta"
+
+
+def _backstop_call_tool_name(call: ast.Call) -> str | None:
+    """Extract the first positional argument (the tool name string), if present."""
+    if (
+        call.args
+        and isinstance(call.args[0], ast.Constant)
+        and isinstance(call.args[0].value, str)
+    ):
+        return call.args[0].value
+    return None
+
+
 def _collect_meta_backstop_attachments() -> dict[str, str]:
     """AST-scan server modules for ``meta=response_backstop_tool_meta(tool_name)`` calls
     used as keyword arguments in ``@mcp.tool(...)`` decorators.
@@ -23,10 +55,8 @@ def _collect_meta_backstop_attachments() -> dict[str, str]:
     Returns a mapping from the *first positional string argument* of the
     ``response_backstop_tool_meta(...)`` call to the decorated function name.
     """
-    server_dir = SRC_ROOT / "server"
     attached: dict[str, str] = {}
-    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
-        tree = ast.parse(py_file.read_text(), filename=str(py_file))
+    for tree in _iter_server_module_trees():
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
@@ -37,30 +67,31 @@ def _collect_meta_backstop_attachments() -> dict[str, str]:
                 if dec.func.attr != "tool":
                     continue
                 for kw in dec.keywords:
-                    if kw.arg != "meta":
+                    if kw.arg != "meta" or not _is_backstop_meta_call(kw.value):
                         continue
-                    call = kw.value
-                    if not isinstance(call, ast.Call):
-                        continue
-                    # Accept both bare name and attribute forms of the helper
-                    func = call.func
-                    if isinstance(func, ast.Name) and func.id == "response_backstop_tool_meta":
-                        pass
-                    elif (
-                        isinstance(func, ast.Attribute)
-                        and func.attr == "response_backstop_tool_meta"
-                    ):
-                        pass
-                    else:
-                        continue
-                    # Extract the first positional argument (the tool name string)
-                    if (
-                        call.args
-                        and isinstance(call.args[0], ast.Constant)
-                        and isinstance(call.args[0].value, str)
-                    ):
-                        attached[call.args[0].value] = node.name
+                    assert isinstance(kw.value, ast.Call)  # narrowed by _is_backstop_meta_call
+                    tool_name = _backstop_call_tool_name(kw.value)
+                    if tool_name is not None:
+                        attached[tool_name] = node.name
     return attached
+
+
+def _collect_all_backstop_calls() -> set[str]:
+    """AST-scan server modules for EVERY ``response_backstop_tool_meta(...)`` call site,
+    regardless of where it appears — not just those wired into a decorator's ``meta=``
+    keyword. Used to detect stray/unattached calls to the helper.
+
+    Returns the set of *first positional string arguments* across all call sites.
+    """
+    all_calls: set[str] = set()
+    for tree in _iter_server_module_trees():
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and _is_backstop_meta_call(node)):
+                continue
+            tool_name = _backstop_call_tool_name(node)
+            if tool_name is not None:
+                all_calls.add(tool_name)
+    return all_calls
 
 
 def test_response_backstop_registry_decorator_parity() -> None:
@@ -104,4 +135,25 @@ def test_meta_attachment_names_match_decorated_function() -> None:
     assert not mismatches, (
         "meta=response_backstop_tool_meta(...) tool name does not match function name "
         "and is not a registered key:\n" + "\n".join(mismatches)
+    )
+
+
+def test_no_unattached_backstop_helper_calls() -> None:
+    """Every ``response_backstop_tool_meta(...)`` call site must be wired into a
+    ``@mcp.tool(..., meta=...)`` decorator. A call made anywhere else (e.g. assigned to
+    a variable, passed to something other than ``meta=``, or on a decorator that isn't
+    ``.tool(...)``) is a stray call that silently drops the exemption it was meant to
+    register.
+    """
+    attached_keys = set(_collect_meta_backstop_attachments())
+    all_calls = _collect_all_backstop_calls()
+
+    stray = all_calls - attached_keys
+    assert not stray, (
+        f"response_backstop_tool_meta(...) called but not attached as meta= on an "
+        f"@mcp.tool decorator: {sorted(stray)}"
+    )
+    assert all_calls == attached_keys, (
+        "response_backstop_tool_meta(...) call sites do not match decorator "
+        f"attachments: all_calls={sorted(all_calls)} attached={sorted(attached_keys)}"
     )

@@ -196,15 +196,12 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
     for name in post_upgrade:
         _assert_incarnation_hooks_execute(cache_root / name)
 
-    _assert_projected_artifact_relocatable(scratch_home, env)
+    _assert_projected_artifact_relocatable(scratch_home)
 
     return True
 
 
-def _assert_projected_artifact_relocatable(
-    scratch_home: Path,
-    env: dict[str, str],  # noqa: ARG001
-) -> None:
+def _assert_projected_artifact_relocatable(scratch_home: Path) -> None:
     """Project a plugin artifact and verify relocatable hooks post-upgrade.
 
     After the cross-interpreter upgrade, acquires a launch binding through the

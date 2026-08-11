@@ -6487,7 +6487,7 @@ def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
     )
     monkeypatch.setattr(smoke, "_assert_incarnation_hooks_execute", lambda _path: None)
 
-    def assert_projection(_home: Path, _env: dict[str, str]) -> None:
+    def assert_projection(_home: Path) -> None:
         if projection_error:
             raise RuntimeError("projected assertion failed")
 

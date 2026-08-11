@@ -113,3 +113,14 @@ def test_session_log_reader_has_one_inspection_tool_and_terminal_codex_policy() 
     assert {"shell_tool", "standalone_web_search", "multi_agent", "multi_agent_v2"} <= set(
         definition.codex.disabled_features
     )
+
+
+def test_session_log_reader_covers_application_level_error_results() -> None:
+    """Reader searches errors carried by successful tool transports."""
+    agent_path = pkg_root() / "agents" / "session-log-reader.md"
+    content = agent_path.read_text()
+
+    assert "literal `error:`" in content
+    assert '`"is_error":true`' in content
+    assert "successful tool transport can contain an application error" in content
+    assert "Paginate every" in content and "matching page" in content

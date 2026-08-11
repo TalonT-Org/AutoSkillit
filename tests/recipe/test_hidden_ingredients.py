@@ -987,27 +987,24 @@ steps:
 
 
 @pytest.mark.parametrize(
-    ("raw_route", "model_step", "expected_fragment"),
+    ("raw_route", "model_step"),
     [
         (
             "on_result:\n    - when: ok\n      route: stale",
             RecipeStep(tool="run_cmd", on_success="done"),
-            "declared routes",
         ),
         (
             "on_result:\n      field: status\n      routes:\n        ok: stale",
             RecipeStep(tool="run_cmd", on_success="done"),
-            "declared routes",
         ),
-        ("on_failure: done", RecipeStep(tool="run_cmd"), "declared routes"),
-        ("on_success: done", RecipeStep(tool="run_cmd", on_failure="done"), "declared routes"),
-        ("on_skip: done", RecipeStep(tool="run_cmd"), "declared routes"),
+        ("on_failure: done", RecipeStep(tool="run_cmd")),
+        ("on_success: done", RecipeStep(tool="run_cmd", on_failure="done")),
+        ("on_skip: done", RecipeStep(tool="run_cmd")),
     ],
 )
 def test_route_consistency_rejects_remaining_edge_drift(
     raw_route: str,
     model_step: RecipeStep,
-    expected_fragment: str,
 ) -> None:
     from autoskillit.recipe._recipe_composition import _validate_route_consistency
 
@@ -1030,7 +1027,7 @@ steps:
 """
 
     errors = _validate_route_consistency(raw, recipe)
-    assert any(expected_fragment in error for error in errors)
+    assert any("declared routes" in error for error in errors)
 
 
 def test_route_consistency_rejects_step_order_drift() -> None:

@@ -309,6 +309,35 @@ async def test_search_is_literal_bounded_and_cited(retained_logs) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("byte_limit_delta", "expected_status"),
+    [(0, "answered"), (-1, "blocked")],
+)
+async def test_search_first_match_respects_exact_byte_budget(
+    retained_logs,
+    byte_limit_delta: int,
+    expected_status: str,
+) -> None:
+    excerpt = '{"kind":"retry"}'
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="search",
+            session_id="session-one",
+            artifact="anomalies",
+            query="retry",
+            byte_limit=len(excerpt.encode()) + byte_limit_delta,
+        )
+    )
+
+    assert result["status"] == expected_status
+    if expected_status == "answered":
+        assert result["matches"][0]["excerpt"] == excerpt
+        assert result["exact_bytes"] == len(excerpt.encode())
+    else:
+        assert result["reason"] == "record_too_large"
+
+
+@pytest.mark.asyncio
 async def test_append_and_index_rewrite_expire_continuations(retained_logs) -> None:
     first = json.loads(
         await session_logs.inspect_session_logs(

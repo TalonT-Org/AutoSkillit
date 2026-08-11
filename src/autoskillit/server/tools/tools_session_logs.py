@@ -411,9 +411,9 @@ def _read_or_search(
         elif query_bytes in raw_line:
             excerpt = decoded.rstrip("\r\n")[:_MAX_EXCERPT_CHARS]
             excerpt_bytes = len(excerpt.encode())
-            if matches and (
-                len(matches) >= _MAX_MATCHES or returned_bytes + excerpt_bytes > page_limit
-            ):
+            if len(matches) >= _MAX_MATCHES or returned_bytes + excerpt_bytes > page_limit:
+                if not matches:
+                    raise _InspectionError("record_too_large")
                 break
             matches.append(
                 {

@@ -240,6 +240,28 @@ def test_reap_vetoes_dirs_referenced_by_live_processes(tmp_path: Path) -> None:
     assert not generation.exists()
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux /proc cwd behavior")
+def test_reap_vetoes_generation_used_as_live_cwd(tmp_path: Path) -> None:
+    platform_root, generation, tmp_dir, _ = _layout(tmp_path)
+    tmp_dir.mkdir(parents=True)
+    _backdate(generation)
+    env = {key: value for key, value in os.environ.items() if key != "TMPDIR"}
+    sleeper = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        cwd=tmp_dir,
+        env=env,
+        text=True,
+    )
+    try:
+        assert _reap(platform_root).returncode == 0
+        assert generation.exists()
+    finally:
+        _stop(sleeper)
+    _backdate(generation)
+    assert _reap(platform_root).returncode == 0
+    assert not generation.exists()
+
+
 def test_reap_errors_are_nonfatal(tmp_path: Path) -> None:
     platform_root, blocked, _, _ = _layout(tmp_path, "blocked")
     other = blocked.parent / "pytest-deadbeef-other"
@@ -355,11 +377,13 @@ def test_live_reference_parser(tmp_path: Path) -> None:
     (process_dir / "cmdline").write_bytes(
         b"pytest\0--basetemp=/two/tmp\0-o\0cache_dir=/two/cache\0"
     )
+    (process_dir / "cwd").symlink_to("/five/tmp")
 
     assert module.scan_linux_live_references(proc_root) == {
         Path("/one/tmp"),
         Path("/two/tmp"),
         Path("/two/cache"),
+        Path("/five/tmp"),
     }
     assert module.parse_ps_live_references(
         "123 pytest TMPDIR=/three/tmp --basetemp=/four/tmp -o cache_dir=/four/cache"

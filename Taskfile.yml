@@ -589,8 +589,11 @@ tasks:
 
   refresh-codex-hook-fixture:
     desc: Regenerate the deterministic Codex hook-event snapshot
+    deps: [_tmpdir-setup]
+    env:
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
     cmds:
-      - uv run pytest --update-fixtures -n0 tests/execution/backends/test_codex_deterministic_conformance.py -k test_update_fixtures_writes_snapshot
+      - uv run pytest --update-fixtures -n0 --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" tests/execution/backends/test_codex_deterministic_conformance.py -k test_update_fixtures_writes_snapshot
 
   regen-contracts:
     desc: Regenerate all bundled recipe contract cards

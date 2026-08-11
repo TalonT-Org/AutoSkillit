@@ -118,6 +118,12 @@ def scan_linux_live_references(proc_root: Path) -> set[Path]:
     for process_dir in process_dirs:
         if not process_dir.name.isdigit() or not process_dir.is_dir():
             continue
+        try:
+            cwd = Path(os.readlink(process_dir / "cwd"))
+        except OSError:
+            pass
+        else:
+            references.add(_absolute(cwd))
         for filename in ("environ", "cmdline"):
             try:
                 raw = (process_dir / filename).read_bytes()

@@ -58,6 +58,14 @@ class TestTaskfile:
         commands = "\n".join(str(command) for command in task["cmds"])
         assert "python3 scripts/pytest_tmp_lifecycle.py reap" in commands
 
+    def test_refresh_codex_hook_fixture_uses_tmp_lifecycle(self) -> None:
+        task = self._load()["tasks"]["refresh-codex-hook-fixture"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        assert "_tmpdir-setup" in task["deps"]
+        assert task["env"]["TMPDIR"] == "{{.PYTEST_TMPDIR}}"
+        assert "--basetemp={{.PYTEST_TMPDIR}}" in commands
+        assert "cache_dir={{.PYTEST_CACHEDIR}}" in commands
+
     def test_status_uses_local_venv_paths_only(self):
         """T4 — status: sentinels use only local relative paths (no absolute/home paths)."""
         data = self._load()

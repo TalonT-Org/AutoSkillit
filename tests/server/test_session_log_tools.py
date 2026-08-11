@@ -170,6 +170,30 @@ async def test_continuation_rejects_boolean_numeric_fields(retained_logs, field)
 
 
 @pytest.mark.asyncio
+async def test_expired_continuation_is_rejected(retained_logs, monkeypatch) -> None:
+    first = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="anomalies",
+            byte_limit=len(b'{"kind":"retry"}\n'),
+        )
+    )
+    monkeypatch.setattr(session_logs, "_CONTINUATION_CLOCK", lambda: 1_301.0)
+
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="anomalies",
+            continuation=first["next_continuation"],
+        )
+    )
+
+    assert result["reason"] == "continuation_invalid"
+
+
+@pytest.mark.asyncio
 async def test_search_is_literal_bounded_and_cited(retained_logs) -> None:
     result = json.loads(
         await session_logs.inspect_session_logs(

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -18,8 +17,6 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     ArtifactLease,
     AuditIdentityReservation,
-    KitchenProcessIdentity,
-    RunSkillCompletionAuthority,
     TrackerAuthorityReadResult,
     TrackerAuthorityTarget,
     TrackerParticipantKey,
@@ -46,18 +43,6 @@ from autoskillit.server.tools._types import deny_envelope
 logger = get_logger(__name__)
 
 
-class _TrackerCtx(Protocol):
-    """Minimal ToolContext duck-type — avoids circular import with tools_execution.py."""
-
-    kitchen_id: str
-    kitchen_process_identity: KitchenProcessIdentity | None
-    project_dir: Path
-    run_skill_completion: RunSkillCompletionAuthority | None
-    active_recipe_steps: dict[str, object] | None
-    tracker_leases: dict[TrackerParticipantKey, ArtifactLease]
-    tracker_leases_lock: threading.RLock
-
-
 def read_tracker_identity(
     target: TrackerAuthorityTarget,
     lease: ArtifactLease,
@@ -74,7 +59,7 @@ def read_tracker_identity(
 
 
 def select_tracker_target(
-    tool_ctx: _TrackerCtx,
+    tool_ctx: ToolContext,
     order_id: str,
     *,
     expected: bool,
@@ -91,7 +76,7 @@ def select_tracker_target(
 
 
 def _retain_context_tracker(
-    tool_ctx: _TrackerCtx,
+    tool_ctx: ToolContext,
     target: TrackerAuthorityTarget,
     *,
     owner_kind: Literal["kitchen", "dispatch", "manual"],
@@ -111,7 +96,7 @@ def _retain_context_tracker(
     return key, lease
 
 
-def _release_context_tracker(tool_ctx: _TrackerCtx, key: TrackerParticipantKey) -> None:
+def _release_context_tracker(tool_ctx: ToolContext, key: TrackerParticipantKey) -> None:
     with tool_ctx.tracker_leases_lock:
         release_tracker_lease(tool_ctx.tracker_leases, key)
 
@@ -336,7 +321,7 @@ async def record_pipeline_step(
 
 
 def _handle_init(
-    ctx: _TrackerCtx,
+    ctx: ToolContext,
     target: TrackerAuthorityTarget,
     lease: ArtifactLease,
     dependencies: dict[str, list[str]] | None,
@@ -416,7 +401,7 @@ def _handle_status(target: TrackerAuthorityTarget, lease: ArtifactLease) -> str:
     )
 
 
-def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: str) -> str:
+def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: str) -> str:
     if not step_name:
         return json.dumps(
             deny_envelope(

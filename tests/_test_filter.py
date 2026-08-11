@@ -993,6 +993,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     # Infra (non-layered)
     "hooks": frozenset(
         {
+            "__init__",
             "hooks",
             "cli/test_cli_hooks.py",
             "cli/test_install.py",

@@ -107,8 +107,8 @@ def detect_autoskillit_mcp_prefix(capabilities: BackendCapabilities) -> str:
 def validate_agent_tool_canonical(tool: str) -> str:
     """Assert a tool string is in DIRECT-canonical form and return its short name.
 
-    Raises ValueError if the tool does not start with DIRECT_PREFIX or
-    its short name is not a registered inspection tool.
+    Raises ValueError if the tool does not start with DIRECT_PREFIX or its short
+    name is neither a canonical exploration tool nor a registered inspection tool.
     """
     from .tool_registry import get_tool_def
     from .types import EXPLORATION_TOOLS, ToolInitializationOperation

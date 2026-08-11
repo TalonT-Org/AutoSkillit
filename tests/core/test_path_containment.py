@@ -203,6 +203,82 @@ class TestReadStableContainedBytes:
 
 
 class TestReadStableContainedRange:
+    @pytest.mark.parametrize(
+        ("offset", "length", "max_range_bytes"),
+        [(-1, 1, 10), (0, -1, 10), (0, 11, 10)],
+    )
+    def test_invalid_ranges_fail_closed(
+        self,
+        tmp_path: Path,
+        offset: int,
+        length: int,
+        max_range_bytes: int,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(
+                artifact,
+                tmp_path,
+                offset=offset,
+                length=length,
+                max_range_bytes=max_range_bytes,
+            )
+
+        assert exc_info.value.reason == "range_invalid"
+
+    def test_open_identity_drift_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        real_fstat = os.fstat
+
+        monkeypatch.setattr(
+            os,
+            "fstat",
+            lambda fd: _with_metadata_drift(real_fstat(fd), "st_ino"),
+        )
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "range_unstable"
+
+    @pytest.mark.parametrize("drift", ["shrink", "mtime"])
+    def test_open_snapshot_drift_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        drift: str,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        real_fstat = os.fstat
+        calls = 0
+
+        def drifting_fstat(fd: int):
+            nonlocal calls
+            metadata = real_fstat(fd)
+            calls += 1
+            if calls != 2:
+                return metadata
+            changed = _with_metadata_drift(metadata, "st_mtime_ns")
+            if drift == "shrink":
+                changed.st_mtime_ns = metadata.st_mtime_ns
+                changed.st_size = metadata.st_size - 1
+            return changed
+
+        monkeypatch.setattr(os, "fstat", drifting_fstat)
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "range_unstable"
+
     def test_reads_small_range_from_sparse_file_above_whole_file_cap(self, tmp_path: Path) -> None:
         artifact = tmp_path / "large.jsonl"
         with artifact.open("wb") as handle:

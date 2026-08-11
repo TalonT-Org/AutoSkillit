@@ -105,6 +105,27 @@ class TestNonMachineLocalWritersAreRelocatable:
         write_generated_hooks_json(tmp_path)
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
 
+    def test_codex_reconciliation_audit_output_is_relocatable(self, tmp_path: Path) -> None:
+        from autoskillit.execution.backends._codex_session_storage import (
+            _write_reconciliation_audit,
+        )
+
+        audit_root = tmp_path / "audits"
+        audit_root.mkdir()
+        audit_path = audit_root / "0123456789abcdef-1.json"
+        _write_reconciliation_audit(
+            audit_path,
+            {
+                "schema_version": 1,
+                "view_id": "0123456789abcdef-1",
+                "recorded_at": "2026-08-11T00:00:00+00:00",
+                "reason": "operator reviewed",
+                "manifest_sha256": "0" * 64,
+            },
+        )
+
+        _assert_relocatable(audit_path.read_text(encoding="utf-8"))
+
     def test_startup_drift_check_output_is_relocatable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

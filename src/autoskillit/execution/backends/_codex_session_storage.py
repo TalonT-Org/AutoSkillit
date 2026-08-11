@@ -16,6 +16,7 @@ import time
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,8 @@ import regex as re
 from autoskillit.core import (
     CODEX_ACTIVE_VIEWS_SUBDIR,
     CODEX_ARCHIVED_SESSIONS_SUBDIR,
+    CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR,
+    CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR,
     CODEX_SESSIONS_SUBDIR,
     BareResume,
     CookSessionHandle,
@@ -52,6 +55,7 @@ _MANIFEST_READ_LIMIT = 256 * 1024
 _MANIFEST_NAME = "manifest.json"
 _LOCKS_SUBDIR = ".locks"
 _INDEX_NAME = "codex-session-index.json"
+_RECONCILIATION_AUDIT_SCHEMA_VERSION = 1
 logger = get_logger(__name__)
 _MANIFEST_STATES = frozenset({"prepared", "running", "finalizing", "complete", "failed"})
 _STORE_TO_PUBLIC = {"active": "sessions", "archived": "archived_sessions"}
@@ -134,6 +138,39 @@ def _atomic_json(path: Path, payload: object) -> None:
         os.close(fd)
     os.replace(temporary, path)
     _fsync_directory(path.parent)
+
+
+def _write_reconciliation_audit(path: Path, payload: object) -> None:
+    """Publish one immutable, crash-safe reconciliation authorization."""
+    _require_real_directory(path.parent, label="reconciliation audit root")
+    if _lexists(path):
+        raise FileExistsError(f"Reconciliation audit already exists: {path.name}")
+    encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(temporary, flags, 0o600)
+    try:
+        view = memoryview(encoded)
+        while view:
+            written = os.write(fd, view)
+            view = view[written:]
+        os.fsync(fd)
+    except BaseException:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        os.close(fd)
+    try:
+        os.link(temporary, path, follow_symlinks=False)
+        _fsync_directory(path.parent)
+    finally:
+        try:
+            temporary.unlink()
+        finally:
+            _fsync_directory(path.parent)
 
 
 def _read_bounded(path: Path, limit: int) -> bytes:
@@ -427,6 +464,10 @@ class CodexSessionStore:
         self.active_root = self.log_dir / CODEX_SESSIONS_SUBDIR
         self.archive_root = self.log_dir / CODEX_ARCHIVED_SESSIONS_SUBDIR
         self.views_root = self.log_dir / CODEX_ACTIVE_VIEWS_SUBDIR
+        self.reconciliations_root = self.log_dir / CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR
+        self.reconciliation_tombstones_root = (
+            self.log_dir / CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR
+        )
         self.locks_root = self.views_root / _LOCKS_SUBDIR
         self.index_path = (
             Path(index_path).expanduser().resolve(strict=False)
@@ -435,13 +476,23 @@ class CodexSessionStore:
         )
 
     def _ensure_roots(self) -> None:
-        for root in (self.active_root, self.archive_root, self.views_root, self.locks_root):
+        roots = (
+            self.active_root,
+            self.archive_root,
+            self.views_root,
+            self.locks_root,
+            self.reconciliations_root,
+            self.reconciliation_tombstones_root,
+        )
+        for root in roots:
             root.mkdir(parents=True, exist_ok=True)
             _require_real_directory(root, label="Codex storage root")
         devices = {
             self.active_root.stat().st_dev,
             self.archive_root.stat().st_dev,
             self.views_root.stat().st_dev,
+            self.reconciliations_root.stat().st_dev,
+            self.reconciliation_tombstones_root.stat().st_dev,
         }
         if len(devices) != 1:
             raise RuntimeError("Codex rollout stores and views must share one filesystem")
@@ -449,6 +500,8 @@ class CodexSessionStore:
             _filesystem_type(self.active_root),
             _filesystem_type(self.archive_root),
             _filesystem_type(self.views_root),
+            _filesystem_type(self.reconciliations_root),
+            _filesystem_type(self.reconciliation_tombstones_root),
         }
         if len(filesystem_types) != 1 or not filesystem_types <= _SUPPORTED_LOCAL_FILESYSTEMS:
             raise RuntimeError(
@@ -1210,6 +1263,203 @@ class CodexSessionStore:
             raise RuntimeError("Spawned Codex recovery view has no child identity")
         if state in {"finalizing", "complete"} and not reaped:
             raise RuntimeError("Final Codex recovery view has no reap proof")
+
+    def _read_reconciliation_candidate(
+        self,
+        view_path: Path,
+    ) -> tuple[bytes, dict[str, Any]]:
+        raw_manifest = _read_bounded(view_path / _MANIFEST_NAME, _MANIFEST_READ_LIMIT)
+        try:
+            manifest = json.loads(raw_manifest)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Codex reconciliation manifest is not valid JSON") from exc
+        if not isinstance(manifest, dict):
+            raise RuntimeError("Codex reconciliation manifest is not an object")
+        for public_name in _INERT_NAMES:
+            root = view_path / public_name
+            with os.scandir(root) as entries:
+                if next(entries, None) is not None:
+                    raise RuntimeError(
+                        f"Codex reconciliation {public_name} root is not strictly empty"
+                    )
+        self._validate_manifest(view_path, manifest)
+        if manifest["state"] not in {"running", "finalizing", "failed"}:
+            raise RuntimeError("Codex view is not a retained schema-v1 unknown attempt")
+        return raw_manifest, manifest
+
+    @staticmethod
+    def _reconciliation_thread_ids(manifest: Mapping[str, Any]) -> set[str]:
+        resume_thread_id = manifest.get("resume_thread_id")
+        return {resume_thread_id} if isinstance(resume_thread_id, str) else set()
+
+    def _read_reconciliation_audit(self, path: Path, *, view_id: str) -> dict[str, Any]:
+        try:
+            payload = json.loads(_read_bounded(path, _MANIFEST_READ_LIMIT))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Invalid reconciliation audit for {view_id}") from exc
+        expected_keys = {
+            "schema_version",
+            "view_id",
+            "recorded_at",
+            "reason",
+            "manifest_sha256",
+        }
+        if not isinstance(payload, dict) or set(payload) != expected_keys:
+            raise RuntimeError(f"Invalid reconciliation audit contract for {view_id}")
+        recorded_at = payload.get("recorded_at")
+        reason = payload.get("reason")
+        digest = payload.get("manifest_sha256")
+        if (
+            payload.get("schema_version") != _RECONCILIATION_AUDIT_SCHEMA_VERSION
+            or payload.get("view_id") != view_id
+            or not isinstance(recorded_at, str)
+            or not isinstance(reason, str)
+            or reason.strip() != reason
+            or not reason
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        ):
+            raise RuntimeError(f"Invalid reconciliation audit values for {view_id}")
+        try:
+            timestamp = datetime.fromisoformat(recorded_at)
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid reconciliation audit timestamp for {view_id}") from exc
+        if timestamp.tzinfo is None:
+            raise RuntimeError(f"Reconciliation audit timestamp lacks timezone for {view_id}")
+        return payload
+
+    def list_attempt_reconciliations(self) -> tuple[dict[str, Any], ...]:
+        """List retained Codex attempt views without recovery or mutation."""
+        self._ensure_roots()
+        rows: list[dict[str, Any]] = []
+        for view_path in sorted(self.views_root.iterdir()):
+            if view_path.name == _LOCKS_SUBDIR:
+                continue
+            state: object = None
+            try:
+                if _VIEW_ID_RE.fullmatch(view_path.name) is None:
+                    raise RuntimeError("invalid view id")
+                _raw_manifest, manifest = self._read_reconciliation_candidate(view_path)
+                state = manifest["state"]
+            except (OSError, RuntimeError, ValueError) as exc:
+                rows.append(
+                    {
+                        "view_id": view_path.name,
+                        "state": state,
+                        "eligible": False,
+                        "detail": str(exc),
+                    }
+                )
+            else:
+                rows.append(
+                    {
+                        "view_id": view_path.name,
+                        "state": state,
+                        "eligible": True,
+                        "detail": "retained schema-v1 unknown with empty staged roots",
+                    }
+                )
+        return tuple(rows)
+
+    def _delete_reconciliation_tombstone(self, tombstone_path: Path) -> None:
+        _require_real_directory(tombstone_path, label="Codex reconciliation tombstone")
+        shutil.rmtree(tombstone_path)
+        _fsync_directory(self.reconciliation_tombstones_root)
+
+    def discard_attempt_view(self, view_id: str, reason: str) -> dict[str, Any]:
+        """Explicitly reconcile one eligible retained schema-v1 unknown view."""
+        if _VIEW_ID_RE.fullmatch(view_id) is None:
+            raise ValueError(f"Invalid Codex attempt view id: {view_id!r}")
+        normalized_reason = reason.strip()
+        if not normalized_reason:
+            raise ValueError("Codex attempt reconciliation requires a non-empty reason")
+        self._ensure_roots()
+        view_path = self.views_root / view_id
+        audit_path = self.reconciliations_root / f"{view_id}.json"
+        tombstone_path = self.reconciliation_tombstones_root / view_id
+        view_lock = _FileLease.acquire(
+            self.locks_root / f"view-{view_id}.lock",
+            nonblocking=True,
+        )
+        thread_locks: list[_FileLease] = []
+        lifecycle: _FileLease | None = None
+        audit: dict[str, Any] | None = None
+        delete_tombstone = False
+        try:
+            view_exists = _lexists(view_path)
+            tombstone_exists = _lexists(tombstone_path)
+            audit_exists = _lexists(audit_path)
+            if view_exists and tombstone_exists:
+                raise RuntimeError(f"Conflicting view and tombstone retained for {view_id}")
+            if tombstone_exists:
+                if not audit_exists:
+                    raise RuntimeError(f"Tombstone has no reconciliation audit for {view_id}")
+                _require_real_directory(tombstone_path, label="Codex reconciliation tombstone")
+                audit = self._read_reconciliation_audit(audit_path, view_id=view_id)
+                if audit["reason"] != normalized_reason:
+                    raise RuntimeError(f"Reconciliation reason conflicts for {view_id}")
+                lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+                if _lexists(view_path) or not _lexists(tombstone_path):
+                    raise RuntimeError(f"Reconciliation tombstone changed for {view_id}")
+                delete_tombstone = True
+            elif not view_exists:
+                if not audit_exists:
+                    raise FileNotFoundError(f"Codex attempt view not found: {view_id}")
+                audit = self._read_reconciliation_audit(audit_path, view_id=view_id)
+                if audit["reason"] != normalized_reason:
+                    raise RuntimeError(f"Reconciliation reason conflicts for {view_id}")
+            else:
+                initial_raw, initial_manifest = self._read_reconciliation_candidate(view_path)
+                initial_digest = hashlib.sha256(initial_raw).hexdigest()
+                initial_thread_ids = self._reconciliation_thread_ids(initial_manifest)
+                for thread_id in sorted(initial_thread_ids):
+                    thread_locks.append(
+                        _FileLease.acquire(self._thread_lock_path(thread_id), nonblocking=True)
+                    )
+                lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+                if _lexists(tombstone_path):
+                    raise RuntimeError(f"Reconciliation tombstone appeared for {view_id}")
+                final_raw, final_manifest = self._read_reconciliation_candidate(view_path)
+                final_digest = hashlib.sha256(final_raw).hexdigest()
+                if (
+                    final_digest != initial_digest
+                    or self._reconciliation_thread_ids(final_manifest) != initial_thread_ids
+                ):
+                    raise RuntimeError(
+                        f"Codex attempt view changed during reconciliation: {view_id}"
+                    )
+                if audit_exists:
+                    audit = self._read_reconciliation_audit(audit_path, view_id=view_id)
+                    if (
+                        audit["reason"] != normalized_reason
+                        or audit["manifest_sha256"] != final_digest
+                    ):
+                        raise RuntimeError(f"Reconciliation audit conflicts for {view_id}")
+                else:
+                    audit = {
+                        "schema_version": _RECONCILIATION_AUDIT_SCHEMA_VERSION,
+                        "view_id": view_id,
+                        "recorded_at": datetime.now(UTC).isoformat(),
+                        "reason": normalized_reason,
+                        "manifest_sha256": final_digest,
+                    }
+                    _write_reconciliation_audit(audit_path, audit)
+                os.rename(view_path, tombstone_path)
+                _fsync_directory(self.views_root)
+                _fsync_directory(self.reconciliation_tombstones_root)
+                delete_tombstone = True
+        finally:
+            if lifecycle is not None:
+                lifecycle.release()
+            for thread_lock in reversed(thread_locks):
+                thread_lock.release()
+            view_lock.release()
+
+        if delete_tombstone:
+            self._delete_reconciliation_tombstone(tombstone_path)
+        if audit is None:
+            raise RuntimeError(f"Reconciliation did not produce an audit for {view_id}")
+        return dict(audit)
 
     def recover(self) -> None:
         """Recover safely-owned orphan views, then rebuild the derived index."""

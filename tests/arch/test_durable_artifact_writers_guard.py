@@ -218,3 +218,25 @@ def test_registered_writers_have_a_matching_call_site() -> None:
         "DURABLE_ARTIFACT_WRITERS entries with no matching write call site in their "
         f"scoped module (stale registration?): {stale}"
     )
+
+
+def test_codex_reconciliation_audit_no_clobber_writer_is_registered() -> None:
+    """The immutable audit hard-link publisher remains a registered durable writer."""
+    rel = "execution/backends/_codex_session_storage.py"
+    path = SRC_ROOT / rel
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    writer = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_write_reconciliation_audit"
+    )
+    calls = {
+        node.func.attr
+        for node in ast.walk(writer)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+    assert {"link", "fsync", "unlink"} <= calls
+    assert (
+        "autoskillit.execution.backends._codex_session_storage:_write_reconciliation_audit"
+    ) in _REGISTERED_WRITERS

@@ -351,6 +351,23 @@ def codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
 
 
 @app.command
+def codex_attempts(
+    *,
+    discard_view: str | None = None,
+    reason: str | None = None,
+    output_json: bool = False,
+) -> None:
+    """List retained Codex attempt views, or explicitly discard one eligible view."""
+    from autoskillit.cli._codex_attempts import run_codex_attempts
+
+    run_codex_attempts(
+        discard_view=discard_view,
+        reason=reason,
+        output_json=output_json,
+    )
+
+
+@app.command
 def migrate(*, check: bool = False, fix: bool = False):
     """Report outdated recipes and stale project-local skills.
 

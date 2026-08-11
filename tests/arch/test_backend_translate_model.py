@@ -80,11 +80,6 @@ def test_translate_model_resolution_respects_alias_classes() -> None:
         translated = [
             (backend.translate_model(k), backend.model_config_overrides(k)) for k in alias_keys
         ]
-        if backend_name == "codex":
-            by_alias = dict(zip(alias_keys, translated, strict=True))
-            assert by_alias["sonnet"] == by_alias["haiku"]
-            assert by_alias["opus"] != by_alias["sonnet"]
-            continue
         assert len(translated) == len(set(translated)), (
             f"{backend_name}: model resolution produced duplicate outputs for alias keys "
             f"{alias_keys}: {translated}"

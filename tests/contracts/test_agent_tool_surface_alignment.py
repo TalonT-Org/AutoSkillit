@@ -104,6 +104,7 @@ def test_session_log_reader_has_one_inspection_tool_and_terminal_codex_policy() 
     assert get_tool_def("inspect_session_logs").initialization_operation is (
         ToolInitializationOperation.INSPECTION
     )
+    assert definition.model == "haiku"
     assert definition.codex.model == "gpt-5.6-luna"
     assert definition.codex.reasoning_effort == "xhigh"
     assert definition.codex.sandbox_mode == "read-only"

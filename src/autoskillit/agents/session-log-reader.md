@@ -2,6 +2,7 @@
 name: session-log-reader
 description: "Terminal reader for bounded, cited pipeline session-log evidence."
 tools: [mcp__autoskillit__inspect_session_logs]
+model: haiku
 maxTurns: 80
 codex:
   model: gpt-5.6-luna

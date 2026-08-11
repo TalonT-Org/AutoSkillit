@@ -103,6 +103,29 @@ retained session-index projection consistency, and orphaned codex processes
 
 ---
 
+## autoskillit codex-attempts
+
+    autoskillit codex-attempts [--discard-view VIEW_ID --reason TEXT] [--output-json]
+
+**Flags:**
+- `--discard-view VIEW_ID` — Explicitly reconcile one eligible retained attempt view
+- `--reason TEXT` — Required operator reason when discarding a view
+- `--output-json` — Output the listing and reconciliation result as JSON
+
+The default command is read-only: it lists retained Codex attempt views and identifies
+which schema-v1 unknown views are eligible for explicit reconciliation. It does not run
+automatic recovery. Eligibility requires an identity-consistent manifest in
+`running`, `finalizing`, or `failed` state and both staged rollout roots to contain no
+descendant entry of any kind.
+
+Discard is fail-closed and affects only the selected view. AutoSkillit records an
+immutable audit containing the normalized reason and manifest digest, atomically moves
+the view through a deterministic tombstone, and resumes an interrupted tombstone
+deletion on retry. Canonical rollout stores and the derived session index are never
+modified by this command.
+
+---
+
 ## autoskillit codex-orphans
 
     autoskillit codex-orphans [--reap] [--output-json]

@@ -211,7 +211,12 @@ class TestRecordPipelineStepInit:
     async def test_completion_identity_read_exception_releases_manual_lease(self, monkeypatch):
         from autoskillit.server.tools import tools_pipeline_tracker
 
+        lease_observed = False
+
         def fail_read(*_args, **_kwargs):
+            nonlocal lease_observed
+            assert any(not lease.closed for lease in self.ctx.tracker_leases.values())
+            lease_observed = True
             raise OSError("identity read failed")
 
         monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_authority", fail_read)
@@ -220,6 +225,7 @@ class TestRecordPipelineStepInit:
         )
 
         assert completed["success"] is False
+        assert lease_observed
         assert self.ctx.tracker_leases == {}
 
     @pytest.mark.anyio
@@ -241,13 +247,19 @@ class TestRecordPipelineStepInit:
     async def test_handler_exception_releases_new_manual_lease(self, monkeypatch, op, handler):
         from autoskillit.server.tools import tools_pipeline_tracker
 
+        lease_observed = False
+
         def fail(*_args, **_kwargs):
+            nonlocal lease_observed
+            assert any(not lease.closed for lease in self.ctx.tracker_leases.values())
+            lease_observed = True
             raise OSError("handler failed")
 
         monkeypatch.setattr(tools_pipeline_tracker, handler, fail)
         result = json.loads(await record_pipeline_step(pipeline_id="AB", op=op))
 
         assert result["success"] is False
+        assert lease_observed
         assert self.ctx.tracker_leases == {}
 
 

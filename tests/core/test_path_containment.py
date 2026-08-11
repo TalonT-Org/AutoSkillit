@@ -228,6 +228,30 @@ class TestReadStableContainedRange:
 
         assert exc_info.value.reason == "range_invalid"
 
+    @pytest.mark.parametrize(
+        ("offset", "length", "expected"),
+        [(6, 3, b""), (7, 3, b""), (4, 10, b"le")],
+    )
+    def test_eof_ranges_return_only_available_opening_snapshot_bytes(
+        self,
+        tmp_path: Path,
+        offset: int,
+        length: int,
+        expected: bytes,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_bytes(b"stable")
+
+        _, data, opening = read_stable_contained_range(
+            artifact,
+            tmp_path,
+            offset=offset,
+            length=length,
+        )
+
+        assert data == expected
+        assert opening.st_size == 6
+
     def test_open_identity_drift_fails_closed(
         self,
         tmp_path: Path,

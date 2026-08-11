@@ -3,8 +3,8 @@ name: analyze-pipeline-health
 uses_capabilities: []
 categories:
 - diagnostics
-description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel terminal reader agents per step
-  group, then diagnoses and consolidates their bounded cited evidence.
+description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel terminal reader agents for bounded
+  step-group packets, then diagnoses and consolidates their cited evidence.
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -19,7 +19,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: autoskillit:session-log-reader
-    for_each: step_batches
+    for_each: reader_packets
   concurrency:
     required: true
   join:
@@ -32,7 +32,8 @@ semantic_requirements:
 # Pipeline Health Analysis Skill
 
 Coordinator skill that scopes a pipeline run, groups retained session identities by step,
-spawns parallel terminal readers, then diagnoses and consolidates their cited evidence.
+spawns no more than six parallel terminal readers, then diagnoses and consolidates their
+cited evidence.
 
 ## Arguments
 
@@ -54,7 +55,8 @@ spawns parallel terminal readers, then diagnoses and consolidates their cited ev
 
 **ALWAYS:**
 - Filter sessions.jsonl by kitchen_id to scope to this pipeline run
-- Spawn `autoskillit:session-log-reader` subagents in parallel (one per step group)
+- Route every step group through an `autoskillit:session-log-reader` subagent
+- Spawn no more than six reader subagents in one run
 - Leave child model, effort, sandbox, feature, and tool policy to the loaded AgentDef
 - Include a wall-clock soft-deadline instruction in each reader packet
 - Report "no issues found" clearly when the pipeline is clean
@@ -75,6 +77,9 @@ Note: The final JSON report (Step 5) writes to the diagnostics log directory (`h
 ### Step 1: Read sessions.jsonl
 
 Read ~/.local/share/autoskillit/logs/sessions.jsonl and filter entries where kitchen_id matches the provided argument.
+Count the filtered rows programmatically. Reconcile that count with the ordered session
+IDs and, later, the sum of all reader-packet session counts; a mismatch is a blocked
+coverage result, never a prose estimate.
 
 ### Step 2: Group by step_name
 
@@ -82,11 +87,14 @@ Group the filtered entries by step_name. Each group represents one phase of the 
 
 ### Step 2b: Build reader packets
 
-For each step group, assign a stable batch ID and build one packet containing:
-- kitchen ID, step name, and batch ID
-- ordered session IDs and their count
+Assign every step group a stable batch ID. If there are at most six groups, build one
+reader packet per group. If there are more than six, combine adjacent whole step groups
+into no more than six packets while preserving group and session order. Never split a
+step group or omit one. Each reader packet contains:
+- kitchen ID and one or more step-name/batch-ID identities
+- the ordered session IDs and count for each batch, plus the packet total
 - requested anomaly classes: failure subtype, retry pattern, timing outlier, and error signature
-- the exact `Verdict`, `Batch`, `Evidence`, `Searched scope`, `Unsupported classes`,
+- the exact per-batch `Verdict`, `Batch`, `Evidence`, `Searched scope`, `Unsupported classes`,
   and `Unknowns` return envelope
 
 Do not include `claude_code_log`, `codex_log`, a session directory, a diagnostics
@@ -95,11 +103,12 @@ the server is the sole bounds authority.
 
 ### Step 3: Spawn reader subagents (SINGLE MESSAGE)
 
-**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+**Start ALL independent child delegations before awaiting any result — one per reader packet,
+at most six total — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-For each step batch, spawn a terminal reader via the child delegation with
+For each reader packet, spawn a terminal reader via the child delegation with
 subagent_type: `autoskillit:session-log-reader`.
 
 Each reader receives only its packet and this instruction: complete within 15
@@ -111,8 +120,8 @@ Issue ALL Agent calls in a single message for parallel execution.
 ### Step 4: Validate reader completion, diagnose, and consolidate findings
 
 Collect results from all readers. For each result:
-1. Require exactly one `Verdict: answered | partial | blocked` plus the complete
-   return envelope and the packet's exact batch/session identity.
+1. Require exactly one complete `Verdict: answered | partial | blocked` envelope for
+   every batch in the packet and its exact batch/session identity.
 2. Reject uncited claims, citations not returned by the tool, missing searched
    scope, or evidence for an unassigned session.
 3. Treat `partial`, `blocked`, empty, or malformed results as coverage gaps; never
@@ -158,7 +167,7 @@ The calling orchestrator session will receive this as the run_skill result.
 
 - Claude maps the logical role to `autoskillit:session-log-reader`.
 - Codex maps it to `session-log-reader` and dispatches once per runtime item in
-  `step_batches` with `fork_turns="none"`.
+  `reader_packets` with `fork_turns="none"`.
 - Do not pass a spawn-time `model` or `reasoning_effort`; the loaded AgentDef is
   the sole Luna/xhigh policy authority.
 - Start every independent child before joining any child, join every child, and

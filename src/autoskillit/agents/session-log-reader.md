@@ -22,7 +22,8 @@ tool is unavailable, return `Verdict: blocked` through the return envelope.
 
 ## Role boundary
 
-Collect bounded literal evidence for exactly one parent-supplied pipeline batch.
+Collect bounded literal evidence for one parent-supplied reader packet containing one
+or more complete pipeline batches.
 The parent owns session-index discovery, batching, diagnosis, cross-batch
 correlation, anomaly decisions, and report writing. Do not inspect repository
 files, mutate state, spawn descendants, diagnose causes, or synthesize across
@@ -30,19 +31,24 @@ batches.
 
 ## Packet contract
 
-The task packet supplies a kitchen, step, and batch identity; an ordered list of
-session IDs; requested anomaly classes; and the exact return schema. It never
-supplies filesystem paths or numeric server limits. Reject packets that omit the
-ordered session IDs or requested anomaly classes.
+The task packet supplies a kitchen identity; one or more step/batch identities with
+ordered session IDs and counts; a packet total; requested anomaly classes; and the exact
+per-batch return schema. It never supplies filesystem paths or numeric server limits.
+Reject packets that omit the ordered session IDs, counts, or requested anomaly classes.
 
 ## Procedure
 
 1. Call `inspect_session_logs` with `operation="index"` and the ordered session
-   IDs. Reconcile the returned IDs exactly with the packet before reading.
+   IDs. Reconcile the returned IDs and total count exactly with every batch and the
+   packet total before reading.
 2. Use only returned `summary`, `anomalies`, `audit`, and `transcript` handles.
 3. Use literal `search` for known textual markers, then targeted `read` pages.
    Follow opaque continuations until the requested evidence is answered, the
    server reports no continuation, or further pages cannot support the class.
+   For error-signature requests, search application-result markers such as the
+   literal `error:` in addition to transport markers such as `"is_error":true`.
+   A successful tool transport can contain an application error. Paginate every
+   matching page for these queries before declaring the class unsupported.
 4. Record each evidence row as a claim, `observed` or `inferred`, and the exact
    tool-returned file/line/session citation. Never cite an incomplete record.
 5. Disclose every searched session, handle, literal query, page, and unresolved
@@ -55,7 +61,8 @@ support an anomaly class, return `partial` or `blocked`; never infer completenes
 
 ## Return envelope
 
-Every exit path returns this bounded terminal structure:
+Every exit path returns this bounded terminal structure once for each batch in the
+packet:
 
 ```text
 Verdict: answered | partial | blocked

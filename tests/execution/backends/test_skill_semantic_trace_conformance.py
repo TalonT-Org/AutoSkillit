@@ -425,16 +425,16 @@ def test_analyze_pipeline_health_projects_the_real_terminal_reader() -> None:
     plan = info.semantic_plan
     role = "autoskillit:session-log-reader"
     assert tuple(item.name for item in plan.logical_roles) == (role,)
-    assert plan.child_spawns == (ChildSpawnSpec(role=role, for_each="step_batches"),)
+    assert plan.child_spawns == (ChildSpawnSpec(role=role, for_each="reader_packets"),)
     assert not plan.child_model_policies
 
     claude_text = "\n".join(ClaudeCodeBackend().adapt_skill_semantics(plan).instruction_fragments)
     codex_text = "\n".join(CodexBackend().adapt_skill_semantics(plan).instruction_fragments)
     assert "subagent_type='autoskillit:session-log-reader'" in claude_text
-    assert "per runtime item in 'step_batches'" in claude_text
+    assert "per runtime item in 'reader_packets'" in claude_text
     assert "model=" not in claude_text
     assert "agent_type='session-log-reader'" in codex_text
-    assert "once per runtime item in 'step_batches'" in codex_text
+    assert "once per runtime item in 'reader_packets'" in codex_text
     assert "fork_turns='none'" in codex_text
     assert "model=" not in codex_text
     assert "reasoning_effort=" not in codex_text

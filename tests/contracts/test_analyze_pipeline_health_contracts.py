@@ -74,10 +74,24 @@ def test_analyze_pipeline_health_routes_bounded_reader_packets_without_paths():
     assert "ordered session IDs" in content
     assert "requested anomaly classes" in content
     assert "Verdict: answered | partial | blocked" in content
+    assert "no more than six" in content
+    assert "Count the filtered rows programmatically" in content
     assert "Do not include `claude_code_log`, `codex_log`" in content
     assert "parent alone interprets the evidence" in content
     assert 'fork_turns="none"' in content
     assert "spawn-time `model` or `reasoning_effort`" in content
+
+
+def test_session_log_reader_covers_application_level_error_results():
+    """Reader searches errors carried by successful tool transports."""
+    from autoskillit.core import pkg_root
+
+    agent_path = pkg_root() / "agents" / "session-log-reader.md"
+    content = agent_path.read_text()
+    assert "literal `error:`" in content
+    assert '`"is_error":true`' in content
+    assert "successful tool transport can contain an application error" in content
+    assert "Paginate every" in content and "matching page" in content
 
 
 def test_analyze_pipeline_health_never_prohibits_tmp():

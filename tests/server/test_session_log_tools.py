@@ -13,6 +13,15 @@ from autoskillit.server.tools import tools_session_logs as session_logs
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
+@pytest.mark.asyncio
+async def test_inspection_requires_an_open_kitchen(tool_ctx) -> None:
+    result = json.loads(await session_logs.inspect_session_logs(operation="index"))
+
+    assert result["success"] is False
+    assert result["subtype"] == "gate_error"
+    assert "open_kitchen" in result["result"]
+
+
 @pytest.fixture
 def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     log_root = tmp_path / "logs"

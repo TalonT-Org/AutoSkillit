@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import autoskillit.core.path_containment as path_containment
 from autoskillit.core.path_containment import (
     ContainmentError,
     check_metadata_stable,
@@ -271,6 +272,37 @@ class TestReadStableContainedRange:
             read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
 
         assert exc_info.value.reason == "range_unstable"
+
+    def test_path_replacement_before_secure_open_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        outside = tmp_path / "outside.txt"
+        outside.write_text("outside")
+        secure_open = path_containment._open_beneath_root_without_symlinks
+
+        def replace_with_symlink(
+            path: str | Path,
+            allowed_root: str | Path,
+            resolved: Path,
+        ) -> int:
+            artifact.unlink()
+            artifact.symlink_to(outside)
+            return secure_open(path, allowed_root, resolved)
+
+        monkeypatch.setattr(
+            path_containment,
+            "_open_beneath_root_without_symlinks",
+            replace_with_symlink,
+        )
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "containment_error"
 
     @pytest.mark.parametrize("drift", ["shrink", "mtime"])
     def test_open_snapshot_drift_fails_closed(

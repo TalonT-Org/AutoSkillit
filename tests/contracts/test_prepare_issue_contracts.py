@@ -25,7 +25,11 @@ def _lines():
 
 def _label_step() -> str:
     text = SKILL_MD.read_text()
-    return text.split("### Step 9: Label Application", 1)[1].split("## Critical Constraints", 1)[0]
+    _, start, remainder = text.partition("### Step 9: Label Application")
+    assert start, "prepare-issue label application section is missing"
+    step, end, _ = remainder.partition("## Critical Constraints")
+    assert end, "prepare-issue critical constraints section is missing"
+    return step
 
 
 def test_label_step_inventories_then_batches_only_missing_definitions():

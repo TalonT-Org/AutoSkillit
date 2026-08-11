@@ -1182,10 +1182,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "fitness checks at this same finalization boundary.",
     ),
     "server/_recipe_section_pagination.py": (
-        1020,
+        1030,
         "REQ-CNST-010-E23: #4414 binds terminal completion receipts to the finalized page "
         "content digest inside the existing immutable page renderer so pagination and receipt "
-        "identity cannot drift across separate serialization authorities.",
+        "identity cannot drift across separate serialization authorities. "
+        "#4557 adds char-ceiling plumbing and json-array-page flattening at _render_candidate.",
     ),
     "tools_kitchen.py": (
         2260,

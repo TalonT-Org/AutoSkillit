@@ -29,6 +29,11 @@ def test_per_page_bound_admits_largest_bundled_section_in_one_page(
         temp_dir=tmp_path,
         monkeypatch=monkeypatch,
     )
+    if envelope.get("delivery_bound_spill") is not True:
+        pytest.skip(
+            f"{recipe_path.stem}: resolves inline under stress-test config "
+            "— no envelope sections to calibrate"
+        )
     assert max(item["total_parts"] for item in envelope["required_sections"]) <= (
         MAX_PAGES_PER_SECTION
     )

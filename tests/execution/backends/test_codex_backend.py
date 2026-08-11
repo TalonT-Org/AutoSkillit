@@ -2682,7 +2682,7 @@ class TestCodexBackendSetupSessionDir:
 
         (self.session_dir / "config.toml").write_text(
             f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}\n"
-            "[mcp_servers.autoskillit]\n"
+            + self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
         )
         (self.codex_home / "auth.json").write_text("{}")
         CodexBackend().setup_session_dir(self.session_dir)

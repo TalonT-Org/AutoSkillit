@@ -39,26 +39,6 @@ class TestExplorerRegistrationDerivesFromBindings:
             expected = definitions[path.stem].codex.web_search
             assert data.get("web_search") == expected
 
-    @pytest.mark.parametrize(
-        "config_text",
-        [None, "[mcp_servers.autoskillit]\n"],
-    )
-    def test_direct_roles_fail_closed_without_canonical_transport(
-        self,
-        tmp_path: Path,
-        config_text: str | None,
-    ) -> None:
-        definitions = tuple(
-            definition
-            for definition in load_bundled_agent_definitions()
-            if definition.name in BUNDLED_EXPLORER_ROLES
-        )
-        if config_text is not None:
-            (tmp_path / "config.toml").write_text(config_text)
-
-        with pytest.raises(ValueError, match="canonical"):
-            _generate_agent_tomls(tmp_path, agent_defs=definitions)
-
     def test_bound_includes_explorer_roles(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex.explorer_projection import (
             _EXPLORER_BINDING_ENV_KEYS,

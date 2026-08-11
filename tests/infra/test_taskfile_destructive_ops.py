@@ -15,6 +15,10 @@ AUDITED_DESTRUCTIVE_TASKFILE_OPS: dict[str, str] = {
     "cleanup-shm::headless-*": (
         "Age-gated cleanup for session artifacts owned by the #3214 session lifecycle."
     ),
+    "cleanup-shm::pytest_tmp_lifecycle.py reap": (
+        "Liveness-verified pytest reaper; macOS ps environment visibility is narrower, "
+        "and scan failures prevent deletion."
+    ),
     "install-worktree::uv venv --clear": (
         "Per-worktree environment rebuild; same-worktree concurrency remains tracked separately."
     ),
@@ -32,6 +36,8 @@ def _destructive_operations() -> set[str]:
             for line in str(command).splitlines():
                 if "uv venv --clear" in line:
                     findings.add(f"{task_name}::uv venv --clear")
+                if "pytest_tmp_lifecycle.py reap" in line:
+                    findings.add(f"{task_name}::pytest_tmp_lifecycle.py reap")
                 if _FIND_EXEC_RM.search(line) or _RECURSIVE_RM.search(line):
                     marker = "headless-*" if "headless-*" in line else line.strip()
                     findings.add(f"{task_name}::{marker}")

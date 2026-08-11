@@ -258,6 +258,11 @@ def _safe_candidates(platform_root: Path, user_root: Path) -> list[Path]:
                 _log(f"skipping private root owned by uid {root_stat.st_uid}: {user_root}")
             else:
                 try:
+                    user_root.chmod(0o700)
+                except OSError as exc:
+                    _log(f"cannot normalize private root permissions for {user_root}: {exc}")
+                    return candidates
+                try:
                     candidates.extend(
                         child for child in user_root.iterdir() if child.name.startswith("pytest-")
                     )
@@ -308,6 +313,9 @@ def _reap(
             continue
         if stat.S_ISLNK(candidate_stat.st_mode) or not stat.S_ISDIR(candidate_stat.st_mode):
             _log(f"skipping non-directory or symlink candidate {candidate}")
+            continue
+        if candidate_stat.st_uid != os.getuid():
+            _log(f"skipping candidate owned by uid {candidate_stat.st_uid}: {candidate}")
             continue
         if _contains_reference(candidate, references):
             continue

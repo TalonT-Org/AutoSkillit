@@ -214,6 +214,47 @@ def test_each_authoritative_obligation_rejects_success(
 
 
 @pytest.mark.parametrize(
+    ("termination", "kill_reason", "expected_retry"),
+    [
+        (TerminationReason.STALE, KillReason.INFRA_KILL, RetryReason.STALE),
+        (TerminationReason.IDLE_STALL, KillReason.INFRA_KILL, RetryReason.IDLE_STALL),
+        (TerminationReason.TIMED_OUT, KillReason.INFRA_KILL, RetryReason.NONE),
+        (
+            TerminationReason.HEALTH_INSPECTOR,
+            KillReason.HEALTH_INSPECTOR,
+            RetryReason.NONE,
+        ),
+        (TerminationReason.SIGNAL_DEATH, KillReason.NATURAL_EXIT, RetryReason.RESUME),
+    ],
+)
+def test_provenance_failure_precedes_pending_obligation(
+    termination: TerminationReason,
+    kill_reason: KillReason,
+    expected_retry: RetryReason,
+) -> None:
+    result = SubprocessResult(
+        returncode=-1,
+        stdout="",
+        stderr="",
+        termination=termination,
+        kill_reason=kill_reason,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("owned",),
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is expected_retry
+    assert skill_result.subtype != "async_obligation"
+
+
+@pytest.mark.parametrize(
     "channel_confirmation",
     [ChannelConfirmation.CHANNEL_A, ChannelConfirmation.CHANNEL_B],
 )

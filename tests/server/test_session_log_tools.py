@@ -524,6 +524,91 @@ async def test_invalid_operation_argument_combinations_are_bounded(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kwargs", "expected_reason"),
+    [
+        (
+            {
+                "operation": "index",
+                "session_ids": [
+                    f"session-{index}" for index in range(session_logs._MAX_SESSION_IDS + 1)
+                ],
+            },
+            "session_batch_invalid",
+        ),
+        (
+            {
+                "operation": "index",
+                "session_ids": ["s" * (session_logs._MAX_SESSION_ID_CHARS + 1)],
+            },
+            "session_batch_invalid",
+        ),
+        (
+            {
+                "operation": "read",
+                "session_id": "s" * (session_logs._MAX_SESSION_ID_CHARS + 1),
+                "artifact": "anomalies",
+            },
+            "arguments_invalid",
+        ),
+        (
+            {
+                "operation": "read",
+                "session_id": "session-one",
+                "artifact": "a" * (session_logs._MAX_SESSION_ID_CHARS + 1),
+            },
+            "arguments_invalid",
+        ),
+        (
+            {
+                "operation": "search",
+                "session_id": "session-one",
+                "artifact": "anomalies",
+                "query": "q" * (session_logs._MAX_QUERY_CHARS + 1),
+            },
+            "arguments_invalid",
+        ),
+        (
+            {
+                "operation": "read",
+                "session_id": "session-one",
+                "artifact": "anomalies",
+                "continuation": "c" * (session_logs._MAX_CONTINUATION_CHARS + 1),
+            },
+            "continuation_invalid",
+        ),
+        (
+            {
+                "operation": "read",
+                "session_id": "session-one",
+                "artifact": "anomalies",
+                "byte_limit": 0,
+            },
+            "byte_limit_invalid",
+        ),
+        (
+            {
+                "operation": "read",
+                "session_id": "session-one",
+                "artifact": "anomalies",
+                "byte_limit": session_logs._MAX_PAGE_BYTES + 1,
+            },
+            "",
+        ),
+    ],
+)
+async def test_public_argument_limits_are_enforced(
+    retained_logs,
+    kwargs: dict[str, object],
+    expected_reason: str,
+) -> None:
+    result = json.loads(await session_logs.inspect_session_logs(**kwargs))
+
+    assert result["reason"] == expected_reason
+    assert result["status"] == ("answered" if not expected_reason else "blocked")
+
+
+@pytest.mark.asyncio
 async def test_complete_handler_exception_boundary_and_docstring(
     retained_logs,
     monkeypatch: pytest.MonkeyPatch,

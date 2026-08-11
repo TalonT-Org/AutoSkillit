@@ -56,7 +56,7 @@ def _simple_flow_generation(name: str) -> RecipeFlowGeneration:
 def test_response_backstop_tool_metadata_comes_from_registry() -> None:
     from autoskillit.server.tools._serve_helpers import response_backstop_tool_meta
 
-    for tool_name in ("load_recipe", "open_kitchen"):
+    for tool_name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY:
         definition = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[tool_name]
         metadata = response_backstop_tool_meta(tool_name, always_load=tool_name == "open_kitchen")
         assert metadata["anthropic/maxResultSizeChars"] == definition.max_chars
@@ -1065,7 +1065,7 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
 
     project_root = Path(__file__).resolve().parent.parent.parent
     measured_modes: set[tuple[str, str, bool]] = set()
-    maxima = {"load_recipe": (0, "", ""), "open_kitchen": (0, "", "")}
+    maxima = {name: (0, "", "") for name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY}
     monkeypatch.setattr(_api_cache, "_refresh_staleness_baseline", lambda: None)
     # Normalize away the environment-dependent scripts path so the pinned
     # maxima are identical regardless of checkout location.
@@ -1105,7 +1105,7 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
             )
 
             for ingredients_only in (False, True):
-                for tool_name in ("load_recipe", "open_kitchen"):
+                for tool_name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY:
                     payload = dict(result)
                     if tool_name == "open_kitchen":
                         payload = build_open_kitchen_recipe_payload(payload, version=__version__)
@@ -1136,11 +1136,12 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
 
     assert measured_modes == {
         (tool_name, mode_name, ingredients_only)
-        for tool_name in ("load_recipe", "open_kitchen")
+        for tool_name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
         for mode_name in _COMPACT_TEST_OVERRIDES
         for ingredients_only in (False, True)
     }
     assert maxima == {
+        "get_recipe_section": (173_024, "remediation", "all_truthy"),
         "load_recipe": (173_024, "remediation", "all_truthy"),
         "open_kitchen": (173_077, "remediation", "all_truthy"),
     }

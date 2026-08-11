@@ -456,7 +456,11 @@ async def load_recipe(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core"},
+    annotations={"readOnlyHint": True},
+    meta=response_backstop_tool_meta("get_recipe_section"),
+)
 @track_response_size("get_recipe_section")
 @_cancellation_shield(
     state_factory=_recipe_section_request_state_factory,

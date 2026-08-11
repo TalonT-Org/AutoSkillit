@@ -14,6 +14,7 @@ from autoskillit.core.types import ChannelConfirmation
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.pipeline.audit import FailureRecord
 from autoskillit.pipeline.gate import DefaultGateState
+from autoskillit.recipe.schema import RecipeStep
 from autoskillit.server.tools.tools_execution import run_skill
 from autoskillit.server.tools.tools_status import (
     get_pipeline_report,
@@ -54,6 +55,13 @@ def _failed_session_json() -> str:
             "is_error": True,
         }
     )
+
+
+def _dependency_recipe_steps() -> dict[str, RecipeStep]:
+    return {
+        "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+        "review_approach": RecipeStep(name="review_approach"),
+    }
 
 
 class TestKitchenStatus:
@@ -157,6 +165,72 @@ class TestKitchenStatus:
         result_str = json.dumps(json.loads(await kitchen_status()))
         assert "stale" not in result_str.lower()
         assert "gate_file" not in result_str.lower()
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_reports_missing_exact_kitchen_tracker(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
+        tool_ctx_kitchen_open.active_recipe_steps = _dependency_recipe_steps()
+        dispatch_path = (
+            tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "dispatch-status.json"
+        )
+        dispatch_path.parent.mkdir(parents=True)
+        dispatch_path.write_text(json.dumps({"steps": {}, "dependencies": {}}))
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "dispatch-status")
+
+        status = json.loads(await kitchen_status())
+
+        assert status["tracker_authority"]["target_order_id"] == "kitchen-status"
+        assert status["tracker_authority"]["available"] is False
+        assert "Expected pipeline tracker 'kitchen-status'" in status["error"]
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_treats_tracker_as_optional_without_dependencies(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
+        tool_ctx_kitchen_open.active_recipe_steps = {"review": RecipeStep(name="review")}
+
+        status = json.loads(await kitchen_status())
+
+        assert status["tracker_authority"] == {
+            "target_order_id": "kitchen-status",
+            "path": str(
+                tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-status.json"
+            ),
+            "expected": False,
+            "available": False,
+            "error": None,
+        }
+        assert "error" not in status
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_reports_readable_kitchen_tracker_clean(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
+        tool_ctx_kitchen_open.active_recipe_steps = _dependency_recipe_steps()
+        tracker_path = (
+            tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-status.json"
+        )
+        tracker_path.parent.mkdir(parents=True)
+        tracker_path.write_text(
+            json.dumps(
+                {
+                    "steps": {"plan": {"status": "pending"}},
+                    "dependencies": {"review": ["plan"]},
+                }
+            )
+        )
+
+        status = json.loads(await kitchen_status())
+
+        assert status["tracker_authority"]["available"] is True
+        assert "error" not in status
 
 
 class TestGetPipelineReport:

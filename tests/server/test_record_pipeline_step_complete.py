@@ -7,36 +7,9 @@ import json
 import pytest
 
 from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
-from tests.server._pipeline_test_helpers import _write_tracker
+from tests.server._pipeline_test_helpers import _grant_success_credit, _write_tracker
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _grant_success_credit(tool_ctx, tmp_path, step_name: str) -> None:
-    authority = tool_ctx.run_skill_completion
-    assert authority is not None
-    tracker_path = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "test-kitchen.json"
-    invocation_id = authority.begin(
-        kitchen_id="test-kitchen",
-        request_session_id="request-session",
-        tracker_order_id="test-kitchen",
-        tracker_path=str(tracker_path.resolve()),
-        tracker_kitchen_id="test-kitchen",
-        tracker_incarnation_id="test-incarnation",
-        step_name=step_name,
-    )
-    receipt = authority.draft(
-        invocation_id,
-        classification="success",
-        success=True,
-        result_digest="digest",
-    )
-    authority.publish(receipt.receipt_id)
-    authority.acknowledge(
-        receipt.receipt_id,
-        kitchen_id="test-kitchen",
-        request_session_id="request-session",
-    )
 
 
 class TestRecordPipelineStepComplete:

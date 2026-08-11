@@ -102,7 +102,7 @@ Read the JSON file. Extract: `prs` array (each: `number`, `title`, `branch`,
 `complexity`, `additions`, `deletions`, `overlap_with_pr_numbers`, `files_changed`). Also read
 `base_branch` from JSON as confirmation. Store the PR list as `pr_list`.
 
-### Step 3: Fetch Closes/Fixes References from Original PR Bodies
+### Step 3: Fetch Source Issue URLs from Original PR Bodies
 
 Fetch all PR bodies in a single GraphQL alias query (1 API call instead of N sequential
 REST calls). Chunk into batches of 20 to stay within GraphQL complexity limits.
@@ -127,10 +127,12 @@ for batch_start in $(seq 0 $BATCH_SIZE $((${#PR_NUMS[@]} - 1))); do
 done
 ```
 
-Extract every line matching `(Closes|Fixes|Resolves)\s+#\d+` (case-insensitive) from
-each PR body in `BODIES_JSON`. Deduplicate across all PRs. Store as `closing_refs`
-(list of strings like `Closes #42`).
-Skip gracefully if `gh` is unavailable — `closing_refs` remains empty.
+Extract every canonical full URL matching
+`(Closes|Fixes|Resolves)\s+https://github.com/{owner}/{repo}/issues/{number}`
+(case-insensitive keyword, exact canonical URL) from each PR body in `BODIES_JSON`.
+Deduplicate the URLs, sort them lexicographically, and store them as
+`source_issue_urls`. Do not reconstruct a URL from a bare `#N` reference. Skip
+gracefully if `gh` is unavailable — `source_issue_urls` remains empty.
 
 ### Step 4: Get Changed Files
 
@@ -350,11 +352,28 @@ The following files had merge conflicts that were automatically resolved during 
 {diagram content}
 ```
 
-{For each item in closing_refs:}
-{Closes #N}
+{For each URL in source_issue_urls, in sorted order:}
+Closes {source_issue_url}
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
 ```
+
+After writing the body, compute SHA-256 over its exact raw bytes and write its
+exclusive version-1 sibling metadata file
+`{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_body_{timestamp}.metadata.json`:
+
+```json
+{
+  "schema_version": 1,
+  "body_sha256": "<64 lowercase hexadecimal SHA-256 of the raw body bytes>",
+  "source_issue_urls": [
+    "https://github.com/TalonT-Org/AutoSkillit/issues/4293"
+  ]
+}
+```
+
+The array must contain the exact unique canonical URLs used in the body, sorted
+lexicographically. Do not add fields.
 
 ### Step 8: Check GitHub Availability
 
@@ -365,6 +384,12 @@ gh auth status 2>/dev/null
 If exit code non-zero: output `pr_url=` and exit successfully.
 
 ### Step 9: Create Integration PR
+
+Immediately before creation, validate the exact invoked body and only its
+`with_suffix(".metadata.json")` sibling. Require a regular readable body, the exact
+three-field version-1 schema above, a matching raw-byte digest, a sorted unique URL
+array, and every listed URL in a closing line in that body. Any mismatch is terminal
+and must stop before `gh pr create` executes.
 
 ```bash
 gh pr create \

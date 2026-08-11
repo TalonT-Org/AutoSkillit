@@ -2,32 +2,38 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
-    RunSkillCompletionAuthority,
-    atomic_write,
+    ArtifactLease,
+    AuditIdentityReservation,
+    TrackerAuthorityReadResult,
+    TrackerAuthorityTarget,
+    TrackerParticipantKey,
     get_logger,
+    initialize_manual_tracker,
+    mutate_tracker,
+    read_tracker_authority,
+    release_tracker_lease,
+    retain_tracker_lease,
 )
-from autoskillit.pipeline import canonical_step_name
+from autoskillit.pipeline import canonical_step_name, get_kitchen_process_identity
+from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_orchestrator_exact
-from autoskillit.server._misc import (
-    _pipeline_tracker_dir,
-    _pipeline_tracker_path,
-)
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._run_skill_completion import _request_session_identity
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -37,85 +43,147 @@ from autoskillit.server.tools._types import deny_envelope
 logger = get_logger(__name__)
 
 
-class _TrackerCtx(Protocol):
-    """Minimal ToolContext duck-type — avoids circular import with tools_execution.py."""
-
-    kitchen_id: str
-    project_dir: Path
-    run_skill_completion: RunSkillCompletionAuthority | None
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedTracker:
-    """Successfully resolved tracker file."""
-
-    order_id: str
-    path: Path
-
-
-def read_tracker_identity(resolved: ResolvedTracker) -> tuple[str, str] | None:
-    """Read the kitchen and incarnation identities from a resolved tracker."""
-    tracker = json.loads(resolved.path.read_text())
-    kitchen_id = tracker.get("kitchen_id")
-    incarnation_id = tracker.get("tracker_incarnation_id")
+def read_tracker_identity(
+    target: TrackerAuthorityTarget,
+    lease: ArtifactLease,
+) -> tuple[str, str] | None:
+    """Read kitchen and incarnation identity under the target's retained lease."""
+    authority = read_tracker_authority(target, lease)
+    if authority.data is None:
+        return None
+    kitchen_id = authority.data.get("kitchen_id")
+    incarnation_id = authority.data.get("tracker_incarnation_id")
     if not isinstance(kitchen_id, str) or not isinstance(incarnation_id, str):
         return None
     return kitchen_id, incarnation_id
 
 
-@dataclass(frozen=True, slots=True)
-class ResolutionRefusal:
-    """Tracker resolution failed — carry a reason for the caller to wrap."""
-
-    reason: str
-    multi_pipeline: bool = False
-
-
-def resolve_tracker_order_id(
-    tool_ctx: _TrackerCtx, order_id: str
-) -> ResolvedTracker | ResolutionRefusal:
-    """Resolve the effective tracker order_id with three-tier precedence.
-
-    1. Explicit ``order_id`` parameter
-    2. ``AUTOSKILLIT_DISPATCH_ID`` environment variable
-    3. Kitchen-scoped fallback via internal ``kitchen_id`` field scan
-
-    Shared by ``_check_pipeline_deps`` (enforcement reader) and the
-    adjudication-point marker (writer) so they can never disagree on
-    which tracker file to target.
-    """
-    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-    kitchen_id = tool_ctx.kitchen_id
-    project_dir = tool_ctx.project_dir
-
+def select_tracker_target(
+    tool_ctx: ToolContext,
+    order_id: str,
+    *,
+    expected: bool,
+) -> TrackerAuthorityTarget | None:
+    """Select one explicit target without scanning for ambient tracker files."""
+    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "") or tool_ctx.kitchen_id
     if not effective_oid:
-        if not kitchen_id:
-            return ResolutionRefusal(reason="no order_id and no kitchen_id")
-        tracker_dir = _pipeline_tracker_dir(project_dir)
-        if not tracker_dir.is_dir():
-            return ResolutionRefusal(reason="tracker directory does not exist")
-        active: set[str] = set()
-        for path in tracker_dir.glob("*.json"):
-            if path.stem == kitchen_id:
-                continue
+        return None
+    return TrackerAuthorityTarget.for_project(
+        tool_ctx.project_dir,
+        effective_oid,
+        expected=expected,
+    )
+
+
+def _retain_context_tracker(
+    tool_ctx: ToolContext,
+    target: TrackerAuthorityTarget,
+    *,
+    owner_kind: Literal["kitchen", "dispatch", "manual"],
+    owner_id: str,
+) -> tuple[TrackerParticipantKey, ArtifactLease]:
+    with tool_ctx.tracker_leases_lock:
+        identity = get_kitchen_process_identity(tool_ctx, owner_id)
+        key = TrackerParticipantKey(
+            target=target,
+            owner_kind=owner_kind,
+            owner_id=owner_id,
+            pid=identity.pid,
+            create_time=identity.create_time,
+            project_path=identity.project_path,
+        )
+        lease = retain_tracker_lease(tool_ctx.tracker_leases, key)
+    return key, lease
+
+
+def _release_context_tracker(tool_ctx: ToolContext, key: TrackerParticipantKey) -> None:
+    with tool_ctx.tracker_leases_lock:
+        release_tracker_lease(tool_ctx.tracker_leases, key)
+
+
+def _select_tracker_authority(
+    tool_ctx: ToolContext,
+    order_id: str,
+    *,
+    expected: bool | None = None,
+) -> tuple[
+    TrackerAuthorityTarget | None,
+    TrackerAuthorityReadResult | None,
+    TrackerParticipantKey | None,
+    ArtifactLease | None,
+]:
+    explicit_target = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+    target_order_id = explicit_target or tool_ctx.kitchen_id
+    if not target_order_id:
+        return None, None, None, None
+    if expected is None:
+        expected = bool(explicit_target)
+        if not expected and tool_ctx.active_recipe_steps:
             try:
-                tracker = json.loads(path.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-            if tracker.get("kitchen_id") == kitchen_id:
-                active.add(path.stem)
-        if len(active) > 1:
-            return ResolutionRefusal(
-                reason=(
-                    f"multiple pipelines are active under this kitchen "
-                    f"({sorted(active)}). Pass order_id explicitly to scope "
-                    "the dependency check."
-                ),
-                multi_pipeline=True,
-            )
-        effective_oid = next(iter(active)) if active else kitchen_id
-    tracker_path = _pipeline_tracker_path(project_dir, effective_oid)
-    return ResolvedTracker(order_id=effective_oid, path=tracker_path)
+                expected = bool(_derive_phase_a_deps(tool_ctx.active_recipe_steps))
+            except (AttributeError, TypeError):
+                expected = False
+    target = TrackerAuthorityTarget.for_project(
+        tool_ctx.project_dir,
+        target_order_id,
+        expected=expected,
+    )
+    key, lease = _retain_context_tracker(
+        tool_ctx,
+        target,
+        owner_kind="manual",
+        owner_id=f"selection:{uuid.uuid4().hex}",
+    )
+    try:
+        authority = read_tracker_authority(target, lease)
+    except Exception:
+        _release_context_tracker(tool_ctx, key)
+        raise
+    return target, authority, key, lease
+
+
+def _restore_reserved_tracker_authority(
+    tool_ctx: ToolContext,
+    reservation: AuditIdentityReservation,
+    current_key: TrackerParticipantKey | None,
+) -> tuple[
+    TrackerAuthorityTarget | None,
+    TrackerAuthorityReadResult | None,
+    TrackerParticipantKey | None,
+    ArtifactLease | None,
+]:
+    target_order_id = reservation.tracker_target_order_id
+    if target_order_id is None:
+        if current_key is not None:
+            _release_context_tracker(tool_ctx, current_key)
+        return None, None, None, None
+    target = TrackerAuthorityTarget.for_project(
+        tool_ctx.project_dir,
+        target_order_id,
+        expected=reservation.tracker_expected,
+    )
+    key, lease = _retain_context_tracker(
+        tool_ctx,
+        target,
+        owner_kind="kitchen",
+        owner_id=tool_ctx.kitchen_id or target_order_id,
+    )
+    try:
+        authority = read_tracker_authority(target, lease)
+    except Exception:
+        if key != current_key:
+            _release_context_tracker(tool_ctx, key)
+        raise
+    if current_key is not None and current_key != key:
+        _release_context_tracker(tool_ctx, current_key)
+    return target, authority, key, lease
+
+
+def _authority_blocks_dependency_check(authority: TrackerAuthorityReadResult | None) -> bool:
+    return bool(
+        authority is not None
+        and (authority.error is not None or (authority.data or {}).get("dependencies"))
+    )
 
 
 def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
@@ -200,13 +268,39 @@ async def record_pipeline_step(
                 )
             )
 
-        tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_pipeline_id)
+        target = TrackerAuthorityTarget.for_project(
+            ctx.project_dir,
+            effective_pipeline_id,
+            expected=True,
+        )
+        key, lease = _retain_context_tracker(
+            ctx,
+            target,
+            owner_kind="manual",
+            owner_id=effective_pipeline_id,
+        )
 
         if op == "init":
-            return _handle_init(ctx, tracker_path, effective_pipeline_id, dependencies)
+            try:
+                result = _handle_init(ctx, target, lease, dependencies)
+            except Exception:
+                _release_context_tracker(ctx, key)
+                raise
+            if not json.loads(result).get("success"):
+                _release_context_tracker(ctx, key)
+            return result
 
         if op == "status":
-            return _handle_status(tracker_path, effective_pipeline_id)
+            try:
+                result = _handle_status(target, lease)
+            except Exception:
+                _release_context_tracker(ctx, key)
+                raise
+            if not json.loads(result).get("success"):
+                _release_context_tracker(ctx, key)
+            return result
+
+        _release_context_tracker(ctx, key)
 
         return json.dumps(
             deny_envelope(
@@ -227,23 +321,11 @@ async def record_pipeline_step(
 
 
 def _handle_init(
-    ctx: object,
-    tracker_path: Path,
-    effective_pipeline_id: str,
+    ctx: ToolContext,
+    target: TrackerAuthorityTarget,
+    lease: ArtifactLease,
     dependencies: dict[str, list[str]] | None,
 ) -> str:
-    if tracker_path.exists():
-        return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
-                    f"record_pipeline_step: pipeline '{effective_pipeline_id}' "
-                    "has already been initialized."
-                ),
-            }
-        )
-
     active_steps = ctx.active_recipe_steps  # type: ignore[attr-defined]
     if active_steps is None:
         return json.dumps(
@@ -257,63 +339,60 @@ def _handle_init(
             }
         )
 
-    skipped = _resolve_skipped_steps(ctx.project_dir, effective_pipeline_id)  # type: ignore[attr-defined]
+    skipped = _resolve_skipped_steps(ctx.project_dir, target.target_order_id)
     steps = _build_tracker_steps(active_steps, skipped)
 
     tracker_data = {
-        "pipeline_id": effective_pipeline_id,
-        "kitchen_id": ctx.kitchen_id,  # type: ignore[attr-defined]
+        "pipeline_id": target.target_order_id,
+        "kitchen_id": ctx.kitchen_id,
         "initialized_at": datetime.now(UTC).isoformat(),
         "tracker_incarnation_id": uuid.uuid4().hex,
         "steps": steps,
         "dependencies": dependencies or {},
     }
 
-    tracker_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(tracker_path, json.dumps(tracker_data))
+    authority = initialize_manual_tracker(target, lease, tracker_data)
+    if authority.error is not None:
+        return json.dumps(
+            {
+                "success": False,
+                "is_error": True,
+                "error": (
+                    f"record_pipeline_step: pipeline '{target.target_order_id}' "
+                    f"has already been initialized. {authority.error}"
+                ),
+            }
+        )
 
     return json.dumps(
         {
             "success": True,
-            "pipeline_id": effective_pipeline_id,
+            "pipeline_id": target.target_order_id,
             "step_count": len(steps),
             "dependency_count": len(dependencies or {}),
         }
     )
 
 
-def _handle_status(tracker_path: Path, effective_pipeline_id: str) -> str:
-    if not tracker_path.exists():
+def _handle_status(target: TrackerAuthorityTarget, lease: ArtifactLease) -> str:
+    authority = read_tracker_authority(target, lease)
+    if authority.data is None:
         return json.dumps(
             {
                 "success": False,
                 "is_error": True,
-                "error": (
-                    f"record_pipeline_step: no tracker found for pipeline "
-                    f"'{effective_pipeline_id}'. Initialize with op='init' first."
-                ),
+                "error": f"record_pipeline_step: {authority.error}",
             }
         )
-
-    try:
-        tracker_data = json.loads(tracker_path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": f"record_pipeline_step: failed to read tracker: {exc}",
-            }
-        )
-
-    steps = tracker_data.get("steps", {})
-    deps = tracker_data.get("dependencies", {})
+    tracker_data = authority.data
+    steps = tracker_data["steps"]
+    deps = tracker_data["dependencies"]
     counts = _compute_status_counts(steps, deps)
 
     return json.dumps(
         {
             "success": True,
-            "pipeline_id": effective_pipeline_id,
+            "pipeline_id": target.target_order_id,
             "steps": steps,
             "dependencies": deps,
             **counts,
@@ -322,7 +401,7 @@ def _handle_status(tracker_path: Path, effective_pipeline_id: str) -> str:
     )
 
 
-def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: str) -> str:
+def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: str) -> str:
     if not step_name:
         return json.dumps(
             deny_envelope(
@@ -332,44 +411,40 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
             )
         )
 
-    resolved = resolve_tracker_order_id(ctx, effective_pipeline_id)
-    if isinstance(resolved, ResolutionRefusal):
+    target = select_tracker_target(ctx, effective_pipeline_id, expected=True)
+    if target is None:
         return json.dumps(
             deny_envelope(
-                f"record_pipeline_step: cannot resolve pipeline tracker: {resolved.reason}",
+                "record_pipeline_step: cannot resolve pipeline tracker: no explicit target",
                 stage="preflight:pipeline_tracker",
                 retriable=False,
             )
         )
-    if not resolved.path.exists():
-        return json.dumps(
-            deny_envelope(
-                f"record_pipeline_step: no tracker found for pipeline "
-                f"'{resolved.order_id}'. Initialize with op='init' first.",
-                stage="preflight:pipeline_tracker",
-                retriable=False,
-            )
-        )
-
+    key, lease = _retain_context_tracker(
+        ctx,
+        target,
+        owner_kind="manual",
+        owner_id=target.target_order_id,
+    )
     try:
-        tracker_identity = read_tracker_identity(resolved)
-    except json.JSONDecodeError as exc:
+        tracker_authority = read_tracker_authority(target, lease)
+    except Exception:
+        _release_context_tracker(ctx, key)
+        raise
+    if tracker_authority.data is None:
+        _release_context_tracker(ctx, key)
+        identity_error = cast(str, tracker_authority.error)
         return json.dumps(
             deny_envelope(
-                f"record_pipeline_step: failed to read tracker identity: {exc}",
+                f"record_pipeline_step: failed to read tracker identity: {identity_error}",
                 stage="preflight:pipeline_tracker",
-                retriable=False,
+                retriable=identity_error.startswith("Cannot read pipeline tracker"),
             )
         )
-    except OSError as exc:
-        return json.dumps(
-            deny_envelope(
-                f"record_pipeline_step: failed to read tracker identity: {exc}",
-                stage="preflight:pipeline_tracker",
-                retriable=True,
-            )
-        )
-    if tracker_identity is None:
+    tracker_kitchen_id = tracker_authority.data.get("kitchen_id")
+    tracker_incarnation_id = tracker_authority.data.get("tracker_incarnation_id")
+    if not isinstance(tracker_kitchen_id, str) or not isinstance(tracker_incarnation_id, str):
+        _release_context_tracker(ctx, key)
         return json.dumps(
             deny_envelope(
                 "record_pipeline_step: tracker incarnation identity is missing.",
@@ -377,9 +452,9 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
                 retriable=False,
             )
         )
-    tracker_kitchen_id, tracker_incarnation_id = tracker_identity
     authority = ctx.run_skill_completion
     if authority is None:
+        _release_context_tracker(ctx, key)
         return json.dumps(
             deny_envelope(
                 "record_pipeline_step: completion authority is unavailable.",
@@ -389,15 +464,15 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
         )
     try:
         result = authority.apply_tracker_credit(
-            tracker_order_id=resolved.order_id,
-            tracker_path=str(resolved.path.resolve()),
+            tracker_order_id=target.target_order_id,
+            tracker_path=str(target.path.resolve()),
             tracker_kitchen_id=tracker_kitchen_id,
             tracker_incarnation_id=tracker_incarnation_id,
             step_name=step_name,
             effect=lambda: mark_step_complete(
-                resolved.path,
+                target,
+                lease,
                 step_name,
-                resolved.order_id,
                 expected_tracker_kitchen_id=tracker_kitchen_id,
                 expected_tracker_incarnation_id=tracker_incarnation_id,
             ),
@@ -408,13 +483,26 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
             stage="preflight:pipeline_tracker_credit",
             retriable=False,
         )
+    except Exception:
+        _release_context_tracker(ctx, key)
+        logger.exception("record_pipeline_step_marker_failed")
+        return json.dumps(
+            {
+                "success": False,
+                "is_error": True,
+                "error": "record_pipeline_step: pipeline marker failed.",
+                "stage": "pipeline_marker",
+            }
+        )
+    if not result.get("success") or result.get("done") == result.get("total"):
+        _release_context_tracker(ctx, key)
     return json.dumps(result)
 
 
 def mark_step_complete(
-    tracker_path: Path,
+    target: TrackerAuthorityTarget,
+    lease: ArtifactLease,
     step_name: str,
-    order_id: str,
     *,
     expected_tracker_kitchen_id: str = "",
     expected_tracker_incarnation_id: str = "",
@@ -425,105 +513,99 @@ def mark_step_complete(
     ``complete_run_skill_result``. Returns a result dict (always includes ``success``).
     """
     canonical = canonical_step_name(step_name)
-    lock_path = tracker_path.parent / ".pipeline_tracker.lock"
+    outcome: dict[str, object] = {}
 
-    try:
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
-    except OSError as exc:
-        return deny_envelope(
-            f"mark_step_complete: failed to open lock file: {exc}",
-            stage="mark_step_complete",
-            retriable=True,
-        )
-
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-    except OSError as exc:
-        os.close(lock_fd)
-        return deny_envelope(
-            f"mark_step_complete: failed to acquire lock: {exc}",
-            stage="mark_step_complete",
-            retriable=True,
-        )
-
-    try:
-        if not tracker_path.exists():
-            return deny_envelope(
-                f"mark_step_complete: tracker file disappeared: {tracker_path}",
-                stage="mark_step_complete",
-                retriable=False,
-            )
-        try:
-            tracker = json.loads(tracker_path.read_text())
-        except (json.JSONDecodeError, OSError) as exc:
-            return deny_envelope(
-                f"mark_step_complete: failed to read tracker: {exc}",
-                stage="mark_step_complete",
-                retriable=False,
-            )
-
+    def _mark(tracker: dict[str, Any]) -> dict[str, Any]:
         if expected_tracker_kitchen_id and (
             tracker.get("kitchen_id") != expected_tracker_kitchen_id
             or tracker.get("tracker_incarnation_id") != expected_tracker_incarnation_id
         ):
-            return {
-                **deny_envelope(
-                    "mark_step_complete: tracker incarnation changed.",
-                    stage="mark_step_complete",
-                    retriable=False,
-                ),
-                "incarnation_matches": False,
-            }
-
-        steps = tracker.get("steps", {})
+            outcome["incarnation_matches"] = False
+            return tracker
+        steps = tracker["steps"]
         if canonical not in steps:
-            return deny_envelope(
-                f"mark_step_complete: step '{canonical}' not found in tracker. "
-                f"Known steps: {sorted(steps.keys())}",
-                stage="mark_step_complete",
-                retriable=False,
+            raise KeyError(
+                f"step '{canonical}' not found in tracker; known steps: {sorted(steps)}"
             )
-
-        steps[canonical]["status"] = "complete"
-        steps[canonical]["completed_at"] = datetime.now(UTC).isoformat()
+        state = steps[canonical]
+        if not isinstance(state, dict):
+            raise ValueError(f"tracker step '{canonical}' must be a JSON object")
+        state["status"] = "complete"
+        state["completed_at"] = datetime.now(UTC).isoformat()
         tracker["steps"] = steps
-        atomic_write(tracker_path, json.dumps(tracker))
 
-        done = sum(1 for s in steps.values() if s.get("status") in ("complete", "skipped"))
+        done = sum(
+            1
+            for item in steps.values()
+            if isinstance(item, dict) and item.get("status") in ("complete", "skipped")
+        )
         total = len(steps)
-        pipeline_id = tracker.get("pipeline_id", order_id)
+        pipeline_id = tracker.get("pipeline_id", target.target_order_id)
 
-        dependencies = tracker.get("dependencies", {})
+        dependencies = tracker["dependencies"]
         dependents_with_unmet = sorted(
             dependent
             for dependent, prereqs in dependencies.items()
+            if isinstance(dependent, str) and isinstance(prereqs, list)
             if canonical in prereqs
             and any(
-                steps.get(prereq, {}).get("status") not in ("complete", "skipped")
+                not isinstance(steps.get(prereq), dict)
+                or steps[prereq].get("status") not in ("complete", "skipped")
                 for prereq in prereqs
+                if isinstance(prereq, str)
             )
         )
+        outcome.update(
+            step=canonical,
+            order_id=target.target_order_id,
+            pipeline_id=pipeline_id,
+            done=done,
+            total=total,
+            dependents_with_unmet=dependents_with_unmet,
+        )
+        return tracker
 
-        result = {
-            "success": True,
-            "incarnation_matches": True,
-            "step": canonical,
-            "order_id": order_id,
-            "status": "complete",
-            "pipeline_id": pipeline_id,
-            "done": done,
-            "total": total,
+    try:
+        authority = mutate_tracker(target, lease, _mark)
+    except (KeyError, ValueError) as exc:
+        return deny_envelope(
+            f"mark_step_complete: {exc}",
+            stage="mark_step_complete",
+            retriable=False,
+        )
+    if authority.data is None:
+        return deny_envelope(
+            cast(str, authority.error),
+            stage="mark_step_complete",
+            retriable=False,
+        )
+    if outcome.get("incarnation_matches") is False:
+        return {
+            **deny_envelope(
+                "mark_step_complete: tracker incarnation changed.",
+                stage="mark_step_complete",
+                retriable=False,
+            ),
+            "incarnation_matches": False,
         }
-        if dependents_with_unmet:
-            result["advisory"] = (
-                f"Step '{canonical}' marked complete but dependent steps "
-                f"{dependents_with_unmet} still show unmet prerequisites — verify correctness"
-            )
-        return result
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        os.close(lock_fd)
+
+    result = {
+        "success": True,
+        "incarnation_matches": True,
+        "step": outcome["step"],
+        "order_id": outcome["order_id"],
+        "status": "complete",
+        "pipeline_id": outcome["pipeline_id"],
+        "done": outcome["done"],
+        "total": outcome["total"],
+    }
+    dependents_with_unmet = outcome["dependents_with_unmet"]
+    if isinstance(dependents_with_unmet, list) and dependents_with_unmet:
+        result["advisory"] = (
+            f"Step '{canonical}' marked complete but dependent steps "
+            f"{dependents_with_unmet} still show unmet prerequisites — verify correctness"
+        )
+    return result
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -603,22 +685,50 @@ async def complete_run_skill_result(
             request_session_id=_request_session_identity(ctx),
         )
         tracker_result: Mapping[str, object] | None = None
-        if receipt.success and receipt.tracker_incarnation_id:
-            tracker_result = authority.apply_tracker_credit(
-                tracker_order_id=receipt.tracker_order_id,
-                tracker_path=receipt.tracker_path,
-                tracker_kitchen_id=receipt.tracker_kitchen_id,
-                tracker_incarnation_id=receipt.tracker_incarnation_id,
-                step_name=receipt.step_name,
-                receipt_id=receipt.receipt_id,
-                effect=lambda: mark_step_complete(
-                    Path(receipt.tracker_path),
-                    receipt.step_name,
+        if receipt.tracker_incarnation_id:
+            try:
+                target = TrackerAuthorityTarget.for_project(
+                    tool_ctx.project_dir,
                     receipt.tracker_order_id,
-                    expected_tracker_kitchen_id=receipt.tracker_kitchen_id,
-                    expected_tracker_incarnation_id=receipt.tracker_incarnation_id,
-                ),
-            )
+                    expected=True,
+                )
+                if Path(receipt.tracker_path).resolve() != target.path.resolve():
+                    raise ValueError(
+                        "receipt tracker path is outside the project tracker authority"
+                    )
+                key, lease = _retain_context_tracker(
+                    tool_ctx,
+                    target,
+                    owner_kind="manual",
+                    owner_id=f"receipt:{receipt.receipt_id}",
+                )
+                try:
+                    if receipt.success:
+                        tracker_result = authority.apply_tracker_credit(
+                            tracker_order_id=receipt.tracker_order_id,
+                            tracker_path=receipt.tracker_path,
+                            tracker_kitchen_id=receipt.tracker_kitchen_id,
+                            tracker_incarnation_id=receipt.tracker_incarnation_id,
+                            step_name=receipt.step_name,
+                            receipt_id=receipt.receipt_id,
+                            effect=lambda: mark_step_complete(
+                                target,
+                                lease,
+                                receipt.step_name,
+                                expected_tracker_kitchen_id=receipt.tracker_kitchen_id,
+                                expected_tracker_incarnation_id=receipt.tracker_incarnation_id,
+                            ),
+                        )
+                finally:
+                    _release_context_tracker(tool_ctx, key)
+            except Exception:
+                logger.exception("complete_run_skill_result_tracker_credit_deferred")
+                tracker_result = deny_envelope(
+                    "complete_run_skill_result: tracker credit was not applied; use "
+                    "record_pipeline_step(op='complete') to repair it.",
+                    stage="tracker_credit",
+                    retriable=True,
+                )
         return json.dumps(
             {
                 "success": True,

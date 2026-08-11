@@ -10,6 +10,7 @@ No test here reads ``payload.json`` or any file under ``recipe-delivery/``.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from unittest.mock import Mock
 
@@ -27,6 +28,7 @@ from autoskillit.server._recipe_execution import (
     install_recipe_execution,
 )
 from tests.conftest import _make_result
+from tests.server._pipeline_test_helpers import _write_tracker
 from tests.server.test_tools_recipe_pull import (
     _NOW,
     _attestation,
@@ -48,6 +50,18 @@ _OVERRIDES = {
     "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
     "task_description": "test task",
 }
+
+
+def _write_attested_tracker(ready, with_args: Mapping[str, object]) -> None:
+    step_name = with_args["step_name"]
+    assert isinstance(step_name, str)
+    _write_tracker(
+        ready.tool_ctx.project_dir,
+        "AB",
+        {step_name: {"status": "pending"}},
+        {},
+        kitchen_id=ready.tool_ctx.kitchen_id,
+    )
 
 
 async def test_bounded_initialization_delivers_attestation_credential(
@@ -94,6 +108,7 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    _write_attested_tracker(ready, with_args)
     ready.tool_ctx.runner.push(_make_result(returncode=1))
     ready.tool_ctx.runner.push(
         _make_result(
@@ -161,6 +176,7 @@ async def test_attested_run_skill_admits_explicit_order_id(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    _write_attested_tracker(ready, with_args)
 
     result = json.loads(
         await run_skill(

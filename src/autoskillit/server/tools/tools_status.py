@@ -93,6 +93,38 @@ async def kitchen_status() -> str:
                 github_client.has_token if github_client is not None else False
             )
             status["github_default_repo"] = _get_config().github.default_repo
+            ctx = _get_ctx()
+            from autoskillit.server.tools._pipeline_deps import (  # circular-break
+                _derive_phase_a_deps,
+            )
+            from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
+                _release_context_tracker,
+                _select_tracker_authority,
+            )
+
+            expected = bool(
+                ctx.active_recipe_steps and _derive_phase_a_deps(ctx.active_recipe_steps)
+            )
+            target, authority, key, _lease = _select_tracker_authority(
+                ctx,
+                ctx.kitchen_id,
+                expected=expected,
+            )
+            try:
+                if target is None or authority is None:
+                    raise RuntimeError("kitchen tracker authority has no target")
+                status["tracker_authority"] = {
+                    "target_order_id": target.target_order_id,
+                    "path": str(target.path),
+                    "expected": target.expected,
+                    "available": authority.data is not None,
+                    "error": authority.error,
+                }
+                if authority.error is not None:
+                    status["error"] = authority.error
+            finally:
+                if key is not None:
+                    _release_context_tracker(ctx, key)
             return json.dumps(status)
         except Exception as exc:
             logger.error("kitchen_status unhandled exception", exc_info=True)

@@ -17,6 +17,7 @@ from autoskillit.core import (
     MARKETPLACE_PREFIX,
     ensure_project_temp,
     get_logger,
+    pipeline_tracker_directory,
 )
 from autoskillit.execution import (
     BACKEND_REGISTRY,
@@ -109,22 +110,11 @@ def _hook_config_overlay_path(project_root: Path) -> Path:
     return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_OVERLAY_FILENAME)
 
 
-_PIPELINE_TRACKER_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp", "pipeline_tracker")
-
-
-def _pipeline_tracker_dir(project_dir: Path) -> Path:
-    return project_dir.joinpath(*_PIPELINE_TRACKER_DIR_COMPONENTS)
-
-
-def _pipeline_tracker_path(project_dir: Path, pipeline_id: str) -> Path:
-    return _pipeline_tracker_dir(project_dir) / f"{pipeline_id}.json"
-
-
 def _scan_tracker_gaps(project_dir: Path) -> list[dict[str, str]]:
     """Return pending-step gap entries across all tracker files."""
     import json
 
-    tracker_dir = _pipeline_tracker_dir(project_dir)
+    tracker_dir = pipeline_tracker_directory(project_dir)
     if not tracker_dir.is_dir():
         return []
     gaps: list[dict[str, str]] = []

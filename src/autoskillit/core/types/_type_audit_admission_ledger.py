@@ -28,6 +28,7 @@ from ._type_audit_admission import (
     _require_digest,
     _require_nonempty,
     _require_optional_digest,
+    _require_tracker_target,
 )
 from ._type_audit_cycle import ArtifactRef, AuditCycleHead
 
@@ -153,6 +154,8 @@ class AuditReservationRequest:
     allowed_root: Path
     parent_authority_digest: str | None = None
     retry_after_audit_attempt_id: AuditAttemptId | None = None
+    tracker_target_order_id: str | None = None
+    tracker_expected: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.recipe_execution_id, RecipeExecutionId):
@@ -189,6 +192,11 @@ class AuditReservationRequest:
             raise ValueError(
                 "AuditReservationRequest.retry_after_audit_attempt_id has the wrong type"
             )
+        _require_tracker_target(
+            "AuditReservationRequest",
+            self.tracker_expected,
+            self.tracker_target_order_id,
+        )
 
 
 @dataclass(frozen=True, slots=True)

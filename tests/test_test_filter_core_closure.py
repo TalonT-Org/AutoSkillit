@@ -97,11 +97,10 @@ class TestClosureCoreNarrowCascade:
         assert result is not None
         dir_names = {p.name for p in result}
         # Union: _plugin_ids={core,cli,execution,hook_registry,server,workspace}
-        # ∪ _plugin_cache={core,cli,server,workspace}
-        for pkg in ["core", "cli", "execution", "server", "workspace"]:
+        # ∪ _plugin_cache={core,cli,fleet,pipeline,server,workspace}
+        for pkg in ["core", "cli", "execution", "fleet", "pipeline", "server", "workspace"]:
             assert pkg in dir_names, f"union cascade should include {pkg}"
         for excluded in [
-            "pipeline",
             "recipe",
             "migration",
             "hooks",

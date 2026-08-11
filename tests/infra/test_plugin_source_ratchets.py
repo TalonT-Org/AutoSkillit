@@ -50,10 +50,34 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("server/tools/tools_kitchen.py", "_close_kitchen_handler", "hook_cfg_path.unlink"): (
+        1,
+        "Closing the kitchen removes the project-owned generated hook configuration; "
+        "the next kitchen activation regenerates it.",
+    ),
+    ("server/tools/tools_kitchen.py", "_close_kitchen_handler", "overlay_path.unlink"): (
+        1,
+        "Closing the kitchen removes the project-owned session overlay while preserving "
+        "its durable synchronization sidecar.",
+    ),
+    (
+        "server/tools/tools_kitchen.py",
+        "_close_kitchen_handler",
+        "review_gate_path.unlink",
+    ): (
+        1,
+        "Closing the kitchen removes only an inactive project-owned review gate state; "
+        "an active review loop is detected and preserved.",
+    ),
     ("execution/session_log.py", "flush_session_log", "shutil.rmtree"): (
         2,
         "The exclusive session-index transaction removes only abandoned summary-less "
         "session directories and expired committed directories selected by retention.",
+    ),
+    ("core/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
+        1,
+        "Exclusive per-tracker lease, tracker lock, strict registry lock, and fresh "
+        "authority/liveness reads guard deletion of exactly one tracker JSON.",
     ),
     ("cli/_install_snapshot/_snapshot.py", "_remove", "path.unlink"): (
         1,

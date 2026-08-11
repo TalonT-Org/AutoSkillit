@@ -55,15 +55,18 @@ class TestPipelineDepsAllowsMet:
         assert "DEPENDENCY UNMET" not in result.get("error", "")
 
 
-class TestPipelineDepsFailOpen:
+class TestPipelineDepsFailClosed:
     @pytest.mark.anyio
-    async def test_allows_no_tracker(self, tool_ctx_kitchen_open, tmp_path):
+    async def test_missing_explicit_tracker_denies(self, tool_ctx_kitchen_open, tmp_path):
         _setup_project(tmp_path, tool_ctx_kitchen_open)
         result = json.loads(
             await run_skill("/do-b task", str(tmp_path), step_name="b", order_id="ZZ")
         )
-        assert "DEPENDENCY UNMET" not in result.get("error", "")
+        assert result["success"] is False
+        assert "Expected pipeline tracker 'ZZ'" in result["error"]
 
+
+class TestPipelineDepsFailOpen:
     @pytest.mark.anyio
     async def test_allows_step_not_in_tracker(self, tool_ctx_kitchen_open, tmp_path):
         _setup_project(tmp_path, tool_ctx_kitchen_open)
@@ -213,7 +216,11 @@ class TestPipelineDepsKitchenScopedFallback:
     async def test_check_pipeline_deps_falls_back_to_kitchen_id(
         self, tool_ctx_kitchen_open, tmp_path
     ):
-        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
+        from autoskillit.server.tools.tools_execution import (
+            _check_pipeline_deps,
+            _select_tracker_authority,
+        )
+        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-2"
@@ -223,7 +230,13 @@ class TestPipelineDepsKitchenScopedFallback:
             {"rectify": {"status": "pending"}, "review_approach": {"status": "pending"}},
             {"review_approach": ["rectify"]},
         )
-        result = _check_pipeline_deps("review_approach", "")
+        _target, authority, key, _lease = _select_tracker_authority(
+            tool_ctx_kitchen_open,
+            "",
+        )
+        result = _check_pipeline_deps("review_approach", authority)
+        if key is not None:
+            _release_context_tracker(tool_ctx_kitchen_open, key)
         assert result is not None
         parsed = json.loads(result)
         assert parsed["success"] is False
@@ -231,6 +244,40 @@ class TestPipelineDepsKitchenScopedFallback:
 
 
 class TestPipelineDepsEmptyStepNameBypass:
+    @pytest.mark.anyio
+    async def test_refreshes_tracker_after_implicit_step_resolution(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        _write_tracker(
+            tmp_path,
+            "AB",
+            {
+                "a": {"status": "complete", "completed_at": "2026-05-31T01:05:00Z"},
+                "b": {"status": "pending"},
+            },
+            {"b": ["a"]},
+        )
+
+        def _resolve_after_tracker_change(skill_command, active_recipe_steps):
+            _write_tracker(
+                tmp_path,
+                "AB",
+                {"a": {"status": "pending"}, "b": {"status": "pending"}},
+                {"b": ["a"]},
+            )
+            return "b", False
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution._resolve_step_name_from_recipe",
+            _resolve_after_tracker_change,
+        )
+        result = json.loads(
+            await run_skill("/do-b task", str(tmp_path), step_name="", order_id="AB")
+        )
+        assert result["success"] is False
+        assert "DEPENDENCY UNMET" in result["error"]
+
     @pytest.mark.anyio
     async def test_run_skill_denies_empty_step_name_with_active_deps(
         self, tool_ctx_kitchen_open, tmp_path
@@ -296,7 +343,11 @@ class TestPipelineDepsRecoveryInstruction:
     async def test_dependency_deny_carries_recovery_instruction(
         self, tool_ctx_kitchen_open, tmp_path
     ):
-        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
+        from autoskillit.server.tools.tools_execution import (
+            _check_pipeline_deps,
+            _select_tracker_authority,
+        )
+        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
 
         _setup_project(tmp_path, tool_ctx_kitchen_open)
         _write_tracker(
@@ -305,7 +356,13 @@ class TestPipelineDepsRecoveryInstruction:
             {"a": {"status": "pending"}, "b": {"status": "pending"}},
             {"b": ["a"]},
         )
-        raw = _check_pipeline_deps("b", "AB")
+        _target, authority, key, _lease = _select_tracker_authority(
+            tool_ctx_kitchen_open,
+            "AB",
+        )
+        raw = _check_pipeline_deps("b", authority)
+        if key is not None:
+            _release_context_tracker(tool_ctx_kitchen_open, key)
         assert raw is not None
         result = json.loads(raw)
         assert "record_pipeline_step" in result["error"]
@@ -315,7 +372,11 @@ class TestPipelineDepsRecoveryInstruction:
 class TestPreflightDenyEnvelopeShape:
     @pytest.mark.anyio
     async def test_preflight_denials_use_canonical_envelope(self, tool_ctx_kitchen_open, tmp_path):
-        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
+        from autoskillit.server.tools.tools_execution import (
+            _check_pipeline_deps,
+            _select_tracker_authority,
+        )
+        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
 
         _setup_project(tmp_path, tool_ctx_kitchen_open)
         _write_tracker(
@@ -324,7 +385,13 @@ class TestPreflightDenyEnvelopeShape:
             {"a": {"status": "pending"}, "b": {"status": "pending"}},
             {"b": ["a"]},
         )
-        raw = _check_pipeline_deps("b", "AB")
+        _target, authority, key, _lease = _select_tracker_authority(
+            tool_ctx_kitchen_open,
+            "AB",
+        )
+        raw = _check_pipeline_deps("b", authority)
+        if key is not None:
+            _release_context_tracker(tool_ctx_kitchen_open, key)
         assert raw is not None
         result = json.loads(raw)
         assert result["success"] is False

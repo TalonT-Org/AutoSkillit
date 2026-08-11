@@ -45,8 +45,13 @@ class TestFleetAutoGateBoot:
         mock_write_hook_config.assert_called_once_with()
         mock_prime_quota_cache.assert_awaited_once_with(supports_quota_check=True)
         mock_create_bg_task.assert_called_once()
-        mock_register_kitchen.assert_called_once_with(
-            tool_ctx.kitchen_id, os.getpid(), str(tool_ctx.project_dir)
+        mock_register_kitchen.assert_called_once()
+        identity = mock_register_kitchen.call_args.args[0]
+        assert identity.create_time > 0
+        assert (identity.kitchen_id, identity.pid, identity.project_path) == (
+            tool_ctx.kitchen_id,
+            os.getpid(),
+            str(tool_ctx.project_dir),
         )
 
     @pytest.mark.anyio
@@ -123,8 +128,11 @@ class TestFleetAutoGateBootProjectDir:
                     ) as mock_register_kitchen:
                         await _fleet_auto_gate_boot(ctx)
 
-        mock_register_kitchen.assert_called_once_with(
-            ctx.kitchen_id, os.getpid(), str(different_dir)
+        identity = mock_register_kitchen.call_args.args[0]
+        assert (identity.kitchen_id, identity.pid, identity.project_path) == (
+            ctx.kitchen_id,
+            os.getpid(),
+            str(different_dir),
         )
 
     @pytest.mark.anyio
@@ -160,8 +168,11 @@ class TestFleetAutoGateBootProjectDir:
                     ) as mock_register_kitchen:
                         await _food_truck_auto_gate_boot(ctx)
 
-        mock_register_kitchen.assert_called_once_with(
-            ctx.kitchen_id, os.getpid(), str(different_dir)
+        identity = mock_register_kitchen.call_args.args[0]
+        assert (identity.kitchen_id, identity.pid, identity.project_path) == (
+            ctx.kitchen_id,
+            os.getpid(),
+            str(different_dir),
         )
 
     @pytest.mark.anyio

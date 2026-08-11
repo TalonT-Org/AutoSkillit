@@ -22,7 +22,11 @@ from autoskillit.pipeline.background import (
     create_background_task,
     write_status,
 )
-from autoskillit.pipeline.context import TerminalRecipeResponseCacheEntry, ToolContext
+from autoskillit.pipeline.context import (
+    TerminalRecipeResponseCacheEntry,
+    ToolContext,
+    get_kitchen_process_identity,
+)
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
 )
@@ -138,6 +142,7 @@ __all__ = [
     "write_status",
     # context
     "ToolContext",
+    "get_kitchen_process_identity",
     "CapabilityResolution",
     "CapabilityResolutionStatus",
     "EXPLORER_INELIGIBLE_SESSION_TYPES",

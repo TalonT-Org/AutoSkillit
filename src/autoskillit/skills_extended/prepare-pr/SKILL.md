@@ -101,6 +101,14 @@ CLOSING_ISSUE="${4:-}"
 ```
 Generate timestamp `ts` from the bash block above.
 
+When `closing_issue` is non-empty, derive `source_issue_url` from the current
+repository identity and the numeric issue value. The canonical form is exactly
+`https://github.com/{owner}/{repo}/issues/{closing_issue}`. Resolve `{owner}/{repo}`
+from the current repository (`gh repo view --json nameWithOwner -q .nameWithOwner`,
+with the configured git remote as the offline fallback); never copy an ambient or
+prep-artifact URL. Refuse a non-numeric issue or an unresolvable repository identity.
+When `closing_issue` is empty, set `source_issue_url = ""`.
+
 ### Step 1: Fetch Requirements from Closing Issue
 
 - If `closing_issue` is absent or empty string: skip — set `requirements_section = ""`.
@@ -228,6 +236,7 @@ Write PR prep file to `{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md`:
 - feature_branch: {feature_branch}
 - base_branch: {base_branch}
 - closing_issue: {issue_number or ""}
+- source_issue_url: {canonical full issue URL or ""}
 - plan_paths: {comma-separated}
 
 ## Title

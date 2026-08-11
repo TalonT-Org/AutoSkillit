@@ -30,10 +30,9 @@ from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa
 
 
 def _resolve_order_id_from_kitchen(tracker_dir: Path, kitchen_id: str) -> str:
-    """Select tracker by internal kitchen_id field (same rule as the server).
+    """Select advisory hook state by its internal kitchen_id field.
 
     Skips the self-named file (``{kitchen_id}.json``) from the candidate scan,
-    matching ``resolve_tracker_order_id`` in ``tools_pipeline_tracker.py``.
     When exactly one non-self candidate exists, returns that candidate's stem.
     When no non-self candidates exist, returns ``kitchen_id`` (the self-named
     file is the implicit default). Returns ``""`` on ambiguity (>1 candidate).

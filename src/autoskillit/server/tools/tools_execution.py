@@ -60,6 +60,8 @@ from autoskillit.core import (
     SkillResult,
     TerminationReason,
     ToolDef,
+    TrackerAuthorityReadResult,
+    TrackerAuthorityTarget,
     ValidatedAddDir,
     WriteBehaviorSpec,
     closure_authority_spec_from_args,
@@ -73,15 +75,14 @@ from autoskillit.core import (
     get_tool_def,
     is_feature_enabled,
     parse_plan_paths,
+    read_tracker_authority,
     render_target_skill_command,
     resolve_temp_dir,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution import (
-    CaptureSetupError,
-)
+from autoskillit.execution import CaptureSetupError
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
@@ -199,6 +200,12 @@ from autoskillit.server.tools._native_shell_capture import (
 )
 from autoskillit.server.tools._overlay_state import OverlayStateError, read_overlay
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
+from autoskillit.server.tools.tools_pipeline_tracker import (
+    _authority_blocks_dependency_check,
+    _release_context_tracker,
+    _restore_reserved_tracker_authority,
+    _select_tracker_authority,
+)
 
 logger = get_logger(__name__)
 
@@ -343,6 +350,7 @@ def _complete_resumed_audit(
     *,
     result: AuditMaterializationResult,
     skill_command: str,
+    tracker_target: TrackerAuthorityTarget | None = None,
 ) -> str:
     status = _materialization_outcome_status(result)
     if status is AuditOutcomeStatus.PUBLISHED:
@@ -374,6 +382,10 @@ def _complete_resumed_audit(
             path=result.path,
             error=None,
             replay_response_json=replay_response,
+            tracker_target_order_id=(
+                tracker_target.target_order_id if tracker_target is not None else None
+            ),
+            tracker_expected=(tracker_target.expected if tracker_target is not None else False),
         )
         tool_ctx.audit_admission_ledger.finalize_response(
             result.attempt_id,
@@ -442,31 +454,23 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     return None
 
 
-def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
+def _check_pipeline_deps(
+    step_name: str,
+    authority: TrackerAuthorityReadResult | None,
+) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
-    from autoskillit.server import _get_ctx  # circular-break
-    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        ResolutionRefusal,
-        resolve_tracker_order_id,
-    )
-
-    ctx = _get_ctx()
-    resolved = resolve_tracker_order_id(ctx, order_id)
-    if isinstance(resolved, ResolutionRefusal):
-        if resolved.multi_pipeline:
-            return json.dumps(
-                deny_envelope(
-                    f"{DEPENDENCY_DENY_PREFIX}: {resolved.reason}",
-                    stage="preflight:pipeline_deps",
-                    retriable=False,
-                )
+    if authority is None:
+        return None
+    if authority.error is not None:
+        return json.dumps(
+            deny_envelope(
+                authority.error,
+                stage="preflight:pipeline_deps",
+                retriable=False,
             )
-        return None
-    if not resolved.path.exists():
-        return None
-    try:
-        tracker = json.loads(resolved.path.read_text())
-    except (json.JSONDecodeError, OSError):
+        )
+    tracker = authority.data
+    if tracker is None:
         return None
     canonical = _canonical_step_name(step_name)
     deps = tracker.get("dependencies", {}).get(canonical, [])
@@ -481,7 +485,7 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
         deny_envelope(
             (
                 f"{DEPENDENCY_DENY_PREFIX}: Step '{step_name}' requires {unmet} to complete "
-                f"first. Pipeline '{resolved.order_id}': {dep_status}."
+                f"first. Pipeline '{authority.target_order_id}': {dep_status}."
             ),
             stage="preflight:pipeline_deps",
             retriable=True,
@@ -513,46 +517,40 @@ def _has_active_locks(order_id: str) -> bool:
     return any(v is False for steps in locked_steps.values() for v in steps.values())
 
 
-def _has_active_deps() -> bool:
-    """Return True if a kitchen-scoped tracker exists with any dependencies defined."""
-    from autoskillit.server import _get_ctx  # circular-break
-    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        ResolvedTracker,
-        resolve_tracker_order_id,
-    )
-
-    ctx = _get_ctx()
-    resolved = resolve_tracker_order_id(ctx, "")
-    if not isinstance(resolved, ResolvedTracker):
-        return False
-    if not resolved.path.exists():
-        return False
-    try:
-        tracker = json.loads(resolved.path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return False
-    return bool(tracker.get("dependencies"))
-
-
-def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[str, str, str, str]:
+def _completion_tracker_binding(
+    tool_ctx: ToolContext,
+    order_id: str,
+    *,
+    tracker_target: TrackerAuthorityTarget | None = None,
+) -> tuple[str, str, str, str]:
     """Resolve immutable tracker identity for a new completion receipt."""
     from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        ResolvedTracker,
+        _release_context_tracker,
+        _retain_context_tracker,
         read_tracker_identity,
-        resolve_tracker_order_id,
+        select_tracker_target,
     )
 
-    resolved = resolve_tracker_order_id(tool_ctx, order_id)
-    if not isinstance(resolved, ResolvedTracker) or not resolved.path.exists():
+    target = tracker_target or select_tracker_target(tool_ctx, order_id, expected=bool(order_id))
+    if target is None or not target.path.exists():
         return "", "", "", ""
+    key, lease = _retain_context_tracker(
+        tool_ctx,
+        target,
+        owner_kind="manual",
+        owner_id=target.target_order_id,
+    )
     try:
-        tracker_identity = read_tracker_identity(resolved)
-    except (json.JSONDecodeError, OSError):
-        return "", "", "", ""
+        tracker_identity = read_tracker_identity(target, lease)
+    except Exception:
+        _release_context_tracker(tool_ctx, key)
+        raise
     if tracker_identity is None:
+        _release_context_tracker(tool_ctx, key)
         return "", "", "", ""
     kitchen_id, incarnation_id = tracker_identity
-    return resolved.order_id, str(resolved.path.resolve()), kitchen_id, incarnation_id
+    _release_context_tracker(tool_ctx, key)
+    return target.target_order_id, str(target.path.resolve()), kitchen_id, incarnation_id
 
 
 def _begin_run_skill_completion(
@@ -561,6 +559,7 @@ def _begin_run_skill_completion(
     request_context: Context,
     order_id: str,
     step_name: str,
+    tracker_target: TrackerAuthorityTarget | None = None,
 ) -> str:
     authority = tool_ctx.run_skill_completion
     if authority is None:
@@ -568,7 +567,11 @@ def _begin_run_skill_completion(
     request_session_id = _request_session_identity(request_context)
 
     tracker_order_id, tracker_path, tracker_kitchen_id, tracker_incarnation_id = (
-        _completion_tracker_binding(tool_ctx, order_id)
+        _completion_tracker_binding(
+            tool_ctx,
+            order_id,
+            tracker_target=tracker_target,
+        )
     )
     return authority.begin(
         kitchen_id=tool_ctx.kitchen_id,
@@ -1029,12 +1032,6 @@ async def run_skill(
     if (
         step_name
         and not resume_session_id
-        and (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None
-    ):
-        return _dep_denial
-    if (
-        step_name
-        and not resume_session_id
         and not (recipe_execution_id or invocation_template_digest)
         and (_plan_path_denial := _check_review_approach_plan_path(step_name, skill_command))
         is not None
@@ -1045,12 +1042,28 @@ async def run_skill(
         _completion_invocation_id = ""
         contract_lifecycle = _RunSkillContractLifecycle()
         _sn_token = _oid_token = None
+        _tracker_target = None
+        _tracker_authority = None
+        _tracker_key = None
+        _tracker_lease = None
         from autoskillit.server import _get_ctx  # circular-break
 
         _cleanup_session_id: str | None = None
         _explorer_parent_identity: tuple[Path, str] | None = None
         _explorer_launch_lease: _ExplorerLaunchLease | None = None
         tool_ctx = _get_ctx()
+        (
+            _tracker_target,
+            _tracker_authority,
+            _tracker_key,
+            _tracker_lease,
+        ) = _select_tracker_authority(tool_ctx, order_id)
+        if (
+            step_name
+            and not resume_session_id
+            and (_dep_denial := _check_pipeline_deps(step_name, _tracker_authority)) is not None
+        ):
+            return _dep_denial
         _installed_execution = get_recipe_execution(tool_ctx)
         _contract_store = tool_ctx.skill_session_contract_store
         contract_lifecycle.store = _contract_store
@@ -1133,6 +1146,8 @@ async def run_skill(
                 _resolved, _ambiguous = _resolve_step_name_from_recipe(
                     skill_command, tool_ctx.active_recipe_steps
                 )
+                if _tracker_target is not None and _tracker_lease is not None:
+                    _tracker_authority = read_tracker_authority(_tracker_target, _tracker_lease)
                 if _resolved:
                     step_name = _resolved
                     logger.warning(
@@ -1142,7 +1157,9 @@ async def run_skill(
                     )
                     if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
                         return _lock_denial
-                    if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
+                    if (
+                        _dep_denial := _check_pipeline_deps(step_name, _tracker_authority)
+                    ) is not None:
                         return _dep_denial
                     if (
                         _plan_path_denial := _check_review_approach_plan_path(
@@ -1151,7 +1168,7 @@ async def run_skill(
                     ) is not None:
                         return _plan_path_denial
                 elif _ambiguous:
-                    if _has_active_deps():
+                    if _authority_blocks_dependency_check(_tracker_authority):
                         return json.dumps(
                             deny_envelope(
                                 (
@@ -1176,7 +1193,7 @@ async def run_skill(
                             retriable=False,
                         )
                     )
-                elif _has_active_deps():
+                elif _authority_blocks_dependency_check(_tracker_authority):
                     return json.dumps(
                         deny_envelope(
                             (
@@ -1190,7 +1207,6 @@ async def run_skill(
                     )
         if invocation is None or projection_context is None:
             raise SkillContractError("Skill dispatch branches did not produce a bound contract")
-
         _preflight_result = None
         _bound_recipe_inputs: tuple[tuple[str, BoundScalar], ...] = ()
         _invocation_template: InvocationTemplate | None = None
@@ -1414,7 +1430,28 @@ async def run_skill(
                                     if retry_after_audit_attempt_id
                                     else None
                                 ),
+                                tracker_target_order_id=(
+                                    _tracker_target.target_order_id
+                                    if _tracker_target is not None
+                                    else None
+                                ),
+                                tracker_expected=(
+                                    _tracker_target.expected
+                                    if _tracker_target is not None
+                                    else False
+                                ),
                             )
+                        )
+                    if _reservation_outcome.reservation is not None:
+                        (
+                            _tracker_target,
+                            _tracker_authority,
+                            _tracker_key,
+                            _tracker_lease,
+                        ) = _restore_reserved_tracker_authority(
+                            tool_ctx,
+                            _reservation_outcome.reservation,
+                            _tracker_key,
                         )
                     match _reservation_outcome.decision:
                         case (
@@ -1452,6 +1489,7 @@ async def run_skill(
                                     request_context=ctx,
                                     order_id=order_id,
                                     step_name=step_name,
+                                    tracker_target=_tracker_target,
                                 ),
                                 _replay_response,
                             )
@@ -1474,6 +1512,7 @@ async def run_skill(
                                 tool_ctx,
                                 result=_resumed,
                                 skill_command=skill_command,
+                                tracker_target=_tracker_target,
                             )
                             return _finalize_run_skill_completion(
                                 tool_ctx,
@@ -1482,6 +1521,7 @@ async def run_skill(
                                     request_context=ctx,
                                     order_id=order_id,
                                     step_name=step_name,
+                                    tracker_target=_tracker_target,
                                 ),
                                 _resumed_response,
                             )
@@ -1501,6 +1541,7 @@ async def run_skill(
                                 tool_ctx,
                                 result=_published,
                                 skill_command=skill_command,
+                                tracker_target=_tracker_target,
                             )
                             return _finalize_run_skill_completion(
                                 tool_ctx,
@@ -1509,6 +1550,7 @@ async def run_skill(
                                     request_context=ctx,
                                     order_id=order_id,
                                     step_name=step_name,
+                                    tracker_target=_tracker_target,
                                 ),
                                 _published_response,
                             )
@@ -2220,6 +2262,7 @@ async def run_skill(
                 request_context=ctx,
                 order_id=order_id,
                 step_name=step_name,
+                tracker_target=_tracker_target,
             )
             _start = time.monotonic()
             try:
@@ -2373,6 +2416,16 @@ async def run_skill(
                                     path=_materialized.path,
                                     error=None,
                                     kill_reason=skill_result.kill_reason,
+                                    tracker_target_order_id=(
+                                        _tracker_target.target_order_id
+                                        if _tracker_target is not None
+                                        else None
+                                    ),
+                                    tracker_expected=(
+                                        _tracker_target.expected
+                                        if _tracker_target is not None
+                                        else False
+                                    ),
                                 )
                             case AuditOutcomeStatus.EXACT_REPLAY:
                                 return _finalize_run_skill_completion(
@@ -2506,6 +2559,14 @@ async def run_skill(
                             error=_audit_outcome_to_finalize.error,
                             kill_reason=_audit_outcome_to_finalize.kill_reason,
                             replay_response_json=_replay_response,
+                            tracker_target_order_id=(
+                                _tracker_target.target_order_id
+                                if _tracker_target is not None
+                                else None
+                            ),
+                            tracker_expected=(
+                                _tracker_target.expected if _tracker_target is not None else False
+                            ),
                         ),
                         required_effect_names=_required_audit_finalization_effect_names(),
                     )
@@ -2569,6 +2630,8 @@ async def run_skill(
         return _cancelled_result.to_json()
     finally:
         contract_lifecycle.cleanup()
+        if _tracker_key is not None and tool_ctx is not None:
+            _release_context_tracker(tool_ctx, _tracker_key)
         if _explorer_launch_lease is not None and tool_ctx is not None:
             exploration_store = tool_ctx.exploration_context_store
             if exploration_store is None:

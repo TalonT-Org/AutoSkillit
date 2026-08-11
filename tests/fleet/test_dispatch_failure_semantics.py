@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
-from autoskillit.core.types import CliSubtype
+from autoskillit.core.types import CliSubtype, FleetErrorCode
 from autoskillit.recipe.schema import RecipeIngredient
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import (
@@ -468,6 +470,164 @@ class TestSidecarBasedResultSynthesis:
 
 class TestTrackerBridgeIntegration:
     @pytest.mark.anyio
+    async def test_pre_lineage_rejection_never_acquires_dispatch_lease(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        acquire_called = False
+
+        def unexpected_acquire(*_args, **_kwargs):
+            nonlocal acquire_called
+            acquire_called = True
+            raise AssertionError("pre-lineage rejection acquired tracker authority")
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            unexpected_acquire,
+        )
+
+        result = await _run(tool_ctx, ingredients={"unknown": "value"})
+
+        assert not acquire_called
+        assert result["success"] is False
+        assert result["reason"] == FleetErrorCode.FLEET_UNKNOWN_INGREDIENT.value
+
+    @pytest.mark.anyio
+    async def test_dispatch_release_preserves_same_target_manual_participant(
+        self, tool_ctx, monkeypatch
+    ):
+        from autoskillit.core import (
+            DispatchIdentity,
+            TrackerAuthorityTarget,
+            TrackerParticipantKey,
+            release_tracker_lease,
+            retain_tracker_lease,
+        )
+        from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+        fixed_identity = DispatchIdentity.from_dispatch_id(dispatch_id)
+
+        class FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls):
+                return fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", FixedDispatchIdentity)
+        target = TrackerAuthorityTarget.for_project(
+            tool_ctx.project_dir, dispatch_id, expected=False
+        )
+        peer_key = TrackerParticipantKey(
+            target=target,
+            owner_kind="manual",
+            owner_id=dispatch_id,
+            pid=1,
+            create_time=1.0,
+            project_path=str(tool_ctx.project_dir),
+        )
+        with tool_ctx.tracker_leases_lock:
+            peer_lease = retain_tracker_lease(tool_ctx.tracker_leases, peer_key)
+        dispatch_key = None
+
+        def recording_retain(tool_ctx, dispatch_id):
+            nonlocal dispatch_key
+            dispatch_key, lease = retain_dispatch_tracker_authority(tool_ctx, dispatch_id)
+            return dispatch_key, lease
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            recording_retain,
+        )
+        try:
+            await _run(tool_ctx)
+            assert dispatch_key is not None
+            assert dispatch_key.target == target
+            assert tool_ctx.tracker_leases[peer_key] is peer_lease
+            assert not peer_lease.closed
+        finally:
+            with tool_ctx.tracker_leases_lock:
+                release_tracker_lease(tool_ctx.tracker_leases, peer_key)
+
+    @pytest.mark.anyio
+    async def test_missing_optional_tracker_preserves_clean_result_and_persisted_status(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_completed_clean(success=True),
+        )
+
+        result = await _run(tool_ctx)
+        record = _read_dispatch_record(tool_ctx)
+
+        assert result["success"] is True
+        assert result["dispatch_status"] == "success"
+        assert record["status"] == "success"
+        assert record["reason"] == result["reason"]
+
+    @pytest.mark.anyio
+    async def test_progress_load_exception_releases_dispatch_lease(self, tool_ctx, monkeypatch):
+        from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        retain_spy = MagicMock(wraps=retain_dispatch_tracker_authority)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            retain_spy,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_completed_clean(success=True),
+        )
+
+        load_calls = 0
+
+        def fail_progress_load(**_kwargs):
+            nonlocal load_calls
+            load_calls += 1
+            raise OSError("progress unavailable")
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.load_dispatch_progress",
+            fail_progress_load,
+        )
+
+        result = await _run(tool_ctx)
+
+        assert result["success"] is False
+        assert result["dispatch_status"] == "failure"
+        assert result["reason"] == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
+        assert load_calls == 1
+        assert retain_spy.call_count == 1
+        assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
+
+    @pytest.mark.anyio
+    async def test_dispatch_cancellation_releases_dispatch_lease(self, tool_ctx, monkeypatch):
+        import asyncio
+
+        from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        retain_spy = MagicMock(wraps=retain_dispatch_tracker_authority)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            retain_spy,
+        )
+
+        async def cancel_dispatch(*_args, **_kwargs):
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", cancel_dispatch)
+
+        with pytest.raises(asyncio.CancelledError):
+            await _run(tool_ctx)
+
+        assert retain_spy.call_count == 1
+        assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
+
+    @pytest.mark.anyio
     async def test_single_issue_killed_with_tracker_progress_is_resumable(
         self, tool_ctx, monkeypatch
     ):
@@ -476,9 +636,14 @@ class TestTrackerBridgeIntegration:
         import json
 
         from autoskillit.core import DispatchIdentity, InfraOutcome
+        from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.load_dispatch_progress",
+            load_dispatch_progress,
+        )
 
         fixed_dispatch_id = "aaaabbbb-aaaa-bbbb-cccc-111111111111"
         _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)

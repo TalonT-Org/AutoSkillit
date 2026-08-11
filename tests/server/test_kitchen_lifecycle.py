@@ -4,6 +4,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import psutil
 import pytest
 
 from autoskillit.config import AutomationConfig
@@ -110,8 +111,15 @@ async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):
         assert list(call_args.args[0]) == [fake_state_path]
 
 
-async def test_close_kitchen_removes_tracker_dir(monkeypatch, tmp_path):
-    """Tracker directory is removed by close_kitchen handler."""
+async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatch, tmp_path):
+    """Close retires only its exact tracker and never removes peer authority."""
+    from autoskillit.core import (
+        ArtifactLease,
+        ArtifactLeaseContention,
+        TrackerAuthorityTarget,
+        tracker_lease_path,
+    )
+
     monkeypatch.chdir(tmp_path)
 
     ctx = make_context(
@@ -125,17 +133,49 @@ async def test_close_kitchen_removes_tracker_dir(monkeypatch, tmp_path):
 
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     tracker_dir.mkdir(parents=True)
-    (tracker_dir / "AB.json").write_text('{"pipeline_id": "AB", "steps": {}}')
+    peer_tracker = tracker_dir / "AB.json"
+    peer_tracker.write_text(
+        '{"pipeline_id": "AB", "kitchen_id": "AB", "steps": {}, "dependencies": {}}'
+    )
+    peer_target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=False)
+    peer_lease_path = tracker_lease_path(peer_target)
 
-    with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
-        patch("autoskillit.core.unregister_active_kitchen"),
-    ):
-        await _open_kitchen_handler()
-        _close_kitchen_handler()
+    lease = ArtifactLease.acquire_shared(peer_lease_path)
+    peer_lease_inode = peer_lease_path.stat().st_ino
+    try:
+        with (
+            patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+                new_callable=AsyncMock,
+            ),
+            patch("autoskillit.core.register_active_kitchen"),
+            patch("autoskillit.core.unregister_active_kitchen"),
+        ):
+            await _open_kitchen_handler()
+            current_target = TrackerAuthorityTarget.for_project(
+                tmp_path, ctx.kitchen_id, expected=False
+            )
+            current_target.path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": ctx.kitchen_id,
+                        "kitchen_id": ctx.kitchen_id,
+                        "steps": {},
+                        "dependencies": {},
+                    }
+                )
+            )
+            _close_kitchen_handler()
 
-    assert not tracker_dir.exists()
+        assert peer_tracker.exists()
+        assert peer_lease_path.exists()
+        assert peer_lease_path.stat().st_ino == peer_lease_inode
+        with pytest.raises(ArtifactLeaseContention):
+            ArtifactLease.acquire_exclusive(peer_lease_path, blocking=False)
+        assert not current_target.path.exists()
+        assert tracker_lease_path(current_target).exists()
+    finally:
+        lease.close_preserving()
 
 
 async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, tmp_path):
@@ -199,7 +239,7 @@ def test_open_without_close_prunes_dead_kitchen_tracker(monkeypatch, tmp_path):
         [
             {
                 "kitchen_id": "K1",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
@@ -223,7 +263,7 @@ def test_open_preserves_live_foreign_kitchen_tracker(monkeypatch, tmp_path):
             {
                 "kitchen_id": "K1",
                 "pid": os.getpid(),
-                "create_time": None,
+                "create_time": psutil.Process(os.getpid()).create_time(),
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
             }
@@ -235,26 +275,35 @@ def test_open_preserves_live_foreign_kitchen_tracker(monkeypatch, tmp_path):
     assert (tracker_dir / "K1.json").exists()
 
 
-def test_open_preserves_young_orphan_tracker(monkeypatch, tmp_path):
-    """A tracker with no registry entry at all, but within the grace window, survives."""
+def test_open_retires_unleased_orphan_without_age_inference(monkeypatch, tmp_path):
+    """Fresh absence of live registry ownership is sufficient retirement evidence."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC))
     _write_registry(monkeypatch, tmp_path, [])
 
     prune_stale_kitchen_state(tmp_path, "K2")
 
-    assert (tracker_dir / "K1.json").exists()
+    assert not (tracker_dir / "K1.json").exists()
 
 
-def test_open_reaps_aged_orphan_tracker(monkeypatch, tmp_path):
-    """A tracker with no registry entry at all, past the grace window, is reaped."""
+def test_open_preserves_orphan_while_shared_lease_is_held(monkeypatch, tmp_path):
+    """A live participant lease is sufficient ownership evidence."""
+    from autoskillit.core import ArtifactLease, TrackerAuthorityTarget, tracker_lease_path
+
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
-    _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC) - timedelta(hours=24))
+    _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC))
     _write_registry(monkeypatch, tmp_path, [])
+    target = TrackerAuthorityTarget.for_project(tmp_path, "K1", expected=False)
+
+    lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+    try:
+        prune_stale_kitchen_state(tmp_path, "K2")
+        assert target.path.exists()
+    finally:
+        lease.close_preserving()
 
     prune_stale_kitchen_state(tmp_path, "K2")
-
-    assert not (tracker_dir / "K1.json").exists()
+    assert not target.path.exists()
 
 
 def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_path):
@@ -271,7 +320,7 @@ def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_p
         [
             {
                 "kitchen_id": "K1",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
@@ -279,7 +328,7 @@ def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_p
             {
                 "kitchen_id": "K1",
                 "pid": os.getpid(),
-                "create_time": None,
+                "create_time": psutil.Process(os.getpid()).create_time(),
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
             },
@@ -302,7 +351,7 @@ def test_same_process_reopen_replaces_registry_entry(monkeypatch, tmp_path):
             {
                 "kitchen_id": "K1",
                 "pid": os.getpid(),
-                "create_time": None,
+                "create_time": psutil.Process(os.getpid()).create_time(),
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
             }
@@ -319,7 +368,7 @@ def test_same_process_reopen_replaces_registry_entry(monkeypatch, tmp_path):
         [
             {
                 "kitchen_id": "K1",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
@@ -384,12 +433,7 @@ async def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_
 
 
 def test_deferred_recall_open_still_prunes(monkeypatch, tmp_path):
-    """The deferred-recall open_kitchen path must prune stale trackers.
-
-    When gate_infrastructure_ready is already True, open_kitchen skips
-    _open_kitchen_handler entirely and takes the deferred-recall path.
-    prune_stale_kitchen_state must still execute on that path.
-    """
+    """The deferred-recall path prunes stale trackers."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     _write_tracker(
         tracker_dir, "dead-kitchen", initialized_at=datetime.now(UTC) - timedelta(hours=2)
@@ -400,7 +444,7 @@ def test_deferred_recall_open_still_prunes(monkeypatch, tmp_path):
         [
             {
                 "kitchen_id": "dead-kitchen",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),

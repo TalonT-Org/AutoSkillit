@@ -7,11 +7,21 @@ Two progress sources feed into SessionCheckpoint:
 
 from __future__ import annotations
 
-import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import ResolvedLaunchContract, SessionCheckpoint, get_logger
+from autoskillit.core import (
+    ArtifactLease,
+    ResolvedLaunchContract,
+    SessionCheckpoint,
+    TrackerAuthorityTarget,
+    TrackerParticipantKey,
+    get_logger,
+    read_tracker_authority,
+    retain_tracker_lease,
+    sample_kitchen_process_identity,
+)
 from autoskillit.fleet.sidecar import IssueSidecarEntry, read_sidecar_from_path
 from autoskillit.fleet.state import CampaignStateMutator
 from autoskillit.fleet.state_types import DispatchStatus
@@ -20,6 +30,34 @@ if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
+
+
+def retain_dispatch_tracker_authority(
+    tool_ctx: ToolContext,
+    dispatch_id: str,
+) -> tuple[TrackerParticipantKey, ArtifactLease]:
+    """Retain the exact dispatch participant after its identity is final."""
+    target = TrackerAuthorityTarget.for_project(
+        tool_ctx.project_dir,
+        dispatch_id,
+        expected=False,
+    )
+    identity = tool_ctx.kitchen_process_identity or sample_kitchen_process_identity(
+        tool_ctx.kitchen_id or dispatch_id,
+        os.getpid(),
+        tool_ctx.project_dir,
+    )
+    key = TrackerParticipantKey(
+        target=target,
+        owner_kind="dispatch",
+        owner_id=dispatch_id,
+        pid=identity.pid,
+        create_time=identity.create_time,
+        project_path=identity.project_path,
+    )
+    with tool_ctx.tracker_leases_lock:
+        lease = retain_tracker_lease(tool_ctx.tracker_leases, key)
+    return key, lease
 
 
 def bind_dispatch_launch_contract(
@@ -127,7 +165,8 @@ def load_dispatch_progress(
     dispatch_id: str,
     backend_name: str,
     recipe: str,
-) -> tuple[Path, list[IssueSidecarEntry], SessionCheckpoint | None]:
+    tracker_lease: ArtifactLease,
+) -> tuple[Path, list[IssueSidecarEntry], SessionCheckpoint | None, str | None]:
     """Load sidecar/tracker progress and choose the authoritative checkpoint."""
     sidecar_file = Path(dispatch_sidecar_path)
     sidecar_entries: list[IssueSidecarEntry] = []
@@ -141,21 +180,18 @@ def load_dispatch_progress(
                 skill_name=recipe,
             )
 
-    tracker_checkpoint: SessionCheckpoint | None = None
-    tracker_path = (
-        tool_ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker" / f"{dispatch_id}.json"
-    )
-    if tracker_path.exists():
-        try:
-            tracker_data = json.loads(tracker_path.read_text())
-            tracker_checkpoint = checkpoint_from_tracker(
-                tracker_data,
-                backend_name=backend_name,
-                skill_name=recipe,
-            )
-        except (OSError, ValueError, TypeError, AttributeError):
-            logger.debug("tracker read failed for %s", dispatch_id, exc_info=True)
+    if dispatch_checkpoint is not None:
+        return sidecar_file, sidecar_entries, dispatch_checkpoint, None
 
-    if dispatch_checkpoint is None and tracker_checkpoint is not None:
-        dispatch_checkpoint = tracker_checkpoint
-    return sidecar_file, sidecar_entries, dispatch_checkpoint
+    target = TrackerAuthorityTarget.for_project(
+        tool_ctx.project_dir,
+        dispatch_id,
+        expected=False,
+    )
+    authority = read_tracker_authority(target, tracker_lease)
+    tracker_checkpoint = checkpoint_from_tracker(
+        authority.data,
+        backend_name=backend_name,
+        skill_name=recipe,
+    )
+    return sidecar_file, sidecar_entries, tracker_checkpoint, authority.error

@@ -442,9 +442,13 @@ def test_register_creates_entry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import register_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        register_active_kitchen,
+        sample_kitchen_process_identity,
+    )
 
-    register_active_kitchen("test-kitchen-001", os.getpid(), str(tmp_path))
+    identity = sample_kitchen_process_identity("test-kitchen-001", os.getpid(), tmp_path)
+    register_active_kitchen(identity)
 
     kitchens = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())[
         "kitchens"
@@ -463,11 +467,13 @@ def test_unregister_removes_entry(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import (
         register_active_kitchen,
+        sample_kitchen_process_identity,
         unregister_active_kitchen,
     )
 
-    register_active_kitchen("test-kitchen-002", os.getpid(), str(tmp_path))
-    unregister_active_kitchen("test-kitchen-002")
+    identity = sample_kitchen_process_identity("test-kitchen-002", os.getpid(), tmp_path)
+    register_active_kitchen(identity)
+    unregister_active_kitchen(identity)
 
     data = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
     assert data["kitchens"] == []
@@ -479,52 +485,62 @@ def test_any_kitchen_open_false_when_pid_dead(
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import (
+        KitchenProcessIdentity,
         any_kitchen_open,
         register_active_kitchen,
     )
 
     process = subprocess.Popen(["true"])
     process.wait()
-    register_active_kitchen("test-kitchen-003", process.pid, str(tmp_path))
+    register_active_kitchen(
+        KitchenProcessIdentity("test-kitchen-003", process.pid, 1.0, str(tmp_path))
+    )
 
     assert any_kitchen_open() is False
 
 
-def test_any_kitchen_open_sweeps_stale(
+def test_any_kitchen_open_does_not_mutate_stale_entries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import (
+        KitchenProcessIdentity,
         any_kitchen_open,
         register_active_kitchen,
     )
 
     process = subprocess.Popen(["true"])
     process.wait()
-    register_active_kitchen("test-kitchen-004", process.pid, str(tmp_path))
+    register_active_kitchen(
+        KitchenProcessIdentity("test-kitchen-004", process.pid, 1.0, str(tmp_path))
+    )
+    before = (tmp_path / ".autoskillit" / "active_kitchens.json").read_bytes()
     any_kitchen_open()
 
-    data = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
-    assert data["kitchens"] == []
+    assert (tmp_path / ".autoskillit" / "active_kitchens.json").read_bytes() == before
 
 
-def test_clear_kitchens_for_pid(
+def test_exact_unregister_preserves_other_incarnation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import (
-        clear_kitchens_for_pid,
+        KitchenProcessIdentity,
         register_active_kitchen,
+        unregister_active_kitchen,
     )
 
-    register_active_kitchen("test-kitchen-005a", os.getpid(), str(tmp_path))
-    register_active_kitchen("test-kitchen-005b", os.getpid(), str(tmp_path))
-    clear_kitchens_for_pid(os.getpid())
+    first = KitchenProcessIdentity("shared", os.getpid(), 1.0, str(tmp_path))
+    second = KitchenProcessIdentity("shared", os.getpid(), 2.0, str(tmp_path))
+    register_active_kitchen(first)
+    register_active_kitchen(second)
+    unregister_active_kitchen(first)
 
     data = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
-    assert data["kitchens"] == []
+    assert len(data["kitchens"]) == 1
+    assert data["kitchens"][0]["create_time"] == 2.0
 
 
 def test_any_kitchen_open_true_for_live_pid(
@@ -535,9 +551,12 @@ def test_any_kitchen_open_true_for_live_pid(
     from autoskillit.core._plugin_cache import (
         any_kitchen_open,
         register_active_kitchen,
+        sample_kitchen_process_identity,
     )
 
-    register_active_kitchen("test-kitchen-006", os.getpid(), str(tmp_path))
+    register_active_kitchen(
+        sample_kitchen_process_identity("test-kitchen-006", os.getpid(), tmp_path)
+    )
 
     assert any_kitchen_open() is True
 
@@ -550,12 +569,17 @@ def test_any_kitchen_open_scoped_excludes_other_project(
     from autoskillit.core._plugin_cache import (
         any_kitchen_open,
         register_active_kitchen,
+        sample_kitchen_process_identity,
     )
 
-    register_active_kitchen("test-kitchen-007", os.getpid(), "/project_A")
+    project_a = tmp_path / "project_A"
+    project_a.mkdir()
+    register_active_kitchen(
+        sample_kitchen_process_identity("test-kitchen-007", os.getpid(), project_a)
+    )
 
     assert any_kitchen_open(project_path="/project_B") is False
-    assert any_kitchen_open(project_path="/project_A") is True
+    assert any_kitchen_open(project_path=str(project_a)) is True
 
 
 def test_any_kitchen_open_no_project_path_returns_global(
@@ -566,9 +590,14 @@ def test_any_kitchen_open_no_project_path_returns_global(
     from autoskillit.core._plugin_cache import (
         any_kitchen_open,
         register_active_kitchen,
+        sample_kitchen_process_identity,
     )
 
-    register_active_kitchen("test-kitchen-008", os.getpid(), "/project_A")
+    project_a = tmp_path / "project_A"
+    project_a.mkdir()
+    register_active_kitchen(
+        sample_kitchen_process_identity("test-kitchen-008", os.getpid(), project_a)
+    )
 
     assert any_kitchen_open() is True
 

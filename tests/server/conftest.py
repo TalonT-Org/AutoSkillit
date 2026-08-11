@@ -166,6 +166,10 @@ def _make_mock_ctx(config=None) -> MagicMock:
     ctx.skill_resolver = MagicMock(spec=SkillResolver)
     ctx.skill_resolver.resolve_effective.return_value = None
     ctx.kitchen_id = f"test-{uuid4().hex}"
+    ctx.kitchen_process_identity = None
+    ctx.kitchen_tracker_key = None
+    ctx.tracker_leases = {}
+    ctx.tracker_leases_lock = RLock()
     ctx.config.output_budget = OutputBudgetConfig()
     ctx.config.quota_guard = QuotaGuardConfig()
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default

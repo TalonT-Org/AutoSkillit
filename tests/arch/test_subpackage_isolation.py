@@ -972,7 +972,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_github_http review boundary and +launch_resolution authority.
         "execution": 19,
         # +agent_definition native-role authority (#4443).
-        "core": 31,
+        "core": 32,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
@@ -1148,7 +1148,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
     ),
     "fleet/_api.py": (
-        1575,
+        1590,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them. Bumped to 1200 by the "
@@ -1158,7 +1158,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "post-start crash persistence; those checkpoints must remain adjacent to the "
         "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
         "shell lineage decision and provenance snapshot remain on the same dispatch "
-        "transaction boundary after conflict resolution.",
+        "transaction boundary after conflict resolution. Bumped to 1590 for shared "
+        "tracker-authority retention and cleanup on every dispatch outcome boundary.",
     ),
     "server/_recipe_delivery.py": (
         1500,
@@ -1262,11 +1263,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "execution-layer gate (+30 net lines)"
         "; closure_report_root derivation after output_dir recipe auto-fill (+11 net lines)"
         "; kitchen-scoped _check_pipeline_deps fallback, _active_order_ids_for_kitchen "
-        "multi-pipeline gating, _has_active_deps/_check_review_approach_plan_path gates, "
+        "multi-pipeline gating, _authority_blocks_dependency_check/"
+        "_check_review_approach_plan_path gates, "
         "and ambiguous/empty step_name dependency-deny branches (+126 net lines)"
         "; server-authoritative step completion: _mark_step_complete_server_side helper "
-        "called at the run_skill adjudication point, shared resolve_tracker_order_id "
-        "resolver, and deny_envelope conversion of all pre-flight deny sites "
+        "called at the run_skill adjudication point, immutable explicit tracker target "
+        "selection, and deny_envelope conversion of all pre-flight deny sites "
         "(#4293 pipeline tracker split-brain, +65 net lines)"
         "; attested recipe execution identity/template verification, structured skill-input "
         "binding, runtime-binding digest capture, and inventory-admission preflight keep all "
@@ -1691,6 +1693,10 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "recipe_initialization_state",
         "recipe_terminal_response_cache",
         "kitchen_open_state",
+        "kitchen_process_identity",
+        "kitchen_tracker_key",
+        "tracker_leases",
+        "tracker_leases_lock",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

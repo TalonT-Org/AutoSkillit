@@ -96,7 +96,7 @@ Parse positional arguments:
 - arg[2] = `all_diagram_paths` (may be empty string)
 - arg[3] = `work_dir`
 - arg[4] = `base_branch`
-- arg[5] = `closing_issue` (optional — overrides value in prep file if set)
+- arg[5] = `closing_issue` (optional — must agree with the prep file if set)
 
 Derive `feature_branch` and set shell variables:
 ```bash
@@ -122,7 +122,13 @@ Read the file at `prep_path`. Extract:
 - `new_files` (from `## Changed Files > ### New (★):`)
 - `modified_files` (from `## Changed Files > ### Modified (●):`)
 - `feature_branch` from `## Metadata` (use the git-derived value from Step 0 if set)
-- `closing_issue` from `## Metadata` (overridden by arg[5] if arg[5] is non-empty)
+- `closing_issue` and `source_issue_url` from `## Metadata`
+
+Reject a non-empty arg[5] that differs from the prep file's `closing_issue`. The
+two prep fields must be either both empty or a complete pair: a positive numeric
+`closing_issue` and the exact canonical
+`https://github.com/{owner}/{repo}/issues/{closing_issue}` URL. Do not discover a
+newer prep file or substitute issue identity from ambient state.
 
 ### Step 2: Read and Validate Diagrams
 
@@ -177,7 +183,7 @@ The following files had merge conflicts that were automatically resolved.
 {## End Architecture Impact conditional}
 
 {If closing_issue is non-empty:}
-Closes #{closing_issue}
+Closes {source_issue_url}
 
 ## Implementation Plan
 
@@ -228,7 +234,7 @@ The following files had merge conflicts that were automatically resolved.
 {## End Architecture Impact conditional}
 
 {If closing_issue is non-empty:}
-Closes #{closing_issue}
+Closes {source_issue_url}
 
 ## Implementation Plan
 
@@ -239,6 +245,22 @@ Plan files:
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
 <!-- autoskillit:pipeline-signature steps=prepare_pr,run_arch_lenses,compose_pr,annotate_pr_diff,review_pr -->
 ```
+
+After writing the body, compute SHA-256 over its exact raw bytes and write the
+exclusive version-1 sibling metadata file
+`{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.metadata.json`:
+
+```json
+{
+  "schema_version": 1,
+  "body_sha256": "<64 lowercase hexadecimal SHA-256 of the raw body bytes>",
+  "closing_issue": 4293,
+  "source_issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4293"
+}
+```
+
+Use the actual paired issue values. For the supported no-issue form, both
+`closing_issue` and `source_issue_url` are JSON `null`. Do not add fields.
 
 ### Step 4: Check GitHub Availability
 
@@ -258,6 +280,12 @@ Run `gh pr create` with bounded retry on transient failures. Capture PR URL from
 On success or successful response-loss recovery, emit `pr_url = <URL>`. On exhausted retries or
 terminal validation failures, print the final `gh pr create` stderr to stderr and return the
 final create status (the empty-`pr_url` path is reserved for Step 4's `gh auth status` preflight).
+
+Immediately before the first create attempt, read `PR_CREATE_BODY` and only its
+`with_suffix(".metadata.json")` sibling. Require a regular readable body, the exact
+four-field version-1 schema above, a matching raw-byte digest, and—when issue-backed—the
+matching issue number plus exact canonical URL in the body. Any mismatch is terminal and
+must stop before `gh pr create` executes.
 
 ```bash
 PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md

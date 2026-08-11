@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: validate compose-pr body file before gh pr create.
+"""PreToolUse hook: validate exact PR-body provenance before ``gh pr create``.
 
-Prevents PRs from being created on GitHub with missing Closes #N references
-when a closing issue is known from the pipeline prep file.
+Every create issued by the PR skills must name a body whose sibling metadata
+binds the exact body bytes to its canonical source issue identity.
 
 stdlib-only; no autoskillit imports.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -34,14 +35,20 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 # introduces a new command inside a compound construct (loops, conditionals).
 _GH_COMMAND_BOUNDARY: frozenset[str] = _SHELL_OPS | _SHELL_CONTROL_WORDS
 
-COMPOSE_PR_BODY_DENY_TRIGGER: str = "compose-pr body missing Closes reference"
+COMPOSE_PR_BODY_DENY_TRIGGER: str = "PR body provenance validation failed"
 
-_CLOSING_RE = re.compile(
-    r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)",
+_ORDINARY_METADATA_FIELDS = frozenset(
+    {"schema_version", "body_sha256", "closing_issue", "source_issue_url"}
+)
+_INTEGRATION_METADATA_FIELDS = frozenset({"schema_version", "body_sha256", "source_issue_urls"})
+_ISSUE_URL_RE = re.compile(r"^https://github\.com/[^/\s]+/[^/\s]+/issues/([1-9]\d*)$")
+_CLOSING_URL_RE = re.compile(
+    r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+"
+    r"(https://github\.com/[^/\s]+/[^/\s]+/issues/[1-9]\d*)"
+    r"(?=$|\s|[.,;)])",
     re.IGNORECASE,
 )
-
-_METADATA_CLOSING_RE = re.compile(r"^-[ \t]*closing_issue:[ \t]*(\S+)", re.MULTILINE)
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 _SIMPLE_ASSIGN_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 _VAR_REF_RE = re.compile(r"^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$")
@@ -150,7 +157,7 @@ def _preprocess_newlines(cmd: str) -> str:
             in_single = not in_single
         elif c == '"' and not in_single:
             in_double = not in_double
-        elif c == "\n" and not in_single and not in_double:
+        elif c in {"\n", ";"} and not in_single and not in_double:
             result.append(" ; ")
             i += 1
             continue
@@ -159,12 +166,13 @@ def _preprocess_newlines(cmd: str) -> str:
     return "".join(result)
 
 
-def _extract_body_file_path(cmd: str) -> str | None:
+def _extract_create_body_paths(cmd: str) -> list[str | None] | None:
     try:
         tokens = shlex.split(_preprocess_newlines(cmd))
     except ValueError:
         return None
 
+    body_paths: list[str | None] = []
     for i, tok in enumerate(tokens):
         if tok != "gh":
             continue
@@ -172,48 +180,103 @@ def _extract_body_file_path(cmd: str) -> str | None:
             continue
         if i + 2 >= len(tokens) or tokens[i + 1] != "pr" or tokens[i + 2] != "create":
             continue
+        body_path: str | None = None
         start = i + 3
         for j in range(start, len(tokens)):
             t = tokens[j]
-            if t in _SHELL_OPS:
+            if t in _GH_COMMAND_BOUNDARY:
                 break
-            if t == "--body-file" and j + 1 < len(tokens) and tokens[j + 1] not in _SHELL_OPS:
+            if (
+                t == "--body-file"
+                and j + 1 < len(tokens)
+                and tokens[j + 1] not in _GH_COMMAND_BOUNDARY
+            ):
                 raw = tokens[j + 1]
                 if raw.startswith("$"):
-                    return _resolve_variable_body_path(raw, tokens, i)
-                return raw
+                    body_path = _resolve_variable_body_path(raw, tokens, i)
+                else:
+                    body_path = raw
+                break
             if t.startswith("--body-file="):
                 raw = t.split("=", 1)[1]
                 if raw.startswith("$"):
-                    return _resolve_variable_body_path(raw, tokens, i)
-                return raw
-    return None
+                    body_path = _resolve_variable_body_path(raw, tokens, i)
+                else:
+                    body_path = raw
+                break
+        body_paths.append(body_path)
+    return body_paths
 
 
-def _find_closing_issue(project_root: Path) -> str | None:
-    prep_dir = project_root / ".autoskillit" / "temp" / "prepare-pr"
-    if not prep_dir.is_dir():
+def _has_closing_url(body: str, issue_url: str) -> bool:
+    return issue_url in _CLOSING_URL_RE.findall(body)
+
+
+def _read_bound_pair(body_path: Path) -> tuple[str, dict[str, object]] | None:
+    if not body_path.is_file():
         return None
-    prep_files = sorted(
-        prep_dir.glob("pr_prep_*.md"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    if not prep_files:
+    metadata_path = body_path.with_suffix(".metadata.json")
+    if not metadata_path.is_file():
         return None
     try:
-        content = prep_files[0].read_text(encoding="utf-8", errors="replace")
-    except OSError:
+        body_bytes = body_path.read_bytes()
+        body = body_bytes.decode("utf-8")
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
-    m = _METADATA_CLOSING_RE.search(content)
-    if not m:
+    if not isinstance(metadata, dict):
         return None
-    value = m.group(1).strip().strip('"').strip("'")
-    return value if value else None
+    digest = metadata.get("body_sha256")
+    if (
+        not isinstance(digest, str)
+        or not _SHA256_RE.fullmatch(digest)
+        or digest != hashlib.sha256(body_bytes).hexdigest()
+    ):
+        return None
+    return body, metadata
 
 
-def _body_has_any_closing_ref(body: str) -> bool:
-    return bool(_CLOSING_RE.search(body))
+def _valid_ordinary_pair(body: str, metadata: dict[str, object]) -> bool:
+    if set(metadata) != _ORDINARY_METADATA_FIELDS or metadata.get("schema_version") != 1:
+        return False
+    closing_issue = metadata.get("closing_issue")
+    issue_url = metadata.get("source_issue_url")
+    if closing_issue is None:
+        return issue_url is None
+    if isinstance(closing_issue, bool) or not isinstance(closing_issue, int):
+        return False
+    if not isinstance(issue_url, str):
+        return False
+    match = _ISSUE_URL_RE.fullmatch(issue_url)
+    return bool(
+        match and int(match.group(1)) == closing_issue and _has_closing_url(body, issue_url)
+    )
+
+
+def _valid_integration_pair(body: str, metadata: dict[str, object]) -> bool:
+    if set(metadata) != _INTEGRATION_METADATA_FIELDS or metadata.get("schema_version") != 1:
+        return False
+    issue_urls = metadata.get("source_issue_urls")
+    if not isinstance(issue_urls, list) or not all(isinstance(url, str) for url in issue_urls):
+        return False
+    if issue_urls != sorted(set(issue_urls)):
+        return False
+    body_issue_urls = sorted(set(_CLOSING_URL_RE.findall(body)))
+    return body_issue_urls == issue_urls
+
+
+def _deny(reason: str) -> None:
+    payload = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (f"{COMPOSE_PR_BODY_DENY_TRIGGER}: {reason}"),
+            }
+        }
+    )
+    sys.stdout.write(payload + "\n")
+    sys.stdout.flush()
 
 
 def main() -> None:
@@ -221,7 +284,7 @@ def main() -> None:
         sys.exit(0)
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
-    if skill_name != "compose-pr":
+    if skill_name not in {"compose-pr", "open-integration-pr"}:
         sys.exit(0)
 
     try:
@@ -235,45 +298,31 @@ def main() -> None:
     if not cmd:
         sys.exit(0)
 
-    body_path_str = _extract_body_file_path(cmd)
-    if not body_path_str:
+    body_path_strs = _extract_create_body_paths(cmd)
+    if not body_path_strs:
         sys.exit(0)
 
     project_root = resolve_state_root(parsed.payload_cwd)
-    body_path = Path(body_path_str)
-    if not body_path.is_absolute():
-        body_path = project_root / body_path
-
-    try:
-        body_content = body_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        sys.exit(0)
-
-    closing_issue = _find_closing_issue(project_root)
-    if not closing_issue:
-        sys.exit(0)
-
-    if _body_has_any_closing_ref(body_content):
-        sys.exit(0)
-
-    reason = (
-        f"{COMPOSE_PR_BODY_DENY_TRIGGER}: the PR body file at {body_path} does not contain "
-        f"any GitHub closing reference (e.g., 'Closes #N'). The prep file "
-        f"specifies closing_issue: {closing_issue}. "
-        f"Add 'Closes #{closing_issue}' to the body file and retry "
-        f"the gh pr create command."
-    )
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.stdout.flush()
+    for body_path_str in body_path_strs:
+        if not body_path_str or body_path_str == "-":
+            _deny("every gh pr create must name a resolvable --body-file")
+            sys.exit(0)
+        body_path = Path(body_path_str)
+        if not body_path.is_absolute():
+            body_path = project_root / body_path
+        pair = _read_bound_pair(body_path)
+        if pair is None:
+            _deny(f"{body_path} and its sibling metadata must be readable and exact")
+            sys.exit(0)
+        body, metadata = pair
+        valid = (
+            _valid_ordinary_pair(body, metadata)
+            if skill_name == "compose-pr"
+            else _valid_integration_pair(body, metadata)
+        )
+        if not valid:
+            _deny(f"{body_path} does not match its required provenance schema")
+            sys.exit(0)
     sys.exit(0)
 
 

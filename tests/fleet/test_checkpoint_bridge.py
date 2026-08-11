@@ -4,8 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.fleet._checkpoint_bridge import checkpoint_from_sidecar, checkpoint_from_tracker
-from autoskillit.fleet.sidecar import IssueSidecarEntry
+from autoskillit.core import ArtifactLease, TrackerAuthorityTarget, tracker_lease_path
+from autoskillit.fleet._checkpoint_bridge import (
+    checkpoint_from_sidecar,
+    checkpoint_from_tracker,
+    load_dispatch_progress,
+)
+from autoskillit.fleet.sidecar import (
+    IssueSidecarEntry,
+    append_sidecar_entry,
+    sidecar_path,
+)
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -160,3 +169,88 @@ class TestCheckpointFromTracker:
         assert checkpoint.completed_items == ["rectify"]
         assert checkpoint.step_name == "rectify"
         assert checkpoint.progress_pct == pytest.approx(0.5)
+
+
+class TestLoadDispatchProgress:
+    def test_missing_optional_tracker_returns_no_authority_error(self, tool_ctx, tmp_path) -> None:
+        tool_ctx.project_dir = tmp_path
+        dispatch_id = "dispatch-missing"
+        target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=False)
+        lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+        try:
+            result = load_dispatch_progress(
+                tool_ctx=tool_ctx,
+                dispatch_sidecar_path=str(sidecar_path(dispatch_id, tmp_path)),
+                dispatch_id=dispatch_id,
+                backend_name="codex",
+                recipe="implementation",
+                tracker_lease=lease,
+            )
+        finally:
+            lease.close_preserving()
+
+        sidecar_file, entries, checkpoint, authority_error = result
+        assert sidecar_file == sidecar_path(dispatch_id, tmp_path)
+        assert entries == []
+        assert checkpoint is None
+        assert authority_error is None
+
+    @pytest.mark.parametrize(
+        "tracker_content",
+        ["{", '{"steps": [], "dependencies": {}}'],
+        ids=["corrupt", "wrong-shape"],
+    )
+    def test_invalid_expected_tracker_returns_authority_error(
+        self, tool_ctx, tmp_path, tracker_content
+    ) -> None:
+        tool_ctx.project_dir = tmp_path
+        dispatch_id = "dispatch-invalid"
+        target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=True)
+        target.path.parent.mkdir(parents=True)
+        target.path.write_text(tracker_content, encoding="utf-8")
+        lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+        try:
+            _path, entries, checkpoint, authority_error = load_dispatch_progress(
+                tool_ctx=tool_ctx,
+                dispatch_sidecar_path=str(sidecar_path(dispatch_id, tmp_path)),
+                dispatch_id=dispatch_id,
+                backend_name="codex",
+                recipe="implementation",
+                tracker_lease=lease,
+            )
+        finally:
+            lease.close_preserving()
+
+        assert entries == []
+        assert checkpoint is None
+        assert authority_error is not None
+        assert dispatch_id in authority_error
+
+    def test_authoritative_sidecar_suppresses_tracker_authority_error(
+        self, tool_ctx, tmp_path
+    ) -> None:
+        tool_ctx.project_dir = tmp_path
+        dispatch_id = "dispatch-sidecar"
+        append_sidecar_entry(
+            dispatch_id,
+            IssueSidecarEntry(issue_url="issue-1", status="completed", ts="t1"),
+            tmp_path,
+        )
+        target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=True)
+        lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+        try:
+            _path, entries, checkpoint, authority_error = load_dispatch_progress(
+                tool_ctx=tool_ctx,
+                dispatch_sidecar_path=str(sidecar_path(dispatch_id, tmp_path)),
+                dispatch_id=dispatch_id,
+                backend_name="codex",
+                recipe="implementation",
+                tracker_lease=lease,
+            )
+        finally:
+            lease.close_preserving()
+
+        assert [entry.issue_url for entry in entries] == ["issue-1"]
+        assert checkpoint is not None
+        assert checkpoint.completed_items == ["issue-1"]
+        assert authority_error is None

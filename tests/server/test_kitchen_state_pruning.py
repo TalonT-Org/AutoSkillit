@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,8 +14,8 @@ from tests.server._helpers import _write_registry
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-def test_malformed_tracker_json_reaped(monkeypatch, tmp_path):
-    """A tracker file containing invalid JSON must be deleted, not raise."""
+def test_malformed_tracker_json_is_preserved(monkeypatch, tmp_path):
+    """Unreadable authority cannot be retired as though it were stale."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     tracker_dir.mkdir(parents=True)
     bad_file = tracker_dir / "K1.json"
@@ -24,11 +25,11 @@ def test_malformed_tracker_json_reaped(monkeypatch, tmp_path):
 
     prune_stale_kitchen_state(tmp_path, "K2")
 
-    assert not bad_file.exists()
+    assert bad_file.read_text() == "{not valid json"
 
 
-def test_tracker_missing_kitchen_id_treated_as_orphan(monkeypatch, tmp_path):
-    """A tracker with no kitchen_id field is an orphan; past grace window it is reaped."""
+def test_wrong_shape_tracker_is_preserved(monkeypatch, tmp_path):
+    """Wrong-shape authority remains available for explicit repair."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     tracker_dir.mkdir(parents=True)
     tracker_data = {
@@ -42,7 +43,7 @@ def test_tracker_missing_kitchen_id_treated_as_orphan(monkeypatch, tmp_path):
 
     prune_stale_kitchen_state(tmp_path, "K2")
 
-    assert not tracker_file.exists()
+    assert json.loads(tracker_file.read_text()) == tracker_data
 
 
 def test_pruner_does_not_raise(monkeypatch, tmp_path):
@@ -55,6 +56,7 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
                 "kitchen_id": "K1",
                 "initialized_at": datetime.now(UTC).isoformat(),
                 "steps": {},
+                "dependencies": {},
             }
         )
     )
@@ -62,6 +64,25 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
     def _raise():
         raise OSError("boom")
 
-    monkeypatch.setattr("autoskillit.core._plugin_cache._active_kitchens_path", _raise)
+    monkeypatch.setattr("autoskillit.core.pipeline_tracker.read_active_kitchens_registry", _raise)
 
     prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert (tracker_dir / "K1.json").exists()
+
+
+def test_invalid_tracker_candidate_is_logged(monkeypatch, tmp_path):
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    tracker_dir.mkdir(parents=True)
+    invalid_tracker = tracker_dir / "invalid\\name.json"
+    invalid_tracker.write_text("{}")
+    mock_logger = MagicMock()
+    monkeypatch.setattr("autoskillit.server.tools.tools_kitchen.logger", mock_logger)
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    mock_logger.warning.assert_called_once_with(
+        "invalid_stale_tracker_candidate",
+        path=str(invalid_tracker),
+        error="target_order_id must be path-safe",
+    )

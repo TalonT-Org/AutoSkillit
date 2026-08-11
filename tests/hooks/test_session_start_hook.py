@@ -67,6 +67,35 @@ def test_session_start_hook_fires_for_interactive_sessions(tmp_path: Path) -> No
     assert "open-kitchen" in data["additionalContext"]
 
 
+def test_session_start_hook_never_mutates_pipeline_trackers(tmp_path: Path) -> None:
+    """Malformed and aged tracker authority survives SessionStart unchanged."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text('{"type":"say","text":"hello"}\n')
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    tracker_dir.mkdir(parents=True)
+    malformed = tracker_dir / "malformed.json"
+    malformed.write_bytes(b"{not-json")
+    aged = tracker_dir / "aged.json"
+    aged.write_text(
+        json.dumps(
+            {
+                "initialized_at": "2020-01-01T00:00:00+00:00",
+                "steps": {},
+                "dependencies": {},
+            }
+        )
+    )
+    before = {path.name: path.read_bytes() for path in tracker_dir.iterdir()}
+    payload = json.dumps({"session_id": "abc", "transcript_path": str(transcript)})
+    env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env["AUTOSKILLIT_STATE_DIR"] = str(tmp_path / "state")
+
+    rc, _ = _run(payload, env=env, cwd=tmp_path)
+
+    assert rc == 0
+    assert {path.name: path.read_bytes() for path in tracker_dir.iterdir()} == before
+
+
 def test_session_start_hook_registry_scope() -> None:
     """session_start_hook must be registered with session_scope=interactive_only."""
     from autoskillit.hook_registry import HOOK_REGISTRY

@@ -29,7 +29,7 @@ _RECIPE_PATH = next(path for path in BUNDLED_RECIPE_PATHS if path.stem == "imple
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "Step 15: validate_compiled_recipe_delivery_budget uses a fixed "
+        "#4557 Step 15: validate_compiled_recipe_delivery_budget uses a fixed "
         "_MAX_PAGES_PER_INITIALIZATION_SECTION=1 that rejects multi-page "
         "plans — fail-degrade planning (bound-derived page ceilings) not "
         "yet implemented"

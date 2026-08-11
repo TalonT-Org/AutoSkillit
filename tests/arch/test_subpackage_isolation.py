@@ -979,7 +979,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
         "cli": 26,  # +_install_contract typed install process boundary (#4409);
-        # +_capture_store; +_codex_orphans (#4536); +_codex_attempts (#4361)
+        # +_capture_store capture-store stats/reclaim; +_codex_orphans (#4536);
+        # +_codex_attempts (#4361)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);

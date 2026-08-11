@@ -15,6 +15,27 @@ import pytest
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def _enable_all_recipe_tags() -> None:
+    """Enable kitchen + kitchen-core so every exempted tool is visible."""
+    from autoskillit.core import ALL_VISIBILITY_TAGS
+    from autoskillit.server import mcp
+
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
+    for tag in ("kitchen", "kitchen-core"):
+        mcp.enable(tags={tag})
+
+
+def _cleanup_transforms() -> None:
+    from autoskillit.core import ALL_VISIBILITY_TAGS
+    from autoskillit.server import mcp
+
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
+
+
 class TestPreMiddlewareBackstopMeta:
     """Layer 2: internal registry carries the full exemption metadata."""
 
@@ -23,44 +44,42 @@ class TestPreMiddlewareBackstopMeta:
         """Every ``RESPONSE_BACKSTOP_EXEMPTION_REGISTRY`` key's live tool object
         must carry ``anthropic/maxResultSizeChars`` matching the registry value.
         """
-        from autoskillit.core import ALL_VISIBILITY_TAGS, RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+        from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
         from autoskillit.server import mcp
 
-        # Enable all tags so every tool is visible (load_recipe needs kitchen-core)
-        mcp._transforms.clear()
-        for tag in sorted(ALL_VISIBILITY_TAGS):
-            mcp.disable(tags={tag})
-        for tag in ("kitchen", "kitchen-core"):
-            mcp.enable(tags={tag})
+        try:
+            _enable_all_recipe_tags()
 
-        all_tools = await mcp.list_tools()
-        tool_by_name = {t.name: t for t in all_tools}
+            all_tools = await mcp.list_tools()
+            tool_by_name = {t.name: t for t in all_tools}
 
-        violations: list[str] = []
-        for tool_name, definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.items():
-            tool = tool_by_name.get(tool_name)
-            if tool is None:
-                violations.append(f"  {tool_name!r}: not found in mcp.list_tools()")
-                continue
-            meta = getattr(tool, "meta", None) or {}
-            actual = meta.get("anthropic/maxResultSizeChars")
-            if actual != definition.max_chars:
-                violations.append(
-                    f"  {tool_name!r}: anthropic/maxResultSizeChars={actual!r}, "
-                    f"expected {definition.max_chars}"
-                )
-            actual_bytes = meta.get("autoskillit/responseBackstopMaxUtf8Bytes")
-            if actual_bytes != definition.max_utf8_bytes:
-                violations.append(
-                    f"  {tool_name!r}: autoskillit/responseBackstopMaxUtf8Bytes="
-                    f"{actual_bytes!r}, expected {definition.max_utf8_bytes}"
-                )
-            actual_measurement = meta.get("autoskillit/responseBackstopMeasurement")
-            if actual_measurement != definition.measurement_id:
-                violations.append(
-                    f"  {tool_name!r}: autoskillit/responseBackstopMeasurement="
-                    f"{actual_measurement!r}, expected {definition.measurement_id!r}"
-                )
+            violations: list[str] = []
+            for tool_name, definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.items():
+                tool = tool_by_name.get(tool_name)
+                if tool is None:
+                    violations.append(f"  {tool_name!r}: not found in mcp.list_tools()")
+                    continue
+                meta = getattr(tool, "meta", None) or {}
+                actual = meta.get("anthropic/maxResultSizeChars")
+                if actual != definition.max_chars:
+                    violations.append(
+                        f"  {tool_name!r}: anthropic/maxResultSizeChars={actual!r}, "
+                        f"expected {definition.max_chars}"
+                    )
+                actual_bytes = meta.get("autoskillit/responseBackstopMaxUtf8Bytes")
+                if actual_bytes != definition.max_utf8_bytes:
+                    violations.append(
+                        f"  {tool_name!r}: autoskillit/responseBackstopMaxUtf8Bytes="
+                        f"{actual_bytes!r}, expected {definition.max_utf8_bytes}"
+                    )
+                actual_measurement = meta.get("autoskillit/responseBackstopMeasurement")
+                if actual_measurement != definition.measurement_id:
+                    violations.append(
+                        f"  {tool_name!r}: autoskillit/responseBackstopMeasurement="
+                        f"{actual_measurement!r}, expected {definition.measurement_id!r}"
+                    )
+        finally:
+            _cleanup_transforms()
 
         assert not violations, (
             "The following tools have incorrect or missing response backstop metadata.\n"
@@ -79,33 +98,32 @@ class TestPostMiddlewareBackstopMeta:
         """
         from fastmcp.client import Client
 
-        from autoskillit.core import ALL_VISIBILITY_TAGS, RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+        from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
         from autoskillit.server import mcp
 
-        mcp._transforms.clear()
-        for tag in sorted(ALL_VISIBILITY_TAGS):
-            mcp.disable(tags={tag})
-        for tag in ("kitchen", "kitchen-core"):
-            mcp.enable(tags={tag})
+        try:
+            _enable_all_recipe_tags()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+            async with Client(mcp) as client:
+                tools = await client.list_tools()
 
-        tool_by_name = {t.name: t for t in tools}
+            tool_by_name = {t.name: t for t in tools}
 
-        violations: list[str] = []
-        for tool_name, definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.items():
-            tool = tool_by_name.get(tool_name)
-            if tool is None:
-                violations.append(f"  {tool_name!r}: not in wire output")
-                continue
-            meta = getattr(tool, "meta", None) or {}
-            actual = meta.get("anthropic/maxResultSizeChars")
-            if actual != definition.max_chars:
-                violations.append(
-                    f"  {tool_name!r}: wire anthropic/maxResultSizeChars={actual!r}, "
-                    f"expected {definition.max_chars}"
-                )
+            violations: list[str] = []
+            for tool_name, definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.items():
+                tool = tool_by_name.get(tool_name)
+                if tool is None:
+                    violations.append(f"  {tool_name!r}: not in wire output")
+                    continue
+                meta = getattr(tool, "meta", None) or {}
+                actual = meta.get("anthropic/maxResultSizeChars")
+                if actual != definition.max_chars:
+                    violations.append(
+                        f"  {tool_name!r}: wire anthropic/maxResultSizeChars={actual!r}, "
+                        f"expected {definition.max_chars}"
+                    )
+        finally:
+            _cleanup_transforms()
 
         assert not violations, "Response backstop meta stripped by middleware:\n\n" + "\n".join(
             violations

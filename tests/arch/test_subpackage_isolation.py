@@ -1241,6 +1241,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "are threaded through normal, deferred, and resource paths while named-open "
         "replacement clears stale readiness before every early return",
     ),
+    "tools_recipe.py": (
+        1050,
+        "REQ-CNST-010-E25: #4557 response backstop meta= attachment on get_recipe_section "
+        "decorator expanded from one-line to four-line form; the three-tool exemption "
+        "registry requires each tool's decorator to carry the meta= kwarg",
+    ),
     "tools_execution.py": (
         1800,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "

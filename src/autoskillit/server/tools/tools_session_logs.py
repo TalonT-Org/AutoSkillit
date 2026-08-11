@@ -232,7 +232,12 @@ def _decode_continuation(token: str) -> dict[str, Any]:
     now = _CONTINUATION_CLOCK()
     issued = payload.get("issued")
     expires = payload.get("expires")
-    if not isinstance(issued, (int, float)) or not isinstance(expires, (int, float)):
+    if (
+        isinstance(issued, bool)
+        or isinstance(expires, bool)
+        or not isinstance(issued, (int, float))
+        or not isinstance(expires, (int, float))
+    ):
         raise _InspectionError("continuation_invalid")
     if issued > now or expires < now or expires - issued > _CONTINUATION_LIFETIME_SECONDS:
         raise _InspectionError("continuation_invalid")
@@ -310,7 +315,13 @@ def _request_position(
     )
     offset = payload.get("offset")
     line = payload.get("line")
-    if not expected or not isinstance(offset, int) or not isinstance(line, int):
+    if (
+        not expected
+        or isinstance(offset, bool)
+        or isinstance(line, bool)
+        or not isinstance(offset, int)
+        or not isinstance(line, int)
+    ):
         raise _InspectionError("continuation_invalid")
     if offset < 0 or line < 1:
         raise _InspectionError("continuation_invalid")

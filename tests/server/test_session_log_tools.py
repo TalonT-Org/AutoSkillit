@@ -135,6 +135,32 @@ async def test_read_pages_have_byte_counts_citations_and_authenticated_continuat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["issued", "expires", "offset", "line"])
+async def test_continuation_rejects_boolean_numeric_fields(retained_logs, field) -> None:
+    first = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="anomalies",
+            byte_limit=len(b'{"kind":"retry"}\n'),
+        )
+    )
+    payload = session_logs._decode_continuation(first["next_continuation"])
+    payload[field] = True
+
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="anomalies",
+            continuation=session_logs._encode_continuation(payload),
+        )
+    )
+
+    assert result["reason"] == "continuation_invalid"
+
+
+@pytest.mark.asyncio
 async def test_search_is_literal_bounded_and_cited(retained_logs) -> None:
     result = json.loads(
         await session_logs.inspect_session_logs(

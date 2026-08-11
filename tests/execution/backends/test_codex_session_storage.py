@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 import pytest
+import structlog
 import zstandard
 
 from autoskillit.core import NamedResume, NoResume
@@ -267,6 +268,38 @@ def test_missing_running_rollout_fails_closed_and_recovery_retains_view(
     with pytest.raises(RuntimeError, match="failed closed"):
         store.recover()
     assert lease.view_path.is_dir()
+
+
+def test_attempt_cleanup_log_carries_context_without_owning_the_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NoResume(),
+    )
+    lease.__enter__()
+
+    def fail_cleanup(_lease: CodexInteractiveSessionLease) -> None:
+        provider_secret = "cleanup-secret-4361"
+        assert provider_secret
+        raise RuntimeError("controlled cleanup failure")
+
+    monkeypatch.setattr(store, "_exit_attempt", fail_cleanup)
+    with structlog.testing.capture_logs() as logs:
+        with pytest.raises(RuntimeError, match="controlled cleanup failure"):
+            lease.__exit__(None, None, None)
+
+    event = next(log for log in logs if log["event"] == "codex_attempt_exit_failed")
+    assert event["view_id"] == lease.view_id
+    assert event["error_type"] == "RuntimeError"
+    assert "exc_info" not in event
+    assert "cleanup-secret-4361" not in json.dumps(event)
 
 
 def test_explicit_reconciliation_lists_and_discards_only_selected_empty_unknown(

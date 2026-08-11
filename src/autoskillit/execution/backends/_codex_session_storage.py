@@ -438,7 +438,11 @@ class CodexInteractiveSessionLease(AbstractContextManager[CookSessionHandle]):
         try:
             self.store._exit_attempt(self)
         except BaseException as cleanup_error:
-            logger.error("codex_attempt_exit_failed", exc_info=True)
+            logger.error(
+                "codex_attempt_exit_failed",
+                view_id=self.view_id,
+                error_type=type(cleanup_error).__name__,
+            )
             failures.append(cleanup_error)
         finally:
             self._release_leases(failures)

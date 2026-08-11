@@ -94,12 +94,22 @@ async def kitchen_status() -> str:
             )
             status["github_default_repo"] = _get_config().github.default_repo
             ctx = _get_ctx()
+            from autoskillit.server.tools._pipeline_deps import (  # circular-break
+                _derive_phase_a_deps,
+            )
             from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
                 _release_context_tracker,
                 _select_tracker_authority,
             )
 
-            target, authority, key, _lease = _select_tracker_authority(ctx, "")
+            expected = bool(
+                ctx.active_recipe_steps and _derive_phase_a_deps(ctx.active_recipe_steps)
+            )
+            target, authority, key, _lease = _select_tracker_authority(
+                ctx,
+                ctx.kitchen_id,
+                expected=expected,
+            )
             try:
                 if target is None or authority is None:
                     raise RuntimeError("kitchen tracker authority has no target")

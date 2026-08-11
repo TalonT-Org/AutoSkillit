@@ -119,6 +119,8 @@ def _release_context_tracker(tool_ctx: _TrackerCtx, key: TrackerParticipantKey) 
 def _select_tracker_authority(
     tool_ctx: ToolContext,
     order_id: str,
+    *,
+    expected: bool | None = None,
 ) -> tuple[
     TrackerAuthorityTarget | None,
     TrackerAuthorityReadResult | None,
@@ -129,12 +131,13 @@ def _select_tracker_authority(
     target_order_id = explicit_target or tool_ctx.kitchen_id
     if not target_order_id:
         return None, None, None, None
-    expected = bool(explicit_target)
-    if not expected and tool_ctx.active_recipe_steps:
-        try:
-            expected = bool(_derive_phase_a_deps(tool_ctx.active_recipe_steps))
-        except (AttributeError, TypeError):
-            expected = False
+    if expected is None:
+        expected = bool(explicit_target)
+        if not expected and tool_ctx.active_recipe_steps:
+            try:
+                expected = bool(_derive_phase_a_deps(tool_ctx.active_recipe_steps))
+            except (AttributeError, TypeError):
+                expected = False
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,
         target_order_id,

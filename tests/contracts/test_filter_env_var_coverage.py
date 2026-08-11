@@ -15,6 +15,8 @@ SKILLS_EXTENDED = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / 
 )
 def test_worktree_test_gates_use_server_owned_tool(skill_name: str) -> None:
     skill_md = (SKILLS_EXTENDED / skill_name / "SKILL.md").read_text()
+    frontmatter = skill_md.split("---", 2)[1]
+    assert "- test_check" in frontmatter
     assert "`test_check` MCP" in skill_md
     assert "task test-check" not in skill_md
 

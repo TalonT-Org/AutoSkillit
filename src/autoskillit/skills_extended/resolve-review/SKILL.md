@@ -5,6 +5,7 @@ categories:
 uses_capabilities:
 - commit_files
 - github_api_write
+- test_check
 description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, publish deferred observations through the structured review tool, and resolve addressed threads. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
 hooks:
   PreToolUse:

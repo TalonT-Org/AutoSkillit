@@ -1,6 +1,7 @@
 ---
 name: implement-worktree
-uses_capabilities: []
+uses_capabilities:
+- test_check
 activate_deps:
 - write-recipe
 description: Worktree implementation executor. ALWAYS invoke this skill when instructed to implement a plan in a worktree
@@ -209,7 +210,8 @@ cd "${WORKTREE_PATH}" && pre-commit run --all-files
 ```
 
 Then call the `test_check` MCP tool with `worktree_path=${WORKTREE_PATH}`. Do not invoke the
-configured test command directly in the shell.
+configured test command directly in the shell. `AUTOSKILLIT_TEST_FILTER` and
+`AUTOSKILLIT_TEST_BASE_REF` remain server-managed filter inputs, not shell exports here.
 
 If tests fail, fix the issue and re-run.
 

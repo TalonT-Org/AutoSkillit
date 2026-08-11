@@ -20,7 +20,7 @@ AUDITED_DESTRUCTIVE_TASKFILE_OPS: dict[str, str] = {
         "and scan failures prevent deletion."
     ),
     "install-worktree::uv venv --clear": (
-        "Per-worktree environment rebuild; same-worktree concurrency remains tracked separately."
+        "Per-worktree environment rebuild with an accepted same-worktree concurrency residual."
     ),
 }
 

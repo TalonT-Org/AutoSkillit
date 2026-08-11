@@ -71,6 +71,7 @@ class TestBootstrapClone:
         )
         assert "error" in result
         assert "rev-parse" in result["error"]
+        mock_mgr.remove_clone.assert_called_once_with(str(tmp_path), "false")
 
     @pytest.mark.anyio
     async def test_bootstrap_clone_timing(self, tool_ctx_kitchen_open, tmp_path):

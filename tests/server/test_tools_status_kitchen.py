@@ -187,6 +187,27 @@ class TestKitchenStatus:
         assert "Expected pipeline tracker 'kitchen-status'" in status["error"]
 
     @pytest.mark.anyio
+    async def test_kitchen_status_treats_tracker_as_optional_without_dependencies(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
+        tool_ctx_kitchen_open.active_recipe_steps = {"review": RecipeStep(name="review")}
+
+        status = json.loads(await kitchen_status())
+
+        assert status["tracker_authority"] == {
+            "target_order_id": "kitchen-status",
+            "path": str(
+                tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-status.json"
+            ),
+            "expected": False,
+            "available": False,
+            "error": None,
+        }
+        assert "error" not in status
+
+    @pytest.mark.anyio
     async def test_kitchen_status_reports_readable_kitchen_tracker_clean(
         self, tool_ctx_kitchen_open, tmp_path
     ):

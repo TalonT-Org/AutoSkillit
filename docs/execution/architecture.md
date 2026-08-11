@@ -4,7 +4,7 @@ How AutoSkillit runs a recipe end to end: orchestrator, kitchen gating, clone an
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 71 MCP tools and 142 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 72 MCP tools and 142 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 
@@ -43,7 +43,7 @@ AutoSkillit uses a three-tier tool visibility model:
   additionally pre-enabled in headless sessions. `post_pr_review` is headless-only and
   deliberately not application-gated.
 
-When you call `open_kitchen` (automatically done by `order`), all 50 kitchen-tagged tools become
+When you call `open_kitchen` (automatically done by `order`), all 51 kitchen-tagged tools become
 available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
 cluttering the tool list.
 
@@ -75,7 +75,7 @@ AutoSkillit supports four session modes with different tool and skill visibility
 
 - **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
   loaded. Sees 4 Free Range MCP tools (`open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`) and Tier 1 skills only
-  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 50 kitchen-tagged MCP
+  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 51 kitchen-tagged MCP
   tools become available.
 
 - **`$ autoskillit cook`**: Interactive development session. Sees all three skill tiers
@@ -83,7 +83,7 @@ AutoSkillit supports four session modes with different tool and skill visibility
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
 - **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
-  all 71 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
+  all 72 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
   delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
 - **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 4 always-visible

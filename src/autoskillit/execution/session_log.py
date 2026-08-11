@@ -42,6 +42,7 @@ from autoskillit.execution.anomaly_detection import (
     detect_model_drift,
     detect_outcome_anomalies,
 )
+from autoskillit.execution.session_index import read_tolerant_session_index_rows
 
 logger = get_logger(__name__)
 
@@ -74,22 +75,6 @@ def resolve_log_dir(log_dir: str) -> Path:
 def session_index_lock_path(log_root: Path) -> Path:
     """Return the stable lease path for session-index transactions."""
     return Path(log_root) / ".locks" / "sessions-index.lock"
-
-
-def _read_index_rows(index_path: Path) -> list[dict[str, Any]]:
-    if not index_path.is_file():
-        return []
-    rows: list[dict[str, Any]] = []
-    for line in index_path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            rows.append(row)
-    return rows
 
 
 def write_telemetry_clear_marker(log_root: Path) -> None:
@@ -675,7 +660,9 @@ def flush_session_log(
         }
         index_path = log_root / "sessions.jsonl"
         index_rows = [
-            row for row in _read_index_rows(index_path) if row.get("dir_name") != dir_name
+            row
+            for row in read_tolerant_session_index_rows(index_path)
+            if row.get("dir_name") != dir_name
         ]
         index_rows.append(index_entry)
 

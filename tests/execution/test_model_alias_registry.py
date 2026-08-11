@@ -34,11 +34,13 @@ def test_codex_alias_values_in_allowlist() -> None:
         )
 
 
-def test_codex_aliases_use_sol() -> None:
+def test_codex_aliases_map_classes_to_tiers() -> None:
     from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
 
     assert set(CODEX_MODEL_ALIASES) == {"sonnet", "opus", "haiku"}
-    assert set(CODEX_MODEL_ALIASES.values()) == {"gpt-5.6-sol"}
+    assert CODEX_MODEL_ALIASES["sonnet"] == "gpt-5.6-sol"
+    assert CODEX_MODEL_ALIASES["opus"] == "gpt-5.6-sol"
+    assert CODEX_MODEL_ALIASES["haiku"] == "gpt-5.6-luna"
 
 
 def test_codex_native_model_allowlist_preserves_compatibility() -> None:

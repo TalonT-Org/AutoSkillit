@@ -12,8 +12,9 @@ from autoskillit.core import (
     CODEX_EXPLORER_IDENTITY,
     DIRECT_PREFIX,
     AgentDef,
+    validate_agent_tool_canonical,
 )
-from autoskillit.execution.backends._codex_config import _serialize_toml
+from autoskillit.execution.backends._codex_config import _format_toml_value, _serialize_toml
 
 _EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
 _LUNA_READ_ONLY_PROJECTION = (*CODEX_EXPLORER_IDENTITY, "read-only")
@@ -39,6 +40,63 @@ _EXPLORER_BINDING_ENV_KEYS = frozenset(
         "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
     }
 )
+
+
+def _direct_agent_mcp_tools(definition: AgentDef) -> tuple[str, ...]:
+    return tuple(
+        validate_agent_tool_canonical(tool)
+        for tool in definition.tools
+        if tool.startswith(DIRECT_PREFIX)
+    )
+
+
+def _resolve_role_mcp_transport(
+    session_dir: Path,
+    definitions: tuple[AgentDef, ...],
+    bindings: Mapping[str, Mapping[str, str]],
+    transport: Mapping[str, object] | None,
+) -> Mapping[str, object] | None:
+    if transport is not None:
+        return transport
+    needs_transport = any(
+        _direct_agent_mcp_tools(definition) and definition.name not in bindings
+        for definition in definitions
+    )
+    if not needs_transport:
+        return None
+    config_path = session_dir / "config.toml"
+    if not config_path.is_file():
+        return {}
+    return _canonical_explorer_mcp_transport(config_path, allow_absent=True)
+
+
+def _render_role_mcp_lines(
+    projection: Mapping[str, object],
+    binding_env: Mapping[str, str] | None = None,
+) -> list[str]:
+    lines = ["[mcp_servers.autoskillit]"]
+    lines.extend(
+        f"{key} = {_format_toml_value(projection[key])}"
+        for key in (*_ROLE_MCP_TRANSPORT_KEYS, "enabled", "enabled_tools")
+        if key in projection
+    )
+    if binding_env is not None:
+        lines.append("[mcp_servers.autoskillit.env]")
+        lines.extend(
+            f"{key} = {_format_toml_value(binding_env[key])}"
+            for key in sorted(_EXPLORER_BINDING_ENV_KEYS)
+        )
+    return lines
+
+
+def _render_direct_role_mcp_lines(
+    transport: Mapping[str, object] | None,
+    enabled_tools: tuple[str, ...],
+) -> list[str]:
+    if transport is None:
+        raise ValueError("a direct MCP agent requires a canonical transport")
+    projection = {**transport, "enabled": True, "enabled_tools": list(enabled_tools)}
+    return _render_role_mcp_lines(projection)
 
 
 def _validate_injected_explorer_parent_policy(
@@ -150,7 +208,11 @@ def _validated_explorer_binding_envs(
     return validated
 
 
-def _canonical_explorer_mcp_transport(config_path: Path) -> dict[str, object]:
+def _canonical_explorer_mcp_transport(
+    config_path: Path,
+    *,
+    allow_absent: bool = False,
+) -> dict[str, object]:
     """Copy the canonical parent transport without copying enabled state or secrets."""
     try:
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -159,6 +221,8 @@ def _canonical_explorer_mcp_transport(config_path: Path) -> dict[str, object]:
     servers = config.get("mcp_servers")
     server = servers.get("autoskillit") if isinstance(servers, dict) else None
     if not isinstance(server, dict):
+        if allow_absent and (not isinstance(servers, dict) or "autoskillit" not in servers):
+            return {}
         raise ValueError("explorer binding requires a canonical autoskillit MCP server")
 
     command = server.get("command")

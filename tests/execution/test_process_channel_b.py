@@ -86,7 +86,9 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    time.sleep(3.0)
+    ready_path = os.path.join(session_dir, "phase2.ready")
+    while not os.path.exists(ready_path):
+        time.sleep(0.01)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -218,21 +220,18 @@ class TestChannelBDrainWait:
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_channel_b_does_not_end_live_process(self, tmp_path):
+    async def test_channel_b_does_not_end_live_process(self, tmp_path, monkeypatch):
         """Channel B fires, but only the wall-clock timeout ends the live process.
 
         Sequence (fast poll params):
           t=0.10s  script creates session JSONL with initial content
-          t=3.10s  script writes %%ORDER_UP%% to session JSONL
-          t~3.15s  Channel B fires → drain wait starts with 0.5s timeout
-          t~3.65s  drain times out (script never wrote to stdout)
-          t~3.65s  process killed with empty stdout
+          Phase 2 initialization creates the readiness file
+          script writes %%ORDER_UP%% to session JSONL
+          Channel B fires → drain wait starts with 0.5s timeout
+          drain times out and the process is killed with empty stdout
 
-        The 3.0s gap between file creation and marker write ensures Phase 1 discovers
-        the JSONL file before the marker arrives, preventing a race where Phase 2
-        initializes scan_pos past the marker under xdist -n 4 event loop saturation
-        (2.0s proved insufficient under WSL2 + xdist load; 3.0s matches the passing
-        adjudication sibling).
+        The readiness handshake ensures Phase 2 initializes its scan position before
+        the marker arrives, independent of xdist event-loop scheduling delays.
 
         timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
         _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
@@ -244,6 +243,7 @@ class TestChannelBDrainWait:
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
+        _coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_no_stdout.py"
         script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
 
@@ -291,7 +291,7 @@ class TestChannelBDrainWait:
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_channel_b_timeout_remains_nonterminal(self, tmp_path):
+    async def test_channel_b_timeout_remains_nonterminal(self, tmp_path, monkeypatch):
         """Channel B corroboration does not turn a wall-clock timeout into completion.
 
         Verifies that channel confirmation remains CHANNEL_B when the bounded
@@ -308,6 +308,7 @@ class TestChannelBDrainWait:
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
+        _coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_no_stdout.py"
         script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
 
@@ -477,7 +478,7 @@ class TestChannelBTimeoutPipelineAdjudication:
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_channel_b_timeout_produces_terminal_timeout_result(self, tmp_path):
+    async def test_channel_b_timeout_produces_terminal_timeout_result(self, tmp_path, monkeypatch):
         """TIMED_OUT + Channel B + empty stdout remains a terminal failure.
 
         Timing notes:
@@ -490,6 +491,7 @@ class TestChannelBTimeoutPipelineAdjudication:
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
+        _coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_no_stdout.py"
         script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
 

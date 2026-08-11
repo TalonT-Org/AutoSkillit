@@ -123,7 +123,7 @@ class TestCodexModelConfigOverrides:
 
     def test_returns_effort_for_haiku_alias(self) -> None:
         overrides = CodexBackend().model_config_overrides("haiku")
-        assert "model_reasoning_effort=medium" in overrides
+        assert "model_reasoning_effort=high" in overrides
 
     def test_strips_context_suffix_before_lookup(self) -> None:
         overrides = CodexBackend().model_config_overrides("opus[1m]")
@@ -154,10 +154,10 @@ class TestCodexEffortInjectionInCmds:
         cmd = list(spec.cmd)
         assert "model_reasoning_effort=high" in cmd
 
-    def test_headless_cmd_haiku_has_effort_medium(self) -> None:
+    def test_headless_cmd_haiku_has_effort_high(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="haiku")
         cmd = list(spec.cmd)
-        assert "model_reasoning_effort=medium" in cmd
+        assert "model_reasoning_effort=high" in cmd
 
     def test_skill_session_cmd_has_effort(self) -> None:
         config = SkillSessionConfig(model="sonnet", completion_marker="%%DONE%%")
@@ -216,10 +216,13 @@ class TestModelClass:
         from autoskillit.core import model_class
 
         shared_model_id = CODEX_MODEL_ALIASES["opus"]
-        assert {CODEX_MODEL_ALIASES[key] for key in ("sonnet", "opus", "haiku")} == {
-            shared_model_id
-        }
+        assert {CODEX_MODEL_ALIASES[key] for key in ("sonnet", "opus")} == {shared_model_id}
         assert model_class(shared_model_id) == shared_model_id
+
+    def test_codex_unique_model_id_reverses_to_local_class(self) -> None:
+        from autoskillit.core import model_class
+
+        assert model_class(CODEX_MODEL_ALIASES["haiku"]) == "haiku"
 
     def test_unknown_passthrough(self) -> None:
         from autoskillit.core import model_class

@@ -170,6 +170,9 @@ class TestRenderAgentDefinitionsByteIdentity:
                 originals[f"{defn.name}.md"] = (agents_dir / f"{defn.name}.md").read_text()
 
         assert originals, "Expected at least one MCP-tool-bearing agent"
+        assert (
+            "tools: [mcp__autoskillit__inspect_session_logs]" in originals["session-log-reader.md"]
+        )
 
         _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)
 
@@ -191,6 +194,13 @@ class TestRenderAgentDefinitionsByteIdentity:
                 f"{name}: the only differing line must be the tools: line"
             )
 
+        reader = next(
+            definition
+            for definition in load_agent_definitions(agents_dir)
+            if definition.name == "session-log-reader"
+        )
+        assert reader.tools == ("mcp__plugin_autoskillit_autoskillit__inspect_session_logs",)
+
     def test_all_builtin_only_agents_rendered_byte_identical(self, tmp_path: Path) -> None:
         from autoskillit.workspace._projected_artifact.materialization import (
             _render_agent_definitions,
@@ -205,12 +215,17 @@ class TestRenderAgentDefinitionsByteIdentity:
             if path.is_file():
                 shutil.copy2(path, agents_dir / path.name)
 
+        bundled_definitions = load_bundled_agent_definitions()
         originals = {}
-        for defn in load_bundled_agent_definitions():
+        for defn in bundled_definitions:
             if not any(tool.startswith("mcp__") for tool in defn.tools):
                 originals[f"{defn.name}.md"] = (agents_dir / f"{defn.name}.md").read_bytes()
 
-        assert len(originals) == 14, f"Expected 14 built-in-only agents, got {len(originals)}"
+        assert len(bundled_definitions) == 16, (
+            "Adding session-log-reader and retiring pipeline-health-scanner must preserve "
+            "the bundled-agent count"
+        )
+        assert len(originals) == 13, f"Expected 13 built-in-only agents, got {len(originals)}"
 
         _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)
 

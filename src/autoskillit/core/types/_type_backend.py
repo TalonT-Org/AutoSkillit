@@ -249,11 +249,13 @@ CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
     {
         "sonnet": "gpt-5.6-sol",
         "opus": "gpt-5.6-sol",
-        "haiku": "gpt-5.6-sol",
+        # The haiku class marks volume-heavy, logic-light work; Luna is the
+        # Codex tier for that class, never Sol.
+        "haiku": "gpt-5.6-luna",
     }
 )
 
-CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-08-01"
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-08-10"
 
 CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol"})
 CODEX_VALID_REASONING_EFFORTS: frozenset[str] = frozenset(
@@ -268,7 +270,7 @@ assert set(CODEX_MODEL_ALIASES.values()).issubset(CODEX_VALID_MODEL_IDS), (
 CODEX_EFFORT_MAPPING: dict[str, str] = {
     "sonnet": "medium",
     "opus": "high",
-    "haiku": "medium",
+    "haiku": "high",
 }
 
 # Backend adapters remain the only authority that translates a logical class

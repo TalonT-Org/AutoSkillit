@@ -450,12 +450,12 @@ tasks:
         else
           PYTHON_CMD="python"
         fi
-        EVIDENCE_DIR="$(pwd)/.autoskillit/temp/claude-explorer-live"
+        EVIDENCE_BASE="$(pwd)/.autoskillit/temp/claude-explorer-live"
+        mkdir -p "$EVIDENCE_BASE"
+        EVIDENCE_DIR="$(mktemp -d "$EVIDENCE_BASE/run.XXXXXX")"
         EVIDENCE="$EVIDENCE_DIR/evidence.jsonl"
         TEST_OUTPUT="$EVIDENCE_DIR/test-output.txt"
         JUNIT_REPORT="$EVIDENCE_DIR/junit.xml"
-        mkdir -p "$EVIDENCE_DIR"
-        rm -f "$EVIDENCE" "$TEST_OUTPUT" "$JUNIT_REPORT"
         export AUTOSKILLIT_CLAUDE_EXPLORER_EVIDENCE="$EVIDENCE"
         set +e
         $PYTHON_CMD -m pytest tests/server/test_claude_explorer_live_gate.py \

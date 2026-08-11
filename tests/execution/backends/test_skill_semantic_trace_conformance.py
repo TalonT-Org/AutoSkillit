@@ -412,6 +412,34 @@ def test_review_approach_projects_the_real_named_web_role() -> None:
     assert "reasoning_effort=" not in codex_text
 
 
+def test_analyze_pipeline_health_projects_the_real_terminal_reader() -> None:
+    skill_md = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
+    info = _skill_info_from_frontmatter(
+        "analyze-pipeline-health",
+        SkillSource.BUNDLED,
+        skill_md,
+    )
+
+    assert not info.invalidities
+    assert info.semantic_plan is not None
+    plan = info.semantic_plan
+    role = "autoskillit:session-log-reader"
+    assert tuple(item.name for item in plan.logical_roles) == (role,)
+    assert plan.child_spawns == (ChildSpawnSpec(role=role, for_each="reader_packets"),)
+    assert not plan.child_model_policies
+
+    claude_text = "\n".join(ClaudeCodeBackend().adapt_skill_semantics(plan).instruction_fragments)
+    codex_text = "\n".join(CodexBackend().adapt_skill_semantics(plan).instruction_fragments)
+    assert "subagent_type='autoskillit:session-log-reader'" in claude_text
+    assert "per runtime item in 'reader_packets'" in claude_text
+    assert "model=" not in claude_text
+    assert "agent_type='session-log-reader'" in codex_text
+    assert "once per runtime item in 'reader_packets'" in codex_text
+    assert "fork_turns='none'" in codex_text
+    assert "model=" not in codex_text
+    assert "reasoning_effort=" not in codex_text
+
+
 @pytest.mark.parametrize("skill_name", ["review-pr", "enrich-issues"])
 def test_real_semantic_skill_materializes_through_codex_adapter(skill_name: str) -> None:
     skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"

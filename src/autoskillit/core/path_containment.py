@@ -16,6 +16,7 @@ from pathlib import Path
 __all__ = [
     "ContainmentError",
     "check_metadata_stable",
+    "read_stable_contained_range",
     "read_stable_contained_bytes",
     "resolve_contained_path",
 ]
@@ -23,6 +24,10 @@ __all__ = [
 
 class ContainmentError(Exception):
     """Raised when a path fails containment validation."""
+
+    def __init__(self, message: str, *, reason: str = "containment_error") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def resolve_contained_path(
@@ -75,7 +80,10 @@ def _open_beneath_root_without_symlinks(
 ) -> int:
     """Open a child through a trusted root descriptor without following symlinks."""
     if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
-        raise ContainmentError("Secure component-wise open is unavailable")
+        raise ContainmentError(
+            "Secure component-wise open is unavailable",
+            reason="secure_open_unavailable",
+        )
 
     resolved_root = Path(allowed_root).resolve(strict=True)
     try:
@@ -125,3 +133,63 @@ def read_stable_contained_bytes(
     check_metadata_stable(resolved, pre_stat, post_fd_stat)
     check_metadata_stable(resolved, pre_stat, resolved.stat())
     return resolved, data
+
+
+def read_stable_contained_range(
+    path: str | Path,
+    allowed_root: str | Path,
+    *,
+    offset: int,
+    length: int,
+    max_range_bytes: int = 1_000_000,
+) -> tuple[Path, bytes, os.stat_result]:
+    """Read a descriptor-bound byte range from the file's opening snapshot."""
+    if offset < 0:
+        raise ContainmentError("Range offset must be non-negative", reason="range_invalid")
+    if length < 0 or length > max_range_bytes:
+        raise ContainmentError("Range length is invalid", reason="range_invalid")
+
+    resolved = resolve_contained_path(path, allowed_root, max_size_bytes=2**63 - 1)
+    pre_open_stat = resolved.stat()
+    fd = _open_beneath_root_without_symlinks(path, allowed_root, resolved)
+    try:
+        opening_stat = os.fstat(fd)
+        _check_range_identity(resolved, pre_open_stat, opening_stat)
+        read_length = min(length, max(0, opening_stat.st_size - offset))
+        data = os.pread(fd, read_length, offset)
+        post_fd_stat = os.fstat(fd)
+    finally:
+        os.close(fd)
+
+    post_path_stat = resolved.stat()
+    _check_range_snapshot(resolved, opening_stat, post_fd_stat)
+    _check_range_snapshot(resolved, opening_stat, post_path_stat)
+    if len(data) > read_length:
+        raise ContainmentError("Range read exceeded requested length", reason="range_unstable")
+    return resolved, data, opening_stat
+
+
+def _check_range_identity(
+    path: Path,
+    expected: os.stat_result,
+    actual: os.stat_result,
+) -> None:
+    if (
+        expected.st_dev != actual.st_dev
+        or expected.st_ino != actual.st_ino
+        or expected.st_mode != actual.st_mode
+        or expected.st_nlink != actual.st_nlink
+    ):
+        raise ContainmentError(f"File {path} identity changed", reason="range_unstable")
+
+
+def _check_range_snapshot(
+    path: Path,
+    opening: os.stat_result,
+    current: os.stat_result,
+) -> None:
+    _check_range_identity(path, opening, current)
+    if current.st_size < opening.st_size:
+        raise ContainmentError(f"File {path} shrank during read", reason="range_unstable")
+    if current.st_size == opening.st_size and current.st_mtime_ns != opening.st_mtime_ns:
+        raise ContainmentError(f"File {path} modified during read", reason="range_unstable")

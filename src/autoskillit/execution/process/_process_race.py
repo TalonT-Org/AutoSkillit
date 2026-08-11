@@ -178,6 +178,42 @@ def fold_lifecycle_evidence(
     return signals.pending_task_ids, signals.schedule_wakeup_violation
 
 
+def fold_lifecycle_evidence_path(
+    path: Path,
+    parser: StreamParser,
+    *,
+    chunk_bytes: int = 64 * 1024,
+    max_record_bytes: int = 1_000_000,
+) -> tuple[tuple[str, ...], bool] | None:
+    """Reduce lifecycle records from a capture without loading the whole file."""
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+    trailing = b""
+    try:
+        with path.open("rb") as stream:
+            while chunk := stream.read(chunk_bytes):
+                buffered = trailing + chunk
+                records = buffered.split(b"\n")
+                trailing = records.pop()
+                if len(trailing) > max_record_bytes:
+                    trailing = trailing[-max_record_bytes:]
+                fold_event_lines(
+                    [record.decode("utf-8", errors="replace") for record in records if record],
+                    parser,
+                    accumulator.observe_event,
+                )
+            if trailing:
+                fold_event_lines(
+                    [trailing.decode("utf-8", errors="replace")],
+                    parser,
+                    accumulator.observe_event,
+                )
+    except OSError:
+        logger.warning("lifecycle_stdout_read_failed", path=str(path), exc_info=True)
+        return None
+    signals = accumulator.to_race_signals()
+    return signals.pending_task_ids, signals.schedule_wakeup_violation
+
+
 async def _watch_process(
     proc: anyio.abc.Process,
     acc: RaceAccumulator,

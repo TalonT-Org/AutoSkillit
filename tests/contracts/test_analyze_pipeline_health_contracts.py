@@ -64,13 +64,22 @@ def test_analyze_pipeline_health_pattern_examples_match_delimiter():
         )
 
 
-def test_analyze_pipeline_health_skill_has_codex_guidance():
-    """SKILL.md must contain guidance for Codex session handling."""
+def test_analyze_pipeline_health_routes_bounded_reader_packets_without_paths():
+    """Reader packets carry identities and evidence classes, never log paths."""
     from autoskillit.core import pkg_root
 
     skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
     content = skill_path.read_text()
-    assert "codex_log" in content, "SKILL.md must reference codex_log for Codex session handling"
+    assert "autoskillit:session-log-reader" in content
+    assert "ordered session IDs" in content
+    assert "requested anomaly classes" in content
+    assert "Verdict: answered | partial | blocked" in content
+    assert "no more than six" in content
+    assert "Count the filtered rows programmatically" in content
+    assert "Do not include `claude_code_log`, `codex_log`" in content
+    assert "parent alone interprets the evidence" in content
+    assert 'fork_turns="none"' in content
+    assert "spawn-time `model` or `reasoning_effort`" in content
 
 
 def test_analyze_pipeline_health_never_prohibits_tmp():

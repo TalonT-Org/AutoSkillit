@@ -997,14 +997,7 @@ def test_migration_no_forbidden_imports() -> None:
 # ── REQ-ARCH-001: No cross-package submodule imports ─────────────────────────
 
 
-_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
-    {
-        (
-            "server/tools/tools_exploration.py",
-            "autoskillit.hooks._exploration_request_record",
-        )
-    }
-)
+_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset()
 
 
 def test_no_cross_package_submodule_imports() -> None:
@@ -1052,12 +1045,6 @@ def test_server_tools_import_only_allowed_packages() -> None:
     TYPE_CHECKING exempt.
     """
     ALLOWED = {"core", "execution", "pipeline", "server", "config", "fleet", "hook_registry"}
-    EXACT_EXEMPTIONS = {
-        (
-            "tools_exploration.py",
-            "autoskillit.hooks._exploration_request_record",
-        )
-    }
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "tools" and p.stem.startswith("tools_")
     ]
@@ -1069,8 +1056,6 @@ def test_server_tools_import_only_allowed_packages() -> None:
                 continue
             parts = node.module.split(".")
             if parts[0] == "autoskillit" and len(parts) >= 2:
-                if (path.name, node.module) in EXACT_EXEMPTIONS:
-                    continue
                 if parts[1] not in ALLOWED:
                     violations.append(
                         f"{path.name}:{node.lineno} imports from "

@@ -8,10 +8,12 @@ from types import SimpleNamespace
 
 import pytest
 
+import autoskillit.core.path_containment as path_containment
 from autoskillit.core.path_containment import (
     ContainmentError,
     check_metadata_stable,
     read_stable_contained_bytes,
+    read_stable_contained_range,
     resolve_contained_path,
 )
 
@@ -199,3 +201,197 @@ class TestReadStableContainedBytes:
         with pytest.raises(ContainmentError, match="TOCTOU"):
             read_stable_contained_bytes(artifact, tmp_path)
         assert artifact_stat_calls == 3
+
+
+class TestReadStableContainedRange:
+    @pytest.mark.parametrize(
+        ("offset", "length", "max_range_bytes"),
+        [(-1, 1, 10), (0, -1, 10), (0, 11, 10)],
+    )
+    def test_invalid_ranges_fail_closed(
+        self,
+        tmp_path: Path,
+        offset: int,
+        length: int,
+        max_range_bytes: int,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(
+                artifact,
+                tmp_path,
+                offset=offset,
+                length=length,
+                max_range_bytes=max_range_bytes,
+            )
+
+        assert exc_info.value.reason == "range_invalid"
+
+    @pytest.mark.parametrize(
+        ("offset", "length", "expected"),
+        [(6, 3, b""), (7, 3, b""), (4, 10, b"le")],
+    )
+    def test_eof_ranges_return_only_available_opening_snapshot_bytes(
+        self,
+        tmp_path: Path,
+        offset: int,
+        length: int,
+        expected: bytes,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_bytes(b"stable")
+
+        _, data, opening = read_stable_contained_range(
+            artifact,
+            tmp_path,
+            offset=offset,
+            length=length,
+        )
+
+        assert data == expected
+        assert opening.st_size == 6
+
+    def test_open_identity_drift_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        real_fstat = os.fstat
+
+        monkeypatch.setattr(
+            os,
+            "fstat",
+            lambda fd: _with_metadata_drift(real_fstat(fd), "st_ino"),
+        )
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "range_unstable"
+
+    def test_path_replacement_before_secure_open_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        outside = tmp_path / "outside.txt"
+        outside.write_text("outside")
+        secure_open = path_containment._open_beneath_root_without_symlinks
+
+        def replace_with_symlink(
+            path: str | Path,
+            allowed_root: str | Path,
+            resolved: Path,
+        ) -> int:
+            artifact.unlink()
+            artifact.symlink_to(outside)
+            return secure_open(path, allowed_root, resolved)
+
+        monkeypatch.setattr(
+            path_containment,
+            "_open_beneath_root_without_symlinks",
+            replace_with_symlink,
+        )
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "containment_error"
+
+    @pytest.mark.parametrize("drift", ["shrink", "mtime"])
+    def test_open_snapshot_drift_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        drift: str,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        real_fstat = os.fstat
+        calls = 0
+
+        def drifting_fstat(fd: int):
+            nonlocal calls
+            metadata = real_fstat(fd)
+            calls += 1
+            if calls != 2:
+                return metadata
+            changed = _with_metadata_drift(metadata, "st_mtime_ns")
+            if drift == "shrink":
+                changed.st_mtime_ns = metadata.st_mtime_ns
+                changed.st_size = metadata.st_size - 1
+            return changed
+
+        monkeypatch.setattr(os, "fstat", drifting_fstat)
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "range_unstable"
+
+    def test_reads_small_range_from_sparse_file_above_whole_file_cap(self, tmp_path: Path) -> None:
+        artifact = tmp_path / "large.jsonl"
+        with artifact.open("wb") as handle:
+            handle.write(b'{"first":true}\n')
+            handle.seek(50_000_001)
+            handle.write(b"\n")
+
+        resolved, data, opening = read_stable_contained_range(
+            artifact,
+            tmp_path,
+            offset=0,
+            length=15,
+        )
+
+        assert resolved == artifact
+        assert data == b'{"first":true}\n'
+        assert opening.st_size > 50_000_000
+        with pytest.raises(ContainmentError, match="too large"):
+            read_stable_contained_bytes(artifact, tmp_path)
+
+    def test_secure_open_unavailable_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        monkeypatch.delattr(os, "O_NOFOLLOW")
+
+        with pytest.raises(ContainmentError) as exc_info:
+            read_stable_contained_range(artifact, tmp_path, offset=0, length=3)
+
+        assert exc_info.value.reason == "secure_open_unavailable"
+
+    def test_append_during_read_is_bounded_to_opening_snapshot(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        artifact = tmp_path / "events.jsonl"
+        artifact.write_bytes(b"one\n")
+        real_pread = os.pread
+
+        def appending_pread(fd: int, length: int, offset: int) -> bytes:
+            data = real_pread(fd, length, offset)
+            with artifact.open("ab") as handle:
+                handle.write(b"two\n")
+            return data
+
+        monkeypatch.setattr(os, "pread", appending_pread)
+        _, data, opening = read_stable_contained_range(
+            artifact,
+            tmp_path,
+            offset=0,
+            length=100,
+        )
+
+        assert data == b"one\n"
+        assert opening.st_size == 4
+        assert artifact.stat().st_size == 8

@@ -107,12 +107,14 @@ from autoskillit.execution.backends._claude_prompt import (
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._codex.explorer_projection import (
-    _EXPLORER_BINDING_ENV_KEYS,
     _EXPLORER_ROLE_NAMES,
-    _ROLE_MCP_TRANSPORT_KEYS,
     _canonical_explorer_mcp_transport,
+    _direct_agent_mcp_tools,
     _explorer_mcp_projection,
+    _render_direct_role_mcp_lines,
     _render_parent_explorer_config,
+    _render_role_mcp_lines,
+    _resolve_role_mcp_transport,
     _validate_injected_explorer_parent_policy,
     _validated_explorer_binding_env,
     _validated_explorer_binding_envs,
@@ -886,9 +888,10 @@ def _preflight_agent_projection(
     built_in_collisions = sorted(set(names) & _CODEX_BUILT_IN_AGENT_NAMES)
     if built_in_collisions:
         raise ValueError(f"Codex built-in agent name collision: {built_in_collisions}")
-
     config_path = session_dir / "config.toml"
     config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    if exact_definitions and any(map(_direct_agent_mcp_tools, definitions)):
+        _canonical_explorer_mcp_transport(config_path)
     configured_agents = config.get("agents", {})
     if not isinstance(configured_agents, dict):
         raise ValueError("Codex config agents table must be a mapping")
@@ -924,6 +927,7 @@ def _render_agent_toml(
     project_explorer_mcp: bool = False,
 ) -> str:
     """Render and parse one role before its output directory is touched."""
+    direct_mcp_tools = _direct_agent_mcp_tools(definition)
     digest = agent_definition_digest(definition)
     lines = [
         f"name = {_format_toml_value(definition.name)}",
@@ -952,7 +956,7 @@ def _render_agent_toml(
         lines.extend(("[agents]", "enabled = false"))
     if explorer_binding_env is not None and not project_explorer_mcp:
         raise ValueError("an explorer binding requires an explorer MCP projection")
-    if explorer_mcp_transport is not None and not project_explorer_mcp:
+    if explorer_mcp_transport is not None and not project_explorer_mcp and not direct_mcp_tools:
         raise ValueError("an explorer MCP transport requires an explorer MCP projection")
     if project_explorer_mcp:
         if explorer_mcp_transport is None:
@@ -961,18 +965,9 @@ def _render_agent_toml(
             explorer_mcp_transport,
             explorer_binding_env,
         )
-        lines.append("[mcp_servers.autoskillit]")
-        lines.extend(
-            f"{key} = {_format_toml_value(projection[key])}"
-            for key in (*_ROLE_MCP_TRANSPORT_KEYS, "enabled", "enabled_tools")
-            if key in projection
-        )
-        if explorer_binding_env is not None:
-            lines.append("[mcp_servers.autoskillit.env]")
-            lines.extend(
-                f"{key} = {_format_toml_value(explorer_binding_env[key])}"
-                for key in sorted(_EXPLORER_BINDING_ENV_KEYS)
-            )
+        lines.extend(_render_role_mcp_lines(projection, explorer_binding_env))
+    elif direct_mcp_tools:
+        lines.extend(_render_direct_role_mcp_lines(explorer_mcp_transport, direct_mcp_tools))
     rendered = "\n".join(lines) + "\n"
     tomllib.loads(rendered)
     return rendered
@@ -1007,12 +1002,17 @@ def _generate_agent_tomls(
         bindings,
         exact=agent_defs is not None,
     )
+    direct_mcp_transport = _resolve_role_mcp_transport(
+        session_dir, eligible, bindings, explorer_mcp_transport
+    )
     rendered = {
         definition.name: _render_agent_toml(
             definition,
             explorer_binding_env=bindings.get(definition.name),
             explorer_mcp_transport=(
-                explorer_mcp_transport if definition.name in bindings else None
+                direct_mcp_transport
+                if definition.name in bindings or _direct_agent_mcp_tools(definition)
+                else None
             ),
             project_explorer_mcp=definition.name in bindings,
         )

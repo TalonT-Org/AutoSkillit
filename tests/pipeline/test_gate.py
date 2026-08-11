@@ -66,6 +66,7 @@ def test_gated_tools_contains_expected_names():
         "submit_exploration_query",
         "get_exploration_page",
         "resume_exploration_context",
+        "inspect_session_logs",
     }
     assert GATED_TOOLS == expected
 

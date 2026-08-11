@@ -214,6 +214,47 @@ def test_each_authoritative_obligation_rejects_success(
 
 
 @pytest.mark.parametrize(
+    ("termination", "kill_reason", "expected_retry"),
+    [
+        (TerminationReason.STALE, KillReason.INFRA_KILL, RetryReason.STALE),
+        (TerminationReason.IDLE_STALL, KillReason.INFRA_KILL, RetryReason.IDLE_STALL),
+        (TerminationReason.TIMED_OUT, KillReason.INFRA_KILL, RetryReason.NONE),
+        (
+            TerminationReason.HEALTH_INSPECTOR,
+            KillReason.HEALTH_INSPECTOR,
+            RetryReason.NONE,
+        ),
+        (TerminationReason.SIGNAL_DEATH, KillReason.NATURAL_EXIT, RetryReason.RESUME),
+    ],
+)
+def test_provenance_failure_precedes_pending_obligation(
+    termination: TerminationReason,
+    kill_reason: KillReason,
+    expected_retry: RetryReason,
+) -> None:
+    result = SubprocessResult(
+        returncode=-1,
+        stdout="",
+        stderr="",
+        termination=termination,
+        kill_reason=kill_reason,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("owned",),
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is expected_retry
+    assert skill_result.subtype != "async_obligation"
+
+
+@pytest.mark.parametrize(
     "channel_confirmation",
     [ChannelConfirmation.CHANNEL_A, ChannelConfirmation.CHANNEL_B],
 )
@@ -268,6 +309,38 @@ def test_defensive_fold_rejects_pending_task_from_available_output(
 
     assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
     assert "pending=defensive-task" in skill_result.result
+
+
+def test_defensive_fold_streams_artifact_backed_output(tmp_path: Path, monkeypatch) -> None:
+    lifecycle_line = json.dumps({"type": "task_started", "task_id": "streamed-task"})
+    stdout_path = tmp_path / "stdout.jsonl"
+    stdout_path.write_bytes(b"x" * 2_000_000 + b"\n" + lifecycle_line.encode() + b"\n")
+    real_read_text = Path.read_text
+
+    def guarded_read_text(path: Path, *args, **kwargs):
+        if path == stdout_path:
+            raise AssertionError("artifact-backed lifecycle fold must stream bytes")
+        return real_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stdout_path=stdout_path,
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+    assert "pending=streamed-task" in skill_result.result
 
 
 def test_defensive_fold_preserves_existing_pending_evidence() -> None:

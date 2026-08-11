@@ -40,6 +40,7 @@ _INSPECTION_TOOLS = frozenset(
         "get_ci_status",
         "get_exploration_page",
         "get_issue_title",
+        "inspect_session_logs",
         "get_pipeline_report",
         "get_pr_reviews",
         "get_quota_events",
@@ -343,6 +344,23 @@ _TOOL_DEFS = (
         ("page_size", "_autoskillit_exploration_request_token"),
         wire_types={"page_size": ToolWireType.INTEGER},
         roles={"_autoskillit_exploration_request_token": ToolParamRole.ORCHESTRATOR_SCOPING},
+    ),
+    _tool(
+        "inspect_session_logs",
+        (
+            "operation",
+            "session_ids",
+            "session_id",
+            "artifact",
+            "query",
+            "continuation",
+            "byte_limit",
+        ),
+        required=("operation",),
+        wire_types={
+            "session_ids": ToolWireType.ARRAY,
+            "byte_limit": ToolWireType.INTEGER,
+        },
     ),
     _tool(
         "clone_repo",

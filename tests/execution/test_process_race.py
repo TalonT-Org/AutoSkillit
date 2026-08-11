@@ -25,6 +25,7 @@ from autoskillit.execution.process._process_race import (
     RaceSignals,
     _extract_stdout_session_id,
     _watch_completion_eligibility,
+    fold_lifecycle_evidence_path,
     resolve_termination,
 )
 
@@ -364,6 +365,13 @@ def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation
     assert signals.schedule_wakeup_violation is False
     assert signals.completion_ceiling_expired is False
     assert signals.process_group_id == 0
+
+
+def test_path_fold_includes_unterminated_final_record(tmp_path: Path) -> None:
+    capture = tmp_path / "stdout.jsonl"
+    capture.write_text('{"type":"task_started","task_id":"owned"}')
+
+    assert fold_lifecycle_evidence_path(capture, ClaudeStreamParser()) == (("owned",), False)
 
 
 @pytest.mark.anyio

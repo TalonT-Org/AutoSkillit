@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
     DIRECT_PREFIX,
     EXPLORATION_TOOLS,
     MARKETPLACE_PREFIX,
     SkillExecutionRole,
     SkillSource,
+    ToolInitializationOperation,
+    get_tool_def,
     load_agent_definitions,
     load_bundled_agent_definitions,
     pkg_root,
@@ -32,10 +35,12 @@ def test_authored_agent_mcp_tools_derive_from_core_authority() -> None:
                 f"the canonical direct prefix {DIRECT_PREFIX!r}"
             )
             short = tool[len(DIRECT_PREFIX) :]
-            assert short in EXPLORATION_TOOLS, (
-                f"Agent {definition.name!r} tool short name {short!r} "
-                f"is not a registered exploration tool"
+            assert (
+                get_tool_def(short).initialization_operation
+                is ToolInitializationOperation.INSPECTION
             )
+            if definition.name in BUNDLED_EXPLORER_ROLES:
+                assert short in EXPLORATION_TOOLS
 
 
 def test_marketplace_artifact_agent_tools_carry_marketplace_prefix(tmp_path: Path) -> None:
@@ -82,7 +87,40 @@ def test_marketplace_artifact_agent_tools_carry_marketplace_prefix(tmp_path: Pat
                 f"the marketplace prefix {MARKETPLACE_PREFIX!r}"
             )
             short = tool[len(MARKETPLACE_PREFIX) :]
-            assert short in EXPLORATION_TOOLS, (
-                f"Marketplace agent {definition.name!r} tool short name {short!r} "
-                f"is not a registered exploration tool"
+            assert (
+                get_tool_def(short).initialization_operation
+                is ToolInitializationOperation.INSPECTION
             )
+            if definition.name in BUNDLED_EXPLORER_ROLES:
+                assert short in EXPLORATION_TOOLS
+
+
+def test_session_log_reader_has_one_inspection_tool_and_terminal_codex_policy() -> None:
+    definition = next(
+        item for item in load_bundled_agent_definitions() if item.name == "session-log-reader"
+    )
+
+    assert definition.tools == (f"{DIRECT_PREFIX}inspect_session_logs",)
+    assert get_tool_def("inspect_session_logs").initialization_operation is (
+        ToolInitializationOperation.INSPECTION
+    )
+    assert definition.model == "haiku"
+    assert definition.codex.model == "gpt-5.6-luna"
+    assert definition.codex.reasoning_effort == "xhigh"
+    assert definition.codex.sandbox_mode == "read-only"
+    assert definition.codex.agents_enabled is False
+    assert definition.codex.web_search == "disabled"
+    assert {"shell_tool", "standalone_web_search", "multi_agent", "multi_agent_v2"} <= set(
+        definition.codex.disabled_features
+    )
+
+
+def test_session_log_reader_covers_application_level_error_results() -> None:
+    """Reader searches errors carried by successful tool transports."""
+    agent_path = pkg_root() / "agents" / "session-log-reader.md"
+    content = agent_path.read_text()
+
+    assert "literal `error:`" in content
+    assert '`"is_error":true`' in content
+    assert "successful tool transport can contain an application error" in content
+    assert "Paginate every" in content and "matching page" in content

@@ -139,6 +139,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "submit_exploration_query",
         "get_exploration_page",
         "resume_exploration_context",
+        "inspect_session_logs",
     }
 )
 
@@ -830,6 +831,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "submit_exploration_query": frozenset({"exploration"}),
     "get_exploration_page": frozenset({"exploration"}),
     "resume_exploration_context": frozenset({"exploration"}),
+    "inspect_session_logs": frozenset({"kitchen-core"}),
 }
 
 EXPLORATION_TOOLS: frozenset[str] = frozenset(

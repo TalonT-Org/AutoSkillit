@@ -1719,6 +1719,16 @@ class TestCodexBackendSetupSessionDir:
         CodexBackend().setup_session_dir(self.session_dir)
         assert (self.session_dir / "config.toml").is_file()
 
+    def test_direct_mcp_agent_rejects_malformed_transport_before_mutation(self) -> None:
+        malformed_config = "[mcp_servers.autoskillit\n"
+        (self.session_dir / "config.toml").write_text(malformed_config)
+
+        with pytest.raises(ValueError, match="invalid Codex MCP configuration"):
+            CodexBackend().setup_session_dir(self.session_dir)
+
+        assert (self.session_dir / "config.toml").read_text() == malformed_config
+        assert not (self.session_dir / "agents").exists()
+
     def test_session_log_reader_projects_direct_mcp_only_policy(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)

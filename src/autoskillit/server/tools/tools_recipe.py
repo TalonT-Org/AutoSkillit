@@ -20,6 +20,8 @@ from autoskillit.config import (
     resolve_ingredient_defaults,
 )
 from autoskillit.core import (
+    RECIPE_RESPONSE_DEFAULT_BYTES,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     RecipeArtifactGeneration,
     RecipeDeliveryRequest,
@@ -113,8 +115,8 @@ _RECIPE_SECTION_REQUEST_STATE: ContextVar[RecipeSectionRequestState] = ContextVa
 def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
     tool_ctx = _get_ctx_or_none()
     admitted = tool_ctx is not None and tool_ctx.recipes is not None
-    response_max_bytes = 90_000
-    conservative_limit = 10_000
+    response_max_bytes = RECIPE_RESPONSE_DEFAULT_BYTES
+    conservative_limit = BackendCapabilities().unnegotiated_tool_result_token_limit
     page_max_bytes: int | None = None
     if tool_ctx is not None:
         configured_response_max = tool_ctx.config.output_budget.response_max_bytes
@@ -140,6 +142,9 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
             response_max_bytes,
             conservative_limit,
             page_max_bytes,
+            exemption_ceiling_bytes=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
+                "get_recipe_section"
+            ].max_utf8_bytes,
         ),
     )
 

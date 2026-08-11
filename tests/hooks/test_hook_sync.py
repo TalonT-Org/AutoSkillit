@@ -46,6 +46,21 @@ def test_hook_config_path_single_source_of_truth():
     )
 
 
+def test_response_spill_hook_config_path_matches_primitives():
+    """_fmt_response_spill._HOOK_CONFIG_PATH_COMPONENTS must match _fmt_primitives."""
+    from autoskillit.hooks.formatters._fmt_primitives import (
+        _HOOK_CONFIG_PATH_COMPONENTS as _PRIMITIVES_PATH,
+    )
+    from autoskillit.hooks.formatters._fmt_response_spill import (
+        _HOOK_CONFIG_PATH_COMPONENTS as _SPILL_PATH,
+    )
+
+    assert _SPILL_PATH == _PRIMITIVES_PATH, (
+        f"_fmt_response_spill._HOOK_CONFIG_PATH_COMPONENTS={_SPILL_PATH!r} "
+        f"does not match _fmt_primitives={_PRIMITIVES_PATH!r}"
+    )
+
+
 def test_response_spill_schema_mirror_matches_server_contract():
     """The standalone formatter's trust schema must exactly mirror the producer."""
     from autoskillit.hooks.formatters.pretty_output_hook import (

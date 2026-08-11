@@ -5,7 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fractions import Fraction
 
-__all__ = ["ASCII_YAML_POLICY", "BytesToTokensPolicy", "TokenLimit", "Utf8ByteLimit"]
+__all__ = [
+    "ASCII_YAML_POLICY",
+    "BytesToTokensPolicy",
+    "CLIENT_CHARS_PER_TOKEN_POLICY",
+    "CONSERVATIVE_ADMISSION_POLICY",
+    "TokenLimit",
+    "Utf8ByteLimit",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,3 +60,16 @@ class BytesToTokensPolicy:
 
 
 ASCII_YAML_POLICY = BytesToTokensPolicy(Fraction(27, 10))
+
+# The Claude Code CLI (v2.1.220, verified via binary inspection) estimates
+# 4 chars per token and budgets truncation at token_limit × 4 chars.
+# This policy mirrors the client's own heuristic for response-budget
+# projection ceilings — used only by the delivery-bound spill path in
+# _response_budget.py to convert a token limit to a char/byte ceiling.
+CLIENT_CHARS_PER_TOKEN_POLICY = BytesToTokensPolicy(Fraction(4, 1))
+
+# Conservative 1:1 bytes-per-token admission policy for delivery-mode
+# decisions. Codex tokenization can merge bytes into one token but cannot
+# require more tokens than the number of input bytes — so using the exact
+# byte count is intentionally conservative for delivery-mode admission.
+CONSERVATIVE_ADMISSION_POLICY = BytesToTokensPolicy(Fraction(1, 1))

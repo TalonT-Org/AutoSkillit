@@ -995,6 +995,9 @@ def test_initialization_requirements_use_the_pull_response_bound(
         resolve_recipe_section_bound_bytes(
             response_max_bytes,
             CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
+            exemption_ceiling_bytes=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
+                "open_kitchen"
+            ].max_utf8_bytes,
         )
     ]
 
@@ -1472,6 +1475,9 @@ def _assert_section_response_bound(rendered: str, tool_ctx) -> None:
     bound = resolve_recipe_section_bound_bytes(
         tool_ctx.config.output_budget.response_max_bytes,
         CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
+        exemption_ceiling_bytes=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
+            "get_recipe_section"
+        ].max_utf8_bytes,
     )
     assert len(rendered.encode("utf-8")) <= bound
 

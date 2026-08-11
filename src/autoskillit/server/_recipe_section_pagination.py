@@ -240,11 +240,18 @@ def resolve_recipe_section_bound_bytes(
     response_max_bytes: int,
     conservative_general_result_limit: int,
     page_max_bytes_override: int | None = None,
+    *,
+    exemption_ceiling_bytes: int | None = None,
 ) -> int:
-    """Resolve the deliberately conservative ordinary recipe-pull ceiling."""
-    if page_max_bytes_override is not None:
-        return page_max_bytes_override
-    return min(response_max_bytes, conservative_general_result_limit)
+    """Delegate to core resolver — thin compatibility wrapper."""
+    from autoskillit.core._delivery_bounds import resolve_recipe_section_response_bound
+
+    return resolve_recipe_section_response_bound(
+        response_max_bytes=response_max_bytes,
+        conservative_general_result_limit=conservative_general_result_limit,
+        page_max_bytes_override=page_max_bytes_override,
+        exemption_ceiling_bytes=exemption_ceiling_bytes,
+    )
 
 
 def resolve_recipe_section_definition(

@@ -45,6 +45,8 @@ __all__ = [
     "RecipeDeliverySurfaceDef",
     "RECIPE_DELIVERY_SURFACE_REGISTRY",
     "RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST",
+    "RECIPE_RESPONSE_MAX_UTF8_BYTES",
+    "RECIPE_RESPONSE_DEFAULT_BYTES",
     "ExecutionInstallSiteDef",
     "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY",
     "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST",
@@ -222,7 +224,8 @@ class RecipeDeliverySurfaceDef(NamedTuple):
     response_exemption: ResponseBackstopExemptionDef | None
 
 
-_RECIPE_RESPONSE_MAX_UTF8_BYTES = 195_000
+RECIPE_RESPONSE_MAX_UTF8_BYTES = 195_000
+RECIPE_RESPONSE_DEFAULT_BYTES = 90_000
 
 RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = MappingProxyType(
     {
@@ -235,8 +238,8 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             initialization_activating=True,
             response_exemption_tool="open_kitchen",
             response_exemption=ResponseBackstopExemptionDef(
-                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_chars=RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=RECIPE_RESPONSE_MAX_UTF8_BYTES,
                 measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
             ),
         ),
@@ -259,8 +262,8 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             initialization_activating=False,
             response_exemption_tool="load_recipe",
             response_exemption=ResponseBackstopExemptionDef(
-                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_chars=RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=RECIPE_RESPONSE_MAX_UTF8_BYTES,
                 measurement_id="bundled-recipes-all-modes-2026-07-22/load-recipe",
             ),
         ),
@@ -669,8 +672,8 @@ RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: Mapping[str, ResponseBackstopExemptionDef]
     MappingProxyType(
         {
             "get_recipe_section": ResponseBackstopExemptionDef(
-                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_chars=RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=RECIPE_RESPONSE_MAX_UTF8_BYTES,
                 measurement_id="bundled-recipes-all-modes-2026-08-09/get-recipe-section",
             ),
             **{

@@ -53,6 +53,27 @@ def resolve_recipe_envelope_byte_limit(capabilities: BackendCapabilities) -> int
     return resolve_general_output_token_limit(capabilities)
 
 
+def resolve_recipe_section_response_bound(
+    *,
+    response_max_bytes: int,
+    conservative_general_result_limit: int,
+    page_max_bytes_override: int | None = None,
+    exemption_ceiling_bytes: int | None = None,
+) -> int:
+    """Resolve the recipe-section byte ceiling via single-seat reconciliation.
+
+    An override is an input to reconciliation, never a bypass — it is clamped
+    to the exemption ceiling when one is provided.
+    """
+    if page_max_bytes_override is not None:
+        candidate = page_max_bytes_override
+    else:
+        candidate = min(response_max_bytes, conservative_general_result_limit)
+    if exemption_ceiling_bytes is not None:
+        return min(candidate, exemption_ceiling_bytes)
+    return candidate
+
+
 def resolve_recipe_delivery_decision(
     *,
     capabilities: BackendCapabilities,

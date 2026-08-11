@@ -815,13 +815,17 @@ def _recipe_exemption_admitted_bytes(ceiling_bytes: int) -> int:
 
 
 def _conservative_token_upper_bound(rendered: str) -> int:
-    """Bound tokenizer output without assuming four UTF-8 bytes per token.
+    """Bound tokenizer output via the conservative 1:1 admission policy.
 
     Codex tokenization can merge bytes into one token, but it cannot require
-    more tokens than the number of input bytes. Using the exact byte count is
-    intentionally conservative for delivery-mode admission.
+    more tokens than the number of input bytes. The CONSERVATIVE_ADMISSION_POLICY
+    (1 byte = 1 token) is the named core policy for this bound.
     """
-    return len(rendered.encode("utf-8"))
+    from autoskillit.core import CONSERVATIVE_ADMISSION_POLICY, Utf8ByteLimit
+
+    return CONSERVATIVE_ADMISSION_POLICY.to_tokens(
+        Utf8ByteLimit(len(rendered.encode("utf-8")))
+    ).value
 
 
 def _attested_render(
@@ -1034,6 +1038,11 @@ def finalize_recipe_delivery(
         response_ceiling_bytes,
         ordinary_limit,
         page_max_bytes,
+        exemption_ceiling_bytes=(
+            surface_definition.response_exemption.max_utf8_bytes
+            if surface_definition.response_exemption is not None
+            else None
+        ),
     )
     if (
         decision.mode is RecipeDeliveryMode.ORDINARY_INLINE

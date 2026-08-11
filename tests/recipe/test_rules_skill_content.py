@@ -1726,13 +1726,25 @@ def test_graphql_rule_fires_for_prose_with_stdin_invocation(
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
-def test_graphql_rule_accepts_literal_payload_with_variables_object(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "bash_block",
+    [
+        'gh api graphql --input "/absolute/run/create.json"',
+        'echo "/absolute/run/create.json.bak"\ngh api graphql --input "/absolute/run/create.json"',
+    ],
+    ids=["literal-path", "longer-earlier-token"],
+)
+def test_graphql_rule_accepts_literal_payload_with_variables_object(
+    tmp_path: Path,
+    bash_block: str,
+) -> None:
     query = (
         "mutation Create($repo: ID!, $title: String!) { "
         "createIssue(input: {repositoryId: $repo, title: $title}) { issue { id } } }"
     )
-    skill_md = textwrap.dedent(
-        """\
+    skill_md = (
+        textwrap.dedent(
+            """\
         # graphql-skill
 
         ## Workflow
@@ -1753,10 +1765,13 @@ def test_graphql_rule_accepts_literal_payload_with_variables_object(tmp_path: Pa
         ```
 
         ```bash
-        gh api graphql --input "/absolute/run/create.json"
+        <BASH_BLOCK>
         ```
         """
-    ).replace("<QUERY_JSON>", json.dumps(query))
+        )
+        .replace("<QUERY_JSON>", json.dumps(query))
+        .replace("<BASH_BLOCK>", bash_block)
+    )
 
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
     rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]

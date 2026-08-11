@@ -863,7 +863,10 @@ def _literal_graphql_input_path(block: str) -> str | None:
     if not (path.startswith("/") or path.startswith("{{AUTOSKILLIT_TEMP}}/")):
         return None
     prefix = block[: match.start()]
-    if path in prefix:
+    if re.search(
+        rf"(?:^|[\s'\"=<>|&;()]){re.escape(path)}(?=$|[\s'\"<>|&;()])",
+        prefix,
+    ):
         return None
     return path
 

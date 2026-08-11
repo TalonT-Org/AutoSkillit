@@ -405,6 +405,42 @@ async def test_search_first_match_respects_exact_byte_budget(
 
 
 @pytest.mark.asyncio
+async def test_large_search_caps_page_bytes_match_count_and_excerpts(retained_logs) -> None:
+    record = '{"kind":"error","payload":"' + ("x" * 600) + '"}\n'
+    retained_logs["anomalies"].write_text(record * (session_logs._MAX_MATCHES + 5))
+    excerpt_bytes = len(record.rstrip()[: session_logs._MAX_EXCERPT_CHARS].encode())
+
+    byte_bounded = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="search",
+            session_id="session-one",
+            artifact="anomalies",
+            query="error",
+            byte_limit=excerpt_bytes * 2,
+        )
+    )
+    assert len(byte_bounded["matches"]) == 2
+    assert byte_bounded["exact_bytes"] == excerpt_bytes * 2
+    assert byte_bounded["truncated"] is True
+
+    count_bounded = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="search",
+            session_id="session-one",
+            artifact="anomalies",
+            query="error",
+        )
+    )
+    assert len(count_bounded["matches"]) == session_logs._MAX_MATCHES
+    assert all(
+        len(match["excerpt"]) <= session_logs._MAX_EXCERPT_CHARS
+        for match in count_bounded["matches"]
+    )
+    assert count_bounded["exact_bytes"] <= session_logs._MAX_PAGE_BYTES
+    assert count_bounded["truncated"] is True
+
+
+@pytest.mark.asyncio
 async def test_append_and_index_rewrite_expire_continuations(retained_logs) -> None:
     first = json.loads(
         await session_logs.inspect_session_logs(

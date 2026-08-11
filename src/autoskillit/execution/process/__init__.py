@@ -599,7 +599,7 @@ async def run_managed_async(
                     if event.has_marker and acc.channel_b_candidate_at is None:
                         acc.channel_b_candidate_at = anyio.current_time()
 
-                final_fold_complete = acc.stdout_cursor is not None
+                final_fold_complete = False
                 if acc.stdout_cursor is not None:
                     final_fold_complete = fold_event_cursor(
                         acc.stdout_cursor, lifecycle_parser, _observe_final_stdout

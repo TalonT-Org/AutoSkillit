@@ -41,7 +41,7 @@ _CONTINUATION_LIFETIME_SECONDS = 300
 _CONTINUATION_VERSION = 1
 _CONTINUATION_KEY: bytes | None = None
 _CONTINUATION_CLOCK = time.time
-_HANDLES = frozenset({"summary", "anomalies", "audit", "transcript"})
+_HANDLES = ("summary", "anomalies", "audit", "transcript")
 _DIR_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}\Z")
 
 
@@ -142,7 +142,7 @@ def _artifact_location(
 
 def _existing_handles(row: dict[str, Any], log_root: Path) -> list[str]:
     handles: list[str] = []
-    for handle in ("summary", "anomalies", "audit", "transcript"):
+    for handle in _HANDLES:
         try:
             path, _, _ = _artifact_location(row, handle, log_root)
             mode = path.lstat().st_mode

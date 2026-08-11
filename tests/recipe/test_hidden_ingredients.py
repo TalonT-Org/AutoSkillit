@@ -1420,6 +1420,8 @@ def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
 @pytest.mark.parametrize(
     ("raw", "message"),
     [
+        ("- steps:\n    guarded:\n      tool: run_cmd\n", "must be a YAML mapping"),
+        ("steps:\n- guarded\n", "requires a block-style top-level steps mapping"),
         ("steps: {guarded: {tool: run_cmd}, done: {action: stop}}\n", "flow-style"),
         (
             "shared: &shared\n  tool: run_cmd\nsteps:\n  guarded: *shared\n"

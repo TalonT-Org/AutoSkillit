@@ -355,6 +355,38 @@ async def test_sequencing_session_step_dispatch(tmp_path):
     assert result.elapsed_seconds == meta.duration_ms / 1000.0
 
 
+@pytest.mark.anyio
+async def test_replayed_session_folds_lifecycle_before_adjudication(tmp_path) -> None:
+    stdout = (
+        '{"type":"task_started","task_id":"replayed-task"}\n'
+        '{"type":"result","subtype":"success","result":"done",'
+        '"session_id":"s1","is_error":false}\n'
+    )
+    runner = ReplayingSubprocessRunner(
+        {"implement": deque([(FakeCLI(stdout=stdout), FakeMeta(exit_code=0))])},
+        {},
+    )
+
+    result = await runner(
+        ["claude", "--print", "do stuff"],
+        cwd=tmp_path,
+        timeout=60,
+        env={"SCENARIO_STEP_NAME": "implement"},
+        stream_parser=ClaudeStreamParser(),
+        lifecycle_observation_enabled=True,
+    )
+
+    assert result.lifecycle_observation_enabled is True
+    assert result.lifecycle_observation_complete is True
+    assert result.pending_task_ids == ("replayed-task",)
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/autoskillit:implement",
+        backend=ClaudeCodeBackend(),
+    )
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
 # --- T14: Non-session step dispatch via result stub ---
 
 

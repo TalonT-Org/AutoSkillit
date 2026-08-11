@@ -513,7 +513,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
     ) -> SubprocessResult:
-        del pass_fds, backend_resume_session_id, lifecycle_observation_enabled
+        del pass_fds, backend_resume_session_id
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if not step_name:
@@ -524,6 +524,16 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         if step_name in self._sessions and self._sessions[step_name]:
             cli, meta = self._sessions[step_name].popleft()
             result = cli.run()
+            lifecycle_observation_complete = False
+            pending_task_ids: tuple[str, ...] = ()
+            schedule_wakeup_violation = False
+            if lifecycle_observation_enabled and stream_parser is not None:
+                from autoskillit.execution.process import fold_lifecycle_evidence
+
+                pending_task_ids, schedule_wakeup_violation = fold_lifecycle_evidence(
+                    result.stdout.splitlines(), stream_parser
+                )
+                lifecycle_observation_complete = True
             return SubprocessResult(
                 returncode=meta.exit_code,
                 stdout=result.stdout,
@@ -531,6 +541,10 @@ class ReplayingSubprocessRunner(SubprocessRunner):
                 termination=TerminationReason.NATURAL_EXIT,
                 pid=0,
                 elapsed_seconds=meta.duration_ms / 1000.0,
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
+                lifecycle_observation_complete=lifecycle_observation_complete,
+                pending_task_ids=pending_task_ids,
+                schedule_wakeup_violation=schedule_wakeup_violation,
             )
 
         if step_name in self._non_session:

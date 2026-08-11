@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _read_index_rows(index_path: Path) -> list[dict[str, Any]]:
+def read_tolerant_session_index_rows(index_path: Path) -> list[dict[str, Any]]:
     if not index_path.is_file():
         return []
     rows: list[dict[str, Any]] = []

@@ -42,7 +42,7 @@ from autoskillit.execution.anomaly_detection import (
     detect_model_drift,
     detect_outcome_anomalies,
 )
-from autoskillit.execution.session_index import _read_index_rows
+from autoskillit.execution.session_index import read_tolerant_session_index_rows
 
 logger = get_logger(__name__)
 
@@ -660,7 +660,9 @@ def flush_session_log(
         }
         index_path = log_root / "sessions.jsonl"
         index_rows = [
-            row for row in _read_index_rows(index_path) if row.get("dir_name") != dir_name
+            row
+            for row in read_tolerant_session_index_rows(index_path)
+            if row.get("dir_name") != dir_name
         ]
         index_rows.append(index_entry)
 

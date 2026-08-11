@@ -116,12 +116,16 @@ in `tests/conftest.py` named by the registry's `parity_fixture` field, e.g.
 
 - `PYTHONDONTWRITEBYTECODE=1` is set via Taskfile — no `.pyc` disk writes (registered
   in `TEST_HARNESS_ENV_OVERRIDES` with `production_interpreter_env` as parity fixture)
-- Test temp I/O is routed to platform-resolved paths:
-  - **Linux / WSL2**: `/dev/shm/pytest-tmp` (kernel tmpfs, RAM-backed)
-  - **macOS**: `/tmp/pytest-tmp` (disk-backed system default)
-- `TMPDIR` is set to the platform path via Taskfile — all `tempfile` calls are routed there
-- `--basetemp` is passed to pytest — `tmp_path` fixtures resolve to the platform path
-- `cache_dir` is redirected to the platform cache path — no stray pytest cache writes
+- Test temp I/O uses one generation per Taskfile invocation under
+  `<platform-root>/autoskillit-pytest-<uid>/pytest-<worktree-hash>-<run-id>`:
+  - **Linux / WSL2**: `<platform-root>` is `/dev/shm` (kernel tmpfs, RAM-backed)
+  - **macOS**: `<platform-root>` is `/tmp` (disk-backed system default)
+- Each generation contains sibling `tmp/` (`TMPDIR` and `--basetemp`), `cache/`
+  (`cache_dir`), and `owner.json`. The marker stays outside `tmp/` because pytest clears
+  its basetemp.
+- `scripts/pytest_tmp_lifecycle.py` reaps only dead-owner or sufficiently old unmarked
+  generations after a live-process reference scan. Scan failure skips all deletion.
+- Never use bare `rm -rf /dev/shm/pytest-tmp-*`; `task cleanup-shm` invokes the safe reaper.
 - `test_tmp_path_is_ram_backed` in `tests/arch/test_ast_rules.py` enforces the `/dev/shm` prefix
   on Linux; on macOS it is a no-op (disk temp is acceptable there)
 

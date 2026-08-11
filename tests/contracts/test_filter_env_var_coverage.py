@@ -9,6 +9,16 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 SKILLS_EXTENDED = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "skills_extended"
 
 
+@pytest.mark.parametrize(
+    "skill_name",
+    ["retry-worktree", "implement-worktree", "implement-worktree-no-merge", "resolve-review"],
+)
+def test_worktree_test_gates_use_server_owned_tool(skill_name: str) -> None:
+    skill_md = (SKILLS_EXTENDED / skill_name / "SKILL.md").read_text()
+    assert "`test_check` MCP" in skill_md
+    assert "task test-check" not in skill_md
+
+
 @pytest.mark.parametrize("env_var", ["AUTOSKILLIT_TEST_FILTER", "AUTOSKILLIT_TEST_BASE_REF"])
 def test_retry_worktree_step4_sets_env_var(env_var: str) -> None:
     """retry-worktree Step 4 must set AUTOSKILLIT_TEST_FILTER and AUTOSKILLIT_TEST_BASE_REF."""

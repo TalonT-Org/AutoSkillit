@@ -49,7 +49,7 @@ for actionable findings, commit each fix, and verify tests still pass.
     addressed threads.
   - `mode=local`: read `local_findings_{pr_number}.json`; skip publication and all GitHub
     API fetching; accumulate DISCUSS/REJECT to persistent local files; skip thread resolution
-    and all review-comment publication; still run `task test-check`.
+    and all review-comment publication; still run the `test_check` MCP gate.
 
 The `cwd` is provided by the recipe step's `cwd:` field — the clone with the feature
 branch already checked out.
@@ -81,7 +81,7 @@ branch already checked out.
 - Fetch both inline comments (`pulls/{number}/comments`) and top-level review
   bodies (`pulls/{number}/reviews`) via the GitHub API
 - Commit each distinct fix separately with a message describing what was addressed
-- Run `{test_command}` (from config, default: `task test-check`) after applying all fixes to catch regressions
+- Run the `test_check` MCP gate after applying all fixes to catch regressions
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error. **Note:** Reads performed by subagents (Task/Agent) do NOT satisfy this requirement — they run in a child session whose reads are invisible to the parent. If a file was only read inside a subagent, you must Read it again in this main session before calling Edit.
@@ -104,8 +104,7 @@ review fixes are committed and the downstream push step receives a clean branch.
 
 ## Workflow
 
-Read test configuration from `.autoskillit/config.yaml`: check `test_check.commands` (ordered list, if set) or `test_check.command` (single command, default: `task test-check`).
-The `test_check` MCP tool runs all configured commands automatically.
+The `test_check` MCP tool owns configured test-command resolution and execution.
 
 ### Step 0: Validate Arguments
 
@@ -680,9 +679,8 @@ Record each skip with: `(file, line, reason)`.
 
 ### Step 5: Run Tests
 
-```bash
-{test_command}
-```
+Call the `test_check` MCP tool with `worktree_path` set to the current clone. Do not invoke
+the configured test command directly in the shell.
 
 - Pass → proceed to Step 6 (Resolve Addressed Review Threads)
 - Fail (iteration < 3): analyze failures against the fixes applied, revert/adjust the
@@ -818,7 +816,7 @@ Log: `"Saved N reject patterns"`.
 
 ### Step 7: Report
 
-**MODE INDEPENDENCE:** `task test-check` (Step 5) runs identically in both modes.
+**MODE INDEPENDENCE:** the `test_check` MCP gate (Step 5) runs identically in both modes.
 Gate token emission is mode-independent.
 
 Print a structured summary to terminal:

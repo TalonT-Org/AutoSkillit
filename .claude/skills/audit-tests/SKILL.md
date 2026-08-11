@@ -184,7 +184,7 @@ Test files or supporting files exceeding 750 lines. Flag files approaching the t
 Tests that are unsafe for parallel execution under pytest-xdist (`-n 4 --dist load`). This project runs tests in parallel by default with explicit safety rules defined in `tests/CLAUDE.md`.
 
 **What to look for:**
-- Tests that create temporary files or directories at fixed paths instead of using `tmp_path` (pytest provides unique per-test paths; on Linux these should land under `/dev/shm/pytest-tmp` per `tests/CLAUDE.md` guidance)
+- Tests that create temporary files or directories at fixed paths instead of using `tmp_path` (pytest provides unique per-test paths; on Linux these should land under the Taskfile-managed `/dev/shm/autoskillit-pytest-<uid>/pytest-<worktree-hash>-<run-id>/tmp` generation per `tests/AGENTS.md` guidance)
 - `scope="module"` or `scope="session"` fixtures that mutate state (module-level dicts, cached objects, singletons) without full teardown via `yield` — these can leak state across workers
 - Tests that use `monkeypatch.setattr()` on a fixture but the fixture itself has `scope != "function"` — the patch won't be reverted between tests that share the fixture instance
 - Tests that bind to fixed network ports; use `port=0` and capture the OS-assigned port via fixture

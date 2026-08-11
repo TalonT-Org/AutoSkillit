@@ -31,6 +31,27 @@ pytestmark = [
 ]
 
 
+def _wait_for_fake_codex_ready(pid: int, name: str, stdin_mode: str) -> None:
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            comm = Path(f"/proc/{pid}/comm").read_text().strip()
+            fd0_target = os.readlink(f"/proc/{pid}/fd/0")
+        except (FileNotFoundError, OSError):
+            time.sleep(0.01)
+            continue
+        target_ready = {
+            "orphan_pty": bool(re.fullmatch(r"/dev/pts/\d+ \(deleted\)", fd0_target)),
+            "live_pty": bool(re.fullmatch(r"/dev/pts/\d+", fd0_target)),
+            "devnull": fd0_target == "/dev/null",
+            "deleted_file": fd0_target.endswith(" (deleted)"),
+        }[stdin_mode]
+        if comm == name and target_ready:
+            return
+        time.sleep(0.01)
+    raise AssertionError(f"fake Codex process {pid} did not reach {stdin_mode} readiness")
+
+
 @pytest.fixture
 def _spawn_fake_codex(tmp_path):
     """Factory fixture spawning a symlinked-Python child with controllable stdin mode."""
@@ -85,8 +106,7 @@ def _spawn_fake_codex(tmp_path):
             raise ValueError(f"Unknown stdin_mode: {stdin_mode}")
 
         children.append(child)
-        # Brief delay to let the child process settle
-        time.sleep(0.1)
+        _wait_for_fake_codex_ready(child.pid, name, stdin_mode)
         return child
 
     yield _spawn

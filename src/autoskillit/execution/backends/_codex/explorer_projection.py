@@ -66,11 +66,8 @@ def _resolve_role_mcp_transport(
         return None
     config_path = session_dir / "config.toml"
     if not config_path.is_file():
-        return {}
-    try:
-        return _canonical_explorer_mcp_transport(config_path)
-    except ValueError:
-        return {}
+        raise ValueError("a direct MCP agent requires a canonical Codex configuration")
+    return _canonical_explorer_mcp_transport(config_path)
 
 
 def _render_role_mcp_lines(

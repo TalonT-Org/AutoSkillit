@@ -137,7 +137,7 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
     peer_tracker.write_text(
         '{"pipeline_id": "AB", "kitchen_id": "AB", "steps": {}, "dependencies": {}}'
     )
-    peer_target = TrackerAuthorityTarget("AB", peer_tracker, expected=False)
+    peer_target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=False)
     peer_lease_path = tracker_lease_path(peer_target)
 
     lease = ArtifactLease.acquire_shared(peer_lease_path)
@@ -293,7 +293,7 @@ def test_open_preserves_orphan_while_shared_lease_is_held(monkeypatch, tmp_path)
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC))
     _write_registry(monkeypatch, tmp_path, [])
-    target = TrackerAuthorityTarget("K1", tracker_dir / "K1.json", expected=False)
+    target = TrackerAuthorityTarget.for_project(tmp_path, "K1", expected=False)
 
     lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
     try:

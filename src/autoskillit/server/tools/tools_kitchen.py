@@ -663,12 +663,17 @@ def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> Non
         if tracker_file.name.startswith(".") or tracker_file.stem == current_kitchen_id:
             continue
         try:
-            target = TrackerAuthorityTarget(
-                target_order_id=tracker_file.stem,
-                path=tracker_file,
+            target = TrackerAuthorityTarget.for_project(
+                project_dir,
+                tracker_file.stem,
                 expected=False,
             )
-        except ValueError:
+        except ValueError as exc:
+            logger.warning(
+                "invalid_stale_tracker_candidate",
+                path=str(tracker_file),
+                error=str(exc),
+            )
             continue
         try_retire_tracker(target)
 

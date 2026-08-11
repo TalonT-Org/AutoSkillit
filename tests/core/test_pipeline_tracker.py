@@ -74,6 +74,19 @@ def test_authority_target_rejects_nonexplicit_or_unsafe_ids(tmp_path, order_id):
         pipeline_tracker_path(tmp_path, order_id)
 
 
+def test_authority_target_carries_and_enforces_project_root(tmp_path):
+    target = _target(tmp_path)
+
+    assert target.project_dir == tmp_path
+    with pytest.raises(ValueError, match="project target tracker JSON"):
+        TrackerAuthorityTarget(
+            target_order_id="order-1",
+            path=target.path,
+            expected=True,
+            project_dir=tmp_path / "other-project",
+        )
+
+
 def test_read_result_enforces_expected_authority_invariants(tmp_path):
     expected = _target(tmp_path)
     with pytest.raises(ValueError, match="expected authority"):

@@ -59,15 +59,18 @@ class TrackerAuthorityTarget:
     target_order_id: str
     path: Path
     expected: bool
+    project_dir: Path
 
     def __post_init__(self) -> None:
         _validate_target_order_id(self.target_order_id)
         if type(self.expected) is not bool:
             raise ValueError("expected must be a boolean")
+        project_dir = Path(self.project_dir)
         path = Path(self.path)
-        if path.name != f"{self.target_order_id}.json":
-            raise ValueError("path must name the explicit target tracker JSON")
+        if path != pipeline_tracker_path(project_dir, self.target_order_id):
+            raise ValueError("path must be the project target tracker JSON")
         object.__setattr__(self, "path", path)
+        object.__setattr__(self, "project_dir", project_dir)
 
     @classmethod
     def for_project(
@@ -81,6 +84,7 @@ class TrackerAuthorityTarget:
             target_order_id=target_order_id,
             path=pipeline_tracker_path(project_dir, target_order_id),
             expected=expected,
+            project_dir=project_dir,
         )
 
 
@@ -333,8 +337,7 @@ def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
                 kitchen_id = current.data.get("kitchen_id")
                 if not isinstance(kitchen_id, str) or not kitchen_id:
                     return False
-                # The tracker JSON lives four levels below the project root.
-                project_path = str(target.path.parents[3].resolve())
+                project_path = str(target.project_dir.resolve())
                 matching = [
                     entry
                     for entry in entries

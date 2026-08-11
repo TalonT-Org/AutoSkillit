@@ -115,6 +115,7 @@ def _ack_direct_run_skill_result(tool_ctx, payload):
         target_order_id=acknowledged.tracker_order_id,
         path=Path(acknowledged.tracker_path),
         expected=True,
+        project_dir=tool_ctx.project_dir,
     )
     key, lease = _retain_context_tracker(
         tool_ctx,

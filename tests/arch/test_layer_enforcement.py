@@ -1045,12 +1045,6 @@ def test_server_tools_import_only_allowed_packages() -> None:
     TYPE_CHECKING exempt.
     """
     ALLOWED = {"core", "execution", "pipeline", "server", "config", "fleet", "hook_registry"}
-    EXACT_EXEMPTIONS = {
-        (
-            "tools_exploration.py",
-            "autoskillit.hooks._exploration_request_record",
-        )
-    }
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "tools" and p.stem.startswith("tools_")
     ]
@@ -1062,8 +1056,6 @@ def test_server_tools_import_only_allowed_packages() -> None:
                 continue
             parts = node.module.split(".")
             if parts[0] == "autoskillit" and len(parts) >= 2:
-                if (path.name, node.module) in EXACT_EXEMPTIONS:
-                    continue
                 if parts[1] not in ALLOWED:
                     violations.append(
                         f"{path.name}:{node.lineno} imports from "

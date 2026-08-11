@@ -1112,3 +1112,16 @@ def validate_plugin_cache_hooks(cache_dir: Path | None = None) -> list[str]:
             )
         )
     return broken
+
+
+def consume_exploration_request_record(
+    project_root: Path,
+    expected_tool_name: str,
+    token: str,
+) -> str | None:
+    """Consume a one-shot exploration request through the public hook gateway."""
+    from autoskillit.hooks._exploration_request_record import (
+        consume_exploration_request_record as _consume,
+    )
+
+    return _consume(project_root, expected_tool_name, token)

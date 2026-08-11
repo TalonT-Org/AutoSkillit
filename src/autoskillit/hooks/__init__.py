@@ -24,9 +24,6 @@ from autoskillit.hooks._command_classification import (
     _WRITE_APIS_RE,
     command_has_blocked_protected_path_read,
 )
-from autoskillit.hooks._exploration_request_record import (
-    consume_exploration_request_record,
-)
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.hooks.guards.branch_protection_guard import BRANCH_PROTECTION_DENY_TRIGGER
 from autoskillit.hooks.guards.review_loop_gate import REVIEW_LOOP_DENY_TRIGGER
@@ -51,7 +48,6 @@ __all__ = [
     "_WRITE_APIS_RE",
     "capture_store_stats",
     "command_has_blocked_protected_path_read",
-    "consume_exploration_request_record",
     "generate_hooks_json",
     "reconcile_capture_store",
 ]

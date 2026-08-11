@@ -11,7 +11,7 @@ from autoskillit.server.tools.tools_pipeline_tracker import (
     record_pipeline_step,
 )
 from tests.server._helpers import _with_finalized_projection
-from tests.server._pipeline_test_helpers import _grant_success_credit
+from tests.server._pipeline_test_helpers import _grant_success_credit, _publish_success_receipt
 from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -285,22 +285,14 @@ class TestCompleteRunSkillResult:
         authority = tool_ctx_kitchen_open.run_skill_completion
         assert authority is not None
         tracker_path = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
-        invocation_id = authority.begin(
-            kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-            request_session_id="request-session",
-            tracker_order_id="AB",
-            tracker_path=str(tracker_path.resolve()),
+        receipt = _publish_success_receipt(
+            tool_ctx_kitchen_open,
+            pipeline_id="AB",
+            tracker_path=tracker_path,
             tracker_kitchen_id=tool_ctx_kitchen_open.kitchen_id,
             tracker_incarnation_id="incarnation",
             step_name="review",
         )
-        receipt = authority.draft(
-            invocation_id,
-            classification="success",
-            success=True,
-            result_digest="digest",
-        )
-        authority.publish(receipt.receipt_id)
 
         def fail_retain(*_args, **_kwargs):
             raise OSError("lease unavailable")

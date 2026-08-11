@@ -119,6 +119,33 @@ class TestRecordPipelineStepInit:
         assert self.ctx.tracker_leases == {}
 
     @pytest.mark.anyio
+    async def test_close_kitchen_releases_partial_pipeline_lease(self):
+        from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
+
+        self.ctx.active_recipe_steps = {"review": {}, "implement": {}}
+        initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
+        assert initialized["success"] is True
+        key, lease = next(iter(self.ctx.tracker_leases.items()))
+        tracker_path = key.target.path
+        _grant_success_credit(self.ctx, self.tmp_path, "review", pipeline_id="AB")
+
+        completed = json.loads(
+            await record_pipeline_step(pipeline_id="AB", op="complete", step_name="review")
+        )
+
+        assert completed["success"] is True
+        assert completed["done"] == 1
+        assert completed["total"] == 2
+        assert self.ctx.tracker_leases == {key: lease}
+        assert not lease.closed
+
+        _close_kitchen_handler()
+
+        assert self.ctx.tracker_leases == {}
+        assert lease.closed
+        assert not tracker_path.exists()
+
+    @pytest.mark.anyio
     async def test_kitchen_release_preserves_manual_tracker_lease(self):
         from autoskillit.server.tools.tools_kitchen import (
             _release_kitchen_tracker_authority,

@@ -922,6 +922,12 @@ def _close_kitchen_handler() -> None:
         _release_kitchen_tracker_authority(ctx, unregister=True, retire=True)
     except Exception:
         logger.warning("close_kitchen_tracker_authority_release_failed", exc_info=True)
+    with ctx.tracker_leases_lock:
+        abandoned_targets = {key.target for key in ctx.tracker_leases}
+        for key in list(ctx.tracker_leases):
+            release_tracker_lease(ctx.tracker_leases, key)
+    for target in abandoned_targets:
+        try_retire_tracker(target)
     if isinstance(ctx.kitchen_id, str) and ctx.kitchen_id:
         if isinstance(ctx.temp_dir, Path) and not retire_recipe_artifacts(
             ctx.temp_dir,

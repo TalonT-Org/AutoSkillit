@@ -263,13 +263,16 @@ class TestAssetDigestMirrorsTheCopier:
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import project_default_plugin_authority
 
+        rendered_hooks_manifest = "hooks/hooks.json"
         authority = project_default_plugin_authority(
             cwd=isolated_home,
             base_branch="main",
             catalog=session_catalog(),
         )
         walked = {
-            str(p.relative_to(pkg_root())) for p in iter_public_plugin_asset_files(pkg_root())
+            str(p.relative_to(pkg_root()))
+            for p in iter_public_plugin_asset_files(pkg_root())
+            if str(p.relative_to(pkg_root())) != rendered_hooks_manifest
         }
         with authority.acquire_launch_binding(
             backend=ClaudeCodeBackend(),
@@ -280,10 +283,12 @@ class TestAssetDigestMirrorsTheCopier:
             copied = {
                 str(p.relative_to(root))
                 for p in root.rglob("*")
-                if p.is_file() and not str(p.relative_to(root)).startswith("skills/")
+                if p.is_file()
+                and not str(p.relative_to(root)).startswith("skills/")
+                and str(p.relative_to(root)) != rendered_hooks_manifest
             }
-            # hooks/hooks.json is regenerated post-projection by install(), and the
-            # skills/ tree is projected from contracts rather than copied.
+            # hooks/hooks.json is renderer-owned and covered by rendered_hooks_digest;
+            # the skills/ tree is projected from contracts rather than copied.
             assert walked == copied, (
                 "the cache-key digest walk and the projection copier disagree:\n"
                 f"  only walked: {sorted(walked - copied)[:10]}\n"

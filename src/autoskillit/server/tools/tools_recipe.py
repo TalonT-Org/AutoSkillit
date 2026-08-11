@@ -108,9 +108,13 @@ class _RecipeSectionError(Exception):
 
 
 # Canonical fallback when tool_ctx is not yet bound (cancellation-shield
-# state factory runs before the tool body). Matches the BackendCapabilities
-# dataclass default — the smallest registered backend bound (Codex code-mode).
-_DEFAULT_CONSERVATIVE_LIMIT: int = BackendCapabilities().unnegotiated_tool_result_token_limit
+# state factory runs before the tool body). Mirrors BackendCapabilities
+# dataclass default for unnegotiated_tool_result_token_limit — the smallest
+# registered backend bound (Codex code-mode). Kept as a literal because the
+# construction-site arch guard requires explicit kwargs for every
+# BackendCapabilities() call. Drift guarded by
+# test_resolve_general_output_token_limit_per_backend.
+_DEFAULT_CONSERVATIVE_LIMIT: int = 10_000
 
 _RECIPE_SECTION_REQUEST_STATE: ContextVar[RecipeSectionRequestState] = ContextVar(
     "recipe_section_request_state"

@@ -380,8 +380,6 @@ def _read_or_search(
         raise _InspectionError(exc.reason) from exc
     if prior is not None:
         _validate_snapshot(prior, resolved, opened)
-    if offset > opened.st_size:
-        raise _InspectionError("continuation_invalid")
 
     lines, incomplete_final_line = _complete_lines(
         data,

@@ -1,6 +1,7 @@
 ---
 name: implement-worktree
-uses_capabilities: []
+uses_capabilities:
+- test_check
 activate_deps:
 - write-recipe
 description: Worktree implementation executor. ALWAYS invoke this skill when instructed to implement a plan in a worktree
@@ -193,25 +194,24 @@ Before running the test suite, confirm the following to prevent avoidable test-f
   or a component count (e.g., in AGENTS.md, README, or API docs), update it to reflect
   new components added during this implementation.
 - [ ] **Count-based test assertions** — if tool, skill, or rule counts have changed, update any
-  `assert len(...) ==` assertions in the test suite before running `{test_command}`
+  `assert len(...) ==` assertions in the test suite before running the `test_check` gate
 
 This checklist exists because these categories produce avoidable test-fix cycles: a single
 missed registration generates 5–30 cascading test failures that require a second commit to fix.
 
 ### Step 5: Final Verification
 
-Read the configured test command(s) from `.autoskillit/config.yaml`: check `test_check.commands` (ordered list of commands, if set) or `test_check.command` (single command, default: `task test-check`). The `test_check` MCP tool runs all configured commands automatically.
+The `test_check` MCP tool owns configured test-command resolution and execution.
 
 Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
-cd "${WORKTREE_PATH}" && \
-  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
-  AUTOSKILLIT_TEST_BASE_REF=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch") \
-  {test_command}
-# Note: {{AUTOSKILLIT_TEMP}}/worktrees/ is sidecar metadata inside the main repo — not the worktree path.
 ```
+
+Then call the `test_check` MCP tool with `worktree_path=${WORKTREE_PATH}`. Do not invoke the
+configured test command directly in the shell. `AUTOSKILLIT_TEST_FILTER` and
+`AUTOSKILLIT_TEST_BASE_REF` remain server-managed filter inputs, not shell exports here.
 
 If tests fail, fix the issue and re-run.
 

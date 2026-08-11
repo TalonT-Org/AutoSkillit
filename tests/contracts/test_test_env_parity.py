@@ -78,8 +78,9 @@ tasks:
     assert _taskfile_env_vars(content) == {"COMPLEX_ENV", "FIRST_ENV", "SECOND_ENV"}
 
 
-# Taskfile vars that are NOT parity concerns — paths, feature toggles,
-# and test-specific configuration that never masks a production failure class.
+# Taskfile vars exempt from production parity because they are harness-scoped paths,
+# feature toggles, or test-only configuration. Pytest path lifecycle safety is enforced
+# separately by scripts/pytest_tmp_lifecycle.py; the paths have masked failures before.
 _TASKFILE_NON_PARITY_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_EXPLORER_LIVE_GATE",

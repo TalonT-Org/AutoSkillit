@@ -36,6 +36,36 @@ class TestTaskfile:
         deps = data["tasks"]["test-check"].get("deps", [])
         assert "install-worktree" in deps, "test-check.deps must include install-worktree"
 
+    def test_tmpdir_setup_delegates_without_recursive_delete(self) -> None:
+        task = self._load()["tasks"]["_tmpdir-setup"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        assert "python3 scripts/pytest_tmp_lifecycle.py setup" in commands
+        assert "rm " not in commands
+
+    def test_pytest_paths_share_generation_template(self) -> None:
+        variables = self._load()["vars"]
+        assert "{{.PYTEST_RUN_ID}}" in variables["PYTEST_GEN_DIR"]
+        assert "{{.PYTEST_GEN_DIR}}" in variables["PYTEST_TMPDIR"]
+        assert "{{.PYTEST_GEN_DIR}}" in variables["PYTEST_CACHEDIR"]
+
+    def test_pytest_generation_uses_dynamic_run_and_user_ids(self) -> None:
+        variables = self._load()["vars"]
+        assert variables["PYTEST_RUN_ID"]["sh"]
+        assert variables["AUTOSKILLIT_UID"]["sh"] == "id -u"
+
+    def test_cleanup_shm_delegates_pytest_reaping(self) -> None:
+        task = self._load()["tasks"]["cleanup-shm"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        assert "python3 scripts/pytest_tmp_lifecycle.py reap" in commands
+
+    def test_refresh_codex_hook_fixture_uses_tmp_lifecycle(self) -> None:
+        task = self._load()["tasks"]["refresh-codex-hook-fixture"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        assert "_tmpdir-setup" in task["deps"]
+        assert task["env"]["TMPDIR"] == "{{.PYTEST_TMPDIR}}"
+        assert "--basetemp={{.PYTEST_TMPDIR}}" in commands
+        assert "cache_dir={{.PYTEST_CACHEDIR}}" in commands
+
     def test_status_uses_local_venv_paths_only(self):
         """T4 — status: sentinels use only local relative paths (no absolute/home paths)."""
         data = self._load()

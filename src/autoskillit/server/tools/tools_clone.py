@@ -619,6 +619,22 @@ async def bootstrap_clone(
                     "autoskillit.bootstrap_clone",
                     extra={"stderr": stderr},
                 )
+                try:
+                    cleanup = await asyncio.to_thread(
+                        tool_ctx.clone_mgr.remove_clone, clone_path, "false"
+                    )
+                    if cleanup.get("removed") != "true":
+                        logger.warning(
+                            "bootstrap_clone cleanup failed",
+                            clone_path=clone_path,
+                            reason=cleanup.get("reason", "unknown"),
+                        )
+                except Exception:
+                    logger.warning(
+                        "bootstrap_clone cleanup raised",
+                        clone_path=clone_path,
+                        exc_info=True,
+                    )
                 return json.dumps({"error": f"rev-parse failed: {stderr.strip()}"})
 
             base_sha = stdout.strip()

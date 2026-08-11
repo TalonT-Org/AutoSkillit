@@ -1,6 +1,7 @@
 ---
 name: retry-worktree
-uses_capabilities: []
+uses_capabilities:
+- test_check
 description: Worktree retry executor. ALWAYS invoke this skill when instructed to continue or retry an implementation in an
   existing worktree. Do not resume editing files directly — use this skill first to load the retry workflow.
 hooks:
@@ -202,11 +203,12 @@ Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd {WORKTREE_PATH} && pre-commit run --all-files
-cd {WORKTREE_PATH} && \
-  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
-  AUTOSKILLIT_TEST_BASE_REF="${BASE_BRANCH:-}" \
-  task test-check
 ```
+
+Then call the `test_check` MCP tool with `worktree_path={WORKTREE_PATH}`. The server-owned
+gate applies project configuration and captures output; do not run the configured command
+in the shell. `AUTOSKILLIT_TEST_FILTER` and `AUTOSKILLIT_TEST_BASE_REF` remain server-managed
+filter inputs, not shell exports in this skill.
 
 If tests fail, fix the issue and re-run.
 

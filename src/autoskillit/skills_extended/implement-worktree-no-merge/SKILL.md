@@ -1,6 +1,7 @@
 ---
 name: implement-worktree-no-merge
-uses_capabilities: []
+uses_capabilities:
+- test_check
 activate_deps:
 - write-recipe
 description: Implementation executor. ALWAYS invoke this skill when instructed to implement a plan in a worktree. Do not read
@@ -214,7 +215,13 @@ Where practical, delegate test updates to subagents to keep main conversation co
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
 ```
 
-Fix any formatting or linting issues. Do NOT run any tests — NEVER invoke pytest, python -m pytest, or any test runner directly. Use `task test-check` if explicitly instructed to verify tests.
+Fix any formatting or linting issues. Do NOT run tests in the shell — NEVER invoke pytest,
+python -m pytest, or a test runner directly. When verification is explicitly required, call
+the `test_check` MCP tool with the worktree path.
+
+```
+test_check(worktree_path="${WORKTREE_PATH}")
+```
 
 If pre-commit auto-fixes files, stage them and create a **new** commit (do NOT use `--amend`):
 ```bash

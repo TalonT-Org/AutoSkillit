@@ -77,7 +77,6 @@ def _setup_dispatch(
     """Wire tool_ctx for dispatch tests."""
     from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
     from autoskillit.fleet import FleetSemaphore
-    from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
     from autoskillit.recipe.schema import Recipe, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
@@ -98,27 +97,6 @@ def _setup_dispatch(
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
     tool_ctx.managed_headless_session_lineage_store = DefaultManagedHeadlessSessionLineageStore()
-
-    def retain_with_expected_tracker(ctx, dispatch_id):
-        key, lease = retain_dispatch_tracker_authority(ctx, dispatch_id)
-        if not key.target.path.exists():
-            key.target.path.parent.mkdir(parents=True, exist_ok=True)
-            key.target.path.write_text(
-                json.dumps(
-                    {
-                        "pipeline_id": dispatch_id,
-                        "kitchen_id": ctx.kitchen_id,
-                        "steps": {},
-                        "dependencies": {},
-                    }
-                )
-            )
-        return key, lease
-
-    monkeypatch.setattr(
-        "autoskillit.fleet._api.retain_dispatch_tracker_authority",
-        retain_with_expected_tracker,
-    )
 
 
 async def _run(

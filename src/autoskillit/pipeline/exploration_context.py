@@ -643,6 +643,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 cwd=canonical_cwd,
                 repository_root=canonical_repository_root,
                 source_identity=source_identity,
+                snapshot_digest=issuance_snapshot.digest,
             )
             self._session_capabilities.setdefault(session_id, set()).add(capability)
         return capability

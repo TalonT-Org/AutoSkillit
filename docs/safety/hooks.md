@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 45 Claude Code hook scripts: 34 PreToolUse, 9 PostToolUse,
+AutoSkillit registers 46 Claude Code hook scripts: 35 PreToolUse, 9 PostToolUse,
 and 2 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (34)
+## PreToolUse hooks (35)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -390,6 +390,18 @@ This hook is defense in depth: the server's one-shot `run_skill` receipt and
 loss, `recover_run_skill_result` may rebind the sole delivered receipt once to the current
 request session in the same kitchen; ambiguous or previously recovered receipts are refused.
 
+### `exploration_request_identity_guard.py`
+**Guarded tools:** `enable_exploration`, `submit_exploration_query`,
+`get_exploration_page`, `resume_exploration_context`
+
+For interactive Claude requests, copies the complete `tool_input` mapping and
+overwrites only the internal exploration request token. The token addresses a
+short-lived, tool-bound record containing the current hook event's native
+`session_id`; `agent_id` is never used as the lease key. Supported events fail
+closed when their identity is malformed or the record cannot be written, while
+malformed JSON and unrelated tools remain fail-open. Codex and headless terminal
+authority do not use this bridge.
+
 ## PostToolUse hooks (9)
 
 ### `pretty_output_hook.py`
@@ -464,7 +476,7 @@ All guard scripts fail-**open** for malformed or unparseable input: a JSON decod
 failure produces exit 0 (approve). This prevents a broken hook from blocking the
 entire tool chain.
 
-Five guards additionally fail-**closed** for valid input with unrecognized values,
+Six guards additionally fail-**closed** for valid input with unrecognized values,
 as a defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -474,6 +486,7 @@ as a defense-in-depth measure against privilege escalation:
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
 | `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
+| `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
 (valid input, unrecognized value) = fail-closed.

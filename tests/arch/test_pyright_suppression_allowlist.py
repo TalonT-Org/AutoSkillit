@@ -85,7 +85,9 @@ def test_type_ignore_count_budget() -> None:
         for line in path.read_text(encoding="utf-8").splitlines():
             if "# type: ignore" in line:
                 count += 1
-    budget = 121
+    # The exploration identity guard has two standalone sibling imports that static
+    # analysis cannot resolve through its runtime hooks-directory path bootstrap.
+    budget = 123
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

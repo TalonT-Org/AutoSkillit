@@ -7,8 +7,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import SessionType
+from autoskillit.core import (
+    CompletenessReport,
+    EvidencePage,
+    ExplorationQuerySpec,
+    SessionType,
+)
 from autoskillit.pipeline.exploration_context import (
+    ExplorationContext,
     OwnerBoundExplorationContextStore,
     is_explorer_binding_eligible,
 )
@@ -130,6 +136,45 @@ class TestSessionScopedAuthority:
         )
         found = store.session_scoped_capability("test-session")
         assert found == capability
+
+    def test_session_scoped_capability_preserves_issuance_snapshot(
+        self, tmp_path: Path, exploration_snapshot_service: MagicMock
+    ) -> None:
+        store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+            trusted_root=tmp_path,
+            service=exploration_snapshot_service,
+        )
+        capability = store.bind_session_scoped(
+            owner_id="uid:1000",
+            session_id="test-session",
+            cwd=tmp_path,
+            repository_root=tmp_path,
+            source_identity="interactive:test-session",
+        )
+        query = ExplorationQuerySpec(query="needle", max_results=1)
+        snapshot = exploration_snapshot_service.capture_snapshot(tmp_path)
+        context = ExplorationContext(
+            query=query,
+            snapshot=snapshot,
+            evidence=(),
+            completeness=CompletenessReport((), (), True),
+        )
+        page = EvidencePage(
+            evidence=(),
+            result_digest="result",
+            completeness=CompletenessReport((), (), True),
+        )
+        exploration_snapshot_service.collect.return_value = context
+        exploration_snapshot_service.page.return_value = page
+
+        replacement, result = store.submit_for_capability(
+            capability=capability,
+            query=query,
+            page_size=1,
+        )
+
+        assert replacement == capability
+        assert result is page
 
     def test_session_scoped_capability_returns_none_without_bind(
         self, tmp_path: Path, exploration_snapshot_service: MagicMock

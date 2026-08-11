@@ -1001,6 +1001,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",
             "server/test_tools_kitchen_gate_hook_config.py",
+            "server/test_enable_exploration.py",
+            "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4
             "server/test_tools_kitchen_envelope.py",
@@ -1028,6 +1030,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_lifespan.py",
             # file-level: live output-budget E2E imports the hook registry directly
             "server/test_output_budget_e2e.py",
+            "server/test_claude_explorer_live_gate.py",
             # infra/ narrowed to 7 files
             "infra/test_adr_runtime_guard_coverage.py",
             "infra/test_command_guard_completeness.py",

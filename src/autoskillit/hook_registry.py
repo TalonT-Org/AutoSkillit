@@ -111,6 +111,7 @@ class LifecycleContractDef:
 # git_ops_guard                          | works-as-is
 # test_runner_guard                      | works-as-is
 # shell_capture_hook                     | works-as-is (Codex-only input-rewrite, #4286/ADR-0006)
+# exploration_request_identity_guard     | not-applicable
 # generated_file_write_guard             | works-as-is
 # write_guard                            | works-as-is
 # planner_result_naming_guard            | works-as-is
@@ -275,6 +276,21 @@ HOOK_REGISTRY: list[HookDef] = [
         produces_resources=frozenset({"shell-captures"}),
         reclaims_resources=frozenset({"shell-captures"}),
         self_reclaims_resources=frozenset({"shell-captures"}),
+    ),
+    HookDef(
+        matcher=(
+            r"mcp__.*autoskillit.*__(enable_exploration|submit_exploration_query|"
+            r"get_exploration_page|resume_exploration_context)$"
+        ),
+        scripts=["guards/exploration_request_identity_guard.py"],
+        timeout_seconds=5,
+        session_scope="interactive_only",
+        codex_status="not-applicable",
+        mechanism="input-rewrite",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+        produces_resources=frozenset({"exploration-request-records"}),
+        reclaims_resources=frozenset({"exploration-request-records"}),
+        self_reclaims_resources=frozenset({"exploration-request-records"}),
     ),
     HookDef(
         matcher=r"Write|Edit",
@@ -454,6 +470,13 @@ LIFECYCLE_CONTRACTS: tuple[LifecycleContractDef, ...] = (
         session_scope="any",
         required_owner_roles=frozenset({"same_runner", "session_start"}),
     ),
+    LifecycleContractDef(
+        resource="exploration-request-records",
+        producer_script="guards/exploration_request_identity_guard.py",
+        backend="claude_code",
+        session_scope="interactive_only",
+        required_owner_roles=frozenset({"same_runner"}),
+    ),
 )
 
 HOOKS_DIR: Path = pkg_root() / "hooks"
@@ -520,6 +543,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "recipe_read_guard.py",
         "github_mutation_guard.py",
         "fabricated_completion_guard.py",
+        "exploration_request_identity_guard.py",
     }
 )
 
@@ -536,6 +560,7 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
         "skill_orchestration_guard.py",
         "background_exec_guard.py",
         "github_mutation_guard.py",
+        "exploration_request_identity_guard.py",
     }
 )
 

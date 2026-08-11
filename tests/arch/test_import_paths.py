@@ -148,6 +148,7 @@ def test_req_imp_003_tools_import_namespace(path: Path) -> None:
             "autoskillit.config",
             "autoskillit.fleet",
             "autoskillit.hook_registry",
+            "autoskillit.hooks",
         }
     )
     violations: list[str] = []

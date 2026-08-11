@@ -83,6 +83,7 @@ _PRINT_EXEMPT = frozenset(
         "_validate.py",
         "_workspace.py",
         "branch_protection_guard.py",
+        "exploration_request_identity_guard.py",
         "_hook_settings.py",
         "lint_after_edit_hook.py",
         "open_kitchen_guard.py",
@@ -127,6 +128,7 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "reset_resume_gate.py",
         "recipe_confirmed_post_hook.py",
         "capture_lifecycle_hook.py",
+        "exploration_request_identity_guard.py",
     }
 )
 

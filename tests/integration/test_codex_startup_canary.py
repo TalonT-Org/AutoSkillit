@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover - exercised only on unsupported platform
 pytestmark = [pytest.mark.large]
 
 _CANARY_ENV = "AUTOSKILLIT_CODEX_STARTUP_CANARY"
-_SUPPORTED_VERSION = "codex-cli 0.145.0"
+_SUPPORTED_VERSION = "codex-cli 0.147.0"
 _OUTPUT_CAP = 64 * 1024
 _INSTALLED_CODEX_HOME = Path.home() / ".codex"
 
@@ -41,7 +41,7 @@ def _installed_supported_codex() -> str:
         pytest.skip("installed-Codex canary requires a supported POSIX PTY/lease platform")
     binary = shutil.which("codex")
     if binary is None:
-        pytest.skip("supported installed Codex CLI is not present")
+        pytest.fail("installed-Codex canary requested but the Codex CLI is not present")
     result = subprocess.run(
         [binary, "--version"],
         capture_output=True,
@@ -51,7 +51,10 @@ def _installed_supported_codex() -> str:
     )
     version = result.stdout.strip()
     if result.returncode != 0 or version != _SUPPORTED_VERSION:
-        pytest.skip(f"unsupported installed Codex version: {version or 'unknown'}")
+        pytest.fail(
+            "installed-Codex canary requested with unsupported version: "
+            f"{version or 'unknown'}; expected {_SUPPORTED_VERSION}"
+        )
     return binary
 
 
@@ -248,7 +251,7 @@ def _write_history_profile(
                     "timestamp": timestamp,
                     "cwd": str(project),
                     "originator": "codex_cli_rs",
-                    "cli_version": "0.145.0",
+                    "cli_version": "0.147.0",
                     "source": "cli",
                 },
             },

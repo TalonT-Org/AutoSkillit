@@ -57,6 +57,8 @@ __all__ = [
     "SkillFamilyDef",
     "GITHUB_API_SKILL_FAMILIES",
     "CODEX_ACTIVE_VIEWS_SUBDIR",
+    "CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR",
+    "CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR",
     "CODEX_ARCHIVED_SESSIONS_SUBDIR",
     "CODEX_SESSIONS_SUBDIR",
     "SESSION_ADD_DIR_SUBDIR",
@@ -545,6 +547,17 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         machine_local=True,
         detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
     ),
+    DurableArtifactWriterDef(
+        writer=(
+            "autoskillit.execution.backends._codex_session_storage:_write_reconciliation_audit"
+        ),
+        artifact=(
+            "immutable operator authorization records for explicit Codex attempt-view "
+            "reconciliation"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
 )
 
 _validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)
@@ -765,6 +778,8 @@ QUOTA_POST_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
 CODEX_SESSIONS_SUBDIR: str = "codex-sessions"
 CODEX_ARCHIVED_SESSIONS_SUBDIR: str = "codex-archived-sessions"
 CODEX_ACTIVE_VIEWS_SUBDIR: str = "codex-active-sessions"
+CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR: str = "codex-attempt-reconciliations"
+CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR: str = "codex-attempt-reconciliation-tombstones"
 SESSION_ADD_DIR_SUBDIR: str = "add-dir"
 
 RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE: str = (

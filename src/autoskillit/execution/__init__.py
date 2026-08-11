@@ -58,6 +58,7 @@ from autoskillit.execution.backends import (
     sync_hooks_to_codex_config,
 )
 from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
+from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.db import (
@@ -305,6 +306,7 @@ __all__ = [
     "CodexHostCorrelation",
     "CodexOuterBudgetAttestor",
     "CodexStateReadinessProbe",
+    "CodexSessionStore",
     "NullProtectedHostAttestationProvider",
     "ProtectedHostAttestationProvider",
     "ProtectedStoreAuthority",

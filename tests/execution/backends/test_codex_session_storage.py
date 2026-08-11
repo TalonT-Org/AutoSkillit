@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 import pytest
+import structlog
 import zstandard
 
 from autoskillit.core import NamedResume, NoResume
@@ -65,6 +66,25 @@ def _hold_flock(lock_path: str, ready: object, release: object) -> None:
             raise RuntimeError("timed out waiting to release lifecycle test lock")
     finally:
         os.close(descriptor)
+
+
+def _retained_empty_unknown_view(
+    tmp_path: Path,
+) -> tuple[CodexSessionStore, Path]:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NoResume(),
+    )
+    with pytest.raises(RuntimeError, match="no rollout data"):
+        with lease as handle:
+            handle.record_spawn(os.getpid(), os.getpgrp())
+            handle.record_reaped(os.getpid(), os.getpgrp())
+    return store, lease.view_path
 
 
 def test_file_lease_rejects_non_lock_path(tmp_path: Path) -> None:
@@ -248,6 +268,255 @@ def test_missing_running_rollout_fails_closed_and_recovery_retains_view(
     with pytest.raises(RuntimeError, match="failed closed"):
         store.recover()
     assert lease.view_path.is_dir()
+
+
+def test_attempt_cleanup_log_carries_context_without_owning_the_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NoResume(),
+    )
+    lease.__enter__()
+
+    def fail_cleanup(_lease: CodexInteractiveSessionLease) -> None:
+        provider_secret = "cleanup-secret-4361"
+        assert provider_secret
+        raise RuntimeError("controlled cleanup failure")
+
+    monkeypatch.setattr(store, "_exit_attempt", fail_cleanup)
+    with structlog.testing.capture_logs() as logs:
+        with pytest.raises(RuntimeError, match="controlled cleanup failure"):
+            lease.__exit__(None, None, None)
+
+    event = next(log for log in logs if log["event"] == "codex_attempt_exit_failed")
+    assert event["view_id"] == lease.view_id
+    assert event["error_type"] == "RuntimeError"
+    assert "exc_info" not in event
+    assert "cleanup-secret-4361" not in json.dumps(event)
+
+
+def test_explicit_reconciliation_lists_and_discards_only_selected_empty_unknown(
+    tmp_path: Path,
+) -> None:
+    store, view_path = _retained_empty_unknown_view(tmp_path)
+    manifest_before = (view_path / "manifest.json").read_bytes()
+
+    assert store.list_retained_attempt_views() == (
+        {
+            "view_id": view_path.name,
+            "state": "finalizing",
+            "eligible": True,
+            "detail": "retained schema-v1 unknown with empty staged roots",
+        },
+    )
+    assert (view_path / "manifest.json").read_bytes() == manifest_before
+
+    audit = store.discard_attempt_view(view_path.name, "  operator reviewed issue #4361  ")
+
+    assert audit["reason"] == "operator reviewed issue #4361"
+    assert audit["manifest_sha256"] == storage.hashlib.sha256(manifest_before).hexdigest()
+    assert not view_path.exists()
+    assert not (store.reconciliation_tombstones_root / view_path.name).exists()
+    audit_path = store.reconciliations_root / f"{view_path.name}.json"
+    assert json.loads(audit_path.read_text(encoding="utf-8")) == audit
+    assert list(store.active_root.rglob("*.jsonl*")) == []
+    assert list(store.archive_root.rglob("*.jsonl*")) == []
+    assert not store.index_path.exists()
+
+
+@pytest.mark.parametrize(
+    "debris_kind",
+    [
+        "hidden-file",
+        "rollout-file",
+        "ordinary-file",
+        "nested-directory",
+        "symlink",
+        "broken-symlink",
+    ],
+)
+def test_reconciliation_rejects_every_staged_descendant_kind(
+    tmp_path: Path,
+    debris_kind: str,
+) -> None:
+    store, view_path = _retained_empty_unknown_view(tmp_path)
+    staged_root = view_path / "sessions"
+    if debris_kind == "hidden-file":
+        (staged_root / ".hidden").write_text("retained", encoding="utf-8")
+    elif debris_kind == "rollout-file":
+        _rollout(staged_root / "rollout.jsonl", "thread-retained")
+    elif debris_kind == "ordinary-file":
+        (staged_root / "notes.txt").write_text("retained", encoding="utf-8")
+    elif debris_kind == "nested-directory":
+        (staged_root / "nested").mkdir()
+    else:
+        target = tmp_path / "target"
+        if debris_kind == "symlink":
+            target.write_text("outside", encoding="utf-8")
+        (staged_root / "link").symlink_to(target)
+
+    with pytest.raises(RuntimeError, match="not strictly empty"):
+        store.discard_attempt_view(view_path.name, "reviewed")
+
+    assert view_path.is_dir()
+    assert not (store.reconciliations_root / f"{view_path.name}.json").exists()
+    assert not (store.reconciliation_tombstones_root / view_path.name).exists()
+
+
+def test_reconciliation_fails_closed_when_manifest_changes_under_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, view_path = _retained_empty_unknown_view(tmp_path)
+    original_read = store._read_reconciliation_candidate
+    calls = 0
+
+    def change_after_initial_read(path: Path) -> tuple[bytes, dict[str, object]]:
+        nonlocal calls
+        raw, manifest = original_read(path)
+        calls += 1
+        if calls == 1:
+            changed = dict(manifest)
+            changed["reaped_ns"] = int(changed["reaped_ns"]) + 1
+            storage._atomic_json(path / "manifest.json", changed)
+        return raw, manifest
+
+    monkeypatch.setattr(store, "_read_reconciliation_candidate", change_after_initial_read)
+
+    with pytest.raises(RuntimeError, match="changed during reconciliation"):
+        store.discard_attempt_view(view_path.name, "reviewed")
+
+    assert view_path.is_dir()
+    assert not (store.reconciliations_root / f"{view_path.name}.json").exists()
+
+
+def test_reconciliation_retry_resumes_tombstone_deletion_and_preserves_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, view_path = _retained_empty_unknown_view(tmp_path)
+    original_delete = store._delete_reconciliation_tombstone
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            store,
+            "_delete_reconciliation_tombstone",
+            lambda _path: (_ for _ in ()).throw(OSError("injected deletion failure")),
+        )
+        with pytest.raises(OSError, match="injected deletion failure"):
+            store.discard_attempt_view(view_path.name, "reviewed")
+
+    tombstone = store.reconciliation_tombstones_root / view_path.name
+    audit_path = store.reconciliations_root / f"{view_path.name}.json"
+    audit_before = audit_path.read_bytes()
+    assert tombstone.is_dir()
+    assert not view_path.exists()
+    with pytest.raises(RuntimeError, match="reason conflicts"):
+        store.discard_attempt_view(view_path.name, "different reason")
+    assert tombstone.is_dir()
+    assert audit_path.read_bytes() == audit_before
+
+    monkeypatch.setattr(store, "_delete_reconciliation_tombstone", original_delete)
+    retried = store.discard_attempt_view(view_path.name, "reviewed")
+
+    assert not tombstone.exists()
+    assert audit_path.read_bytes() == audit_before
+    assert retried == json.loads(audit_before)
+    assert store.discard_attempt_view(view_path.name, "reviewed") == retried
+
+
+@pytest.mark.parametrize(
+    "failure_point",
+    ["audit-publish", "rename", "views-fsync", "tombstone-fsync"],
+)
+def test_reconciliation_crash_boundaries_leave_a_retryable_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    store, view_path = _retained_empty_unknown_view(tmp_path)
+    audit_path = store.reconciliations_root / f"{view_path.name}.json"
+    tombstone = store.reconciliation_tombstones_root / view_path.name
+    original_fsync = storage._fsync_directory
+
+    with monkeypatch.context() as scoped:
+        if failure_point == "audit-publish":
+            scoped.setattr(
+                storage,
+                "_write_reconciliation_audit",
+                lambda _path, _payload: (_ for _ in ()).throw(
+                    OSError("injected audit-publish failure")
+                ),
+            )
+        elif failure_point == "rename":
+            scoped.setattr(
+                storage.os,
+                "rename",
+                lambda _source, _target: (_ for _ in ()).throw(OSError("injected rename failure")),
+            )
+        else:
+
+            def fail_target_fsync(path: Path) -> None:
+                target = (
+                    store.views_root
+                    if failure_point == "views-fsync"
+                    else store.reconciliation_tombstones_root
+                )
+                if path == target and tombstone.exists():
+                    raise OSError(f"injected {failure_point} failure")
+                original_fsync(path)
+
+            scoped.setattr(storage, "_fsync_directory", fail_target_fsync)
+
+        with pytest.raises(OSError, match=f"injected {failure_point} failure"):
+            store.discard_attempt_view(view_path.name, "reviewed")
+
+    if failure_point == "audit-publish":
+        assert view_path.is_dir()
+        assert not audit_path.exists()
+        assert not tombstone.exists()
+    elif failure_point == "rename":
+        assert view_path.is_dir()
+        assert audit_path.is_file()
+        assert not tombstone.exists()
+    else:
+        assert not view_path.exists()
+        assert audit_path.is_file()
+        assert tombstone.is_dir()
+
+    audit = store.discard_attempt_view(view_path.name, "reviewed")
+    assert audit["view_id"] == view_path.name
+    assert not view_path.exists()
+    assert not tombstone.exists()
+
+
+@pytest.mark.parametrize(
+    ("view_id", "reason", "message"),
+    [
+        ("not-a-view", "reviewed", "Invalid Codex attempt view id"),
+        ("0123456789abcdef-1", "   ", "requires a non-empty reason"),
+    ],
+)
+def test_reconciliation_rejects_invalid_authority_before_storage_mutation(
+    tmp_path: Path,
+    view_id: str,
+    reason: str,
+    message: str,
+) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+
+    with pytest.raises(ValueError, match=message):
+        store.discard_attempt_view(view_id, reason)
+
+    assert not log_dir.exists()
 
 
 def test_recovery_rejects_incomplete_manifest_without_deleting_view(

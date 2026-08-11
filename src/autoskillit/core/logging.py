@@ -235,7 +235,9 @@ def configure_logging(
 
     if use_json:
         final_processors: list[Any] = [
-            structlog.processors.dict_tracebacks,
+            structlog.processors.ExceptionRenderer(
+                structlog.tracebacks.ExceptionDictTransformer(show_locals=False)
+            ),
             structlog.processors.JSONRenderer(),
         ]
     else:

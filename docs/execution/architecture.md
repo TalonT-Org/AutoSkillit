@@ -145,9 +145,11 @@ codex-active-sessions/
     manifest.json
     sessions/                      # active side of this attempt
     archived_sessions/             # archived side of this attempt
+codex-attempt-reconciliations/     # immutable operator discard audits
+codex-attempt-reconciliation-tombstones/  # crash-recoverable deletion staging
 ```
 
-Before a view is created, all three roots must have the same `st_dev` and map
+Before a view is created, all five roots must have the same `st_dev` and map
 to one recognized local filesystem. Network, remote, cross-device, and
 unclassifiable mounts fail closed because the design depends on hard-link
 identity and advisory-lock behavior. Paths are containment-checked; symlink
@@ -207,6 +209,25 @@ Canonical active/archive files remain authoritative. The bounded
 `codex-session-index.json` is only an atomically replaced, rebuildable
 `SessionSummary` snapshot; locator listing reads it without hidden mutation.
 
+Schema-v1 attempts that were spawned and retained without rollout material remain
+unknown; automatic recovery continues to fail closed. Operators can inspect them with
+`autoskillit codex-attempts`. An explicit discard requires the exact view ID and a
+non-empty reason, then revalidates the bounded manifest and strictly empty staged trees
+while holding the view lock, sorted thread locks, and lifecycle lock. It publishes an
+immutable manifest-digest audit before atomically renaming only that view to its
+deterministic tombstone. Parent directories are fsynced before recursive tombstone
+deletion. Retry either revalidates an intact view, resumes deletion of an authorized
+tombstone, or reports an already-recorded reconciliation. Canonical stores, the launch
+registry, and the derived index are never changed by this operation.
+
+Clean-empty lifecycle completion remains blocked for interactive Codex 0.147.0. Its
+exec JSONL and app-server thread events occur only after explicit `thread/start`, so
+their absence is not a final negative proof for TUI `/quit`; OS SID and PTY identity
+prove process startup only. The attempt manifest therefore remains schema v1 with
+spawn/reap evidence, and no terminal-disposition callback or proven-empty completion
+path is implemented until a version-pinned, attempt-bound host signal can distinguish
+session establishment from no session started.
+
 ### PTY and hook-trust ownership
 
 `_session_process.py` alone owns process groups, foreground-PGID transfer,
@@ -229,6 +250,15 @@ version. It must prove that fresh and resumed writes remain on the staged
 inode (or follow an explicitly supported representation transition) and that
 a live Codex process retains the inherited lease after the parent closes its
 copy. Failure blocks the hard-link design for that version.
+
+### Exception rendering ownership
+
+TTY logging renders the standard plain traceback. JSON and non-TTY logging retain
+exception type, message, and stack locations but never serialize arbitrary frame
+locals. For Codex attempt cleanup, the lease emits one concise structured event with
+the view ID and exception type, then rethrows. Process-runner failure and cleanup
+events likewise retain structured identity context without attaching their own
+traceback. The outer CLI process is the sole owner of the user-facing traceback.
 
 ### Claude MCP addressability
 

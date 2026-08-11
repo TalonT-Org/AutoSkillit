@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import io
 import json
 import logging
+import sys
 
 import pytest
 import structlog
@@ -12,6 +14,37 @@ import structlog
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+_SECRET_VALUE = "synthetic-provider-secret-4361"
+_CONFIG_SENTINEL = "large-config-sentinel-4361-" * 64
+
+
+class _TtyStream(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def _emit_exception_with_secret_locals(logger: object) -> None:
+    provider_secret = _SECRET_VALUE
+    large_config = _CONFIG_SENTINEL
+    try:
+        raise RuntimeError("controlled logging failure")
+    except RuntimeError:
+        logger.error(  # type: ignore[attr-defined]
+            "secret_safe_exception",
+            exc_info=True,
+        )
+    assert provider_secret and large_config
+
+
+def _assert_no_serialized_locals(value: object) -> None:
+    if isinstance(value, dict):
+        assert "locals" not in value
+        for child in value.values():
+            _assert_no_serialized_locals(child)
+    elif isinstance(value, list):
+        for child in value:
+            _assert_no_serialized_locals(child)
 
 
 class TestGetLogger:
@@ -131,6 +164,58 @@ class TestConfigureLogging:
         parsed = json.loads(line)
         assert parsed["event"] == "json_event"
         assert parsed["key"] == "value"
+
+    @pytest.mark.parametrize("json_output", [False, True])
+    def test_structured_exception_output_never_serializes_frame_locals(
+        self,
+        json_output: bool,
+    ) -> None:
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream = io.StringIO()
+        configure_logging(level=logging.DEBUG, json_output=json_output, stream=stream)
+        _emit_exception_with_secret_locals(get_logger("autoskillit.secret-test"))
+
+        payload = json.loads(stream.getvalue())
+        serialized = json.dumps(payload)
+        assert _SECRET_VALUE not in serialized
+        assert _CONFIG_SENTINEL not in serialized
+        assert isinstance(payload["exception"], list)
+        assert payload["exception"][0]["exc_type"] == "RuntimeError"
+        assert payload["exception"][0]["exc_value"] == "controlled logging failure"
+        assert payload["exception"][0]["frames"]
+        _assert_no_serialized_locals(payload["exception"])
+
+    def test_configured_tty_exception_uses_plain_traceback_without_locals(self) -> None:
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream = _TtyStream()
+        configure_logging(level=logging.DEBUG, json_output=False, stream=stream)
+        _emit_exception_with_secret_locals(get_logger("autoskillit.secret-test"))
+
+        rendered = stream.getvalue()
+        assert "Traceback (most recent call last)" in rendered
+        assert "controlled logging failure" in rendered
+        assert _SECRET_VALUE not in rendered
+        assert _CONFIG_SENTINEL not in rendered
+
+    def test_import_time_tty_exception_uses_plain_traceback_without_locals(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.core.logging as logging_mod
+
+        stream = _TtyStream()
+        monkeypatch.setattr(sys, "stderr", stream)
+        structlog.reset_defaults()
+        logging_mod = importlib.reload(logging_mod)
+
+        _emit_exception_with_secret_locals(logging_mod.get_logger("autoskillit.pre-config"))
+
+        rendered = stream.getvalue()
+        assert "Traceback (most recent call last)" in rendered
+        assert _SECRET_VALUE not in rendered
+        assert _CONFIG_SENTINEL not in rendered
 
     def test_log_level_filters_below_threshold(self):
         """Messages below the configured level are suppressed."""

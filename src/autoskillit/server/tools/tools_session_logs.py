@@ -148,7 +148,7 @@ def _existing_handles(row: dict[str, Any], log_root: Path) -> list[str]:
             mode = path.lstat().st_mode
         except (OSError, _InspectionError):
             continue
-        if stat.S_ISREG(mode) and not stat.S_ISLNK(mode):
+        if stat.S_ISREG(mode):
             handles.append(handle)
     return handles
 

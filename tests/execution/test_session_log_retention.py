@@ -52,6 +52,14 @@ def test_strict_session_index_reader_rejects_partial_suffix(tmp_path: Path) -> N
         read_session_index_rows(index)
 
 
+def test_strict_session_index_reader_rejects_invalid_utf8(tmp_path: Path) -> None:
+    index = tmp_path / "sessions.jsonl"
+    index.write_bytes(b"\xff\n")
+
+    with pytest.raises(ValueError, match="not valid UTF-8"):
+        read_session_index_rows(index)
+
+
 # --- recover_crashed_sessions tests ---
 
 

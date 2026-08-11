@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -16,6 +17,14 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "pytest_tmp_lifecycle.py"
+
+
+def _load_lifecycle_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("pytest_tmp_lifecycle", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _run(*args: object) -> subprocess.CompletedProcess[str]:
@@ -366,10 +375,7 @@ def test_root_safety(tmp_path: Path) -> None:
 
 
 def test_live_reference_parser(tmp_path: Path) -> None:
-    spec = importlib.util.spec_from_file_location("pytest_tmp_lifecycle", SCRIPT)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_lifecycle_module()
     proc_root = tmp_path / "proc"
     process_dir = proc_root / "123"
     process_dir.mkdir(parents=True)
@@ -388,6 +394,17 @@ def test_live_reference_parser(tmp_path: Path) -> None:
     assert module.parse_ps_live_references(
         "123 pytest TMPDIR=/three/tmp --basetemp=/four/tmp -o cache_dir=/four/cache"
     ) == {Path("/three/tmp"), Path("/four/tmp"), Path("/four/cache")}
+
+
+def test_pid_probe_fails_closed_on_unexpected_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_lifecycle_module()
+
+    def fail_probe(pid: int, signal: int) -> None:
+        raise OSError("transient probe failure")
+
+    monkeypatch.setattr(module.os, "kill", fail_probe)
+
+    assert module._pid_exists(12345)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux /proc fail-closed behavior")

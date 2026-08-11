@@ -41,6 +41,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "decide_termination_action",
         "execute_termination_action",
         "fold_lifecycle_evidence",
+        "fold_lifecycle_evidence_path",
         "find_orphaned_codex_processes",
         "kill_process_tree",
         "pty_wrap_command",
@@ -133,6 +134,7 @@ def test_process_race_exports():
         RaceSignals,
         _watch_heartbeat,
         fold_lifecycle_evidence,
+        fold_lifecycle_evidence_path,
         resolve_termination,
     )
 
@@ -144,6 +146,8 @@ def test_process_race_exports():
     assert _watch_heartbeat.__module__ == "autoskillit.execution.process._process_race"
     assert callable(fold_lifecycle_evidence)
     assert fold_lifecycle_evidence.__module__ == "autoskillit.execution.process._process_race"
+    assert callable(fold_lifecycle_evidence_path)
+    assert fold_lifecycle_evidence_path.__module__ == "autoskillit.execution.process._process_race"
 
 
 def test_process_facade_reexports_all_public_symbols():

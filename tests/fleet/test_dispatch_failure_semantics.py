@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from autoskillit.core.types import CliSubtype, FleetErrorCode
@@ -567,7 +569,14 @@ class TestTrackerBridgeIntegration:
 
     @pytest.mark.anyio
     async def test_progress_load_exception_releases_dispatch_lease(self, tool_ctx, monkeypatch):
+        from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
+
         _setup_dispatch(tool_ctx, monkeypatch)
+        retain_spy = MagicMock(wraps=retain_dispatch_tracker_authority)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            retain_spy,
+        )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
@@ -591,13 +600,21 @@ class TestTrackerBridgeIntegration:
         assert result["dispatch_status"] == "failure"
         assert result["reason"] == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
         assert load_calls == 1
+        assert retain_spy.call_count == 1
         assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
 
     @pytest.mark.anyio
     async def test_dispatch_cancellation_releases_dispatch_lease(self, tool_ctx, monkeypatch):
         import asyncio
 
+        from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
+
         _setup_dispatch(tool_ctx, monkeypatch)
+        retain_spy = MagicMock(wraps=retain_dispatch_tracker_authority)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            retain_spy,
+        )
 
         async def cancel_dispatch(*_args, **_kwargs):
             raise asyncio.CancelledError
@@ -607,6 +624,7 @@ class TestTrackerBridgeIntegration:
         with pytest.raises(asyncio.CancelledError):
             await _run(tool_ctx)
 
+        assert retain_spy.call_count == 1
         assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
 
     @pytest.mark.anyio

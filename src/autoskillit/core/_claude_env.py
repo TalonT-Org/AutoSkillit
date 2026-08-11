@@ -28,7 +28,11 @@ import os
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from .types._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
+from .types._type_constants_env import (
+    AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
+    AUTOSKILLIT_ATTESTED_META_SUPPORT,
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
+)
 
 # Exact-match IDE discovery variable names stripped from the child env.
 IDE_ENV_DENYLIST: frozenset[str] = frozenset(
@@ -48,6 +52,11 @@ IDE_ENV_DENYLIST: frozenset[str] = frozenset(
         # MCP response size gate: injected explicitly by AutoSkillit session launchers
         # so the child always gets the correct value regardless of the parent env.
         "MAX_MCP_OUTPUT_TOKENS",
+        # Host client attestation: launcher-injected (SHARED_BASELINE_ENV), never
+        # IDE-sourced. Stripped from base so a parent session's attestation cannot
+        # leak into a child that the launcher did not itself attest.
+        AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
+        AUTOSKILLIT_ATTESTED_META_SUPPORT,
     }
 )
 

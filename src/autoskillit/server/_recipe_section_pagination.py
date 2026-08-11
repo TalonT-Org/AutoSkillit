@@ -94,6 +94,7 @@ class _PagePlanCacheKey:
     section_registry_sha256: str
     pagination_policy_sha256: str
     pagination_version: int
+    char_ceiling: int | None
 
 
 @dataclass(slots=True)
@@ -978,6 +979,7 @@ def _cache_key(
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
+    char_ceiling: int | None = None,
 ) -> _PagePlanCacheKey:
     return _PagePlanCacheKey(
         kitchen_id=kitchen_id,
@@ -989,6 +991,7 @@ def _cache_key(
         section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
         pagination_policy_sha256=RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
         pagination_version=RECIPE_SECTION_PAGINATION_VERSION,
+        char_ceiling=char_ceiling,
     )
 
 
@@ -998,6 +1001,7 @@ def get_or_build_recipe_section_page_plan(
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
+    char_ceiling: int | None = None,
 ) -> RecipeSectionPagePlan:
     """Return a verified cached plan or build and admit one."""
     key = _cache_key(
@@ -1005,6 +1009,7 @@ def get_or_build_recipe_section_page_plan(
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=recipe_section_bound_bytes,
+        char_ceiling=char_ceiling,
     )
     cache = _page_plan_cache()
     return cache.get_or_build(
@@ -1014,6 +1019,7 @@ def get_or_build_recipe_section_page_plan(
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=recipe_section_bound_bytes,
+            char_ceiling=char_ceiling,
         ),
     )
 

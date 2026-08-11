@@ -9,7 +9,7 @@ import pytest
 from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.server._recipe_delivery import validate_recipe_exemption_fitness
-from tests.contracts._delivery_constants import MAX_PAGES_PER_SECTION
+from tests.contracts._delivery_constants import CALIBRATED_PAGES_PER_SECTION
 from tests.contracts.fixtures.recipes import (
     ALL_DELIVERY_SURFACES,
     BUNDLED_RECIPE_PATHS,
@@ -71,6 +71,6 @@ def test_bundled_recipe_bounded_path_compiled_capacity_within_budget(
             "config — no bounded path to check"
         )
     assert all(
-        item["compiled_page_count"] == item["total_parts"] <= MAX_PAGES_PER_SECTION
+        item["compiled_page_count"] == item["total_parts"] <= CALIBRATED_PAGES_PER_SECTION
         for item in envelope["required_sections"]
     )

@@ -679,6 +679,9 @@ async def get_recipe_section(
                     generation=identity,
                     selected=selected,
                     recipe_section_bound_bytes=request_state.recipe_section_bound_bytes,
+                    char_ceiling=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
+                        "get_recipe_section"
+                    ].max_chars,
                 )
             except RecipeSectionBoundError:
                 return _recipe_section_failure("recipe_section_bound_too_small")
@@ -748,6 +751,12 @@ async def get_recipe_section(
                 )
                 if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
                     return _recipe_section_failure("recipe_section_bound_too_small")
+                # Acknowledged limitation: this compares a SerializedChars count
+                # against a byte ceiling (recipe_section_bound_bytes is the only
+                # bound request_state carries). It is sound only because
+                # max_chars == max_utf8_bytes for every current
+                # RESPONSE_BACKSTOP_EXEMPTION_REGISTRY entry. Revisit once the
+                # bound resolver returns both dimensions separately.
                 if (
                     client_serialized_char_len(rendered).value
                     > request_state.recipe_section_bound_bytes

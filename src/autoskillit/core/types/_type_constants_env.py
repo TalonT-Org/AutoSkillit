@@ -9,6 +9,8 @@ from importlib.metadata import version
 
 __all__ = [
     "AUTOSKILLIT_APPLICABLE_GUARDS",
+    "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+    "AUTOSKILLIT_ATTESTED_META_SUPPORT",
     "AUTOSKILLIT_INSTALLED_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
     "AUTOSKILLIT_STATE_ROOT_ENV_VAR",
@@ -94,6 +96,12 @@ AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES: str = "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES"
 # (stdlib-only boundary prevents importing this constant there) — keep the two
 # string values byte-identical.
 AUTOSKILLIT_STATE_ROOT_ENV_VAR: str = "AUTOSKILLIT_STATE_ROOT"
+# Launcher-to-server host client attestation transport. Injected by every
+# command builder (SHARED_BASELINE_ENV) so the server can read, once at
+# startup, the launcher's attested client capabilities without trusting
+# per-call claims. Absent/malformed → conservative ENVELOPE default.
+AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS: str = "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS"
+AUTOSKILLIT_ATTESTED_META_SUPPORT: str = "AUTOSKILLIT_ATTESTED_META_SUPPORT"
 KNOWN_BACKEND_NAMES: frozenset[str] = frozenset({AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_CODEX})
 MCP_CLIENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_MCP_CLIENT_BACKEND"
 NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: str = "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE"
@@ -144,6 +152,8 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         MANAGED_ATTEMPT_ID_ENV_VAR,
         MANAGED_LINEAGE_DIGEST_ENV_VAR,
         MANAGED_LINEAGE_REF_ENV_VAR,
+        AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
+        AUTOSKILLIT_ATTESTED_META_SUPPORT,
         *CODEX_COOK_RESERVED_ENV_VARS,
     }
 )

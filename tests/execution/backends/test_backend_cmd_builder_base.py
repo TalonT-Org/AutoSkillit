@@ -82,9 +82,11 @@ class TestAssembleSharedEnvExtras:
             cwd="/work",
             scenario_step_name="step1",
         )
-        assert len(result) == 13
+        assert len(result) == 15
         assert result["MAX_MCP_OUTPUT_TOKENS"] == "50000"
         assert result["MCP_CONNECTION_NONBLOCKING"] == "0"
+        assert result["AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS"] == "50000"
+        assert result["AUTOSKILLIT_ATTESTED_META_SUPPORT"] == "1"
         assert result["AUTOSKILLIT_HEADLESS"] == "1"
         assert result["AUTOSKILLIT_SESSION_TYPE"] == "skill"
         assert result["AUTOSKILLIT_APPLICABLE_GUARDS"] == "write_guard"
@@ -163,10 +165,12 @@ class TestExtensionPoints:
 
 
 class TestSharedBaselineEnv:
-    def test_exactly_two_keys(self) -> None:
+    def test_exactly_four_keys(self) -> None:
         assert set(SHARED_BASELINE_ENV.keys()) == {
             "MAX_MCP_OUTPUT_TOKENS",
             "MCP_CONNECTION_NONBLOCKING",
+            "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+            "AUTOSKILLIT_ATTESTED_META_SUPPORT",
         }
 
 

@@ -49,9 +49,9 @@ from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
 )
 from tests.contracts._delivery_constants import (
+    CALIBRATED_PAGES_PER_SECTION,
     MAX_ENVELOPE_MANIFEST_BYTES,
     MAX_OPEN_KITCHEN_CALLS,
-    MAX_PAGES_PER_SECTION,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -211,7 +211,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
             projection.entrypoint,
         ]
         assert all(
-            item["compiled_page_count"] == item["total_parts"] <= MAX_PAGES_PER_SECTION
+            item["compiled_page_count"] == item["total_parts"] <= CALIBRATED_PAGES_PER_SECTION
             and item["compiled_bytes"] > 0
             for item in required_sections
         )

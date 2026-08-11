@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import os
 import shutil
 import time
 from collections.abc import Iterator
@@ -21,6 +22,8 @@ from autoskillit._recipe_delivery_framing import (
 )
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
+    AUTOSKILLIT_ATTESTED_META_SUPPORT,
     CLAUDE_CODE_CAPABILITIES,
     CONSERVATIVE_ADMISSION_POLICY,
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
@@ -34,6 +37,7 @@ from autoskillit.core import (
     BackendCapabilities,
     BoundedDeliveryRoundTripBudgetExceededError,
     FinalizedRecipeProjection,
+    HostClientAttestation,
     RecipeArtifactGeneration,
     RecipeDeliveryAttestation,
     RecipeDeliveryDecision,
@@ -43,6 +47,7 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeExemptionFitnessError,
     RecipeFlowGeneration,
+    SerializedChars,
     Utf8ByteLimit,
     atomic_write,
     build_recipe_execution_credential,
@@ -116,7 +121,6 @@ class RecipeArtifactSchemaError(RecipeArtifactError):
 
 
 _MAX_BOUNDED_RECIPE_CALLS = 4
-_MAX_PAGES_PER_INITIALIZATION_SECTION = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -708,6 +712,7 @@ def _initialization_requirements(
     completion_required: bool,
     flow_generation: RecipeFlowGeneration,
     execution_snapshot: RecipeExecutionSnapshot,
+    char_ceiling: int | None = None,
 ) -> tuple[RecipeInitializationRequirement, ...]:
     """Build the exact flow and entrypoint page plans advertised by a manifest."""
 
@@ -752,6 +757,7 @@ def _initialization_requirements(
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=bound_bytes,
+            char_ceiling=char_ceiling,
         )
         requirements.append(
             RecipeInitializationRequirement(
@@ -776,12 +782,14 @@ def validate_compiled_recipe_delivery_budget(
     backend: str,
     section_page_counts: tuple[int, ...],
 ) -> None:
-    """Reject a compiled bounded delivery that exceeds its fixed call budget."""
-    planned_calls = 1 + sum(section_page_counts) + 1
-    if (
-        any(parts > _MAX_PAGES_PER_INITIALIZATION_SECTION for parts in section_page_counts)
-        or planned_calls > _MAX_BOUNDED_RECIPE_CALLS
-    ):
+    """Reject only genuinely non-terminating bounded delivery plans.
+
+    A plan that needs more pages than the default budget is slower but
+    terminates correctly. Only plans with zero-element sections (where
+    the bound is below the floor) are non-terminating.
+    """
+    if any(parts <= 0 for parts in section_page_counts):
+        planned_calls = 1 + sum(section_page_counts) + 1
         raise BoundedDeliveryRoundTripBudgetExceededError(
             recipe=recipe,
             backend=backend,
@@ -817,9 +825,9 @@ def _recipe_exemption_admitted_bytes(ceiling_bytes: int) -> int:
     return ceiling_bytes * 9 // 10
 
 
-def _exemption_admitted_chars(ceiling_chars: int) -> int:
+def _exemption_admitted_chars(ceiling_chars: SerializedChars) -> SerializedChars:
     """Return the exemption ceiling in chars after reserving the packaging margin."""
-    return ceiling_chars * 9 // 10
+    return SerializedChars(ceiling_chars.value * 9 // 10)
 
 
 def _conservative_token_upper_bound(rendered: str) -> int:
@@ -862,6 +870,29 @@ def _attested_render(
     )
 
 
+def _resolve_host_client_attestation() -> HostClientAttestation | None:
+    """Read the launcher-injected host client attestation from the environment.
+
+    Every AutoSkillit command builder injects ``AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS``
+    and ``AUTOSKILLIT_ATTESTED_META_SUPPORT`` via ``SHARED_BASELINE_ENV`` — the
+    launcher's attestation of what the connected host client supports. Absent
+    or malformed values conservatively resolve to None, which routes recipe
+    delivery decisions to ``RecipeDeliveryMode.ENVELOPE`` rather than trusting
+    an unattested per-call claim.
+    """
+    raw_gate_tokens = os.environ.get(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS)
+    raw_meta_support = os.environ.get(AUTOSKILLIT_ATTESTED_META_SUPPORT)
+    if raw_gate_tokens is None or raw_meta_support is None:
+        return None
+    try:
+        return HostClientAttestation(
+            attested_client_gate_tokens=int(raw_gate_tokens),
+            annotation_support=raw_meta_support == "1",
+        )
+    except (ValueError, TypeError):
+        return None
+
+
 def _failure_decision(
     *, producer: str, reason: str, selected_limit: int, contract_digest: str
 ) -> RecipeDeliveryDecision:
@@ -897,8 +928,11 @@ def finalize_recipe_delivery(
     supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     receipt_ledger: RecipeDeliveryReceiptLedger | None = None,
     now_unix: int | None = None,
+    host_client_attestation: HostClientAttestation | None = None,
 ) -> FinalizedRecipeResponse:
     """Persist, decide, shape, and transactionally reserve one recipe response."""
+    if host_client_attestation is None:
+        host_client_attestation = _resolve_host_client_attestation()
     surface_definition = RECIPE_DELIVERY_SURFACE_REGISTRY[surface]
     candidate_capabilities = (
         getattr(tool_ctx.backend, "capabilities", None) if tool_ctx.backend is not None else None
@@ -1035,6 +1069,18 @@ def finalize_recipe_delivery(
         attestation=candidate_attestation,
         supported_evidence=candidate_evidence,
         now_unix=now_unix,
+        # Stage E: annotation-aware inline
+        host_client_attestation=host_client_attestation,
+        payload_serialized_chars=(
+            client_serialized_char_len(ordinary_rendered).value
+            if surface_definition.response_exemption is not None
+            else None
+        ),
+        exemption_ceiling_chars=(
+            surface_definition.response_exemption.max_chars
+            if surface_definition.response_exemption is not None
+            else None
+        ),
     )
     response_budget = tool_ctx.config.output_budget
     response_ceiling_bytes = response_budget.response_max_bytes
@@ -1127,7 +1173,7 @@ def finalize_recipe_delivery(
             and len(ordinary_rendered.encode("utf-8"))
             <= _recipe_exemption_admitted_bytes(_exemption.max_utf8_bytes)
             and client_serialized_char_len(ordinary_rendered).value
-            <= _exemption_admitted_chars(_exemption.max_chars)
+            <= _exemption_admitted_chars(SerializedChars(_exemption.max_chars)).value
         ):
             decision = replace(
                 decision,
@@ -1158,6 +1204,11 @@ def finalize_recipe_delivery(
                 completion_required=surface_definition.initialization_activating,
                 flow_generation=flow_generation,
                 execution_snapshot=execution_snapshot,
+                char_ceiling=(
+                    surface_definition.response_exemption.max_chars
+                    if surface_definition.response_exemption is not None
+                    else None
+                ),
             )
             rendered = json.dumps(
                 build_recipe_envelope(

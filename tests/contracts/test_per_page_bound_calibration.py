@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from tests.contracts._delivery_constants import (
-    MAX_PAGES_PER_SECTION,
+    CALIBRATED_PAGES_PER_SECTION,
     MIN_CALIBRATED_PER_PAGE_BYTES,
 )
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS, compile_bounded_page_plan
@@ -35,5 +35,5 @@ def test_per_page_bound_admits_largest_bundled_section_in_one_page(
             "— no envelope sections to calibrate"
         )
     assert max(item["total_parts"] for item in envelope["required_sections"]) <= (
-        MAX_PAGES_PER_SECTION
+        CALIBRATED_PAGES_PER_SECTION
     )

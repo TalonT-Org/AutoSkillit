@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 from autoskillit.core import (
     AUTOSKILLIT_APPLICABLE_GUARDS,
+    AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
+    AUTOSKILLIT_ATTESTED_META_SUPPORT,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
@@ -57,10 +59,18 @@ _MAX_MCP_OUTPUT_TOKENS_VALUE: str = str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS)
 # ``codex.py``) imports this directly for the ``include_session_baseline=True``
 # path so resume sessions do NOT inadvertently pick up ambient campaign/kitchen
 # IDs from ``os.environ`` (which ``_assemble_shared_env_extras`` would).
+#
+# AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS / AUTOSKILLIT_ATTESTED_META_SUPPORT
+# carry the launcher's host client attestation to the MCP server — read once
+# at server startup (see server._factory / server._recipe_delivery) and used
+# as the conservative-default source for recipe-delivery decisions. Absent or
+# malformed values fall back to None → ENVELOPE, never trusted per-call claims.
 SHARED_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     {
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
         "MCP_CONNECTION_NONBLOCKING": "0",
+        AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS: _MAX_MCP_OUTPUT_TOKENS_VALUE,
+        AUTOSKILLIT_ATTESTED_META_SUPPORT: "1",
     }
 )
 
@@ -184,7 +194,8 @@ class BackendCmdBuilderBase(ABC):
     ) -> dict[str, str]:
         """Assemble the shared env keys consumed by both backends.
 
-        Always-on keys (three): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
+        Always-on keys (five): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
+        ``AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS``, ``AUTOSKILLIT_ATTESTED_META_SUPPORT``,
         ``AUTOSKILLIT_HEADLESS``.
 
         Conditional keys (ten): ``AUTOSKILLIT_SESSION_TYPE``,

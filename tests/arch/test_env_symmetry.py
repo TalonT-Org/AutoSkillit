@@ -11,6 +11,8 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _REQUIRED_IN_BOTH: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_APPLICABLE_GUARDS",
+        "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+        "AUTOSKILLIT_ATTESTED_META_SUPPORT",
         "AUTOSKILLIT_HEADLESS",
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES",

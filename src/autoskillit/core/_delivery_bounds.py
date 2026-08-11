@@ -132,6 +132,12 @@ def resolve_recipe_delivery_decision(
         return _envelope("invalid_required_token_count")
     if not producer or not _is_sha256_identity(payload_sha256):
         return _envelope("invalid_payload_identity")
+    # Unannotated regime: tools without annotation support are token-gated
+    # at the backend's unnegotiated limit (46,500 for Claude, derived from
+    # the injected 50,000-token MAX_MCP_OUTPUT_TOKENS with 7% headroom).
+    # Non-AutoSkillit sessions use the client's 25,000-token default gate
+    # (CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS), but AutoSkillit always injects
+    # CLAUDE_INJECTED_CLIENT_RESULT_TOKENS, so the operative limit is higher.
     if required_serialized_tokens <= ordinary_limit:
         return _decision(
             RecipeDeliveryMode.ORDINARY_INLINE,

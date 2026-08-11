@@ -26,15 +26,6 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 _RECIPE_PATH = next(path for path in BUNDLED_RECIPE_PATHS if path.stem == "implementation")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#4557 Step 15: validate_compiled_recipe_delivery_budget uses a fixed "
-        "_MAX_PAGES_PER_INITIALIZATION_SECTION=1 that rejects multi-page "
-        "plans — fail-degrade planning (bound-derived page ceilings) not "
-        "yet implemented"
-    ),
-)
 def test_claude_conservative_fallback_produces_a_live_envelope(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

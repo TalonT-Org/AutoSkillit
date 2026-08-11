@@ -10,6 +10,7 @@ import pytest
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_CODEX,
+    CLAUDE_CODE_CAPABILITIES,
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
@@ -124,7 +125,11 @@ def _resolve(
     capabilities = (
         _CODEX_CAPABILITIES
         if backend_name == AGENT_BACKEND_CODEX
-        else BackendCapabilities(unnegotiated_tool_result_token_limit=46_500)
+        else BackendCapabilities(
+            unnegotiated_tool_result_token_limit=(
+                CLAUDE_CODE_CAPABILITIES.unnegotiated_tool_result_token_limit
+            )
+        )
     )
     return resolve_recipe_delivery_decision(
         capabilities=capabilities,
@@ -344,7 +349,10 @@ def test_non_codex_request_cannot_upgrade_claude() -> None:
         evidence=_protected_evidence(),
     )
     assert decision.mode is RecipeDeliveryMode.ENVELOPE
-    assert decision.selected_result_token_limit == 46_500
+    assert (
+        decision.selected_result_token_limit
+        == CLAUDE_CODE_CAPABILITIES.unnegotiated_tool_result_token_limit
+    )
 
 
 def test_history_retention_never_becomes_selected_outer_result() -> None:

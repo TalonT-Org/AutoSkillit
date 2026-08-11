@@ -1738,6 +1738,18 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "config.toml").read_text() == invalid_transport
         assert not (self.session_dir / "agents").exists()
 
+    def test_bundled_direct_mcp_agent_rejects_malformed_transport_before_mutation(
+        self,
+    ) -> None:
+        invalid_transport = "[mcp_servers.autoskillit]\n"
+        (self.session_dir / "config.toml").write_text(invalid_transport)
+
+        with pytest.raises(ValueError, match="requires exactly one canonical.*transport"):
+            CodexBackend().setup_session_dir(self.session_dir)
+
+        assert (self.session_dir / "config.toml").read_text() == invalid_transport
+        assert not (self.session_dir / "agents").exists()
+
     def test_session_log_reader_projects_direct_mcp_only_policy(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)

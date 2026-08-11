@@ -890,7 +890,7 @@ def _preflight_agent_projection(
         raise ValueError(f"Codex built-in agent name collision: {built_in_collisions}")
     config_path = session_dir / "config.toml"
     config = tomllib.loads(config_path.read_text(encoding="utf-8"))
-    if exact_definitions and any(map(_direct_agent_mcp_tools, definitions)):
+    if any(map(_direct_agent_mcp_tools, definitions)):
         _canonical_explorer_mcp_transport(config_path)
     configured_agents = config.get("agents", {})
     if not isinstance(configured_agents, dict):

@@ -509,6 +509,7 @@ async def test_prepare_issue_reports_post_creation_label_failure(
 
     assert result["success"] is False
     assert result["status"] == "failed"
+    assert result["error"].startswith("Additional labels were not applied:")
     assert result["issue_url"] == "https://github.com/o/r/issues/7"
     assert result["issue_number"] == 7
 

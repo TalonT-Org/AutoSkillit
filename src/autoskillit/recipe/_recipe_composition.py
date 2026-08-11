@@ -213,7 +213,7 @@ def _resolve_skip_redirects(
     return redirects
 
 
-def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
+def _drop_sub_recipe_step(recipe: Recipe, step_name: str) -> Recipe:
     """Drop a false-gated placeholder and preserve its attachment point."""
     placeholder = recipe.steps[step_name]
     continuation = placeholder.on_success

@@ -214,16 +214,15 @@ def test_without_success_key_no_success_is_noop() -> None:
 
 def test_build_prepare_skill_command_basic() -> None:
     """No labels, no dry_run → '/prepare-issue\\n\\nTitle: T\\n\\nBody:\\nB'."""
-    cmd = _build_prepare_skill_command("T", "B", "", None, False, False)
+    cmd = _build_prepare_skill_command("T", "B", "", False, False)
     assert cmd == "/prepare-issue\n\nTitle: T\n\nBody:\nB"
 
 
 def test_build_prepare_skill_command_with_flags() -> None:
-    """labels + dry_run + split → all flags in output."""
-    cmd = _build_prepare_skill_command("T", "B", "owner/repo", ["bug", "needs-triage"], True, True)
+    """repo + dry_run + split → supported flags in output."""
+    cmd = _build_prepare_skill_command("T", "B", "owner/repo", True, True)
     assert "--repo owner/repo" in cmd
-    assert "--label bug" in cmd
-    assert "--label needs-triage" in cmd
+    assert "--label" not in cmd
     assert "--dry-run" in cmd
     assert "--split" in cmd
 
@@ -390,6 +389,153 @@ async def test_prepare_issue_success(tool_ctx_kitchen_open) -> None:
     assert result["success"] is True
     assert result["status"] == "complete"
     assert result["issue_url"] == "https://github.com/o/r/issues/1"
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_requires_client_before_creating_issue_for_additional_labels(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_executor = AsyncMock()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "executor", mock_executor)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", None)
+
+    result = json.loads(await prepare_issue("Title", "Body", labels=["bug"]))
+
+    assert result["success"] is False
+    assert "GitHub client not configured" in result["error"]
+    mock_executor.run.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_applies_deduplicated_additional_labels_once(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    block_data = {
+        "issue_url": "https://github.com/o/r/issues/7",
+        "issue_number": 7,
+        "labels_applied": ["recipe:implementation", "bug"],
+    }
+    output = f"---prepare-issue-result---\n{json.dumps(block_data)}\n---/prepare-issue-result---\n"
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _make_skill_result(success=True, result=output)
+    mock_client = AsyncMock()
+    mock_client.add_labels.return_value = {
+        "success": True,
+        "labels": ["urgent", "recipe:implementation", "bug"],
+    }
+    mock_sleep = AsyncMock()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "executor", mock_executor)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_issue_headless.asyncio.sleep",
+        mock_sleep,
+    )
+
+    result = json.loads(await prepare_issue("Title", "Body", labels=["bug", "urgent", "bug"]))
+
+    assert result["success"] is True
+    assert result["labels_applied"] == ["recipe:implementation", "bug", "urgent"]
+    mock_sleep.assert_awaited_once_with(1)
+    mock_client.add_labels.assert_awaited_once_with("o", "r", 7, ["bug", "urgent"])
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("issue_url", "issue_number"),
+    [
+        ("not-an-issue-url", 7),
+        ("https://github.com/o/r/issues/7/extra", 7),
+        ("https://github.com/o/r/issues/7", 8),
+    ],
+    ids=["malformed", "trailing-path", "number-mismatch"],
+)
+async def test_prepare_issue_rejects_invalid_created_issue_identity_before_labeling(
+    issue_url: str,
+    issue_number: int,
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    block_data = {"issue_url": issue_url, "issue_number": issue_number}
+    output = f"---prepare-issue-result---\n{json.dumps(block_data)}\n---/prepare-issue-result---\n"
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _make_skill_result(success=True, result=output)
+    mock_client = AsyncMock()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "executor", mock_executor)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
+
+    result = json.loads(await prepare_issue("Title", "Body", labels=["bug"]))
+
+    assert result["success"] is False
+    assert result["issue_url"] == issue_url
+    assert result["issue_number"] == issue_number
+    mock_client.add_labels.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "label_result",
+    [
+        {"success": False, "error": "denied"},
+        {"success": True},
+        {"success": True, "labels": ["other"]},
+    ],
+    ids=["failure", "missing-labels", "requested-label-missing"],
+)
+async def test_prepare_issue_reports_post_creation_label_failure(
+    label_result: dict[str, object],
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    block_data = {
+        "issue_url": "https://github.com/o/r/issues/7",
+        "issue_number": 7,
+        "labels_applied": ["recipe:implementation"],
+    }
+    output = f"---prepare-issue-result---\n{json.dumps(block_data)}\n---/prepare-issue-result---\n"
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _make_skill_result(success=True, result=output)
+    mock_client = AsyncMock()
+    mock_client.add_labels.return_value = label_result
+    monkeypatch.setattr(tool_ctx_kitchen_open, "executor", mock_executor)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_issue_headless.asyncio.sleep",
+        AsyncMock(),
+    )
+
+    result = json.loads(await prepare_issue("Title", "Body", labels=["bug"]))
+
+    assert result["success"] is False
+    assert result["status"] == "failed"
+    assert result["issue_url"] == "https://github.com/o/r/issues/7"
+    assert result["issue_number"] == 7
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_dry_run_with_labels_needs_no_client_or_sleep(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    block_data = {"dry_run": True, "labels_applied": ["recipe:implementation"]}
+    output = f"---prepare-issue-result---\n{json.dumps(block_data)}\n---/prepare-issue-result---\n"
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _make_skill_result(success=True, result=output)
+    mock_sleep = AsyncMock()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "executor", mock_executor)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", None)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_issue_headless.asyncio.sleep",
+        mock_sleep,
+    )
+
+    result = json.loads(await prepare_issue("Title", "Body", labels=["bug", "bug"], dry_run=True))
+
+    assert result["success"] is True
+    assert result["labels_applied"] == ["recipe:implementation", "bug"]
+    assert "--label" not in mock_executor.run.await_args.args[0]
+    mock_sleep.assert_not_awaited()
 
 
 @pytest.mark.anyio

@@ -194,7 +194,13 @@ class TestPrepareIssueWhitelist:
 
         tool_ctx_kitchen_open.config.github.allowed_labels = ["bug", "enhancement"]
         mock_executor = AsyncMock()
-        payload = _json.dumps({"issue_url": "https://github.com/x/y/issues/1", "route": "impl"})
+        payload = _json.dumps(
+            {
+                "issue_url": "https://github.com/x/y/issues/1",
+                "issue_number": 1,
+                "route": "impl",
+            }
+        )
         mock_executor.run.return_value = SkillResult(
             success=True,
             result=f"{_PREPARE_RESULT_START}\n{payload}\n{_PREPARE_RESULT_END}",
@@ -207,6 +213,13 @@ class TestPrepareIssueWhitelist:
             stderr="",
         )
         tool_ctx_kitchen_open.executor = mock_executor
+        mock_client = AsyncMock()
+        mock_client.add_labels.return_value = {"success": True, "labels": ["bug"]}
+        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_issue_headless.asyncio.sleep",
+            AsyncMock(),
+        )
 
         result = json.loads(
             await prepare_issue(
@@ -217,6 +230,7 @@ class TestPrepareIssueWhitelist:
         )
         assert result["success"] is True
         mock_executor.run.assert_awaited_once()
+        mock_client.add_labels.assert_awaited_once_with("x", "y", 1, ["bug"])
 
     @pytest.mark.anyio
     async def test_prepare_issue_no_labels_skips_validation(

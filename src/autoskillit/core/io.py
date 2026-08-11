@@ -23,7 +23,7 @@ import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeGuard
 
 import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
@@ -98,6 +98,7 @@ __all__ = [
     "atomic_write",
     "compose_yaml",
     "ensure_project_temp",
+    "is_yaml_mapping_node",
     "load_yaml",
     "mapping_entry_byte_ranges_from_yaml",
     "dump_yaml_str",
@@ -591,6 +592,11 @@ def compose_yaml(source: str) -> yaml.Node | None:
     empty (matches :func:`yaml.compose` semantics).
     """
     return yaml.compose(source, Loader=_Loader)
+
+
+def is_yaml_mapping_node(node: object) -> TypeGuard[yaml.MappingNode]:
+    """Return whether *node* is a YAML mapping without leaking the YAML dependency."""
+    return isinstance(node, yaml.MappingNode)
 
 
 def mapping_entry_byte_ranges_from_yaml(

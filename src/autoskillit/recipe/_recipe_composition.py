@@ -8,9 +8,14 @@ from pathlib import Path
 from typing import Any
 
 import regex as re
-from yaml import MappingNode
 
-from autoskillit.core import SKILL_TOOLS, YAMLError, compose_yaml, load_yaml
+from autoskillit.core import (
+    SKILL_TOOLS,
+    YAMLError,
+    compose_yaml,
+    is_yaml_mapping_node,
+    load_yaml,
+)
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import _parse_recipe, find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
@@ -509,14 +514,14 @@ def _resolve_skip_guards_in_content(
     if not resolutions:
         return raw
     root = compose_yaml(raw)
-    if not isinstance(root, MappingNode):
+    if not is_yaml_mapping_node(root):
         raise ValueError("Guarded recipe must be a YAML mapping")
     steps_node = None
     for key_node, value_node in root.value:
         if getattr(key_node, "value", None) == "steps":
             steps_node = value_node
             break
-    if not isinstance(steps_node, MappingNode):
+    if not is_yaml_mapping_node(steps_node):
         raise ValueError("Guarded recipe requires a block-style top-level steps mapping")
     if getattr(steps_node, "flow_style", False):
         raise ValueError("Guarded recipe does not support a flow-style top-level steps mapping")

@@ -393,7 +393,10 @@ def load_and_validate(
                 combined_errors = validate_recipe_structure(combined_recipe)
                 errors.extend(f"[combined] {e}" for e in combined_errors)
             elif any(step.sub_recipe is not None for step in source_recipe.steps.values()):
-                errors.extend(validate_recipe_structure(active_recipe))
+                active_errors = validate_recipe_structure(active_recipe)
+                errors.extend(
+                    f"[active] {error}" for error in active_errors if error not in errors
+                )
             t0 = _t("validate_recipe_structure", t0, name)
 
             # Stage: resolve skill_resolver (needed by both pre-prune and post-prune contexts)

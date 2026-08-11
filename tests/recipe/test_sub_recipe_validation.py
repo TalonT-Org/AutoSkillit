@@ -239,6 +239,37 @@ def test_dual_validation_standalone_errors_surfaced(tmp_path: Path) -> None:
     assert result.get("valid") is False, f"Expected valid=False, got {result.get('valid')}"
 
 
+def test_false_gated_sub_recipe_does_not_duplicate_source_errors(tmp_path: Path) -> None:
+    from autoskillit.recipe._api import load_and_validate
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_content = textwrap.dedent("""
+        name: test-recipe
+        description: Test
+        kitchen_rules:
+          - no native tools
+        ingredients:
+          flag_mode:
+            description: Enable sprint
+            default: "false"
+            hidden: true
+        steps:
+          test_entry:
+            sub_recipe: test-sub
+            gate: flag_mode
+            on_success: finish
+          finish:
+            action: stop
+    """)
+    (recipes_dir / "test-recipe.yaml").write_text(recipe_content)
+
+    result = load_and_validate("test-recipe", project_dir=tmp_path)
+
+    expected = "Terminal step 'finish' (action: stop) must have a 'message'."
+    assert result["errors"].count(expected) == 1
+
+
 def test_combined_graph_dataflow_validated(tmp_path: Path) -> None:
     """Semantic rules run on combined graph when gate=true."""
     from autoskillit.recipe._api import load_and_validate

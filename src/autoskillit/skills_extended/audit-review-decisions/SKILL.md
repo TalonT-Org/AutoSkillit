@@ -87,21 +87,12 @@ implemented. Identify review debt before it compounds.
 
 2. Resolve `OWNER` and `REPO` from `git remote get-url origin`.
 
-3. Query the most recent `[AUDIT]` sentinel comment across recently merged PRs:
+3. Query the most recent `[AUDIT]` sentinel comment across recently merged PRs. Use a
+   file-write tool in a separate completed tool call to write the bounded query and its
+   `owner`/`name` variables object to
+   `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/watermark_query.json`, then invoke it:
    ```bash
-   gh api graphql -f query='
-     query($owner:String!, $name:String!) {
-       rateLimit { cost remaining resetAt }
-       repository(owner:$owner, name:$name) {
-         pullRequests(first:500, states:MERGED, orderBy:{field:UPDATED_AT,direction:DESC}) {
-           nodes { number
-             reviewThreads(first:50) {
-               nodes { comments(first:10) { nodes { body createdAt } } }
-             }
-           }
-         }
-       }
-     }' -f owner="${OWNER}" -f name="${REPO}"
+   gh api graphql --input "{{AUTOSKILLIT_TEMP}}/audit-review-decisions/watermark_query.json"
    ```
    Extract the most recent `createdAt` from any comment whose `body` starts with
    `[AUDIT]`. Store as `LAST_AUDIT_TS` (empty string if none — first run).
@@ -146,10 +137,13 @@ implemented. Identify review debt before it compounds.
      }
    }
    ```
-   Build the alias query string in a shell variable and invoke:
+   Do not output prose between payload-write and GitHub calls or between chunks; immediately
+   proceed to the next required call.
+   Build the alias query and variables object for each batch. Use a file-write tool in a
+   separate completed tool call to write the bounded JSON payload, then invoke its literal
+   path in a later call:
    ```bash
-   BATCH_QUERY="query { rateLimit { cost remaining resetAt } pr1: repository(owner:\"$OWNER\", name:\"$REPO\") { pullRequest(number:$N1) { number title mergedAt reviews(first:100){nodes{author { login } body state submittedAt}} reviewThreads(first:100){pageInfo{hasNextPage endCursor}nodes{isResolved comments(first:100){nodes{databaseId author { login } body path line createdAt}}}} } } pr2: repository(owner:\"$OWNER\", name:\"$REPO\") { pullRequest(number:$N2) { ... } } }"
-   gh api graphql -f query="$BATCH_QUERY"
+   gh api graphql --input "{{AUTOSKILLIT_TEMP}}/audit-review-decisions/pr_batch_0.json"
    ```
    Include `rateLimit { cost remaining resetAt }` at query root.
    After the initial fetch, for each PR where `reviewThreads.pageInfo.hasNextPage` is

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.io import load_yaml
+from autoskillit.hooks._command_classification import (
+    GitHubMutationStatus,
+    analyze_github_mutations,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -18,11 +23,80 @@ def _lines():
     return SKILL_MD.read_text().splitlines()
 
 
-def test_label_create_calls_include_force():
-    """All gh label create calls in prepare-issue must include --force."""
-    for line in _lines():
-        if "gh label create" in line:
-            assert "--force" in line, f"Missing --force in: {line}"
+def _label_step() -> str:
+    text = SKILL_MD.read_text()
+    _, start, remainder = text.partition("### Step 9: Label Application")
+    assert start, "prepare-issue label application section is missing"
+    step, end, _ = remainder.partition("## Critical Constraints")
+    assert end, "prepare-issue critical constraints section is missing"
+    return step
+
+
+def test_label_step_inventories_then_batches_only_missing_definitions():
+    step = _label_step()
+
+    assert step.index("gh label list") < step.index("createLabel")
+    assert "gh label create" not in step
+    assert "--force" not in step
+    assert step.count("gh api graphql --input") == 1
+    assert "separate completed tool call" in step
+
+
+def test_label_step_applies_route_and_type_in_one_issue_edit():
+    step = _label_step()
+
+    assert step.count("gh issue edit") == 1
+    assert step.count("--add-label") == 2
+    assert '"${ROUTE_LABEL}"' in step
+    assert '"${ISSUE_TYPE_LABEL}"' in step
+
+
+def test_old_six_write_shape_is_denied() -> None:
+    command = " && ".join(
+        [
+            'gh label create "recipe:implementation" --force',
+            'gh label create "recipe:remediation" --force',
+            'gh label create "bug" --force',
+            'gh label create "enhancement" --force',
+            'gh issue edit 42 --add-label "recipe:implementation"',
+            'gh issue edit 42 --add-label "bug"',
+        ]
+    )
+
+    analysis = analyze_github_mutations(command)
+
+    assert analysis.status is GitHubMutationStatus.MULTIPLE
+    assert analysis.request_count == 6
+
+
+def test_revised_label_mutations_are_independently_guard_compatible(tmp_path: Path) -> None:
+    payload = tmp_path / "labels.json"
+    payload.write_text(
+        json.dumps(
+            {
+                "query": (
+                    "mutation Labels($repo: ID!, $name: String!) { "
+                    "missing: createLabel(input: {repositoryId: $repo, name: $name, "
+                    'color: "d73a4a"}) { label { id } } }'
+                ),
+                "variables": {"repo": "R_1", "name": "bug"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    definition = analyze_github_mutations(
+        f"gh api graphql --input {payload}",
+        cwd=str(tmp_path),
+    )
+    application = analyze_github_mutations(
+        'gh issue edit 42 --add-label "recipe:implementation" --add-label "bug"'
+    )
+
+    assert definition.status is GitHubMutationStatus.SINGLE_RESOLVED
+    assert definition.request_count == 1
+    assert application.status is GitHubMutationStatus.SINGLE_RESOLVED
+    assert application.request_count == 1
 
 
 def test_no_batch_labels_applied():

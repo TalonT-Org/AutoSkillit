@@ -189,18 +189,17 @@ code** from the PR's changes, not to restore it. The base branch's deletion is a
 
 ### Step 1.8: Detect Auto-Merge Availability
 
+Resolve the repository identity, then use a file-write tool in a separate completed tool call
+to write a bounded parameterized query and `owner`/`repo` variables object to
+`{{AUTOSKILLIT_TEMP}}/merge-pr/auto_merge_query.json` (relative to the current working directory).
+
 ```bash
-REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||')
-OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/}
-AUTO_MERGE_ALLOWED=$(gh api graphql -f query="query {
-  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
-    autoMergeAllowed
-  }
-}" 2>/dev/null | jq -r '.data.repository.autoMergeAllowed // false')
+gh api graphql --input "{{AUTOSKILLIT_TEMP}}/merge-pr/auto_merge_query.json"
 ```
 
-Capture `AUTO_MERGE_ALLOWED` ("true" or "false"). On gh failure, default to "false"
-(the safe path: use plain `--squash`, not `--squash --auto`).
+In a later local-processing call, parse `.data.repository.autoMergeAllowed // false` and
+capture `AUTO_MERGE_ALLOWED` ("true" or "false"). On gh failure, default to "false" (the
+safe path: use plain `--squash`, not `--squash --auto`).
 
 ### Step 1.9: Pre-flight Mergeability Check
 

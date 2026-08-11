@@ -72,8 +72,9 @@ looped, dynamic, or otherwise unresolved GitHub mutations. Classification
 resolves relative `gh api --input FILE` payloads against the command's own
 *execution cwd* — a run_cmd tool call's own required target-directory
 argument, or a Bash call's payload cwd — never against an unrelated session-
-level field, and fails closed when no absolute execution cwd is available or
-the request/`comments[]` count cannot be proven. Review publication must use
+level field, and fails closed when no absolute execution cwd is available,
+the request/`comments[]` count cannot be proven, or classification raises an
+unexpected runtime error. Review publication must use
 the typed `post_pr_review` tool; proven single non-review mutations retain
 their existing policy. See "Fail Modes" below for the guard's exhaustive
 deny-trigger vocabulary.
@@ -485,7 +486,7 @@ as a defense-in-depth measure against privilege escalation:
 | `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
 | `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
-| `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
+| `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command, or unexpected classifier error | Unknown mutation scope must not bypass the structured review publisher |
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier

@@ -412,32 +412,41 @@ block, exit.
 
 Otherwise:
 
-```bash
-# Ensure labels exist (idempotent)
-gh label create "recipe:implementation" --force \
-    --description "Route: proceed directly to implementation" \
-    --color "0E8A16"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-gh label create "recipe:remediation" --force \
-    --description "Route: investigate/decompose before implementation" \
-    --color "D93F0B"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-gh label create "bug" --force \
-    --description "Existing behavior is broken" \
-    --color "d73a4a"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-gh label create "enhancement" --force \
-    --description "New feature or request" \
-    --color "a2eeef"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
+1. Read the complete repository label inventory before any label mutation:
 
-# Apply triage labels (use the route determined in Step 6)
-gh issue edit {issue_number} --add-label "recipe:implementation"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-# or, for remediation route:
-gh issue edit {issue_number} --add-label "recipe:remediation"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-gh issue edit {issue_number} --add-label "{issue_type}"
+```bash
+gh label list --limit 1000 --json name
+```
+
+2. Compare that inventory with the four definitions below and retain only genuinely
+   missing labels:
+   - `recipe:implementation` — color `0E8A16`, description
+     `Route: proceed directly to implementation`
+   - `recipe:remediation` — color `D93F0B`, description
+     `Route: investigate/decompose before implementation`
+   - `bug` — color `d73a4a`, description `Existing behavior is broken`
+   - `enhancement` — color `a2eeef`, description `New feature or request`
+3. If labels are missing, use a file-write tool in a separate completed tool call to write
+   one bounded JSON object to the expanded absolute path
+   `{{AUTOSKILLIT_TEMP}}/prepare-issue/label_definitions.json`. Its `query`
+   contains one aliased `createLabel` operation per missing definition, and its `variables`
+   object supplies the repository ID plus each label's name, color, and description. Do not
+   include labels already present in the inventory. Then invoke that payload once:
+
+```bash
+gh api graphql --input "{{AUTOSKILLIT_TEMP}}/prepare-issue/label_definitions.json"
+```
+
+4. After the definition request completes, wait one second, then apply the selected route
+   and issue-type labels in one request using repeated flags:
+
+```bash
+ROUTE_LABEL="recipe:implementation"  # or recipe:remediation, from Step 6
+ISSUE_TYPE_LABEL="bug"  # or enhancement, from Step 6
+sleep 1
+gh issue edit {issue_number} \
+    --add-label "${ROUTE_LABEL}" \
+    --add-label "${ISSUE_TYPE_LABEL}"
 ```
 
 ## Critical Constraints
@@ -459,7 +468,7 @@ gh issue edit {issue_number} --add-label "{issue_type}"
 
 **ALWAYS:**
 - Confirm repo access with `gh repo view` before any issue operations
-- Use `--force` on all `gh label create` calls for idempotency
+- Create only definitions proven missing by the complete label inventory
 - Emit the result block (`---prepare-issue-result---`) even on dry-run
 - Respect `--dry-run`: never create or edit anything when this flag is set
 

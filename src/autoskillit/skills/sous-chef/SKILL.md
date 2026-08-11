@@ -412,10 +412,12 @@ When dispatching from an execution map:
    }
    ```
 
-   Build the alias query from the `gated_by` issue numbers and invoke:
+   Build the alias query and its variables object from the `gated_by` issue numbers. Use a
+   file-write tool in a separate completed tool call to write the bounded JSON payload under
+   the resolved absolute project temp directory. Use `/absolute/project-temp/sous-chef/`
+   below as the placeholder for that directory, then invoke that literal path:
    ```bash
-   LABEL_QUERY="query { $(for NUM in $BLOCKER_NUMS; do echo "i${NUM}: repository(owner:\"$OWNER\", name:\"$REPO\") { issue(number:${NUM}) { labels(first:20) { nodes { name } } } }"; done) }"
-   gh api graphql -f query="$LABEL_QUERY"
+   gh api graphql --input "/absolute/project-temp/sous-chef/blocker_labels.json"
    ```
 
    For each blocker, check whether the `in-progress` label is still present. If a
@@ -632,37 +634,36 @@ produced by a single pipeline or by N parallel pipelines.
 
 ### 1. Detect merge queue availability — once per orchestration session
 
-Before initiating any merge, run the following detection step via `run_cmd` (not a
-headless session):
+Before initiating any merge, use a file-write tool in a separate completed tool call to
+write a bounded GraphQL JSON payload to
+`/absolute/project-temp/sous-chef/merge_queue_query.json`, where `/absolute/project-temp`
+stands for the resolved absolute project temp directory. Its `query` requests
+`repository(owner:$owner,name:$repo){mergeQueue(branch:$branch){id}}` and its `variables`
+object supplies the resolved owner, repository, and target branch. Then run the detection
+via `run_cmd` (not a headless session):
 
 ```bash
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) &&
-OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-BRANCH="<base_branch>" &&    # substitute the PR's target branch (e.g. "main", "develop")
-gh api graphql -f query="query {
-  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
-    mergeQueue(branch:\"$BRANCH\") { id }
-  }
-}" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end' || echo false
+gh api graphql --input "/absolute/project-temp/sous-chef/merge_queue_query.json"
 ```
 
-Capture the result as `queue_available`. If `gh api graphql` fails (auth error, network
-error), the `|| echo false` fallback ensures `queue_available` defaults to `"false"`,
-routing to the safe sequential (non-queue) path rather than leaving the variable unset.
+In a later local-processing call, parse the response with
+`jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end'` and capture
+the result as `queue_available`. If `gh api graphql` fails (auth error, network error), set
+`queue_available` to `"false"`, routing to the safe sequential (non-queue) path.
 
 Run this **once per orchestration run**, not per-PR.
 
-After detecting queue availability, also detect auto-merge availability:
+After detecting queue availability, use a file-write tool in a separate completed tool call
+to write `/absolute/project-temp/sous-chef/auto_merge_query.json`, with a parameterized
+read-only query for `repository(owner:$owner,name:$repo){autoMergeAllowed}` and a complete
+`variables` object. Then detect auto-merge availability:
 
 ```bash
-gh api graphql -f query="query {
-  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
-    autoMergeAllowed
-  }
-}" | jq -r '.data.repository.autoMergeAllowed // false' || echo false
+gh api graphql --input "/absolute/project-temp/sous-chef/auto_merge_query.json"
 ```
 
-Capture the result as `auto_merge_available`. If detection fails, default to `"false"`.
+In a later local-processing call, parse `.data.repository.autoMergeAllowed // false` and
+capture the result as `auto_merge_available`. If detection fails, default to `"false"`.
 
 **Note:** All three recipes (`implementation`, `implementation-groups`, `remediation`)
 perform both detections automatically via `check_merge_queue` + `check_auto_merge` —

@@ -1114,7 +1114,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(issue #4479).",
     ),
     "hooks/_command_classification.py": (
-        1900,
+        2050,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
         "interpreter-write detection, protected-path reads, recursive payload "
@@ -1125,7 +1125,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_segment_has_possible_github_exec_token, "
         "_segments_have_possible_github_exec_token, "
         "_segments_have_dispatch_word_exec_risk, and _gh_args_have_bare_help_flag "
-        "must stay adjacent to the tokenizer they share.",
+        "must stay adjacent to the tokenizer they share. Bumped to 2050 so gh issue "
+        "edit's target/flag grammar and statically proven fan-out count remain beside "
+        "the mutation aggregation authority they feed.",
     ),
     "session.py": (
         1060,

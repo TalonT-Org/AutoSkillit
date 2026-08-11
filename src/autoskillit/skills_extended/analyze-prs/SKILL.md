@@ -173,75 +173,25 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
   (1 API call regardless of PR count, instead of 2N sequential REST calls). Chunk into
   batches of 20 PRs to stay within GraphQL complexity limits.
 
+  Initialize `ELIGIBLE_PRS`, `CI_BLOCKED_PRS`, and `REVIEW_BLOCKED_PRS` as empty arrays.
+  Do not output prose between payload-write and GitHub calls or between chunks; immediately
+  proceed to the next required call.
+  For each batch, build one aliased query plus a `variables` object containing the owner,
+  repository, and PR numbers. Use a file-write tool in a separate completed tool call to
+  write the bounded JSON payload to
+  `{{AUTOSKILLIT_TEMP}}/analyze-prs/pr_status_batch_0.json`, changing
+  only the numeric suffix for later chunks (relative to the current working directory).
+  Invoke each chunk as its own tool call, never
+  from inside a shell loop:
+
   ```bash
-  ELIGIBLE_PRS=()
-  CI_BLOCKED_PRS=()      # [{number, title, reason}]
-  REVIEW_BLOCKED_PRS=()  # [{number, title, reason}]
-
-  # Build GraphQL alias query for all PRs in batches of 20
-  ALL_PR_NUMS=($(echo "$ALL_PRS" | jq -r '.[].number'))
-  BATCH_SIZE=20
-  for batch_start in $(seq 0 $BATCH_SIZE $((${#ALL_PR_NUMS[@]} - 1))); do
-    BATCH_NUMS=("${ALL_PR_NUMS[@]:$batch_start:$BATCH_SIZE}")
-
-    QUERY="query { "
-    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
-      NUM="${BATCH_NUMS[$i]}"
-      QUERY="${QUERY} pr${i}: repository(owner: \"${OWNER}\", name: \"${REPO}\") {
-        pullRequest(number: ${NUM}) {
-          number
-          reviews(last: 20) { nodes { state } }
-          commits(last: 1) { nodes { commit { statusCheckRollup {
-            state
-            contexts(last: 100) { nodes { ... on CheckRun { name status conclusion } } }
-          } } } }
-        }
-      }"
-    done
-    QUERY="${QUERY} }"
-    BATCH_RESULT=$(gh api graphql -f query="${QUERY}")
-
-    # Parse per-PR results from BATCH_RESULT
-    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
-      NUM="${BATCH_NUMS[$i]}"
-      PR_TITLE=$(echo "$ALL_PRS" | jq -r --argjson n "$NUM" '.[] | select(.number == $n) | .title')
-      PR_DATA=$(echo "$BATCH_RESULT" | jq --arg key "pr${i}" '.data[$key].pullRequest')
-
-      # --- CI Gate ---
-      FAILING=$(echo "$PR_DATA" | jq '
-        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
-         select(.conclusion != null and
-                .conclusion != "success" and
-                .conclusion != "skipped" and
-                .conclusion != "neutral")] | length')
-      IN_PROGRESS=$(echo "$PR_DATA" | jq '
-        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
-         select(.conclusion == null)] | length')
-
-      if [ "${FAILING:-0}" -gt 0 ] || [ "${IN_PROGRESS:-0}" -gt 0 ]; then
-        REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
-        CI_BLOCKED_PRS+=("{\"number\":${NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-        continue
-      fi
-
-      # --- Review Gate ---
-      CHANGES_REQUESTED=$(echo "$PR_DATA" | jq '
-        [.reviews.nodes |
-         group_by(.author.login)[] |
-         last |
-         select(.state == "CHANGES_REQUESTED")] | length')
-
-      if [ "${CHANGES_REQUESTED:-0}" -gt 0 ]; then
-        REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
-        REVIEW_BLOCKED_PRS+=("{\"number\":${NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-        continue
-      fi
-
-      mapfile -t _pr_entry < <(echo "$ALL_PRS" | jq -c --argjson n "$NUM" '.[] | select(.number == $n)')
-      ELIGIBLE_PRS+=("${_pr_entry[@]}")
-    done
-  done
+  gh api graphql --input "{{AUTOSKILLIT_TEMP}}/analyze-prs/pr_status_batch_0.json"
   ```
+
+  Parse each alias from the response. Preserve the existing gates exactly: add PRs with
+  failed or in-progress checks to `CI_BLOCKED_PRS`; add PRs whose latest review per author
+  is `CHANGES_REQUESTED` to `REVIEW_BLOCKED_PRS`; add all remaining PRs to `ELIGIBLE_PRS`.
+  Process chunks sequentially with the same batch size of 20.
 
   All subsequent steps (overlap matrix, topo sort, PR ordering) operate on `ELIGIBLE_PRS` only.
   `CI_BLOCKED_PRS` and `REVIEW_BLOCKED_PRS` are written to the manifest in Step 5.

@@ -53,48 +53,93 @@ For each non-duplicate ticket body file, check its size:
 
 ## Step 5 — Batch-Create Issues via GraphQL
 
+Do not output prose between payload-write and GitHub calls or between chunks; immediately
+proceed to the next required call.
+
 Resolve repo identity: use `gh repo view --json owner,name` to get the canonical owner and repo name, then fetch `gh api repos/{owner}/{repo} --jq '.node_id'`.
 If this call fails or returns an empty node_id (missing `GH_TOKEN`, wrong remote, insufficient
 permissions), abort immediately with a clear error message: `"Error: could not resolve repo node_id
 — check GH_TOKEN and remote URL. Aborting."` Do not proceed with GraphQL mutations using an empty node_id.
-Resolve label IDs for `audit` and `recipe:implementation` labels (ensure they exist via `gh label create --force`).
-Build batched GraphQL `createIssue` mutations with aliases (`issue0`, `issue1`, ...), chunked at 20 per request.
+Before any label mutation, read the complete repository label inventory with
+`gh label list --limit 1000 --json name,id`. Build the required set from `audit`,
+`recipe:implementation`, and every source-specific label derived from the ticket filenames.
+Determine the genuinely missing definitions. If any are missing, use a file-write tool in a
+separate completed tool call to create one bounded GraphQL JSON payload under the absolute run
+directory. The payload contains one aliased `createLabel` operation per missing label and a
+`variables` object with the repository ID, name, color, and description. Invoke that payload
+once using the exact absolute path written in the prior call; this concrete command illustrates
+the required shape:
 
-```graphql
-mutation {
-  issue0: createIssue(input: {repositoryId: "<REPO_ID>", title: "<TITLE>", body: "<BODY>"}) {
-    issue { number url }
-  }
-  issue1: createIssue(input: {repositoryId: "<REPO_ID>", title: "<TITLE>", body: "<BODY>"}) {
-    issue { number url }
+```bash
+gh api graphql --input "/absolute/audit-run/create_missing_labels.json"
+```
+
+Do not create or rewrite definitions already present. After the mutation, refresh the inventory
+and build an explicit label-name-to-node-ID map. Abort before issue creation if any required
+label still lacks a node ID. When the missing-definition request ran, sleep one second before
+the next mutating call.
+
+Build `createIssue` mutations with aliases (`issue0`, `issue1`, ...), chunked at 20 issues per
+request. Put titles and bodies in the JSON payload's `variables` object rather than interpolating
+them into the GraphQL document. Each alias must return the issue node ID as well as its number
+and URL:
+
+```json
+{
+  "query": "mutation CreateIssues($repositoryId: ID!, $title0: String!, $body0: String!) { issue0: createIssue(input: {repositoryId: $repositoryId, title: $title0, body: $body0}) { issue { id number url } } }",
+  "variables": {
+    "repositoryId": "R_1",
+    "title0": "Validated audit finding",
+    "body0": "Full validated ticket body"
   }
 }
 ```
 
+For every chunk, use a file-write tool in a separate completed tool call to write a bounded JSON
+object under the absolute run directory, then invoke its literal absolute path in a later call:
+
 ```bash
-echo "$MUTATION_JSON" | gh api graphql --input -
+gh api graphql --input "/absolute/audit-run/create_issues_chunk_0.json"
 ```
 
-Sleep 1 second between chunks (per GitHub API discipline).
-Collect created issue URLs and numbers.
+Parse each response by alias. Store both an alias-to-issue-ID map and a ticket-body-file-to-issue-ID
+map alongside the issue number and URL. Abort the chunk on a missing alias, missing `id`, `number`,
+or `url`, or any GraphQL error. Sleep one second between consecutive mutating chunks.
 
 ## Step 6 — Apply Source-Specific Labels
 
-Parse the source from each ticket body filename (`ticket_body_{source}_{N}_{ts}.md`). For each unique
-source, ensure a label exists (e.g., `audit:tests`, `audit:arch`, `audit:cohesion`, etc.).
-Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with aliases.
+Do not output prose between payload-write and GitHub calls or between chunks; immediately
+proceed to the next required call.
 
-```graphql
-mutation {
-  l0: addLabelsToLabelable(input: {labelableId: "<ISSUE_ID>", labelIds: ["<LABEL_ID>"]}) {
-    labelable { ... on Issue { number } }
+Parse the source from each ticket body filename (`ticket_body_{source}_{N}_{ts}.md`). For each unique
+source, look up its source-label node ID in the refreshed inventory map from Step 5 (for example,
+`audit:tests`, `audit:arch`, or `audit:cohesion`). Never construct a label mutation from a label
+name alone. For each created ticket, combine the node IDs for `audit`,
+`recipe:implementation`, and its actual source label with the issue node ID stored by Step 5.
+
+Build aliased `addLabelsToLabelable` operations in chunks of 20. Put every issue ID and label-ID
+list in the payload's `variables` object:
+
+```json
+{
+  "query": "mutation ApplyLabels($issue0: ID!, $labels0: [ID!]!) { l0: addLabelsToLabelable(input: {labelableId: $issue0, labelIds: $labels0}) { labelable { ... on Issue { id number } } } }",
+  "variables": {
+    "issue0": "I_1",
+    "labels0": ["LA_audit", "LA_recipe", "LA_source"]
   }
 }
 ```
 
+For each chunk, use a file-write tool in a separate completed tool call to write the bounded JSON
+payload under the absolute run directory. Before every chunk after the first, run `sleep 1` in its
+own tool call. Invoke the payload in a later call through the exact literal absolute path:
+
 ```bash
-echo "$LABEL_MUTATION" | gh api graphql --input -
+gh api graphql --input "/absolute/audit-run/apply_labels_chunk_0.json"
 ```
+
+Treat a missing issue/label ID, missing alias, or GraphQL error as a chunk failure. Preserve the
+existing one-second pacing between every consecutive mutating GitHub API call.
 
 ## Step 7 — Write Filed Issues Manifest
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -10,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import RetryReason, get_logger
+from autoskillit.core import RetryReason, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
@@ -194,7 +195,6 @@ def _build_prepare_skill_command(
     title: str,
     body: str,
     repo: str,
-    labels: list[str] | None,
     dry_run: bool,
     split: bool,
 ) -> str:
@@ -202,9 +202,6 @@ def _build_prepare_skill_command(
     parts = [f"/prepare-issue\n\nTitle: {title}\n\nBody:\n{body}"]
     if repo:
         parts.append(f"--repo {repo}")
-    if labels:
-        for lbl in labels:
-            parts.append(f"--label {lbl}")
     if dry_run:
         parts.append("--dry-run")
     if split:
@@ -221,6 +218,34 @@ def _parse_prepare_result(response_text: str) -> dict[str, Any]:
         return json.loads("\n".join(block_lines))
     except json.JSONDecodeError:
         return {"success": False, "error": "result block contained invalid JSON"}
+
+
+def _add_labels_result_error(
+    label_result: object,
+    requested_labels: list[str],
+) -> str | None:
+    if not isinstance(label_result, dict):
+        return "GitHub returned a malformed label result"
+    if label_result.get("success") is not True:
+        error = label_result.get("error")
+        return str(error) if error else "GitHub label application failed"
+    returned_labels = label_result.get("labels")
+    if (
+        not isinstance(returned_labels, list)
+        or not all(isinstance(label, str) for label in returned_labels)
+        or not set(requested_labels).issubset(returned_labels)
+    ):
+        return "GitHub returned a malformed label result"
+    return None
+
+
+def _merge_applied_labels(existing: object, additions: list[str]) -> list[str]:
+    ordered = (
+        [label for label in existing if isinstance(label, str)]
+        if isinstance(existing, list)
+        else []
+    )
+    return list(dict.fromkeys([*ordered, *additions]))
 
 
 def _build_enrich_skill_command(
@@ -306,12 +331,21 @@ async def prepare_issue(
             tool_ctx = _get_ctx()
             if tool_ctx.executor is None:
                 return json.dumps({"success": False, "error": "Executor not configured"})
+            github_client = tool_ctx.github_client
 
             if labels:
                 if err := tool_ctx.config.github.check_labels_allowed(labels):
                     return json.dumps({"success": False, "error": err})
+            additional_labels = list(dict.fromkeys(labels or []))
+            if additional_labels and not dry_run and github_client is None:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "GitHub client not configured for additional label application",
+                    }
+                )
 
-            skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
+            skill_command = _build_prepare_skill_command(title, body, repo, dry_run, split)
 
             expected_output_patterns: list[str] = []
             if tool_ctx.output_pattern_resolver:
@@ -373,6 +407,48 @@ async def prepare_issue(
                         success=True,
                         extra_fields=extra,
                     )
+                )
+
+            if additional_labels and not dry_run:
+                issue_url = parsed.get("issue_url")
+                issue_number = parsed.get("issue_number")
+                try:
+                    if not isinstance(issue_url, str) or type(issue_number) is not int:
+                        raise ValueError("result lacks a valid issue URL and integer number")
+                    owner, issue_repo, url_number = _parse_issue_ref(issue_url)
+                    canonical_url = f"https://github.com/{owner}/{issue_repo}/issues/{url_number}"
+                    if issue_url.strip() != canonical_url or url_number != issue_number:
+                        raise ValueError("result issue URL and issue number are inconsistent")
+                except ValueError as exc:
+                    return json.dumps(
+                        _build_headless_error_response(
+                            result,
+                            error=f"Additional labels were not applied: {exc}",
+                            extra_fields=_without_success_key(parsed),
+                        )
+                    )
+
+                await asyncio.sleep(1)
+                assert github_client is not None
+                label_result = await github_client.add_labels(
+                    owner,
+                    issue_repo,
+                    issue_number,
+                    additional_labels,
+                )
+                if error := _add_labels_result_error(label_result, additional_labels):
+                    return json.dumps(
+                        _build_headless_error_response(
+                            result,
+                            error=f"Additional labels were not applied: {error}",
+                            extra_fields=_without_success_key(parsed),
+                        )
+                    )
+
+            if additional_labels:
+                parsed["labels_applied"] = _merge_applied_labels(
+                    parsed.get("labels_applied"),
+                    additional_labels,
                 )
 
             # Block parsed successfully. result.success=True is the authoritative signal —

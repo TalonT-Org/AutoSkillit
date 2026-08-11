@@ -1142,6 +1142,92 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
         assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
 
+    @pytest.mark.parametrize(
+        ("document", "expected_status", "expected_kind"),
+        [
+            (
+                "mutation Batch($ids: [ID!]!, $body: String!) { "
+                "first: addComment(input: {subjectId: $ids, body: $body}) "
+                "{ clientMutationId } second: addComment(input: "
+                "{subjectId: $ids, body: $body}) { clientMutationId } }",
+                GitHubMutationStatus.SINGLE_RESOLVED,
+                GitHubMutationKind.OTHER,
+            ),
+            (
+                "mutation Publish($id: ID!) { review: submitPullRequestReview("
+                "input: {pullRequestReviewId: $id, event: COMMENT}) "
+                "{ clientMutationId } }",
+                GitHubMutationStatus.SINGLE_RESOLVED,
+                GitHubMutationKind.GRAPHQL_REVIEW,
+            ),
+            (
+                "query Nodes($ids: [ID!]!) { nodes(ids: $ids) { id } }",
+                GitHubMutationStatus.NONE,
+                None,
+            ),
+        ],
+        ids=["aliased-mutation", "review-mutation", "read-only-query"],
+    )
+    def test_literal_graphql_input_preserves_document_provenance(
+        self,
+        document: str,
+        expected_status: GitHubMutationStatus,
+        expected_kind: GitHubMutationKind | None,
+        tmp_path: Path,
+    ) -> None:
+        payload = tmp_path / "graphql.json"
+        payload.write_text(
+            json.dumps(
+                {
+                    "query": document,
+                    "variables": {"ids": ["I_1", "I_2"], "body": "[literal] $value"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        analysis = analyze_github_mutations(
+            "gh api graphql --input graphql.json",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is expected_status
+        if expected_kind is None:
+            assert analysis.request_count == 0
+        else:
+            assert analysis.request_count == 1
+            assert analysis.mutations[0].kind is expected_kind
+
+    def test_input_without_query_does_not_authorize_inline_graphql(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / "variables.json").write_text(
+            json.dumps({"variables": {"id": "I_1"}}),
+            encoding="utf-8",
+        )
+
+        analysis = analyze_github_mutations(
+            "gh api graphql --input variables.json "
+            "'-f' 'query=mutation($id: ID!) { deleteIssue(input: {issueId: $id}) "
+            "{ clientMutationId } }'",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+
+    def test_fully_literal_inline_aliased_graphql_mutation_remains_resolved(self) -> None:
+        document = (
+            'mutation { one: deleteIssue(input:{issueId:"I1"}) { clientMutationId } '
+            'two: deleteIssue(input:{issueId:"I2"}) { clientMutationId } }'
+        )
+
+        analysis = analyze_github_mutations(f"gh api graphql -f query={json.dumps(document)}")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
     def test_review_input_file_counts_comments_exactly(self, tmp_path: Path) -> None:
         payload = tmp_path / "review.json"
         payload.write_text(
@@ -1208,6 +1294,58 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
         assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
         assert analysis.request_count == 1
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit 23 34 --add-label bug",
+            (
+                "gh issue edit https://github.com/o/r/issues/23 "
+                "https://github.com/o/r/issues/34 --title fixed"
+            ),
+        ],
+        ids=["numeric-targets", "url-targets"],
+    )
+    def test_issue_edit_counts_each_static_target(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.MULTIPLE
+        assert analysis.request_count == 2
+        assert analysis.mutations[0].request_count == 2
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit 23 --add-label bug --add-label urgent",
+            "gh issue edit --repo o/r 23 --body text --body-file path --milestone v1",
+            "gh issue edit -Ro/r 23 -bbody -Fpath -mv1 -ttitle",
+            "gh issue edit 23 --title=fixed --remove-project=Roadmap",
+            "gh issue edit --repo o/r -- 23",
+        ],
+        ids=["repeated", "separated", "attached-short", "equals", "terminator"],
+    )
+    def test_issue_edit_single_target_flag_grammar_is_one_request(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit --add-label bug",
+            "gh issue edit 23 --title",
+            "gh issue edit $ISSUE --title fixed",
+            "gh issue edit 23 --unknown value",
+            "gh issue edit -- --not-an-issue",
+        ],
+        ids=["zero-targets", "missing-value", "dynamic-target", "unknown-flag", "bad-target"],
+    )
+    def test_issue_edit_ambiguous_grammar_is_unresolved(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
 
     def test_pr_review_stays_pull_review_kind_alongside_widened_verbs(self) -> None:
         analysis = analyze_github_mutations("gh pr review 5 --approve")

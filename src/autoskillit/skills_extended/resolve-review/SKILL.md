@@ -240,16 +240,20 @@ gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate
 ```
 
 Fetch review thread node IDs (needed for thread resolution in Step 6) using
-cursor-based pagination to handle PRs with more than 100 threads:
+cursor-based pagination to handle PRs with more than 100 threads. Before each page, use a
+file-write tool in a separate completed tool call to write the bounded parameterized query
+and its `owner`, `repo`, `number`, and `after` variables object to
+`{{AUTOSKILLIT_TEMP}}/resolve-review/thread_query.json`. Invoke the literal path later:
+
+```json
+{
+  "query": "query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{isResolved comments(first:5){nodes{databaseId body}}}}}}}",
+  "variables": {"owner": "owner", "repo": "repo", "number": 1, "after": null}
+}
+```
 
 ```bash
-# Fetch all pages; repeat with after=$endCursor while hasNextPage is true
-gh api graphql \
-  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:5){nodes{databaseId body}}}}}}}' \
-  -F owner="$owner" \
-  -F repo="$repo" \
-  -F number=$number \
-  -F after=""
+gh api graphql --input "{{AUTOSKILLIT_TEMP}}/resolve-review/thread_query.json"
 ```
 
 Collect all `nodes` across pages into a single list. Continue fetching while
@@ -698,7 +702,7 @@ Batch all thread resolutions into a single GraphQL request using aliased mutatio
 This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
 If `addressed_thread_ids` has more than 50 threads, chunk into batches of 50.
 
-```text
+```bash
 gh api graphql -f query='mutation {
   resolve0: resolveReviewThread(input: {threadId: "PRRT_literal_node_id_0"}) {
     thread { isResolved }

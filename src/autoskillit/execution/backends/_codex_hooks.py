@@ -61,7 +61,6 @@ def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str
             continue
         if "/autoskillit/" not in cmd and "_dispatch.py" not in cmd:
             continue
-        # Check: does the dispatcher target exist?
         import shlex
 
         try:

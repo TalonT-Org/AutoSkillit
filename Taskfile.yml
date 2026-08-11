@@ -3,16 +3,22 @@ version: '3'
 set: ['pipefail']
 
 vars:
-  PYTEST_TMPDIR: '{{if eq OS "linux"}}/dev/shm/pytest-tmp-{{else}}/tmp/pytest-tmp-{{end}}{{ substr 0 8 (sha256sum .ROOT_DIR) }}'
-  PYTEST_CACHEDIR: '{{if eq OS "linux"}}/dev/shm/pytest-cache-{{else}}/tmp/pytest-cache-{{end}}{{ substr 0 8 (sha256sum .ROOT_DIR) }}'
+  PYTEST_TMP_ROOT: '{{if eq OS "linux"}}/dev/shm{{else}}/tmp{{end}}'
+  WORKTREE_HASH: '{{ substr 0 8 (sha256sum .ROOT_DIR) }}'
+  AUTOSKILLIT_UID:
+    sh: id -u
+  PYTEST_RUN_ID:
+    sh: echo "$$-$(date +%s)"
+  PYTEST_GEN_DIR: '{{.PYTEST_TMP_ROOT}}/autoskillit-pytest-{{.AUTOSKILLIT_UID}}/pytest-{{.WORKTREE_HASH}}-{{.PYTEST_RUN_ID}}'
+  PYTEST_TMPDIR: '{{.PYTEST_GEN_DIR}}/tmp'
+  PYTEST_CACHEDIR: '{{.PYTEST_GEN_DIR}}/cache'
 
 tasks:
   _tmpdir-setup:
     internal: true
-    desc: Wipe and recreate pytest tmpdir so each run starts clean (platform-aware)
+    desc: Reap dead-owner pytest generations, then create this generation's unique basetemp (never wipes)
     cmds:
-      - rm -rf {{.PYTEST_TMPDIR}}
-      - mkdir -p {{.PYTEST_TMPDIR}} {{.PYTEST_CACHEDIR}}
+      - python3 scripts/pytest_tmp_lifecycle.py setup --root {{.PYTEST_TMP_ROOT}} --dir {{.PYTEST_TMPDIR}} --cache-dir {{.PYTEST_CACHEDIR}}
 
   test-all:
     desc: Run all tests with parallel workers
@@ -758,24 +764,7 @@ tasks:
     cmds:
       - |
         echo "Cleaning stale /dev/shm directories..."
-
-        # pytest-tmp dirs older than 2 hours
-        PYTEST_COUNT=$(find /dev/shm -maxdepth 1 -name 'pytest-tmp-*' -mmin +120 -type d 2>/dev/null | wc -l)
-        if [ "$PYTEST_COUNT" -gt 0 ]; then
-          find /dev/shm -maxdepth 1 -name 'pytest-tmp-*' -mmin +120 -type d -exec rm -rf {} +
-          echo "  Removed $PYTEST_COUNT stale pytest-tmp dirs (>2h old)"
-        else
-          echo "  No stale pytest-tmp dirs found"
-        fi
-
-        # pytest-cache dirs older than 2 hours
-        CACHE_COUNT=$(find /dev/shm -maxdepth 1 -name 'pytest-cache-*' -mmin +120 -type d 2>/dev/null | wc -l)
-        if [ "$CACHE_COUNT" -gt 0 ]; then
-          find /dev/shm -maxdepth 1 -name 'pytest-cache-*' -mmin +120 -type d -exec rm -rf {} +
-          echo "  Removed $CACHE_COUNT stale pytest-cache dirs (>2h old)"
-        else
-          echo "  No stale pytest-cache dirs found"
-        fi
+        python3 scripts/pytest_tmp_lifecycle.py reap --root /dev/shm
 
         # headless session dirs older than 4 hours
         HEADLESS_COUNT=$(find /dev/shm/autoskillit-sessions -maxdepth 1 -name 'headless-*' -mmin +240 -type d 2>/dev/null | wc -l)

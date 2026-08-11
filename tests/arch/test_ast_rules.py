@@ -187,22 +187,35 @@ def test_tmp_path_is_ram_backed(tmp_path: Path) -> None:
         )
 
 
-def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
-    """tmp_path must contain a .ROOT_DIR-derived hash to prevent cross-worktree collision.
+def test_tmp_and_cache_share_generation_parent(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Tmp and cache paths must be siblings in one invocation-unique generation."""
+    if sys.platform == "linux":
+        cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
+        tmp_root = next(path for path in (tmp_path, *tmp_path.parents) if path.name == "tmp")
+        generation = tmp_root.parent
+        cache_dir = Path(str(request.config.getini("cache_dir"))).resolve()
+        assert cache_dir.parent == generation
+        assert generation.name.startswith(f"pytest-{cwd_hash}-")
 
-    Fails when pytest is invoked with --basetemp=/dev/shm/pytest-tmp (static path).
-    Passes only when Taskfile.yml derives PYTEST_TMPDIR from .ROOT_DIR via the
-    slim-sprig sha256sum template function.
-    """
+
+def test_tmpdir_env_matches_basetemp(tmp_path: Path) -> None:
+    """TMPDIR must resolve to the basetemp ancestor rendered for this invocation."""
+    configured_tmpdir = Path(os.environ["TMPDIR"]).resolve()
+    assert (
+        configured_tmpdir == tmp_path.resolve() or configured_tmpdir in tmp_path.resolve().parents
+    )
+
+
+def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
+    """tmp_path must contain the worktree hash followed by a generation suffix."""
     if sys.platform == "linux":
         cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
         path_str = str(tmp_path)
-        assert f"pytest-tmp-{cwd_hash}" in path_str, (
-            f"tmp_path ({path_str!r}) does not contain the expected worktree hash "
-            f"'{cwd_hash}'. PYTEST_TMPDIR must be derived from .ROOT_DIR. "
-            f"Expected /dev/shm/pytest-tmp-{cwd_hash} as the base. "
-            "Update Taskfile.yml PYTEST_TMPDIR to use a .ROOT_DIR-derived hash suffix "
-            "(use slim-sprig: {{ substr 0 8 (sha256sum .ROOT_DIR) }})."
+        assert f"pytest-{cwd_hash}-" in path_str, (
+            f"tmp_path ({path_str!r}) does not contain invocation-unique worktree identity "
+            f"pytest-{cwd_hash}-. Run tests through the Taskfile test gate."
         )
 
 

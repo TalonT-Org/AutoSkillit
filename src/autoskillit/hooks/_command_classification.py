@@ -1609,8 +1609,9 @@ def _issue_edit_request_count(args: Sequence[str]) -> tuple[int | None, str]:
             i += 1
             continue
         if not options_ended:
-            if token in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS or token in (
-                _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
+            if (
+                token in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS
+                or token in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
             ):
                 if i + 1 >= len(args):
                     return (None, f"gh issue edit flag {token} is missing a value")

@@ -148,13 +148,13 @@ def test_req_imp_003_tools_import_namespace(path: Path) -> None:
             "autoskillit.config",
             "autoskillit.fleet",
             "autoskillit.hook_registry",
-            "autoskillit.hooks",
         }
     )
+    exact_allowed = frozenset({"autoskillit.hooks"})
     violations: list[str] = []
     for mod, _in_tc in _parse_imports(path):
         top2 = ".".join(mod.split(".")[:2])
-        if top2 not in allowed and mod != "autoskillit":
+        if top2 not in allowed and mod not in exact_allowed and mod != "autoskillit":
             violations.append(mod)
     assert not violations, f"REQ-IMP-003 violations in {path.name}:\n" + "\n".join(violations)
 

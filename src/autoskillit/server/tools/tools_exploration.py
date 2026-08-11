@@ -21,9 +21,7 @@ from autoskillit.core import (
 from autoskillit.core import (
     session_type as _resolve_session_type,
 )
-from autoskillit.hooks._exploration_request_record import (
-    consume_exploration_request_record,
-)
+from autoskillit.hooks import consume_exploration_request_record
 from autoskillit.pipeline import (
     EXPLORER_INELIGIBLE_SESSION_TYPES,
     CapabilityResolutionStatus,

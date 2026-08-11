@@ -11,7 +11,11 @@ def read_tolerant_session_index_rows(index_path: Path) -> list[dict[str, Any]]:
     if not index_path.is_file():
         return []
     rows: list[dict[str, Any]] = []
-    for line in index_path.read_text(encoding="utf-8").splitlines():
+    for raw_line in index_path.read_bytes().splitlines():
+        try:
+            line = raw_line.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
         if not line.strip():
             continue
         try:

@@ -213,6 +213,22 @@ def test_ordinary_body_must_contain_exact_closing_url(monkeypatch, tmp_path, con
 
 
 @pytest.mark.parametrize(
+    "closing_line",
+    [
+        f"Fixes {ISSUE_URL}",
+        f"Resolves: {ISSUE_URL}",
+        f"cLoSeD {ISSUE_URL}",
+    ],
+)
+def test_ordinary_accepts_supported_closing_keywords(monkeypatch, tmp_path, closing_line):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, closing_line)
+    _ordinary_metadata(body)
+
+    assert _run_hook(_event(f"gh pr create --body-file {body}"), monkeypatch) == ""
+
+
+@pytest.mark.parametrize(
     "urls",
     [
         [ISSUE_URL],

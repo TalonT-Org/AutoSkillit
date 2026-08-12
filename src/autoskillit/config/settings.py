@@ -249,6 +249,10 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
     from autoskillit.core import Utf8ByteLimit
 
     if target_type is Utf8ByteLimit:
+        if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+            raise ConfigSchemaError(
+                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
+            )
         try:
             return Utf8ByteLimit(int(value))
         except (TypeError, ValueError) as exc:

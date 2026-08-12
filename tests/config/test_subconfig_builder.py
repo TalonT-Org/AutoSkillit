@@ -11,6 +11,7 @@ from autoskillit.config.settings import (
     _build_subconfig,
     _coerce_value,
 )
+from autoskillit.core import Utf8ByteLimit
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
@@ -27,6 +28,14 @@ def test_coerce_value_int() -> None:
     with pytest.raises(Exception) as exc_info:
         _coerce_value("abc", int, "x.y")
     assert "x.y" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("value", [True, False, 1.5])
+def test_coerce_value_utf8_byte_limit_rejects_non_integer_yaml_values(
+    value: object,
+) -> None:
+    with pytest.raises(Exception, match="must be a positive integer"):
+        _coerce_value(value, Utf8ByteLimit, "output_budget.response_max_bytes")
 
 
 def test_coerce_value_float() -> None:

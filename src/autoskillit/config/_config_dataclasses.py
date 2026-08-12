@@ -16,6 +16,7 @@ from autoskillit.core import (
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     IssueLabelState,
     OutputFormat,
+    Utf8ByteLimit,
     get_logger,
 )
 
@@ -384,8 +385,8 @@ class OutputBudgetConfig:
     inline_max_chars: int = 5000
     head_chars: int = 2500
     tail_chars: int = 2500
-    response_max_bytes: int = RECIPE_RESPONSE_DEFAULT_BYTES
-    page_max_bytes: int | None = RECIPE_RESPONSE_MAX_UTF8_BYTES
+    response_max_bytes: Utf8ByteLimit = Utf8ByteLimit(RECIPE_RESPONSE_DEFAULT_BYTES)
+    page_max_bytes: Utf8ByteLimit | None = Utf8ByteLimit(RECIPE_RESPONSE_MAX_UTF8_BYTES)
     guard_enabled: bool = True
     shell_max_inline_bytes: int = 12_000
     capture_capacity: dict[str, int] | None = None

@@ -71,7 +71,7 @@ class RecipeSectionRequestState:
     def __post_init__(self) -> None:
         """Reject bounds that cannot contain every mandatory failure response."""
         if (
-            type(self.recipe_section_bound_bytes) is not int
+            not isinstance(self.recipe_section_bound_bytes, int)
             or self.recipe_section_bound_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES
         ):
             raise ValueError(

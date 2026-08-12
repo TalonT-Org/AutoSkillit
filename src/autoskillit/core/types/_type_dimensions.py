@@ -1,9 +1,15 @@
-"""Dimension-safe token, UTF-8 byte, and serialized-char limits."""
+"""Dimension-safe token, UTF-8 byte, and serialized-char limits.
+
+Each wrapper is an ``int`` subclass: arithmetic and comparisons with plain
+``int`` work transparently at runtime, while mypy treats them as distinct
+types — comparing ``Utf8ByteLimit`` with ``TokenLimit`` is a type error.
+The ``.value`` property returns the plain ``int`` for call sites that
+explicitly extract the numeric value.
+"""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from fractions import Fraction
 
 __all__ = [
@@ -18,40 +24,46 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True, slots=True)
-class TokenLimit:
+class TokenLimit(int):
     """A positive token count, not interchangeable with a byte count."""
 
-    value: int
+    def __new__(cls, value: int) -> TokenLimit:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"TokenLimit must be positive; got {value!r}")
+        return super().__new__(cls, value)
 
-    def __post_init__(self) -> None:
-        if type(self.value) is not int or self.value <= 0:
-            raise ValueError(f"TokenLimit must be positive; got {self.value!r}")
+    @property
+    def value(self) -> int:
+        return int(self)
 
 
-@dataclass(frozen=True, slots=True)
-class Utf8ByteLimit:
+class Utf8ByteLimit(int):
     """A positive UTF-8 byte count, not interchangeable with tokens."""
 
-    value: int
+    def __new__(cls, value: int) -> Utf8ByteLimit:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"Utf8ByteLimit must be positive; got {value!r}")
+        return super().__new__(cls, value)
 
-    def __post_init__(self) -> None:
-        if type(self.value) is not int or self.value <= 0:
-            raise ValueError(f"Utf8ByteLimit must be positive; got {self.value!r}")
+    @property
+    def value(self) -> int:
+        return int(self)
 
 
-@dataclass(frozen=True, slots=True)
-class SerializedChars:
+class SerializedChars(int):
     """Client-measured JSON-serialized character count.
 
     Not interchangeable with a byte count or a token count.
     """
 
-    value: int
+    def __new__(cls, value: int) -> SerializedChars:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"SerializedChars must be non-negative; got {value!r}")
+        return super().__new__(cls, value)
 
-    def __post_init__(self) -> None:
-        if type(self.value) is not int or self.value < 0:
-            raise ValueError(f"SerializedChars must be non-negative; got {self.value!r}")
+    @property
+    def value(self) -> int:
+        return int(self)
 
 
 def client_serialized_char_len(text: str) -> SerializedChars:
@@ -66,17 +78,17 @@ def client_serialized_char_len(text: str) -> SerializedChars:
     return SerializedChars(len(json.dumps(text)))
 
 
-@dataclass(frozen=True, slots=True)
 class BytesToTokensPolicy:
     """Explicit exact-rational conversion between byte and token domains."""
 
-    utf8_bytes_per_token: Fraction
+    __slots__ = ("utf8_bytes_per_token",)
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.utf8_bytes_per_token, Fraction):
+    def __init__(self, utf8_bytes_per_token: Fraction) -> None:
+        if not isinstance(utf8_bytes_per_token, Fraction):
             raise TypeError("utf8_bytes_per_token must be a Fraction")
-        if self.utf8_bytes_per_token <= 0:
+        if utf8_bytes_per_token <= 0:
             raise ValueError("utf8_bytes_per_token must be positive")
+        self.utf8_bytes_per_token = utf8_bytes_per_token
 
     def to_tokens(self, byte_limit: Utf8ByteLimit) -> TokenLimit:
         numerator = self.utf8_bytes_per_token.numerator

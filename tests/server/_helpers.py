@@ -94,9 +94,14 @@ class McpCallCounter:
 
     calls: list[tuple[str, str | None]] = field(default_factory=list)
     delivery_mode: str | None = None
+    responses: list[str] = field(default_factory=list)
 
-    def record(self, tool_name: str, initialization_id: str | None = None) -> None:
+    def record(
+        self, tool_name: str, initialization_id: str | None = None, response: str | None = None
+    ) -> None:
         self.calls.append((tool_name, initialization_id))
+        if response is not None:
+            self.responses.append(response)
 
     def __len__(self) -> int:
         return len(self.calls)
@@ -118,7 +123,6 @@ async def simulate_session_start(
     monkeypatch.setattr(tool_ctx, "kitchen_open_state", closed_kitchen_open_state())
     monkeypatch.setattr(tool_ctx, "recipe_initialization_state", NoActiveRecipe())
     counter = McpCallCounter()
-    counter.record("open_kitchen")
     project_root = Path(__file__).resolve().parents[2]
     try:
         envelope = await _open_kitchen_patched(
@@ -137,6 +141,7 @@ async def simulate_session_start(
             f"recipe delivery is unavailable under the active feature scope: {recipe_name}"
         )
     assert envelope.get("success") is True, envelope
+    counter.record("open_kitchen", response=json.dumps(envelope))
     if envelope.get("delivery_bound_spill") is True:
         capabilities = BACKEND_REGISTRY[backend_name]().capabilities
         counter.delivery_mode = (

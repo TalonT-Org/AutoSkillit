@@ -1,9 +1,9 @@
 """Type-safety: SerializedChars and Utf8ByteLimit are nominally distinct.
 
-Rather than depending on mypy availability in the test runner (it may not be
-installed in the venv), this test verifies the runtime property that makes
-unit mixing fail: the frozen dataclasses are not interchangeable at runtime
-either — min() raises TypeError because they don't implement __lt__.
+Both are ``int`` subclasses — runtime arithmetic works transparently.
+Cross-unit misuse is caught by mypy (static type checking). This test
+verifies the runtime properties: distinct types, correct `.value`,
+and construction-time validation.
 """
 
 from __future__ import annotations
@@ -13,20 +13,18 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_serialized_chars_and_utf8_bytes_are_not_comparable() -> None:
-    """SerializedChars and Utf8ByteLimit cannot be compared or substituted."""
+def test_serialized_chars_and_utf8_bytes_are_distinct_int_subclasses() -> None:
+    """SerializedChars and Utf8ByteLimit are distinct types (same int base)."""
     from autoskillit.core import SerializedChars, Utf8ByteLimit
 
     chars = SerializedChars(100)
     bytes_ = Utf8ByteLimit(100)
 
-    # Same numeric value, but distinct types — min() must fail
-    with pytest.raises(TypeError):
-        min(chars, bytes_)
-
-    # Direct comparison must also fail
-    with pytest.raises(TypeError):
-        chars < bytes_  # type: ignore[operator]  # noqa: B015
+    # Same numeric value, distinct types — both are int subclasses
+    assert type(chars) is not type(bytes_)
+    assert isinstance(chars, int) and isinstance(bytes_, int)
+    assert chars == bytes_  # same numeric value via int comparison
+    assert chars.value == bytes_.value == 100
 
 
 def test_serialized_chars_rejects_negative() -> None:

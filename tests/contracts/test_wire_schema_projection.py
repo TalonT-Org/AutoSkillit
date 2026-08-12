@@ -62,6 +62,43 @@ def test_finalized_wire_payload_excludes_projection(
     assert validated > 0
 
 
+def test_implementation_wire_reduction_from_projection_removal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stage F size reduction pin: removing finalized_recipe_projection from the
+    wire saves approximately 200KB.
+
+    Measured by comparing the persisted artifact (retains the projection) against
+    the delivered wire payload (excludes it). The difference must be at least
+    150KB (projection is ~205KB; tolerance accounts for JSON-key overhead).
+    """
+    impl_path = next(p for p in BUNDLED_RECIPE_PATHS if p.stem == "implementation")
+    result = compile_bounded_page_plan(
+        impl_path,
+        "open_kitchen",
+        "claude-code",
+        temp_dir=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+    wire_size = len(json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    # Read the persisted artifact (includes the projection)
+    payload_paths = list((tmp_path / "recipe-delivery").rglob("payload.json"))
+    assert payload_paths, "no persisted recipe artifact found"
+    persisted = json.loads(payload_paths[0].read_text(encoding="utf-8"))
+    assert "finalized_recipe_projection" in persisted
+    persisted_size = len(
+        json.dumps(persisted, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+
+    reduction_bytes = persisted_size - wire_size
+    assert reduction_bytes >= 150_000, (
+        f"Expected at least 150KB reduction from projection removal, "
+        f"got {reduction_bytes:,} bytes (persisted={persisted_size:,}, wire={wire_size:,})"
+    )
+
+
 @pytest.mark.parametrize("recipe_path", BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
 def test_persisted_artifact_retains_projection(
     recipe_path: Path,

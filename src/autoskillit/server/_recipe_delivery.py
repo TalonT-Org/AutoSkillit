@@ -880,6 +880,36 @@ def _attested_render(
     )
 
 
+# Context-owned host client attestation — populated once by
+# initialize_host_client_attestation() (called from make_context()) and
+# consumed by finalize_recipe_delivery() when no explicit attestation
+# argument is supplied. Tests that monkeypatch env vars can either pass
+# host_client_attestation explicitly or call initialize_host_client_attestation()
+# after the monkeypatch to refresh.
+_CONTEXT_HOST_CLIENT_ATTESTATION: HostClientAttestation | None = None
+_CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED: bool = False
+
+
+def initialize_host_client_attestation() -> HostClientAttestation | None:
+    """Read the launcher-injected host client attestation once at startup.
+
+    Called by ``make_context()`` — the composition root — to read the env
+    exactly once. Subsequent calls to ``finalize_recipe_delivery`` consume
+    the cached value without rereading ``os.environ``.
+    """
+    global _CONTEXT_HOST_CLIENT_ATTESTATION, _CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED  # noqa: PLW0603
+    _CONTEXT_HOST_CLIENT_ATTESTATION = _resolve_host_client_attestation()
+    _CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED = True
+    return _CONTEXT_HOST_CLIENT_ATTESTATION
+
+
+def get_context_host_client_attestation() -> HostClientAttestation | None:
+    """Return the context-owned attestation, or read from env as fallback."""
+    if _CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED:
+        return _CONTEXT_HOST_CLIENT_ATTESTATION
+    return _resolve_host_client_attestation()
+
+
 def _resolve_host_client_attestation() -> HostClientAttestation | None:
     """Read the launcher-injected host client attestation from the environment.
 
@@ -890,9 +920,6 @@ def _resolve_host_client_attestation() -> HostClientAttestation | None:
     malformed values conservatively resolve to None, which routes recipe
     delivery decisions to ``RecipeDeliveryMode.ENVELOPE`` rather than trusting
     an unattested per-call claim.
-
-    Not cached: tests monkeypatch env vars and a frozen cache would poison
-    subsequent test cases.
     """
     raw_gate_tokens = os.environ.get(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS)
     raw_meta_support = os.environ.get(AUTOSKILLIT_ATTESTED_META_SUPPORT)
@@ -951,7 +978,7 @@ def finalize_recipe_delivery(
 ) -> FinalizedRecipeResponse:
     """Persist, decide, shape, and transactionally reserve one recipe response."""
     if host_client_attestation is None:
-        host_client_attestation = _resolve_host_client_attestation()
+        host_client_attestation = get_context_host_client_attestation()
     surface_definition = RECIPE_DELIVERY_SURFACE_REGISTRY[surface]
     candidate_capabilities = (
         getattr(tool_ctx.backend, "capabilities", None) if tool_ctx.backend is not None else None

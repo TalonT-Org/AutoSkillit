@@ -134,8 +134,8 @@ def test_build_protected_ids_exported_from_fleet(tmp_path: Path) -> None:
     assert fn(tmp_path) == frozenset()
 
 
-def test_build_protected_ids_stale_schema_version_skipped(tmp_path: Path) -> None:
-    """PROT_10: State file with stale schema_version is skipped, not protected."""
+def test_build_protected_ids_prior_schema_version_remains_protected(tmp_path: Path) -> None:
+    """PROT_10: The immediately prior supported schema remains protected."""
     dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
     dispatches_dir.mkdir(parents=True, exist_ok=True)
     stale_payload = {
@@ -145,4 +145,4 @@ def test_build_protected_ids_stale_schema_version_skipped(tmp_path: Path) -> Non
     }
     (dispatches_dir / "stale.json").write_text(json.dumps(stale_payload), encoding="utf-8")
     result = build_protected_campaign_ids(tmp_path)
-    assert result == frozenset()
+    assert result == frozenset({"stale-campaign"})

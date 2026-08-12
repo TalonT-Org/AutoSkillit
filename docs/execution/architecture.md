@@ -239,6 +239,17 @@ uses the inherited slave as controlling terminal, duplicates standard
 streams, and immediately execs Codex. It does not perform a second session
 transition.
 
+Managed async, managed sync, and active-cook launches receive group authority
+only from the controller that atomically spawned the direct child as a fresh
+group leader. While that leader remains unreaped, it fences PGID reuse and the
+controller may perform bounded TERM/KILL settlement before the sole reap.
+Persisted PID/PGID values and recovery scans are observation-only: they can
+target only identities and ancestry they positively establish and cannot
+reconstruct group authority. Cleanup completeness means the requested bounded
+observation finished without survivors or denied operations; it is not a
+permanent group-emptiness proof, and descendants that leave the process group
+are outside the owned-group scope.
+
 Interactive Codex configs deliberately use
 `HookTrustPolicy.REVIEW_EACH_SESSION`, so fresh, resumed, and reload commands
 do not bypass hook review. Automated skill and food-truck builders retain

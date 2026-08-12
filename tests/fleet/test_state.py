@@ -54,7 +54,7 @@ class TestInitialState:
 
         state = read_state(sp)
         assert state is not None
-        assert state.schema_version == 11
+        assert state.schema_version == 12
         assert state.campaign_id == "cid-1"
         assert state.campaign_name == "my-campaign"
         assert state.manifest_path == "/m.yaml"
@@ -1337,6 +1337,22 @@ class TestBuildProtectedCampaignIdsSchemaValidation:
         result = build_protected_campaign_ids(tmp_path)
         assert "cid-current" in result
 
+    def test_build_protected_campaign_ids_includes_prior_version(self, tmp_path: Path) -> None:
+        dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
+        dispatches_dir.mkdir(parents=True)
+        (dispatches_dir / "cid-prior.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION - 1,
+                    "campaign_id": "cid-prior",
+                    "dispatches": [{"name": "d1", "status": "running"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert "cid-prior" in build_protected_campaign_ids(tmp_path)
+
 
 class TestReadAllCampaignCapturesSchemaValidation:
     def test_read_all_campaign_captures_skips_stale_version(self, tmp_path: Path) -> None:
@@ -1382,6 +1398,24 @@ class TestReadAllCampaignCapturesSchemaValidation:
         )
         result = read_all_campaign_captures(dispatches_dir, "cid-current")
         assert result == {"key": "value"}
+
+    def test_read_all_campaign_captures_includes_prior_version(self, tmp_path: Path) -> None:
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir()
+        (dispatches_dir / "cid-prior.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION - 1,
+                    "campaign_id": "cid-prior",
+                    "started_at": 0.0,
+                    "dispatches": [{"name": "d1", "status": "success"}],
+                    "captured_values": {"key": "prior"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert read_all_campaign_captures(dispatches_dir, "cid-prior") == {"key": "prior"}
 
 
 class TestCampaignEndedAt:

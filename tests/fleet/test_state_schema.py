@@ -80,8 +80,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
         assert dispatch_raw["issue_url"] == "https://github.com/org/repo/issues/42"
 
-    def test_schema_version_is_11(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 11
+    def test_schema_version_is_12(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 12
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""

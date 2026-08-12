@@ -211,7 +211,7 @@ def test_outcome_constructors_require_provenance() -> None:
         )
 
 
-def test_dispatch_record_persists_provenance_in_schema_v10() -> None:
+def test_dispatch_record_persists_provenance_in_current_schema() -> None:
     tracker = DispatchProvenanceTracker(operation_id="operation-7")
     tracker.start(
         DispatchEffectName.DISPATCH_ALLOCATION,
@@ -230,6 +230,39 @@ def test_dispatch_record_persists_provenance_in_schema_v10() -> None:
 
     restored = DispatchRecord.from_dict(record.to_dict())
 
-    assert FLEET_STATE_SCHEMA_VERSION == 11
+    assert FLEET_STATE_SCHEMA_VERSION == 12
     assert restored.effect_provenance["operation_id"] == "operation-7"
     assert restored.effect_provenance["retry_disposition"] == "resume_by_identity"
+
+
+def test_dispatch_record_normalizes_legacy_cleanup_evidence_fail_closed() -> None:
+    raw = DispatchRecord(
+        name="dispatch",
+        effect_provenance={
+            "operation_id": "operation-legacy",
+            "local_cleanup": {
+                "root_pid": 42,
+                "survivor_pids": [],
+                "access_denied_pids": [],
+                "complete": True,
+            },
+        },
+    ).to_dict()
+
+    restored = DispatchRecord.from_dict(raw)
+
+    cleanup = restored.effect_provenance["local_cleanup"]
+    assert cleanup["observation_complete"] is False
+    assert cleanup["complete"] is False
+
+
+def test_dispatch_record_preserves_current_cleanup_evidence() -> None:
+    cleanup = ProcessCleanupResult(root_pid=42, observation_complete=True).to_dict()
+    raw = DispatchRecord(
+        name="dispatch",
+        effect_provenance={"operation_id": "operation-current", "local_cleanup": cleanup},
+    ).to_dict()
+
+    restored = DispatchRecord.from_dict(raw)
+
+    assert restored.effect_provenance["local_cleanup"] == cleanup

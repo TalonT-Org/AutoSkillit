@@ -90,7 +90,7 @@ class ProcessCleanupResult:
 
     @property
     def complete(self) -> bool:
-        """Whether every observed local process was confirmed absent."""
+        """Whether bounded observation completed and every verified target is absent."""
         return self.observation_complete and not self.survivor_pids and not self.access_denied_pids
 
     def to_dict(self) -> dict[str, object]:

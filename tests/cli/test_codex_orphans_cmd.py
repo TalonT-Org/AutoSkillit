@@ -109,7 +109,13 @@ def test_run_reap_output_json_shape(
     monkeypatch.setattr(
         execution_mod,
         "reap_orphaned_codex_processes",
-        lambda scanned: [CodexOrphanReapResult(scanned[0].pid, "terminated")],
+        lambda scanned: [
+            CodexOrphanReapResult(
+                scanned[0].pid,
+                "terminated",
+                observation_complete=True,
+            )
+        ],
     )
 
     run_codex_orphans(reap=True, output_json=True)
@@ -119,6 +125,7 @@ def test_run_reap_output_json_shape(
         {
             "pid": 1001,
             "action": "terminated",
+            "observation_complete": True,
             "survivor_pids": [],
             "access_denied_pids": [],
         }
@@ -135,8 +142,13 @@ def test_run_reap_invokes_reaper_and_reports(
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
 
     fake_results = [
-        CodexOrphanReapResult(2001, "terminated"),
-        CodexOrphanReapResult(2002, "incomplete", survivor_pids=(3001,)),
+        CodexOrphanReapResult(2001, "terminated", observation_complete=True),
+        CodexOrphanReapResult(
+            2002,
+            "incomplete",
+            observation_complete=True,
+            survivor_pids=(3001,),
+        ),
         CodexOrphanReapResult(2003, "skipped"),
     ]
     received: list[object] = []
@@ -160,3 +172,22 @@ def test_run_reap_invokes_reaper_and_reports(
     assert out.index("orphan: pid=2003") < out.index("skipped pid 2003")
     assert "exited" not in out
     assert "caused" not in out
+
+
+def test_run_reap_reports_observation_incomplete_without_pid_lists(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import autoskillit.execution as execution_mod
+    from autoskillit.cli._codex_orphans import run_codex_orphans
+
+    orphan = _make_orphan(2004)
+    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: [orphan])
+    monkeypatch.setattr(
+        execution_mod,
+        "reap_orphaned_codex_processes",
+        lambda _scanned: [CodexOrphanReapResult(2004, "incomplete")],
+    )
+
+    run_codex_orphans(reap=True)
+
+    assert "incomplete pid 2004 (observation incomplete)" in capsys.readouterr().out

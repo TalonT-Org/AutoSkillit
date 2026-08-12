@@ -56,6 +56,24 @@ class TestCheckFleetStateSchema:
         assert "drift" in result.message.lower()
         assert "stale" in result.message
 
+    def test_check_fleet_state_schema_accepts_prior_supported_version(
+        self, tmp_path: Path
+    ) -> None:
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir()
+        (dispatches_dir / "campaign_prior.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION - 1,
+                    "campaign_id": "prior",
+                    "dispatches": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert _check_fleet_state_schema(dispatches_dir).severity.name == "OK"
+
     def test_check_fleet_state_schema_ok_on_empty_dir(self, tmp_path: Path) -> None:
         dispatches_dir = tmp_path / "dispatches"
         dispatches_dir.mkdir()

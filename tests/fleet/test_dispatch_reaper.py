@@ -10,6 +10,7 @@ from unittest.mock import patch
 import psutil
 import pytest
 
+from autoskillit.core import ProcessCleanupResult
 from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
@@ -83,6 +84,31 @@ class TestReap:
         assert state is not None
         assert state.dispatches[0].status == DispatchStatus.INTERRUPTED
         assert state.dispatches[0].reason == "reaped_orphan"
+
+    def test_reap_leaves_incomplete_cleanup_for_reconciliation(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+        )
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch(
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
+                return_value=1000,
+            ),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch(
+                "autoskillit.fleet._dispatch_reaper.kill_process_tree",
+                return_value=ProcessCleanupResult(root_pid=12345),
+            ),
+        ):
+            _reap(sp)
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+        assert state.dispatches[0].reason == ""
 
     def test_reap_skips_recycled_pid(self, tmp_path: Path) -> None:
         sp = _make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)

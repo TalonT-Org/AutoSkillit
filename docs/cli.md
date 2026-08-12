@@ -145,10 +145,14 @@ With `--reap`, each orphan is re-verified immediately before signaling: starttim
 ticks must still match and fd 0 must still be a deleted pty. Termination uses
 SIGTERM→SIGKILL process-tree escalation via `kill_process_tree`. Per-target
 outcomes:
-- **terminated** — root process confirmed gone after escalation
+- **terminated** — bounded observation completed and every verified target is absent
 - **skipped** — no longer matches the orphan signature (state-agnostic)
-- **incomplete** — escalation left survivors or hit access-denied pids (carried on
-  the result)
+- **incomplete** — escalation left survivors, hit access-denied PIDs, or could
+  not complete the bounded observation even when both PID lists are empty
+
+JSON reap entries include `observation_complete` in addition to the action,
+survivor PIDs, and access-denied PIDs. Text output renders `observation incomplete`
+explicitly when that flag is false.
 
 Reap is signal-only: persisted `~/.codex/sessions` rollouts are never deleted and
 remain eligible for `codex resume`. Flushing of an in-flight turn to disk is not

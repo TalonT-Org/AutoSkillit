@@ -249,15 +249,18 @@ async def async_kill_process_tree(
     pid: int,
     timeout: float = 2.0,
 ) -> ProcessCleanupResult:
-    """Run observation-only PID-tree cleanup without blocking the event loop."""
+    """Run observation-only PID-tree cleanup without group authority or event-loop blocking."""
     return await anyio.to_thread.run_sync(kill_process_tree, pid, timeout)
 
 
 class OwnedProcessGroup:
     """Live capability for a freshly spawned, unreaped direct-child group leader.
 
-    The capability is controller-local and ends permanently when an ordinary
-    poll or wait reaps the leader.  Stored PIDs and PGIDs cannot recreate it.
+    The spawn-bound capability is controller-local and ends permanently when
+    an ordinary poll or wait reaps the leader. Stored PIDs and PGIDs cannot
+    recreate it. Settlement observes only the bounded group scope while the
+    direct leader prevents PGID reuse; descendants that escape the group are
+    outside that guarantee.
     """
 
     def __init__(

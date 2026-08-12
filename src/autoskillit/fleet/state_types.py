@@ -22,7 +22,7 @@ from autoskillit.core import (
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 11
+FLEET_STATE_SCHEMA_VERSION = 12
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -352,6 +352,19 @@ _INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
 )
 
 
+def _normalize_effect_provenance(raw: object) -> dict[str, Any]:
+    """Normalize legacy persisted cleanup evidence to the fail-closed shape."""
+    if not isinstance(raw, Mapping):
+        raise TypeError("effect_provenance must be an object")
+    local_cleanup_raw = raw.get("local_cleanup")
+    if not isinstance(local_cleanup_raw, Mapping) or "observation_complete" in local_cleanup_raw:
+        return dict(raw)
+    local_cleanup = dict(local_cleanup_raw)
+    local_cleanup["observation_complete"] = False
+    local_cleanup["complete"] = False
+    return {**raw, "local_cleanup": local_cleanup}
+
+
 @dataclass
 class DispatchRecord:
     """Runtime state of a single dispatch within a campaign.
@@ -553,7 +566,7 @@ class DispatchRecord:
             backend_authority=backend_authority,
             launch_contract=launch_contract,
             launch_contract_digest=launch_digest,
-            effect_provenance=d.get("effect_provenance", {}),
+            effect_provenance=_normalize_effect_provenance(d.get("effect_provenance", {})),
             managed_lineage_ref=managed_lineage_ref,
         )
 

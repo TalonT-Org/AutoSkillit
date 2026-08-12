@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from autoskillit.core import (
@@ -17,6 +19,15 @@ from autoskillit.core.types._type_recipe_delivery import (
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _PAYLOAD_SHA = "sha256:" + "a" * 64
+
+
+@pytest.mark.parametrize("gate_tokens", [0, -1, True, 1.5])
+def test_host_client_attestation_rejects_invalid_gate_tokens(gate_tokens: object) -> None:
+    with pytest.raises(ValueError, match="must be a positive integer"):
+        HostClientAttestation(
+            attested_client_gate_tokens=cast(int, gate_tokens),
+            annotation_support=True,
+        )
 
 
 def test_annotation_aware_inline_when_attested_and_fits() -> None:

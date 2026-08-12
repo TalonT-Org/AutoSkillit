@@ -281,6 +281,14 @@ class HostClientAttestation:
     attested_client_gate_tokens: int
     annotation_support: bool
 
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.attested_client_gate_tokens, bool)
+            or not isinstance(self.attested_client_gate_tokens, int)
+            or self.attested_client_gate_tokens <= 0
+        ):
+            raise ValueError("attested_client_gate_tokens must be a positive integer")
+
 
 @dataclass(frozen=True, slots=True)
 class RecipeDeliveryDecision:

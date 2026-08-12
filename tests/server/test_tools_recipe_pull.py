@@ -58,6 +58,7 @@ from autoskillit.server._recipe_artifact import (
     _canonical_payload,
     _generation_dir,
     _generation_from_payload,
+    _safe_component,
 )
 from autoskillit.server._recipe_delivery import (
     RECIPE_BODY_END,
@@ -91,6 +92,16 @@ from autoskillit.server.tools.tools_recipe import get_recipe_section
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _NOW = 1_800_000_000
+
+
+def test_safe_component_bounds_expanded_identity() -> None:
+    value = "é" * 1_000
+
+    component = _safe_component(value)
+
+    assert len(component) == 255
+    assert component == _safe_component(value)
+    assert component != _safe_component(value + "x")
 
 
 def _test_flow_generation(payload: dict[str, object]) -> RecipeFlowGeneration:

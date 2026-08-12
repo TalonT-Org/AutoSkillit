@@ -338,14 +338,20 @@ def _safe_component(value: str) -> str:
         return "~"
     if value in {".", ".."}:
         raise RecipeArtifactError("unsafe recipe artifact path component")
+    value_bytes = value.encode("utf-8")
     encoded: list[str] = []
-    for byte in value.encode("utf-8"):
+    for byte in value_bytes:
         character = chr(byte)
         if character.isascii() and (character.isalnum() or character in "._-"):
             encoded.append(character)
         else:
             encoded.append(f"~{byte:02x}")
-    return "".join(encoded)
+    component = "".join(encoded)
+    if len(component) <= 255:
+        return component
+    digest = hashlib.sha256(value_bytes).hexdigest()
+    prefix_length = 255 - len(digest) - 1
+    return f"{component[:prefix_length]}~{digest}"
 
 
 def _artifact_root(temp_dir: Path) -> Path:

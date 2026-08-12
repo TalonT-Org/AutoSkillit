@@ -136,9 +136,17 @@ def test_launcher_attestation_env_reaches_server_context_unchanged(
     """
     from packaging.version import Version
 
+    import autoskillit.server._recipe_delivery_helpers as _recipe_delivery_helpers
     from autoskillit.execution.backends.claude import _claude_host_attestation_env
     from autoskillit.server._recipe_delivery import (
         initialize_host_client_attestation,
+    )
+
+    monkeypatch.setattr(_recipe_delivery_helpers, "_CONTEXT_HOST_CLIENT_ATTESTATION", None)
+    monkeypatch.setattr(
+        _recipe_delivery_helpers,
+        "_CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED",
+        False,
     )
 
     # Get what the launcher would inject for a version that supports annotations

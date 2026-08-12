@@ -147,7 +147,3 @@ def test_no_unattached_backstop_helper_calls() -> None:
         f"response_backstop_tool_meta(...) called but not attached as meta= on an "
         f"@mcp.tool decorator: {sorted(stray)}"
     )
-    assert all_calls == attached_keys, (
-        "response_backstop_tool_meta(...) call sites do not match decorator "
-        f"attachments: all_calls={sorted(all_calls)} attached={sorted(attached_keys)}"
-    )

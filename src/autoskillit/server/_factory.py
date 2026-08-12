@@ -92,6 +92,7 @@ from autoskillit.server._audit_authority_materializer import (
     DefaultCommittedDispositionResolver,
 )
 from autoskillit.server._exploration_service import DefaultExplorationService
+from autoskillit.server._recipe_delivery_helpers import initialize_host_client_attestation
 from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
     DefaultCloneManager,
@@ -308,10 +309,7 @@ def make_context(
 
     gate = DefaultGateState(enabled=False)
 
-    # Read host client attestation once at startup — circular-break
-    from autoskillit.server import _recipe_delivery as _rd  # circular-break
-
-    _rd.initialize_host_client_attestation()
+    initialize_host_client_attestation()
 
     project_dir = project_dir if project_dir is not None else resolve_project_dir()
     exploration_trusted_root = (

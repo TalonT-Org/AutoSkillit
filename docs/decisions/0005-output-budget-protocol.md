@@ -203,9 +203,12 @@ packaging validation.
 ### Typed dimensional bounds
 
 Token and UTF-8 byte limits are represented by the distinct `TokenLimit` and
-`Utf8ByteLimit` frozen value objects. They deliberately provide no integer coercion or
-cross-unit ordering. Conversion uses `BytesToTokensPolicy` with an exact `Fraction`
-ratio; implicit byte/token arithmetic is not permitted at a consumer boundary.
+`Utf8ByteLimit` integer subclasses. Construction enforces positive integer values at
+runtime, while dimensional separation is enforced statically by mypy. Normal integer
+arithmetic, equality, and ordering—including cross-unit comparisons—remain available at
+runtime, so consumer boundaries must retain the dimensional annotations rather than rely
+on runtime rejection. Conversion uses `BytesToTokensPolicy` with an exact `Fraction`
+ratio; implicit byte/token arithmetic is not permitted at a typed consumer boundary.
 
 `output_budget.page_max_bytes` is an explicit operator calibration for bounded recipe
 pages. When present it selects the measured UTF-8 page ceiling instead of treating a

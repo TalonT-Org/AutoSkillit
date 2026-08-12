@@ -8,11 +8,11 @@ import pytest
 
 from autoskillit.core import (
     BackendCapabilities,
+    HostClientAttestation,
     RecipeDeliveryMode,
     resolve_recipe_delivery_decision,
 )
 from autoskillit.core.types._type_recipe_delivery import (
-    HostClientAttestation,
     RecipeDeliveryBudgetDef,
 )
 

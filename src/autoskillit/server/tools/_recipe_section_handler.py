@@ -465,8 +465,6 @@ async def get_recipe_section(
                     return _recipe_section_failure("invalid_recipe_initialization_identity")
                 assert isinstance(state, (InitializingRecipe, ReadyRecipe))
                 active_initialization = state
-                if page_plan_sha256 != page_plan.page_plan_sha256:
-                    return _recipe_section_failure("invalid_recipe_page_plan_identity")
             expected_continuation = (
                 None
                 if part == 0

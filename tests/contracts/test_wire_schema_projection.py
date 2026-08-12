@@ -66,7 +66,7 @@ def test_implementation_wire_reduction_from_projection_removal(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Stage F size reduction pin: removing finalized_recipe_projection from the
+    """Wire-schema size-reduction pin: removing finalized_recipe_projection from the
     wire saves approximately 200KB.
 
     Measured by comparing the persisted artifact (retains the projection) against

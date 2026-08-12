@@ -166,7 +166,10 @@ def test_fragment_pages_preserve_string_content() -> None:
     """
     # Create a payload with an oversized flow_records element that forces
     # fragmentation at a small bound
-    large_record = json.dumps({"kind": "step", "name": "x" * 500, "index": 0})
+    # Element must be large enough to exceed the bound even after page-envelope
+    # overhead (~1475 bytes of descriptor/SHA fields).  A 2048-byte bound with
+    # a ~4000-char element guarantees multi-page fragmentation.
+    large_record = json.dumps({"kind": "step", "name": "x" * 4000, "index": 0})
     payload = _payload()
     payload["flow_records"] = [large_record]
 
@@ -175,7 +178,7 @@ def test_fragment_pages_preserve_string_content() -> None:
         kitchen_id="contract-fragment",
         generation=_generation(),
         selected=selected,
-        recipe_section_bound_bytes=300,  # force fragmentation
+        recipe_section_bound_bytes=2_048,  # force fragmentation of the large element
     )
     # If the element fits in one page, skip (fragmentation not triggered)
     if plan.total_parts <= 1:

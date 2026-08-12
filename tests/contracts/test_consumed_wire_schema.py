@@ -26,7 +26,9 @@ _CONSUMED_INLINE_FIELDS = frozenset(
         "recipe_flow",
         "recipe_pull",
         "success",
-        "warnings",
+        # NOTE: "warnings" is handler-injected by open_kitchen (tools_kitchen.py)
+        # when override warnings exist, not by the delivery pipeline.  It is NOT
+        # required in the inline schema produced by finalize_recipe_delivery.
     }
 )
 

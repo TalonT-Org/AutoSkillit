@@ -22,11 +22,14 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    CLIENT_CHARS_PER_TOKEN_POLICY,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     FinalizedRecipeProjection,
     HostClientAttestation,
+    TokenLimit,
+    client_serialized_char_len,
     resolve_general_output_token_limit,
     resolve_recipe_envelope_byte_limit,
 )
@@ -80,7 +83,7 @@ def _backend_capabilities():
 
 def _generic_backstop_bound_bytes(bound_tokens: int) -> int:
     """Convert a generic response backstop token limit to its UTF-8 byte ceiling."""
-    return bound_tokens * 4
+    return CLIENT_CHARS_PER_TOKEN_POLICY.to_bytes(TokenLimit(bound_tokens)).value
 
 
 @pytest.mark.parametrize("backend_name", sorted(_backend_capabilities()), ids=lambda n: n)
@@ -207,13 +210,13 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
 
     if finalized.decision.reason == "annotation_aware_inline":
         assert caps.recipe_delivery_budget is None
-        bound_bytes = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+        bound_chars = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_chars
     else:
-        bound_bytes = resolve_recipe_envelope_byte_limit(caps)
+        bound_chars = resolve_recipe_envelope_byte_limit(caps)
     envelope = json.loads(finalized.rendered)
-    assert len(finalized.rendered.encode("utf-8")) <= bound_bytes, (
+    assert client_serialized_char_len(finalized.rendered).value <= bound_chars, (
         f"{backend_name}: envelope for {recipe_name} exceeds "
-        f"{bound_bytes} bytes (effective delivery bound)"
+        f"{bound_chars} chars (effective delivery bound)"
     )
     assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
     assert envelope["success"] is True
@@ -277,9 +280,9 @@ def test_bundled_recipe_open_kitchen_raw_spill_projection_fits_per_backend(
         assert isinstance(result, str), (
             f"{backend_name}: expected str result for {recipe_name} payload"
         )
-        assert len(result.encode("utf-8")) <= bound_bytes, (
+        assert client_serialized_char_len(result).value <= bound_bytes, (
             f"{backend_name}: projection for {recipe_name} exceeds "
-            f"{bound_bytes} bytes (effective delivery bound)"
+            f"{bound_bytes} chars (effective delivery bound)"
         )
         data = json.loads(result)
         assert data.get("delivery_bound_spill") is True

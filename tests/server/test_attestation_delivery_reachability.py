@@ -44,7 +44,7 @@ from tests.server.test_tools_recipe_pull import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _RECIPE_ENVELOPE = "remediation"
-_RECIPE_ORDINARY = "promote-to-main-wrapper"
+_RECIPE_INLINE_SMALL = "promote-to-main-wrapper"
 _ATTESTED_STEP = "investigate"
 _OVERRIDES = {
     "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
@@ -358,7 +358,7 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
     match mode:
         case RecipeDeliveryMode.ORDINARY_INLINE:
             arm()
-            envelope = await _open_kitchen_patched(_RECIPE_ORDINARY, _OVERRIDES, monkeypatch)
+            envelope = await _open_kitchen_patched(_RECIPE_INLINE_SMALL, _OVERRIDES, monkeypatch)
             assert envelope.get("success") is True
             assert not envelope.get("delivery_bound_spill")
             block = envelope[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]

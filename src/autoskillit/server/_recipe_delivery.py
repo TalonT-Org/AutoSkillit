@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass, replace
@@ -60,6 +59,7 @@ from autoskillit.pipeline import (
 from autoskillit.server._recipe_artifact import (
     RecipeArtifactError,
     RecipeArtifactSchemaError,
+    _qualified_sha256,
     build_canonical_recipe_artifact_payload,
     build_recipe_flow_generation,
     load_recipe_artifact,
@@ -553,14 +553,11 @@ def complete_finalized_recipe_response(
                 install_recipe_execution(
                     finalized.tool_ctx,
                     prepared_execution=prepared_execution,
-                    completion_receipt=(
-                        "sha256:"
-                        + hashlib.sha256(
-                            (
-                                finalized.initialization_id
-                                + finalized.artifact_generation.payload_sha256
-                            ).encode("utf-8")
-                        ).hexdigest()
+                    completion_receipt=_qualified_sha256(
+                        (
+                            finalized.initialization_id
+                            + finalized.artifact_generation.payload_sha256
+                        ).encode("utf-8")
                     ),
                 )
         except Exception:

@@ -454,7 +454,7 @@ def test_codex_managed_order_runtime_writes_do_not_mutate_projection(
         project_dir,
         during_attempt=write_runtime_artifacts,
     )
-    launch_id = "projection-immutability"
+    launch_id = "0123456789abcdef"
     _launch_cook_session(
         "projection immutability integration",
         project_dir=project_dir,

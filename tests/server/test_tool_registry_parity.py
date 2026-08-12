@@ -29,7 +29,10 @@ def _handler_signatures(
         Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "server" / "tools"
     )
     handlers: dict[str, tuple[tuple[str, bool], ...]] = {}
-    for path in sorted(tools_dir.glob("tools_*.py")):
+    # Scan both tools_*.py and the decomposed _recipe_section_handler.py
+    for path in sorted(
+        [*tools_dir.glob("tools_*.py"), *tools_dir.glob("_recipe_section_handler.py")]
+    ):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

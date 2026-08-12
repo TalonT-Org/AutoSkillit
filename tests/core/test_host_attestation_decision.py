@@ -172,6 +172,75 @@ def test_unannotated_regime_is_token_gated() -> None:
     assert decision2.mode is RecipeDeliveryMode.ENVELOPE
 
 
+def test_regimes_are_independent_no_cross_unit_comparison() -> None:
+    """The two regimes must be independent: changing char-domain inputs must
+    not alter the unannotated token-domain outcome, and changing token-domain
+    inputs must not alter the annotated char-domain outcome.
+
+    Independence invariant:
+    - Annotated regime: decision depends only on (attestation, payload_chars,
+      ceiling_chars, ANNOTATION_HARD_CAP_CHARS, budget).
+    - Unannotated regime: decision depends only on (required_tokens,
+      unnegotiated_limit).
+    """
+    # 1. Unannotated regime: varying char inputs has no effect
+    base_unannotated = resolve_recipe_delivery_decision(
+        capabilities=BackendCapabilities(unnegotiated_tool_result_token_limit=46_500),
+        required_serialized_tokens=30_000,
+        budget=None,
+        producer="open_kitchen",
+        payload_sha256=_PAYLOAD_SHA,
+        # No attestation, no char inputs
+    )
+    assert base_unannotated.reason == "fits_unnegotiated_result_limit"
+
+    # Adding char-domain inputs without attestation: outcome unchanged
+    with_chars = resolve_recipe_delivery_decision(
+        capabilities=BackendCapabilities(unnegotiated_tool_result_token_limit=46_500),
+        required_serialized_tokens=30_000,
+        budget=None,
+        producer="open_kitchen",
+        payload_sha256=_PAYLOAD_SHA,
+        payload_serialized_chars=190_000,
+        exemption_ceiling_chars=195_000,
+    )
+    assert with_chars.reason == base_unannotated.reason
+    assert with_chars.mode is base_unannotated.mode
+
+    # 2. Annotated regime: varying token limit has no effect when payload
+    # exceeds the token limit but fits the char ceiling
+    annotated_small_limit = resolve_recipe_delivery_decision(
+        capabilities=BackendCapabilities(unnegotiated_tool_result_token_limit=5_000),
+        required_serialized_tokens=100_000,
+        budget=None,
+        producer="open_kitchen",
+        payload_sha256=_PAYLOAD_SHA,
+        host_client_attestation=HostClientAttestation(
+            attested_client_gate_tokens=50_000,
+            annotation_support=True,
+        ),
+        payload_serialized_chars=150_000,
+        exemption_ceiling_chars=195_000,
+    )
+    annotated_large_limit = resolve_recipe_delivery_decision(
+        capabilities=BackendCapabilities(unnegotiated_tool_result_token_limit=99_000),
+        required_serialized_tokens=100_000,
+        budget=None,
+        producer="open_kitchen",
+        payload_sha256=_PAYLOAD_SHA,
+        host_client_attestation=HostClientAttestation(
+            attested_client_gate_tokens=50_000,
+            annotation_support=True,
+        ),
+        payload_serialized_chars=150_000,
+        exemption_ceiling_chars=195_000,
+    )
+    # Both resolve to annotation_aware_inline: the token limit is irrelevant
+    # when the payload exceeds it and attestation + char ceiling qualify
+    assert annotated_small_limit.reason == "annotation_aware_inline"
+    assert annotated_large_limit.reason == "annotation_aware_inline"
+
+
 def test_exemption_ceiling_above_hard_cap_falls_through() -> None:
     """The annotation-aware branch must not fire when the registered exemption
     ceiling itself exceeds ANNOTATION_HARD_CAP_CHARS, regardless of how small

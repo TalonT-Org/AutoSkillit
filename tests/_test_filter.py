@@ -586,6 +586,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     ),
     "_recipe_composition": frozenset({"recipe"}),
     "_recipe_ingredients": frozenset({"recipe"}),
+    "_recipe_raw_repair": frozenset({"recipe"}),
     "diagrams": frozenset({"recipe"}),
     "identity": frozenset({"recipe"}),
     "order": frozenset({"recipe"}),

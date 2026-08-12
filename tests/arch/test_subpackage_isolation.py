@@ -968,7 +968,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
         "server": 23,  # +_run_skill_completion exact receipt delivery boundary (#4457)
-        "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
+        # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
+        "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
         "execution": 20,  # +session_index strict byte-bounded retained-index reads (#4514)
         # +agent_definition native-role authority (#4443).

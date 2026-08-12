@@ -1,9 +1,10 @@
-"""Tests for _prune_skipped_steps deferral mode and LoadRecipeResult.deferred_guards."""
+"""Tests for skip-guard resolution, deferral, and raw-YAML repair."""
 
 from __future__ import annotations
 
 import pytest
 
+from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -88,8 +89,6 @@ class TestPruneSkippedStepsDeferral:
     def test_resolve_skip_guards_preserves_deferred_step_block(self):
         """When a resolution is None (deferred), the step block must be preserved in the
         YAML content and only the skip_when_false line removed."""
-        from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
-
         raw = (
             "steps:\n  review:\n    skip_when_false: inputs.review_approach\n"
             "    on_skip: done\n    optional: true\n  done:\n    action: stop\n"
@@ -108,6 +107,195 @@ class TestPruneSkippedStepsDeferral:
         assert "skip_when_false:" not in result, "skip_when_false line not stripped"
         assert "on_skip:" not in result, "on_skip line not stripped"
         assert "optional: true" in result, "optional: true must be preserved for deferred steps"
+
+
+def test_prune_content_strips_literal_skip_when_false_step_block() -> None:
+    """Raw repair strips a step block for literal skip_when_false: false."""
+    raw = """steps:
+  main_step:
+    tool: run_cmd
+    with:
+      cmd: echo hi
+    on_success: optional_step
+  optional_step:
+    tool: run_skill
+    optional: true
+    skip_when_false: "false"
+    on_skip: done
+    with:
+      skill_command: /autoskillit:diagnose /tmp/x.md
+      cwd: /tmp
+    on_success: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "optional_step": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="false",
+            on_skip="done",
+            on_success="done",
+            with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
+        ),
+        "done": RecipeStep(action="stop", message="done"),
+    }
+
+    result = _resolve_skip_guards_in_content(raw, {"optional_step": False}, original_steps)
+    assert "  optional_step:\n" not in result
+    assert 'skip_when_false: "false"' not in result
+
+
+def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
+    """Raw repair strips optional: true from a truthy-resolved step."""
+    raw = """steps:
+  main_step:
+    tool: run_cmd
+    with:
+      cmd: echo hi
+    on_success: guarded
+  guarded:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.flag
+    on_skip: done
+    with:
+      skill_command: /autoskillit:do_thing /tmp/x.md
+    on_success: done
+    on_failure: done
+    on_context_limit: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "guarded": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.flag",
+            on_skip="done",
+            on_success="done",
+            on_failure="done",
+            on_context_limit="done",
+            with_args={"skill_command": "/autoskillit:do_thing /tmp/x.md"},
+        )
+    }
+
+    result = _resolve_skip_guards_in_content(raw, {"guarded": True}, original_steps)
+    assert "optional: true" not in result
+    assert "optional: True" not in result
+    assert "tool: run_skill" in result
+    assert "on_success: done" in result
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        ("- steps:\n    guarded:\n      tool: run_cmd\n", "must be a YAML mapping"),
+        ("steps:\n- guarded\n", "requires a block-style top-level steps mapping"),
+        ("steps: {guarded: {tool: run_cmd}, done: {action: stop}}\n", "flow-style"),
+        (
+            "shared: &shared\n  tool: run_cmd\nsteps:\n  guarded: *shared\n"
+            "  done:\n    action: stop\n",
+            "aliases",
+        ),
+        (
+            "steps:\n  guarded: &guarded\n    tool: run_cmd\n    nested: *guarded\n"
+            "  done:\n    action: stop\n",
+            "aliases",
+        ),
+    ],
+)
+def test_guarded_raw_repair_rejects_unsafe_yaml_shapes(raw: str, message: str) -> None:
+    guarded = RecipeStep(tool="run_cmd", skip_when_false="true", on_skip="done")
+    with pytest.raises(ValueError, match=message):
+        _resolve_skip_guards_in_content(raw, {"guarded": True}, {"guarded": guarded})
+
+
+def test_resolve_skip_guards_preserves_optional_on_unresolved_steps() -> None:
+    """Raw repair preserves optional: true on unresolved steps."""
+    raw = """steps:
+  guarded:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.flag
+    with:
+      skill_command: /autoskillit:do_thing /tmp/x.md
+    on_success: other
+  other:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.other_flag
+    with:
+      skill_command: /autoskillit:other /tmp/y.md
+    on_success: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "guarded": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.flag",
+            on_success="other",
+            with_args={"skill_command": "/autoskillit:do_thing /tmp/x.md"},
+        ),
+        "other": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.other_flag",
+            on_success="done",
+            with_args={"skill_command": "/autoskillit:other /tmp/y.md"},
+        ),
+    }
+
+    result = _resolve_skip_guards_in_content(raw, {"guarded": True}, original_steps)
+    guarded_end = result.index("  other:\n")
+    guarded_block = result[result.index("  guarded:\n") : guarded_end]
+    assert "optional: true" not in guarded_block
+    other_end = result.index("  done:\n")
+    other_block = result[result.index("  other:\n") : other_end]
+    assert "optional: true" in other_block
+
+
+@pytest.mark.parametrize(
+    ("quoted_route", "redirect_target", "quoted_target"),
+    [
+        ("'skipped'", "done'now", "'done''now'"),
+        ('"skipped"', 'done"\\now', '"done\\"\\\\now"'),
+    ],
+)
+def test_guarded_raw_repair_preserves_route_quote_style(
+    quoted_route: str, redirect_target: str, quoted_target: str
+) -> None:
+    raw = f"""steps:
+  first:
+    tool: run_cmd
+    on_success: {quoted_route}
+  skipped:
+    tool: run_cmd
+    skip_when_false: inputs.flag
+    on_skip: {quoted_target}
+  {quoted_target}:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "first": RecipeStep(tool="run_cmd", on_success="skipped"),
+        "skipped": RecipeStep(
+            tool="run_cmd",
+            skip_when_false="inputs.flag",
+            on_skip=redirect_target,
+        ),
+        redirect_target: RecipeStep(action="stop", message="done"),
+    }
+
+    result = _resolve_skip_guards_in_content(raw, {"skipped": False}, original_steps)
+
+    assert f"on_success: {quoted_target}" in result
+    assert "  skipped:\n" not in result
 
 
 @pytest.mark.small

@@ -851,47 +851,6 @@ steps:
     assert "skip_when_false: inputs.flag" not in content
 
 
-def test_prune_content_strips_literal_skip_when_false_step_block() -> None:
-    """_resolve_skip_guards_in_content strips step block for literal skip_when_false: false."""
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
-
-    raw = """steps:
-  main_step:
-    tool: run_cmd
-    with:
-      cmd: echo hi
-    on_success: optional_step
-  optional_step:
-    tool: run_skill
-    optional: true
-    skip_when_false: "false"
-    on_skip: done
-    with:
-      skill_command: /autoskillit:diagnose /tmp/x.md
-      cwd: /tmp
-    on_success: done
-  done:
-    action: stop
-    message: done
-"""
-    original_steps = {
-        "optional_step": RecipeStep(
-            tool="run_skill",
-            optional=True,
-            skip_when_false="false",
-            on_skip="done",
-            on_success="done",
-            with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
-        ),
-        "done": RecipeStep(action="stop", message="done"),
-    }
-    resolutions = {"optional_step": False}
-
-    result = _resolve_skip_guards_in_content(raw, resolutions, original_steps)
-    assert "  optional_step:\n" not in result
-    assert 'skip_when_false: "false"' not in result
-
-
 def test_post_prune_dangling_route_returns_errors() -> None:
     """_validate_no_dangling_routes returns errors for dangling route references."""
     from autoskillit.recipe._recipe_composition import _validate_no_dangling_routes
@@ -1092,9 +1051,9 @@ def test_guarded_chain_pruning_matches_independent_oracle(
     from autoskillit.core import load_yaml
     from autoskillit.recipe._recipe_composition import (
         _prune_skipped_steps,
-        _resolve_skip_guards_in_content,
         _validate_route_consistency,
     )
+    from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
     from autoskillit.recipe.io import _parse_recipe
     from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
 
@@ -1370,127 +1329,6 @@ def test_remediation_audit_skip_routes_to_commit_guard() -> None:
     }
     assert ("test", "success", "commit_guard") in projected_routes
     assert ("merge_gate_test", "success", "commit_guard") in projected_routes
-
-
-def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
-    """_resolve_skip_guards_in_content strips optional: true from truthy-resolved step."""
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
-
-    raw = """steps:
-  main_step:
-    tool: run_cmd
-    with:
-      cmd: echo hi
-    on_success: guarded
-  guarded:
-    tool: run_skill
-    optional: true
-    skip_when_false: inputs.flag
-    on_skip: done
-    with:
-      skill_command: /autoskillit:do_thing /tmp/x.md
-    on_success: done
-    on_failure: done
-    on_context_limit: done
-  done:
-    action: stop
-    message: done
-"""
-    original_steps = {
-        "guarded": RecipeStep(
-            tool="run_skill",
-            optional=True,
-            skip_when_false="inputs.flag",
-            on_skip="done",
-            on_success="done",
-            on_failure="done",
-            on_context_limit="done",
-            with_args={"skill_command": "/autoskillit:do_thing /tmp/x.md"},
-        )
-    }
-    resolutions = {"guarded": True}
-
-    result = _resolve_skip_guards_in_content(raw, resolutions, original_steps)
-    assert "optional: true" not in result
-    assert "optional: True" not in result
-    assert "tool: run_skill" in result
-    assert "on_success: done" in result
-
-
-@pytest.mark.parametrize(
-    ("raw", "message"),
-    [
-        ("- steps:\n    guarded:\n      tool: run_cmd\n", "must be a YAML mapping"),
-        ("steps:\n- guarded\n", "requires a block-style top-level steps mapping"),
-        ("steps: {guarded: {tool: run_cmd}, done: {action: stop}}\n", "flow-style"),
-        (
-            "shared: &shared\n  tool: run_cmd\nsteps:\n  guarded: *shared\n"
-            "  done:\n    action: stop\n",
-            "aliases",
-        ),
-        (
-            "steps:\n  guarded: &guarded\n    tool: run_cmd\n    nested: *guarded\n"
-            "  done:\n    action: stop\n",
-            "aliases",
-        ),
-    ],
-)
-def test_guarded_raw_repair_rejects_unsafe_yaml_shapes(raw: str, message: str) -> None:
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
-
-    guarded = RecipeStep(tool="run_cmd", skip_when_false="true", on_skip="done")
-    with pytest.raises(ValueError, match=message):
-        _resolve_skip_guards_in_content(raw, {"guarded": True}, {"guarded": guarded})
-
-
-def test_resolve_skip_guards_preserves_optional_on_unresolved_steps() -> None:
-    """_resolve_skip_guards_in_content preserves optional: true on steps not being resolved."""
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
-
-    raw = """steps:
-  guarded:
-    tool: run_skill
-    optional: true
-    skip_when_false: inputs.flag
-    with:
-      skill_command: /autoskillit:do_thing /tmp/x.md
-    on_success: other
-  other:
-    tool: run_skill
-    optional: true
-    skip_when_false: inputs.other_flag
-    with:
-      skill_command: /autoskillit:other /tmp/y.md
-    on_success: done
-  done:
-    action: stop
-    message: done
-"""
-    original_steps = {
-        "guarded": RecipeStep(
-            tool="run_skill",
-            optional=True,
-            skip_when_false="inputs.flag",
-            on_success="other",
-            with_args={"skill_command": "/autoskillit:do_thing /tmp/x.md"},
-        ),
-        "other": RecipeStep(
-            tool="run_skill",
-            optional=True,
-            skip_when_false="inputs.other_flag",
-            on_success="done",
-            with_args={"skill_command": "/autoskillit:other /tmp/y.md"},
-        ),
-    }
-    resolutions = {"guarded": True}
-
-    result = _resolve_skip_guards_in_content(raw, resolutions, original_steps)
-    guarded_end = result.index("  other:\n")
-    guarded_block = result[result.index("  guarded:\n") : guarded_end]
-    assert "optional: true" not in guarded_block
-    other_end = result.index("  done:\n")
-    other_block = result[result.index("  other:\n") : other_end]
-    assert "optional: true" in other_block
 
 
 def test_assert_content_integrity_raises_on_optional_residual() -> None:

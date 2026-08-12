@@ -57,7 +57,6 @@ from autoskillit.recipe._recipe_composition import (
     _derive_rate_limit_routes,
     _prune_skipped_steps,
     _resolve_hidden_inputs_in_content,
-    _resolve_skip_guards_in_content,
     _validate_no_dangling_routes,
     _validate_route_consistency,
 )
@@ -70,6 +69,7 @@ from autoskillit.recipe._recipe_ingredients import (
     build_ingredient_rows,  # noqa: F401
     format_ingredients_table,
 )
+from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
 from autoskillit.recipe._rule_helpers import (
     _is_failure_sentinel_value,
     extract_sentinel_json_blocks,

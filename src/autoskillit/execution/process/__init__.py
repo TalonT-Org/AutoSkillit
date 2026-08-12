@@ -637,6 +637,18 @@ async def run_managed_async(
                 if acc.channel_b_candidate_at is not None:
                     acc.channel_b_status = ChannelBStatus.COMPLETION
                 acc.lifecycle_observation_complete = final_fold_complete
+            if (
+                lifecycle_observation_enabled
+                and not acc.has_unresolved_obligations()
+                and (
+                    acc.channel_a_candidate_at is not None
+                    or acc.channel_b_candidate_at is not None
+                )
+                and not acc.process_exited
+            ):
+                with anyio.move_on_after(0.05):
+                    while await anyio.to_thread.run_sync(owner.observe_exit) is None:
+                        await anyio.sleep(0.001)
             final_observed_returncode = await anyio.to_thread.run_sync(owner.observe_exit)
             acc.process_observation_snapshot = owner.snapshot
             if final_observed_returncode is not None:

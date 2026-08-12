@@ -129,7 +129,7 @@ def test_complete_array_page_has_no_nested_json_strings(section: str) -> None:
                 if isinstance(element, str):
                     try:
                         parsed = json.loads(element)
-                    except (json.JSONDecodeError, TypeError):
+                    except json.JSONDecodeError:
                         continue  # not parseable — fine
                     assert not isinstance(parsed, dict | list), (
                         f"{section} content element is a JSON-structured string: {element[:80]!r}"
@@ -153,7 +153,7 @@ def test_complete_array_page_has_no_nested_json_strings(section: str) -> None:
         ):
             try:
                 parsed = json.loads(value)
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError:
                 continue
             assert not isinstance(parsed, dict | list), (
                 f"{section} body field {key!r} is a JSON-structured string"

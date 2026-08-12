@@ -1,59 +1,113 @@
-"""Shared process-group cleanup helpers for execution tests."""
+"""Identity-fenced process cleanup helpers for execution tests."""
 
 from __future__ import annotations
 
 import os
+import signal
+import subprocess
 import time
+from collections.abc import Mapping
 
 import psutil
 
 
-def _process_group_members(process_group_id: int) -> set[int]:
-    members: set[int] = set()
-    for process in psutil.process_iter(["pid"]):
+def _capture_owned_group_identities(
+    process: subprocess.Popen[object],
+) -> dict[int, float]:
+    """Capture group identities only while an unreaped leader anchors its PGID."""
+    if process.returncode is not None or process.pid <= 0:
+        return {}
+    try:
+        if os.getpgid(process.pid) != process.pid:
+            return {}
+    except OSError:
+        return {}
+
+    identities: dict[int, float] = {}
+    for candidate in psutil.process_iter(["pid"]):
         try:
-            if process.pid != os.getpid() and os.getpgid(process.pid) == process_group_id:
-                members.add(process.pid)
+            if candidate.pid != os.getpid() and os.getpgid(candidate.pid) == process.pid:
+                identities[candidate.pid] = candidate.create_time()
         except (OSError, psutil.Error):
             continue
-    return members
+    return identities
 
 
-def _cleanup_process_group(
-    process_group_id: int,
+def _cleanup_process_identities(
+    identities: Mapping[int, float],
     *,
     timeout: float = 1,
     poll_interval: float = 0.02,
 ) -> set[int]:
-    survivors = _process_group_members(process_group_id) if process_group_id else set()
-    if not survivors:
-        return survivors
-    identities: dict[int, float] = {}
-    for pid in survivors:
+    """Terminate only PIDs whose captured creation identity still matches."""
+    targets = dict(identities)
+    for pid, create_time in targets.items():
         try:
-            identities[pid] = psutil.Process(pid).create_time()
-        except (psutil.Error, OSError):
+            candidate = psutil.Process(pid)
+            if candidate.create_time() == create_time:
+                candidate.terminate()
+        except (OSError, psutil.Error):
             continue
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _live_identities(targets):
+            return set(targets)
+        time.sleep(poll_interval)
+    for pid in _live_identities(targets):
+        try:
+            candidate = psutil.Process(pid)
+            if candidate.create_time() == targets[pid]:
+                candidate.kill()
+        except (OSError, psutil.Error):
+            continue
+    return set(targets)
+
+
+def _cleanup_owned_process_group(
+    process: subprocess.Popen[object],
+    *,
+    timeout: float = 1,
+    poll_interval: float = 0.02,
+) -> set[int]:
+    """Settle a directly spawned group before reaping its still-owned leader."""
+    identities = _capture_owned_group_identities(process)
+    if not identities:
+        return set()
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except OSError:
+        pass
+
+    nonleader = {pid: created for pid, created in identities.items() if pid != process.pid}
+    deadline = time.monotonic() + timeout
+    while _live_identities(nonleader) and time.monotonic() < deadline:
+        time.sleep(poll_interval)
+    if _live_identities(nonleader):
+        try:
+            if process.returncode is None and os.getpgid(process.pid) == process.pid:
+                os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            if process.returncode is None and os.getpgid(process.pid) == process.pid:
+                os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            process.kill()
+        process.wait(timeout=timeout)
+    _cleanup_process_identities(nonleader, timeout=timeout, poll_interval=poll_interval)
+    return set(identities)
+
+
+def _live_identities(identities: Mapping[int, float]) -> set[int]:
+    live: set[int] = set()
     for pid, create_time in identities.items():
         try:
-            process = psutil.Process(pid)
-            if process.create_time() == create_time:
-                process.terminate()
-        except (psutil.Error, OSError):
+            if psutil.Process(pid).create_time() == create_time:
+                live.add(pid)
+        except (OSError, psutil.Error):
             continue
-    deadline = time.monotonic() + timeout
-    while _process_group_members(process_group_id) and time.monotonic() < deadline:
-        time.sleep(poll_interval)
-    remaining = _process_group_members(process_group_id)
-    if remaining:
-        for pid in remaining:
-            create_time = identities.get(pid)
-            if create_time is None:
-                continue
-            try:
-                process = psutil.Process(pid)
-                if process.create_time() == create_time:
-                    process.kill()
-            except (psutil.Error, OSError):
-                continue
-    return survivors
+    return live

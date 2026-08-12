@@ -530,10 +530,12 @@ def _terminate_probe(owner: object) -> None:
     if not isinstance(owner, OwnedProcessGroup):
         raise TypeError("Codex probe cleanup requires its spawn-bound owner")
     process = owner.process
-    owner.cleanup(timeout=2)
-    for stream in (process.stdout, process.stderr):
-        if stream is not None:
-            stream.close()
+    try:
+        owner.settle(timeout=2)
+    finally:
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
 
 
 def _run_bounded_codex_probe(
@@ -620,8 +622,12 @@ def _run_bounded_codex_probe(
             stderr=bytes(output["stderr"]),
             failure="timed out while reaping",
         )
-    except BaseException:
-        _terminate_probe(owner)
+    except BaseException as exc:
+        if process.returncode is None:
+            try:
+                _terminate_probe(owner)
+            except BaseException as cleanup_exc:
+                exc.add_note(f"Codex probe cleanup failed: {type(cleanup_exc).__name__}")
         raise
     finally:
         if selector is not None:

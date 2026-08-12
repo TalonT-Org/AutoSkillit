@@ -129,9 +129,9 @@ def run_cook_attempt(
             if owner is not None and pid is not None and pgid is not None:
                 try:
                     if failures:
-                        owner.settle_preserving(failures[0])
+                        cleanup_result = owner.settle_preserving(failures[0])
                         returncode = owner.process.returncode
-                        cleanup_proved = returncode is not None
+                        cleanup_proved = returncode is not None and cleanup_result.complete
                     else:
                         returncode, cleanup_result = owner.settle()
                         cleanup_proved = cleanup_result.complete

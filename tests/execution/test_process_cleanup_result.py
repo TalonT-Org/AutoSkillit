@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import signal
 from typing import Any
 
@@ -101,6 +102,68 @@ def test_wait_timeout_is_positive_survivor_evidence(
     assert result.complete is False
 
 
+def test_wait_permission_denial_is_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProcess:
+        pid = 101
+
+        def children(self, *, recursive: bool) -> list[FakeProcess]:
+            assert recursive is True
+            return []
+
+        def create_time(self) -> float:
+            return 123.0
+
+        def send_signal(self, _sig: signal.Signals) -> None:
+            return
+
+    process = FakeProcess()
+    monkeypatch.setattr(_process_kill.psutil, "Process", lambda _pid: process)
+    monkeypatch.setattr(
+        _process_kill.psutil,
+        "wait_procs",
+        lambda _procs, *, timeout: (_ for _ in ()).throw(psutil.AccessDenied(pid=process.pid)),
+    )
+
+    result = kill_process_tree(process.pid, timeout=0)
+
+    assert result.access_denied_pids == (process.pid,)
+    assert result.observation_complete is False
+    assert result.complete is False
+
+
+def test_os_signal_permission_denial_is_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProcess:
+        pid = 101
+
+        def children(self, *, recursive: bool) -> list[FakeProcess]:
+            assert recursive is True
+            return []
+
+        def create_time(self) -> float:
+            return 123.0
+
+        def send_signal(self, _sig: signal.Signals) -> None:
+            raise PermissionError(errno.EPERM, "denied")
+
+    process = FakeProcess()
+    monkeypatch.setattr(_process_kill.psutil, "Process", lambda _pid: process)
+    monkeypatch.setattr(
+        _process_kill.psutil,
+        "wait_procs",
+        lambda procs, *, timeout: ([], list(procs)),
+    )
+
+    result = kill_process_tree(process.pid, timeout=0)
+
+    assert result.access_denied_pids == (process.pid,)
+    assert result.observation_complete is False
+    assert result.complete is False
+
+
 def test_programming_errors_still_propagate() -> None:
     with pytest.raises(ValueError, match="positive integer"):
         kill_process_tree(0)
@@ -166,7 +229,7 @@ def test_reaped_leader_permanently_revokes_group_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     signals: list[tuple[int, signal.Signals]] = []
-    process = FakePopen([])
+    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(
         _process_kill,
         "_snapshot_process_tree",
@@ -174,10 +237,17 @@ def test_reaped_leader_permanently_revokes_group_signal(
     )
     monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
     monkeypatch.setattr(_process_kill.os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
-    owner = _process_kill.OwnedProcessGroup(process, process.pid)
-    process.returncode = 0
+    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    owner.process.returncode = 0
 
     owner._signal_group(signal.SIGKILL)
 
     assert signals == []
     assert owner.snapshot.observation_complete is False
+
+
+def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
+    process = FakePopen([])
+
+    with pytest.raises(TypeError, match="spawn_owned_process"):
+        _process_kill.OwnedProcessGroup(process, process.pid)

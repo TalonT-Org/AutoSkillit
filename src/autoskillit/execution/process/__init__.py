@@ -105,7 +105,6 @@ __all__ = [
     "DefaultSubprocessRunner",
     "OrphanedCodexProcess",
     "OwnedProcessGroup",
-    "ProcessObservationSnapshot",
     "_extract_stdout_session_id",
     "_resolve_session_id",
     "RaceAccumulator",

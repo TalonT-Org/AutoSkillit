@@ -7,7 +7,6 @@ does not return until the leader is reaped and the owned group is absent.
 
 from __future__ import annotations
 
-import contextlib
 import errno
 import logging
 import os
@@ -74,6 +73,7 @@ _FORWARDED_SIGNALS = (
 logger = logging.getLogger(__name__)  # noqa: TID251 - isolated stdlib runner
 logger.addHandler(logging.NullHandler())
 logger.propagate = False
+_OWNED_PROCESS_SPAWN_TOKEN = object()
 
 
 class OwnedProcessError(RuntimeError):
@@ -99,6 +99,11 @@ class OwnedProcessGroup:
     _restored: bool = False
     _handlers_restored: bool = False
     _reaping_started: bool = False
+    _spawn_token: object | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if self._spawn_token is not _OWNED_PROCESS_SPAWN_TOKEN:
+            raise TypeError("OwnedProcessGroup instances must come from a spawn helper")
 
     @property
     def stdout(self) -> IO[bytes] | None:
@@ -342,17 +347,11 @@ def spawn_owned_process(
         raise OwnedProcessError("owned process did not start")
     if restore_error is not None:
         try:
-            if process.returncode is None and os.getpgid(process.pid) == process.pid:
-                os.killpg(process.pid, signal.SIGKILL)
-            else:
-                process.kill()
-        except (OSError, ProcessLookupError):
-            with contextlib.suppress(OSError, ProcessLookupError):
-                process.kill()
-        try:
-            process.wait(timeout=_KILL_TIMEOUT_SECONDS)
-        except (OSError, subprocess.SubprocessError):
-            pass
+            _settle_failed_capture(
+                _finish_owned_spawn(process, inherit_terminal=not capture_output)
+            )
+        except BaseException:
+            logger.error("owned_process_cwd_restore_cleanup_failed", exc_info=True)
         raise OwnedProcessError("cannot restore runner cwd") from restore_error
     return _finish_owned_spawn(process, inherit_terminal=not capture_output)
 
@@ -376,7 +375,11 @@ def _finish_owned_spawn(
         finally:
             raise OwnedProcessError("unsafe owned process group identity")
 
-    owner = OwnedProcessGroup(process=process, pgid=pgid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=pgid,
+        _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN,
+    )
     try:
         owner._previous_handlers = _install_signal_forwarding(owner)
         if inherit_terminal:
@@ -407,7 +410,7 @@ def _spawn_bash(
     command: str,
     *,
     capture_output: bool,
-) -> subprocess.Popen[bytes]:
+) -> OwnedProcessGroup:
     try:
         inherited_cwd_fd = os.open(
             ".",
@@ -445,13 +448,15 @@ def _spawn_bash(
 
     if restore_error is not None:
         if process is not None:
-            _settle_failed_capture(_own_spawned_process(process, capture_output=capture_output))
+            _settle_failed_capture(
+                _finish_owned_spawn(process, inherit_terminal=not capture_output)
+            )
         raise CaptureSetupError.from_os_error(
             restore_error, "cannot restore runner cwd"
         ) from restore_error
     if process is None:
         raise CaptureSetupError.unknown("capture shell did not start")
-    return process
+    return _finish_owned_spawn(process, inherit_terminal=not capture_output)
 
 
 def _drain_capture(
@@ -598,19 +603,6 @@ def _settle_failed_capture(
             action="owned_group_settlement_failed",
             returncode=None,
         )
-
-
-def _own_spawned_process(
-    process: subprocess.Popen[bytes],
-    *,
-    capture_output: bool,
-) -> subprocess.Popen[bytes] | OwnedProcessGroup:
-    """Adopt real subprocesses while retaining narrow injected test doubles."""
-
-    pid = getattr(process, "pid", None)
-    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 1:
-        return process
-    return _finish_owned_spawn(process, inherit_terminal=not capture_output)
 
 
 def _install_signal_forwarding(

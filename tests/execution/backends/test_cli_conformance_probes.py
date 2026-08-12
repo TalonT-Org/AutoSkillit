@@ -16,7 +16,6 @@ import pty
 import select
 import shlex
 import shutil
-import signal
 import subprocess
 import sys
 import threading
@@ -82,7 +81,7 @@ from autoskillit.execution.backends._probe_cache import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStreamParser
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.process import run_managed_async
+from autoskillit.execution.process import kill_process_tree, run_managed_async, spawn_owned_process
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
@@ -97,10 +96,7 @@ from autoskillit.hooks._capture_contract import (
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
-from tests.execution._process_group_helpers import (
-    _cleanup_process_group,
-    _process_group_members,
-)
+from tests.execution._process_group_helpers import _cleanup_owned_process_group
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -2536,13 +2532,8 @@ def _run_claude_startup_probe(
             if process.poll() is not None:
                 break
     finally:
-        if process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=5)
+        if process.returncode is None:
+            _cleanup_owned_process_group(process, timeout=5)
         terminal_path.write_bytes(bytes(retained))
         os.close(master_fd)
     output = bytes(retained)
@@ -2666,20 +2657,39 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
     for key in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
         if value := os.environ.get(key):
             environment[key] = value
-    process = subprocess.Popen(
-        spec.cmd,
-        cwd=tmp_path,
-        env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
-    survivors: set[int] = set()
-    try:
-        stdout, stderr = process.communicate(timeout=150)
-    finally:
-        survivors = _cleanup_process_group(process.pid, timeout=5, poll_interval=0.05)
+    stdout_path = tmp_path / "foreground-stdout.txt"
+    stderr_path = tmp_path / "foreground-stderr.txt"
+    with (
+        stdout_path.open("w+", encoding="utf-8") as stdout_stream,
+        stderr_path.open("w+", encoding="utf-8") as stderr_stream,
+    ):
+        owner = spawn_owned_process(
+            spec.cmd,
+            cwd=tmp_path,
+            env=environment,
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            text=True,
+            start_new_session=True,
+        )
+        deadline = time.monotonic() + 150
+        try:
+            while owner.observe_exit() is None and time.monotonic() < deadline:
+                time.sleep(0.05)
+            if owner.returncode is None:
+                owner.settle(timeout=5)
+                pytest.fail("Claude startup readiness probe timed out")
+            returncode, cleanup = owner.settle(timeout=5)
+        except BaseException as exc:
+            if owner.process.returncode is None:
+                owner.settle_preserving(exc, timeout=5)
+            raise
+        stdout_stream.seek(0)
+        stderr_stream.seek(0)
+        stdout = stdout_stream.read()
+        stderr = stderr_stream.read()
+    process = owner.process
+    survivors = set(cleanup.survivor_pids)
 
     records = []
     for line in stdout.splitlines():
@@ -2720,7 +2730,7 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
         )
         + "\n"
     )
-    assert process.returncode == 0, stderr[-2_000:]
+    assert returncode == 0, stderr[-2_000:]
     assert len(agents) >= 2
     assert all("run_in_background" not in (block.get("input") or {}) for block in agents)
     assert not any(record.get("type") in forbidden_lifecycle for record in records)
@@ -2839,7 +2849,7 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
             if isinstance(block, dict) and block.get("type") == "tool_use"
         ]
         agents = [block for block in tool_uses if block.get("name") == "Agent"]
-        survivors = _process_group_members(result.process_group_id)
+        survivors = set()
         head_sha = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=worktree_path,
@@ -2906,10 +2916,5 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
         assert not survivors
         assert marker in result.stdout
     finally:
-        process_group_id = (
-            result.process_group_id
-            if result is not None
-            else (spawned_pid[-1] if spawned_pid else 0)
-        )
-        if process_group_id:
-            _cleanup_process_group(process_group_id, timeout=5, poll_interval=0.05)
+        if result is None and spawned_pid:
+            kill_process_tree(spawned_pid[-1], timeout=5)

@@ -76,12 +76,23 @@ def _record_group_settlement(
     events.append("settle_group")
 
 
+def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
+    process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
+
+    with pytest.raises(TypeError, match="spawn helper"):
+        OwnedProcessGroup(process=process, pgid=process.pid)
+
+
 def test_wait_settles_owned_group_before_reaping_leader(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -98,7 +109,11 @@ def test_settle_settles_owned_group_before_reaping_leader(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -118,7 +133,11 @@ def test_settle_error_path_settles_owned_group_before_reaping_leader(
         "subprocess.Popen[bytes]",
         _OrderedProcess(events, poll_error=True),
     )
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -135,7 +154,11 @@ def test_remaining_group_gets_bounded_term_grace_before_kill(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     signals: list[signal.Signals] = []
     waits: list[tuple[int, float]] = []
     outcomes = iter((False, True))
@@ -175,7 +198,11 @@ def test_remaining_group_exiting_during_term_grace_is_not_killed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     signals: list[signal.Signals] = []
 
     monkeypatch.setattr(
@@ -205,7 +232,11 @@ def test_wait_cancellation_still_settles_and_reaps(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
 
     def cancel_wait(
         _process: subprocess.Popen[bytes],
@@ -240,7 +271,11 @@ def test_signal_handlers_forward_every_terminal_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     previous = {signum: object() for signum in capture_process._FORWARDED_SIGNALS}
     installed: dict[signal.Signals, object] = {}
     forwarded: list[signal.Signals] = []
@@ -275,7 +310,11 @@ def test_descendant_held_pipe_has_bounded_term_kill_drain(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _DrainProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     selector = _EmptySelector()
     signals: list[signal.Signals] = []
     monotonic_values = iter((0.0, 0.3, 0.9))
@@ -352,6 +391,7 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
         owner = capture_process.OwnedProcessGroup(
             process=process,
             pgid=process.pid,
+            _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
         )
         owner._previous_handlers = previous_handlers
         terminal = capture_process._take_foreground_process_group(process.pid)

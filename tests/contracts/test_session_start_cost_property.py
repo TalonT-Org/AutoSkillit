@@ -27,12 +27,15 @@ def test_session_start_cost_accepts_any_positive_page_count(body_bytes: int) -> 
     )
 
 
-def test_session_start_cost_rejects_non_terminating_zero_page_section() -> None:
+@pytest.mark.parametrize("counts", [(0, 1), (1, 0), (0, 0)])
+def test_session_start_cost_rejects_non_terminating_zero_page_section(
+    counts: tuple[int, int],
+) -> None:
     """A section that cannot fit even a single element (zero compiled pages)
     is non-terminating and must be rejected."""
     with pytest.raises(BoundedDeliveryRoundTripBudgetExceededError):
         validate_compiled_recipe_delivery_budget(
             recipe="synthetic",
             backend="property",
-            section_page_counts=(0, 1),
+            section_page_counts=counts,
         )

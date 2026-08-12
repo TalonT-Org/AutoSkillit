@@ -82,7 +82,7 @@ def _backend_capabilities():
 
 def _generic_backstop_bound_bytes(bound_tokens: int) -> int:
     """Convert a generic response backstop token limit to its UTF-8 byte ceiling."""
-    return CLIENT_CHARS_PER_TOKEN_POLICY.to_bytes(TokenLimit(bound_tokens)).value
+    return CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(TokenLimit(bound_tokens)).value
 
 
 @pytest.mark.parametrize("backend_name", sorted(_backend_capabilities()), ids=lambda n: n)

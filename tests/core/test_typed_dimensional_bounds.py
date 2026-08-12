@@ -5,7 +5,14 @@ from typing import cast
 
 import pytest
 
-from autoskillit.core import ASCII_YAML_POLICY, BytesToTokensPolicy, TokenLimit, Utf8ByteLimit
+from autoskillit.core import (
+    ASCII_YAML_POLICY,
+    CLIENT_CHARS_PER_TOKEN_POLICY,
+    BytesToTokensPolicy,
+    SerializedChars,
+    TokenLimit,
+    Utf8ByteLimit,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -38,6 +45,11 @@ def test_bytes_to_tokens_conversion_uses_exact_explicit_policy() -> None:
     assert policy.utf8_bytes_per_token == Fraction(27, 10)
     assert policy.to_tokens(Utf8ByteLimit(100_000)) == TokenLimit(37_038)
     assert policy.to_bytes(TokenLimit(37_038)) == Utf8ByteLimit(100_002)
+
+
+def test_client_character_policy_preserves_character_dimension() -> None:
+    assert CLIENT_CHARS_PER_TOKEN_POLICY.to_tokens(SerializedChars(100)) == TokenLimit(25)
+    assert CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(TokenLimit(25)) == SerializedChars(100)
 
 
 def test_bytes_to_tokens_policy_rejects_non_fraction_ratio() -> None:

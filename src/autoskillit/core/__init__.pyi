@@ -691,6 +691,7 @@ from .types import BoundValue as BoundValue
 from .types import BoundValueOrigin as BoundValueOrigin
 from .types import BoundValueState as BoundValueState
 from .types import BytesToTokensPolicy as BytesToTokensPolicy
+from .types import CharsToTokensPolicy as CharsToTokensPolicy
 from .types import CampaignProtector as CampaignProtector
 from .types import CanonicalRepresentationManifest as CanonicalRepresentationManifest
 from .types import CanonicalSpanId as CanonicalSpanId

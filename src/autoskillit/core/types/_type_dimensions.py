@@ -16,6 +16,7 @@ __all__ = [
     "ASCII_YAML_POLICY",
     "BytesToTokensPolicy",
     "CLIENT_CHARS_PER_TOKEN_POLICY",
+    "CharsToTokensPolicy",
     "CONSERVATIVE_ADMISSION_POLICY",
     "SerializedChars",
     "TokenLimit",
@@ -100,6 +101,28 @@ class BytesToTokensPolicy:
         return Utf8ByteLimit(token_limit.value * ratio.numerator // ratio.denominator)
 
 
+class CharsToTokensPolicy:
+    """Explicit exact-rational conversion between character and token domains."""
+
+    __slots__ = ("chars_per_token",)
+
+    def __init__(self, chars_per_token: Fraction) -> None:
+        if not isinstance(chars_per_token, Fraction):
+            raise TypeError("chars_per_token must be a Fraction")
+        if chars_per_token <= 0:
+            raise ValueError("chars_per_token must be positive")
+        self.chars_per_token = chars_per_token
+
+    def to_tokens(self, char_limit: SerializedChars) -> TokenLimit:
+        numerator = self.chars_per_token.numerator
+        denominator = self.chars_per_token.denominator
+        return TokenLimit((char_limit.value * denominator + numerator - 1) // numerator)
+
+    def to_chars(self, token_limit: TokenLimit) -> SerializedChars:
+        ratio = self.chars_per_token
+        return SerializedChars(token_limit.value * ratio.numerator // ratio.denominator)
+
+
 ASCII_YAML_POLICY = BytesToTokensPolicy(Fraction(27, 10))
 
 # The Claude Code CLI (v2.1.220, verified via binary inspection) estimates
@@ -107,7 +130,7 @@ ASCII_YAML_POLICY = BytesToTokensPolicy(Fraction(27, 10))
 # This policy mirrors the client's own heuristic for response-budget
 # projection ceilings — used only by the delivery-bound spill path in
 # _response_budget.py to convert a token limit to a char/byte ceiling.
-CLIENT_CHARS_PER_TOKEN_POLICY = BytesToTokensPolicy(Fraction(4, 1))
+CLIENT_CHARS_PER_TOKEN_POLICY = CharsToTokensPolicy(Fraction(4, 1))
 
 # Conservative 1:1 bytes-per-token admission policy for delivery-mode
 # decisions. Codex tokenization can merge bytes into one token but cannot

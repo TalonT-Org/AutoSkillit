@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -469,6 +470,7 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order() produces a valid command for each registered backend."""
+        from autoskillit.core import CookSessionHandle
         from autoskillit.execution.backends import get_backend as _real_get_backend
         from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
@@ -512,6 +514,18 @@ class TestCLIOrderCommand:
 
         monkeypatch.setattr(CodexBackend, "ensure_pre_launch", fake_pre_launch)
         monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda *_: [])
+        monkeypatch.setattr(
+            CodexBackend,
+            "cook_session_context",
+            lambda _self, **_kwargs: nullcontext(
+                CookSessionHandle(
+                    view_id="test-view",
+                    pass_fds=(),
+                    _record_spawn=lambda _pid, _pgid: None,
+                    _record_reaped=lambda _pid, _pgid: None,
+                )
+            ),
+        )
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
 

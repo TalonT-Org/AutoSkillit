@@ -119,6 +119,7 @@ def test_local_cleanup_does_not_erase_confirmed_spawn() -> None:
             root_pid=456,
             process_identities=((456, 100.5),),
             terminated_pids=(456,),
+            observation_complete=True,
         )
     )
 

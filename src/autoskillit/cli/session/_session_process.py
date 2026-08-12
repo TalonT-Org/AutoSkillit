@@ -18,8 +18,6 @@ from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.core import CmdSpec, get_logger
 from autoskillit.execution import OwnedProcessGroup, spawn_owned_process
 
-_TERM_TIMEOUT_SECONDS = 2.0
-_KILL_TIMEOUT_SECONDS = 2.0
 _GROUP_POLL_SECONDS = 0.02
 logger = get_logger(__name__)
 

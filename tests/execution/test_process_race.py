@@ -356,7 +356,8 @@ def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation
     assert acc.stdout_cursor is None
     assert acc.channel_b_cursor is None
     assert not acc.completion_candidate_event.is_set()
-    assert acc.process_group_id == 0
+    assert acc.process_observation_snapshot.process_identities == ()
+    assert acc.process_observation_snapshot.observation_complete is True
 
     signals = acc.to_race_signals()
     assert signals.lifecycle_observation_complete is False
@@ -364,7 +365,7 @@ def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation
     assert signals.terminal_task_ids == ()
     assert signals.schedule_wakeup_violation is False
     assert signals.completion_ceiling_expired is False
-    assert signals.process_group_id == 0
+    assert signals.process_observation_snapshot == acc.process_observation_snapshot
 
 
 def test_path_fold_includes_unterminated_final_record(tmp_path: Path) -> None:

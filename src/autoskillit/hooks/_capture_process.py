@@ -282,6 +282,7 @@ class OwnedProcessGroup:
         try:
             self._restore_signal_handlers()
         except BaseException as exc:
+            logger.error("owned_process_signal_restore_failed", exc_info=True)
             failures.append(exc)
         if failures:
             if len(failures) == 1:

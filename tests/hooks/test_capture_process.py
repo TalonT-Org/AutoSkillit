@@ -354,8 +354,9 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
             pgid=process.pid,
         )
         owner._previous_handlers = previous_handlers
-        owner._terminal_fd = terminal_fd
-        owner._previous_foreground_pgid = previous_pgid
+        terminal = capture_process._take_foreground_process_group(process.pid)
+        assert terminal is not None
+        owner._terminal_fd, owner._previous_foreground_pgid = terminal
         owner._restore_parent_state()
         owner._restore_parent_state()
     finally:

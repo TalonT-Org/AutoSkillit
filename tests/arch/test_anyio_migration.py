@@ -73,9 +73,10 @@ class TestAnyioPrimitivesUsed:
         source = PROCESS_MONITOR_PY.read_text()
         assert ".monotonic()" in source
 
-    def test_anyio_open_process_present(self):
+    def test_owned_popen_spawn_is_offloaded(self):
         source = PROCESS_PY.read_text()
-        assert "anyio.open_process(" in source
+        assert "spawn_owned_process," in source
+        assert "anyio.to_thread.run_sync(" in source
 
     def test_anyio_event_present(self):
         source = PROCESS_PY.read_text()
@@ -122,12 +123,12 @@ def test_server_has_no_asyncio_ensure_future() -> None:
 
 
 class TestProcTypeAnnotationUpdated:
-    """REQ-MIG-005/scan_done_signals: proc annotation is anyio.abc.Process, not asyncio."""
+    """REQ-MIG-005: watcher owns a spawn-bound process group, never asyncio."""
 
     def test_scan_done_signals_proc_annotation_not_asyncio_subprocess(self):
         source = PROCESS_PY.read_text()
         assert "asyncio.subprocess.Process" not in source
 
-    def test_scan_done_signals_proc_annotation_is_anyio(self):
+    def test_process_watcher_accepts_owned_group(self):
         source = PROCESS_RACE_PY.read_text()
-        assert "anyio.abc.Process" in source
+        assert "owner: OwnedProcessGroup" in source

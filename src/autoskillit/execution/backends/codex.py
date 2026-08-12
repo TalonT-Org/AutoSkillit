@@ -574,7 +574,7 @@ def _run_bounded_codex_probe(
         selector = selector_factory()
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-        while selector.get_map() or process.poll() is None:
+        while selector.get_map() or owner.observe_exit() is None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 _terminate_probe(owner)

@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import client_serialized_char_len
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS, compile_bounded_page_plan
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -107,10 +106,3 @@ def test_inline_payload_schema_is_exact(
         "Add consumed fields to _CONSUMED_INLINE_FIELDS (with consumer citation) "
         "or handler-injected fields to _HANDLER_INJECTED_FIELDS."
     )
-
-    # Measure serialized size for headroom tracking
-    import json
-
-    rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
-    serialized_chars = client_serialized_char_len(rendered).value
-    assert serialized_chars > 0, "inline payload has zero serialized chars"

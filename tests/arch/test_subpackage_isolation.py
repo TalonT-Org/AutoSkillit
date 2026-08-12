@@ -119,7 +119,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_response_budget",  # canonical spill schema digest
         "_explorer_projection",  # server-owned logger and immutable projection authority
         "_explorer_dispatch",  # immutable backend-specific native dispatch renderers
-        "tools_recipe",  # request-scoped recipe pagination ContextVar
+        "tools_recipe",  # request-scoped recipe pagination ContextVar (delegated)
+        "_recipe_section_handler",  # request-scoped recipe pagination ContextVar
         # Thread-safe callback registry decouples artifact retirement from page-cache lifecycle.
         "_lifecycle",
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
@@ -651,9 +652,13 @@ def test_server_file_count_under_limit() -> None:
     Limit updated from 22 to 23 after _guards.py was extracted from helpers.py.
     Limit updated from 23 to 24 after _subprocess.py was extracted from helpers.py.
     Limit updated from 24 to 25 after _misc.py was extracted from helpers.py.
+    Limit updated from 25 to 28 after #4557 decomposed _recipe_delivery.py
+    into _recipe_artifact.py + _recipe_delivery_helpers.py + _recipe_delivery.py,
+    and _recipe_section_pagination.py into _recipe_section_planning.py +
+    _recipe_section_pagination.py.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 25, f"server/ has {len(py_files)} files, max is 25"
+    assert len(py_files) <= 28, f"server/ has {len(py_files)} files, max is 28"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -969,7 +974,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 23,  # +_run_skill_completion exact receipt delivery boundary (#4457)
+        "server": 26,  # +_run_skill_completion exact receipt delivery boundary (#4457)
+        # +_recipe_artifact.py (persistence), +_recipe_delivery_helpers.py (attestation,
+        # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
+        # — #4557 decomposes three modules over the 750-line structural limit
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
         "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
@@ -1168,29 +1176,18 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "tracker-authority retention and cleanup on every dispatch outcome boundary.",
     ),
     "server/_recipe_delivery.py": (
-        1555,
-        "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
-        "selection, receipt reservation, and compiled-execution publication form one "
-        "transactional authority boundary; the snapshot carrier keeps installation before "
-        "durable delivery commit without introducing a second finalization path; "
-        "generation-bound flow records, bounded recovery manifests, exact-replay "
-        "provenance, and activating/non-activating lifecycle staging remain in that same "
-        "finalizer transaction so no second wire authority can drift; #4399's exemption-aware "
-        "ordinary-inline override and success-shaped surface payload preserve complete bodies "
-        "for registered non-protected surfaces; #4419's audit installation/finalization fence "
-        "and #4425's kitchen-effect transition remain co-located to preserve that single "
-        "delivery authority. #4414 adds packaging-time bounded-call and exemption-margin "
-        "fitness checks at this same finalization boundary. "
-        "#4557 adds host-attestation transport, char-ceiling threading, annotation-aware "
-        "inline delivery resolution, and context-owned attestation initialization.",
+        750,
+        "REQ-CNST-010-E12: #4557 decomposes recipe delivery into _recipe_delivery.py "
+        "(finalization orchestrator) and _recipe_artifact.py (persistence, attestation, "
+        "helper types).",
     ),
     "server/_recipe_section_pagination.py": (
-        1055,
+        750,
         "REQ-CNST-010-E23: #4414 binds terminal completion receipts to the finalized page "
         "content digest inside the existing immutable page renderer so pagination and receipt "
         "identity cannot drift across separate serialization authorities. "
-        "#4557 adds char-ceiling plumbing, json-array-page flattening, and flow-record "
-        "object parsing at _render_candidate.",
+        "#4557 decomposes pagination into sibling modules (_recipe_section_planning, "
+        "_recipe_section_rendering) with char-ceiling plumbing and dual-domain page fitting.",
     ),
     "tools_kitchen.py": (
         2260,
@@ -1248,10 +1245,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "replacement clears stale readiness before every early return",
     ),
     "tools_recipe.py": (
-        1050,
-        "REQ-CNST-010-E25: #4557 response backstop meta= attachment on get_recipe_section "
-        "decorator expanded from one-line to four-line form; the three-tool exemption "
-        "registry requires each tool's decorator to carry the meta= kwarg",
+        750,
+        "REQ-CNST-010-E25: #4557 decomposes get_recipe_section handler into "
+        "tools_recipe.py (tool entry points) and tools/_recipe_section_handler.py "
+        "(bounded-delivery pull handler and counter injection).",
     ),
     "tools_execution.py": (
         1800,

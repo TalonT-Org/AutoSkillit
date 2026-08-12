@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-from collections.abc import Mapping
-from contextvars import ContextVar
-from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from fastmcp import Context
@@ -20,25 +16,10 @@ from autoskillit.config import (
     resolve_ingredient_defaults,
 )
 from autoskillit.core import (
-    CONSERVATIVE_RESULT_TOKEN_FLOOR,
-    RECIPE_RESPONSE_DEFAULT_BYTES,
-    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
-    BackendCapabilities,
-    RecipeArtifactGeneration,
     RecipeDeliveryRequest,
     RecipeLoadError,
-    client_serialized_char_len,
-    fast_dumps,
     get_logger,
-    load_yaml,
-    resolve_general_output_token_limit,
     temp_dir_display_str,
-)  # noqa: F401
-from autoskillit.pipeline import (  # noqa: F401
-    GATED_TOOLS,
-    UNGATED_TOOLS,
-    InitializingRecipe,
-    ReadyRecipe,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -49,45 +30,27 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._recipe_delivery import (
-    RecipeArtifactError,
-    RecipeArtifactSchemaError,
     document_recipe_delivery_contract,
     finalize_recipe_delivery,
-    load_recipe_artifact,
-    persist_recipe_artifact,
-    prepare_recipe_delivery_generation,
-    recipe_pull_producers,
-    recipe_recreation_producers,
 )
-from autoskillit.server._recipe_generation import (
-    get_recipe_generation_store,
-    thaw_recipe_generation_mapping,
-)
-from autoskillit.server._recipe_initialization import (
-    FinalizedRecipeSectionResponse,
-    build_completion_response,
-    matches_recipe_initialization_requirement,
-    recipe_initialization_progress_counts,
-    replay_terminal_section_response,
-)
-from autoskillit.server._recipe_section_pagination import (
-    RecipeSectionBoundError,
-    RecipeSectionNonConvergenceError,
-    RecipeSectionPaginationError,
-    RecipeSectionRequestState,
-    get_or_build_recipe_section_page_plan,
-    recipe_section_continuation_binding,
-    render_recipe_section_failure,
-    render_recipe_section_page,
-    resolve_recipe_section_bound_bytes,
-    select_recipe_section,
-)
+from autoskillit.server._recipe_initialization import build_completion_response
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._recipe_section_handler import (
+    _RECIPE_SECTION_REQUEST_STATE,
+    _current_recipe_section_request_state,
+    _extract_step_body_from_persisted,
+    _inject_initialization_counters,
+    _recipe_section_cancellation_response,
+    _recipe_section_failure,
+    _recipe_section_request_state_factory,
+    _RecipeSectionError,
+    get_recipe_section,
+)
 from autoskillit.server.tools._serve_helpers import (
     _admit_recipe_name,
     build_backend_capabilities_map,
@@ -100,83 +63,24 @@ from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
 
-
-class _RecipeSectionError(Exception):
-    """Structured artifact failure surfaced by ``get_recipe_section``."""
-
-    def __init__(self, code: str, detail: str) -> None:
-        super().__init__(detail)
-        self.code = code
-
-
-_RECIPE_SECTION_REQUEST_STATE: ContextVar[RecipeSectionRequestState] = ContextVar(
-    "recipe_section_request_state"
-)
-
-
-def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
-    tool_ctx = _get_ctx_or_none()
-    admitted = tool_ctx is not None and tool_ctx.recipes is not None
-    response_max_bytes = RECIPE_RESPONSE_DEFAULT_BYTES
-    conservative_limit = CONSERVATIVE_RESULT_TOKEN_FLOOR
-    page_max_bytes: int | None = None
-    if tool_ctx is not None:
-        configured_response_max = tool_ctx.config.output_budget.response_max_bytes
-        if isinstance(configured_response_max, int) and configured_response_max > 0:
-            response_max_bytes = configured_response_max
-        configured_page_max = tool_ctx.config.output_budget.page_max_bytes
-        if isinstance(configured_page_max, int) and configured_page_max > 0:
-            page_max_bytes = configured_page_max
-        backend_capabilities = (
-            tool_ctx.backend.capabilities
-            if tool_ctx.backend is not None
-            and isinstance(
-                getattr(tool_ctx.backend, "capabilities", None),
-                BackendCapabilities,
-            )
-            else None
-        )
-        if backend_capabilities is not None:
-            conservative_limit = resolve_general_output_token_limit(backend_capabilities)
-    _exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["get_recipe_section"]
-    return RecipeSectionRequestState(
-        admitted=admitted,
-        recipe_section_bound_bytes=resolve_recipe_section_bound_bytes(
-            response_max_bytes,
-            conservative_limit,
-            page_max_bytes,
-            exemption_ceiling_bytes=_exemption.max_utf8_bytes,
-        ),
-        recipe_section_bound_chars=_exemption.max_chars,
-    )
-
-
-def _current_recipe_section_request_state() -> RecipeSectionRequestState:
-    return _RECIPE_SECTION_REQUEST_STATE.get()
-
-
-def _recipe_section_cancellation_response(
-    state: RecipeSectionRequestState,
-    _error: asyncio.CancelledError,
-) -> str:
-    return render_recipe_section_failure(
-        "recipe_section_cancelled",
-        bound_bytes=state.recipe_section_bound_bytes,
-        context={"admitted": state.admitted},
-    )
-
-
-def _recipe_section_failure(
-    code: str,
-    *,
-    context: Mapping[str, object] | None = None,
-) -> str:
-    state = _current_recipe_section_request_state()
-    return render_recipe_section_failure(
-        code,
-        bound_bytes=state.recipe_section_bound_bytes,
-        context=context,
-    )
+# Re-exported for backward-compatible import sites and test monkeypatching
+# of the get_recipe_section handler as a module attribute of tools_recipe.
+__all__ = [
+    "_RECIPE_SECTION_REQUEST_STATE",
+    "_RecipeSectionError",
+    "_current_recipe_section_request_state",
+    "_extract_step_body_from_persisted",
+    "_inject_initialization_counters",
+    "_recipe_section_cancellation_response",
+    "_recipe_section_failure",
+    "_recipe_section_request_state_factory",
+    "complete_recipe_initialization",
+    "get_recipe_section",
+    "list_recipes",
+    "load_recipe",
+    "migrate_recipe",
+    "validate_recipe",
+]
 
 
 @mcp.tool(
@@ -434,6 +338,8 @@ async def load_recipe(
             if not ingredients_only and result.get("valid", False):
                 if _finalized_projection is None:
                     raise RuntimeError("valid recipe is missing its finalized projection")
+                from autoskillit.server._recipe_delivery import prepare_recipe_delivery_generation
+
                 _prepared_generation = prepare_recipe_delivery_generation(
                     result,
                     recipe_name=name,
@@ -461,346 +367,6 @@ async def load_recipe(
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
-
-
-@mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core"},
-    annotations={"readOnlyHint": True},
-    meta=response_backstop_tool_meta("get_recipe_section"),
-)
-@track_response_size("get_recipe_section")
-@_cancellation_shield(
-    state_factory=_recipe_section_request_state_factory,
-    state_context_var=_RECIPE_SECTION_REQUEST_STATE,
-    response_factory=_recipe_section_cancellation_response,
-)
-async def get_recipe_section(
-    section: str,
-    recipe_name: str,
-    producer_tool: str,
-    descriptor_version: int,
-    schema_version: int,
-    payload_sha256: str,
-    artifact_blob_sha256: str,
-    artifact_blob_size_bytes: int,
-    body_sha256: str,
-    body_size_bytes: int,
-    flow_schema_version: int,
-    flow_sha256: str,
-    flow_size_bytes: int,
-    flow_record_count: int,
-    part: int = 0,
-    initialization_id: str | None = None,
-    page_plan_sha256: str | None = None,
-    continuation: str | None = None,
-) -> str:
-    """Retrieve a recipe step or section from the persisted recipe artifact.
-
-    Fixed sections are ``content``, ``ingredients_table``,
-    ``orchestration_rules``, ``stop_step_semantics``, ``errors``, and
-    ``warnings``. A validated ``post_prune_step_names`` entry selects raw
-    named-step YAML. Every page carries ``pagination_version``,
-    ``section_registry_sha256``, section/plan digests, and immutable payload
-    and body identities. Consumers must reject unknown versions or formats.
-
-    ``content_format`` selects exactly one reconstruction algorithm:
-    ``raw-text`` concatenates contiguous UTF-8 byte ranges;
-    ``json-scalar-page`` JSON-decodes and concatenates string pages;
-    ``json-array-page`` JSON-decodes and extends complete array pages; and
-    ``json-element-fragment`` JSON-decodes string fragments, concatenates and
-    verifies one canonical element, then JSON-decodes that element. Arrays may
-    interleave complete pages and oversized-element fragments.
-
-    Args:
-        section: The step or section name to retrieve. Must match a
-            ``post_prune_step_names`` entry from the envelope, or the
-            fixed section names documented above.
-        part: Continuation index (0-based). Default 0 returns the first
-            chunk; pass the value from the previous response's
-            ``next_part`` to retrieve the next chunk.
-        recipe_name: Recipe identity copied from the envelope's
-            ``recipe_pull.recipe_name`` field.
-        producer_tool: Producer identity copied from the envelope's
-            ``recipe_pull.producer_tool`` field.
-        payload_sha256: Domain-labelled semantic payload identity.
-        artifact_blob_sha256: Digest of the exact persisted blob bytes.
-        artifact_blob_size_bytes: Exact persisted blob byte size.
-        body_sha256: Digest of the recipe body bytes.
-        body_size_bytes: Exact recipe body byte size.
-        flow_schema_version: Exact flow-record schema version.
-        flow_sha256: Digest of the complete ordered flow generation.
-        flow_size_bytes: Exact length-prefixed flow-generation byte size.
-        flow_record_count: Exact number of canonical flow records.
-
-    Returns:
-        A versioned JSON page. Nonterminal pages include ``next_part``;
-        terminal pages omit it.
-
-    This tool requires the kitchen to be open (gated by open_kitchen).
-
-    Never raises.
-    """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    try:
-        request_state = _current_recipe_section_request_state()
-        with structlog.contextvars.bound_contextvars(tool="get_recipe_section"):
-            tool_ctx = _get_ctx_or_none()
-            if tool_ctx is None or tool_ctx.recipes is None:
-                return json.dumps({"success": False, "error": "kitchen not open"})
-
-            if not recipe_name or not producer_tool:
-                return _recipe_section_failure("recipe_artifact_identity_required")
-            requested_recipe_name = recipe_name
-
-            if producer_tool not in recipe_pull_producers():
-                return _recipe_section_failure("invalid_recipe_artifact_identity")
-
-            artifact_dir = getattr(tool_ctx, "temp_dir", None)
-            if not isinstance(artifact_dir, Path):
-                return _recipe_section_failure("invalid_recipe_artifact_identity")
-            try:
-                identity = RecipeArtifactGeneration(
-                    producer_tool=producer_tool,
-                    recipe_name=requested_recipe_name,
-                    descriptor_version=descriptor_version,
-                    schema_version=schema_version,
-                    payload_sha256=payload_sha256,
-                    artifact_blob_sha256=artifact_blob_sha256,
-                    artifact_blob_size_bytes=artifact_blob_size_bytes,
-                    body_sha256=body_sha256,
-                    body_size_bytes=body_size_bytes,
-                    flow_schema_version=flow_schema_version,
-                    flow_sha256=flow_sha256,
-                    flow_size_bytes=flow_size_bytes,
-                    flow_record_count=flow_record_count,
-                )
-            except (TypeError, ValueError):
-                return _recipe_section_failure("invalid_recipe_artifact_identity")
-            if not identity.has_valid_read_bounds():
-                return _recipe_section_failure("invalid_recipe_artifact_identity")
-            if part < 0:
-                return _recipe_section_failure("invalid_recipe_section_part")
-
-            try:
-                persisted = load_recipe_artifact(
-                    artifact_dir,
-                    kitchen_id=tool_ctx.kitchen_id,
-                    identity=identity,
-                )
-            except RecipeArtifactSchemaError as exc:
-                logger.warning(
-                    "get_recipe_section_schema_mismatch",
-                    stage="load",
-                    detail=str(exc),
-                )
-                return _recipe_section_failure("recipe_artifact_schema_mismatch")
-            except RecipeArtifactError:
-                if producer_tool not in recipe_recreation_producers():
-                    return _recipe_section_failure("recipe_artifact_unavailable")
-                generation_record = get_recipe_generation_store().lookup_artifact(
-                    tool_ctx.kitchen_id,
-                    identity,
-                )
-                if generation_record is None:
-                    return _recipe_section_failure("invalid_recipe_artifact_identity")
-                try:
-                    recreated_payload = thaw_recipe_generation_mapping(
-                        generation_record.artifact_payload
-                    )
-                    recreated_generation = persist_recipe_artifact(
-                        artifact_dir,
-                        kitchen_id=tool_ctx.kitchen_id,
-                        producer_tool=producer_tool,
-                        recipe_name=requested_recipe_name,
-                        payload=recreated_payload,
-                        flow_generation=generation_record.flow_generation,
-                    )
-                except RecipeArtifactSchemaError as exc:
-                    logger.warning(
-                        "get_recipe_section_schema_mismatch",
-                        stage="recreate_persist",
-                        detail=str(exc),
-                    )
-                    return _recipe_section_failure("recipe_artifact_schema_mismatch")
-                except (OSError, RecipeArtifactError, TypeError):
-                    return _recipe_section_failure(
-                        "recipe_artifact_unavailable",
-                        context={"detail": "recreation write failed"},
-                    )
-                if recreated_generation != identity:
-                    return _recipe_section_failure("invalid_recipe_artifact_identity")
-
-                try:
-                    persisted = load_recipe_artifact(
-                        artifact_dir,
-                        kitchen_id=tool_ctx.kitchen_id,
-                        identity=identity,
-                    )
-                except RecipeArtifactSchemaError as exc:
-                    logger.warning(
-                        "get_recipe_section_schema_mismatch",
-                        stage="reload",
-                        detail=str(exc),
-                    )
-                    return _recipe_section_failure("recipe_artifact_schema_mismatch")
-                except RecipeArtifactError as exc:
-                    logger.warning(
-                        "get_recipe_section_artifact_unavailable",
-                        stage="reload",
-                        detail=str(exc),
-                        exc_info=True,
-                    )
-                    return _recipe_section_failure(
-                        "recipe_artifact_unavailable",
-                        context={"detail": "post-recreation reload failed"},
-                    )
-
-            try:
-                selected = select_recipe_section(
-                    persisted,
-                    section,
-                    dynamic_content_loader=lambda step_name: _extract_step_body_from_persisted(
-                        persisted, step_name
-                    ),
-                )
-            except _RecipeSectionError as exc:
-                return _recipe_section_failure(exc.code)
-            selected = replace(selected, initialization_id=initialization_id)
-            if not selected.present:
-                return _recipe_section_failure(
-                    "section_not_found",
-                    context={"section": section},
-                )
-
-            try:
-                page_plan = get_or_build_recipe_section_page_plan(
-                    kitchen_id=tool_ctx.kitchen_id,
-                    generation=identity,
-                    selected=selected,
-                    recipe_section_bound_bytes=request_state.recipe_section_bound_bytes,
-                    char_ceiling=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
-                        "get_recipe_section"
-                    ].max_chars,
-                )
-            except RecipeSectionBoundError:
-                return _recipe_section_failure("recipe_section_bound_too_small")
-            except RecipeSectionNonConvergenceError:
-                return _recipe_section_failure("recipe_section_pagination_nonconvergent")
-            except RecipeSectionPaginationError:
-                logger.error("get_recipe_section pagination invariant failure", exc_info=True)
-                return _recipe_section_failure("recipe_section_internal_error")
-            if part >= page_plan.total_parts:
-                return _recipe_section_failure(
-                    "invalid_recipe_section_part",
-                    context={"total_parts": page_plan.total_parts},
-                )
-            if page_plan_sha256 is not None and (page_plan_sha256 != page_plan.page_plan_sha256):
-                return _recipe_section_failure("invalid_recipe_page_plan_identity")
-            active_initialization: InitializingRecipe | ReadyRecipe | None = None
-            if initialization_id is not None:
-                with tool_ctx.recipe_execution_lock:
-                    state = tool_ctx.recipe_initialization_state
-                if not matches_recipe_initialization_requirement(
-                    state,
-                    initialization_id=initialization_id,
-                    artifact_generation=identity,
-                    section=section,
-                    page_plan_sha256=page_plan.page_plan_sha256,
-                ):
-                    return _recipe_section_failure("invalid_recipe_initialization_identity")
-                assert isinstance(state, (InitializingRecipe, ReadyRecipe))
-                active_initialization = state
-                if page_plan_sha256 != page_plan.page_plan_sha256:
-                    return _recipe_section_failure("invalid_recipe_page_plan_identity")
-            expected_continuation = (
-                None
-                if part == 0
-                else recipe_section_continuation_binding(
-                    generation=identity,
-                    initialization_id=initialization_id,
-                    section=section,
-                    section_sha256=page_plan.manifest.section_sha256,
-                    page_plan_sha256=page_plan.page_plan_sha256,
-                    next_part=part,
-                )
-            )
-            if continuation != expected_continuation:
-                return _recipe_section_failure("invalid_recipe_section_continuation")
-            rendered = render_recipe_section_page(page_plan, part)
-            if isinstance(active_initialization, InitializingRecipe):
-                completed_parts, total_parts, remaining_section_pulls = (
-                    recipe_initialization_progress_counts(
-                        active_initialization,
-                        section=section,
-                        page_plan_sha256=page_plan.page_plan_sha256,
-                        part=part,
-                    )
-                )
-                # Counter injection without reserialization: parse the outer
-                # envelope, update the three integer counters, and re-dump.
-                # The content field (a parsed list for array sections after
-                # Stage D flattening) passes through json.dumps unchanged —
-                # list elements are already Python objects, not strings that
-                # would be double-escaped.
-                rendered_payload = json.loads(rendered)
-                rendered_payload["completed_parts"] = completed_parts
-                rendered_payload["total_parts"] = total_parts
-                rendered_payload["remaining_section_pulls"] = remaining_section_pulls
-                rendered = json.dumps(
-                    rendered_payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                    sort_keys=True,
-                )
-                if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
-                    return _recipe_section_failure("recipe_section_bound_too_small")
-                # Final-form character validation: the post-mutation rendered
-                # string is the actual delivered form; check it against the
-                # independent serialized-character ceiling.
-                if (
-                    request_state.recipe_section_bound_chars is not None
-                    and client_serialized_char_len(rendered).value
-                    > request_state.recipe_section_bound_chars
-                ):
-                    return _recipe_section_failure("recipe_section_bound_too_small")
-            else:
-                rendered_payload = json.loads(rendered)
-            content_sha256 = rendered_payload.get("content_sha256")
-            if isinstance(active_initialization, ReadyRecipe):
-                if isinstance(content_sha256, str):
-                    replayed = replay_terminal_section_response(
-                        tool_ctx,
-                        initialization_id=active_initialization.initialization_id,
-                        section=section,
-                        part=part,
-                        content_sha256=content_sha256,
-                    )
-                    if replayed is not None:
-                        return replayed
-                return rendered
-            if active_initialization is None:
-                return rendered
-            completion_receipt = rendered_payload.get("completion_receipt")
-            return cast(
-                str,
-                FinalizedRecipeSectionResponse(
-                    rendered=rendered,
-                    tool_ctx=tool_ctx,
-                    initialization_id=active_initialization.initialization_id,
-                    artifact_generation=identity,
-                    section=section,
-                    page_plan_sha256=page_plan.page_plan_sha256,
-                    part=part,
-                    content_sha256=(content_sha256 if isinstance(content_sha256, str) else ""),
-                    completion_receipt=(
-                        completion_receipt if isinstance(completion_receipt, str) else None
-                    ),
-                ),
-            )
-    except Exception:
-        logger.error("get_recipe_section unhandled exception", exc_info=True)
-        return _recipe_section_failure("recipe_section_internal_error")
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -835,60 +401,6 @@ async def complete_recipe_initialization(initialization_id: str) -> str:
             {"success": False, "error": "recipe_initialization_internal_error"},
             separators=(",", ":"),
         )
-
-
-def _extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:
-    """Extract a single step's YAML subtree from the persisted full payload.
-
-    The persisted payload's ``content`` field is the full recipe YAML
-    rendered as a string (from ``load_and_validate``). We re-parse it
-    via ``load_yaml`` to access the structured steps dict, then return
-    only the requested step's sub-mapping serialized back to YAML.
-    Returns an empty string only when the step is not present. Artifact parse
-    and section serialization failures raise ``_RecipeSectionError`` so the
-    caller can distinguish them from an absent section.
-    """
-    content = persisted.get("content", "") or ""
-    if not content or not step_name:
-        return ""
-    try:
-        parsed = load_yaml(content)
-    except Exception as exc:
-        logger.warning(
-            "get_recipe_section_step_yaml_parse_failed",
-            step_name=step_name,
-            exc_info=True,
-        )
-        raise _RecipeSectionError(
-            "recipe_artifact_parse_failed", f"{type(exc).__name__}: {exc}"
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise _RecipeSectionError(
-            "recipe_artifact_parse_failed", "recipe content is not a mapping"
-        )
-    steps = parsed.get("steps")
-    if not isinstance(steps, dict):
-        raise _RecipeSectionError("recipe_artifact_parse_failed", "recipe steps are not a mapping")
-    step_obj = steps.get(step_name)
-    if step_obj is None:
-        return ""
-    if not isinstance(step_obj, dict):
-        raise _RecipeSectionError(
-            "recipe_section_serialization_failed",
-            "recipe step is not a mapping",
-        )
-    # Render just this step's subtree as compact YAML.
-    try:
-        return fast_dumps({step_name: step_obj})
-    except Exception as exc:
-        logger.warning(
-            "get_recipe_section_step_yaml_serialize_failed",
-            step_name=step_name,
-            exc_info=True,
-        )
-        raise _RecipeSectionError(
-            "recipe_section_serialization_failed", f"{type(exc).__name__}: {exc}"
-        ) from exc
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})

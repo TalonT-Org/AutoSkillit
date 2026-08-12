@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
+from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY, client_serialized_char_len
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from tests.contracts.fixtures.recipes import (
     ALL_DELIVERY_SURFACES,
@@ -96,6 +96,18 @@ def test_implementation_wire_reduction_from_projection_removal(
     assert reduction_bytes >= 150_000, (
         f"Expected at least 150KB reduction from projection removal, "
         f"got {reduction_bytes:,} bytes (persisted={persisted_size:,}, wire={wire_size:,})"
+    )
+
+    # Client-serialized chars: verify the reduction is also visible in the
+    # client-measured domain (not just raw bytes).
+    wire_rendered = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+    persisted_rendered = json.dumps(persisted, ensure_ascii=False, separators=(",", ":"))
+    wire_chars = client_serialized_char_len(wire_rendered).value
+    persisted_chars = client_serialized_char_len(persisted_rendered).value
+    reduction_chars = persisted_chars - wire_chars
+    assert reduction_chars >= 150_000, (
+        f"Expected at least 150K client-serialized char reduction, "
+        f"got {reduction_chars:,} chars (persisted={persisted_chars:,}, wire={wire_chars:,})"
     )
 
 

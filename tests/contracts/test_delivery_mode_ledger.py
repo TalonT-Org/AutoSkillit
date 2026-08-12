@@ -1,8 +1,9 @@
-"""Delivery-mode ledger: pinned (recipe × backend) → delivery mode."""
+"""Delivery-mode ledger: pinned (recipe × backend) → delivery mode and size."""
 
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -15,6 +16,7 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     HostClientAttestation,
     RecipeDeliveryMode,
+    client_serialized_char_len,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
@@ -66,12 +68,19 @@ _EXPECTED_MODES: dict[tuple[str, str], RecipeDeliveryMode] = {
 }
 
 
-def _resolve_mode(
+@dataclass(frozen=True, slots=True)
+class _ResolvedDelivery:
+    mode: RecipeDeliveryMode
+    rendered: str
+    serialized_chars: int
+
+
+def _resolve_delivery(
     recipe_path: Path,
     backend_name: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> RecipeDeliveryMode:
+) -> _ResolvedDelivery:
     from autoskillit.server import _recipe_generation
 
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
@@ -128,7 +137,12 @@ def _resolve_mode(
         normalized_compile_key=prepared.normalized_compile_key,
         host_client_attestation=attestation,
     )
-    return finalized.decision.mode
+    chars = client_serialized_char_len(finalized.rendered).value
+    return _ResolvedDelivery(
+        mode=finalized.decision.mode,
+        rendered=finalized.rendered,
+        serialized_chars=chars,
+    )
 
 
 @pytest.mark.parametrize("recipe_path", BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
@@ -140,7 +154,8 @@ def test_delivery_mode_is_pinned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Any change flipping a delivery mode must update this ledger."""
-    mode = _resolve_mode(recipe_path, backend_name, tmp_path, monkeypatch)
+    resolved = _resolve_delivery(recipe_path, backend_name, tmp_path, monkeypatch)
+    mode = resolved.mode
     assert mode in (
         RecipeDeliveryMode.ORDINARY_INLINE,
         RecipeDeliveryMode.ENVELOPE,
@@ -154,4 +169,58 @@ def test_delivery_mode_is_pinned(
     assert mode == expected, (
         f"{recipe_path.stem}/{backend_name}: delivery mode changed from "
         f"{expected} to {mode} — update _EXPECTED_MODES if this flip is intentional"
+    )
+
+
+# Pinned (recipe stem, backend) → max client-serialized chars for inline recipes.
+# After Stage F (projection removal), inline payloads are significantly smaller.
+# Each value is the measured serialized char count with 10% headroom tolerance.
+# Update when a recipe grows/shrinks past these thresholds.
+_EXPECTED_MAX_SERIALIZED_CHARS: dict[tuple[str, str], int] = {
+    ("bem-wrapper", "claude-code"): 24_000,
+    ("consolidate-health-reports", "claude-code"): 12_000,
+    ("consolidate-health-reports", "codex"): 12_000,
+    ("full-audit", "claude-code"): 37_000,
+    ("implement-findings", "claude-code"): 34_000,
+    ("planner", "claude-code"): 80_000,
+    ("promote-to-main-wrapper", "claude-code"): 19_000,
+    ("research-archive", "claude-code"): 31_000,
+    ("research-design", "claude-code"): 67_000,
+    ("research-implement", "claude-code"): 108_000,
+    ("research-review", "claude-code"): 77_000,
+}
+
+
+@pytest.mark.parametrize("recipe_path", BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+@pytest.mark.parametrize("backend_name", sorted(BACKEND_REGISTRY), ids=lambda n: n)
+def test_inline_payload_serialized_size_is_pinned(
+    recipe_path: Path,
+    backend_name: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inline recipes must have client-serialized chars within pinned headroom.
+
+    Stage F removed ~200K of finalized_recipe_projection from the wire,
+    producing a measurable reduction in client-serialized payload size.
+    This test pins the post-reduction sizes with headroom to detect
+    unexpected growth (recipe bloat) or reduction (missing content).
+    """
+    resolved = _resolve_delivery(recipe_path, backend_name, tmp_path, monkeypatch)
+    if resolved.mode != RecipeDeliveryMode.ORDINARY_INLINE:
+        pytest.skip(f"{recipe_path.stem}/{backend_name} is ENVELOPE, no inline size pin")
+    expected_max = _EXPECTED_MAX_SERIALIZED_CHARS.get((recipe_path.stem, backend_name))
+    assert expected_max is not None, (
+        f"{recipe_path.stem}/{backend_name}: no pinned size in _EXPECTED_MAX_SERIALIZED_CHARS — "
+        "add one when introducing a new inline-delivered recipe or backend"
+    )
+    assert resolved.serialized_chars <= expected_max, (
+        f"{recipe_path.stem}/{backend_name}: inline payload serialized chars "
+        f"({resolved.serialized_chars:,}) exceeds pinned max ({expected_max:,}) — "
+        "update _EXPECTED_MAX_SERIALIZED_CHARS if this growth is intentional"
+    )
+    # Sanity: inline payloads must also have meaningful content (not empty/trivial)
+    assert resolved.serialized_chars > 1_000, (
+        f"{recipe_path.stem}/{backend_name}: inline payload suspiciously small "
+        f"({resolved.serialized_chars:,} chars)"
     )

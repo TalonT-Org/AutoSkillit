@@ -372,12 +372,12 @@ def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
     Shared by attested-path tests that must prove a value came from a tool
     response, never from re-reading the recipe artifact off disk.
     """
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     def _forbidden(*_args, **_kwargs):
         raise AssertionError("credential must come from responses, not payload.json")
 
-    return lambda: monkeypatch.setattr(tools_recipe, "load_recipe_artifact", _forbidden)
+    return lambda: monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", _forbidden)
 
 
 _READY_RECIPE_ENVELOPE = "remediation"

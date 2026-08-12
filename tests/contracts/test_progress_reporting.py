@@ -7,7 +7,6 @@ import pytest
 from autoskillit.core import SerializedChars
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline import ToolContext
-from autoskillit.server.tools import tools_recipe
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 from tests.server._helpers import _open_kitchen_patched
 
@@ -64,8 +63,10 @@ async def test_progress_recheck_enforces_client_char_ceiling_too(
     identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
     requirement = envelope["required_sections"][0]
 
+    from autoskillit.server.tools import _recipe_section_handler
+
     monkeypatch.setattr(
-        tools_recipe,
+        _recipe_section_handler,
         "client_serialized_char_len",
         lambda _text: SerializedChars(10**9),
     )

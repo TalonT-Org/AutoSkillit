@@ -51,17 +51,20 @@ from autoskillit.pipeline import (
     start_kitchen_effect,
 )
 from autoskillit.recipe import load_and_validate
+from autoskillit.server import _recipe_artifact as recipe_artifact
 from autoskillit.server import _recipe_delivery as recipe_delivery
 from autoskillit.server import _recipe_section_pagination as pagination
+from autoskillit.server._recipe_artifact import (
+    _canonical_payload,
+    _generation_dir,
+    _generation_from_payload,
+)
 from autoskillit.server._recipe_delivery import (
     RECIPE_BODY_END,
     RECIPE_BODY_START,
     RECIPE_COMPLETION_SENTINEL,
     RecipeArtifactError,
     RecipeArtifactSchemaError,
-    _canonical_payload,
-    _generation_dir,
-    _generation_from_payload,
     build_recipe_envelope,
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
@@ -540,7 +543,7 @@ def test_shared_producer_surfaces_require_identical_pull_policies(
         pull_eligible=False
     )
     monkeypatch.setattr(
-        "autoskillit.server._recipe_delivery.RECIPE_DELIVERY_SURFACE_REGISTRY",
+        "autoskillit.server._recipe_artifact.RECIPE_DELIVERY_SURFACE_REGISTRY",
         conflicting,
     )
 
@@ -621,9 +624,9 @@ def test_generation_path_includes_version_domain(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version_name: str
 ) -> None:
     first = _persist(tmp_path)
-    current_version = getattr(recipe_delivery, version_name)
+    current_version = getattr(recipe_artifact, version_name)
     monkeypatch.setattr(
-        f"autoskillit.server._recipe_delivery.{version_name}",
+        f"autoskillit.server._recipe_artifact.{version_name}",
         current_version + 1,
     )
     monkeypatch.setattr(recipe_delivery_types, version_name, current_version + 1)
@@ -862,7 +865,7 @@ def test_kitchen_retirement_evicts_after_generation_lock_exits(
     tmp_path: Path,
 ) -> None:
     lock_active = False
-    original_lock = recipe_delivery._generation_lock
+    original_lock = recipe_artifact._generation_lock
 
     @contextmanager
     def _tracked_lock(temp_dir: Path, *, exclusive: bool):
@@ -880,7 +883,7 @@ def test_kitchen_retirement_evicts_after_generation_lock_exits(
         assert lock_active is False
         evicted.append(kitchen_id)
 
-    monkeypatch.setattr(recipe_delivery, "_generation_lock", _tracked_lock)
+    monkeypatch.setattr(recipe_artifact, "_generation_lock", _tracked_lock)
     monkeypatch.setattr(pagination, "evict_kitchen", _evict)
 
     assert retire_recipe_artifacts(tmp_path, kitchen_id="lock-kitchen") is True
@@ -899,7 +902,7 @@ def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
 
     evict.reset_mock()
     monkeypatch.setattr(
-        recipe_delivery,
+        recipe_artifact,
         "atomic_write",
         MagicMock(side_effect=OSError("retirement failed")),
     )
@@ -1633,7 +1636,7 @@ async def test_pull_tool_maps_planner_failures_to_exact_bounded_codes(
         raise failure
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_recipe.get_or_build_recipe_section_page_plan",
+        "autoskillit.server.tools._recipe_section_handler.get_or_build_recipe_section_page_plan",
         _fail_plan,
     )
 
@@ -1704,6 +1707,7 @@ async def test_pull_tool_distinguishes_missing_none_and_present_empty_sections(
 async def test_initial_schema_failure_is_bounded_and_never_recreates(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
     import autoskillit.server.tools.tools_recipe as tools_recipe
 
     tool_ctx_kitchen_open.backend = CodexBackend()
@@ -1718,7 +1722,7 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
     recreate = MagicMock(side_effect=AssertionError("schema failure must not recreate"))
     warning = MagicMock()
     monkeypatch.setattr(tools_recipe, "serve_recipe", recreate)
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1739,7 +1743,7 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
 async def test_recreation_persistence_schema_failure_precedes_artifact_error(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-write"
@@ -1749,12 +1753,12 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
     )
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "persist_recipe_artifact",
         MagicMock(side_effect=RecipeArtifactSchemaError("malformed recreation")),
     )
     warning = MagicMock()
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1772,18 +1776,18 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
 async def test_post_recreation_reload_schema_failure_precedes_reload_error(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-reload"
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "persist_recipe_artifact",
         lambda *_args, **_kwargs: generation,
     )
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "load_recipe_artifact",
         MagicMock(
             side_effect=[
@@ -1793,7 +1797,7 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
         ),
     )
     warning = MagicMock()
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1811,18 +1815,18 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
 async def test_post_recreation_reload_artifact_failure_logs_exception_context(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-artifact-reload"
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "persist_recipe_artifact",
         lambda *_args, **_kwargs: generation,
     )
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "load_recipe_artifact",
         MagicMock(
             side_effect=[
@@ -1832,7 +1836,7 @@ async def test_post_recreation_reload_artifact_failure_logs_exception_context(
         ),
     )
     warning = MagicMock()
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1855,13 +1859,13 @@ async def test_post_recreation_reload_artifact_failure_logs_exception_context(
 async def test_negative_part_is_rejected_before_artifact_load(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
     generation = _persist(tool_ctx_kitchen_open.temp_dir)
     artifact_load = MagicMock(side_effect=AssertionError("negative part reached artifact load"))
-    monkeypatch.setattr(tools_recipe, "load_recipe_artifact", artifact_load)
+    monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", artifact_load)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 

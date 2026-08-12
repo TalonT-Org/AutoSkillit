@@ -26,6 +26,7 @@ _SCANNED_FILES = (
     SRC_ROOT / "server" / "_recipe_delivery.py",
     SRC_ROOT / "server" / "_recipe_section_pagination.py",
     SRC_ROOT / "server" / "tools" / "tools_recipe.py",
+    SRC_ROOT / "server" / "tools" / "_recipe_section_handler.py",
 )
 
 _BOUND_ATTRS = frozenset({"page_max_bytes", "response_max_bytes"})
@@ -46,12 +47,12 @@ _ALLOWED_BOUND_READS: frozenset[tuple[str, str, str]] = frozenset(
             "response_budget.page_max_bytes",
         ),
         (
-            "server/tools/tools_recipe.py",
+            "server/tools/_recipe_section_handler.py",
             "_recipe_section_request_state_factory",
             "tool_ctx.config.output_budget.response_max_bytes",
         ),
         (
-            "server/tools/tools_recipe.py",
+            "server/tools/_recipe_section_handler.py",
             "_recipe_section_request_state_factory",
             "tool_ctx.config.output_budget.page_max_bytes",
         ),

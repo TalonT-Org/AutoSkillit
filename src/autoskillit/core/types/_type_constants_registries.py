@@ -349,7 +349,7 @@ RECIPE_EXECUTION_INSTALL_SITE_REGISTRY: Mapping[str, ExecutionInstallSiteDef] = 
         "inline_delivery": ExecutionInstallSiteDef(
             installer_module="src/autoskillit/server/_recipe_delivery.py",
             installer_symbol="complete_finalized_recipe_response",
-            delivering_module="src/autoskillit/server/_recipe_delivery.py",
+            delivering_module="src/autoskillit/server/_recipe_artifact.py",
             delivering_symbol="build_canonical_recipe_artifact_payload",
             delivery_surface="open_kitchen",
         ),

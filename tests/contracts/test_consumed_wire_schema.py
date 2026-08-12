@@ -53,7 +53,7 @@ _RECIPE_PAYLOAD_FIELDS = frozenset(
 # The union of all fields with programmatic consumers.
 _CONSUMED_INLINE_FIELDS = _DELIVERY_PIPELINE_FIELDS | _RECIPE_PAYLOAD_FIELDS
 
-# Fields that MUST NOT appear (dead weight removed in Stage F)
+# Fields that MUST NOT appear on the wire: dead weight with no programmatic consumers.
 _EXCLUDED_INLINE_FIELDS = frozenset(
     {
         "finalized_recipe_projection",

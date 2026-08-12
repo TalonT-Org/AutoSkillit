@@ -10,7 +10,11 @@ from types import MappingProxyType
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
-from ._type_constants_registries import CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS
+from ._type_constants_registries import (
+    CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS,
+    CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
+    CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
+)
 from ._type_enums import BackendEventKind, HookTrustPolicy, OutputFormat
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
@@ -379,13 +383,18 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     session_dir_persistent=False,
     cook_startup_observer_capable=False,
     supports_model_invocation_gating=True,
-    # 23,250 = 93% of the conservative (unattested) 25,000-token client gate —
-    # a 7% headroom fraction.  The static capability must derive from the
-    # conservative default, not the attested 50,000 value; the attested figure
-    # flows only through host attestation at runtime, never through this static
-    # table.  Recipes exceeding this threshold but fitting the attested ceiling
-    # are handled by the annotation-aware inline path when attestation is present.
-    unnegotiated_tool_result_token_limit=CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS * 93 // 100,
+    # 23,250 = CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS × CONSERVATIVE_GATE_HEADROOM
+    # (25,000 × 93 / 100).  The static capability derives from the conservative
+    # (unattested) 25,000-token client gate with a named 7% headroom fraction.
+    # The attested 50,000 value flows only through host attestation at runtime,
+    # never through this static table.  Recipes exceeding this threshold but
+    # fitting the attested ceiling are handled by the annotation-aware inline
+    # path when attestation is present.
+    unnegotiated_tool_result_token_limit=(
+        CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS
+        * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
+        // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
+    ),
     protected_recipe_delivery_capable=False,
     recipe_delivery_budget=None,
     hook_trust_policy=HookTrustPolicy.AUTOMATED,

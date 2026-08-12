@@ -117,6 +117,12 @@ def compile_bounded_page_plan(
     return result
 
 
+def load_recipe_payload(recipe_path: Path) -> dict[str, object]:
+    """Return the production-shaped payload dict for a bundled recipe."""
+    payload, _ = _payload_and_projection(recipe_path)
+    return payload
+
+
 def backend_forces_bounded(backend_name: str, surface: str) -> bool:
     """Return whether backend/surface policy requires envelope delivery."""
     capabilities = BACKEND_REGISTRY[backend_name]().capabilities

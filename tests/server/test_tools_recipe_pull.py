@@ -1157,12 +1157,25 @@ def test_annotation_aware_inline_for_exempt_surface_within_ceiling(tool_ctx) -> 
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-exemption"
 
-    ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
-    # Payload whose ordinary JSON exceeds the ordinary_limit (in bytes) but stays
-    # under the 195,000-byte exemption ceiling.
+    # The effective unannotated limit rises to the attested gate × headroom
+    # when attestation is valid. The payload must exceed THAT to exercise the
+    # annotation-aware branch.
+    from autoskillit.core import (
+        CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+        CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
+        CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
+    )
+
+    effective_unannotated = (
+        CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
+        * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
+        // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
+    )
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
-    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, ordinary_limit + 5_000)
-    assert len(oversized_content.encode("utf-8")) > ordinary_limit
+    # Payload whose ordinary JSON exceeds the effective attested unannotated
+    # limit (46,500) but stays under the char-margin exemption ceiling.
+    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, effective_unannotated + 5_000)
+    assert len(oversized_content.encode("utf-8")) > effective_unannotated
     assert len(oversized_content.encode("utf-8")) <= ceiling * 9 // 10
 
     finalized = _finalize_recipe_delivery(

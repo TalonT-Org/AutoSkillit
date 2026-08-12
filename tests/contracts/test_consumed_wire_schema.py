@@ -12,10 +12,10 @@ from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS, compile_bound
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-# Fields that inline delivery MUST carry (have programmatic consumers).
-# A future field addition must name its consumer here so dead weight
-# cannot silently re-accrete.
-_CONSUMED_INLINE_FIELDS = frozenset(
+# Delivery-pipeline fields: always present in every inline delivery,
+# added by finalize_recipe_delivery.  Consumer: recipe initialization,
+# execution, and pull machinery.
+_DELIVERY_PIPELINE_FIELDS = frozenset(
     {
         "content",
         "content_hash",
@@ -26,16 +26,46 @@ _CONSUMED_INLINE_FIELDS = frozenset(
         "recipe_flow",
         "recipe_pull",
         "success",
-        # NOTE: "warnings" is handler-injected by open_kitchen (tools_kitchen.py)
-        # when override warnings exist, not by the delivery pipeline.  It is NOT
-        # required in the inline schema produced by finalize_recipe_delivery.
     }
 )
+
+# Recipe payload fields: recipe-specific content consumed by the
+# sous-chef and recipe system.  Vary by recipe; all are legitimate.
+_RECIPE_PAYLOAD_FIELDS = frozenset(
+    {
+        "diagram",
+        "ingredients_table",
+        "initialization_id",
+        "kitchen",
+        "kitchen_rules",
+        "orchestration_rules",
+        "post_prune_routing_edges",
+        "post_prune_step_names",
+        "recipe_version",
+        "requires_packs",
+        "stop_step_semantics",
+        "suggestions",
+        "valid",
+        "version",
+    }
+)
+
+# The union of all fields with programmatic consumers.
+_CONSUMED_INLINE_FIELDS = _DELIVERY_PIPELINE_FIELDS | _RECIPE_PAYLOAD_FIELDS
 
 # Fields that MUST NOT appear (dead weight removed in Stage F)
 _EXCLUDED_INLINE_FIELDS = frozenset(
     {
         "finalized_recipe_projection",
+    }
+)
+
+# Fields that may appear when handler-injected (e.g. open_kitchen injects
+# "warnings" for override warnings) but are not part of the delivery
+# pipeline's own output.  Exact-equality checks must allow these.
+_HANDLER_INJECTED_FIELDS = frozenset(
+    {
+        "warnings",
     }
 )
 
@@ -66,6 +96,16 @@ def test_inline_payload_schema_is_exact(
     missing_consumed = _CONSUMED_INLINE_FIELDS - payload_fields
     assert not missing_consumed, (
         f"Missing consumed fields for {recipe_path.stem}: {sorted(missing_consumed)}"
+    )
+
+    # Exact equality: no unexpected fields beyond consumed + handler-injected.
+    # A future field addition must either name its consumer in
+    # _CONSUMED_INLINE_FIELDS or be explicitly handler-injected.
+    unexpected = payload_fields - _CONSUMED_INLINE_FIELDS - _HANDLER_INJECTED_FIELDS
+    assert not unexpected, (
+        f"Unexpected wire fields for {recipe_path.stem}: {sorted(unexpected)}. "
+        "Add consumed fields to _CONSUMED_INLINE_FIELDS (with consumer citation) "
+        "or handler-injected fields to _HANDLER_INJECTED_FIELDS."
     )
 
     # Measure serialized size for headroom tracking

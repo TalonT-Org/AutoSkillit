@@ -244,6 +244,17 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
             return _coerce_value(value, inner, context)
         return value
 
+    # Dimensional wrapper types (Utf8ByteLimit, etc.): bless raw YAML
+    # integers into typed wrappers exactly once at the config boundary.
+    from autoskillit.core import Utf8ByteLimit
+
+    if target_type is Utf8ByteLimit:
+        try:
+            return Utf8ByteLimit(int(value))
+        except (TypeError, ValueError) as exc:
+            raise ConfigSchemaError(
+                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
+            ) from exc
     if target_type is int:
         try:
             return int(value)

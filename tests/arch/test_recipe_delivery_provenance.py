@@ -72,3 +72,45 @@ def test_resolver_does_not_treat_wire_metadata_or_rollouts_as_authority() -> Non
     body = ast.dump(_resolver()).lower()
     for untrusted_source in ("_meta", "rollout", "trace", "tool_output_token_limit"):
         assert untrusted_source not in body
+
+
+def test_attestation_gate_and_annotation_ceiling_are_independent() -> None:
+    """Attested gate tokens and annotation ceiling must never be compared.
+
+    The annotated regime (char-gated via ``exemption_ceiling_chars``) and the
+    unannotated regime (token-gated via ``attested_client_gate_tokens``) are
+    independent admission channels — the resolver must never cross-compare a
+    char ceiling against a token count.
+    """
+    function = _resolver()
+    # Walk the AST for Compare nodes — no comparison should involve both
+    # "attested_client_gate_tokens" and "exemption_ceiling_chars".
+    for node in ast.walk(function):
+        if isinstance(node, ast.Compare):
+            names = {
+                n.attr if isinstance(n, ast.Attribute) else n.id
+                for n in ast.walk(node)
+                if isinstance(n, (ast.Name, ast.Attribute))
+            }
+            assert not (
+                "attested_client_gate_tokens" in names and "exemption_ceiling_chars" in names
+            ), (
+                "resolver cross-compares attested gate tokens with annotation ceiling — "
+                "these are independent admission channels (token vs char)"
+            )
+
+
+def test_resolver_validates_attestation_gate_before_trusting() -> None:
+    """The resolver must validate attested_client_gate_tokens before consuming it.
+
+    A bare non-None check is insufficient — the gate must be compared against
+    the expected injected value (CLAUDE_INJECTED_CLIENT_RESULT_TOKENS) so
+    arbitrary positive attestations cannot bypass the token gate.
+    """
+    body = ast.dump(_resolver())
+    # The resolver must reference CLAUDE_INJECTED_CLIENT_RESULT_TOKENS to
+    # validate the attested gate — its name (or its re-export) must appear.
+    assert "CLAUDE_INJECTED_CLIENT_RESULT_TOKENS" in body, (
+        "resolver does not validate attested_client_gate_tokens against "
+        "CLAUDE_INJECTED_CLIENT_RESULT_TOKENS — arbitrary attestation accepted"
+    )

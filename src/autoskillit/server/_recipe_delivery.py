@@ -819,8 +819,25 @@ def validate_recipe_exemption_fitness(
 
 
 def _recipe_exemption_admitted_bytes(ceiling_bytes: int) -> int:
-    """Return the exemption ceiling after reserving the packaging margin."""
-    return ceiling_bytes * 9 // 10
+    """Return the byte exemption ceiling after reserving the packaging margin."""
+    return ceiling_bytes * _EXEMPTION_HEADROOM_NUMERATOR // _EXEMPTION_HEADROOM_DENOMINATOR
+
+
+# Shared 90% headroom factor for exemption admission — reserves 10% of the
+# registered ceiling for packaging overhead (JSON envelope, counters, hashes).
+# Used by both the byte-domain and char-domain exemption helpers.
+_EXEMPTION_HEADROOM_NUMERATOR = 9
+_EXEMPTION_HEADROOM_DENOMINATOR = 10
+
+
+def _recipe_exemption_admitted_chars(ceiling_chars: int) -> int:
+    """Return the char exemption ceiling after reserving the packaging margin.
+
+    Typed counterpart of ``_recipe_exemption_admitted_bytes`` for the
+    client-measured serialized-character domain. Both helpers share the
+    same 90% headroom factor.
+    """
+    return ceiling_chars * _EXEMPTION_HEADROOM_NUMERATOR // _EXEMPTION_HEADROOM_DENOMINATOR
 
 
 def _conservative_token_upper_bound(rendered: str) -> int:
@@ -1079,7 +1096,7 @@ def finalize_recipe_delivery(
             else None
         ),
         exemption_ceiling_chars=(
-            surface_definition.response_exemption.max_chars
+            _recipe_exemption_admitted_chars(surface_definition.response_exemption.max_chars)
             if surface_definition.response_exemption is not None
             else None
         ),

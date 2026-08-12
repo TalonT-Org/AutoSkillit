@@ -764,7 +764,8 @@ async def get_recipe_section(
                     > request_state.recipe_section_bound_chars
                 ):
                     return _recipe_section_failure("recipe_section_bound_too_small")
-            rendered_payload = json.loads(rendered)
+            else:
+                rendered_payload = json.loads(rendered)
             content_sha256 = rendered_payload.get("content_sha256")
             if isinstance(active_initialization, ReadyRecipe):
                 if isinstance(content_sha256, str):

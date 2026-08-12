@@ -17,8 +17,11 @@ from ._type_exceptions import SkillContractError
 
 __all__ = [
     "ANNOTATION_HARD_CAP_CHARS",
+    "CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION",
     "CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS",
     "CLAUDE_INJECTED_CLIENT_RESULT_TOKENS",
+    "CONSERVATIVE_GATE_HEADROOM_DENOMINATOR",
+    "CONSERVATIVE_GATE_HEADROOM_NUMERATOR",
     "PIPELINE_FORBIDDEN_TOOLS",
     "SKILL_TOOLS",
     "GATED_TOOLS",
@@ -241,6 +244,22 @@ CONSERVATIVE_RESULT_TOKEN_FLOOR = 10_000
 CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS = 25_000
 CLAUDE_INJECTED_CLIENT_RESULT_TOKENS = 50_000
 ANNOTATION_HARD_CAP_CHARS = 500_000
+
+# Conservative headroom fraction applied to client token gates when
+# deriving the server's admission threshold. Reserves 7% below the
+# nominal gate to account for the gap between the 1:1 conservative
+# byte-to-token estimate (CONSERVATIVE_ADMISSION_POLICY) and actual
+# tokenization — a 46K-byte payload may tokenize to slightly more than
+# 46K tokens under some tokenizers, so the 93% multiplier ensures the
+# server never admits a payload that risks spilling at the client gate.
+CONSERVATIVE_GATE_HEADROOM_NUMERATOR = 93
+CONSERVATIVE_GATE_HEADROOM_DENOMINATOR = 100
+
+# The minimum Claude Code CLI version that supports the
+# ``anthropic/maxResultSizeChars`` tool-result annotation. Below this
+# version, annotation metadata is stripped and the tool result is gated
+# purely by ``MAX_MCP_OUTPUT_TOKENS``.
+CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION = "2.1.91"
 
 RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = MappingProxyType(
     {

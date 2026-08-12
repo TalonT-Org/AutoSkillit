@@ -8,7 +8,6 @@ from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any
 
 import regex as re
@@ -21,6 +20,7 @@ from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
     CAMPAIGN_ID_ENV_VAR,
+    CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION,
     CLAUDE_CODE_CAPABILITIES,
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR,
@@ -104,22 +104,51 @@ from autoskillit.execution.session import parse_session_result
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
 
-# Claude-only host client attestation, layered onto every Claude-launched
-# session env (interactive, resume, skill, food-truck). Carries the launcher's
-# attestation of what the connected Claude Code host client supports to the
-# MCP server — read once at server startup (see server._recipe_delivery) and
-# used as the conservative-default source for recipe-delivery decisions.
-#
-# Deliberately NOT part of SHARED_BASELINE_ENV: Codex has its own
-# receipt-based protected recipe-delivery pipeline and must never be told it
-# has annotation support, which would make it eligible to bypass that
-# pipeline via ordinary inline delivery.
-_CLAUDE_HOST_ATTESTATION_ENV: Mapping[str, str] = MappingProxyType(
-    {
+# The minimum annotation-support version as a pre-parsed Version instance,
+# derived from the core constant to avoid redundant string parsing at every
+# launch. Used by _claude_host_attestation_env() to determine whether the
+# installed Claude Code CLI supports ``anthropic/maxResultSizeChars``.
+_ANNOTATION_SUPPORT_MIN = Version(CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION)
+
+# Module-level frozen attestation env, computed once by ensure_pre_launch()
+# and used by every subsequent session launch. None until the first
+# successful probe; _host_attestation_env() returns conservative defaults
+# (meta_support="0") in that case.
+_FROZEN_ATTESTATION_ENV: dict[str, str] | None = None
+
+
+def _claude_host_attestation_env(
+    installed_version: Version | None,
+) -> dict[str, str]:
+    """Build the host client attestation env for one Claude-launched session.
+
+    Carries the launcher's attestation of what the connected Claude Code host
+    client supports to the MCP server — read once at server startup (see
+    ``server._recipe_delivery``) and used as the conservative-default source
+    for recipe-delivery decisions.
+
+    ``annotation_support`` is derived from the installed CLI version probed by
+    ``ensure_pre_launch()`` — not hardcoded. Below 2.1.91, annotation metadata
+    is stripped by the client and tool results fall back to token-gated
+    ``MAX_MCP_OUTPUT_TOKENS`` only. When the installed version is unknown
+    (pre-launch probe not yet run), annotation support defaults to ``"0"``
+    (conservative fallback).
+
+    Deliberately NOT part of ``SHARED_BASELINE_ENV``: Codex has its own
+    receipt-based protected recipe-delivery pipeline and must never be told it
+    has annotation support.
+    """
+    meta_support = (
+        "1"
+        if installed_version is not None and installed_version >= _ANNOTATION_SUPPORT_MIN
+        else "0"
+    )
+    return {
         AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS: str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
-        AUTOSKILLIT_ATTESTED_META_SUPPORT: "1",
+        AUTOSKILLIT_ATTESTED_META_SUPPORT: meta_support,
     }
-)
+
+
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
     "Order up! Today's special:",
@@ -438,6 +467,13 @@ class ClaudeResultParser:
 
 @dataclass(frozen=True, slots=True)
 class ClaudeCodeBackend(BackendCmdBuilderBase):
+    def _host_attestation_env(self) -> dict[str, str]:
+        """Return the host client attestation env for this backend instance."""
+        if _FROZEN_ATTESTATION_ENV is not None:
+            return dict(_FROZEN_ATTESTATION_ENV)
+        # Pre-probe: conservative defaults (annotation_support="0")
+        return _claude_host_attestation_env(None)
+
     def _binary(self) -> str:
         return "claude"
 
@@ -642,7 +678,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
             builder.variadic_pair(ClaudeFlags.TOOLS, t)
-        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | dict(_CLAUDE_HOST_ATTESTATION_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | self._host_attestation_env()
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
@@ -699,7 +735,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         _apply_output_format(cmd, output_format)
         if plugin_binding is not None:
             cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
-        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | dict(_CLAUDE_HOST_ATTESTATION_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | self._host_attestation_env()
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
@@ -805,7 +841,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             scenario_step_name=scenario_step_name,
         )
-        extras.update(_CLAUDE_HOST_ATTESTATION_ENV)
+        extras.update(self._host_attestation_env())
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
@@ -908,7 +944,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             scenario_step_name=scenario_step_name,
         )
-        extras.update(_CLAUDE_HOST_ATTESTATION_ENV)
+        extras.update(self._host_attestation_env())
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
@@ -1160,6 +1196,11 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             return ["Claude Code capability probe returned unparseable version output"]
         if installed < minimum:
             return [f"AutoSkillit requires Claude Code {minimum} or newer; found {installed}"]
+        # Freeze the attestation env from the probed version — all subsequent
+        # session launches use these values, ensuring consistency between the
+        # executable binding capture and the final cmd build.
+        global _FROZEN_ATTESTATION_ENV  # noqa: PLW0603
+        _FROZEN_ATTESTATION_ENV = _claude_host_attestation_env(installed)
         return []
 
     def recover_cook_history(self) -> None:

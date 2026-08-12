@@ -31,7 +31,6 @@ from autoskillit.core import (
     TokenLimit,
     client_serialized_char_len,
     resolve_general_output_token_limit,
-    resolve_recipe_envelope_byte_limit,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import (
@@ -212,7 +211,9 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         assert caps.recipe_delivery_budget is None
         bound_chars = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_chars
     else:
-        bound_chars = resolve_recipe_envelope_byte_limit(caps)
+        # Use the decision's selected limit — it reflects the attested gate
+        # when host attestation raised the unannotated threshold.
+        bound_chars = finalized.decision.selected_result_token_limit
     envelope = json.loads(finalized.rendered)
     assert client_serialized_char_len(finalized.rendered).value <= bound_chars, (
         f"{backend_name}: envelope for {recipe_name} exceeds "

@@ -8,10 +8,29 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from autoskillit.cli.session._session_launch import _run_interactive_session
 from autoskillit.core import BackendConventions, ClaudeFlags, HookTrustPolicy
+from autoskillit.execution.backends import claude as _claude_mod
 from autoskillit.execution.backends.codex import CodexFlags
+
+
+@pytest.fixture(autouse=True)
+def _pre_freeze_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pre-freeze the Claude attestation env so the executable binding capture
+    and the final cmd build see identical values.
+
+    Without this, ensure_pre_launch() sets _FROZEN_ATTESTATION_ENV between the
+    two build_interactive_cmd calls, causing env mismatch errors. The mock
+    subprocess returns version 2.1.197 (see _capture_subprocess).
+    """
+    monkeypatch.setattr(
+        _claude_mod,
+        "_FROZEN_ATTESTATION_ENV",
+        _claude_mod._claude_host_attestation_env(Version("2.1.197")),
+    )
+
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

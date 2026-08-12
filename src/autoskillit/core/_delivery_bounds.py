@@ -7,7 +7,12 @@ import json
 import time
 
 from .types._type_backend import BackendCapabilities
-from .types._type_constants_registries import ANNOTATION_HARD_CAP_CHARS
+from .types._type_constants_registries import (
+    ANNOTATION_HARD_CAP_CHARS,
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+    CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
+    CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
+)
 from .types._type_recipe_delivery import (
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
     HostClientAttestation,
@@ -133,27 +138,46 @@ def resolve_recipe_delivery_decision(
         return _envelope("invalid_required_token_count")
     if not producer or not _is_sha256_identity(payload_sha256):
         return _envelope("invalid_payload_identity")
-    # Unannotated regime: payloads that fit the backend's static unnegotiated
-    # limit (46,500 tokens for Claude, 10,000 for Codex) go inline without
-    # any attestation or protected-delivery machinery. The attested client
-    # gate (50,000 tokens) flows through the annotation-aware path below,
-    # not here — this branch handles only the small-payload fast path.
-    if required_serialized_tokens <= ordinary_limit:
+    # Unannotated regime: payloads that fit the effective token gate go
+    # inline without any attestation or protected-delivery machinery.
+    # When the host attests the exact injected gate (50,000 tokens) AND the
+    # backend has no protected delivery pipeline (budget is None — Claude
+    # only), the admission limit rises to the attested value × conservative
+    # headroom (46,500). Without attestation, or for backends with their own
+    # protected pipeline (Codex), the static conservative default applies.
+    _attestation_valid = (
+        host_client_attestation is not None
+        and host_client_attestation.attested_client_gate_tokens
+        == CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
+    )
+    effective_unannotated_limit = (
+        (
+            host_client_attestation.attested_client_gate_tokens
+            * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
+            // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
+        )
+        if _attestation_valid and host_client_attestation is not None and budget is None
+        else ordinary_limit
+    )
+    if required_serialized_tokens <= effective_unannotated_limit:
         return _decision(
             RecipeDeliveryMode.ORDINARY_INLINE,
-            selected_limit=ordinary_limit,
+            selected_limit=effective_unannotated_limit,
             reason="fits_unnegotiated_result_limit",
             receipt_status="not_required",
         )
     # Annotation-aware inline: when the host attests annotation support
-    # and the payload fits within the exemption ceiling, deliver inline
-    # without the protected-delivery machinery. Scoped to backends without
-    # a registered recipe_delivery_budget (i.e. Claude Code) — a backend
-    # that owns a protected delivery pipeline (Codex) must always resolve
-    # through that pipeline's receipt-based checks below, never through an
-    # unreceipted annotation shortcut.
+    # with a validated gate token value, and the payload fits within the
+    # exemption ceiling, deliver inline without the protected-delivery
+    # machinery. Scoped to backends without a registered
+    # recipe_delivery_budget (i.e. Claude Code) — a backend that owns a
+    # protected delivery pipeline (Codex) must always resolve through that
+    # pipeline's receipt-based checks below, never through an unreceipted
+    # annotation shortcut. Requires exact gate-token match to prevent
+    # arbitrary positive attestation from bypassing the token gate.
     if (
-        host_client_attestation is not None
+        _attestation_valid
+        and host_client_attestation is not None
         and host_client_attestation.annotation_support
         and budget is None
         and payload_serialized_chars is not None

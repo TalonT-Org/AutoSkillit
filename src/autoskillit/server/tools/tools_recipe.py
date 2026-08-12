@@ -40,17 +40,7 @@ from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._recipe_section_handler import (
-    _RECIPE_SECTION_REQUEST_STATE,
-    _current_recipe_section_request_state,
-    _extract_step_body_from_persisted,
-    _inject_initialization_counters,
-    _recipe_section_cancellation_response,
-    _recipe_section_failure,
-    _recipe_section_request_state_factory,
-    _RecipeSectionError,
-    get_recipe_section,
-)
+from autoskillit.server.tools._recipe_section_handler import get_recipe_section
 from autoskillit.server.tools._serve_helpers import (
     _admit_recipe_name,
     build_backend_capabilities_map,
@@ -63,17 +53,7 @@ from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
 
-# Re-exported for backward-compatible import sites and test monkeypatching
-# of the get_recipe_section handler as a module attribute of tools_recipe.
 __all__ = [
-    "_RECIPE_SECTION_REQUEST_STATE",
-    "_RecipeSectionError",
-    "_current_recipe_section_request_state",
-    "_extract_step_body_from_persisted",
-    "_inject_initialization_counters",
-    "_recipe_section_cancellation_response",
-    "_recipe_section_failure",
-    "_recipe_section_request_state_factory",
     "complete_recipe_initialization",
     "get_recipe_section",
     "list_recipes",

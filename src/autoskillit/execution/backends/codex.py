@@ -570,7 +570,8 @@ def _run_bounded_codex_probe(
     try:
         assert process.stdout is not None
         assert process.stderr is not None
-        selector = selectors.DefaultSelector()
+        selector_factory = selectors.DefaultSelector
+        selector = selector_factory()
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
         while selector.get_map() or owner.observe_exit() is None:
@@ -1967,8 +1968,7 @@ class CodexBackend(BackendCmdBuilderBase):
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
         )
-        # build_env strips this key from extras unconditionally, so it must be
-        # injected here, after build_env returns (as the other builders do).
+        # build_env strips this key, so inject it after the call like other builders.
         env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: NativeShellCaptureMode.CAPTURE.value})
         if executable is not None and dict(env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")

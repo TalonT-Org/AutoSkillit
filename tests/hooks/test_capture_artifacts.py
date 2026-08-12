@@ -19,7 +19,6 @@ import pytest
 
 import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture_artifacts as capture_artifacts
-import autoskillit.hooks._capture_process as capture_process
 from autoskillit.hooks._capture._snapshot import (
     CaptureMeasurement,
     CommandOutcome,
@@ -70,6 +69,7 @@ from autoskillit.hooks._capture_lifecycle import (
 )
 
 capture_authority = importlib.import_module(capture_artifacts.open_project_anchor.__module__)
+capture_process = importlib.import_module(capture_artifacts._spawn_bash.__module__)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 

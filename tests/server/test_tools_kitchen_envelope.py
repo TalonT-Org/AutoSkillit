@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.core import BackendCapabilities
 from tests.server._helpers import (
     _PATCHED_DEFAULTS,
     _SERVER_ONLY_KEYS,
@@ -17,6 +18,14 @@ from tests.server._helpers import (
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _claude_code_backend_mock() -> MagicMock:
+    backend = MagicMock()
+    backend.capabilities = BackendCapabilities(unnegotiated_tool_result_token_limit=46_500)
+    backend.name = "claude-code"
+    return backend
+
 
 # ---------------------------------------------------------------------------
 # Group E — hook drift / diagnostic warnings
@@ -484,7 +493,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     """T7: open_kitchen smoke-test renders the config-resolved base_branch value."""
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
-    from autoskillit.core import BackendCapabilities, pkg_root
+    from autoskillit.core import pkg_root
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     project_dir = pkg_root().parent.parent
@@ -503,10 +512,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     # must fit the conservative 1:1 admission policy, so backend=None with its
     # CLAUDE_CODE_CAPABILITIES fallback (23,250 tokens) may route to ENVELOPE.
     # Provide a mock backend with high enough limit for this ingredient test.
-    mock_backend = MagicMock()
-    mock_backend.capabilities = BackendCapabilities(unnegotiated_tool_result_token_limit=46_500)
-    mock_backend.name = "claude-code"
-    mock_ctx.backend = mock_backend
+    mock_ctx.backend = _claude_code_backend_mock()
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 
@@ -657,7 +663,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     """Full open_kitchen path: config value wins over caller override in rendered output."""
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
-    from autoskillit.core import BackendCapabilities, pkg_root
+    from autoskillit.core import pkg_root
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     project_dir = pkg_root().parent.parent
@@ -677,10 +683,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
-    mock_backend = MagicMock()
-    mock_backend.capabilities = BackendCapabilities(unnegotiated_tool_result_token_limit=46_500)
-    mock_backend.name = "claude-code"
-    mock_ctx.backend = mock_backend
+    mock_ctx.backend = _claude_code_backend_mock()
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 

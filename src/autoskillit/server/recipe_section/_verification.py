@@ -10,6 +10,7 @@ from autoskillit.core import (
     client_serialized_char_len,
     recipe_section_element_digest,
 )
+from autoskillit.server._recipe_section_planning import _decode_flow_record_elements
 from autoskillit.server.recipe_section._contracts import (
     RECIPE_SECTION_PAGE_RANGE_FIELDS,
     PlannedRecipeSectionPage,
@@ -297,18 +298,7 @@ def verify_finalized_recipe_section_plan(
         if page.descriptor.content_format == "json-array-page":
             expected_content = json.loads(page.content)
             if selected.section == "flow_records":
-                parsed_expected: list[object] = []
-                for elem in expected_content:
-                    if isinstance(elem, str):
-                        try:
-                            obj = json.loads(elem)
-                        except (json.JSONDecodeError, TypeError):
-                            parsed_expected.append(elem)
-                            continue
-                        parsed_expected.append(obj if isinstance(obj, dict) else elem)
-                    else:
-                        parsed_expected.append(elem)
-                expected_content = parsed_expected
+                expected_content = _decode_flow_record_elements(expected_content)
             content_matches = response.get("content") == expected_content
         else:
             content_matches = response.get("content") == page.content

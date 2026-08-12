@@ -66,6 +66,22 @@ def _max_utf8_prefix_end(
     )
 
 
+def _decode_flow_record_elements(content: list[object]) -> list[object]:
+    """Decode canonical flow-record object strings while preserving other values."""
+    records: list[object] = []
+    for element in content:
+        if isinstance(element, str):
+            try:
+                decoded = json.loads(element)
+            except (json.JSONDecodeError, TypeError):
+                records.append(element)
+                continue
+            records.append(decoded if isinstance(decoded, dict) else element)
+        else:
+            records.append(element)
+    return records
+
+
 def _render_candidate(
     *,
     selected: SelectedRecipeSection,
@@ -125,24 +141,7 @@ def _render_candidate(
         # string-in-string layer disappears here.
         content = json.loads(page.content)
         if selected.section == "flow_records":
-            # Flow-record elements are canonical JSON strings wrapping
-            # objects (see RecipeFlowGeneration.__post_init__,
-            # _canonical_flow_record). Parse each to a dict so the
-            # delivered page carries list[dict], not list[str].
-            # Defensive: only parse elements that are valid JSON objects;
-            # plain strings pass through unchanged.
-            parsed_records: list[object] = []
-            for elem in content:
-                if isinstance(elem, str):
-                    try:
-                        obj = json.loads(elem)
-                    except (json.JSONDecodeError, TypeError):
-                        parsed_records.append(elem)
-                        continue
-                    parsed_records.append(obj if isinstance(obj, dict) else elem)
-                else:
-                    parsed_records.append(elem)
-            content = parsed_records
+            content = _decode_flow_record_elements(content)
         body["content"] = content
     return json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 

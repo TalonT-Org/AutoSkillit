@@ -182,8 +182,8 @@ def test_implementation_recipe_envelope_is_physically_required(
 ) -> None:
     """The implementation recipe's flow records make inline delivery impossible.
 
-    After Stage F's projection removal, the implementation recipe payload
-    (without finalized_recipe_projection) is ~154K serialized chars — well
+    Without finalized_recipe_projection, the implementation recipe payload
+    is ~154K serialized chars — well
     under the annotation ceiling. However, the surface_payload rendered at
     delivery time includes 651 flow records, bringing the total to ~286K
     serialized chars — far exceeding the 175,500-char annotation ceiling.

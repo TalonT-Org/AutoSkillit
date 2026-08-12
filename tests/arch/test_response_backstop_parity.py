@@ -119,22 +119,16 @@ def test_response_backstop_registry_decorator_parity() -> None:
 
 def test_meta_attachment_names_match_decorated_function() -> None:
     """Guard against copy-paste: the tool name passed to ``response_backstop_tool_meta``
-    must match the function the decorator is attached to, or be a known alias.
+    must match the function the decorator is attached to.
     """
-    from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
-
     attached = _collect_meta_backstop_attachments()
     mismatches: list[str] = []
     for tool_name, func_name in attached.items():
         if tool_name != func_name:
-            # Ensure the tool_name is at least a valid registry key
-            if tool_name not in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY:
-                mismatches.append(
-                    f"  {func_name}: meta names {tool_name!r} which is not in the registry"
-                )
+            mismatches.append(f"  {func_name}: meta names {tool_name!r}")
     assert not mismatches, (
-        "meta=response_backstop_tool_meta(...) tool name does not match function name "
-        "and is not a registered key:\n" + "\n".join(mismatches)
+        "meta=response_backstop_tool_meta(...) tool name does not match function name:\n"
+        + "\n".join(mismatches)
     )
 
 

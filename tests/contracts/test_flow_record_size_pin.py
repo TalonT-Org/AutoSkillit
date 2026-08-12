@@ -88,9 +88,7 @@ def test_implementation_flow_records_real_page_within_115k(
     monkeypatch.setattr(
         _recipe_generation,
         "_RECIPE_GENERATION_STORE",
-        __import__(
-            "autoskillit.server._recipe_generation", fromlist=["RecipeGenerationStore"]
-        ).RecipeGenerationStore(),
+        _recipe_generation.RecipeGenerationStore(),
     )
 
     project_root = Path(__file__).resolve().parents[2]

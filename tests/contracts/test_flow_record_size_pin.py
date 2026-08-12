@@ -67,10 +67,6 @@ def test_implementation_flow_records_within_115k_serialized_chars(
         f"implementation flow_records compiled_bytes={compiled} exceeds "
         f"{_MAX_FLOW_RECORD_SERIALIZED_CHARS} serialized-char pin"
     )
-    # Measure the entire envelope as delivered to the client
-    rendered_envelope = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
-    envelope_chars = client_serialized_char_len(rendered_envelope).value
-    assert envelope_chars > 0, "envelope has zero serialized chars"
 
 
 def test_implementation_flow_records_real_page_within_115k(

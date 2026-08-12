@@ -17,7 +17,7 @@ from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
 )
-from autoskillit.server import _recipe_delivery
+from autoskillit.server import _recipe_delivery_helpers
 from autoskillit.server._recipe_delivery import (
     get_context_host_client_attestation,
     initialize_host_client_attestation,
@@ -27,16 +27,19 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.fixture(autouse=True)
-def _reset_context_attestation_state() -> None:
-    """Restore module-global attestation cache after each test.
+def _reset_context_attestation_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provide a clean module-global attestation cache for each test.
 
     ``initialize_host_client_attestation()`` mutates process-global state
     (``_CONTEXT_HOST_CLIENT_ATTESTATION`` / ``..._INITIALIZED``); leaving it
     set would leak into unrelated tests sharing this xdist worker.
     """
-    yield
-    _recipe_delivery._CONTEXT_HOST_CLIENT_ATTESTATION = None
-    _recipe_delivery._CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED = False
+    monkeypatch.setattr(_recipe_delivery_helpers, "_CONTEXT_HOST_CLIENT_ATTESTATION", None)
+    monkeypatch.setattr(
+        _recipe_delivery_helpers,
+        "_CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED",
+        False,
+    )
 
 
 def test_absent_env_vars_initialize_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,7 +96,7 @@ def test_get_context_before_initialization_returns_none_without_reading_env(
     monkeypatch.setenv(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS, "50000")
     monkeypatch.setenv(AUTOSKILLIT_ATTESTED_META_SUPPORT, "1")
 
-    assert _recipe_delivery._CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED is False
+    assert _recipe_delivery_helpers._CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED is False
     assert get_context_host_client_attestation() is None
 
 

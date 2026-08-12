@@ -143,6 +143,14 @@ def _calls_in(node: ast.AST, *, owner: str, attr: str) -> list[ast.Call]:
     ]
 
 
+def _named_calls_in(node: ast.AST, *, name: str) -> list[ast.Call]:
+    return [
+        call
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == name
+    ]
+
+
 def _attributes_in(node: ast.AST, *, owner: str, attr: str) -> list[ast.Attribute]:
     return [
         attribute
@@ -176,42 +184,7 @@ def _function(tree: ast.Module, name: str) -> ast.FunctionDef:
     return matches[0]
 
 
-def _popen_outside_terminal_guard(node: ast.AST) -> list[int]:
-    violations: list[int] = []
-
-    class GuardTracker(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.guard_depth = 0
-
-        def visit_With(self, with_node: ast.With) -> None:
-            entered = any(
-                isinstance(item.context_expr, ast.Call)
-                and isinstance(item.context_expr.func, ast.Name)
-                and item.context_expr.func.id == "terminal_guard"
-                for item in with_node.items
-            )
-            if entered:
-                self.guard_depth += 1
-            self.generic_visit(with_node)
-            if entered:
-                self.guard_depth -= 1
-
-        def visit_Call(self, call: ast.Call) -> None:
-            if (
-                isinstance(call.func, ast.Attribute)
-                and isinstance(call.func.value, ast.Name)
-                and call.func.value.id == "subprocess"
-                and call.func.attr == "Popen"
-                and self.guard_depth == 0
-            ):
-                violations.append(call.lineno)
-            self.generic_visit(call)
-
-    GuardTracker().visit(node)
-    return violations
-
-
-def test_cook_attempt_popen_is_owned_only_by_the_shared_process_owner() -> None:
+def test_cook_attempt_uses_only_the_shared_spawn_bound_owner() -> None:
     session_dir = CLI_DIR / "session"
     violations: list[str] = []
     for path in sorted(session_dir.rglob("*.py")):
@@ -225,9 +198,14 @@ def test_cook_attempt_popen_is_owned_only_by_the_shared_process_owner() -> None:
     process_path = session_dir / "_session_process.py"
     process_tree = ast.parse(process_path.read_text(encoding="utf-8"), filename=str(process_path))
     run_attempt = _function(process_tree, "run_cook_attempt")
-    popen_calls = _calls_in(run_attempt, owner="subprocess", attr="Popen")
-    assert popen_calls, "run_cook_attempt() must own every cook-attempt Popen"
-    assert _popen_outside_terminal_guard(run_attempt) == []
+    assert _calls_in(run_attempt, owner="subprocess", attr="Popen") == []
+    spawn_calls = _named_calls_in(run_attempt, name="spawn_owned_process")
+    assert len(spawn_calls) == 2
+    terminal_guard = _with_context_calls(run_attempt, name="terminal_guard")[0]
+    assert terminal_guard.end_lineno is not None
+    assert all(
+        terminal_guard.lineno < call.lineno <= terminal_guard.end_lineno for call in spawn_calls
+    )
 
     cook_source = (session_dir / "_session_cook.py").read_text(encoding="utf-8")
     assert "run_cook_attempt(" in cook_source
@@ -235,11 +213,11 @@ def test_cook_attempt_popen_is_owned_only_by_the_shared_process_owner() -> None:
     assert "subprocess.Popen(" not in cook_source
 
 
-def test_cook_popen_returns_before_the_single_spawn_callback() -> None:
+def test_cook_owner_spawn_returns_before_the_single_spawn_callback() -> None:
     process_path = CLI_DIR / "session" / "_session_process.py"
     tree = ast.parse(process_path.read_text(encoding="utf-8"), filename=str(process_path))
     run_attempt = _function(tree, "run_cook_attempt")
-    popen_calls = _calls_in(run_attempt, owner="subprocess", attr="Popen")
+    spawn_calls = _named_calls_in(run_attempt, name="spawn_owned_process")
     on_spawn_calls = [
         call
         for call in ast.walk(run_attempt)
@@ -249,7 +227,7 @@ def test_cook_popen_returns_before_the_single_spawn_callback() -> None:
     ]
 
     assert len(on_spawn_calls) == 1
-    assert max(call.lineno for call in popen_calls) < on_spawn_calls[0].lineno
+    assert max(call.lineno for call in spawn_calls) < on_spawn_calls[0].lineno
 
 
 def test_cook_pty_path_has_no_unsafe_post_fork_python_setup() -> None:
@@ -295,8 +273,8 @@ def test_terminal_and_lease_ownership_are_not_duplicated_across_pty_layers() -> 
     run_attempt = _function(process_tree, "run_cook_attempt")
 
     assert len(_with_context_calls(run_attempt, name="terminal_guard")) == 1
-    assert _calls_in(run_attempt, owner="subprocess", attr="Popen")
-    assert _popen_outside_terminal_guard(run_attempt) == []
+    assert _calls_in(run_attempt, owner="subprocess", attr="Popen") == []
+    assert len(_named_calls_in(run_attempt, name="spawn_owned_process")) == 2
     assert _calls_in(process_tree, owner="os", attr="tcsetpgrp")
     assert _attributes_in(process_tree, owner="fcntl", attr="LOCK_UN") == []
     assert not any(

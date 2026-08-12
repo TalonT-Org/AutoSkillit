@@ -1027,11 +1027,6 @@ def test_direct_control_flow_exception_settles_and_reraises(
     )
     monkeypatch.setattr(
         capture_artifacts,
-        "_own_spawned_process",
-        lambda spawned, *, capture_output: spawned,
-    )
-    monkeypatch.setattr(
-        capture_artifacts,
         "_settle_failed_capture",
         lambda supplied: settled.append(supplied),
     )
@@ -1720,6 +1715,11 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
     monkeypatch.setattr(capture_artifacts.os, "close", record_close)
     monkeypatch.setattr(capture_artifacts.os, "fchdir", fail_restore)
     monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(
+        capture_process,
+        "_finish_owned_spawn",
+        lambda spawned, **_kwargs: spawned,
+    )
 
     try:
         with pytest.raises(CaptureSetupError, match="cannot restore runner cwd"):

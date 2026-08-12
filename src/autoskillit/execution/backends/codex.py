@@ -529,11 +529,10 @@ def _terminate_probe(owner: object) -> None:
 
     if not isinstance(owner, OwnedProcessGroup):
         raise TypeError("Codex probe cleanup requires its spawn-bound owner")
-    process = owner.process
     try:
         owner.settle(timeout=2)
     finally:
-        for stream in (process.stdout, process.stderr):
+        for stream in (owner.process.stdout, owner.process.stderr):
             if stream is not None:
                 stream.close()
 
@@ -544,7 +543,6 @@ def _run_bounded_codex_probe(
     env: Mapping[str, str],
     cwd: str,
 ) -> _BoundedProbeResult:
-    """Run a normal Codex config-load probe with hard time and byte bounds."""
     try:
         from autoskillit.execution.process._process_kill import spawn_owned_process
 
@@ -572,8 +570,7 @@ def _run_bounded_codex_probe(
     try:
         assert process.stdout is not None
         assert process.stderr is not None
-        selector_factory = selectors.DefaultSelector
-        selector = selector_factory()
+        selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
         while selector.get_map() or owner.observe_exit() is None:
@@ -627,6 +624,7 @@ def _run_bounded_codex_probe(
             try:
                 _terminate_probe(owner)
             except BaseException as cleanup_exc:
+                logger.error("codex_probe_cleanup_failed", exc_info=True)
                 exc.add_note(f"Codex probe cleanup failed: {type(cleanup_exc).__name__}")
         raise
     finally:
@@ -1913,10 +1911,9 @@ class CodexBackend(BackendCmdBuilderBase):
                 builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
         builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
         if isinstance(resume_spec, NoResume):
-            # Interactive TUI sessions keep full scope-discipline coverage deliberately:
-            # the task is unknown at launch (manual $rectify/$resolve-review runs also
-            # over-size), and there is no dispatch-time skill identity to key the
-            # narrower skill-session delivery off of.
+            # Interactive TUI tasks are unknown at launch (including manual runs), so
+            # they retain full scope coverage without a dispatch-time skill identity
+            # that could select narrower skill-session delivery.
             _interactive_suffix = codex_discipline_suffix(include_scope=True)
             developer_instructions = (
                 f"{system_prompt}\n\n{_interactive_suffix}"

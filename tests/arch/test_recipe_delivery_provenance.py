@@ -169,7 +169,9 @@ def test_launcher_attestation_env_reaches_server_context_unchanged(
     )
 
 
-def test_implementation_recipe_envelope_is_physically_required() -> None:
+def test_implementation_recipe_envelope_is_physically_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The implementation recipe's flow records make inline delivery impossible.
 
     After Stage F's projection removal, the implementation recipe payload
@@ -221,7 +223,11 @@ def test_implementation_recipe_envelope_is_physically_required() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        _recipe_generation._RECIPE_GENERATION_STORE = RecipeGenerationStore()
+        monkeypatch.setattr(
+            _recipe_generation,
+            "_RECIPE_GENERATION_STORE",
+            RecipeGenerationStore(),
+        )
         tool_ctx = cast_fn(
             AnyType,
             SimpleNamespace(

@@ -180,9 +180,7 @@ def test_fragment_pages_preserve_string_content() -> None:
         selected=selected,
         recipe_section_bound_bytes=2_048,  # force fragmentation of the large element
     )
-    # If the element fits in one page, skip (fragmentation not triggered)
-    if plan.total_parts <= 1:
-        pytest.skip("element fits in one page — fragmentation not triggered")
+    assert plan.total_parts > 1, "element fits in one page — fragmentation not triggered"
     for part in range(plan.total_parts):
         rendered = json.loads(render_recipe_section_page(plan, part))
         if rendered.get("content_format") == "json-element-fragment":

@@ -101,3 +101,90 @@ def test_non_array_section_content_remains_a_string(section: str) -> None:
 
     assert rendered["content_format"] != "json-array-page"
     assert isinstance(rendered["content"], str)
+
+
+@pytest.mark.parametrize("section", _ARRAY_SECTIONS)
+def test_complete_array_page_has_no_nested_json_strings(section: str) -> None:
+    """Complete json-array-page body fields must not contain JSON-parseable
+    structured strings — the anti-nesting property.
+    """
+    payload = _payload()
+    selected = select_recipe_section(payload, section)
+    plan = build_recipe_section_page_plan(
+        kitchen_id="contract-flat-array-nesting",
+        generation=_generation(),
+        selected=selected,
+        recipe_section_bound_bytes=8_192,
+    )
+    rendered = json.loads(render_recipe_section_page(plan, 0))
+
+    # content must be a list (already tested), but also verify no element
+    # in the body is a string that parses to a dict or list (nested JSON)
+    for key, value in rendered.items():
+        if key == "content":
+            # content elements may be strings (element_kind="string" for
+            # errors/warnings) but must not be structured JSON strings
+            assert isinstance(value, list)
+            for element in value:
+                if isinstance(element, str):
+                    try:
+                        parsed = json.loads(element)
+                    except (json.JSONDecodeError, TypeError):
+                        continue  # not parseable — fine
+                    assert not isinstance(parsed, dict | list), (
+                        f"{section} content element is a JSON-structured string: {element[:80]!r}"
+                    )
+        elif isinstance(value, str) and key not in (
+            "continuation",
+            "section_sha256",
+            "page_plan_sha256",
+            "pagination_policy_sha256",
+            "section_registry_sha256",
+            "content_format",
+            "section",
+            "producer_tool",
+            "recipe_name",
+            "payload_sha256",
+            "artifact_blob_sha256",
+            "body_sha256",
+            "flow_sha256",
+            "initialization_id",
+            "page_content_sha256",
+        ):
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            assert not isinstance(parsed, dict | list), (
+                f"{section} body field {key!r} is a JSON-structured string"
+            )
+
+
+def test_fragment_pages_preserve_string_content() -> None:
+    """json-element-fragment continuation pages must carry string content,
+    not parsed lists — partial JSON cannot be structured.
+    """
+    # Create a payload with an oversized flow_records element that forces
+    # fragmentation at a small bound
+    large_record = json.dumps({"kind": "step", "name": "x" * 500, "index": 0})
+    payload = _payload()
+    payload["flow_records"] = [large_record]
+
+    selected = select_recipe_section(dict(payload), "flow_records")
+    plan = build_recipe_section_page_plan(
+        kitchen_id="contract-fragment",
+        generation=_generation(),
+        selected=selected,
+        recipe_section_bound_bytes=300,  # force fragmentation
+    )
+    # If the element fits in one page, skip (fragmentation not triggered)
+    if plan.total_parts <= 1:
+        pytest.skip("element fits in one page — fragmentation not triggered")
+    for part in range(plan.total_parts):
+        rendered = json.loads(render_recipe_section_page(plan, part))
+        if rendered.get("content_format") == "json-element-fragment":
+            # Fragment content must be a string (partial JSON)
+            assert isinstance(rendered["content"], str), (
+                f"Fragment page {part} content is {type(rendered['content']).__name__}, "
+                "expected str"
+            )

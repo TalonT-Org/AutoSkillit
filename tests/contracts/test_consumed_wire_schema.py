@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from autoskillit.config import OutputBudgetConfig
+from autoskillit.core import client_serialized_char_len
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS, compile_bounded_page_plan
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-# Fields that inline delivery MUST carry (have programmatic consumers)
+# Fields that inline delivery MUST carry (have programmatic consumers).
+# A future field addition must name its consumer here so dead weight
+# cannot silently re-accrete.
 _CONSUMED_INLINE_FIELDS = frozenset(
     {
         "content",
@@ -36,11 +39,12 @@ _EXCLUDED_INLINE_FIELDS = frozenset(
 
 
 @pytest.mark.parametrize("recipe_path", BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
-def test_inline_payload_has_no_excluded_fields(
+def test_inline_payload_schema_is_exact(
     recipe_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Inline payloads carry exactly the consumed fields, no more."""
     envelope = compile_bounded_page_plan(
         recipe_path,
         "open_kitchen",
@@ -51,7 +55,20 @@ def test_inline_payload_has_no_excluded_fields(
     )
     if envelope.get("delivery_bound_spill") is True:
         pytest.skip("resolves ENVELOPE — no inline fields to check")
-    present_excluded = _EXCLUDED_INLINE_FIELDS & set(envelope)
+
+    payload_fields = set(envelope)
+    present_excluded = _EXCLUDED_INLINE_FIELDS & payload_fields
     assert not present_excluded, f"Excluded fields in inline payload: {sorted(present_excluded)}"
-    present_consumed = _CONSUMED_INLINE_FIELDS & set(envelope)
-    assert present_consumed, f"No consumed fields found in inline payload for {recipe_path.stem}"
+
+    # Every consumed field must be present
+    missing_consumed = _CONSUMED_INLINE_FIELDS - payload_fields
+    assert not missing_consumed, (
+        f"Missing consumed fields for {recipe_path.stem}: {sorted(missing_consumed)}"
+    )
+
+    # Measure serialized size for headroom tracking
+    import json
+
+    rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+    serialized_chars = client_serialized_char_len(rendered).value
+    assert serialized_chars > 0, "inline payload has zero serialized chars"

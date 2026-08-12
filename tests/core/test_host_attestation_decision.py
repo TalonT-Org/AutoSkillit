@@ -118,6 +118,60 @@ def test_protected_backend_never_uses_annotation_aware_inline() -> None:
     assert decision.mode is not RecipeDeliveryMode.ORDINARY_INLINE
 
 
+def test_annotated_regime_is_char_gated_independently() -> None:
+    """Annotated regime: resolved page char ceiling ≤ entry max_chars
+    ≤ ANNOTATION_HARD_CAP_CHARS (500,000). The annotation replaces the
+    token threshold for that tool — no cross-unit comparison.
+    """
+    from autoskillit.core import ANNOTATION_HARD_CAP_CHARS
+
+    # Annotated: payload fits char ceiling → inline
+    decision = resolve_recipe_delivery_decision(
+        capabilities=BackendCapabilities(unnegotiated_tool_result_token_limit=46_500),
+        required_serialized_tokens=100_000,  # exceeds token limit
+        budget=None,
+        producer="open_kitchen",
+        payload_sha256=_PAYLOAD_SHA,
+        host_client_attestation=HostClientAttestation(
+            attested_client_gate_tokens=50_000,
+            annotation_support=True,
+        ),
+        payload_serialized_chars=190_000,
+        exemption_ceiling_chars=195_000,
+    )
+    assert decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
+    assert decision.reason == "annotation_aware_inline"
+    # Char ceiling must be within the hard cap
+    assert 195_000 <= ANNOTATION_HARD_CAP_CHARS
+
+
+def test_unannotated_regime_is_token_gated() -> None:
+    """Unannotated regime: estimated result tokens ≤ the backend's
+    unnegotiated token limit. The token gate is independent of char ceiling.
+    """
+    # Small payload fitting the token limit → inline regardless of attestation
+    decision = resolve_recipe_delivery_decision(
+        capabilities=BackendCapabilities(unnegotiated_tool_result_token_limit=46_500),
+        required_serialized_tokens=30_000,
+        budget=None,
+        producer="open_kitchen",
+        payload_sha256=_PAYLOAD_SHA,
+    )
+    assert decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
+    assert decision.reason == "fits_unnegotiated_result_limit"
+    assert decision.selected_result_token_limit == 46_500
+
+    # Large payload exceeding token limit but no attestation → envelope
+    decision2 = resolve_recipe_delivery_decision(
+        capabilities=BackendCapabilities(unnegotiated_tool_result_token_limit=46_500),
+        required_serialized_tokens=100_000,
+        budget=None,
+        producer="open_kitchen",
+        payload_sha256=_PAYLOAD_SHA,
+    )
+    assert decision2.mode is RecipeDeliveryMode.ENVELOPE
+
+
 def test_exemption_ceiling_above_hard_cap_falls_through() -> None:
     """The annotation-aware branch must not fire when the registered exemption
     ceiling itself exceeds ANNOTATION_HARD_CAP_CHARS, regardless of how small

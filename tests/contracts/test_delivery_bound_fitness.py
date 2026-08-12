@@ -22,6 +22,7 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     CLIENT_CHARS_PER_TOKEN_POLICY,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
@@ -190,7 +191,10 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     # honor this attestation — see resolve_recipe_delivery_decision's
     # `budget is None` guard — so this reflects real launch behavior for both.
     host_client_attestation = (
-        HostClientAttestation(attested_client_gate_tokens=50_000, annotation_support=True)
+        HostClientAttestation(
+            attested_client_gate_tokens=CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+            annotation_support=True,
+        )
         if caps.recipe_delivery_budget is None
         else None
     )

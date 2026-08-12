@@ -17,6 +17,7 @@ import pytest
 import autoskillit.core.types._type_recipe_delivery as recipe_delivery_types
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
@@ -1180,7 +1181,7 @@ def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:
 
 
 _ATTESTED_HOST_CLIENT = HostClientAttestation(
-    attested_client_gate_tokens=50_000,
+    attested_client_gate_tokens=CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     annotation_support=True,
 )
 
@@ -1203,7 +1204,6 @@ def test_annotation_aware_inline_for_exempt_surface_within_ceiling(tool_ctx) -> 
     # when attestation is valid. The payload must exceed THAT to exercise the
     # annotation-aware branch.
     from autoskillit.core import (
-        CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
         CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
         CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
     )

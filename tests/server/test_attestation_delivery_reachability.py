@@ -44,7 +44,7 @@ from tests.server.test_tools_recipe_pull import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _RECIPE_ENVELOPE = "remediation"
-_RECIPE_ORDINARY = "full-audit"
+_RECIPE_ORDINARY = "promote-to-main-wrapper"
 _ATTESTED_STEP = "investigate"
 _OVERRIDES = {
     "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",

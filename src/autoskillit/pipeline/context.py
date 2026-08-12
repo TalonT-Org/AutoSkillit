@@ -37,7 +37,6 @@ from autoskillit.core import (
     GitHubFetcher,
     GitHubReviewPosterProtocol,
     HeadlessExecutor,
-    HostClientAttestation,
     InputContractResolver,
     KitchenProcessIdentity,
     KitchenTransitionLock,
@@ -300,7 +299,6 @@ class ToolContext:
         tuple[str, str, int], TerminalRecipeResponseCacheEntry
     ] = field(default_factory=dict, repr=False)
     exploration_context_store: ExplorationContextStoreProtocol[object] | None = field(default=None)
-    host_client_attestation: HostClientAttestation | None = field(default=None)
     _baseline_config: AutomationConfig = field(init=False, repr=False)
     _session_config_overrides: dict[str, dict[str, Any]] = field(
         init=False,

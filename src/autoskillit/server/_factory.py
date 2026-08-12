@@ -403,14 +403,6 @@ def make_context(
         gateway=github_review_gateway,
         review_comment_cap=config.github.review_comment_cap,
     )
-    # Read host client attestation once from the environment at context
-    # construction.  Absent/malformed values resolve to None, which routes
-    # delivery decisions to ENVELOPE.  This is the composition root — the
-    # attestation is read here and never re-read from os.environ.
-    from autoskillit.server._recipe_delivery import _resolve_host_client_attestation
-
-    host_client_attestation = _resolve_host_client_attestation()
-
     ctx = ToolContext(
         config=config,
         audit=audit,
@@ -449,7 +441,6 @@ def make_context(
             service=DefaultExplorationService(),
         ),
         ephemeral_root=ephemeral_root,
-        host_client_attestation=host_client_attestation,
         quota_refresh_task=None,
         session_serve_overrides=None,
         fleet_lock=(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -15,7 +15,10 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.cli._plugin_artifact import interactive_plugin_authority
-from autoskillit.cli.session._session_launch import _run_interactive_session
+from autoskillit.cli.session._session_launch import (
+    _launch_cook_session,
+    _run_interactive_session,
+)
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     BackendConventions,
@@ -25,13 +28,17 @@ from autoskillit.core import (
     ManagedSessionHome,
     PluginLaunchBinding,
     PluginLoadMode,
+    SkillExecutionRole,
     SkillProjectionContextAuthority,
     ValidatedAddDir,
+    plugin_launch_binding_scope,
 )
 from autoskillit.core._plugin_ids import (
     detect_autoskillit_mcp_prefix as _production_mcp_prefix,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
+from autoskillit.workspace._projection_cache import projected_plugin_artifact_digest
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
@@ -137,6 +144,12 @@ class _RecordingBackend:
         )
 
 
+class _PersistentCodexRecordingBackend(_RecordingBackend):
+    @property
+    def capabilities(self):
+        return CodexBackend().capabilities
+
+
 class _CookSessionManager:
     def __init__(self, generated_home: Path, events: list[tuple[object, ...]]) -> None:
         self._generated_home = generated_home
@@ -170,6 +183,8 @@ class _CookSessionManager:
 def _install_cook_harness(
     monkeypatch: pytest.MonkeyPatch,
     project_dir: Path,
+    *,
+    during_attempt: Callable[[Path], None] | None = None,
 ) -> dict[str, object]:
     generated_home = project_dir / "managed-home"
     events: list[tuple[object, ...]] = []
@@ -187,12 +202,14 @@ def _install_cook_harness(
         trace = kwargs["trace"]
         on_spawn(101, 101)  # type: ignore[operator]
         trace.record_spawn()  # type: ignore[attr-defined]
+        if during_attempt is not None:
+            during_attempt(generated_home)
         on_reaped(101, 101)  # type: ignore[operator]
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
     generated_home.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(shutil, "which", lambda _binary: "/usr/bin/agent")
+    monkeypatch.setattr(shutil, "which", lambda _binary, **_kwargs: "/usr/bin/agent")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager",
@@ -379,6 +396,113 @@ def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
     assert len(backend.build_calls) == 1
     assert backend.build_calls[0]["plugin_binding"] is None
     assert backend.build_calls[0]["generated_home"] == generated_home
+
+
+def test_codex_managed_order_runtime_writes_do_not_mutate_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = build_plugin_artifact_state(
+        tmp_path / "home",
+        PluginArtifactStateKind.VALID_CURRENT,
+    )
+    _activate_production_selector(monkeypatch, state)
+    project_dir = state.home / "project"
+    project_dir.mkdir(parents=True)
+    backend = _PersistentCodexRecordingBackend("codex")
+    catalog = DefaultSkillResolver().list_effective(
+        project_dir,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    compilation = compile_session_skill_catalog(catalog, backend)
+    authority, load_mode = interactive_plugin_authority(
+        backend=backend,
+        project_dir=project_dir,
+        default_base_branch="main",
+        skill_catalog=compilation.catalog,
+        generated_home_available=True,
+        retain_projection_source=True,
+    )
+    assert authority is not None
+    assert load_mode is PluginLoadMode.GENERATED_HOME
+
+    with plugin_launch_binding_scope(
+        authority=authority,
+        backend=backend,
+        load_mode=PluginLoadMode.PROJECTED_HOME,
+    ) as before_binding:
+        assert before_binding is not None
+        before_identity = before_binding.identity
+        projection_root = before_identity.managed_path
+        before_digest = projected_plugin_artifact_digest(projection_root)
+        assert before_identity.artifact_digest == before_digest
+        before_tree = tuple(
+            sorted(
+                path.relative_to(projection_root).as_posix() for path in projection_root.rglob("*")
+            )
+        )
+
+    def write_runtime_artifacts(generated_home: Path) -> None:
+        (generated_home / "auth.json").write_bytes(b"runtime auth marker")
+        (generated_home / "state_5.sqlite").write_bytes(b"runtime sqlite marker")
+        session_file = generated_home / "sessions" / "2026" / "08" / "rollout-test.jsonl"
+        session_file.parent.mkdir(parents=True)
+        session_file.write_text('{"type":"runtime marker"}\n')
+
+    captured = _install_cook_harness(
+        monkeypatch,
+        project_dir,
+        during_attempt=write_runtime_artifacts,
+    )
+    launch_id = "projection-immutability"
+    _launch_cook_session(
+        "projection immutability integration",
+        project_dir=project_dir,
+        required_env=frozenset(),
+        backend=backend,
+        skill_compilation=compilation,
+        launch_id=launch_id,
+        default_base_branch="main",
+        workspace_temp_dir=None,
+    )
+
+    generated_home = cast(Path, captured["generated_home"])
+    assert captured["events"] == [
+        ("managed-enter", launch_id),
+        ("run",),
+        ("managed-exit", launch_id),
+    ]
+    assert len(backend.build_calls) == 1
+    assert backend.build_calls[0]["generated_home"] == generated_home
+    assert backend.build_calls[0]["plugin_binding"] is None
+    assert not generated_home.is_relative_to(projection_root)
+    assert (generated_home / "auth.json").is_file()
+    assert (generated_home / "state_5.sqlite").is_file()
+    assert (generated_home / "sessions" / "2026" / "08" / "rollout-test.jsonl").is_file()
+
+    with plugin_launch_binding_scope(
+        authority=authority,
+        backend=backend,
+        load_mode=PluginLoadMode.PROJECTED_HOME,
+    ) as after_binding:
+        assert after_binding is not None
+        assert after_binding.identity == before_identity
+        assert after_binding.identity.artifact_digest == before_digest
+        assert projected_plugin_artifact_digest(projection_root) == before_digest
+        assert (
+            tuple(
+                sorted(
+                    path.relative_to(projection_root).as_posix()
+                    for path in projection_root.rglob("*")
+                )
+            )
+            == before_tree
+        )
+
+    for runtime_path in ("auth.json", "state_5.sqlite", "sessions", "archived_sessions"):
+        projection_runtime_path = projection_root / runtime_path
+        assert not projection_runtime_path.exists()
+        assert not projection_runtime_path.is_symlink()
 
 
 @pytest.mark.parametrize(

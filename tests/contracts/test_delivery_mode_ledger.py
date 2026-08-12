@@ -173,7 +173,7 @@ def test_delivery_mode_is_pinned(
 
 
 # Pinned (recipe stem, backend) → max client-serialized chars for inline recipes.
-# After Stage F (projection removal), inline payloads are significantly smaller.
+# Without finalized_recipe_projection on the wire, inline payloads are significantly smaller.
 # Each stored maximum includes 10% headroom above the measured serialized char count.
 # Update when a recipe grows/shrinks past these thresholds.
 _EXPECTED_MAX_SERIALIZED_CHARS: dict[tuple[str, str], int] = {

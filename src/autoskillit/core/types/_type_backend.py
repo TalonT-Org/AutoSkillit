@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
-from ._type_constants_registries import CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
+from ._type_constants_registries import CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS
 from ._type_enums import BackendEventKind, HookTrustPolicy, OutputFormat
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
@@ -379,13 +379,13 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     session_dir_persistent=False,
     cook_startup_observer_capable=False,
     supports_model_invocation_gating=True,
-    # 46,500 = 93% of the attested (host-injected) 50,000-token client gate —
-    # a 7% conservative headroom fraction. The attested figure is the correct
-    # derivation base: it flows only through host attestation, never through
-    # this static table, so headroom off the attested ceiling protects the
-    # unattested fallback path without under-provisioning it against the
-    # smaller unattested 25,000-token default.
-    unnegotiated_tool_result_token_limit=CLAUDE_INJECTED_CLIENT_RESULT_TOKENS * 93 // 100,
+    # 23,250 = 93% of the conservative (unattested) 25,000-token client gate —
+    # a 7% headroom fraction.  The static capability must derive from the
+    # conservative default, not the attested 50,000 value; the attested figure
+    # flows only through host attestation at runtime, never through this static
+    # table.  Recipes exceeding this threshold but fitting the attested ceiling
+    # are handled by the annotation-aware inline path when attestation is present.
+    unnegotiated_tool_result_token_limit=CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS * 93 // 100,
     protected_recipe_delivery_capable=False,
     recipe_delivery_budget=None,
     hook_trust_policy=HookTrustPolicy.AUTOMATED,

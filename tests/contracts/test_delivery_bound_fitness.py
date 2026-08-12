@@ -280,9 +280,9 @@ def test_bundled_recipe_open_kitchen_raw_spill_projection_fits_per_backend(
         assert isinstance(result, str), (
             f"{backend_name}: expected str result for {recipe_name} payload"
         )
-        assert client_serialized_char_len(result).value <= bound_bytes, (
+        assert len(result.encode("utf-8")) <= bound_bytes, (
             f"{backend_name}: projection for {recipe_name} exceeds "
-            f"{bound_bytes} chars (effective delivery bound)"
+            f"{bound_bytes} bytes (effective delivery bound)"
         )
         data = json.loads(result)
         assert data.get("delivery_bound_spill") is True

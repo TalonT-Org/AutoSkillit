@@ -63,9 +63,9 @@ def _get_ctx_or_none() -> ToolContext | None:
 
 def _resolve_backend_capabilities(ctx: ToolContext | None) -> BackendCapabilities | None:
     """Extract the resolved backend's capabilities from ``ctx``, if any."""
-    backend = getattr(ctx, "backend", None) if ctx is not None else None
-    caps = getattr(backend, "capabilities", None) if backend is not None else None
-    return caps if isinstance(caps, BackendCapabilities) else None
+    if ctx is None or ctx.backend is None:
+        return None
+    return ctx.backend.capabilities
 
 
 async def _notify(

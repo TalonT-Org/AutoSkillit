@@ -260,6 +260,44 @@ def test_resolve_skip_guards_preserves_optional_on_unresolved_steps() -> None:
     assert "optional: true" in other_block
 
 
+@pytest.mark.parametrize(
+    ("quoted_route", "redirect_target", "quoted_target"),
+    [
+        ("'skipped'", "done'now", "'done''now'"),
+        ('"skipped"', 'done"\\now', '"done\\"\\\\now"'),
+    ],
+)
+def test_guarded_raw_repair_preserves_route_quote_style(
+    quoted_route: str, redirect_target: str, quoted_target: str
+) -> None:
+    raw = f"""steps:
+  first:
+    tool: run_cmd
+    on_success: {quoted_route}
+  skipped:
+    tool: run_cmd
+    skip_when_false: inputs.flag
+    on_skip: {quoted_target}
+  {quoted_target}:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "first": RecipeStep(tool="run_cmd", on_success="skipped"),
+        "skipped": RecipeStep(
+            tool="run_cmd",
+            skip_when_false="inputs.flag",
+            on_skip=redirect_target,
+        ),
+        redirect_target: RecipeStep(action="stop", message="done"),
+    }
+
+    result = _resolve_skip_guards_in_content(raw, {"skipped": False}, original_steps)
+
+    assert f"on_success: {quoted_target}" in result
+    assert "  skipped:\n" not in result
+
+
 @pytest.mark.small
 def test_semantic_rule_flags_falsy_default_skip_guard_ingredients():
     """A semantic rule must produce a WARNING for skip_when_false ingredients

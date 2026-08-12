@@ -84,7 +84,7 @@ def _resolve_delivery(
     from autoskillit.server import _recipe_generation
 
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
-    project_root = Path(__file__).resolve().parents[3]
+    project_root = Path(__file__).resolve().parents[2]
     loaded = load_and_validate(
         recipe_path.stem,
         project_dir=project_root,

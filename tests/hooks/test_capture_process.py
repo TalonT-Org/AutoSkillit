@@ -349,10 +349,13 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
     )
 
     try:
-        owner = capture_process.adopt_owned_process(
-            process,
-            inherit_terminal=True,
+        owner = capture_process.OwnedProcessGroup(
+            process=process,
+            pgid=process.pid,
         )
+        owner._previous_handlers = previous_handlers
+        owner._terminal_fd = terminal_fd
+        owner._previous_foreground_pgid = previous_pgid
         owner._restore_parent_state()
         owner._restore_parent_state()
     finally:

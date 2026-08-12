@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
 import anyio
-import anyio.abc
 
 from autoskillit.core import (
     BackendEventKind,
@@ -23,6 +22,10 @@ from autoskillit.execution.process._process_jsonl import (
     EventCursor,
     fold_event_cursor,
     fold_event_lines,
+)
+from autoskillit.execution.process._process_kill import (
+    OwnedProcessGroup,
+    ProcessObservationSnapshot,
 )
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
@@ -84,7 +87,9 @@ class RaceSignals:
     terminal_task_ids: tuple[str, ...] = ()
     schedule_wakeup_violation: bool = False
     completion_ceiling_expired: bool = False
-    process_group_id: int = 0
+    process_observation_snapshot: ProcessObservationSnapshot = field(
+        default_factory=ProcessObservationSnapshot
+    )
 
 
 @dataclass
@@ -123,7 +128,9 @@ class RaceAccumulator:
     stdout_cursor: EventCursor | None = None
     channel_b_cursor: EventCursor | None = None
     completion_candidate_event: anyio.Event = field(default_factory=anyio.Event)
-    process_group_id: int = 0
+    process_observation_snapshot: ProcessObservationSnapshot = field(
+        default_factory=ProcessObservationSnapshot
+    )
 
     def observe_event(self, event: SessionEvent) -> None:
         if not self.lifecycle_observation_enabled:
@@ -163,7 +170,7 @@ class RaceAccumulator:
             terminal_task_ids=tuple(sorted(self.terminal_task_ids)),
             schedule_wakeup_violation=self.schedule_wakeup_violation,
             completion_ceiling_expired=self.completion_ceiling_expired,
-            process_group_id=self.process_group_id,
+            process_observation_snapshot=self.process_observation_snapshot,
         )
 
 
@@ -215,34 +222,37 @@ def fold_lifecycle_evidence_path(
 
 
 async def _watch_process(
-    proc: anyio.abc.Process,
+    owner: OwnedProcessGroup,
     acc: RaceAccumulator,
     trigger: anyio.Event,
 ) -> None:
-    """Wait for the subprocess to exit and deposit the process-exit signal.
+    """Observe subprocess exit while retaining the waitable ownership anchor.
 
     Ordering guarantee: ``acc.process_exited_event`` is set BEFORE ``trigger``
     so that execute_termination_action's DRAIN_THEN_KILL_IF_ALIVE path can
     await the event inside the drain window.
     """
-    await proc.wait()
-    logger.debug("process_exited", pid=proc.pid, returncode=proc.returncode)
-    # Exit snapshot: best-effort capture at exact exit time.
-    # waitpid() reaps the process atomically, so /proc/[pid] is already gone for
-    # normally-exiting processes — acc.exit_snapshot will be None in most cases.
+    while True:
+        returncode = await anyio.to_thread.run_sync(owner.observe_exit)
+        acc.process_observation_snapshot = owner.snapshot
+        if returncode is not None:
+            break
+        await anyio.sleep(0.02)
+    logger.debug("process_exited", pid=owner.pid, returncode=returncode)
+    # Best-effort tracing while the leader remains waitable where WNOWAIT exists.
     try:
         # Deferred import: linux_tracing depends on psutil and reads /proc, which is
         # Linux-only. Importing at module level would fail on non-Linux platforms where
         # LINUX_TRACING_AVAILABLE is False. The bare except below degrades gracefully.
         from autoskillit.execution.linux_tracing import read_proc_snapshot
 
-        snap = read_proc_snapshot(proc.pid)
+        snap = read_proc_snapshot(owner.pid)
         if snap is not None:
             acc.exit_snapshot = {**asdict(snap), "event": "exit_snapshot"}
     except Exception:
-        logger.debug("exit_snapshot_failed", pid=proc.pid, exc_info=True)
+        logger.debug("exit_snapshot_failed", pid=owner.pid, exc_info=True)
     acc.process_exited = True
-    acc.process_returncode = proc.returncode
+    acc.process_returncode = returncode
     acc.process_exited_event.set()
     trigger.set()
 

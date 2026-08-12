@@ -223,7 +223,7 @@ class TestKillProcessTreeUnit:
         # Should handle gracefully
         kill_process_tree(pid)
 
-    def test_process_group_cleanup_survives_exited_root(self):
+    def test_exited_unowned_root_cannot_reconstruct_group_authority(self):
         proc = subprocess.Popen(
             [
                 sys.executable,
@@ -241,9 +241,10 @@ class TestKillProcessTreeUnit:
         child_pid = int(proc.stdout.readline())
         proc.wait(timeout=5)
         try:
-            result = kill_process_tree(proc.pid, process_group_id=proc.pid)
-            assert child_pid in result.terminated_pids
-            assert not result.survivor_pids
+            result = kill_process_tree(proc.pid)
+            assert result.observation_complete is False
+            assert result.complete is False
+            assert child_pid not in result.terminated_pids
         finally:
             _cleanup_process_group(proc.pid)
 

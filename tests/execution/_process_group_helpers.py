@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import signal
 import time
 
 import psutil
@@ -29,16 +28,32 @@ def _cleanup_process_group(
     survivors = _process_group_members(process_group_id) if process_group_id else set()
     if not survivors:
         return survivors
-    try:
-        os.killpg(process_group_id, signal.SIGTERM)
-    except ProcessLookupError:
-        return survivors
+    identities: dict[int, float] = {}
+    for pid in survivors:
+        try:
+            identities[pid] = psutil.Process(pid).create_time()
+        except (psutil.Error, OSError):
+            continue
+    for pid, create_time in identities.items():
+        try:
+            process = psutil.Process(pid)
+            if process.create_time() == create_time:
+                process.terminate()
+        except (psutil.Error, OSError):
+            continue
     deadline = time.monotonic() + timeout
     while _process_group_members(process_group_id) and time.monotonic() < deadline:
         time.sleep(poll_interval)
-    if _process_group_members(process_group_id):
-        try:
-            os.killpg(process_group_id, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    remaining = _process_group_members(process_group_id)
+    if remaining:
+        for pid in remaining:
+            create_time = identities.get(pid)
+            if create_time is None:
+                continue
+            try:
+                process = psutil.Process(pid)
+                if process.create_time() == create_time:
+                    process.kill()
+            except (psutil.Error, OSError):
+                continue
     return survivors

@@ -118,6 +118,7 @@ from autoskillit.execution.process import (
     CodexOrphanReapResult,
     DefaultSubprocessRunner,
     OrphanedCodexProcess,
+    OwnedProcessGroup,
     _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
     find_orphaned_codex_processes,
@@ -125,6 +126,7 @@ from autoskillit.execution.process import (
     reap_orphaned_codex_processes,
     run_managed_async,
     run_managed_sync,
+    spawn_owned_process,
     summarize_capture,
 )
 from autoskillit.execution.quota import (
@@ -197,10 +199,12 @@ __all__ = [
     "CodexOrphanReapResult",
     "DefaultSubprocessRunner",
     "OrphanedCodexProcess",
+    "OwnedProcessGroup",
     "find_orphaned_codex_processes",
     "reap_orphaned_codex_processes",
     "run_managed_async",
     "run_managed_sync",
+    "spawn_owned_process",
     "summarize_capture",
     # recording
     "RecordingSubprocessRunner",

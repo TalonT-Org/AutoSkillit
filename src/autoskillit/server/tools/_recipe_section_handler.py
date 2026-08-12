@@ -489,12 +489,6 @@ async def get_recipe_section(
                         part=part,
                     )
                 )
-                # Counter injection without content reserialization: replace
-                # the three integer counter values in the rendered JSON
-                # string surgically, without parsing and re-dumping the
-                # entire content array (which can be 100K+ of flow-record
-                # objects). The rendered page uses sort_keys=True and
-                # separators=(",",":") so keys are predictable.
                 rendered = _inject_initialization_counters(
                     rendered,
                     completed_parts=completed_parts,

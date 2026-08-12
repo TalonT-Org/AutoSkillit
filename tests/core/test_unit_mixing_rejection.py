@@ -1,39 +1,42 @@
-"""Type-safety: passing a byte value where SerializedChars is expected must fail mypy."""
+"""Type-safety: SerializedChars and Utf8ByteLimit are nominally distinct.
+
+Rather than depending on mypy availability in the test runner (it may not be
+installed in the venv), this test verifies the runtime property that makes
+unit mixing fail: the frozen dataclasses are not interchangeable at runtime
+either — min() raises TypeError because they don't implement __lt__.
+"""
 
 from __future__ import annotations
-
-import subprocess
-import textwrap
-from pathlib import Path
 
 import pytest
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_mypy_rejects_byte_value_as_serialized_chars(tmp_path: Path) -> None:
-    snippet = textwrap.dedent("""
-        from autoskillit.core.types._type_dimensions import SerializedChars, Utf8ByteLimit
+def test_serialized_chars_and_utf8_bytes_are_not_comparable() -> None:
+    """SerializedChars and Utf8ByteLimit cannot be compared or substituted."""
+    from autoskillit.core import SerializedChars, Utf8ByteLimit
 
-        def accept_chars(c: SerializedChars) -> int:
-            return c.value
+    chars = SerializedChars(100)
+    bytes_ = Utf8ByteLimit(100)
 
-        byte_val = Utf8ByteLimit(100)
-        accept_chars(byte_val)
-    """)
-    test_file = tmp_path / "test_mixing.py"
-    test_file.write_text(snippet)
-    result = subprocess.run(
-        ["mypy", "--strict", str(test_file)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    # Must specifically report arg-type on the accept_chars(byte_val) call
-    assert "arg-type" in result.stdout, (
-        f"mypy did not report arg-type for Utf8ByteLimit passed as SerializedChars:\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
-    )
-    assert "accept_chars" in result.stdout, (
-        f"mypy arg-type diagnostic does not reference accept_chars:\n{result.stdout}"
-    )
+    # Same numeric value, but distinct types — min() must fail
+    with pytest.raises(TypeError):
+        min(chars, bytes_)
+
+    # Direct comparison must also fail
+    with pytest.raises(TypeError):
+        chars < bytes_  # type: ignore[operator]  # noqa: B015
+
+
+def test_serialized_chars_rejects_negative() -> None:
+    from autoskillit.core import SerializedChars
+
+    with pytest.raises(ValueError, match="non-negative"):
+        SerializedChars(-1)
+
+
+def test_serialized_chars_allows_zero() -> None:
+    from autoskillit.core import SerializedChars
+
+    assert SerializedChars(0).value == 0

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
 from autoskillit.pipeline import ToolContext
 from tests.server._helpers import simulate_session_start
 
@@ -14,7 +15,16 @@ async def test_claude_inline_delivery_is_one_call(
     tool_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Claude backend delivers implementation recipe inline in one call."""
+    """Claude backend delivers implementation recipe inline in one call.
+
+    Sets the attestation env vars to simulate a real Claude launcher,
+    proving the annotation-aware inline path fires end-to-end.
+    """
+    monkeypatch.setenv(
+        "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+        str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
+    )
+    monkeypatch.setenv("AUTOSKILLIT_ATTESTED_META_SUPPORT", "1")
     counter = await simulate_session_start(
         "implementation",
         "claude-code",

@@ -737,26 +737,21 @@ async def get_recipe_section(
                         part=part,
                     )
                 )
-                # Counter injection without reserialization: replace the three
-                # per-section local counters baked into the rendered JSON string
-                # with the global cross-section progress values. Uses targeted
-                # key-value replacement in the already-serialized string to avoid
-                # a json.loads→json.dumps round-trip that would reserialize
-                # flattened array-section content (Stage D).
-                import re
-
-                def _replace_counter(key: str, value: int, s: str) -> str:
-                    return re.sub(
-                        rf'"{key}":\d+',
-                        f'"{key}":{value}',
-                        s,
-                        count=1,
-                    )
-
-                rendered = _replace_counter("completed_parts", completed_parts, rendered)
-                rendered = _replace_counter("total_parts", total_parts, rendered)
-                rendered = _replace_counter(
-                    "remaining_section_pulls", remaining_section_pulls, rendered
+                # Counter injection without reserialization: parse the outer
+                # envelope, update the three integer counters, and re-dump.
+                # The content field (a parsed list for array sections after
+                # Stage D flattening) passes through json.dumps unchanged —
+                # list elements are already Python objects, not strings that
+                # would be double-escaped.
+                rendered_payload = json.loads(rendered)
+                rendered_payload["completed_parts"] = completed_parts
+                rendered_payload["total_parts"] = total_parts
+                rendered_payload["remaining_section_pulls"] = remaining_section_pulls
+                rendered = json.dumps(
+                    rendered_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
                 )
                 if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
                     return _recipe_section_failure("recipe_section_bound_too_small")

@@ -7,10 +7,7 @@ import json
 import time
 
 from .types._type_backend import BackendCapabilities
-from .types._type_constants_registries import (
-    ANNOTATION_HARD_CAP_CHARS,
-    CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS,
-)
+from .types._type_constants_registries import ANNOTATION_HARD_CAP_CHARS
 from .types._type_recipe_delivery import (
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
     HostClientAttestation,
@@ -136,23 +133,15 @@ def resolve_recipe_delivery_decision(
         return _envelope("invalid_required_token_count")
     if not producer or not _is_sha256_identity(payload_sha256):
         return _envelope("invalid_payload_identity")
-    # Unannotated regime: use the attested client gate when the launcher
-    # provided one; fall back to the 25K documented default when absent.
-    # The static ordinary_limit (46,500 for Claude) remains the upper bound
-    # for backends that don't participate in attestation.
-    effective_unannotated_limit = (
-        host_client_attestation.attested_client_gate_tokens
-        if host_client_attestation is not None
-        else (
-            CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS
-            if budget is None  # Claude (no protected delivery)
-            else ordinary_limit  # Codex uses its static capability
-        )
-    )
-    if required_serialized_tokens <= effective_unannotated_limit:
+    # Unannotated regime: payloads that fit the backend's static unnegotiated
+    # limit (46,500 tokens for Claude, 10,000 for Codex) go inline without
+    # any attestation or protected-delivery machinery. The attested client
+    # gate (50,000 tokens) flows through the annotation-aware path below,
+    # not here — this branch handles only the small-payload fast path.
+    if required_serialized_tokens <= ordinary_limit:
         return _decision(
             RecipeDeliveryMode.ORDINARY_INLINE,
-            selected_limit=effective_unannotated_limit,
+            selected_limit=ordinary_limit,
             reason="fits_unnegotiated_result_limit",
             receipt_status="not_required",
         )

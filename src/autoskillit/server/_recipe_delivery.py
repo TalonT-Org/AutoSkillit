@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import functools
 import hashlib
 import json
 import os
@@ -864,7 +863,6 @@ def _attested_render(
     )
 
 
-@functools.lru_cache(maxsize=1)
 def _resolve_host_client_attestation() -> HostClientAttestation | None:
     """Read the launcher-injected host client attestation from the environment.
 
@@ -876,9 +874,8 @@ def _resolve_host_client_attestation() -> HostClientAttestation | None:
     delivery decisions to ``RecipeDeliveryMode.ENVELOPE`` rather than trusting
     an unattested per-call claim.
 
-    Cached: these env vars are fixed for the lifetime of the MCP server
-    process (set once by the launcher before the process starts), so this
-    is read once rather than on every recipe-delivery call.
+    Not cached: tests monkeypatch env vars and a frozen cache would poison
+    subsequent test cases.
     """
     raw_gate_tokens = os.environ.get(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS)
     raw_meta_support = os.environ.get(AUTOSKILLIT_ATTESTED_META_SUPPORT)

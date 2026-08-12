@@ -318,7 +318,9 @@ async def load_recipe(
             if not ingredients_only and result.get("valid", False):
                 if _finalized_projection is None:
                     raise RuntimeError("valid recipe is missing its finalized projection")
-                from autoskillit.server._recipe_delivery import prepare_recipe_delivery_generation
+                from autoskillit.server._recipe_delivery import (  # circular-break
+                    prepare_recipe_delivery_generation,
+                )
 
                 _prepared_generation = prepare_recipe_delivery_generation(
                     result,

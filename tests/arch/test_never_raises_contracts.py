@@ -120,7 +120,7 @@ def test_all_mcp_tool_handlers_have_cancellation_shield() -> None:
 
 def test_get_recipe_section_tracks_typed_cancellation_response_size() -> None:
     """The recipe pull backstop must wrap its typed cancellation shield immediately."""
-    path = SRC_ROOT / "server" / "tools" / "tools_recipe.py"
+    path = SRC_ROOT / "server" / "tools" / "_recipe_section_handler.py"
     tree = ast.parse(path.read_text(), filename=str(path))
     function = next(
         node

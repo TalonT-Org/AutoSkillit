@@ -88,7 +88,7 @@ class TestPruneSkippedStepsDeferral:
     def test_resolve_skip_guards_preserves_deferred_step_block(self):
         """When a resolution is None (deferred), the step block must be preserved in the
         YAML content and only the skip_when_false line removed."""
-        from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+        from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
 
         raw = (
             "steps:\n  review:\n    skip_when_false: inputs.review_approach\n"

@@ -853,7 +853,7 @@ steps:
 
 def test_prune_content_strips_literal_skip_when_false_step_block() -> None:
     """_resolve_skip_guards_in_content strips step block for literal skip_when_false: false."""
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+    from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
 
     raw = """steps:
   main_step:
@@ -1092,9 +1092,9 @@ def test_guarded_chain_pruning_matches_independent_oracle(
     from autoskillit.core import load_yaml
     from autoskillit.recipe._recipe_composition import (
         _prune_skipped_steps,
-        _resolve_skip_guards_in_content,
         _validate_route_consistency,
     )
+    from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
     from autoskillit.recipe.io import _parse_recipe
     from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
 
@@ -1374,7 +1374,7 @@ def test_remediation_audit_skip_routes_to_commit_guard() -> None:
 
 def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
     """_resolve_skip_guards_in_content strips optional: true from truthy-resolved step."""
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+    from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
 
     raw = """steps:
   main_step:
@@ -1436,7 +1436,7 @@ def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
     ],
 )
 def test_guarded_raw_repair_rejects_unsafe_yaml_shapes(raw: str, message: str) -> None:
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+    from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
 
     guarded = RecipeStep(tool="run_cmd", skip_when_false="true", on_skip="done")
     with pytest.raises(ValueError, match=message):
@@ -1445,7 +1445,7 @@ def test_guarded_raw_repair_rejects_unsafe_yaml_shapes(raw: str, message: str) -
 
 def test_resolve_skip_guards_preserves_optional_on_unresolved_steps() -> None:
     """_resolve_skip_guards_in_content preserves optional: true on steps not being resolved."""
-    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+    from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
 
     raw = """steps:
   guarded:

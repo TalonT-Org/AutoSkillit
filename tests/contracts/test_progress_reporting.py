@@ -51,8 +51,8 @@ async def test_progress_recheck_enforces_client_char_ceiling_too(
     tool_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Issue #4557 Stage C: the post-mutation re-check that gates the
-    initialization progress-counter update must also enforce the
+    """The post-mutation re-check that gates the initialization progress-counter
+    update must also enforce the
     client-measured serialized-char ceiling, not just the byte ceiling —
     otherwise a page that passes the byte re-check could still overflow the
     client's actual truncation gate.

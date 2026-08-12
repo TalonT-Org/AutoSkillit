@@ -40,13 +40,14 @@ async def test_run_managed_async_coerces_env_to_dict(
     """run_managed_async must coerce env to dict before owned Popen spawn."""
     captured_env: dict[str, Any] = {}
 
-    from autoskillit.execution.process import spawn_owned_process as real_spawn
+    real_popen = subprocess.Popen
 
-    def spy_spawn(*args: Any, **kwargs: Any) -> Any:
-        captured_env["env"] = kwargs.get("env")
-        return real_spawn(*args, **kwargs)
+    class SpyPopen(real_popen):  # type: ignore[misc]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            captured_env["env"] = kwargs.get("env")
+            super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr("autoskillit.execution.process.spawn_owned_process", spy_spawn)
+    monkeypatch.setattr(subprocess, "Popen", SpyPopen)
     env = MappingProxyType({"PATH": os.environ["PATH"], "FOO": "bar"})
     await run_managed_async(
         cmd=["echo", "ok"],

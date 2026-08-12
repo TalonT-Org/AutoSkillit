@@ -965,7 +965,7 @@ class TestSessionIdEagerPersistence:
         d = state["dispatches"][0]
         assert d["dispatched_session_id"] == "early-session-xyz"
         assert d["status"] == "interrupted"
-        assert d["effect_provenance"]["retry_disposition"] == "resume_by_identity"
+        assert d["effect_provenance"]["retry_disposition"] == "reconcile_required"
         spawn_effect = next(
             effect
             for effect in d["effect_provenance"]["effects"]

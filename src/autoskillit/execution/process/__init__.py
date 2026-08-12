@@ -637,6 +637,12 @@ async def run_managed_async(
                 if acc.channel_b_candidate_at is not None:
                     acc.channel_b_status = ChannelBStatus.COMPLETION
                 acc.lifecycle_observation_complete = final_fold_complete
+            final_observed_returncode = await anyio.to_thread.run_sync(owner.observe_exit)
+            acc.process_observation_snapshot = owner.snapshot
+            if final_observed_returncode is not None:
+                acc.process_exited = True
+                acc.process_returncode = final_observed_returncode
+                acc.process_exited_event.set()
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
 

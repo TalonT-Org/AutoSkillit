@@ -480,7 +480,10 @@ class TestCLIOrderCommand:
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/fake-binary")
+        fake_binary = tmp_path / real_backend.binary_name()
+        fake_binary.write_text("#!/bin/sh\nexit 0\n")
+        fake_binary.chmod(0o755)
+        monkeypatch.setattr(shutil, "which", lambda _: str(fake_binary))
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
         mock_config = MagicMock()
@@ -490,16 +493,25 @@ class TestCLIOrderCommand:
         mock_config.providers.profiles = {}
         mock_config.subsets.disabled = []
         mock_config.packs.enabled = []
+        mock_config.branching.default_base_branch = "develop"
+        mock_config.workspace.temp_dir = ".autoskillit/temp"
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
         monkeypatch.setattr(
             "autoskillit.cli.session._session_backend.resolve_global_backend",
             lambda name: _real_get_backend(name),
         )
-        monkeypatch.setattr(
-            CodexBackend,
-            "ensure_pre_launch",
-            lambda _self, *, session_dir=None, executable=None: [],
-        )
+
+        def fake_pre_launch(_self, *, session_dir=None, executable=None, plugin_dir=None):
+            del executable, plugin_dir
+            if session_dir is not None:
+                session_dir.mkdir(parents=True, exist_ok=True)
+                (session_dir / "config.toml").write_text(
+                    '[mcp_servers.autoskillit]\ncommand = "autoskillit"\nargs = ["mcp"]\n'
+                )
+            return []
+
+        monkeypatch.setattr(CodexBackend, "ensure_pre_launch", fake_pre_launch)
+        monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda *_: [])
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
 
@@ -509,6 +521,18 @@ class TestCLIOrderCommand:
             return type("R", (), {"returncode": 0})()
 
         monkeypatch.setattr(subprocess, "run", fake_run)
+
+        def fake_cook_attempt(spec, **kwargs):
+            captured["cmd"] = list(spec.cmd)
+            captured["env"] = dict(spec.env)
+            kwargs["on_spawn"](12345, 12345)
+            kwargs["on_reaped"](12345, 12345)
+            return type("R", (), {"returncode": 0})()
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_process.run_cook_attempt",
+            fake_cook_attempt,
+        )
 
         cli.order("test-script")
 

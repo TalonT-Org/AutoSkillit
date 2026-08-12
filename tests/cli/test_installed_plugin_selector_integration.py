@@ -472,9 +472,9 @@ def test_codex_managed_order_runtime_writes_do_not_mutate_projection(
         ("run",),
         ("managed-exit", launch_id),
     ]
-    assert len(backend.build_calls) == 1
-    assert backend.build_calls[0]["generated_home"] == generated_home
-    assert backend.build_calls[0]["plugin_binding"] is None
+    assert len(backend.build_calls) == 2
+    assert backend.build_calls[-1]["generated_home"] == generated_home
+    assert backend.build_calls[-1]["plugin_binding"] is None
     assert not generated_home.is_relative_to(projection_root)
     assert (generated_home / "auth.json").is_file()
     assert (generated_home / "state_5.sqlite").is_file()

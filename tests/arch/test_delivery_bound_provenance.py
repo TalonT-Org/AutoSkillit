@@ -22,11 +22,8 @@ from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_SCANNED_FILES = (
-    SRC_ROOT / "server" / "_recipe_delivery.py",
-    SRC_ROOT / "server" / "_recipe_section_pagination.py",
-    SRC_ROOT / "server" / "tools" / "tools_recipe.py",
-    SRC_ROOT / "server" / "tools" / "_recipe_section_handler.py",
+_SCANNED_FILES = tuple(sorted((SRC_ROOT / "server").glob("_recipe_*.py"))) + tuple(
+    sorted((SRC_ROOT / "server" / "tools").glob("*recipe*.py"))
 )
 
 _BOUND_ATTRS = frozenset({"page_max_bytes", "response_max_bytes"})

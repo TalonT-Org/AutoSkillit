@@ -1,8 +1,4 @@
-"""Campaign state file management — DispatchRecord, atomic writes, resume algorithm.
-
-Provides the single-file state format for fleet campaign execution.
-All writes use core.io.atomic_write for crash-safety (tmp + os.replace).
-"""
+"""Fleet campaign state records with atomic crash-safe writes and resume support."""
 
 from __future__ import annotations
 
@@ -17,6 +13,7 @@ from typing import IO, Any
 from autoskillit.core import (
     DispatchIdentity,
     get_logger,
+    read_versioned_json,
     write_versioned_json,
 )
 from autoskillit.fleet.state_gates import record_gate_outcome
@@ -228,33 +225,22 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
 
 
 _LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9, 10, 11})
-_SUPPORTED_SCHEMA_VERSIONS = _LEGACY_SCHEMA_VERSIONS | {FLEET_STATE_SCHEMA_VERSION}
-
-
-def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
-    import json as _json
-
-    try:
-        raw = _json.loads(state_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, _json.JSONDecodeError, OSError):
-        return None
-    return raw if isinstance(raw, dict) else None
 
 
 def _read_fleet_state_payload(state_path: Path) -> dict[str, Any] | None:
-    """Read one fleet payload when its schema is in the supported version set."""
-    data = _read_raw_json(state_path)
-    if data is None:
+    if (
+        data := read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+    ) is not None:
+        return data
+    import json as _json
+
+    try:
+        legacy = _json.loads(state_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, _json.JSONDecodeError, OSError):
         return None
-    if data.get("schema_version") not in _SUPPORTED_SCHEMA_VERSIONS:
-        logger.warning(
-            "fleet_state_schema_drift",
-            path=str(state_path),
-            schema_version=data.get("schema_version"),
-            supported_versions=sorted(_SUPPORTED_SCHEMA_VERSIONS),
-        )
-        return None
-    return data
+    if isinstance(legacy, dict) and legacy.get("schema_version") in _LEGACY_SCHEMA_VERSIONS:
+        return legacy
+    return None
 
 
 def read_state(state_path: Path) -> CampaignState | None:

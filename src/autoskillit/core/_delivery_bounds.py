@@ -92,7 +92,6 @@ def resolve_recipe_delivery_decision(
     attestation: RecipeDeliveryAttestation | None = None,
     supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     now_unix: int | None = None,
-    # Stage E: annotation-aware inline
     host_client_attestation: HostClientAttestation | None = None,
     payload_serialized_chars: int | None = None,
     exemption_ceiling_chars: int | None = None,

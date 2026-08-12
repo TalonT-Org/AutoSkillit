@@ -284,7 +284,6 @@ def finalize_recipe_delivery(
         attestation=candidate_attestation,
         supported_evidence=candidate_evidence,
         now_unix=now_unix,
-        # Stage E: annotation-aware inline
         host_client_attestation=host_client_attestation,
         payload_serialized_chars=(
             client_serialized_char_len(ordinary_rendered).value

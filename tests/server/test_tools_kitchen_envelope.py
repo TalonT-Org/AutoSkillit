@@ -485,7 +485,6 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import pkg_root
-    from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     project_dir = pkg_root().parent.parent
@@ -500,7 +499,10 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
-    mock_ctx.backend = BACKEND_REGISTRY["claude-code"]()
+    # backend=None is correct for this mock test: the smoke-test recipe is
+    # only ~1.6KB and fits within any limit.  A real backend changes the
+    # open_kitchen handler's delivery path in ways that affect field passthrough.
+    mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 
@@ -652,7 +654,6 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import pkg_root
-    from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     project_dir = pkg_root().parent.parent
@@ -672,7 +673,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
-    mock_ctx.backend = BACKEND_REGISTRY["claude-code"]()
+    mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 

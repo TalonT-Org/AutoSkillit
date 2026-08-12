@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from autoskillit.config import ConfigSchemaError
 from autoskillit.config.settings import (
     _FIELD_OVERRIDES,
     _YAML_KEY_ALIASES,
@@ -34,7 +35,7 @@ def test_coerce_value_int() -> None:
 def test_coerce_value_utf8_byte_limit_rejects_non_integer_yaml_values(
     value: object,
 ) -> None:
-    with pytest.raises(Exception, match="must be a positive integer"):
+    with pytest.raises(ConfigSchemaError, match="must be a positive integer"):
         _coerce_value(value, Utf8ByteLimit, "output_budget.response_max_bytes")
 
 

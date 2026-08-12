@@ -10,11 +10,11 @@ from tests.server._helpers import simulate_session_start
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.anyio]
 
 
-async def test_claude_inline_delivery_completes(
+async def test_claude_inline_delivery_is_one_call(
     tool_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Claude backend delivers implementation recipe inline (no ENVELOPE)."""
+    """Claude backend delivers implementation recipe inline in one call."""
     counter = await simulate_session_start(
         "implementation",
         "claude-code",
@@ -22,8 +22,10 @@ async def test_claude_inline_delivery_completes(
         monkeypatch=monkeypatch,
     )
     assert counter.delivery_mode is not None
-    # Claude resolves either inline (exemption override) or envelope
-    assert counter.delivery_mode in ("claude_code_inline", "claude_code_bounded")
+    assert counter.delivery_mode == "claude_code_inline", (
+        f"Expected claude_code_inline (one-call), got {counter.delivery_mode}"
+    )
+    assert len(counter) == 1, f"Expected 1 call (one-call inline), got {len(counter)}"
 
 
 async def test_codex_envelope_delivery_completes(

@@ -19,7 +19,7 @@ def test_mypy_rejects_byte_value_as_serialized_chars(tmp_path: Path) -> None:
             return c.value
 
         byte_val = Utf8ByteLimit(100)
-        accept_chars(byte_val)  # type: ignore[arg-type] should catch this
+        accept_chars(byte_val)
     """)
     test_file = tmp_path / "test_mixing.py"
     test_file.write_text(snippet)
@@ -29,6 +29,11 @@ def test_mypy_rejects_byte_value_as_serialized_chars(tmp_path: Path) -> None:
         text=True,
         timeout=30,
     )
-    assert "arg-type" in result.stdout or result.returncode != 0, (
-        f"mypy did not reject Utf8ByteLimit passed as SerializedChars:\n{result.stdout}"
+    # Must specifically report arg-type on the accept_chars(byte_val) call
+    assert "arg-type" in result.stdout, (
+        f"mypy did not report arg-type for Utf8ByteLimit passed as SerializedChars:\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "accept_chars" in result.stdout, (
+        f"mypy arg-type diagnostic does not reference accept_chars:\n{result.stdout}"
     )

@@ -884,13 +884,18 @@ def _resolve_host_client_attestation() -> HostClientAttestation | None:
     raw_meta_support = os.environ.get(AUTOSKILLIT_ATTESTED_META_SUPPORT)
     if raw_gate_tokens is None or raw_meta_support is None:
         return None
+    if raw_meta_support not in ("0", "1"):
+        return None  # malformed → conservative default
     try:
-        return HostClientAttestation(
-            attested_client_gate_tokens=int(raw_gate_tokens),
-            annotation_support=raw_meta_support == "1",
-        )
+        gate_tokens = int(raw_gate_tokens)
     except (ValueError, TypeError):
         return None
+    if gate_tokens <= 0:
+        return None
+    return HostClientAttestation(
+        attested_client_gate_tokens=gate_tokens,
+        annotation_support=raw_meta_support == "1",
+    )
 
 
 def _failure_decision(

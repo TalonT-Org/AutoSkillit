@@ -26,13 +26,17 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 _RECIPE_PATH = next(path for path in BUNDLED_RECIPE_PATHS if path.stem == "implementation")
 
 
-def test_claude_conservative_fallback_produces_a_live_envelope(
+def test_claude_conservative_fallback_produces_a_live_multipage_envelope(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Claude backend + ``page_max_bytes=None`` must resolve to a usable
-    ENVELOPE plan for the bundled ``implementation`` recipe, not raise
-    ``BoundedDeliveryRoundTripBudgetExceededError``.
+    multipage ENVELOPE plan for the bundled ``implementation`` recipe.
+
+    The conservative bound (~46.5K bytes) is much smaller than the default
+    page_max_bytes (195K), so sections that fit in one page under default
+    config require multiple pages here. This test proves the fail-degrade
+    path actually produces and can serve those multiple pages.
     """
     try:
         envelope = compile_bounded_page_plan(
@@ -53,3 +57,12 @@ def test_claude_conservative_fallback_produces_a_live_envelope(
         )
     assert envelope.get("success") is True, envelope
     assert envelope.get("delivery_bound_spill") is True, envelope
+    # Prove multipage delivery: at least one section must require >1 page
+    # under the conservative bound.
+    required_sections = envelope["required_sections"]
+    max_pages = max(item["total_parts"] for item in required_sections)
+    assert max_pages > 1, (
+        f"Conservative fallback did not produce multipage delivery — "
+        f"max pages per section is {max_pages}; expected >1 under the "
+        f"~46.5K conservative bound for the implementation recipe"
+    )

@@ -728,7 +728,6 @@ async def get_recipe_section(
             if continuation != expected_continuation:
                 return _recipe_section_failure("invalid_recipe_section_continuation")
             rendered = render_recipe_section_page(page_plan, part)
-            rendered_payload = json.loads(rendered)
             if isinstance(active_initialization, InitializingRecipe):
                 completed_parts, total_parts, remaining_section_pulls = (
                     recipe_initialization_progress_counts(
@@ -738,21 +737,26 @@ async def get_recipe_section(
                         part=part,
                     )
                 )
-                # Counter injection: the rendered page carries per-section local
-                # counts from _render_candidate; the global cross-section progress
-                # must replace them. This parse+mutate+dump operates on the outer
-                # envelope only — array-section content is already a parsed list
-                # from Stage D flattening, so no content reserialization occurs.
-                rendered_payload.update(
-                    completed_parts=completed_parts,
-                    total_parts=total_parts,
-                    remaining_section_pulls=remaining_section_pulls,
-                )
-                rendered = json.dumps(
-                    rendered_payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                    sort_keys=True,
+                # Counter injection without reserialization: replace the three
+                # per-section local counters baked into the rendered JSON string
+                # with the global cross-section progress values. Uses targeted
+                # key-value replacement in the already-serialized string to avoid
+                # a json.loads→json.dumps round-trip that would reserialize
+                # flattened array-section content (Stage D).
+                import re
+
+                def _replace_counter(key: str, value: int, s: str) -> str:
+                    return re.sub(
+                        rf'"{key}":\d+',
+                        f'"{key}":{value}',
+                        s,
+                        count=1,
+                    )
+
+                rendered = _replace_counter("completed_parts", completed_parts, rendered)
+                rendered = _replace_counter("total_parts", total_parts, rendered)
+                rendered = _replace_counter(
+                    "remaining_section_pulls", remaining_section_pulls, rendered
                 )
                 if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
                     return _recipe_section_failure("recipe_section_bound_too_small")
@@ -765,6 +769,7 @@ async def get_recipe_section(
                     > request_state.recipe_section_bound_chars
                 ):
                     return _recipe_section_failure("recipe_section_bound_too_small")
+            rendered_payload = json.loads(rendered)
             content_sha256 = rendered_payload.get("content_sha256")
             if isinstance(active_initialization, ReadyRecipe):
                 if isinstance(content_sha256, str):

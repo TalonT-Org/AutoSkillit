@@ -24,6 +24,7 @@ from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
     ClaudeDirectoryConventions,
+    CompiledSessionSkillCatalogAuthority,
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
     ManagedSessionHome,
@@ -83,6 +84,7 @@ _ExplorerBindingEnvFactory: TypeAlias = Callable[[Path], _ExplorerBindingEnv | N
 
 class _SessionSetupKwargs(TypedDict):
     parent_sandbox_mode: str
+    execution_role: SkillExecutionRole
     explorer_binding_env: NotRequired[_ExplorerBindingEnv]
 
 
@@ -284,14 +286,15 @@ def compile_session_skill_catalog(
 def write_skill_unavailability_metadata(
     add_dir: Path,
     *,
-    backend: str | None,
-    unavailable: tuple[SkillUnavailableMetadata, ...],
+    compilation: CompiledSessionSkillCatalogAuthority | None,
+    backend: str | None = None,
 ) -> None:
     """Publish deterministic machine-readable SESSION catalog omissions."""
-    metadata = {
-        "backend": backend,
-        "unavailable": tuple(item.to_payload() for item in unavailable),
-    }
+    metadata = (
+        dict(compilation.unavailability_payload)
+        if compilation is not None
+        else {"backend": backend, "unavailable": ()}
+    )
     write_versioned_json(
         add_dir / "skill-unavailability.json",
         metadata,
@@ -379,6 +382,7 @@ def _link_generated_home_skill_view(
     projected_skills: Path,
     *,
     skills_subdir: Path,
+    execution_role: SkillExecutionRole,
 ) -> int:
     """Expose projected skills at a persistent backend's home discovery root."""
     discovery_root = generated_home / skills_subdir
@@ -390,6 +394,8 @@ def _link_generated_home_skill_view(
             raise SkillContractError(f"invalid projected session skill directory: {source}")
         target = discovery_root / source.name
         if os.path.lexists(target):
+            if execution_role is SkillExecutionRole.ORCHESTRATOR:
+                raise SkillContractError(f"orchestrator skill discovery collision at {target}")
             logger.debug(
                 "generated_home_skill_collision_preserved",
                 skill=source.name,
@@ -705,25 +711,32 @@ class DefaultSessionSkillManager:
     def managed_session(
         self,
         session_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ) -> Iterator[ManagedSessionHome]:
         """Yield an already-owned generated home and clean it exactly once."""
         self._validate_session_id(session_id)
-        if catalog.execution_role is not SkillExecutionRole.SESSION:
-            raise SkillContractError("L1 catalog materialization requires SESSION contracts")
+        catalog = compilation.catalog
+        if catalog.execution_role not in {
+            SkillExecutionRole.SESSION,
+            SkillExecutionRole.ORCHESTRATOR,
+        }:
+            raise SkillContractError(
+                "managed catalog materialization requires SESSION or ORCHESTRATOR contracts"
+            )
         for member in catalog.skills:
             if member.invalidities:
                 raise SkillContractError(
                     f"invalid materialization contract for {member.name!r}: "
                     f"{render_skill_invalidities(member.invalidities)}"
                 )
-            if member.execution_role is not SkillExecutionRole.SESSION:
+            if member.execution_role is not catalog.execution_role:
                 actual = (
                     member.execution_role.value if member.execution_role is not None else "invalid"
                 )
                 raise SkillContractError(
-                    f"L1 catalog materialization requires SESSION members; "
+                    f"managed catalog materialization requires {catalog.execution_role.value} "
+                    f"members; "
                     f"{member.name!r} is {actual}"
                 )
             validate_skill_capability_roles(
@@ -739,6 +752,7 @@ class DefaultSessionSkillManager:
             session_id,
             catalog.skills,
             projection_context,
+            compilation=compilation,
         )
         lease_fd = initialized.lease.fd if initialized.lease is not None else None
         if lease_fd is None:
@@ -799,6 +813,7 @@ class DefaultSessionSkillManager:
         records: tuple[SkillAuthority, ...],
         projection_context: SkillProjectionContextAuthority,
         *,
+        compilation: CompiledSessionSkillCatalogAuthority | None = None,
         explorer_binding_env: _ExplorerBindingEnv | None = None,
         explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> _InitializedSession:
@@ -864,6 +879,7 @@ class DefaultSessionSkillManager:
                 records,
                 projection_context,
                 skills_subdir=skills_subdir,
+                compilation=compilation,
                 explorer_binding_env=explorer_binding_env,
                 explorer_binding_env_factory=explorer_binding_env_factory,
             )
@@ -907,6 +923,7 @@ class DefaultSessionSkillManager:
         projection_context: SkillProjectionContextAuthority,
         *,
         skills_subdir: Path,
+        compilation: CompiledSessionSkillCatalogAuthority | None = None,
         explorer_binding_env: _ExplorerBindingEnv | None = None,
         explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> ValidatedAddDir:
@@ -915,13 +932,15 @@ class DefaultSessionSkillManager:
         skills_base = add_dir / skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
 
-        unavailable: tuple[SkillUnavailableMetadata, ...] = ()
         effective_catalog = projection_context.catalog
-        if backend is not None and effective_catalog is not None:
-            compilation = compile_session_skill_catalog(effective_catalog, backend)
+        if compilation is not None:
             effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
-            unavailable = compilation.unavailable
+        elif backend is not None and effective_catalog is not None:
+            local_compilation = compile_session_skill_catalog(effective_catalog, backend)
+            effective_catalog = local_compilation.catalog
+            records = tuple(effective_catalog.skills)
+            compilation = local_compilation
         elif backend is not None and projection_context.invocation is not None:
             for record in records:
                 plan = record.semantic_plan
@@ -932,8 +951,14 @@ class DefaultSessionSkillManager:
 
         write_skill_unavailability_metadata(
             add_dir,
+            compilation=compilation,
             backend=backend.name if backend is not None else None,
-            unavailable=unavailable,
+        )
+
+        execution_role = (
+            effective_catalog.execution_role
+            if effective_catalog is not None
+            else SkillExecutionRole.SESSION
         )
 
         if backend is not None and backend.capabilities.mcp_config_capable:
@@ -945,6 +970,7 @@ class DefaultSessionSkillManager:
         if backend is not None:
             setup_kwargs: _SessionSetupKwargs = {
                 "parent_sandbox_mode": projection_context.parent_sandbox_mode,
+                "execution_role": execution_role,
             }
             if explorer_binding_env is not None:
                 setup_kwargs["explorer_binding_env"] = explorer_binding_env
@@ -972,17 +998,18 @@ class DefaultSessionSkillManager:
             ),
             projection_version=projection_context.projection_version,
         )
-        session_records = (
-            records
-            if backend is None
-            else tuple(record for record in records if record.source is not SkillSource.BUNDLED)
-        )
+        session_records = records
+        if backend is not None and execution_role is SkillExecutionRole.SESSION:
+            session_records = tuple(
+                record for record in records if record.source is not SkillSource.BUNDLED
+            )
         materialize_agent_skill_tree(skills_base, session_records, ungated_context)
         if backend is not None and backend.capabilities.session_dir_persistent:
             linked = _link_generated_home_skill_view(
                 generated_home,
                 skills_base,
                 skills_subdir=skills_subdir,
+                execution_role=execution_role,
             )
             logger.debug("generated_home_skill_view_linked", count=linked)
         if backend is not None and backend.capabilities.session_dir_persistent:

@@ -20,8 +20,8 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     BackendConventions,
     CmdSpec,
+    CompiledSessionSkillCatalogAuthority,
     CookSessionHandle,
-    EffectiveSkillCatalogAuthority,
     ManagedSessionHome,
     PluginLaunchBinding,
     PluginLoadMode,
@@ -149,11 +149,11 @@ class _CookSessionManager:
     def managed_session(
         self,
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ) -> Iterator[ManagedSessionHome]:
         self._events.append(("managed-enter", launch_id))
-        assert projection_context.catalog == catalog
+        assert projection_context.catalog == compilation.catalog
         skills_dir = self._generated_home / "skills"
         skills_dir.mkdir(parents=True, exist_ok=True)
         try:

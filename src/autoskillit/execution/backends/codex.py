@@ -75,6 +75,7 @@ from autoskillit.core import (
     SessionCheckpoint,
     SessionLocator,
     SessionSummary,
+    SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
     SkillSessionConfig,
@@ -1332,6 +1333,35 @@ def _render_parent_sandbox_config(config_text: str, sandbox_mode: str) -> str:
     return updated
 
 
+def _render_cli_auth_store(config_text: str, execution_role: SkillExecutionRole) -> str:
+    """Pin ORCHESTRATOR homes to the durable file credential store."""
+    if execution_role is not SkillExecutionRole.ORCHESTRATOR:
+        return config_text
+    lines = config_text.splitlines()
+    table_start = next(
+        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
+    )
+    key_indexes = [
+        i
+        for i, line in enumerate(lines[:table_start])
+        if line.split("=", 1)[0].strip() == "cli_auth_credentials_store"
+    ]
+    if len(key_indexes) > 1:
+        raise ValueError(
+            "generated Codex config has duplicate top-level cli_auth_credentials_store keys"
+        )
+    if key_indexes:
+        del lines[key_indexes[0]]
+    table_start = next(
+        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
+    )
+    lines.insert(table_start, 'cli_auth_credentials_store = "file"')
+    updated = "\n".join(lines) + "\n"
+    if tomllib.loads(updated).get("cli_auth_credentials_store") != "file":
+        raise ValueError("generated Codex config did not retain the file credential store")
+    return updated
+
+
 def _materialize_profile_skills(
     session_dir: Path,
     *,
@@ -2156,6 +2186,7 @@ class CodexBackend(BackendCmdBuilderBase):
         parent_sandbox_mode: str = "workspace-write",
         agent_defs: tuple[AgentDef, ...] | None = None,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> None:
         assert self.source_codex_home is not None
         codex_home_source = self.source_codex_home
@@ -2180,6 +2211,10 @@ class CodexBackend(BackendCmdBuilderBase):
             config_path.read_text(encoding="utf-8"),
             parent_sandbox_mode,
         )
+        rendered_parent_config = _render_cli_auth_store(
+            rendered_parent_config,
+            execution_role,
+        )
         if explorer_binding_envs:
             assert explorer_mcp_transport is not None
             shared_binding = next(iter(explorer_binding_envs.values()))
@@ -2192,13 +2227,13 @@ class CodexBackend(BackendCmdBuilderBase):
 
         auth_source = codex_home_source / "auth.json"
         auth_dest = session_dir / "auth.json"
-        if auth_source.exists():
-            auth_dest.symlink_to(auth_source.resolve(strict=True))
-            logger.debug(
-                "codex_auth_symlink",
-                src=str(auth_source),
-                dest=str(auth_dest),
-            )
+        auth_target = auth_source.resolve(strict=False)
+        auth_dest.symlink_to(auth_target)
+        logger.debug(
+            "codex_auth_symlink",
+            src=str(auth_target),
+            dest=str(auth_dest),
+        )
 
         env_source = codex_home_source / ".env"
         if env_source.exists():
@@ -2221,10 +2256,17 @@ class CodexBackend(BackendCmdBuilderBase):
             explorer_binding_envs=explorer_binding_envs,
         )
         logger.debug("codex_agents_registered", count=registered)
-        _materialize_profile_skills(
-            session_dir,
-            source_codex_home=codex_home_source,
-        )
+        if execution_role is SkillExecutionRole.SESSION:
+            _materialize_profile_skills(
+                session_dir,
+                source_codex_home=codex_home_source,
+            )
+        finalized_config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        if (
+            execution_role is SkillExecutionRole.ORCHESTRATOR
+            and finalized_config.get("cli_auth_credentials_store") != "file"
+        ):
+            raise ValueError("finalized ORCHESTRATOR config lost the file credential store")
 
     def refresh_explorer_binding_env(
         self,

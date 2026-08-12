@@ -592,6 +592,20 @@ def test_session_order_launch_calls_pass_order_interactive_required_env() -> Non
         )
 
 
+def test_session_order_launch_calls_pass_explicit_home_authorities() -> None:
+    required = {
+        "skill_compilation",
+        "launch_id",
+        "default_base_branch",
+        "workspace_temp_dir",
+    }
+    for call in _launch_cook_session_calls():
+        supplied = {keyword.arg for keyword in call.keywords}
+        assert required <= supplied, (
+            f"Call at line {call.lineno} is missing {sorted(required - supplied)}"
+        )
+
+
 def test_launch_cook_session_required_env_is_required_keyword_only() -> None:
     """required_env must be a keyword-only parameter with no default — omission must be
     a language/type-checking error, not silently accepted as None."""

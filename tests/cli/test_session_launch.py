@@ -6,6 +6,8 @@ import shutil
 import subprocess
 from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from packaging.version import Version
@@ -1023,7 +1025,13 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
     )
     _stub_plugin_installed(monkeypatch, installed=True)
     _launch_cook_session(
-        system_prompt="test", backend=_CapturingBackend(), required_env=frozenset()
+        system_prompt="test",
+        backend=_CapturingBackend(),
+        required_env=frozenset(),
+        skill_compilation=MagicMock(unavailable=(), catalog=None),
+        launch_id="test-order",
+        default_base_branch="main",
+        workspace_temp_dir=None,
     )
     assert build_calls, "backend.build_interactive_cmd must be called via _launch_cook_session"
 
@@ -1307,3 +1315,69 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
     monkeypatch.setattr(subprocess, "run", _must_not_call)
     with pytest.raises(SystemExit, match="1"):
         _run_interactive_session(system_prompt="test", backend=_FailingCodexBackend())
+
+
+def test_managed_interactive_session_validates_before_shared_process_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import (
+        CLAUDE_CODE_CAPABILITIES,
+        CmdSpec,
+        ManagedSessionHome,
+        ValidatedAddDir,
+    )
+
+    events: list[str] = []
+
+    class _ManagedBackend(_BackendLifecycleStub):
+        @property
+        def capabilities(self):
+            return CLAUDE_CODE_CAPABILITIES
+
+        def binary_name(self) -> str:
+            return "claude"
+
+        def build_interactive_cmd(self, **kwargs):
+            return CmdSpec(cmd=("claude",), env={}, inherited_fds=(3,))
+
+        def validate_interactive_invocation(self, spec):
+            events.append("validated")
+            assert spec.cwd == str(tmp_path.resolve())
+            return []
+
+    def run_attempt(spec, **kwargs):
+        events.append("spawned")
+        assert kwargs["observer"] is None
+        assert kwargs["pass_fds"] == (3, 7, 8)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        run_attempt,
+    )
+    generated_home = tmp_path / "generated"
+    generated_home.mkdir()
+    managed_home = ManagedSessionHome(
+        launch_id="launch-id",
+        generated_home=generated_home,
+        skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
+        pass_fds=(7,),
+    )
+    retained_binding = MagicMock(inherited_fds=(8,))
+    trace = MagicMock()
+
+    result = _run_interactive_session(
+        system_prompt="test",
+        backend=_ManagedBackend(),
+        project_dir=tmp_path,
+        skill_compilation=MagicMock(),
+        managed_home=managed_home,
+        retained_projection_binding=retained_binding,
+        startup_trace=trace,
+        attempt=1,
+    )
+
+    assert result is None
+    assert events == ["validated", "spawned"]
+    trace.record_attempt_anchor.assert_called_once_with(attempt=1, view_id="launch-id-1")

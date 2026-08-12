@@ -15,9 +15,12 @@ the child must NOT attach to the IDE channel via either discovery path:
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -52,7 +55,16 @@ def test_cook_session_ignores_ide_lock_file(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
+        _launch_cook_session(
+            "system prompt",
+            initial_message="hello",
+            required_env=frozenset(),
+            backend=ClaudeCodeBackend(),
+            skill_compilation=SimpleNamespace(unavailable=(), catalog=None),
+            launch_id="test-order",
+            default_base_branch="main",
+            workspace_temp_dir=None,
+        )
 
     # (1) Env scrub
     env = mock_run.call_args.kwargs["env"]

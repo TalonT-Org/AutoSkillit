@@ -770,6 +770,7 @@ from .types import DispatchIdentity as DispatchIdentity
 from .types import DispatchRequestEvent as DispatchRequestEvent
 from .types import DurableArtifactWriterDef as DurableArtifactWriterDef
 from .types import DurableContextAdmissionPayload as DurableContextAdmissionPayload
+from .types import CompiledSessionSkillCatalogAuthority as CompiledSessionSkillCatalogAuthority
 from .types import EffectiveSkillCatalogAuthority as EffectiveSkillCatalogAuthority
 from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocationAuthority
 from .types import EnvPolicy as EnvPolicy

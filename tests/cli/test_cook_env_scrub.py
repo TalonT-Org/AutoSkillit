@@ -17,12 +17,23 @@ import pytest
 
 from autoskillit.core import CmdSpec, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.small,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
 ]
+
+
+def _launch_kwargs() -> dict[str, object]:
+    return {
+        "backend": ClaudeCodeBackend(),
+        "skill_compilation": SimpleNamespace(unavailable=(), catalog=None),
+        "launch_id": "test-order",
+        "default_base_branch": "main",
+        "workspace_temp_dir": None,
+    }
 
 
 def test_launch_cook_session_env_excludes_ide_vars(
@@ -43,7 +54,12 @@ def test_launch_cook_session_env_excludes_ide_vars(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
+        _launch_cook_session(
+            "system prompt",
+            initial_message="hello",
+            required_env=frozenset(),
+            **_launch_kwargs(),
+        )
 
     mock_run.assert_called_once()
     env = mock_run.call_args.kwargs["env"]
@@ -73,6 +89,7 @@ def test_launch_cook_session_extra_env_still_applied(
             "system prompt",
             extra_env={"AUTOSKILLIT_SUBSETS__DISABLED": "@json []"},
             required_env=frozenset(),
+            **_launch_kwargs(),
         )
 
     env = mock_run.call_args.kwargs["env"]
@@ -94,7 +111,12 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
+        _launch_cook_session(
+            "system prompt",
+            initial_message="hello",
+            required_env=frozenset(),
+            **_launch_kwargs(),
+        )
 
     env = mock_run.call_args.kwargs["env"]
     assert env["MAX_MCP_OUTPUT_TOKENS"] == SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"]
@@ -114,7 +136,12 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
+        _launch_cook_session(
+            "system prompt",
+            initial_message="hello",
+            required_env=frozenset(),
+            **_launch_kwargs(),
+        )
 
     env = mock_run.call_args.kwargs["env"]
     assert env["MCP_CONNECTION_NONBLOCKING"] == "0"

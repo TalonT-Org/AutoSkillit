@@ -14,6 +14,7 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     ManagedSessionHome,
     RepositoryProfileId,
+    SkillContractError,
     SkillExecutionRole,
     ValidatedAddDir,
     pkg_root,
@@ -54,23 +55,24 @@ def _catalog_context(
     *,
     backend=None,
     names: frozenset[str] | None = None,
+    role: SkillExecutionRole = SkillExecutionRole.SESSION,
 ):
     from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
 
     project_root = manager._root
     catalog = DefaultSkillResolver().list_effective(
         project_root,
-        SkillExecutionRole.SESSION,
+        role,
     )
     if names is not None:
         catalog = EffectiveSkillCatalog(
             skills=tuple(member for member in catalog.skills if member.name in names),
-            execution_role=SkillExecutionRole.SESSION,
+            execution_role=role,
         )
     else:
         catalog = EffectiveSkillCatalog(
             skills=tuple(member for member in catalog.skills if not member.exploration_vectors),
-            execution_role=SkillExecutionRole.SESSION,
+            execution_role=role,
         )
     resolved_exploration_profile = (
         RepositoryProfileId.AUTOSKILLIT
@@ -98,9 +100,18 @@ def _materialize(
     return manager.init_session(session_id, catalog, context)
 
 
-def _managed(manager, session_id: str, *, backend):
-    catalog, context = _catalog_context(manager, backend=backend)
-    return manager.managed_session(session_id, catalog, context)
+def _managed(
+    manager,
+    session_id: str,
+    *,
+    backend,
+    role: SkillExecutionRole = SkillExecutionRole.SESSION,
+):
+    from autoskillit.workspace import compile_session_skill_catalog
+
+    catalog, context = _catalog_context(manager, backend=backend, role=role)
+    compilation = compile_session_skill_catalog(catalog, backend)
+    return manager.managed_session(session_id, compilation, context)
 
 
 @pytest.fixture
@@ -310,7 +321,9 @@ def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
         session_dir: Path,
         *,
         parent_sandbox_mode: str = "workspace-write",
+        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> None:
+        del parent_sandbox_mode, execution_role
         profile_skill = session_dir / "skills" / "investigate"
         profile_skill.mkdir(parents=True)
         (profile_skill / "SKILL.md").write_text(profile_content)
@@ -340,7 +353,71 @@ def test_codex_init_session_delegates_to_setup_session_dir(
     codex_env.backend.setup_session_dir.assert_called_once_with(
         Path(str(session_path)).parent,
         parent_sandbox_mode="workspace-write",
+        execution_role=SkillExecutionRole.SESSION,
     )
+
+
+def test_codex_managed_orchestrator_materializes_exact_catalog(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    mgr = make_session_skill_manager()
+    catalog, _ = _catalog_context(
+        mgr,
+        backend=codex_env.backend,
+        role=SkillExecutionRole.ORCHESTRATOR,
+    )
+
+    with _managed(
+        mgr,
+        "orchestrator",
+        backend=codex_env.backend,
+        role=SkillExecutionRole.ORCHESTRATOR,
+    ) as managed:
+        projected_root = Path(managed.skills_dir.path) / "skills"
+        discovery_root = managed.generated_home / "skills"
+        assert {entry.name for entry in projected_root.iterdir()} == {
+            member.name for member in catalog.skills
+        }
+        for member in catalog.skills:
+            discovery = discovery_root / member.name
+            assert discovery.is_symlink()
+            assert (discovery.resolve() / "SKILL.md").is_file()
+            assert not (discovery.resolve() / "SKILL.md").is_symlink()
+
+
+def test_codex_managed_orchestrator_rejects_discovery_collision(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    mgr = make_session_skill_manager()
+    catalog, _ = _catalog_context(
+        mgr,
+        backend=codex_env.backend,
+        role=SkillExecutionRole.ORCHESTRATOR,
+    )
+    collision_name = catalog.skills[0].name
+
+    def setup_session_dir(
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
+    ) -> None:
+        del parent_sandbox_mode, execution_role
+        collision = session_dir / "skills" / collision_name
+        collision.mkdir(parents=True)
+        (collision / "SKILL.md").write_text("profile collision")
+
+    codex_env.backend.setup_session_dir.side_effect = setup_session_dir
+    with pytest.raises(SkillContractError, match="orchestrator skill discovery collision"):
+        with _managed(
+            mgr,
+            "orchestrator",
+            backend=codex_env.backend,
+            role=SkillExecutionRole.ORCHESTRATOR,
+        ):
+            pass
 
 
 def test_no_backend_skips_setup_session_dir(make_session_skill_manager) -> None:

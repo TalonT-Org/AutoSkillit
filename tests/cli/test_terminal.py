@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from autoskillit.cli.ui._terminal import _RESET_SPEC
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -489,6 +490,14 @@ class TestCookTerminalGuard:
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
 
         with pytest.raises(KeyboardInterrupt):
-            app_mod._launch_cook_session("system prompt", required_env=frozenset())
+            app_mod._launch_cook_session(
+                "system prompt",
+                required_env=frozenset(),
+                backend=ClaudeCodeBackend(),
+                skill_compilation=Mock(unavailable=(), catalog=None),
+                launch_id="test-order",
+                default_base_branch="main",
+                workspace_temp_dir=None,
+            )
 
         assert tcsetattr_calls, "terminal must be restored by _launch_cook_session on exception"

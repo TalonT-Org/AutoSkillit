@@ -85,6 +85,7 @@ from autoskillit.server._recipe_section_pagination import (
 )
 from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.recipe_section import _lifecycle as recipe_section_lifecycle
+from autoskillit.server.tools._recipe_section_handler import _inject_initialization_counters
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -187,6 +188,33 @@ def _finalize_recipe_delivery(
         normalized_compile_key=prepared.normalized_compile_key,
         **kwargs,
     )
+
+
+def test_initialization_counter_injection_preserves_nested_content_fields() -> None:
+    rendered = json.dumps(
+        {
+            "completed_parts": 0,
+            "content": [{"remaining_section_pulls": 888, "total_parts": 999}],
+            "remaining_section_pulls": 1,
+            "total_parts": 1,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+    updated = json.loads(
+        _inject_initialization_counters(
+            rendered,
+            completed_parts=1,
+            remaining_section_pulls=0,
+            total_parts=2,
+        )
+    )
+
+    assert updated["completed_parts"] == 1
+    assert updated["remaining_section_pulls"] == 0
+    assert updated["total_parts"] == 2
+    assert updated["content"] == [{"remaining_section_pulls": 888, "total_parts": 999}]
 
 
 def test_prepare_generation_rejects_non_finite_compile_values(tool_ctx) -> None:

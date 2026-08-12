@@ -10,7 +10,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
-import regex as re
 import structlog
 
 from autoskillit.core import (
@@ -74,16 +73,6 @@ class _RecipeSectionError(Exception):
         self.code = code
 
 
-# Precompiled patterns for surgical counter injection (no content reserialization).
-# The rendered page uses sort_keys=True and separators=(",",":") so keys are in
-# predictable positions with no whitespace.
-_COUNTER_PATTERNS = {
-    "completed_parts": re.compile(r'"completed_parts":(\d+)'),
-    "remaining_section_pulls": re.compile(r'"remaining_section_pulls":(\d+)'),
-    "total_parts": re.compile(r'"total_parts":(\d+)'),
-}
-
-
 def _inject_initialization_counters(
     rendered: str,
     *,
@@ -91,24 +80,17 @@ def _inject_initialization_counters(
     total_parts: int,
     remaining_section_pulls: int,
 ) -> str:
-    """Replace initialization counter values in a rendered page without reserialization.
-
-    The rendered page is a compact JSON string (sort_keys, no whitespace separators)
-    produced by ``_render_candidate``. This function surgically replaces the three
-    integer counter fields via regex substitution, avoiding a full ``json.loads`` /
-    ``json.dumps`` cycle that would reserialize the entire content array (which can
-    be 100K+ of flow-record objects).
-    """
+    """Replace top-level initialization counter values in a rendered page."""
     replacements = {
         "completed_parts": completed_parts,
         "total_parts": total_parts,
         "remaining_section_pulls": remaining_section_pulls,
     }
-    result = rendered
-    for key, value in replacements.items():
-        pattern = _COUNTER_PATTERNS[key]
-        result = pattern.sub(f'"{key}":{value}', result, count=1)
-    return result
+    page = json.loads(rendered)
+    if not isinstance(page, dict):
+        raise TypeError("rendered recipe section page must be a JSON object")
+    page.update(replacements)
+    return json.dumps(page, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 _RECIPE_SECTION_REQUEST_STATE: ContextVar[RecipeSectionRequestState] = ContextVar(

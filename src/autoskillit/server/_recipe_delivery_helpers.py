@@ -268,7 +268,7 @@ def _resolve_host_client_attestation() -> HostClientAttestation | None:
 
     Every Claude-launched AutoSkillit command builder injects
     ``AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS`` and ``AUTOSKILLIT_ATTESTED_META_SUPPORT``
-    (see ``claude.py``'s ``_CLAUDE_HOST_ATTESTATION_ENV``) — the launcher's
+    (see ``claude.py``'s ``_claude_host_attestation_env()``) — the launcher's
     attestation of what the connected host client supports. Absent or
     malformed values conservatively resolve to None, which routes recipe
     delivery decisions to ``RecipeDeliveryMode.ENVELOPE`` rather than trusting

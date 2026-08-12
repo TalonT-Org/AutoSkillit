@@ -62,7 +62,7 @@ _MAX_MCP_OUTPUT_TOKENS_VALUE: str = str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS)
 #
 # Backend-specific host client attestation (e.g. Claude's
 # AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS / AUTOSKILLIT_ATTESTED_META_SUPPORT,
-# see claude.py's ``_CLAUDE_HOST_ATTESTATION_ENV``) is deliberately excluded
+# see claude.py's ``_claude_host_attestation_env()``) is deliberately excluded
 # from this cross-backend baseline — Codex has its own receipt-based protected
 # delivery pipeline and must never be told it has annotation support, which
 # would make it eligible to bypass that pipeline via ordinary inline delivery.
@@ -196,7 +196,7 @@ class BackendCmdBuilderBase(ABC):
         Always-on keys (three): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
         ``AUTOSKILLIT_HEADLESS``. Backend-specific keys (e.g. Claude's host client
         attestation pair) are layered on by each concrete backend's own builders,
-        not by this shared assembly — see ``claude.py``'s ``_CLAUDE_HOST_ATTESTATION_ENV``.
+        not by this shared assembly — see ``claude.py``'s ``_claude_host_attestation_env()``.
 
         Conditional keys (ten): ``AUTOSKILLIT_SESSION_TYPE``,
         ``AUTOSKILLIT_APPLICABLE_GUARDS``, ``AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES``,

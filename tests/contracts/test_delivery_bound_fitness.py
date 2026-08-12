@@ -217,7 +217,9 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     else:
         # Use the decision's selected limit — it reflects the attested gate
         # when host attestation raised the unannotated threshold.
-        bound_chars = finalized.decision.selected_result_token_limit
+        bound_chars = CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(
+            TokenLimit(finalized.decision.selected_result_token_limit)
+        ).value
     envelope = json.loads(finalized.rendered)
     assert client_serialized_char_len(finalized.rendered).value <= bound_chars, (
         f"{backend_name}: envelope for {recipe_name} exceeds "

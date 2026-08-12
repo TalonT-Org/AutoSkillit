@@ -6,6 +6,7 @@ import hashlib
 import json
 import time
 
+from .types import CLIENT_CHARS_PER_TOKEN_POLICY, SerializedChars
 from .types._type_backend import BackendCapabilities
 from .types._type_constants_registries import (
     ANNOTATION_HARD_CAP_CHARS,
@@ -186,7 +187,9 @@ def resolve_recipe_delivery_decision(
     ):
         return _decision(
             RecipeDeliveryMode.ORDINARY_INLINE,
-            selected_limit=exemption_ceiling_chars,
+            selected_limit=CLIENT_CHARS_PER_TOKEN_POLICY.to_tokens(
+                SerializedChars(exemption_ceiling_chars)
+            ).value,
             reason="annotation_aware_inline",
             receipt_status="not_required",
         )

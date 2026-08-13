@@ -91,10 +91,7 @@ def bridge_claude_session_id(
 def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> None:
     """Bind an existing launch row to the exact spawned client process."""
     path = registry_path(project_dir)
-    try:
-        registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise KeyError(f"unknown launch ID: {launch_id}") from exc
+    registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
 
     if launch_id not in registry:
         raise KeyError(f"unknown launch ID: {launch_id}")

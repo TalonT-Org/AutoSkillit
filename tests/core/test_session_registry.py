@@ -90,6 +90,24 @@ def test_bind_session_owner_rejects_unknown_launch_id(tmp_path: Path) -> None:
     assert set(read_registry(tmp_path)) == {"abc"}
 
 
+@pytest.mark.parametrize(
+    ("contents", "expected_error"),
+    [(None, FileNotFoundError), ("not valid json", json.JSONDecodeError)],
+)
+def test_bind_session_owner_preserves_registry_read_errors(
+    tmp_path: Path,
+    contents: str | None,
+    expected_error: type[Exception],
+) -> None:
+    if contents is not None:
+        path = registry_path(tmp_path)
+        path.parent.mkdir(parents=True)
+        path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(expected_error):
+        bind_session_owner(tmp_path, "abc", os.getpid())
+
+
 def test_bind_session_owner_fails_closed_without_linux_identity(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

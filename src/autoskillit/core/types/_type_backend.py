@@ -204,6 +204,10 @@ class BackendCapabilities:
     session_dir_persistent: bool = False
     # True when interactive cook launches support the guarded startup observer.
     cook_startup_observer_capable: bool = False
+    # Explicit-path environment selector used when resolving the backend executable.
+    explicit_path_env_var: str = ""
+    # True when cook needs an exact executable probe before sealing its launch env.
+    cook_exact_binding_probe_required: bool = field(default=False)
     # True when backend honors the disable-model-invocation SKILL.md frontmatter
     # key. When False, tier-2 skills are structurally omitted from the session
     # directory rather than written with gating frontmatter that the backend
@@ -382,6 +386,8 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     skill_sigil="/",
     session_dir_persistent=False,
     cook_startup_observer_capable=False,
+    explicit_path_env_var="CLAUDE_CODE_EXECPATH",
+    cook_exact_binding_probe_required=True,
     supports_model_invocation_gating=True,
     # 23,250 = CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS × CONSERVATIVE_GATE_HEADROOM
     # (25,000 × 93 / 100).  The static capability derives from the conservative

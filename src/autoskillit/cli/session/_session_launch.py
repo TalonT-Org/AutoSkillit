@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
@@ -24,10 +26,13 @@ from autoskillit.core import (
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.core import (
+        CmdSpec,
         CodingAgentBackend,
+        ExecutableLaunchBinding,
         ManagedSessionHome,
         PluginLaunchBinding,
         ResumeSpec,
+        ValidatedAddDir,
     )
     from autoskillit.workspace import CompiledSessionSkillCatalog, SkillExclusion
 
@@ -58,6 +63,91 @@ def render_skill_catalog_exclusions(exclusions: tuple[SkillExclusion, ...]) -> N
 class _InfraExitSignal:
     session_id: str
     category: str
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedInteractiveLaunch:
+    """Capability-complete command and exact executable binding for one launch."""
+
+    spec: CmdSpec
+    executable: ExecutableLaunchBinding
+
+
+def prepare_interactive_launch(
+    backend: CodingAgentBackend,
+    *,
+    project_dir: Path,
+    extra_env: Mapping[str, str] | None,
+    required_env: frozenset[str] | None,
+    plugin_binding: PluginLaunchBinding | None,
+    resume_spec: ResumeSpec,
+    system_prompt: str | None,
+    initial_prompt: str | None,
+    tools: Sequence[str] = (),
+    add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+    generated_home: Path | None = None,
+) -> PreparedInteractiveLaunch:
+    """Probe an exact executable before sealing the capability-complete session env."""
+
+    probe_env = dict(os.environ)
+    if extra_env is not None and "PATH" in extra_env:
+        probe_env["PATH"] = extra_env["PATH"]
+    selector = backend.capabilities.explicit_path_env_var
+    if selector and extra_env is not None and selector in extra_env:
+        probe_env[selector] = extra_env[selector]
+    explicit_path_env = selector if selector and selector in probe_env else None
+
+    provisional = resolve_executable_launch_binding(
+        binary_name=backend.binary_name(),
+        environment=probe_env,
+        cwd=project_dir,
+        explicit_path_env=explicit_path_env,
+    )
+    readiness = backend.ensure_pre_launch(executable=provisional)
+    if readiness.errors:
+        raise ValueError("\n".join(readiness.errors))
+
+    merged_extras = {**(extra_env or {}), **readiness.attested_env}
+    env_spec = backend.build_interactive_cmd(
+        initial_prompt=initial_prompt,
+        resume_spec=resume_spec,
+        system_prompt=system_prompt,
+        env_extras=merged_extras,
+        required_env=required_env,
+        plugin_binding=plugin_binding,
+        add_dirs=add_dirs,
+        generated_home=generated_home,
+        tools=tools,
+    )
+    final = resolve_executable_launch_binding(
+        binary_name=backend.binary_name(),
+        environment=env_spec.env,
+        cwd=project_dir,
+        explicit_path_env=explicit_path_env,
+    )
+    if final != provisional:
+        raise ValueError(
+            "interactive executable identity changed between probe and launch preparation"
+        )
+    spec = backend.build_interactive_cmd(
+        initial_prompt=initial_prompt,
+        executable=final,
+        resume_spec=resume_spec,
+        system_prompt=system_prompt,
+        env_extras=merged_extras,
+        required_env=required_env,
+        plugin_binding=plugin_binding,
+        add_dirs=add_dirs,
+        generated_home=generated_home,
+        tools=tools,
+    )
+    return PreparedInteractiveLaunch(spec=spec, executable=final)
+
+
+def _exit_launch_preparation_error(exc: ValueError) -> NoReturn:
+    for line in str(exc).splitlines() or [str(exc)]:
+        sys.stderr.write(f"ERROR: {line}\n")
+    raise SystemExit(1)
 
 
 def _run_interactive_session(
@@ -133,51 +223,61 @@ def _run_interactive_session(
         assert attempt is not None
         assert retained_projection_binding is not None
         assert startup_trace is not None
-        candidate_spec = backend.build_interactive_cmd(
-            initial_prompt=initial_message,
-            resume_spec=final_resume_spec,
-            system_prompt=system_prompt,
-            env_extras=extra_env,
-            required_env=required_env,
-            plugin_binding=plugin_binding,
-            add_dirs=[managed_home.skills_dir],
-            generated_home=managed_home.generated_home,
-            tools=tools_arg,
-        )
-        try:
-            executable = resolve_executable_launch_binding(
-                binary_name=backend.binary_name(),
-                environment=candidate_spec.env,
-                cwd=_project_dir,
-                explicit_path_env=(
-                    "CLAUDE_CODE_EXECPATH"
-                    if "CLAUDE_CODE_EXECPATH" in candidate_spec.env
-                    else None
-                ),
+        if backend.capabilities.cook_exact_binding_probe_required:
+            try:
+                prepared = prepare_interactive_launch(
+                    backend,
+                    project_dir=_project_dir,
+                    extra_env=extra_env,
+                    required_env=required_env,
+                    plugin_binding=plugin_binding,
+                    resume_spec=final_resume_spec,
+                    system_prompt=system_prompt,
+                    initial_prompt=initial_message,
+                    add_dirs=[managed_home.skills_dir],
+                    generated_home=managed_home.generated_home,
+                    tools=tools_arg,
+                )
+            except ValueError as exc:
+                _exit_launch_preparation_error(exc)
+            built_spec = prepared.spec
+            executable = prepared.executable
+        else:
+            candidate_spec = backend.build_interactive_cmd(
+                initial_prompt=initial_message,
+                resume_spec=final_resume_spec,
+                system_prompt=system_prompt,
+                env_extras=extra_env,
+                required_env=required_env,
+                plugin_binding=plugin_binding,
+                add_dirs=[managed_home.skills_dir],
+                generated_home=managed_home.generated_home,
+                tools=tools_arg,
             )
-        except ValueError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            sys.exit(1)
-        built_spec = backend.build_interactive_cmd(
-            initial_prompt=initial_message,
-            executable=executable,
-            resume_spec=final_resume_spec,
-            system_prompt=system_prompt,
-            env_extras=extra_env,
-            required_env=required_env,
-            plugin_binding=plugin_binding,
-            add_dirs=[managed_home.skills_dir],
-            generated_home=managed_home.generated_home,
-            tools=tools_arg,
-        )
+            selector = backend.capabilities.explicit_path_env_var
+            try:
+                executable = resolve_executable_launch_binding(
+                    binary_name=backend.binary_name(),
+                    environment=candidate_spec.env,
+                    cwd=_project_dir,
+                    explicit_path_env=(selector if selector in candidate_spec.env else None),
+                )
+            except ValueError as exc:
+                _exit_launch_preparation_error(exc)
+            built_spec = backend.build_interactive_cmd(
+                initial_prompt=initial_message,
+                executable=executable,
+                resume_spec=final_resume_spec,
+                system_prompt=system_prompt,
+                env_extras=extra_env,
+                required_env=required_env,
+                plugin_binding=plugin_binding,
+                add_dirs=[managed_home.skills_dir],
+                generated_home=managed_home.generated_home,
+                tools=tools_arg,
+            )
         spec = replace(built_spec, cwd=str(_project_dir))
         assert_interactive_ordering(spec=spec)
-        if not executable_binding_matches_current_file(executable):
-            print(
-                "ERROR: interactive executable changed after capability probing",
-                file=sys.stderr,
-            )
-            sys.exit(1)
         validation_errors = backend.validate_interactive_invocation(spec)
         if validation_errors:
             for error in validation_errors:
@@ -207,6 +307,11 @@ def _run_interactive_session(
                     )
                 )
             )
+            if not executable_binding_matches_current_file(executable):
+                sys.stderr.write(
+                    "ERROR: interactive executable changed after capability probing\n"
+                )
+                raise SystemExit(1)
             managed_result = run_cook_attempt(
                 spec,
                 pass_fds=pass_fds,
@@ -234,51 +339,28 @@ def _run_interactive_session(
             backend=backend,
             load_mode=load_mode,
         ) as binding:
-            candidate_spec = backend.build_interactive_cmd(
-                initial_prompt=initial_message,
-                resume_spec=final_resume_spec,
-                system_prompt=system_prompt,
-                env_extras=extra_env,
-                required_env=required_env,
-                plugin_binding=binding,
-                tools=tools_arg,
-            )
             try:
-                executable = resolve_executable_launch_binding(
-                    binary_name=backend.binary_name(),
-                    environment=candidate_spec.env,
-                    cwd=_project_dir,
-                    explicit_path_env=(
-                        "CLAUDE_CODE_EXECPATH"
-                        if "CLAUDE_CODE_EXECPATH" in candidate_spec.env
-                        else None
-                    ),
+                prepared = prepare_interactive_launch(
+                    backend,
+                    project_dir=_project_dir,
+                    extra_env=extra_env,
+                    required_env=required_env,
+                    plugin_binding=binding,
+                    resume_spec=final_resume_spec,
+                    system_prompt=system_prompt,
+                    initial_prompt=initial_message,
+                    tools=tools_arg,
                 )
             except ValueError as exc:
-                print(f"ERROR: {exc}", file=sys.stderr)
-                sys.exit(1)
-            pre_launch_errors = backend.ensure_pre_launch(executable=executable)
-            if pre_launch_errors:
-                for err in pre_launch_errors:
-                    print(f"ERROR: {err}", file=sys.stderr)
-                sys.exit(1)
-            spec = backend.build_interactive_cmd(
-                initial_prompt=initial_message,
-                executable=executable,
-                resume_spec=final_resume_spec,
-                system_prompt=system_prompt,
-                env_extras=extra_env,
-                required_env=required_env,
-                plugin_binding=binding,
-                tools=tools_arg,
-            )
+                _exit_launch_preparation_error(exc)
+            spec = prepared.spec
+            executable = prepared.executable
             assert_interactive_ordering(spec=spec)
             if not executable_binding_matches_current_file(executable):
-                print(
-                    "ERROR: interactive executable changed after capability probing",
-                    file=sys.stderr,
+                sys.stderr.write(
+                    "ERROR: interactive executable changed after capability probing\n"
                 )
-                sys.exit(1)
+                raise SystemExit(1)
             with terminal_guard():
                 raw_result = subprocess.run(
                     [*spec.cmd],

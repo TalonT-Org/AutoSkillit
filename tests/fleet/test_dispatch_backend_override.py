@@ -7,6 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from autoskillit.core import PreLaunchReadiness
 from autoskillit.fleet.state_types import _RETRY_IDENTITY_FIELDS, DispatchRecord
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -24,7 +25,7 @@ def _mock_backend(name: str = "claude-code", *, food_truck_capable: bool = True)
         project_log_dir=Mock(return_value=Path("/tmp/logs")),
         session_log_path=Mock(return_value=None),
     )
-    backend.ensure_pre_launch.return_value = []
+    backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     backend.build_food_truck_cmd.return_value = Mock(
         cmd=["claude", "--headless"],
         env={},
@@ -61,6 +62,97 @@ async def _run_with_backend(tool_ctx, dispatch_backend=None):
         dispatch_backend=dispatch_backend,
     )
     return json.loads(result.outcome.to_envelope())
+
+
+def _caller_authority(backend: str):
+    from autoskillit.core import BackendAuthority, BackendAuthorityKind, BackendAuthorityTier
+
+    return BackendAuthority(
+        backend=backend,
+        kind=BackendAuthorityKind.CALLER,
+        tier=BackendAuthorityTier.CALLER,
+        key_path="test.backend",
+    )
+
+
+class TestFoodTruckBackendOverridePrelaunch:
+    @pytest.mark.anyio
+    async def test_non_global_claude_dispatch_skips_interactive_prelaunch(
+        self,
+        tool_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import json
+
+        from autoskillit.core import SubprocessResult, TerminationReason
+        from tests.fakes import MockSubprocessRunner
+
+        executor = tool_ctx.executor
+        _setup(tool_ctx, monkeypatch)
+        tool_ctx.executor = executor
+        backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("claude-code"))
+        monkeypatch.setattr(
+            type(backend),
+            "ensure_pre_launch",
+            lambda _self, **_kwargs: pytest.fail("Claude food-truck dispatch must skip prelaunch"),
+        )
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "result": "L3 done %%FT_DONE%%",
+                        "session_id": "ft-session",
+                        "is_error": False,
+                    }
+                ),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1234,
+            )
+        )
+        tool_ctx.runner = runner
+        tool_ctx.backend = backend
+
+        await _run_with_backend(tool_ctx, dispatch_backend=backend)
+
+        assert runner.call_args_list
+
+    @pytest.mark.anyio
+    async def test_non_global_codex_dispatch_still_runs_prelaunch(
+        self,
+        tool_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import SubprocessResult, TerminationReason
+        from tests.fakes import MockSubprocessRunner
+
+        executor = tool_ctx.executor
+        _setup(tool_ctx, monkeypatch)
+        tool_ctx.executor = executor
+        backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("codex"))
+        prelaunch = Mock(return_value=PreLaunchReadiness((), {}))
+        monkeypatch.setattr(type(backend), "ensure_pre_launch", prelaunch)
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1234,
+            )
+        )
+        tool_ctx.runner = runner
+        tool_ctx.backend = backend
+
+        await _run_with_backend(tool_ctx, dispatch_backend=backend)
+
+        assert runner.call_args_list
+        prelaunch.assert_called_once_with()
 
 
 class TestDispatchBackendOverrideThreadsToExecutor:

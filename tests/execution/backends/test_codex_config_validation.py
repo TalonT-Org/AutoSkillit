@@ -14,6 +14,8 @@ from typing import Any
 
 import pytest
 
+from autoskillit.core import PreLaunchReadiness
+
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _VALID_CONFIG_BYTES = (
@@ -377,7 +379,7 @@ def test_generated_home_snapshot_is_the_exact_post_mcp_and_hook_transaction(
     monkeypatch.setenv("CODEX_HOME", str(ambient_home))
     monkeypatch.setattr(Path, "home", staticmethod(lambda: ambient_home))
 
-    assert backend.ensure_pre_launch(session_dir=generated_home) == []
+    assert backend.ensure_pre_launch(session_dir=generated_home) == PreLaunchReadiness((), {})
 
     source_bytes = source_config.read_bytes()
     assert (generated_home / "config.toml").read_bytes() == source_bytes
@@ -386,6 +388,36 @@ def test_generated_home_snapshot_is_the_exact_post_mcp_and_hook_transaction(
     assert "autoskillit" in data["mcp_servers"]
     assert data["hooks"]
     assert not (ambient_home / "config.toml").exists()
+
+
+def test_interactive_cmd_rejects_environment_changed_after_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import resolve_executable_launch_binding
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    executable = tmp_path / "codex"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    backend = CodexBackend(source_codex_home=source_home)
+    extras = {"PATH": str(tmp_path)}
+    candidate = backend.build_interactive_cmd(env_extras=extras)
+    binding = resolve_executable_launch_binding(
+        binary_name="codex",
+        environment=candidate.env,
+        cwd=tmp_path,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_CODEX_GUARD_MUTATION", "changed")
+
+    with pytest.raises(
+        ValueError,
+        match="interactive environment changed after executable binding",
+    ):
+        backend.build_interactive_cmd(executable=binding, env_extras=extras)
 
 
 def test_config_lock_is_non_reentrant_for_the_same_canonical_path(tmp_path: Path) -> None:

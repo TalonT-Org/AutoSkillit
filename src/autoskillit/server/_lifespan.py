@@ -739,9 +739,9 @@ async def _run_backend_mcp_registration_async(backend: CodingAgentBackend) -> No
     """Offload backend-owned MCP configuration to an executor — fail-open."""
 
     def _run_prelaunch() -> None:
-        errors = backend.ensure_pre_launch()
-        if errors:
-            raise RuntimeError("; ".join(errors))
+        readiness = backend.ensure_pre_launch()
+        if readiness.errors:
+            raise RuntimeError("; ".join(readiness.errors))
 
     try:
         loop = _asyncio.get_running_loop()

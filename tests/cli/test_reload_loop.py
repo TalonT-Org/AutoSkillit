@@ -132,6 +132,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
             supports_tool_list_changed=True,
+            cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
         )
         adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
@@ -357,6 +358,7 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
             supports_tool_list_changed=True,
+            cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
         )
         adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)

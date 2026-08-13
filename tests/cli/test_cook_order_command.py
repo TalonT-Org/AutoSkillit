@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.core import ClaudeFlags
+from autoskillit.core import ClaudeFlags, PreLaunchReadiness
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [
@@ -510,7 +510,7 @@ class TestCLIOrderCommand:
                 (session_dir / "config.toml").write_text(
                     '[mcp_servers.autoskillit]\ncommand = "autoskillit"\nargs = ["mcp"]\n'
                 )
-            return []
+            return PreLaunchReadiness((), {})
 
         monkeypatch.setattr(CodexBackend, "ensure_pre_launch", fake_pre_launch)
         monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda *_: [])

@@ -29,7 +29,7 @@ from ._type_native_shell_capture import (
     NativeShellCaptureDecision,
 )
 from ._type_plugin_source import PluginLaunchBinding
-from ._type_results import ValidatedAddDir
+from ._type_results import PreLaunchReadiness, ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
 from ._type_skill_contract import ExplorationVectorDef
 from ._type_skill_semantics import SkillSemanticAdaptationResult, SkillSemanticPlan
@@ -315,7 +315,7 @@ class CodingAgentBackend(Protocol):
         session_dir: Path | None = None,
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
-    ) -> list[str]:
+    ) -> PreLaunchReadiness:
         """Return backend-specific launch-readiness errors.
 
         ``executable`` carries the shared exact launch binding. Backends whose

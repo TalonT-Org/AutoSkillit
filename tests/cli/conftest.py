@@ -70,8 +70,10 @@ def _stub_interactive_prelaunch(
     import autoskillit.cli.session._session_launch as _session_launch
     from autoskillit.core import (
         ExecutableLaunchBinding,
+        PreLaunchReadiness,
         resolve_executable_launch_binding,
     )
+    from autoskillit.core.io import atomic_write
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
     from autoskillit.execution.backends.codex import CodexBackend
 
@@ -80,7 +82,7 @@ def _stub_interactive_prelaunch(
     binaries: dict[str, Path] = {}
     for name in ("claude", "codex"):
         binary = binary_dir / name
-        binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        atomic_write(binary, "#!/bin/sh\nexit 0\n")
         binary.chmod(0o755)
         binaries[name] = binary
 
@@ -116,12 +118,12 @@ def _stub_interactive_prelaunch(
     monkeypatch.setattr(
         ClaudeCodeBackend,
         "ensure_pre_launch",
-        lambda _self, *, session_dir=None, executable=None: [],
+        lambda _self, *, session_dir=None, executable=None: PreLaunchReadiness((), {}),
     )
     monkeypatch.setattr(
         CodexBackend,
         "ensure_pre_launch",
-        lambda _self, *, session_dir=None, executable=None: [],
+        lambda _self, *, session_dir=None, executable=None: PreLaunchReadiness((), {}),
     )
 
 

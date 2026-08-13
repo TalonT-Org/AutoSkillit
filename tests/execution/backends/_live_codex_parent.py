@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from autoskillit.core import PreLaunchReadiness
 from autoskillit.core.agent_definition import AgentDef
 from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
@@ -84,7 +85,7 @@ def prepare_live_codex_parent(
     ensure_codex_mcp_registered(config_path=profile_config, headless_auto_gate=False)
     sync_hooks_to_codex_config(config_path=profile_config)
     backend = CodexBackend()
-    assert backend.ensure_pre_launch(session_dir=session_home) == []
+    assert backend.ensure_pre_launch(session_dir=session_home) == PreLaunchReadiness((), {})
     issued_binding_env = (
         explorer_binding_env_factory(session_home)
         if explorer_binding_env_factory is not None

@@ -29,6 +29,7 @@ from autoskillit.core import (
     ManagedSessionHome,
     PluginLaunchBinding,
     PluginLoadMode,
+    PreLaunchReadiness,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
     ValidatedAddDir,
@@ -102,9 +103,9 @@ class _RecordingBackend:
         *,
         session_dir: Path | None = None,
         executable: object = None,
-    ) -> list[str]:
+    ) -> PreLaunchReadiness:
         del session_dir, executable
-        return []
+        return PreLaunchReadiness((), {})
 
     def recover_cook_history(self) -> None:
         self.recover_count += 1
@@ -265,7 +266,7 @@ def _run_session_launch(
     agent_path.chmod(0o755)
 
     def resolve_agent(_binary: str, *, path: str | None = None) -> str:
-        assert path is None
+        del path
         return str(agent_path)
 
     monkeypatch.setattr(shutil, "which", resolve_agent)
@@ -359,7 +360,7 @@ def test_cook_binds_through_projection_authority(
     _install_cook_harness(monkeypatch, state.home / "project")
     cli.cook(backend=backend)
 
-    assert len(backend.build_calls) == 1
+    assert len(backend.build_calls) == 2
     binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
     assert binding.load_mode is PluginLoadMode.EXPLICIT_PLUGIN_DIR
     assert isinstance(binding.plugin_dir, Path)

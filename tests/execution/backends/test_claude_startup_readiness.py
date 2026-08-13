@@ -6,22 +6,26 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from autoskillit.core import (
+    AUTOSKILLIT_ATTESTED_META_SUPPORT,
     CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR,
     CLAUDE_MCP_CONNECT_TIMEOUT_MS,
     CLAUDE_MCP_CONNECTION_NONBLOCKING,
     ExecutableLaunchBinding,
+    atomic_write,
     resolve_executable_launch_binding,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
+from autoskillit.execution.backends.claude import _claude_host_attestation_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _binding(tmp_path: Path) -> ExecutableLaunchBinding:
     executable = tmp_path / "claude"
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    atomic_write(executable, "#!/bin/sh\nexit 0\n")
     executable.chmod(0o755)
     return resolve_executable_launch_binding(
         binary_name="claude",
@@ -36,7 +40,7 @@ def _binding(tmp_path: Path) -> ExecutableLaunchBinding:
 
 def test_interactive_cmd_uses_bound_path_and_sealed_readiness_values(tmp_path: Path) -> None:
     executable = tmp_path / "claude"
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    atomic_write(executable, "#!/bin/sh\nexit 0\n")
     executable.chmod(0o755)
     backend = ClaudeCodeBackend()
     extras = {
@@ -64,6 +68,46 @@ def test_interactive_cmd_uses_bound_path_and_sealed_readiness_values(tmp_path: P
     assert spec.env == binding.launch_environment
 
 
+def test_interactive_cmd_rejects_environment_changed_after_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    backend = ClaudeCodeBackend()
+    extras = {"PATH": str(tmp_path)}
+    executable = tmp_path / "claude"
+    atomic_write(executable, "#!/bin/sh\nexit 0\n")
+    executable.chmod(0o755)
+    candidate = backend.build_interactive_cmd(env_extras=extras)
+    binding = resolve_executable_launch_binding(
+        binary_name="claude",
+        environment=candidate.env,
+        cwd=tmp_path,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_GUARD_MUTATION", "changed")
+
+    with pytest.raises(
+        ValueError,
+        match="interactive environment changed after executable binding",
+    ):
+        backend.build_interactive_cmd(executable=binding, env_extras=extras)
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        (Version("2.1.90"), "0"),
+        (Version("2.1.91"), "1"),
+        (None, "0"),
+    ],
+)
+def test_claude_host_attestation_version_boundary(
+    version: Version | None,
+    expected: str,
+) -> None:
+    assert _claude_host_attestation_env(version)[AUTOSKILLIT_ATTESTED_META_SUPPORT] == expected
+
+
 def test_pre_launch_probes_bound_executable_with_bound_environment(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -78,7 +122,9 @@ def test_pre_launch_probes_bound_executable_with_bound_environment(
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    assert ClaudeCodeBackend().ensure_pre_launch(executable=binding) == []
+    readiness = ClaudeCodeBackend().ensure_pre_launch(executable=binding)
+
+    assert readiness.errors == ()
     assert captured["cmd"] == (str(binding.path), "--version")
     assert captured["env"] == dict(binding.launch_environment)
     assert captured["cwd"] == str(binding.cwd)
@@ -109,7 +155,7 @@ def test_pre_launch_fails_closed_for_unusable_capability_probe(
         ),
     )
 
-    errors = ClaudeCodeBackend().ensure_pre_launch(executable=binding)
+    errors = ClaudeCodeBackend().ensure_pre_launch(executable=binding).errors
 
     assert errors
     assert expected in errors[0]
@@ -131,7 +177,7 @@ def test_pre_launch_retains_bounded_nonzero_probe_diagnostics(
         ),
     )
 
-    errors = ClaudeCodeBackend().ensure_pre_launch(executable=binding)
+    errors = ClaudeCodeBackend().ensure_pre_launch(executable=binding).errors
 
     assert len(errors) == 1
     assert "loader policy denied" in errors[0]

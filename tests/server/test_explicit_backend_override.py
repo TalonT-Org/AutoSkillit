@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from autoskillit.core import PreLaunchReadiness
 from tests.server._helpers import (
     BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
     _bundled_backend,
@@ -131,7 +132,7 @@ class TestExplicitOverrideProviderPrecedence:
         fake_backend.name = "codex"
         fake_backend.capabilities = concrete_backend.capabilities
         fake_backend.conventions = concrete_backend.conventions
-        fake_backend.ensure_pre_launch.return_value = []
+        fake_backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
         fake_backend.validate_session_layout.return_value = []
         fake_backend.session_locator.return_value.project_log_dir.return_value = None
         tool_ctx_kitchen_open.backend = fake_backend

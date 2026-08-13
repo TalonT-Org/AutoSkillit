@@ -593,8 +593,8 @@ def _run_codex_selection_case(
         env.pop(inherited_headless_flag, None)
 
     backend = CodexBackend(source_codex_home=source_codex_home)
-    pre_launch_errors = backend.ensure_pre_launch(session_dir=case_codex_home)
-    assert not pre_launch_errors, f"Codex pre-launch failed: {pre_launch_errors}"
+    readiness = backend.ensure_pre_launch(session_dir=case_codex_home)
+    assert not readiness.errors, f"Codex pre-launch failed: {readiness.errors}"
     backend.setup_session_dir(case_codex_home)
 
     venv_bin = Path(__file__).resolve().parents[3] / ".venv" / "bin"

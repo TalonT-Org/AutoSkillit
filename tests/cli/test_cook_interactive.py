@@ -27,6 +27,7 @@ from autoskillit.core import (
     NoResume,
     SkillProjectionContextAuthority,
     ValidatedAddDir,
+    atomic_write,
 )
 from tests.fakes import adapt_test_skill_semantics
 
@@ -89,6 +90,7 @@ class _Backend:
         session_dir_persistent=False,
         session_scoped_explorer_capable=True,
         terminal_explorer_capable=False,
+        cook_exact_binding_probe_required=False,
         skill_injection_capable=True,
         supports_tool_list_changed=True,
     )
@@ -180,6 +182,17 @@ def _install_harness(
 
     manager.managed_session.side_effect = managed_session
 
+    claude_shim = tmp_path / "claude"
+    atomic_write(
+        claude_shim,
+        "#!/bin/sh\n"
+        'if [ "${1-}" = "--version" ]; then\n'
+        "  printf '%s\\n' '2.1.220 (Claude Code)'\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    claude_shim.chmod(0o755)
+
     def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
         captured["spec"] = spec
         captured["run_kwargs"] = kwargs
@@ -195,7 +208,7 @@ def _install_harness(
         return SimpleNamespace(pid=101, pgid=101, returncode=returncode)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(claude_shim))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager",
@@ -554,6 +567,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
+            cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
             supports_tool_list_changed=True,
         )
@@ -649,6 +663,7 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
         session_scoped_explorer_capable=False,
         terminal_explorer_capable=False,
         cook_startup_observer_capable=False,
+        cook_exact_binding_probe_required=False,
         skill_injection_capable=True,
         supports_tool_list_changed=True,
     )

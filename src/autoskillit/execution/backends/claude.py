@@ -54,6 +54,7 @@ from autoskillit.core import (
     NoResume,
     OutputFormat,
     PluginLaunchBinding,
+    PreLaunchReadiness,
     ResumeSpec,
     SessionCheckpoint,
     SessionEvent,
@@ -110,12 +111,6 @@ _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer bin
 # launch. Used by _claude_host_attestation_env() to determine whether the
 # installed Claude Code CLI supports ``anthropic/maxResultSizeChars``.
 _ANNOTATION_SUPPORT_MIN = Version(CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION)
-
-# Module-level frozen attestation env, computed once by ensure_pre_launch()
-# and used by every subsequent session launch. None until the first
-# successful probe; _host_attestation_env() returns conservative defaults
-# (meta_support="0") in that case.
-_FROZEN_ATTESTATION_ENV: dict[str, str] | None = None
 
 
 def _claude_host_attestation_env(
@@ -468,13 +463,6 @@ class ClaudeResultParser:
 
 @dataclass(frozen=True, slots=True)
 class ClaudeCodeBackend(BackendCmdBuilderBase):
-    def _host_attestation_env(self) -> dict[str, str]:
-        """Return the host client attestation env for this backend instance."""
-        if _FROZEN_ATTESTATION_ENV is not None:
-            return dict(_FROZEN_ATTESTATION_ENV)
-        # Pre-probe: conservative defaults (annotation_support="0")
-        return _claude_host_attestation_env(None)
-
     def _binary(self) -> str:
         return "claude"
 
@@ -681,7 +669,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
             builder.variadic_pair(ClaudeFlags.TOOLS, t)
-        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | self._host_attestation_env()
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | _claude_host_attestation_env(None)
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
@@ -738,7 +726,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         _apply_output_format(cmd, output_format)
         if plugin_binding is not None:
             cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
-        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | self._host_attestation_env()
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | _claude_host_attestation_env(None)
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
@@ -844,7 +832,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             scenario_step_name=scenario_step_name,
         )
-        extras.update(self._host_attestation_env())
+        extras.update(_claude_host_attestation_env(None))
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
@@ -947,7 +935,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             scenario_step_name=scenario_step_name,
         )
-        extras.update(self._host_attestation_env())
+        extras.update(_claude_host_attestation_env(None))
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
@@ -1151,19 +1139,17 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         session_dir: Path | None = None,
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
-    ) -> list[str]:
+    ) -> PreLaunchReadiness:
         del session_dir, plugin_dir
         if executable is None:
-            return ["Claude Code launch requires an exact executable binding"]
+            return PreLaunchReadiness(
+                errors=("Claude Code launch requires an exact executable binding",)
+            )
         if not executable_binding_matches_current_file(executable):
-            return ["Claude Code executable changed after capability probing"]
+            return PreLaunchReadiness(
+                errors=("Claude Code executable changed after capability probing",)
+            )
         environment = executable.launch_environment
-        if environment.get("MCP_CONNECTION_NONBLOCKING") != CLAUDE_MCP_CONNECTION_NONBLOCKING:
-            return ["Claude Code MCP blocking startup policy is not sealed"]
-        if environment.get(CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR) != str(
-            CLAUDE_MCP_CONNECT_TIMEOUT_MS
-        ):
-            return ["Claude Code MCP connection timeout policy is not sealed"]
         try:
             result = subprocess.run(
                 (str(executable.path), "--version"),
@@ -1174,9 +1160,9 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 cwd=str(executable.cwd),
             )
         except subprocess.TimeoutExpired:
-            return ["Claude Code capability probe timed out"]
+            return PreLaunchReadiness(errors=("Claude Code capability probe timed out",))
         except OSError as exc:
-            return [f"Claude Code capability probe failed: {exc}"]
+            return PreLaunchReadiness(errors=(f"Claude Code capability probe failed: {exc}",))
         stdout = result.stdout if isinstance(result.stdout, str) else ""
         stderr = result.stderr if isinstance(result.stderr, str) else ""
         if result.returncode != 0:
@@ -1184,28 +1170,34 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             normalized = "".join(char if char.isprintable() else " " for char in raw_diagnostic)
             diagnostic = truncate_text(" ".join(normalized.split()), max_len=1_000)
             detail = f": {diagnostic}" if diagnostic else ""
-            return [
-                f"Claude Code capability probe failed with exit code {result.returncode}{detail}"
-            ]
+            return PreLaunchReadiness(
+                errors=(
+                    "Claude Code capability probe failed with exit code "
+                    f"{result.returncode}{detail}",
+                )
+            )
         output = stdout.strip() or stderr.strip()
         if not output:
-            return ["Claude Code capability probe returned empty output"]
+            return PreLaunchReadiness(
+                errors=("Claude Code capability probe returned empty output",)
+            )
         match = re.search(r"\b(\d+\.\d+\.\d+)\b", output)
         if match is None:
-            return ["Claude Code capability probe returned unparseable version output"]
+            return PreLaunchReadiness(
+                errors=("Claude Code capability probe returned unparseable version output",)
+            )
         try:
             installed = Version(match.group(1))
             minimum = Version(self.capabilities.min_version)
         except InvalidVersion:
-            return ["Claude Code capability probe returned unparseable version output"]
+            return PreLaunchReadiness(
+                errors=("Claude Code capability probe returned unparseable version output",)
+            )
         if installed < minimum:
-            return [f"AutoSkillit requires Claude Code {minimum} or newer; found {installed}"]
-        # Freeze the attestation env from the probed version — all subsequent
-        # session launches use these values, ensuring consistency between the
-        # executable binding capture and the final cmd build.
-        global _FROZEN_ATTESTATION_ENV  # noqa: PLW0603
-        _FROZEN_ATTESTATION_ENV = _claude_host_attestation_env(installed)
-        return []
+            return PreLaunchReadiness(
+                errors=(f"AutoSkillit requires Claude Code {minimum} or newer; found {installed}",)
+            )
+        return PreLaunchReadiness(errors=(), attested_env=_claude_host_attestation_env(installed))
 
     def recover_cook_history(self) -> None:
         return None

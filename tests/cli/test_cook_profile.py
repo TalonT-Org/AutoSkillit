@@ -50,6 +50,7 @@ def _make_mock_backend_class():
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
             supports_tool_list_changed=True,
+            cook_exact_binding_probe_required=False,
             skill_injection_capable=False,
             plugin_install_capable=True,
         )
@@ -303,6 +304,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
             terminal_explorer_capable=True,
             supports_tool_list_changed=False,
             cook_startup_observer_capable=False,
+            cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
             plugin_install_capable=False,
         )

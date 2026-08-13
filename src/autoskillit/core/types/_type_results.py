@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -46,6 +47,7 @@ __all__ = [
     "WriteEvidence",
     "FailureRecord",
     "ProviderOutcome",
+    "PreLaunchReadiness",
     "InfraOutcome",
     "ApiRetryOutcome",
     "NdjsonDriftOutcome",
@@ -94,6 +96,14 @@ class LoadResult(Generic[T]):
 
     items: list[T]
     errors: list[LoadReport] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class PreLaunchReadiness:
+    """Backend readiness result whose failed probes never carry capability claims."""
+
+    errors: tuple[str, ...]
+    attested_env: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

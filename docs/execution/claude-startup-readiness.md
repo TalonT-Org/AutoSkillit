@@ -26,10 +26,28 @@ not `MCP_TIMEOUT`, the distinct per-server connection timeout. Claude may let a
 pending server continue in the background after the snapshot deadline, so the
 configuration does not claim that an over-budget server is addressable.
 
-The executable path, file identity and digest, working directory, sealed launch
-environment, and the two readiness values form one `ExecutableLaunchBinding`.
-Availability lookup, `--version` probing, command construction, and spawn use
-that same binding. A file replacement between the probe and spawn fails closed.
+Interactive launch is a two-stage transaction. A provisional binding fingerprints
+the selected executable and directs only the `--version` probe. After the probe
+returns capability attestation as data, the launcher builds the authoritative
+session environment and creates a final content-sealed binding. The provisional
+and final executable identities must be equal, the final command rebuild must
+match the sealed environment, and file continuity is checked again immediately
+before spawn.
+
+The session environment is sealed exactly once, after all capability-dependent
+inputs are known; only that sealed environment reaches the session. The probe
+inherits OS/runtime variables and executable selectors (`PATH` and, for Claude,
+`CLAUDE_CODE_EXECPATH`), but AutoSkillit-added session state, lineage, provider
+credentials, and other final-session extras are withheld. The former readiness
+checks for MCP policy keys on the probe binding are intentionally absent: those
+keys belong to the final builder output and are set there unconditionally, so a
+probe-binding check would be unreachable under this transaction.
+
+Unprobed resume, skill-session, and food-truck builders conservatively attest no
+annotation support. They may claim support only when a caller explicitly threads
+attestation from an exact successful probe. The identity checks are portable
+fail-closed drift detection, not atomic executable binding: pathname replacement
+after the final check and writable same-file mutation remain residual risks.
 
 ## Fresh and resumed sessions
 

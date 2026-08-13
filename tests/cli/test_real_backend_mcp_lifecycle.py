@@ -40,10 +40,7 @@ def _wait_for_registered_daemon(launch_id: str, timeout: float) -> psutil.Proces
             try:
                 if process.environ().get("AUTOSKILLIT_LAUNCH_ID") == launch_id:
                     command = process.cmdline()
-                    if any(Path(arg).name == "autoskillit" for arg in command) or any(
-                        command[index : index + 2] == ["-m", "autoskillit"]
-                        for index in range(len(command) - 1)
-                    ):
+                    if any(Path(arg).name == "autoskillit" for arg in command):
                         return process
             except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
                 continue

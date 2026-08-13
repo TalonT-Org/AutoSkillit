@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -90,6 +91,7 @@ def test_bridge_noop_on_missing_launch_id(tmp_path: Path) -> None:
     assert reg["abc"]["claude_session_id"] is None
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
 def test_bind_session_owner_preserves_launch_metadata(tmp_path: Path) -> None:
     write_registry_entry(tmp_path, "abc", "cook", "recipe")
     bridge_claude_session_id(tmp_path, "abc", "claude-session")
@@ -138,6 +140,7 @@ def test_bind_session_owner_preserves_registry_read_errors(
         bind_session_owner(tmp_path, "abc", os.getpid())
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
 def test_bind_session_owner_fails_closed_without_linux_identity(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

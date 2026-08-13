@@ -31,7 +31,11 @@ from autoskillit.core import (
 )
 from tests.fakes import adapt_test_skill_semantics
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_owner_binding"),
+]
 
 
 class _CookBinding:
@@ -240,7 +244,6 @@ def _install_harness(
             ("registry", launch_id)
         ),
     )
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
     monkeypatch.setattr(
         "autoskillit.cli.session._session_process.run_cook_attempt",
         run_attempt,

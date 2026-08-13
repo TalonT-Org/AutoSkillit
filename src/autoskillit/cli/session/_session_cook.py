@@ -258,8 +258,8 @@ def cook(
         render_skill_contract_composition_failure(exc)
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(session_catalog.exclusions)
-    catalog_compilation = compile_session_skill_catalog(session_catalog, backend)
-    session_catalog = catalog_compilation.catalog
+    skill_compilation = compile_session_skill_catalog(session_catalog, backend)
+    session_catalog = skill_compilation.catalog
     requires_resolved_exploration_profile = any(
         vector.disposition is ExplorationVectorDisposition.MIGRATED
         and vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
@@ -301,7 +301,7 @@ def cook(
         ) as projection_binding,
         session_mgr.managed_session(
             launch_id,
-            catalog_compilation,
+            skill_compilation,
             _build_cook_projection_context(
                 skills_provider,
                 session_catalog,

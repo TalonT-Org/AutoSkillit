@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from typing import cast
 
 import anyio
 import pytest
@@ -71,13 +72,17 @@ async def test_drain_escalates_through_owner_when_leader_stays_live() -> None:
 
 @pytest.mark.anyio
 async def test_immediate_kill_skips_drain() -> None:
+    class UnexpectedDrain:
+        async def wait(self) -> None:
+            pytest.fail("IMMEDIATE_KILL must not wait for process exit")
+
     owner = await _spawn(30)
 
     with anyio.fail_after(5):
         kill_reason, returncode, cleanup = await execute_termination_action(
             TerminationAction.IMMEDIATE_KILL,
             owner=owner,
-            process_exited_event=anyio.Event(),
+            process_exited_event=cast(anyio.Event, UnexpectedDrain()),
             grace_seconds=30,
             proc_log=structlog.get_logger().bind(pid=owner.pid),
         )

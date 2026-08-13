@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
@@ -434,13 +435,7 @@ def test_interactive_session_reload_uses_named_resume(
     monkeypatch.setattr(
         subprocess,
         "Popen",
-        lambda *a, **kw: SimpleNamespace(
-            pid=123,
-            wait=lambda timeout=None: 0,
-            poll=lambda: 0,
-            terminate=lambda: None,
-            kill=lambda: None,
-        ),
+        lambda *a, **kw: InteractiveProcessStub(pid=123),
     )
     monkeypatch.setattr("autoskillit.cli.ui._terminal.terminal_guard", _noop_terminal_guard)
     monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)

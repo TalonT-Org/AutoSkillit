@@ -12,6 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
@@ -20,13 +22,23 @@ def _update_submodule(name: str) -> ModuleType:
     return importlib.import_module(f"autoskillit.cli.update.{name}")
 
 
-def test_daemon_orphans_help_is_registered() -> None:
+def test_daemon_orphans_help_is_registered(tmp_path: Path) -> None:
+    state_dir = tmp_path / "state"
+    home_dir = tmp_path / "home"
+    state_dir.mkdir()
+    home_dir.mkdir()
+    env = production_interpreter_env()
+    env.pop("AUTOSKILLIT_LAUNCH_ID", None)
+    env.pop("AUTOSKILLIT_STATE_ROOT", None)
+    env.update(AUTOSKILLIT_STATE_DIR=str(state_dir), HOME=str(home_dir))
     result = subprocess.run(
         [sys.executable, "-m", "autoskillit", "daemon-orphans", "--help"],
         capture_output=True,
         text=True,
         timeout=15,
         check=False,
+        cwd=tmp_path,
+        env=env,
     )
     assert result.returncode == 0, result.stderr
     assert "--reap" in result.stdout

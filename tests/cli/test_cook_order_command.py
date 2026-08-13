@@ -13,7 +13,7 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags, PreLaunchReadiness
-from tests.cli._interactive_process import configure_popen
+from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [
@@ -518,7 +518,7 @@ class TestCLIOrderCommand:
         def fake_run(cmd, **kwargs):
             captured["cmd"] = list(cmd)
             captured["env"] = kwargs.get("env", {}) or {}
-            return configure_popen(MagicMock(), returncode=0)
+            return InteractiveProcessStub()
 
         monkeypatch.setattr(subprocess, "Popen", fake_run)
 

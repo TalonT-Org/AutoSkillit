@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -39,6 +40,29 @@ def test_write_is_atomic(tmp_path: Path) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
     assert "id1" in data
+
+
+@pytest.mark.parametrize("operation", ["write", "bridge", "bind"])
+def test_registry_mutations_acquire_exclusive_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", None)
+    lock_operations: list[int] = []
+    monkeypatch.setattr(
+        "autoskillit.core.runtime.session_registry.fcntl.flock",
+        lambda _lock_file, lock_operation: lock_operations.append(lock_operation),
+    )
+
+    if operation == "write":
+        write_registry_entry(tmp_path, "new", "cook", None)
+    elif operation == "bridge":
+        bridge_claude_session_id(tmp_path, "abc", "claude-session")
+    else:
+        bind_session_owner(tmp_path, "abc", os.getpid())
+
+    assert lock_operations == [fcntl.LOCK_EX]
 
 
 def test_read_returns_empty_on_missing_file(tmp_path: Path) -> None:

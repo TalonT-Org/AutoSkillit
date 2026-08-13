@@ -6,10 +6,13 @@ Read by the scoped resume picker to classify sessions by type.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import sys
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -39,6 +42,15 @@ def read_registry(project_dir: Path) -> dict[str, dict]:
         return {}
 
 
+@contextmanager
+def _registry_lock(path: Path) -> Iterator[None]:
+    """Serialize mutations of one session registry."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix(".lock").open("w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        yield
+
+
 def write_registry_entry(
     project_dir: Path,
     launch_id: str,
@@ -51,19 +63,20 @@ def write_registry_entry(
     Merges with existing registry (does not clobber unrelated entries).
     """
     path = registry_path(project_dir)
-    try:
-        existing: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        existing = {}
+    with _registry_lock(path):
+        try:
+            existing: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = {}
 
-    existing[launch_id] = {
-        "session_type": session_type,
-        "launched_at": datetime.now(UTC).isoformat(),
-        "recipe_name": recipe_name,
-        "claude_session_id": None,
-    }
+        existing[launch_id] = {
+            "session_type": session_type,
+            "launched_at": datetime.now(UTC).isoformat(),
+            "recipe_name": recipe_name,
+            "claude_session_id": None,
+        }
 
-    _atomic_write(path, _fast_dumps(existing))
+        _atomic_write(path, _fast_dumps(existing))
 
 
 def bridge_claude_session_id(
@@ -76,16 +89,17 @@ def bridge_claude_session_id(
     No-op if launch_id not found. Uses atomic write.
     """
     path = registry_path(project_dir)
-    try:
-        registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return
+    with _registry_lock(path):
+        try:
+            registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
 
-    if launch_id not in registry:
-        return
+        if launch_id not in registry:
+            return
 
-    registry[launch_id]["claude_session_id"] = claude_session_id
-    _atomic_write(path, _fast_dumps(registry))
+        registry[launch_id]["claude_session_id"] = claude_session_id
+        _atomic_write(path, _fast_dumps(registry))
 
 
 def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> None:
@@ -94,25 +108,26 @@ def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> Non
         raise ValueError("owner_pid must be a positive integer")
 
     path = registry_path(project_dir)
-    registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
+    with _registry_lock(path):
+        registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
 
-    if launch_id not in registry:
-        raise KeyError(f"unknown launch ID: {launch_id}")
+        if launch_id not in registry:
+            raise KeyError(f"unknown launch ID: {launch_id}")
 
-    if not sys.platform.startswith("linux"):
-        return
+        if not sys.platform.startswith("linux"):
+            return
 
-    boot_id = read_boot_id()
-    starttime_ticks = read_starttime_ticks(owner_pid)
-    if not boot_id or not starttime_ticks:
-        raise RuntimeError(f"unable to capture Linux owner identity for PID {owner_pid}")
+        boot_id = read_boot_id()
+        starttime_ticks = read_starttime_ticks(owner_pid)
+        if not boot_id or not starttime_ticks:
+            raise RuntimeError(f"unable to capture Linux owner identity for PID {owner_pid}")
 
-    registry[launch_id].update(
-        owner_pid=owner_pid,
-        owner_boot_id=boot_id,
-        owner_starttime_ticks=starttime_ticks,
-    )
-    _atomic_write(path, _fast_dumps(registry))
+        registry[launch_id].update(
+            owner_pid=owner_pid,
+            owner_boot_id=boot_id,
+            owner_starttime_ticks=starttime_ticks,
+        )
+        _atomic_write(path, _fast_dumps(registry))
 
 
 def _atomic_write(path: Path, content: str) -> None:

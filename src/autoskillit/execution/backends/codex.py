@@ -448,8 +448,8 @@ class CodexEnvPolicy:
             )
         # This is an outer-cook control signal, never child or nested-session state.
         out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
-        for key in CODEX_MCP_ENV_FORWARD_VARS:
-            out.setdefault(key, "")
+        out.setdefault("AUTOSKILLIT_LAUNCH_ID", "")
+        out.setdefault("AUTOSKILLIT_STATE_ROOT", "")
         if required is not None:
             missing = required - frozenset(out)
             if missing:

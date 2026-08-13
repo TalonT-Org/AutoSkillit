@@ -937,10 +937,9 @@ class DefaultSessionSkillManager:
             effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
         elif backend is not None and effective_catalog is not None:
-            local_compilation = compile_session_skill_catalog(effective_catalog, backend)
-            effective_catalog = local_compilation.catalog
+            compilation = compile_session_skill_catalog(effective_catalog, backend)
+            effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
-            compilation = local_compilation
         elif backend is not None and projection_context.invocation is not None:
             for record in records:
                 plan = record.semantic_plan

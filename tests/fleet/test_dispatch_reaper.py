@@ -377,7 +377,7 @@ class TestReap:
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=0,
-            dispatched_create_time=1000000.5,
+            dispatched_create_time=1000000.0,
         )
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),

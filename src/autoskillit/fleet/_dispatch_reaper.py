@@ -214,6 +214,7 @@ def reap_stale_dispatches(
 
             current_ticks = read_starttime_ticks(pid)
             use_tick_identity = False
+            confirmed_create_time: float | None = None
             if (
                 dispatch.dispatched_boot_id
                 and dispatch.dispatched_starttime_ticks > 0
@@ -228,6 +229,8 @@ def reap_stale_dispatches(
                 try:
                     actual_ct = psutil.Process(pid).create_time()
                     identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
+                    if identity_confirmed:
+                        confirmed_create_time = actual_ct
                 except psutil.NoSuchProcess:
                     _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
                     continue
@@ -259,9 +262,10 @@ def reap_stale_dispatches(
                                 expected_starttime_ticks=dispatch.dispatched_starttime_ticks,
                             )
                         else:
+                            assert confirmed_create_time is not None
                             cleanup_result = kill_process_tree(
                                 pid,
-                                expected_create_time=dispatch.dispatched_create_time,
+                                expected_create_time=confirmed_create_time,
                             )
                     except Exception:
                         logger.warning(

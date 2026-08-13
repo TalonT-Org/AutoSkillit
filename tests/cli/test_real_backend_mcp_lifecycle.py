@@ -111,13 +111,40 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
 def _terminate(process: psutil.Process | None) -> None:
     if process is None:
         return
-    with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+    with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
         process.terminate()
         process.wait(timeout=2)
         return
     with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
         process.kill()
         process.wait(timeout=2)
+
+
+def test_terminate_kills_process_after_terminate_timeout() -> None:
+    class StubbornProcess:
+        pid = 123
+
+        def __init__(self) -> None:
+            self.terminated = False
+            self.killed = False
+
+        def terminate(self) -> None:
+            self.terminated = True
+
+        def kill(self) -> None:
+            self.killed = True
+
+        def wait(self, timeout: float) -> int:
+            if not self.killed:
+                raise psutil.TimeoutExpired(timeout, pid=self.pid)
+            return 0
+
+    process = StubbornProcess()
+
+    _terminate(process)  # type: ignore[arg-type]
+
+    assert process.terminated is True
+    assert process.killed is True
 
 
 @pytest.mark.parametrize("backend_name", ["claude", "codex"])

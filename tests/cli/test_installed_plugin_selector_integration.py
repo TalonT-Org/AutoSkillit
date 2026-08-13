@@ -41,6 +41,7 @@ from autoskillit.core._plugin_ids import (
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
 from autoskillit.workspace._projection_cache import projected_plugin_artifact_digest
+from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
@@ -278,13 +279,7 @@ def _run_session_launch(
 
     def record_spawn(*args: object, **kwargs: object) -> object:
         spawn_calls.append((args, kwargs))
-        return SimpleNamespace(
-            pid=123,
-            wait=lambda timeout=None: 0,
-            poll=lambda: 0,
-            terminate=lambda: None,
-            kill=lambda: None,
-        )
+        return InteractiveProcessStub(pid=123)
 
     monkeypatch.setattr(subprocess, "Popen", record_spawn)
     _run_interactive_session(

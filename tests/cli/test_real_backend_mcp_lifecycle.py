@@ -268,7 +268,8 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
             client.kill()
             client.wait(timeout=3)
         stop_drain.set()
-        drain.join()
+        drain.join(timeout=1)
+        assert not drain.is_alive(), diagnostics.decode(errors="replace")
         os.close(master_fd)
         master_fd = -1
 

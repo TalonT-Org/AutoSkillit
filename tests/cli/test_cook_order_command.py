@@ -631,17 +631,27 @@ def test_session_order_launch_calls_pass_order_interactive_required_env() -> Non
 
 
 def test_session_order_launch_calls_pass_explicit_home_authorities() -> None:
-    required = {
-        "skill_compilation",
-        "launch_id",
-        "default_base_branch",
-        "workspace_temp_dir",
+    import ast
+
+    expected_values = {
+        "skill_compilation": "skill_compilation",
+        "launch_id": "launch_id",
+        "default_base_branch": "config.branching.default_base_branch",
+        "workspace_temp_dir": "config.workspace.temp_dir",
     }
     for call in _launch_cook_session_calls():
-        supplied = {keyword.arg for keyword in call.keywords}
-        assert required <= supplied, (
-            f"Call at line {call.lineno} is missing {sorted(required - supplied)}"
+        supplied = {keyword.arg: keyword.value for keyword in call.keywords}
+        assert expected_values.keys() <= supplied.keys(), (
+            f"Call at line {call.lineno} is missing "
+            f"{sorted(expected_values.keys() - supplied.keys())}"
         )
+        for keyword, expression in expected_values.items():
+            expected = ast.parse(expression, mode="eval").body
+            actual = supplied[keyword]
+            assert ast.dump(actual) == ast.dump(expected), (
+                f"Call at line {call.lineno} must pass {keyword}={expression}, "
+                f"got {ast.dump(actual)}"
+            )
 
 
 def test_launch_cook_session_required_env_is_required_keyword_only() -> None:

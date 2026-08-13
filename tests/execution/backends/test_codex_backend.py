@@ -1430,6 +1430,32 @@ class TestCodexMcpClientBackendRequired:
         spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
         assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == AGENT_BACKEND_CODEX
 
+    @pytest.mark.parametrize(
+        "build",
+        [
+            lambda backend: backend.build_interactive_cmd(initial_prompt="work"),
+            lambda backend: backend.build_headless_cmd("work"),
+            lambda backend: backend.build_resume_cmd(resume_session_id="session-1", prompt="work"),
+            lambda backend: backend.build_skill_session_cmd(
+                **TestCodexMcpClientBackendRequired.SKILL_BASE
+            ),
+            lambda backend: backend.build_food_truck_cmd(
+                **TestCodexMcpClientBackendRequired.FOOD_TRUCK_BASE
+            ),
+        ],
+        ids=("interactive", "headless", "resume", "skill-session", "food-truck"),
+    )
+    def test_every_builder_overrides_inherited_mcp_backend(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        build,
+    ) -> None:
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "claude-code")
+
+        spec = build(CodexBackend())
+
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == AGENT_BACKEND_CODEX
+
     @pytest.fixture()
     def _strip_mcp_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         original = CodexEnvPolicy.build_env

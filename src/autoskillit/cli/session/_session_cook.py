@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.cli.session._session_launch import (
+    prepare_interactive_launch,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
 )
@@ -18,6 +19,7 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
     SkillContractError,
+    executable_binding_matches_current_file,
     is_feature_enabled,
     plugin_launch_binding_scope,
     resolve_project_dir,
@@ -373,15 +375,36 @@ def cook(
             while True:
                 attempt += 1
                 launch_binding = projection_binding if load_mode.consumes_artifact else None
-                built_spec = backend.build_interactive_cmd(
-                    plugin_binding=launch_binding,
-                    add_dirs=[managed_home.skills_dir],
-                    generated_home=managed_home.generated_home,
-                    initial_prompt=current_initial_prompt,
-                    resume_spec=current_resume_spec,
-                    system_prompt=cook_system_prompt,
-                    env_extras=cook_env_extras,
-                )
+                prepared = None
+                if backend.capabilities.cook_exact_binding_probe_required:
+                    try:
+                        prepared = prepare_interactive_launch(
+                            backend,
+                            project_dir=project_dir,
+                            extra_env=cook_env_extras,
+                            required_env=None,
+                            plugin_binding=launch_binding,
+                            resume_spec=current_resume_spec,
+                            system_prompt=cook_system_prompt,
+                            initial_prompt=current_initial_prompt,
+                            add_dirs=[managed_home.skills_dir],
+                            generated_home=managed_home.generated_home,
+                        )
+                    except ValueError as exc:
+                        for line in str(exc).splitlines() or [str(exc)]:
+                            sys.stderr.write(f"ERROR: {line}\n")
+                        raise SystemExit(1) from exc
+                    built_spec = prepared.spec
+                else:
+                    built_spec = backend.build_interactive_cmd(
+                        plugin_binding=launch_binding,
+                        add_dirs=[managed_home.skills_dir],
+                        generated_home=managed_home.generated_home,
+                        initial_prompt=current_initial_prompt,
+                        resume_spec=current_resume_spec,
+                        system_prompt=cook_system_prompt,
+                        env_extras=cook_env_extras,
+                    )
                 final_cmd = built_spec.cmd
                 final_origin = built_spec.origin
                 final_env = dict(built_spec.env)
@@ -427,6 +450,13 @@ def cook(
                             )
                         )
                     )
+                    if prepared is not None and not executable_binding_matches_current_file(
+                        prepared.executable
+                    ):
+                        sys.stderr.write(
+                            "ERROR: interactive executable changed after capability probing\n"
+                        )
+                        raise SystemExit(1)
                     result = run_cook_attempt(
                         spec,
                         pass_fds=pass_fds,

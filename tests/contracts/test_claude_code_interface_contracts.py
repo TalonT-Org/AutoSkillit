@@ -227,7 +227,6 @@ class TestCookAddDirStructure:
     def test_cook_add_dir_target_has_correct_structure(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        import shutil
         from types import SimpleNamespace
 
         from autoskillit.core import CmdSpec
@@ -266,7 +265,34 @@ class TestCookAddDirStructure:
             kwargs["on_reaped"](1, 1)  # type: ignore[operator]
             return SimpleNamespace(pid=1, pgid=1, returncode=0)
 
-        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+        from autoskillit.core import ExecutableLaunchBinding, PreLaunchReadiness
+        from autoskillit.execution.backends import ClaudeCodeBackend
+
+        def binding(**kwargs: object) -> ExecutableLaunchBinding:
+            return ExecutableLaunchBinding(
+                path=tmp_path / "claude",
+                device=1,
+                inode=1,
+                size=1,
+                mtime_ns=1,
+                file_sha256="a" * 64,
+                cwd=tmp_path,
+                launch_environment=kwargs["environment"],  # type: ignore[arg-type]
+            )
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch.resolve_executable_launch_binding",
+            binding,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_cook.executable_binding_matches_current_file",
+            lambda _binding: True,
+        )
+        monkeypatch.setattr(
+            ClaudeCodeBackend,
+            "ensure_pre_launch",
+            lambda _self, **_kwargs: PreLaunchReadiness((), {}),
+        )
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
         monkeypatch.setattr(

@@ -122,6 +122,105 @@ def test_plugin_binding_cleanup_does_not_replace_primary_error(
 class TestDispatchFoodTruck:
     """Tests for DefaultHeadlessExecutor.dispatch_food_truck."""
 
+    @staticmethod
+    def _caller_authority(backend: str):
+        from autoskillit.core import (
+            BackendAuthority,
+            BackendAuthorityKind,
+            BackendAuthorityTier,
+        )
+
+        return BackendAuthority(
+            backend=backend,
+            kind=BackendAuthorityKind.CALLER,
+            tier=BackendAuthorityTier.CALLER,
+            key_path="test.backend",
+        )
+
+    @pytest.mark.anyio
+    async def test_non_global_claude_dispatch_skips_interactive_prelaunch(
+        self,
+        minimal_ctx,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        monkeypatch.setattr(
+            ClaudeCodeBackend,
+            "ensure_pre_launch",
+            lambda _self, **_kwargs: pytest.fail("Claude food-truck dispatch must skip prelaunch"),
+        )
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=_make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1234,
+            )
+        )
+        minimal_ctx.runner = runner
+        minimal_ctx.backend = ClaudeCodeBackend()
+        authority = _StaticPluginAuthority(tmp_path)
+        minimal_ctx.plugin_authority = authority
+
+        result = await DefaultHeadlessExecutor(minimal_ctx).dispatch_food_truck(
+            "dispatch",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+            plugin_authority=authority,
+            backend_authority=self._caller_authority("claude-code"),
+        )
+
+        assert result.success is True
+        assert runner.call_args_list
+
+    @pytest.mark.anyio
+    async def test_non_global_codex_dispatch_still_runs_prelaunch(
+        self,
+        minimal_ctx,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from unittest.mock import Mock
+
+        from autoskillit.core import PreLaunchReadiness, SubprocessResult, TerminationReason
+        from autoskillit.execution.backends import CodexBackend
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        prelaunch = Mock(return_value=PreLaunchReadiness((), {}))
+        monkeypatch.setattr(CodexBackend, "ensure_pre_launch", prelaunch)
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1234,
+            )
+        )
+        minimal_ctx.runner = runner
+        minimal_ctx.backend = CodexBackend()
+        authority = _StaticPluginAuthority(tmp_path)
+        minimal_ctx.plugin_authority = authority
+
+        await DefaultHeadlessExecutor(minimal_ctx).dispatch_food_truck(
+            "dispatch",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+            plugin_authority=authority,
+            backend_authority=self._caller_authority("codex"),
+        )
+
+        assert runner.call_args_list
+        prelaunch.assert_called_once_with()
+
     @pytest.mark.anyio
     async def test_dispatch_food_truck_calls_runner(self, minimal_ctx, tmp_path: Path):
         from autoskillit.core.types import SubprocessResult, TerminationReason

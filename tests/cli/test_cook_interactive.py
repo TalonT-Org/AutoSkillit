@@ -89,6 +89,7 @@ class _Backend:
         session_dir_persistent=False,
         session_scoped_explorer_capable=True,
         terminal_explorer_capable=False,
+        cook_exact_binding_probe_required=False,
         skill_injection_capable=True,
         supports_tool_list_changed=True,
     )
@@ -554,6 +555,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
+            cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
             supports_tool_list_changed=True,
         )
@@ -649,6 +651,7 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
         session_scoped_explorer_capable=False,
         terminal_explorer_capable=False,
         cook_startup_observer_capable=False,
+        cook_exact_binding_probe_required=False,
         skill_injection_capable=True,
         supports_tool_list_changed=True,
     )

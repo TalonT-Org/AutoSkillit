@@ -84,10 +84,17 @@ def test_response_backstop_fires_below_codex_history_retention_limit() -> None:
 
 
 def test_resolve_general_output_token_limit_per_backend() -> None:
-    from autoskillit.core import BackendCapabilities, resolve_general_output_token_limit
+    from autoskillit.core import (
+        CLAUDE_CODE_CAPABILITIES,
+        BackendCapabilities,
+        resolve_general_output_token_limit,
+    )
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
-    expected = {"codex": 10_000, "claude-code": 46_500}
+    expected = {
+        "codex": 10_000,
+        "claude-code": CLAUDE_CODE_CAPABILITIES.unnegotiated_tool_result_token_limit,
+    }
     observed: dict[str, int] = {}
     for name, cls in BACKEND_REGISTRY.items():
         caps = cls().capabilities

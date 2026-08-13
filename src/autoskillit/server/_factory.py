@@ -92,6 +92,7 @@ from autoskillit.server._audit_authority_materializer import (
     DefaultCommittedDispositionResolver,
 )
 from autoskillit.server._exploration_service import DefaultExplorationService
+from autoskillit.server._recipe_delivery_helpers import initialize_host_client_attestation
 from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
     DefaultCloneManager,
@@ -452,6 +453,7 @@ def make_context(
             )
         ),
     )
+    ctx.host_client_attestation = initialize_host_client_attestation()
     if runner is not None:
         ctx.tester = DefaultTestRunner(config=ctx.config, runner=runner)
 

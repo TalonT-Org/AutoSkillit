@@ -1431,7 +1431,7 @@ def test_tool_subset_tags_match_decorators() -> None:
     server_dir = SRC_ROOT / "server"
     decorator_tags: dict[str, frozenset[str]] = {}
 
-    for py_file in (server_dir / "tools").glob("tools_*.py"):
+    for py_file in (server_dir / "tools").glob("*.py"):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

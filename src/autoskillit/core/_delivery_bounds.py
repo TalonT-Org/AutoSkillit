@@ -6,9 +6,17 @@ import hashlib
 import json
 import time
 
+from .types import CLIENT_CHARS_PER_TOKEN_POLICY, SerializedChars
 from .types._type_backend import BackendCapabilities
+from .types._type_constants_registries import (
+    ANNOTATION_HARD_CAP_CHARS,
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+    CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
+    CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
+)
 from .types._type_recipe_delivery import (
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
+    HostClientAttestation,
     RecipeDeliveryAttestation,
     RecipeDeliveryBudgetDef,
     RecipeDeliveryDecision,
@@ -53,6 +61,27 @@ def resolve_recipe_envelope_byte_limit(capabilities: BackendCapabilities) -> int
     return resolve_general_output_token_limit(capabilities)
 
 
+def resolve_recipe_section_response_bound(
+    *,
+    response_max_bytes: int,
+    conservative_general_result_limit: int,
+    page_max_bytes_override: int | None = None,
+    exemption_ceiling_bytes: int | None = None,
+) -> int:
+    """Resolve the recipe-section byte ceiling via single-seat reconciliation.
+
+    An override is an input to reconciliation, never a bypass — it is clamped
+    to the exemption ceiling when one is provided.
+    """
+    if page_max_bytes_override is not None:
+        candidate = page_max_bytes_override
+    else:
+        candidate = min(response_max_bytes, conservative_general_result_limit)
+    if exemption_ceiling_bytes is not None:
+        return min(candidate, exemption_ceiling_bytes)
+    return candidate
+
+
 def resolve_recipe_delivery_decision(
     *,
     capabilities: BackendCapabilities,
@@ -64,6 +93,9 @@ def resolve_recipe_delivery_decision(
     attestation: RecipeDeliveryAttestation | None = None,
     supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     now_unix: int | None = None,
+    host_client_attestation: HostClientAttestation | None = None,
+    payload_serialized_chars: int | None = None,
+    exemption_ceiling_chars: int | None = None,
 ) -> RecipeDeliveryDecision:
     """Resolve one recipe response without treating caller claims as authority."""
     ordinary_limit = resolve_general_output_token_limit(capabilities)
@@ -106,11 +138,59 @@ def resolve_recipe_delivery_decision(
         return _envelope("invalid_required_token_count")
     if not producer or not _is_sha256_identity(payload_sha256):
         return _envelope("invalid_payload_identity")
-    if required_serialized_tokens <= ordinary_limit:
+    # Unannotated regime: payloads that fit the effective token gate go
+    # inline without any attestation or protected-delivery machinery.
+    # When the host attests the exact injected gate (50,000 tokens) AND the
+    # backend has no protected delivery pipeline (budget is None — Claude
+    # only), the admission limit rises to the attested value × conservative
+    # headroom (46,500). Without attestation, or for backends with their own
+    # protected pipeline (Codex), the static conservative default applies.
+    _attestation_valid = (
+        host_client_attestation is not None
+        and host_client_attestation.attested_client_gate_tokens
+        == CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
+    )
+    effective_unannotated_limit = (
+        (
+            host_client_attestation.attested_client_gate_tokens
+            * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
+            // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
+        )
+        if _attestation_valid and host_client_attestation is not None and budget is None
+        else ordinary_limit
+    )
+    if required_serialized_tokens <= effective_unannotated_limit:
         return _decision(
             RecipeDeliveryMode.ORDINARY_INLINE,
-            selected_limit=ordinary_limit,
+            selected_limit=effective_unannotated_limit,
             reason="fits_unnegotiated_result_limit",
+            receipt_status="not_required",
+        )
+    # Annotation-aware inline: when the host attests annotation support
+    # with a validated gate token value, and the payload fits within the
+    # exemption ceiling, deliver inline without the protected-delivery
+    # machinery. Scoped to backends without a registered
+    # recipe_delivery_budget (i.e. Claude Code) — a backend that owns a
+    # protected delivery pipeline (Codex) must always resolve through that
+    # pipeline's receipt-based checks below, never through an unreceipted
+    # annotation shortcut. Requires exact gate-token match to prevent
+    # arbitrary positive attestation from bypassing the token gate.
+    if (
+        _attestation_valid
+        and host_client_attestation is not None
+        and host_client_attestation.annotation_support
+        and budget is None
+        and payload_serialized_chars is not None
+        and exemption_ceiling_chars is not None
+        and exemption_ceiling_chars <= ANNOTATION_HARD_CAP_CHARS
+        and payload_serialized_chars <= exemption_ceiling_chars
+    ):
+        return _decision(
+            RecipeDeliveryMode.ORDINARY_INLINE,
+            selected_limit=CLIENT_CHARS_PER_TOKEN_POLICY.to_tokens(
+                SerializedChars(exemption_ceiling_chars)
+            ).value,
+            reason="annotation_aware_inline",
             receipt_status="not_required",
         )
     if not capabilities.protected_recipe_delivery_capable:

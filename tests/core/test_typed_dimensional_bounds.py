@@ -5,7 +5,14 @@ from typing import cast
 
 import pytest
 
-from autoskillit.core import ASCII_YAML_POLICY, BytesToTokensPolicy, TokenLimit, Utf8ByteLimit
+from autoskillit.core import (
+    ASCII_YAML_POLICY,
+    CLIENT_CHARS_PER_TOKEN_POLICY,
+    BytesToTokensPolicy,
+    SerializedChars,
+    TokenLimit,
+    Utf8ByteLimit,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -14,8 +21,12 @@ def test_token_and_utf8_byte_limits_are_distinct_positive_types() -> None:
     token_limit = TokenLimit(46_500)
     byte_limit = Utf8ByteLimit(46_500)
 
-    with pytest.raises(TypeError):
-        min(token_limit, byte_limit)
+    # Both are int subclasses — runtime arithmetic works transparently.
+    # Cross-unit misuse is caught by mypy (static type checking), not
+    # at runtime. Verify they are distinct types but numerically equal.
+    assert type(token_limit) is not type(byte_limit)
+    assert token_limit == byte_limit  # same numeric value
+    assert isinstance(token_limit, int) and isinstance(byte_limit, int)
 
 
 @pytest.mark.parametrize("limit_type", [TokenLimit, Utf8ByteLimit])
@@ -34,6 +45,11 @@ def test_bytes_to_tokens_conversion_uses_exact_explicit_policy() -> None:
     assert policy.utf8_bytes_per_token == Fraction(27, 10)
     assert policy.to_tokens(Utf8ByteLimit(100_000)) == TokenLimit(37_038)
     assert policy.to_bytes(TokenLimit(37_038)) == Utf8ByteLimit(100_002)
+
+
+def test_client_character_policy_preserves_character_dimension() -> None:
+    assert CLIENT_CHARS_PER_TOKEN_POLICY.to_tokens(SerializedChars(100)) == TokenLimit(25)
+    assert CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(TokenLimit(25)) == SerializedChars(100)
 
 
 def test_bytes_to_tokens_policy_rejects_non_fraction_ratio() -> None:

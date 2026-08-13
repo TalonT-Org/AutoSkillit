@@ -74,7 +74,7 @@ def _count_mcp_tools() -> int:
 
 def _count_kitchen_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' in dec:
                 total += 1

@@ -18,6 +18,18 @@ _REQUIRED_IN_BOTH: frozenset[str] = frozenset(
     }
 )
 
+# Host client attestation is Claude-only (see claude.py's
+# _CLAUDE_HOST_ATTESTATION_ENV): Codex owns its own receipt-based protected
+# recipe-delivery pipeline and must never be told it has annotation support,
+# which would make it eligible to bypass that pipeline via ordinary inline
+# delivery.
+_CLAUDE_ONLY_ATTESTATION_VARS: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+        "AUTOSKILLIT_ATTESTED_META_SUPPORT",
+    }
+)
+
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -228,3 +240,29 @@ def test_agent_backend_flat_and_dynaconf_values_match_in_interactive_and_resume(
             resume_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
             == resume_spec.env["AUTOSKILLIT_AGENT_BACKEND"]
         ), f"{name}: nested and flat AGENT_BACKEND values differ in build_resume_cmd"
+
+
+@pytest.mark.parametrize("builder_name", _ALL_GUARD_BUILDERS)
+def test_host_client_attestation_is_claude_only(builder_name: str) -> None:
+    """Host client attestation vars must appear only in Claude Code's launch env.
+
+    Codex owns its own receipt-based protected recipe-delivery pipeline; if it
+    received these vars, the MCP server it launches would (mis)read them as an
+    attestation of annotation support and become eligible to bypass that
+    pipeline via the annotation-aware ordinary-inline shortcut.
+    """
+    from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
+    for name, cls in BACKEND_REGISTRY.items():
+        backend = cls()
+        if builder_name == "build_resume_cmd" and not backend.capabilities.session_resume_capable:
+            continue
+        spec = _call_builder(backend, builder_name)
+        if name == AGENT_BACKEND_CLAUDE_CODE:
+            for var in _CLAUDE_ONLY_ATTESTATION_VARS:
+                assert var in spec.env, f"{name}: {var} missing from {builder_name} env"
+        else:
+            for var in _CLAUDE_ONLY_ATTESTATION_VARS:
+                assert var not in spec.env, f"{name}: {var} must not leak into {builder_name} env"

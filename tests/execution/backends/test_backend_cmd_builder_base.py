@@ -85,6 +85,8 @@ class TestAssembleSharedEnvExtras:
         assert len(result) == 13
         assert result["MAX_MCP_OUTPUT_TOKENS"] == "50000"
         assert result["MCP_CONNECTION_NONBLOCKING"] == "0"
+        assert "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS" not in result
+        assert "AUTOSKILLIT_ATTESTED_META_SUPPORT" not in result
         assert result["AUTOSKILLIT_HEADLESS"] == "1"
         assert result["AUTOSKILLIT_SESSION_TYPE"] == "skill"
         assert result["AUTOSKILLIT_APPLICABLE_GUARDS"] == "write_guard"
@@ -164,6 +166,12 @@ class TestExtensionPoints:
 
 class TestSharedBaselineEnv:
     def test_exactly_two_keys(self) -> None:
+        """Host client attestation is backend-specific (Claude-only) and must
+        NOT live in SHARED_BASELINE_ENV — see claude.py's
+        _CLAUDE_HOST_ATTESTATION_ENV. Advertising it to every backend would
+        make Codex eligible to bypass its receipt-based protected delivery
+        pipeline via the annotation-aware inline shortcut.
+        """
         assert set(SHARED_BASELINE_ENV.keys()) == {
             "MAX_MCP_OUTPUT_TOKENS",
             "MCP_CONNECTION_NONBLOCKING",
@@ -171,9 +179,9 @@ class TestSharedBaselineEnv:
 
 
 class TestMaxMcpOutputTokensCommentAccuracy:
-    """The comment above _MAX_MCP_OUTPUT_TOKENS_VALUE must not claim the token setting
-    prevents disk persistence — that's a separate, harness-controlled byte-size gate
-    (issue #4253)."""
+    """The comment above _MAX_MCP_OUTPUT_TOKENS_VALUE must reflect the binary-verified
+    (CLI 2.1.220) annotated/unannotated gating topology, not the earlier empirical
+    ~100KB guess (issue #4253)."""
 
     def _preceding_comment(self) -> str:
         import ast
@@ -210,7 +218,9 @@ class TestMaxMcpOutputTokensCommentAccuracy:
     def test_max_mcp_output_tokens_comment_accuracy(self) -> None:
         comment = self._preceding_comment()
         assert "inline token limit" in comment
-        assert "does NOT control" in comment
-        assert "disk-persistence" in comment or "disk persistence" in comment
+        assert "Binary-verified" in comment
+        assert "2.1.220" in comment
+        assert "annotated" in comment
+        assert "500,000" in comment
         assert "preventing open_kitchen() responses" not in comment
         assert "persisted to a file instead of returned inline" not in comment

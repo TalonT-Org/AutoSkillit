@@ -7,6 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import (
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+    RECIPE_RESPONSE_DEFAULT_BYTES,
+    RECIPE_RESPONSE_MAX_UTF8_BYTES,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DECISION = REPO_ROOT / "docs/decisions/0005-output-budget-protocol.md"
 DECISION_INDEX = REPO_ROOT / "docs/decisions/README.md"
@@ -49,16 +55,16 @@ def test_decision_names_all_four_layers(decision_text: str, required: str) -> No
 @pytest.mark.parametrize(
     "required",
     [
-        "max_chars = 195_000",
-        "max_utf8_bytes = 195_000",
+        f"max_chars = {RECIPE_RESPONSE_MAX_UTF8_BYTES:_}",
+        f"max_utf8_bytes = {RECIPE_RESPONSE_MAX_UTF8_BYTES:_}",
         "ordinary_omitted_result_token_limit = 10_000",
-        "((195_000 + 3) // 4) + 8_000",
+        f"(({RECIPE_RESPONSE_MAX_UTF8_BYTES:_} + 3) // 4) + 8_000",
         "authoritative_attested_recipe_result_token_limit = 56_750",
         "CODEX_HISTORY_RETENTION_TOKEN_LIMIT = 56_750",
         "CODEX_AUTO_COMPACT_LIMIT = 999_999_999",
         "inline_max_chars = 5_000",
-        "response_max_bytes = 90_000",
-        "MAX_MCP_OUTPUT_TOKENS = 50_000",
+        f"response_max_bytes = {RECIPE_RESPONSE_DEFAULT_BYTES:_}",
+        f"MAX_MCP_OUTPUT_TOKENS = {CLAUDE_INJECTED_CLIENT_RESULT_TOKENS:_}",
     ],
 )
 def test_decision_pins_numeric_rationales(decision_text: str, required: str) -> None:

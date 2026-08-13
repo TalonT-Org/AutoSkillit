@@ -347,12 +347,12 @@ def _reconstruct_array_section(
     for page in pages:
         content = page["content"]
         content_format = page["content_format"]
-        assert isinstance(content, str)
         assert isinstance(content_format, str)
         formats.add(content_format)
-        decoded = json.loads(content)
 
         if content_format == "json-array-page":
+            assert isinstance(content, list)
+            decoded = content  # already parsed
             assert not fragment_chunks
             assert isinstance(decoded, list)
             assert page["element_start"] == len(values)
@@ -365,6 +365,8 @@ def _reconstruct_array_section(
             continue
 
         assert content_format == "json-element-fragment"
+        assert isinstance(content, str)
+        decoded = json.loads(content)
         assert isinstance(decoded, str)
         element_index = page["element_index"]
         assert element_index == len(values)

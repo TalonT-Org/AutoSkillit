@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     ASCII_YAML_POLICY,
+    CLIENT_CHARS_PER_TOKEN_POLICY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    TokenLimit,
     Utf8ByteLimit,
     atomic_write,
     get_logger,
@@ -870,7 +872,7 @@ def _spill_for_delivery_bound(
             parsed = None
     else:
         parsed = result
-    bound = selected_result_token_limit * 4
+    bound = CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(TokenLimit(selected_result_token_limit)).value
     floor_bytes = min(bound, config.response_max_bytes)
     rendered: str | None
     try:
@@ -1037,7 +1039,7 @@ def enforce_response_budget(
     }
 
     delivery_bound_bytes = (
-        selected_result_token_limit * 4
+        CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(TokenLimit(selected_result_token_limit)).value
         if selected_result_token_limit is not None and selected_result_token_limit > 0
         else None
     )

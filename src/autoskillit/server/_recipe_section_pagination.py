@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-from bisect import bisect_right
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from threading import Event, Lock, RLock
 
 from autoskillit.core import (
@@ -21,11 +18,15 @@ from autoskillit.core import (
     RecipeSectionDef,
     canonical_recipe_section_json,
     get_logger,
-    recipe_section_digest,
-    recipe_section_element_digest,
     recipe_section_plan_digest,
+    resolve_recipe_section_response_bound,
 )
-from autoskillit.server._recipe_initialization import recipe_initialization_receipt
+from autoskillit.server._recipe_section_planning import (
+    _render_candidate,
+    plan_pages,
+    recipe_section_continuation_binding,
+    selected_section_sha256,
+)
 from autoskillit.server.recipe_section._contracts import (
     PlannedRecipeSectionPage,
     RecipeSectionBoundError,
@@ -47,7 +48,6 @@ logger = get_logger(__name__)
 
 PAGE_PLAN_CACHE_MAX_ENTRIES = 8
 PAGE_PLAN_CACHE_MAX_BYTES = 32 * 1024 * 1024
-_PLAN_DIGEST_PLACEHOLDER = "sha256:" + ("0" * 64)
 
 
 def _convergence_iteration_ceiling() -> int:
@@ -93,6 +93,7 @@ class _PagePlanCacheKey:
     section_registry_sha256: str
     pagination_policy_sha256: str
     pagination_version: int
+    char_ceiling: int | None
 
 
 @dataclass(slots=True)
@@ -240,11 +241,16 @@ def resolve_recipe_section_bound_bytes(
     response_max_bytes: int,
     conservative_general_result_limit: int,
     page_max_bytes_override: int | None = None,
+    *,
+    exemption_ceiling_bytes: int | None = None,
 ) -> int:
-    """Resolve the deliberately conservative ordinary recipe-pull ceiling."""
-    if page_max_bytes_override is not None:
-        return page_max_bytes_override
-    return min(response_max_bytes, conservative_general_result_limit)
+    """Delegate to core resolver — thin compatibility wrapper."""
+    return resolve_recipe_section_response_bound(
+        response_max_bytes=response_max_bytes,
+        conservative_general_result_limit=conservative_general_result_limit,
+        page_max_bytes_override=page_max_bytes_override,
+        exemption_ceiling_bytes=exemption_ceiling_bytes,
+    )
 
 
 def resolve_recipe_section_definition(
@@ -306,577 +312,19 @@ def select_recipe_section(
     )
 
 
-def _qualified_content_digest(content: str) -> str:
-    return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
-
-
-def _utf8_prefix_offsets(value: str) -> list[int]:
-    offsets = [0]
-    total = 0
-    for character in value:
-        total += len(character.encode("utf-8"))
-        offsets.append(total)
-    return offsets
-
-
-def _max_utf8_prefix_end(
-    offsets: list[int],
-    *,
-    start: int,
-    bound_bytes: int,
-) -> int:
-    """Return the largest end whose content bytes alone can fit the response bound."""
-    return (
-        bisect_right(
-            offsets,
-            offsets[start] + bound_bytes,
-            lo=start + 1,
-        )
-        - 1
-    )
-
-
-def _render_candidate(
-    *,
-    selected: SelectedRecipeSection,
-    generation: RecipeArtifactGeneration,
-    section_sha256: str,
-    page: PlannedRecipeSectionPage,
-    part: int,
-    total_parts: int,
-    page_plan_sha256: str,
-    terminal: bool,
-) -> str:
-    body: dict[str, object] = {
-        "content": page.content,
-        "content_format": page.descriptor.content_format,
-        "has_more": not terminal,
-        "page_plan_sha256": page_plan_sha256,
-        "pagination_policy_sha256": RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
-        "pagination_version": RECIPE_SECTION_PAGINATION_VERSION,
-        "part": part,
-        "section": selected.section,
-        "section_registry_sha256": RECIPE_SECTION_REGISTRY_DIGEST,
-        "section_sha256": section_sha256,
-        "success": True,
-        "total_parts": total_parts,
-    }
-    body.update(generation.pull_identity())
-    body.pop("pull_tool")
-    if selected.initialization_id is not None:
-        body["initialization_id"] = selected.initialization_id
-        body["completed_parts"] = part + 1
-        body["remaining_section_pulls"] = total_parts - part - 1
-    if terminal and selected.completion_response is not None:
-        completion_response = dict(selected.completion_response)
-        content_sha256 = page.descriptor.page_content_sha256
-        completion_response["content_sha256"] = content_sha256
-        assert selected.initialization_id is not None
-        completion_response["completion_receipt"] = recipe_initialization_receipt(
-            selected.initialization_id,
-            generation,
-            content_sha256=content_sha256,
-        )
-        body.update(completion_response)
-    if not terminal:
-        body["next_part"] = part + 1
-        body["continuation"] = recipe_section_continuation_binding(
-            generation=generation,
-            initialization_id=selected.initialization_id,
-            section=selected.section,
-            section_sha256=section_sha256,
-            page_plan_sha256=page_plan_sha256,
-            next_part=part + 1,
-        )
-    body.update(page.descriptor.wire_ranges())
-    return json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-
-
-def recipe_section_continuation_binding(
-    *,
-    generation: RecipeArtifactGeneration,
-    initialization_id: str | None,
-    section: str,
-    section_sha256: str,
-    page_plan_sha256: str,
-    next_part: int,
-) -> str:
-    """Bind the next part to the complete immutable request without a cursor."""
-    material = json.dumps(
-        {
-            "generation": generation.pull_identity(),
-            "initialization_id": initialization_id,
-            "next_part": next_part,
-            "page_plan_sha256": page_plan_sha256,
-            "section": section,
-            "section_sha256": section_sha256,
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return (
-        "sha256:"
-        + hashlib.sha256(b"autoskillit.recipe-section-continuation.v1\0" + material).hexdigest()
-    )
-
-
-def _fits(
-    *,
-    selected: SelectedRecipeSection,
-    generation: RecipeArtifactGeneration,
-    section_sha256: str,
-    page: PlannedRecipeSectionPage,
-    part: int,
-    total_width: int,
-    terminal: bool,
-    bound_bytes: int,
-) -> bool:
-    rendered = _render_candidate(
-        selected=selected,
-        generation=generation,
-        section_sha256=section_sha256,
-        page=page,
-        part=part,
-        total_parts=(10**total_width) - 1,
-        page_plan_sha256=_PLAN_DIGEST_PLACEHOLDER,
-        terminal=terminal,
-    )
-    return len(rendered.encode("utf-8")) <= bound_bytes
-
-
-def _raw_or_scalar_pages(
-    *,
-    selected: SelectedRecipeSection,
-    generation: RecipeArtifactGeneration,
-    section_sha256: str,
-    value: str,
-    total_width: int,
-    bound_bytes: int,
-    scalar: bool,
-) -> list[PlannedRecipeSectionPage]:
-    offsets = _utf8_prefix_offsets(value)
-    pages: list[PlannedRecipeSectionPage] = []
-    if not value:
-        content = canonical_recipe_section_json("") if scalar else ""
-        if scalar:
-            descriptor = RecipeSectionPageDescriptor(
-                content_format=selected.definition.ordinary_content_format,
-                page_content_sha256=_qualified_content_digest(content),
-                scalar_byte_start=0,
-                scalar_byte_end=0,
-                scalar_byte_total=0,
-            )
-        else:
-            descriptor = RecipeSectionPageDescriptor(
-                content_format=selected.definition.ordinary_content_format,
-                page_content_sha256=_qualified_content_digest(content),
-                byte_start=0,
-                byte_end=0,
-                byte_total=0,
-            )
-        page = PlannedRecipeSectionPage(descriptor, content)
-        if not _fits(
-            selected=selected,
-            generation=generation,
-            section_sha256=section_sha256,
-            page=page,
-            part=0,
-            total_width=total_width,
-            terminal=True,
-            bound_bytes=bound_bytes,
-        ):
-            raise RecipeSectionBoundError("recipe section bound cannot fit an empty page")
-        return [page]
-
-    start = 0
-    while start < len(value):
-        part = len(pages)
-
-        def candidate_for(end: int) -> PlannedRecipeSectionPage:
-            chunk = value[start:end]
-            content = canonical_recipe_section_json(chunk) if scalar else chunk
-            if scalar:
-                descriptor = RecipeSectionPageDescriptor(
-                    content_format=selected.definition.ordinary_content_format,
-                    page_content_sha256=_qualified_content_digest(content),
-                    scalar_byte_start=offsets[start],
-                    scalar_byte_end=offsets[end],
-                    scalar_byte_total=offsets[-1],
-                )
-            else:
-                descriptor = RecipeSectionPageDescriptor(
-                    content_format=selected.definition.ordinary_content_format,
-                    page_content_sha256=_qualified_content_digest(content),
-                    byte_start=offsets[start],
-                    byte_end=offsets[end],
-                    byte_total=offsets[-1],
-                )
-            return PlannedRecipeSectionPage(descriptor, content)
-
-        max_end = _max_utf8_prefix_end(
-            offsets,
-            start=start,
-            bound_bytes=bound_bytes,
-        )
-        if max_end == len(value):
-            terminal_candidate = candidate_for(max_end)
-            if _fits(
-                selected=selected,
-                generation=generation,
-                section_sha256=section_sha256,
-                page=terminal_candidate,
-                part=part,
-                total_width=total_width,
-                terminal=True,
-                bound_bytes=bound_bytes,
-            ):
-                pages.append(terminal_candidate)
-                break
-
-        low = start + 1
-        high = min(max_end, len(value) - 1)
-        accepted: PlannedRecipeSectionPage | None = None
-        accepted_end = start
-        while low <= high:
-            end = (low + high) // 2
-            candidate = candidate_for(end)
-            if _fits(
-                selected=selected,
-                generation=generation,
-                section_sha256=section_sha256,
-                page=candidate,
-                part=part,
-                total_width=total_width,
-                terminal=False,
-                bound_bytes=bound_bytes,
-            ):
-                accepted = candidate
-                accepted_end = end
-                low = end + 1
-            else:
-                high = end - 1
-        if accepted is None or accepted_end == start:
-            raise RecipeSectionBoundError("recipe section bound cannot fit progress")
-        pages.append(accepted)
-        start = accepted_end
-    return pages
-
-
-def _array_page(
-    *,
-    definition: RecipeSectionDef,
-    canonical_elements: list[str],
-    start: int,
-    end: int,
-) -> PlannedRecipeSectionPage:
-    content = "[" + ",".join(canonical_elements[start:end]) + "]"
-    return PlannedRecipeSectionPage(
-        RecipeSectionPageDescriptor(
-            content_format=definition.ordinary_content_format,
-            page_content_sha256=_qualified_content_digest(content),
-            element_start=start,
-            element_end=end,
-            element_total=len(canonical_elements),
-        ),
-        content,
-    )
-
-
-def _canonical_array_prefix_bytes(canonical_elements: list[str]) -> list[int]:
-    prefix_bytes = [0]
-    for element in canonical_elements:
-        prefix_bytes.append(prefix_bytes[-1] + len(element.encode("utf-8")) + 1)
-    return prefix_bytes
-
-
-def _max_array_page_end(
-    prefix_bytes: list[int],
-    *,
-    start: int,
-    bound_bytes: int,
-) -> int:
-    """Bound one candidate by the bytes of its JSON array content alone."""
-    return (
-        bisect_right(
-            prefix_bytes,
-            prefix_bytes[start] + bound_bytes - 1,
-            lo=start + 1,
-        )
-        - 1
-    )
-
-
-def _fragment_pages(
-    *,
-    selected: SelectedRecipeSection,
-    generation: RecipeArtifactGeneration,
-    section_sha256: str,
-    element: object,
-    canonical_element: str,
-    element_index: int,
-    element_total: int,
-    part_start: int,
-    total_width: int,
-    fragment_width: int,
-    bound_bytes: int,
-) -> list[PlannedRecipeSectionPage]:
-    offsets = _utf8_prefix_offsets(canonical_element)
-    element_sha256 = recipe_section_element_digest(element)
-    pages: list[PlannedRecipeSectionPage] = []
-    start = 0
-    assumed_fragment_count = (10**fragment_width) - 1
-    content_format = selected.definition.oversized_content_format
-    if content_format is None:
-        raise ValueError("array recipe section definition requires an oversized format")
-    while start < len(canonical_element):
-        part = part_start + len(pages)
-        fragment_index = len(pages)
-
-        def candidate_for(end: int) -> PlannedRecipeSectionPage:
-            content = canonical_recipe_section_json(canonical_element[start:end])
-            descriptor = RecipeSectionPageDescriptor(
-                content_format=content_format,
-                page_content_sha256=_qualified_content_digest(content),
-                element_index=element_index,
-                element_sha256=element_sha256,
-                fragment_index=fragment_index,
-                fragment_count=max(assumed_fragment_count, fragment_index + 1),
-                fragment_byte_start=offsets[start],
-                fragment_byte_end=offsets[end],
-                fragment_byte_total=offsets[-1],
-            )
-            return PlannedRecipeSectionPage(descriptor, content)
-
-        max_end = _max_utf8_prefix_end(
-            offsets,
-            start=start,
-            bound_bytes=bound_bytes,
-        )
-        is_final_element = element_index + 1 == element_total
-        if is_final_element and max_end == len(canonical_element):
-            terminal_candidate = candidate_for(max_end)
-            if _fits(
-                selected=selected,
-                generation=generation,
-                section_sha256=section_sha256,
-                page=terminal_candidate,
-                part=part,
-                total_width=total_width,
-                terminal=True,
-                bound_bytes=bound_bytes,
-            ):
-                pages.append(terminal_candidate)
-                break
-
-        low = start + 1
-        high = min(max_end, len(canonical_element) - 1) if is_final_element else max_end
-        accepted: PlannedRecipeSectionPage | None = None
-        accepted_end = start
-        while low <= high:
-            end = (low + high) // 2
-            candidate = candidate_for(end)
-            if _fits(
-                selected=selected,
-                generation=generation,
-                section_sha256=section_sha256,
-                page=candidate,
-                part=part,
-                total_width=total_width,
-                terminal=False,
-                bound_bytes=bound_bytes,
-            ):
-                accepted = candidate
-                accepted_end = end
-                low = end + 1
-            else:
-                high = end - 1
-        if accepted is None or accepted_end == start:
-            raise RecipeSectionBoundError("recipe section bound cannot fit element fragment")
-        pages.append(accepted)
-        start = accepted_end
-    fragment_count = len(pages)
-    return [
-        PlannedRecipeSectionPage(
-            replace(page.descriptor, fragment_count=fragment_count),
-            page.content,
-        )
-        for page in pages
-    ]
-
-
-def _array_pages(
-    *,
-    selected: SelectedRecipeSection,
-    generation: RecipeArtifactGeneration,
-    section_sha256: str,
-    values: list[object],
-    total_width: int,
-    fragment_widths: Mapping[int, int],
-    bound_bytes: int,
-) -> tuple[list[PlannedRecipeSectionPage], dict[int, int]]:
-    canonical_elements = [canonical_recipe_section_json(value) for value in values]
-    prefix_bytes = _canonical_array_prefix_bytes(canonical_elements)
-    if not values:
-        page = _array_page(
-            definition=selected.definition,
-            canonical_elements=canonical_elements,
-            start=0,
-            end=0,
-        )
-        if not _fits(
-            selected=selected,
-            generation=generation,
-            section_sha256=section_sha256,
-            page=page,
-            part=0,
-            total_width=total_width,
-            terminal=True,
-            bound_bytes=bound_bytes,
-        ):
-            raise RecipeSectionBoundError("recipe section bound cannot fit an empty array")
-        return [page], {}
-
-    pages: list[PlannedRecipeSectionPage] = []
-    observed_fragments: dict[int, int] = {}
-    start = 0
-    while start < len(values):
-        part = len(pages)
-        max_end = _max_array_page_end(
-            prefix_bytes,
-            start=start,
-            bound_bytes=bound_bytes,
-        )
-        if max_end == len(values):
-            terminal_candidate = _array_page(
-                definition=selected.definition,
-                canonical_elements=canonical_elements,
-                start=start,
-                end=max_end,
-            )
-            if _fits(
-                selected=selected,
-                generation=generation,
-                section_sha256=section_sha256,
-                page=terminal_candidate,
-                part=part,
-                total_width=total_width,
-                terminal=True,
-                bound_bytes=bound_bytes,
-            ):
-                pages.append(terminal_candidate)
-                break
-
-        low = start + 1
-        high = min(max_end, len(values) - 1)
-        accepted: PlannedRecipeSectionPage | None = None
-        accepted_end = start
-        while low <= high:
-            end = (low + high) // 2
-            candidate = _array_page(
-                definition=selected.definition,
-                canonical_elements=canonical_elements,
-                start=start,
-                end=end,
-            )
-            if _fits(
-                selected=selected,
-                generation=generation,
-                section_sha256=section_sha256,
-                page=candidate,
-                part=part,
-                total_width=total_width,
-                terminal=False,
-                bound_bytes=bound_bytes,
-            ):
-                accepted = candidate
-                accepted_end = end
-                low = end + 1
-            else:
-                high = end - 1
-        if accepted is not None:
-            pages.append(accepted)
-            start = accepted_end
-            continue
-
-        fragments = _fragment_pages(
-            selected=selected,
-            generation=generation,
-            section_sha256=section_sha256,
-            element=values[start],
-            canonical_element=canonical_elements[start],
-            element_index=start,
-            element_total=len(values),
-            part_start=len(pages),
-            total_width=total_width,
-            fragment_width=fragment_widths.get(start, 1),
-            bound_bytes=bound_bytes,
-        )
-        pages.extend(fragments)
-        observed_fragments[start] = len(fragments)
-        start += 1
-    return pages, observed_fragments
-
-
-def _selected_section_sha256(selected: SelectedRecipeSection) -> str:
-    if not selected.present:
-        raise ValueError(f"recipe section {selected.section!r} is absent")
-    raw = selected.definition.section_strategy == "raw"
-    return recipe_section_digest(selected.value, raw=raw)
-
-
-def _plan_pages(
-    *,
-    selected: SelectedRecipeSection,
-    generation: RecipeArtifactGeneration,
-    section_sha256: str,
-    total_width: int,
-    fragment_widths: Mapping[int, int],
-    bound_bytes: int,
-) -> tuple[list[PlannedRecipeSectionPage], dict[int, int]]:
-    strategy = selected.definition.section_strategy
-    if strategy in {"raw", "scalar"}:
-        if type(selected.value) is not str:
-            raise TypeError(f"{strategy} recipe section strategy requires a string")
-        return (
-            _raw_or_scalar_pages(
-                selected=selected,
-                generation=generation,
-                section_sha256=section_sha256,
-                value=selected.value,
-                total_width=total_width,
-                bound_bytes=bound_bytes,
-                scalar=strategy == "scalar",
-            ),
-            {},
-        )
-    if strategy == "array":
-        if type(selected.value) is not list:
-            raise TypeError("array recipe section strategy requires a list")
-        return _array_pages(
-            selected=selected,
-            generation=generation,
-            section_sha256=section_sha256,
-            values=selected.value,
-            total_width=total_width,
-            fragment_widths=fragment_widths,
-            bound_bytes=bound_bytes,
-        )
-    raise ValueError(f"unknown recipe section strategy: {strategy}")
-
-
 def build_recipe_section_page_plan(
     *,
     kitchen_id: str,
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
+    char_ceiling: int | None = None,
 ) -> RecipeSectionPagePlan:
     """Build, finalize, and verify one deterministic immutable page plan."""
     del kitchen_id  # Identity participates in the cache key, not the manifest.
     if recipe_section_bound_bytes <= 0:
         raise RecipeSectionBoundError("recipe section bound must be positive")
-    section_sha256 = _selected_section_sha256(selected)
+    section_sha256 = selected_section_sha256(selected)
     total_width = 1
     fragment_widths: dict[int, int] = {}
     seen_states: set[tuple[int, tuple[tuple[int, int], ...]]] = set()
@@ -886,13 +334,14 @@ def build_recipe_section_page_plan(
         if state in seen_states:
             raise RecipeSectionNonConvergenceError("recipe section pagination did not converge")
         seen_states.add(state)
-        pages, observed_fragments = _plan_pages(
+        pages, observed_fragments = plan_pages(
             selected=selected,
             generation=generation,
             section_sha256=section_sha256,
             total_width=total_width,
             fragment_widths=fragment_widths,
             bound_bytes=recipe_section_bound_bytes,
+            char_ceiling=char_ceiling,
         )
         required_total_width = len(str(len(pages)))
         required_fragment_widths = {
@@ -947,6 +396,7 @@ def build_recipe_section_page_plan(
         pagination_policy_sha256=RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
         section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
         section_sha256=section_sha256,
+        char_ceiling=char_ceiling,
     )
     cache_weight = sum(len(rendered.encode("utf-8")) for rendered in rendered_pages)
     cache_weight += len(canonical_recipe_section_json(manifest).encode("utf-8"))
@@ -965,17 +415,19 @@ def _cache_key(
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
+    char_ceiling: int | None = None,
 ) -> _PagePlanCacheKey:
     return _PagePlanCacheKey(
         kitchen_id=kitchen_id,
         generation=generation,
         initialization_id=selected.initialization_id,
         section=selected.section,
-        section_sha256=_selected_section_sha256(selected),
+        section_sha256=selected_section_sha256(selected),
         recipe_section_bound_bytes=recipe_section_bound_bytes,
         section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
         pagination_policy_sha256=RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
         pagination_version=RECIPE_SECTION_PAGINATION_VERSION,
+        char_ceiling=char_ceiling,
     )
 
 
@@ -985,6 +437,7 @@ def get_or_build_recipe_section_page_plan(
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
+    char_ceiling: int | None = None,
 ) -> RecipeSectionPagePlan:
     """Return a verified cached plan or build and admit one."""
     key = _cache_key(
@@ -992,6 +445,7 @@ def get_or_build_recipe_section_page_plan(
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=recipe_section_bound_bytes,
+        char_ceiling=char_ceiling,
     )
     cache = _page_plan_cache()
     return cache.get_or_build(
@@ -1001,6 +455,7 @@ def get_or_build_recipe_section_page_plan(
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=recipe_section_bound_bytes,
+            char_ceiling=char_ceiling,
         ),
     )
 

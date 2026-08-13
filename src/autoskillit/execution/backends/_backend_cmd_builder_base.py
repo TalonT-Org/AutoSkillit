@@ -25,6 +25,7 @@ from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     CODEX_COOK_RESERVED_ENV_VARS,
     CODEX_STARTUP_TRACE_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
@@ -44,18 +45,27 @@ if TYPE_CHECKING:
 
 
 # Injected into every AutoSkillit-launched headless and cook session.
-# Raises the Claude Code client-side MCP tool result inline token limit from
-# 25,000 to 50,000. NOTE: This does NOT control the ~100KB disk-persistence
-# gate — persistence is governed by a separate byte-size threshold in the
-# Claude Code harness (empirically ~100KB on CLI 2.1.197). See issue #4253.
-_MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
+# Raises the Claude Code client-side MCP tool result inline token limit
+# from the default 25,000 to 50,000. Binary-verified on CLI 2.1.220:
+# annotated (image-free) tools are char-gated at min(annotation, 500,000)
+# with the token gate bypassed; unannotated tools are token-gated at
+# MAX_MCP_OUTPUT_TOKENS (default 25,000 tokens) with overflow persisted
+# to disk.
+_MAX_MCP_OUTPUT_TOKENS_VALUE: str = str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS)
 
 
-# Baseline env vars injected into EVERY AutoSkillit-launched session. Callers
-# can override via env_extras. The shim ``_codex_exec_extras`` (in
-# ``codex.py``) imports this directly for the ``include_session_baseline=True``
+# Baseline env vars injected into EVERY AutoSkillit-launched session, on every
+# backend. Callers can override via env_extras. The shim ``_codex_exec_extras``
+# (in ``codex.py``) imports this directly for the ``include_session_baseline=True``
 # path so resume sessions do NOT inadvertently pick up ambient campaign/kitchen
 # IDs from ``os.environ`` (which ``_assemble_shared_env_extras`` would).
+#
+# Backend-specific host client attestation (e.g. Claude's
+# AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS / AUTOSKILLIT_ATTESTED_META_SUPPORT,
+# see claude.py's ``_claude_host_attestation_env()``) is deliberately excluded
+# from this cross-backend baseline — Codex has its own receipt-based protected
+# delivery pipeline and must never be told it has annotation support, which
+# would make it eligible to bypass that pipeline via ordinary inline delivery.
 SHARED_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     {
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
@@ -184,7 +194,9 @@ class BackendCmdBuilderBase(ABC):
         """Assemble the shared env keys consumed by both backends.
 
         Always-on keys (three): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
-        ``AUTOSKILLIT_HEADLESS``.
+        ``AUTOSKILLIT_HEADLESS``. Backend-specific keys (e.g. Claude's host client
+        attestation pair) are layered on by each concrete backend's own builders,
+        not by this shared assembly — see ``claude.py``'s ``_claude_host_attestation_env()``.
 
         Conditional keys (ten): ``AUTOSKILLIT_SESSION_TYPE``,
         ``AUTOSKILLIT_APPLICABLE_GUARDS``, ``AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES``,

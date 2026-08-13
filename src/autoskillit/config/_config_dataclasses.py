@@ -11,9 +11,12 @@ from autoskillit.core import (
     DRY_WALKTHROUGH_VERIFIED_MARKER,
     KNOWN_BACKEND_NAMES,
     LABEL_LIFECYCLE_REGISTRY,
+    RECIPE_RESPONSE_DEFAULT_BYTES,
+    RECIPE_RESPONSE_MAX_UTF8_BYTES,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     IssueLabelState,
     OutputFormat,
+    Utf8ByteLimit,
     get_logger,
 )
 
@@ -382,8 +385,8 @@ class OutputBudgetConfig:
     inline_max_chars: int = 5000
     head_chars: int = 2500
     tail_chars: int = 2500
-    response_max_bytes: int = 90_000
-    page_max_bytes: int | None = 195_000
+    response_max_bytes: Utf8ByteLimit = Utf8ByteLimit(RECIPE_RESPONSE_DEFAULT_BYTES)
+    page_max_bytes: Utf8ByteLimit | None = Utf8ByteLimit(RECIPE_RESPONSE_MAX_UTF8_BYTES)
     guard_enabled: bool = True
     shell_max_inline_bytes: int = 12_000
     capture_capacity: dict[str, int] | None = None
@@ -399,6 +402,18 @@ class OutputBudgetConfig:
         ):
             raise ValueError(
                 f"page_max_bytes must be at least {RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
+            )
+        if (
+            self.page_max_bytes is not None
+            and self.page_max_bytes > RECIPE_RESPONSE_MAX_UTF8_BYTES
+        ):
+            raise ValueError(
+                f"page_max_bytes must not exceed {RECIPE_RESPONSE_MAX_UTF8_BYTES} bytes"
+            )
+        if self.page_max_bytes is not None and self.response_max_bytes > self.page_max_bytes:
+            raise ValueError(
+                f"response_max_bytes ({self.response_max_bytes}) must not exceed "
+                f"page_max_bytes ({self.page_max_bytes})"
             )
 
 

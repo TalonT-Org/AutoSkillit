@@ -235,12 +235,17 @@ async def test_decorated_run_skill_preserves_routing_scalars_and_full_artifact(
     tool_ctx_kitchen_open.output_pattern_resolver = None
     tool_ctx_kitchen_open.completion_required_resolver = None
     tool_ctx_kitchen_open.write_expected_resolver = None
+    # Payload must exceed response_max_bytes (triggering spill) while staying
+    # under the delivery-bound token limit.  With the conservative 23,250-token
+    # Claude limit, 15K+15K (~30KB serialized) safely fits the token budget.
+    # Shrink response_max_bytes so the response-size spill path is exercised.
+    tool_ctx_kitchen_open.config.output_budget.response_max_bytes = 20_000
     sentinels = ("HEAD-SENTINEL", "MIDDLE-SENTINEL", "TAIL-SENTINEL")
     producer_result = (
         sentinels[0]
-        + ("x" * 30_000)
+        + ("x" * 15_000)
         + sentinels[1]
-        + ("y" * 30_000)
+        + ("y" * 15_000)
         + sentinels[2]
         + "\n%%ORDER_UP::deadbeef%%"
     )

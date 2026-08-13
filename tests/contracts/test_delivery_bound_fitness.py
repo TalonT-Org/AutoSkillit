@@ -22,12 +22,16 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+    CLIENT_CHARS_PER_TOKEN_POLICY,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     FinalizedRecipeProjection,
+    HostClientAttestation,
+    TokenLimit,
+    client_serialized_char_len,
     resolve_general_output_token_limit,
-    resolve_recipe_envelope_byte_limit,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import (
@@ -49,9 +53,9 @@ from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
 )
 from tests.contracts._delivery_constants import (
+    CALIBRATED_PAGES_PER_SECTION,
     MAX_ENVELOPE_MANIFEST_BYTES,
     MAX_OPEN_KITCHEN_CALLS,
-    MAX_PAGES_PER_SECTION,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -79,7 +83,7 @@ def _backend_capabilities():
 
 def _generic_backstop_bound_bytes(bound_tokens: int) -> int:
     """Convert a generic response backstop token limit to its UTF-8 byte ceiling."""
-    return bound_tokens * 4
+    return CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(TokenLimit(bound_tokens)).value
 
 
 @pytest.mark.parametrize("backend_name", sorted(_backend_capabilities()), ids=lambda n: n)
@@ -178,6 +182,22 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         tool_ctx=tool_ctx,
         finalized_projection=projection,
     )
+    caps = _backend_capabilities()[backend_name]
+    # Annotation-aware inline is Claude-only (recipe_delivery_budget is None):
+    # attest a host client with annotation support so recipes that fit the
+    # exemption ceiling are exercised through that branch, matching a real
+    # attested Claude launch. Backends with their own protected delivery
+    # pipeline (recipe_delivery_budget is not None, e.g. Codex) must never
+    # honor this attestation — see resolve_recipe_delivery_decision's
+    # `budget is None` guard — so this reflects real launch behavior for both.
+    host_client_attestation = (
+        HostClientAttestation(
+            attested_client_gate_tokens=CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+            annotation_support=True,
+        )
+        if caps.recipe_delivery_budget is None
+        else None
+    )
     finalized = finalize_recipe_delivery(
         payload,
         surface="open_kitchen",
@@ -188,18 +208,22 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         canonical_artifact_payload=prepared.canonical_artifact_payload,
         execution_snapshot=prepared.execution_snapshot,
         normalized_compile_key=prepared.normalized_compile_key,
+        host_client_attestation=host_client_attestation,
     )
 
-    caps = _backend_capabilities()[backend_name]
-    if finalized.decision.reason == "exemption_overrides_envelope":
+    if finalized.decision.reason == "annotation_aware_inline":
         assert caps.recipe_delivery_budget is None
-        bound_bytes = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+        bound_chars = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_chars
     else:
-        bound_bytes = resolve_recipe_envelope_byte_limit(caps)
+        # Use the decision's selected limit — it reflects the attested gate
+        # when host attestation raised the unannotated threshold.
+        bound_chars = CLIENT_CHARS_PER_TOKEN_POLICY.to_chars(
+            TokenLimit(finalized.decision.selected_result_token_limit)
+        ).value
     envelope = json.loads(finalized.rendered)
-    assert len(finalized.rendered.encode("utf-8")) <= bound_bytes, (
+    assert client_serialized_char_len(finalized.rendered).value <= bound_chars, (
         f"{backend_name}: envelope for {recipe_name} exceeds "
-        f"{bound_bytes} bytes (effective delivery bound)"
+        f"{bound_chars} chars (effective delivery bound)"
     )
     assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
     assert envelope["success"] is True
@@ -211,7 +235,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
             projection.entrypoint,
         ]
         assert all(
-            item["compiled_page_count"] == item["total_parts"] <= MAX_PAGES_PER_SECTION
+            item["compiled_page_count"] == item["total_parts"] <= CALIBRATED_PAGES_PER_SECTION
             and item["compiled_bytes"] > 0
             for item in required_sections
         )

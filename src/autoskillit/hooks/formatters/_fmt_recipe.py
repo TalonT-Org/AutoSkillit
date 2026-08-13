@@ -26,7 +26,6 @@ else:
 
 
 _RECIPE_INITIALIZATION_FIELDS: tuple[str, ...] = (
-    "finalized_recipe_projection",
     "flow_records",
     "recipe_execution",
     "recipe_flow",

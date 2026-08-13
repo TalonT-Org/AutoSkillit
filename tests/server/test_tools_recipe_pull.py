@@ -17,6 +17,7 @@ import pytest
 import autoskillit.core.types._type_recipe_delivery as recipe_delivery_types
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
@@ -25,6 +26,7 @@ from autoskillit.core import (
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     FinalizedRecipeProjection,
+    HostClientAttestation,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
     RecipeDeliveryAttestation,
@@ -50,17 +52,21 @@ from autoskillit.pipeline import (
     start_kitchen_effect,
 )
 from autoskillit.recipe import load_and_validate
+from autoskillit.server import _recipe_artifact as recipe_artifact
 from autoskillit.server import _recipe_delivery as recipe_delivery
 from autoskillit.server import _recipe_section_pagination as pagination
+from autoskillit.server._recipe_artifact import (
+    _canonical_payload,
+    _generation_dir,
+    _generation_from_payload,
+    _safe_component,
+)
 from autoskillit.server._recipe_delivery import (
     RECIPE_BODY_END,
     RECIPE_BODY_START,
     RECIPE_COMPLETION_SENTINEL,
     RecipeArtifactError,
     RecipeArtifactSchemaError,
-    _canonical_payload,
-    _generation_dir,
-    _generation_from_payload,
     build_recipe_envelope,
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
@@ -81,11 +87,22 @@ from autoskillit.server._recipe_section_pagination import (
 )
 from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.recipe_section import _lifecycle as recipe_section_lifecycle
+from autoskillit.server.tools._recipe_section_handler import _inject_initialization_counters
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _NOW = 1_800_000_000
+
+
+def test_safe_component_bounds_expanded_identity() -> None:
+    value = "é" * 1_000
+
+    component = _safe_component(value)
+
+    assert len(component) == 255
+    assert component == _safe_component(value)
+    assert component != _safe_component(value + "x")
 
 
 def _test_flow_generation(payload: dict[str, object]) -> RecipeFlowGeneration:
@@ -183,6 +200,33 @@ def _finalize_recipe_delivery(
         normalized_compile_key=prepared.normalized_compile_key,
         **kwargs,
     )
+
+
+def test_initialization_counter_injection_preserves_nested_content_fields() -> None:
+    rendered = json.dumps(
+        {
+            "completed_parts": 0,
+            "content": [{"remaining_section_pulls": 888, "total_parts": 999}],
+            "remaining_section_pulls": 1,
+            "total_parts": 1,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+    updated = json.loads(
+        _inject_initialization_counters(
+            rendered,
+            completed_parts=1,
+            remaining_section_pulls=0,
+            total_parts=2,
+        )
+    )
+
+    assert updated["completed_parts"] == 1
+    assert updated["remaining_section_pulls"] == 0
+    assert updated["total_parts"] == 2
+    assert updated["content"] == [{"remaining_section_pulls": 888, "total_parts": 999}]
 
 
 def test_prepare_generation_rejects_non_finite_compile_values(tool_ctx) -> None:
@@ -539,7 +583,7 @@ def test_shared_producer_surfaces_require_identical_pull_policies(
         pull_eligible=False
     )
     monkeypatch.setattr(
-        "autoskillit.server._recipe_delivery.RECIPE_DELIVERY_SURFACE_REGISTRY",
+        "autoskillit.server._recipe_artifact.RECIPE_DELIVERY_SURFACE_REGISTRY",
         conflicting,
     )
 
@@ -620,9 +664,9 @@ def test_generation_path_includes_version_domain(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version_name: str
 ) -> None:
     first = _persist(tmp_path)
-    current_version = getattr(recipe_delivery, version_name)
+    current_version = getattr(recipe_artifact, version_name)
     monkeypatch.setattr(
-        f"autoskillit.server._recipe_delivery.{version_name}",
+        f"autoskillit.server._recipe_artifact.{version_name}",
         current_version + 1,
     )
     monkeypatch.setattr(recipe_delivery_types, version_name, current_version + 1)
@@ -861,7 +905,7 @@ def test_kitchen_retirement_evicts_after_generation_lock_exits(
     tmp_path: Path,
 ) -> None:
     lock_active = False
-    original_lock = recipe_delivery._generation_lock
+    original_lock = recipe_artifact._generation_lock
 
     @contextmanager
     def _tracked_lock(temp_dir: Path, *, exclusive: bool):
@@ -879,7 +923,7 @@ def test_kitchen_retirement_evicts_after_generation_lock_exits(
         assert lock_active is False
         evicted.append(kitchen_id)
 
-    monkeypatch.setattr(recipe_delivery, "_generation_lock", _tracked_lock)
+    monkeypatch.setattr(recipe_artifact, "_generation_lock", _tracked_lock)
     monkeypatch.setattr(pagination, "evict_kitchen", _evict)
 
     assert retire_recipe_artifacts(tmp_path, kitchen_id="lock-kitchen") is True
@@ -898,7 +942,7 @@ def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
 
     evict.reset_mock()
     monkeypatch.setattr(
-        recipe_delivery,
+        recipe_artifact,
         "atomic_write",
         MagicMock(side_effect=OSError("retirement failed")),
     )
@@ -995,6 +1039,9 @@ def test_initialization_requirements_use_the_pull_response_bound(
         resolve_recipe_section_bound_bytes(
             response_max_bytes,
             CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
+            exemption_ceiling_bytes=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
+                "open_kitchen"
+            ].max_utf8_bytes,
         )
     ]
 
@@ -1133,26 +1180,54 @@ def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:
     assert finalized.decision.contract_digest == selected_budget.contract_digest
 
 
-def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx) -> None:
-    """Issue #4399: when an exempt surface's ordinary-rendered payload exceeds the
-    backend's ordinary token limit but fits within the registered exemption ceiling,
-    finalize_recipe_delivery() must upgrade ENVELOPE back to ORDINARY_INLINE so the
-    full recipe body survives.
+_ATTESTED_HOST_CLIENT = HostClientAttestation(
+    attested_client_gate_tokens=CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+    annotation_support=True,
+)
 
-    Claude Code backend: protected_recipe_delivery_capable=False → decision resolver
-    returns ENVELOPE based on ordinary_limit alone. The exemption override added in
-    Issue #4399 must catch this case and re-route to ORDINARY_INLINE.
+
+@pytest.mark.parametrize("attestation_source", ["argument", "context"])
+def test_annotation_aware_inline_for_exempt_surface_within_ceiling(
+    tool_ctx, attestation_source: str
+) -> None:
+    """When an attested Claude host client claims annotation support and an exempt
+    surface's ordinary-rendered payload exceeds the backend's ordinary token limit
+    but fits within the registered exemption ceiling, finalize_recipe_delivery()
+    must resolve to ORDINARY_INLINE so the full recipe body survives (superseding
+    the removed Issue #4399 ad-hoc override — this is now handled by the
+    annotation-aware branch in resolve_recipe_delivery_decision).
+
+    Claude Code backend: recipe_delivery_budget=None → decision resolver is
+    eligible for the annotation-aware branch when attestation is present.
     """
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-exemption"
 
-    ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
-    # Payload whose ordinary JSON exceeds the ordinary_limit (in bytes) but stays
-    # under the 195,000-byte exemption ceiling.
+    # The effective unannotated limit rises to the attested gate × headroom
+    # when attestation is valid. The payload must exceed THAT to exercise the
+    # annotation-aware branch.
+    from autoskillit.core import (
+        CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
+        CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
+    )
+
+    effective_unannotated = (
+        CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
+        * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
+        // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
+    )
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
-    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, ordinary_limit + 5_000)
-    assert len(oversized_content.encode("utf-8")) > ordinary_limit
+    # Payload whose ordinary JSON exceeds the effective attested unannotated
+    # limit (46,500) but stays under the char-margin exemption ceiling.
+    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, effective_unannotated + 5_000)
+    assert len(oversized_content.encode("utf-8")) > effective_unannotated
     assert len(oversized_content.encode("utf-8")) <= ceiling * 9 // 10
+
+    attestation_kwargs = {}
+    if attestation_source == "context":
+        tool_ctx.host_client_attestation = _ATTESTED_HOST_CLIENT
+    else:
+        attestation_kwargs["host_client_attestation"] = _ATTESTED_HOST_CLIENT
 
     finalized = _finalize_recipe_delivery(
         _payload(oversized_content),
@@ -1160,18 +1235,44 @@ def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
+        **attestation_kwargs,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
-    assert finalized.decision.reason == "exemption_overrides_envelope"
+    assert finalized.decision.reason == "annotation_aware_inline"
     # Recipe content must be present in the rendered string (not stripped by ENVELOPE).
     assert oversized_content in finalized.rendered
 
 
+def test_annotation_aware_inline_falls_through_without_attestation(tool_ctx) -> None:
+    """Without a host client attestation, the same payload that would qualify for
+    the annotation-aware branch must remain ENVELOPE — never trust an unattested
+    per-call claim."""
+    tool_ctx.backend = ClaudeCodeBackend()
+    tool_ctx.kitchen_id = "claude-code-exemption-unattested"
+
+    ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
+    ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, ordinary_limit + 5_000)
+
+    finalized = _finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+        host_client_attestation=None,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert finalized.decision.reason != "annotation_aware_inline"
+
+
 def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx) -> None:
-    """Issue #4399 boundary: payloads exceeding the 195KB exemption ceiling must
-    remain ENVELOPE — the override only applies when the ordinary-rendered payload
-    fits within the registered exemption.
+    """Boundary: payloads exceeding the 195KB exemption ceiling must remain
+    ENVELOPE even with attestation present — the annotation-aware branch only
+    applies when the ordinary-rendered payload fits within the registered
+    exemption.
     """
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-over-ceiling"
@@ -1187,15 +1288,55 @@ def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx)
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
-    assert finalized.decision.reason != "exemption_overrides_envelope"
+    assert finalized.decision.reason != "annotation_aware_inline"
+
+
+def test_exemption_override_requires_char_ceiling_too(tool_ctx) -> None:
+    """Issue #4557 Stage C: the annotation-aware branch must ALSO respect the
+    client-measured serialized-char ceiling, not just the byte ceiling. The
+    server budgets in compiled UTF-8 bytes, but the client gates on
+    JSON-serialized chars — a payload already embedded as an escaped JSON
+    string field doubles again in char count (but not in byte count) when the
+    client's outer transport re-serializes it. Backslash-dense content can
+    therefore stay comfortably under the byte margin while its
+    client-serialized char length blows past the char ceiling — the branch
+    must not fire for such a payload.
+    """
+    tool_ctx.backend = ClaudeCodeBackend()
+    tool_ctx.kitchen_id = "claude-code-char-ceiling"
+
+    exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
+    byte_margin = exemption.max_utf8_bytes * 9 // 10
+    # n backslashes cost 2n chars once embedded as an ordinary JSON string
+    # field (each backslash escapes to `\\`), but 4n chars once the client
+    # re-serializes that already-escaped payload as an outer JSON string.
+    oversized_content = "\\" * 50_000
+    embedded_length = len(json.dumps(oversized_content))
+    client_length = len(json.dumps(json.dumps(oversized_content)))
+    assert embedded_length < byte_margin
+    assert client_length > exemption.max_chars
+
+    finalized = _finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert finalized.decision.reason != "annotation_aware_inline"
 
 
 def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> None:
-    """Issue #4399 boundary: get_recipe has no response_exemption_tool registration,
-    so the override must not apply — ENVELOPE remains the result.
+    """Boundary: get_recipe has no response_exemption_tool registration, so the
+    annotation-aware branch must not apply — ENVELOPE remains the result even
+    with attestation present.
     """
     tool_ctx.backend = ClaudeCodeBackend()
     tool_ctx.kitchen_id = "claude-code-get-recipe"
@@ -1209,10 +1350,38 @@ def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> No
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
-    assert finalized.decision.reason != "exemption_overrides_envelope"
+    assert finalized.decision.reason != "annotation_aware_inline"
+
+
+def test_annotation_aware_inline_not_available_to_protected_backend(tool_ctx) -> None:
+    """A backend with its own recipe_delivery_budget (Codex) must never resolve
+    via the annotation-aware branch, even when handed a host client attestation
+    claiming annotation support — that attestation vector is Claude-only and
+    Codex must resolve exclusively through its receipt-based protected
+    delivery pipeline.
+    """
+    tool_ctx.backend = CodexBackend()
+    tool_ctx.kitchen_id = "codex-annotation-aware-rejected"
+
+    ordinary_limit = CodexBackend().capabilities.unnegotiated_tool_result_token_limit
+    ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, ordinary_limit + 5_000)
+
+    finalized = _finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+        host_client_attestation=_ATTESTED_HOST_CLIENT,
+    )
+
+    assert finalized.decision.reason != "annotation_aware_inline"
+    assert finalized.decision.mode is not RecipeDeliveryMode.ORDINARY_INLINE
 
 
 def _request() -> RecipeDeliveryRequest:
@@ -1472,6 +1641,9 @@ def _assert_section_response_bound(rendered: str, tool_ctx) -> None:
     bound = resolve_recipe_section_bound_bytes(
         tool_ctx.config.output_budget.response_max_bytes,
         CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
+        exemption_ceiling_bytes=RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[
+            "get_recipe_section"
+        ].max_utf8_bytes,
     )
     assert len(rendered.encode("utf-8")) <= bound
 
@@ -1512,7 +1684,7 @@ async def test_pull_tool_maps_planner_failures_to_exact_bounded_codes(
         raise failure
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_recipe.get_or_build_recipe_section_page_plan",
+        "autoskillit.server.tools._recipe_section_handler.get_or_build_recipe_section_page_plan",
         _fail_plan,
     )
 
@@ -1568,7 +1740,12 @@ async def test_pull_tool_distinguishes_missing_none_and_present_empty_sections(
     response = json.loads(rendered)
     assert response["success"] is expected_success
     if expected_success:
-        assert json.loads(response["content"]) == expected_value
+        if section in ("errors", "warnings"):
+            # Array sections (json-array-page) arrive pre-parsed as a list.
+            assert response["content"] == expected_value
+        else:
+            # ingredients_table uses json-scalar-page; content is still a string.
+            assert json.loads(response["content"]) == expected_value
         assert response["has_more"] is False
         assert "next_part" not in response
     else:
@@ -1578,6 +1755,7 @@ async def test_pull_tool_distinguishes_missing_none_and_present_empty_sections(
 async def test_initial_schema_failure_is_bounded_and_never_recreates(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
     import autoskillit.server.tools.tools_recipe as tools_recipe
 
     tool_ctx_kitchen_open.backend = CodexBackend()
@@ -1592,7 +1770,7 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
     recreate = MagicMock(side_effect=AssertionError("schema failure must not recreate"))
     warning = MagicMock()
     monkeypatch.setattr(tools_recipe, "serve_recipe", recreate)
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1613,7 +1791,7 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
 async def test_recreation_persistence_schema_failure_precedes_artifact_error(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-write"
@@ -1623,12 +1801,12 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
     )
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "persist_recipe_artifact",
         MagicMock(side_effect=RecipeArtifactSchemaError("malformed recreation")),
     )
     warning = MagicMock()
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1646,18 +1824,18 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
 async def test_post_recreation_reload_schema_failure_precedes_reload_error(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-reload"
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "persist_recipe_artifact",
         lambda *_args, **_kwargs: generation,
     )
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "load_recipe_artifact",
         MagicMock(
             side_effect=[
@@ -1667,7 +1845,7 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
         ),
     )
     warning = MagicMock()
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1685,18 +1863,18 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
 async def test_post_recreation_reload_artifact_failure_logs_exception_context(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-artifact-reload"
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "persist_recipe_artifact",
         lambda *_args, **_kwargs: generation,
     )
     monkeypatch.setattr(
-        tools_recipe,
+        recipe_section_handler,
         "load_recipe_artifact",
         MagicMock(
             side_effect=[
@@ -1706,7 +1884,7 @@ async def test_post_recreation_reload_artifact_failure_logs_exception_context(
         ),
     )
     warning = MagicMock()
-    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    monkeypatch.setattr(recipe_section_handler.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1729,13 +1907,13 @@ async def test_post_recreation_reload_artifact_failure_logs_exception_context(
 async def test_negative_part_is_rejected_before_artifact_load(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
     generation = _persist(tool_ctx_kitchen_open.temp_dir)
     artifact_load = MagicMock(side_effect=AssertionError("negative part reached artifact load"))
-    monkeypatch.setattr(tools_recipe, "load_recipe_artifact", artifact_load)
+    monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", artifact_load)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1917,14 +2095,15 @@ async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open
 
 
 @pytest.mark.parametrize("field", ["artifact_blob_size_bytes", "body_size_bytes"])
+@pytest.mark.parametrize("producer_tool", ["open_kitchen", "load_recipe"])
 async def test_pull_tool_rejects_forged_unbounded_identity_sizes(
-    tool_ctx_kitchen_open, field: str
+    tool_ctx_kitchen_open, field: str, producer_tool: str
 ) -> None:
     tool_ctx_kitchen_open.kitchen_id = "pull-unbounded-identity"
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-        producer_tool="open_kitchen",
+        producer_tool=producer_tool,
         recipe_name="remediation",
         payload=_payload(),
     )

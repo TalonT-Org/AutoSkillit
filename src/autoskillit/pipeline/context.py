@@ -37,6 +37,7 @@ from autoskillit.core import (
     GitHubFetcher,
     GitHubReviewPosterProtocol,
     HeadlessExecutor,
+    HostClientAttestation,
     InputContractResolver,
     KitchenProcessIdentity,
     KitchenTransitionLock,
@@ -136,6 +137,8 @@ class ToolContext:
                           config.agent_backend. Provides command building, stream/result
                           parsing, env policy, and session location. None in test
                           ToolContext instances unless explicitly provided.
+    host_client_attestation: Launcher-provided client capabilities captured when the
+                          ToolContext is constructed.
     executor:             HeadlessExecutor — runs headless Claude Code sessions
     tester:               TestRunner — runs the project test suite
     recipes:              RecipeRepository — loads and lists pipeline recipes
@@ -357,6 +360,16 @@ class ToolContext:
             )
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)
+
+    @property
+    def host_client_attestation(self) -> HostClientAttestation | None:
+        """Return the launcher attestation snapshot owned by this context."""
+        value = self.__dict__.get("_host_client_attestation")
+        return value if isinstance(value, HostClientAttestation) else None
+
+    @host_client_attestation.setter
+    def host_client_attestation(self, value: HostClientAttestation | None) -> None:
+        self.__dict__["_host_client_attestation"] = value
 
     @property
     def default_ci_scope(self) -> CIRunScope:

@@ -97,3 +97,36 @@ class TestDefaultsSyncYamlDataclass:
         assert cfg.run_skill.max_suppression_seconds == dc.max_suppression_seconds
         assert cfg.run_skill.completion_drain_timeout == dc.completion_drain_timeout
         assert cfg.run_skill.mcp_tool_timeout_sec == dc.mcp_tool_timeout_sec
+
+    def test_output_budget_defaults_match_yaml(self, tmp_path) -> None:
+        """OutputBudgetConfig field defaults agree with defaults.yaml values."""
+        import dataclasses
+
+        from autoskillit.config import OutputBudgetConfig
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("")
+        cfg = load_config(tmp_path)
+        dc = OutputBudgetConfig()
+        for f in dataclasses.fields(OutputBudgetConfig):
+            yaml_val = getattr(cfg.output_budget, f.name)
+            dc_val = getattr(dc, f.name)
+            assert yaml_val == dc_val, (
+                f"OutputBudgetConfig.{f.name}: yaml={yaml_val!r} != default={dc_val!r}"
+            )
+
+    def test_output_budget_defaults_are_core_constants(self) -> None:
+        """OutputBudgetConfig defaults are bound to the canonical core constants."""
+        from autoskillit.config import OutputBudgetConfig
+        from autoskillit.core import RECIPE_RESPONSE_DEFAULT_BYTES, RECIPE_RESPONSE_MAX_UTF8_BYTES
+
+        dc = OutputBudgetConfig()
+        assert dc.response_max_bytes == RECIPE_RESPONSE_DEFAULT_BYTES, (
+            f"response_max_bytes default {dc.response_max_bytes} != "
+            f"RECIPE_RESPONSE_DEFAULT_BYTES {RECIPE_RESPONSE_DEFAULT_BYTES}"
+        )
+        assert dc.page_max_bytes == RECIPE_RESPONSE_MAX_UTF8_BYTES, (
+            f"page_max_bytes default {dc.page_max_bytes} != "
+            f"RECIPE_RESPONSE_MAX_UTF8_BYTES {RECIPE_RESPONSE_MAX_UTF8_BYTES}"
+        )

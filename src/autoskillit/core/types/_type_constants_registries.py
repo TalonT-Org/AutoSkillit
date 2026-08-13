@@ -16,6 +16,12 @@ from ._type_enums import FleetErrorCode, SkillExecutionRole
 from ._type_exceptions import SkillContractError
 
 __all__ = [
+    "ANNOTATION_HARD_CAP_CHARS",
+    "CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION",
+    "CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS",
+    "CLAUDE_INJECTED_CLIENT_RESULT_TOKENS",
+    "CONSERVATIVE_GATE_HEADROOM_DENOMINATOR",
+    "CONSERVATIVE_GATE_HEADROOM_NUMERATOR",
     "PIPELINE_FORBIDDEN_TOOLS",
     "SKILL_TOOLS",
     "GATED_TOOLS",
@@ -45,6 +51,9 @@ __all__ = [
     "RecipeDeliverySurfaceDef",
     "RECIPE_DELIVERY_SURFACE_REGISTRY",
     "RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST",
+    "RECIPE_RESPONSE_MAX_UTF8_BYTES",
+    "RECIPE_RESPONSE_DEFAULT_BYTES",
+    "CONSERVATIVE_RESULT_TOKEN_FLOOR",
     "ExecutionInstallSiteDef",
     "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY",
     "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST",
@@ -222,7 +231,35 @@ class RecipeDeliverySurfaceDef(NamedTuple):
     response_exemption: ResponseBackstopExemptionDef | None
 
 
-_RECIPE_RESPONSE_MAX_UTF8_BYTES = 195_000
+RECIPE_RESPONSE_MAX_UTF8_BYTES = 195_000
+RECIPE_RESPONSE_DEFAULT_BYTES = 90_000
+
+# Conservative fallback for the general-output token limit when no backend
+# capability is resolvable. Matches BackendCapabilities.unnegotiated_tool_result_token_limit's
+# dataclass default — the smallest registered backend bound (Codex code-mode).
+CONSERVATIVE_RESULT_TOKEN_FLOOR = 10_000
+
+# Client-gate constants. Binary-verified on Claude Code CLI v2.1.220.
+# Source: inspection of the installed CLI binary's MCP result handling.
+CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS = 25_000
+CLAUDE_INJECTED_CLIENT_RESULT_TOKENS = 50_000
+ANNOTATION_HARD_CAP_CHARS = 500_000
+
+# Conservative headroom fraction applied to client token gates when
+# deriving the server's admission threshold. Reserves 7% below the
+# nominal gate to account for the gap between the 1:1 conservative
+# byte-to-token estimate (CONSERVATIVE_ADMISSION_POLICY) and actual
+# tokenization — a 46K-byte payload may tokenize to slightly more than
+# 46K tokens under some tokenizers, so the 93% multiplier ensures the
+# server never admits a payload that risks spilling at the client gate.
+CONSERVATIVE_GATE_HEADROOM_NUMERATOR = 93
+CONSERVATIVE_GATE_HEADROOM_DENOMINATOR = 100
+
+# The minimum Claude Code CLI version that supports the
+# ``anthropic/maxResultSizeChars`` tool-result annotation. Below this
+# version, annotation metadata is stripped and the tool result is gated
+# purely by ``MAX_MCP_OUTPUT_TOKENS``.
+CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION = "2.1.91"
 
 RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = MappingProxyType(
     {
@@ -235,8 +272,8 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             initialization_activating=True,
             response_exemption_tool="open_kitchen",
             response_exemption=ResponseBackstopExemptionDef(
-                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_chars=RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=RECIPE_RESPONSE_MAX_UTF8_BYTES,
                 measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
             ),
         ),
@@ -259,8 +296,8 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             initialization_activating=False,
             response_exemption_tool="load_recipe",
             response_exemption=ResponseBackstopExemptionDef(
-                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_chars=RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=RECIPE_RESPONSE_MAX_UTF8_BYTES,
                 measurement_id="bundled-recipes-all-modes-2026-07-22/load-recipe",
             ),
         ),
@@ -312,7 +349,7 @@ RECIPE_EXECUTION_INSTALL_SITE_REGISTRY: Mapping[str, ExecutionInstallSiteDef] = 
         "inline_delivery": ExecutionInstallSiteDef(
             installer_module="src/autoskillit/server/_recipe_delivery.py",
             installer_symbol="complete_finalized_recipe_response",
-            delivering_module="src/autoskillit/server/_recipe_delivery.py",
+            delivering_module="src/autoskillit/server/_recipe_artifact.py",
             delivering_symbol="build_canonical_recipe_artifact_payload",
             delivery_surface="open_kitchen",
         ),
@@ -669,8 +706,8 @@ RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: Mapping[str, ResponseBackstopExemptionDef]
     MappingProxyType(
         {
             "get_recipe_section": ResponseBackstopExemptionDef(
-                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_chars=RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=RECIPE_RESPONSE_MAX_UTF8_BYTES,
                 measurement_id="bundled-recipes-all-modes-2026-08-09/get-recipe-section",
             ),
             **{

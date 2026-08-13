@@ -187,11 +187,14 @@ page omits `next_part`.
 
 ### Bounded-delivery round-trip budget
 
-Every bounded recipe initialization must be representable in at most four MCP calls,
-including `open_kitchen`, both required section pulls, and completion. Page planning
-records each section's compiled byte and page counts and rejects a plan with more than
-one page per required section. Receivers must not assume that recovery can continue for
-an unbounded number of calls.
+Bounded recipe initialization plans compute page counts from the reconciled
+section bound at plan time. When an operator configures a stricter bound (such
+as `page_max_bytes=None`), sections that exceed a single page produce multiple
+pages rather than raising a hard error. Under the default `OutputBudgetConfig`,
+every bundled recipe completes its bounded delivery in at most four MCP calls —
+one `open_kitchen`, up to one `get_recipe_section` page per required section,
+and one `complete_recipe_initialization`. Non-terminating plans (where the bound
+is below the mandatory floor) still raise `BoundedDeliveryRoundTripBudgetExceededError`.
 
 The reserved inline-exemption margin is a packaging-time fitness invariant enforced by
 the bundled-recipe contract matrix. Runtime delivery mode selection does not repeat that
@@ -200,9 +203,12 @@ packaging validation.
 ### Typed dimensional bounds
 
 Token and UTF-8 byte limits are represented by the distinct `TokenLimit` and
-`Utf8ByteLimit` frozen value objects. They deliberately provide no integer coercion or
-cross-unit ordering. Conversion uses `BytesToTokensPolicy` with an exact `Fraction`
-ratio; implicit byte/token arithmetic is not permitted at a consumer boundary.
+`Utf8ByteLimit` integer subclasses. Construction enforces positive integer values at
+runtime, while dimensional separation is enforced statically by mypy. Normal integer
+arithmetic, equality, and ordering—including cross-unit comparisons—remain available at
+runtime, so consumer boundaries must retain the dimensional annotations rather than rely
+on runtime rejection. Conversion uses `BytesToTokensPolicy` with an exact `Fraction`
+ratio; implicit byte/token arithmetic is not permitted at a typed consumer boundary.
 
 `output_budget.page_max_bytes` is an explicit operator calibration for bounded recipe
 pages. When present it selects the measured UTF-8 page ceiling instead of treating a

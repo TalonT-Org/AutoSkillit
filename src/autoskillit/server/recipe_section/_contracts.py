@@ -62,15 +62,16 @@ class RecipeSectionBoundError(RecipeSectionPaginationError):
 
 @dataclass(frozen=True, slots=True)
 class RecipeSectionRequestState:
-    """One captured request admission and byte-bound decision."""
+    """One captured request admission and dual byte/char bound decision."""
 
     admitted: bool
     recipe_section_bound_bytes: int
+    recipe_section_bound_chars: int | None = None
 
     def __post_init__(self) -> None:
         """Reject bounds that cannot contain every mandatory failure response."""
         if (
-            type(self.recipe_section_bound_bytes) is not int
+            not isinstance(self.recipe_section_bound_bytes, int)
             or self.recipe_section_bound_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES
         ):
             raise ValueError(

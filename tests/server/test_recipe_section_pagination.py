@@ -23,14 +23,17 @@ from autoskillit.core import (
     RECIPE_SECTION_MANDATORY_FAILURE_CODES,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RecipeArtifactGeneration,
+    client_serialized_char_len,
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
 )
 from autoskillit.server import _recipe_section_pagination as pagination
+from autoskillit.server import _recipe_section_planning as planning
 from autoskillit.server._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
+    RecipeSectionBoundError,
     RecipeSectionPageDescriptor,
     RecipeSectionPaginationError,
     RecipeSectionRequestState,
@@ -217,7 +220,7 @@ def test_page_descriptor_rejects_malformed_fragment_values(
 def test_scalar_planning_never_serializes_the_whole_oversized_remainder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original = pagination.canonical_recipe_section_json
+    original = planning.canonical_recipe_section_json
     serialized_string_bytes: list[int] = []
 
     def _record_bounded_string(value: object) -> str:
@@ -225,7 +228,7 @@ def test_scalar_planning_never_serializes_the_whole_oversized_remainder(
             serialized_string_bytes.append(len(value.encode("utf-8")))
         return original(value)
 
-    monkeypatch.setattr(pagination, "canonical_recipe_section_json", _record_bounded_string)
+    monkeypatch.setattr(planning, "canonical_recipe_section_json", _record_bounded_string)
     bound = _PAGE_TEST_BOUND
     plan = _build(
         _payload(ingredients_table="x" * 10_000),
@@ -301,6 +304,57 @@ def test_terminal_initialization_page_carries_progress_and_completion_receipt() 
         content_sha256=content_sha256,
     )
     assert page["recipe_execution"] == {"execution_id": "execution"}
+
+
+def test_char_ceiling_accepts_a_page_within_it() -> None:
+    """A char_ceiling at least as large as the exact client-serialized length
+    of every rendered page does not disturb an otherwise-fitting plan."""
+    plan = _build(
+        _payload(orchestration_rules="follow the graph exactly"),
+        "orchestration_rules",
+        bound=_PAGE_TEST_BOUND,
+    )
+    exact_char_ceiling = max(
+        client_serialized_char_len(rendered).value for rendered in plan.rendered_pages
+    )
+
+    replan = build_recipe_section_page_plan(
+        kitchen_id="kitchen-test",
+        generation=_generation(),
+        selected=select_recipe_section(
+            _payload(orchestration_rules="follow the graph exactly"), "orchestration_rules"
+        ),
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
+        char_ceiling=exact_char_ceiling,
+    )
+    assert replan.rendered_pages == plan.rendered_pages
+
+
+def test_char_ceiling_rejects_a_page_that_exceeds_it() -> None:
+    """A char_ceiling one below the exact client-serialized length of a
+    rendered page must fail planning even though every page satisfies
+    the byte bound — the client gates on serialized chars, not bytes.
+
+    The dual-domain planner enforces both bounds during page fitting
+    (not just post-hoc verification), so a candidate that exceeds the
+    char ceiling is rejected at the same "cannot fit progress" boundary
+    as a byte-bound violation — it never reaches a page that would need
+    the final-form verification check to reject it.
+    """
+    payload = _payload(orchestration_rules="follow the graph exactly")
+    plan = _build(payload, "orchestration_rules", bound=_PAGE_TEST_BOUND)
+    exact_char_ceiling = max(
+        client_serialized_char_len(rendered).value for rendered in plan.rendered_pages
+    )
+
+    with pytest.raises(RecipeSectionBoundError, match="cannot fit progress"):
+        build_recipe_section_page_plan(
+            kitchen_id="kitchen-test",
+            generation=_generation(),
+            selected=select_recipe_section(payload, "orchestration_rules"),
+            recipe_section_bound_bytes=_PAGE_TEST_BOUND,
+            char_ceiling=exact_char_ceiling - 1,
+        )
 
 
 def test_select_recipe_section_loads_only_recognized_dynamic_content() -> None:
@@ -402,7 +456,10 @@ def _decoded_pages(plan: Any, *, bound: int) -> list[dict[str, Any]]:
         assert required_ranges <= page.keys()
         assert not ((_ALL_RANGE_FIELDS - required_ranges) & page.keys())
         assert page["content"] != "" or page["content_format"] == "json-array-page"
-        if page["content_format"] != "raw-text":
+        if page["content_format"] == "json-array-page":
+            # Flat delivery encoding: array-page content arrives pre-parsed.
+            assert isinstance(page["content"], list)
+        elif page["content_format"] != "raw-text":
             json.loads(page["content"])
         decoded_pages.append(page)
 
@@ -460,7 +517,7 @@ def _reconstruct(pages: list[dict[str, Any]]) -> object:
         page = pages[page_cursor]
         if page["content_format"] == "json-array-page":
             assert page["element_start"] == element_cursor
-            values = json.loads(page["content"])
+            values = page["content"]  # already parsed by flat delivery encoding
             assert isinstance(values, list) and values
             assert page["element_end"] - page["element_start"] == len(values)
             result.extend(values)
@@ -655,14 +712,14 @@ def test_candidate_sizing_uses_binary_search_scale_oracle_calls(
         search_space = len(fragment)
 
     oracle_calls = 0
-    original_fits = pagination._fits
+    original_fits = planning._fits
 
     def _counted_fits(**kwargs: Any) -> bool:
         nonlocal oracle_calls
         oracle_calls += 1
         return original_fits(**kwargs)
 
-    monkeypatch.setattr(pagination, "_fits", _counted_fits)
+    monkeypatch.setattr(planning, "_fits", _counted_fits)
 
     plan = _build(payload, section, bound=_PAGE_TEST_BOUND)
 
@@ -686,14 +743,11 @@ def test_convergence_ceiling_is_derived_from_artifact_policy() -> None:
 def test_final_digest_injection_revalidates_descriptor_boundaries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original_render = pagination._render_candidate
+    original_render = planning._render_candidate
 
     def _corrupt_final_boundary(**kwargs: Any) -> str:
         rendered = original_render(**kwargs)
-        if (
-            kwargs["page_plan_sha256"] != pagination._PLAN_DIGEST_PLACEHOLDER
-            and kwargs["part"] == 1
-        ):
+        if kwargs["page_plan_sha256"] != planning._PLAN_DIGEST_PLACEHOLDER and kwargs["part"] == 1:
             response = json.loads(rendered)
             response["byte_start"] += 1
             return json.dumps(
@@ -1015,8 +1069,16 @@ def test_every_cache_key_dimension_prevents_aliasing(
     elif dimension == "bound":
         kwargs["recipe_section_bound_bytes"] = _PAGE_TEST_BOUND + 1
     elif dimension == "registry_digest":
+        # Both the manifest builder (pagination) and the page-body renderer
+        # (planning) hold independent imported bindings of this constant —
+        # both must move together or manifest/render digests diverge.
         monkeypatch.setattr(
             pagination,
+            "RECIPE_SECTION_REGISTRY_DIGEST",
+            f"sha256:{'a' * 64}",
+        )
+        monkeypatch.setattr(
+            planning,
             "RECIPE_SECTION_REGISTRY_DIGEST",
             f"sha256:{'a' * 64}",
         )
@@ -1026,11 +1088,21 @@ def test_every_cache_key_dimension_prevents_aliasing(
             "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
             f"sha256:{'b' * 64}",
         )
+        monkeypatch.setattr(
+            planning,
+            "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
+            f"sha256:{'b' * 64}",
+        )
     else:
         monkeypatch.setattr(
             pagination,
             "RECIPE_SECTION_PAGINATION_VERSION",
             pagination.RECIPE_SECTION_PAGINATION_VERSION + 1,
+        )
+        monkeypatch.setattr(
+            planning,
+            "RECIPE_SECTION_PAGINATION_VERSION",
+            planning.RECIPE_SECTION_PAGINATION_VERSION + 1,
         )
 
     changed = get_or_build_recipe_section_page_plan(**kwargs)

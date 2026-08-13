@@ -227,7 +227,8 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
 _LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9, 10, 11})
 
 
-def _read_fleet_state_payload(state_path: Path) -> dict[str, Any] | None:
+def read_fleet_state_payload(state_path: Path) -> dict[str, Any] | None:
+    """Read a current or supported legacy fleet-state payload."""
     if (
         data := read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
     ) is not None:
@@ -250,7 +251,7 @@ def read_state(state_path: Path) -> CampaignState | None:
     Accepts the current schema version and legacy versions in _LEGACY_SCHEMA_VERSIONS.
     Never raises.
     """
-    data = _read_fleet_state_payload(state_path)
+    data = read_fleet_state_payload(state_path)
     if data is None:
         return None
     try:
@@ -633,7 +634,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
         if not dispatches_dir.is_dir():
             return frozenset()
         for state_file in dispatches_dir.glob("*.json"):
-            data = _read_fleet_state_payload(state_file)
+            data = read_fleet_state_payload(state_file)
             if data is None:
                 continue
             try:
@@ -704,7 +705,7 @@ def read_all_campaign_captures(
         return result
     entries: list[tuple[float, dict[str, str]]] = []
     for path in dispatches_dir.glob("*.json"):
-        data = _read_fleet_state_payload(path)
+        data = read_fleet_state_payload(path)
         if data is None:
             continue
         try:

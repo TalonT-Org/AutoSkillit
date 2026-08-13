@@ -217,7 +217,7 @@ def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> Doc
 
 def _check_fleet_state_schema(dispatches_dir: Path | None = None) -> DoctorResult:
     """Check fleet state files for schema version drift."""
-    from autoskillit.fleet import _read_fleet_state_payload
+    from autoskillit.fleet import read_fleet_state_payload
 
     check_name = "fleet_state_schema"
     if dispatches_dir is None:
@@ -226,7 +226,7 @@ def _check_fleet_state_schema(dispatches_dir: Path | None = None) -> DoctorResul
         return DoctorResult(Severity.OK, check_name, "No dispatches directory")
     stale_files: list[str] = []
     for path in dispatches_dir.glob("*.json"):
-        if _read_fleet_state_payload(path) is None:
+        if read_fleet_state_payload(path) is None:
             stale_files.append(str(path))
     if stale_files:
         return DoctorResult(

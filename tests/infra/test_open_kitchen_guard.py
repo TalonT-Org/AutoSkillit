@@ -190,7 +190,9 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     project_dir = tmp_path
     write_registry_entry(project_dir, "abc", "cook", None)
     seed_registry_owner(project_dir, "abc")
-    assert read_registry(project_dir)["abc"]["claude_session_id"] is None
+    seeded_entry = read_registry(project_dir)["abc"]
+    assert seeded_entry["claude_session_id"] is None
+    seeded_owner = {key: value for key, value in seeded_entry.items() if key.startswith("owner_")}
 
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     hook_input = {
@@ -212,9 +214,9 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     assert result.returncode == 0, f"Hook failed: {result.stderr}"
     registry = read_registry(project_dir)
     assert registry["abc"]["claude_session_id"] == "claude-xyz"
-    assert registry["abc"]["owner_pid"] == 321
-    assert registry["abc"]["owner_boot_id"] == "boot-id"
-    assert registry["abc"]["owner_starttime_ticks"] == 654
+    assert {
+        key: value for key, value in registry["abc"].items() if key.startswith("owner_")
+    } == seeded_owner
 
 
 def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:

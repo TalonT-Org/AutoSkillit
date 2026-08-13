@@ -26,6 +26,11 @@ class TestClaudeSessionLocator:
         project.mkdir()
         write_registry_entry(project, "0123456789abcdef", "cook", None)
         seed_registry_owner(project, "0123456789abcdef")
+        seeded_owner = {
+            key: value
+            for key, value in read_registry(project)["0123456789abcdef"].items()
+            if key.startswith("owner_")
+        }
         bridge_claude_session_id(project, "0123456789abcdef", "claude-1")
         fake_home = tmp_path / "home"
         index_dir = fake_home / ".claude" / "projects" / "-ignored"
@@ -67,9 +72,9 @@ class TestClaudeSessionLocator:
             ),
         )
         entry = read_registry(project)["0123456789abcdef"]
-        assert entry["owner_pid"] == 321
-        assert entry["owner_boot_id"] == "boot-id"
-        assert entry["owner_starttime_ticks"] == 654
+        assert {
+            key: value for key, value in entry.items() if key.startswith("owner_")
+        } == seeded_owner
 
     def test_list_sessions_filters_sidechains_and_other_projects(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

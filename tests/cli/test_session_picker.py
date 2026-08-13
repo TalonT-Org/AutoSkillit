@@ -81,15 +81,20 @@ def test_pick_session_filters_cook(
     write_registry_entry(project_dir, "lid-cook", "cook", None)
     write_registry_entry(project_dir, "lid-order", "order", None)
     seed_registry_owner(project_dir, "lid-cook")
+    seeded_owner = {
+        key: value
+        for key, value in read_registry(project_dir)["lid-cook"].items()
+        if key.startswith("owner_")
+    }
 
     from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")
     owner_fields = read_registry(project_dir)["lid-cook"]
-    assert owner_fields["owner_pid"] == 321
-    assert owner_fields["owner_boot_id"] == "boot-id"
-    assert owner_fields["owner_starttime_ticks"] == 654
+    assert {
+        key: value for key, value in owner_fields.items() if key.startswith("owner_")
+    } == seeded_owner
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "1")

@@ -20,7 +20,7 @@ def seed_registry_owner(project_dir: Path, launch_id: str) -> None:
     registry = read_registry(project_dir)
     registry[launch_id].update(
         owner_pid=321,
-        owner_boot_id="boot-id",
+        owner_boot_id="12345678-1234-1234-1234-123456789abc",
         owner_starttime_ticks=654,
     )
     registry_path(project_dir).write_text(json.dumps(registry), encoding="utf-8")

@@ -734,6 +734,7 @@ from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CommittedDispositionResolver as CommittedDispositionResolver
+from .types import CompiledSessionSkillCatalogAuthority as CompiledSessionSkillCatalogAuthority
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ConcurrencySpec as ConcurrencySpec
 from .types import ConflictRejectedEffect as ConflictRejectedEffect
@@ -770,7 +771,6 @@ from .types import DispatchIdentity as DispatchIdentity
 from .types import DispatchRequestEvent as DispatchRequestEvent
 from .types import DurableArtifactWriterDef as DurableArtifactWriterDef
 from .types import DurableContextAdmissionPayload as DurableContextAdmissionPayload
-from .types import CompiledSessionSkillCatalogAuthority as CompiledSessionSkillCatalogAuthority
 from .types import EffectiveSkillCatalogAuthority as EffectiveSkillCatalogAuthority
 from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocationAuthority
 from .types import EnvPolicy as EnvPolicy

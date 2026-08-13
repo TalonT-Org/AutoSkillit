@@ -2223,6 +2223,12 @@ class CodexBackend(BackendCmdBuilderBase):
                 explorer_mcp_transport=explorer_mcp_transport,
                 explorer_binding_env=shared_binding,
             )
+        finalized_config = tomllib.loads(rendered_parent_config)
+        if (
+            execution_role is SkillExecutionRole.ORCHESTRATOR
+            and finalized_config.get("cli_auth_credentials_store") != "file"
+        ):
+            raise ValueError("finalized ORCHESTRATOR config lost the file credential store")
         atomic_write(config_path, rendered_parent_config)
 
         auth_source = codex_home_source / "auth.json"
@@ -2261,12 +2267,6 @@ class CodexBackend(BackendCmdBuilderBase):
                 session_dir,
                 source_codex_home=codex_home_source,
             )
-        finalized_config = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        if (
-            execution_role is SkillExecutionRole.ORCHESTRATOR
-            and finalized_config.get("cli_auth_credentials_store") != "file"
-        ):
-            raise ValueError("finalized ORCHESTRATOR config lost the file credential store")
 
     def refresh_explorer_binding_env(
         self,

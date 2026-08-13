@@ -198,7 +198,7 @@ def test_d2_inter_batch_synthesis(deep_workflow_section: str) -> None:
 def test_deep_waves_complete_before_inter_batch_progress(
     deep_workflow_section: str,
 ) -> None:
-    normalized = deep_workflow_section.lower()
+    normalized = " ".join(deep_workflow_section.lower().split())
     assert "every launch has a terminal result" in normalized
     assert "before launching batch 2" in normalized
     assert "inter-batch synthesis:" in normalized

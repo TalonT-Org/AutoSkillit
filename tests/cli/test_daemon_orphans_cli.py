@@ -43,6 +43,20 @@ def test_default_reports_without_reaping(
     assert "--reap" in output
 
 
+def test_default_reports_when_no_candidates(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("autoskillit.execution.find_orphaned_autoskillit_daemons", lambda: [])
+    monkeypatch.setattr(
+        "autoskillit.execution.reap_orphaned_autoskillit_daemons",
+        lambda _items: pytest.fail("empty report-only command reaped"),
+    )
+
+    run_daemon_orphans()
+
+    assert capsys.readouterr().out == "no orphaned AutoSkillit daemons\n"
+
+
 def test_reap_prints_target_before_signaling_and_preserves_registry(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:

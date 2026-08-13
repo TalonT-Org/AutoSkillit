@@ -19,12 +19,8 @@ pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.small,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+    pytest.mark.usefixtures("_stub_owner_binding"),
 ]
-
-
-@pytest.fixture(autouse=True)
-def _stub_owner_binding(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
 
 
 class _ReloadBinding:

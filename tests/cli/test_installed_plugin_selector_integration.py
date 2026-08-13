@@ -50,12 +50,11 @@ from tests.fixtures.plugin_artifact_state import (
     build_plugin_artifact_state,
 )
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-
-@pytest.fixture(autouse=True)
-def _stub_owner_binding(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_owner_binding"),
+]
 
 
 _CLAUDE_INSTALLED_INVALID_STATES = tuple(

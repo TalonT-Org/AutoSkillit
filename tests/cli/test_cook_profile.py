@@ -386,7 +386,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
         patch("autoskillit.cli._onboarding.is_first_run", return_value=False),
         patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
         patch("autoskillit.core.write_registry_entry"),
-        patch("autoskillit.cli.session._session_launch.bind_session_owner"),
+        patch("autoskillit.core.bind_session_owner"),
         patch(
             "autoskillit.cli.session._session_process.run_cook_attempt",
             side_effect=run_attempt,

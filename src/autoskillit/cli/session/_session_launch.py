@@ -17,7 +17,6 @@ from autoskillit.core import (
     NamedResume,
     NoResume,
     SkillContractError,
-    bind_session_owner,
     executable_binding_matches_current_file,
     get_logger,
     plugin_launch_binding_scope,
@@ -192,7 +191,7 @@ def _run_interactive_session(
             default_base_branch = configured_base_branch
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
-    from autoskillit.core import InfraExitCategory
+    from autoskillit.core import InfraExitCategory, bind_session_owner
 
     managed = managed_home is not None
     if managed != (attempt is not None):

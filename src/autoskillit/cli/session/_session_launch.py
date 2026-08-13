@@ -17,6 +17,7 @@ from autoskillit.core import (
     NamedResume,
     NoResume,
     SkillContractError,
+    bind_session_owner,
     executable_binding_matches_current_file,
     get_logger,
     plugin_launch_binding_scope,
@@ -39,12 +40,6 @@ if TYPE_CHECKING:
     from autoskillit.workspace import CompiledSessionSkillCatalog, SkillExclusion
 
 logger = get_logger(__name__)
-
-
-def _bind_launch_owner(project_dir: Path, launch_id: str, pid: int) -> None:
-    from autoskillit.core import bind_session_owner
-
-    bind_session_owner(project_dir, launch_id, pid)
 
 
 def render_skill_contract_composition_failure(exc: SkillContractError) -> None:
@@ -327,7 +322,7 @@ def _run_interactive_session(
                 attempt_handle.record_spawn(pid, pgid)
                 launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
                 if launch_id:
-                    _bind_launch_owner(_project_dir, launch_id, pid)
+                    bind_session_owner(_project_dir, launch_id, pid)
 
             managed_result = run_cook_attempt(
                 spec,
@@ -389,7 +384,7 @@ def _run_interactive_session(
                 try:
                     launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
                     if launch_id:
-                        _bind_launch_owner(_project_dir, launch_id, process.pid)
+                        bind_session_owner(_project_dir, launch_id, process.pid)
                     returncode = process.wait()
                 except BaseException:
                     try:

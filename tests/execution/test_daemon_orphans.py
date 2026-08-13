@@ -234,5 +234,7 @@ def test_incomplete_candidate_remains_discoverable(
 def test_registered_stdio_command_shape_is_exact() -> None:
     assert subject._is_registered_stdio_command(("/usr/bin/autoskillit",))
     assert subject._is_registered_stdio_command((sys.executable, "/usr/bin/autoskillit"))
+    assert subject._is_registered_stdio_command(("/usr/bin/python3.12", "/usr/bin/autoskillit"))
     assert not subject._is_registered_stdio_command(("autoskillit", "serve"))
     assert not subject._is_registered_stdio_command((sys.executable, "-m", "autoskillit"))
+    assert not subject._is_registered_stdio_command(("python-wrapper", "autoskillit"))

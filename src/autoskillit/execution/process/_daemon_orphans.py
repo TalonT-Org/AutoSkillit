@@ -30,6 +30,7 @@ logger = get_logger(__name__)
 
 _LAUNCH_ID_RE = re.compile(r"[0-9a-f]{16}")
 _BOOT_ID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+_PYTHON_EXECUTABLE_RE = re.compile(r"python(?:\d+(?:\.\d+)*)?")
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +77,7 @@ def _is_registered_stdio_command(command: tuple[str, ...]) -> bool:
     """Match only the installed command with no transport/subcommand arguments."""
     return (len(command) == 1 and Path(command[0]).name == "autoskillit") or (
         len(command) == 2
-        and Path(command[0]).name.startswith("python")
+        and _PYTHON_EXECUTABLE_RE.fullmatch(Path(command[0]).name) is not None
         and Path(command[1]).name == "autoskillit"
     )
 

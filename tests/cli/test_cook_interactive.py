@@ -310,6 +310,93 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
     assert "defined as both" in guidance and "rejected" in guidance
 
 
+def test_codex_cook_projects_only_spawnable_compose_pr_roles(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.execution.backends.codex import CodexBackend, _effective_agent_names
+    from autoskillit.workspace import DefaultSkillResolver
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    source_home = tmp_path / "home" / ".codex"
+    source_home.mkdir(parents=True)
+    (source_home / "config.toml").write_text(
+        'cli_auth_credentials_store = "keyring"\n',
+        encoding="utf-8",
+    )
+    (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
+    backend = CodexBackend(source_codex_home=source_home)
+    catalog = DefaultSkillResolver().list_effective(
+        project_root,
+        SkillExecutionRole.SESSION,
+        cook_session=True,
+    )
+    compose_pr = next(member for member in catalog.skills if member.name == "compose-pr")
+    assert compose_pr.semantic_plan is not None
+    adaptation = backend.adapt_skill_semantics(compose_pr.semantic_plan)
+    mapped_targets = {
+        adaptation.logical_role_mapping[spawn.role]
+        for spawn in compose_pr.semantic_plan.child_spawns
+    }
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def cook_session_context(_self, **_kwargs: object):
+        yield CookSessionHandle(
+            view_id="codex-view",
+            pass_fds=(),
+            _record_spawn=lambda _pid, _pgid: None,
+            _record_reaped=lambda _pid, _pgid: None,
+        )
+
+    def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
+        generated_home = Path(spec.env["CODEX_HOME"])
+        compose_projection = generated_home / "add-dir" / "skills" / "compose-pr" / "SKILL.md"
+        role_names = _effective_agent_names(generated_home)
+        captured["compose_projected"] = compose_projection.is_file()
+        captured["mapped_targets"] = mapped_targets
+        captured["role_names"] = role_names
+        kwargs["on_spawn"](101, 101)  # type: ignore[operator]
+        kwargs["trace"].record_spawn()  # type: ignore[union-attr]
+        kwargs["on_reaped"](101, 101)  # type: ignore[operator]
+        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+
+    monkeypatch.chdir(project_root)
+    monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/codex")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _project: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.ui._timed_input.timed_prompt",
+        lambda *args, **kwargs: "",
+    )
+    monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *args: None)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        run_attempt,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        lambda _project: None,
+    )
+    monkeypatch.setattr(CodexBackend, "cook_session_context", cook_session_context)
+    monkeypatch.setattr(
+        CodexBackend,
+        "validate_interactive_invocation",
+        lambda _self, _spec: [],
+    )
+
+    cli.cook(backend=backend)
+
+    assert captured["compose_projected"] is True
+    assert captured["mapped_targets"] == {"pr-source-reader", "pr-synthesizer"}
+    role_names = captured["role_names"]
+    assert isinstance(role_names, frozenset)
+    assert mapped_targets <= role_names
+
+
 def test_notification_capable_cook_has_no_pre_reveal_guidance(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

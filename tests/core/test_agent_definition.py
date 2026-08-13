@@ -29,6 +29,15 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
 
+_SKILL_CHILD_ROLE_TOOLS = {
+    "pr-source-reader": ("Read",),
+    "pr-synthesizer": ("Read",),
+    "research-source-reader": ("Read",),
+    "research-synthesizer": ("Read",),
+    "friction-batch-scanner": ("Read", "Grep"),
+    "friction-category-analyzer": ("Read", "Grep"),
+}
+
 
 @pytest.mark.parametrize(
     ("name", "role_boundary"),
@@ -105,6 +114,19 @@ def test_bundled_agent_catalog_loads_with_unique_digests() -> None:
     assert len({agent_definition_digest(definition) for definition in definitions}) == len(
         definitions
     )
+
+
+def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
+    definitions = {definition.name: definition for definition in load_bundled_agent_definitions()}
+
+    assert len(definitions) == 22
+    assert _SKILL_CHILD_ROLE_TOOLS.keys() <= definitions.keys()
+    for name, expected_tools in _SKILL_CHILD_ROLE_TOOLS.items():
+        definition = definitions[name]
+        assert definition.tools == expected_tools
+        assert definition.description.startswith("Use when ")
+        assert definition.description not in definition.body
+        assert not ({"Bash", "Write", "Edit"} & set(definition.tools))
 
 
 def test_explicit_luna_projection_is_independent_from_claude_model(tmp_path: Path) -> None:

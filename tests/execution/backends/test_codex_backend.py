@@ -1890,14 +1890,28 @@ class TestCodexBackendSetupSessionDir:
     def test_agent_toml_required_fields_present_and_nonempty(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
+        required_new_roles = {
+            "friction-batch-scanner",
+            "friction-category-analyzer",
+            "pr-source-reader",
+            "pr-synthesizer",
+            "research-source-reader",
+            "research-synthesizer",
+        }
         definitions = {
             definition.name: definition
             for definition in load_agent_definitions(pkg_root() / "agents")
         }
+        generated_names = {path.stem for path in (self.session_dir / "agents").glob("*.toml")}
+        assert required_new_roles <= generated_names
         for toml_path in sorted((self.session_dir / "agents").glob("*.toml")):
             data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
             assert data["name"], f"{toml_path.name}: name empty"
             assert data["description"], f"{toml_path.name}: description empty"
+            assert data["description"] == definitions[toml_path.stem].description
+            assert data["description"] != definitions[toml_path.stem].body
+            if toml_path.stem in required_new_roles:
+                assert data["description"].startswith("Use when ")
             assert data["developer_instructions"], (
                 f"{toml_path.name}: developer_instructions empty"
             )
@@ -2611,6 +2625,44 @@ class TestCodexBackendSetupSessionDir:
         assert config["agents"]["wp-elaborator"]["config_file"] == ("agents/wp-elaborator.toml")
         assert not (self.session_dir / "agents" / "profile-specialist.toml").exists()
 
+    def test_setup_returns_only_finalized_spawnable_agent_names(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        valid_target = self.fake_home / "valid-ambient.toml"
+        valid_target.write_text('name = "valid-ambient"\n', encoding="utf-8")
+        source_relative_target = self.codex_home / "agents" / "source-only.toml"
+        source_relative_target.parent.mkdir()
+        source_relative_target.write_text('name = "source-only"\n', encoding="utf-8")
+        (self.codex_home / "config.toml").write_text(
+            self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
+            + '\n[agents."valid-ambient"]\n'
+            + 'description = "absolute ambient role"\n'
+            + f'config_file = "{valid_target}"\n'
+            + '\n[agents."source-relative"]\n'
+            + 'description = "source-relative ambient role"\n'
+            + 'config_file = "agents/source-only.toml"\n',
+            encoding="utf-8",
+        )
+        (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "pre-test-backend")
+        backend = CodexBackend()
+
+        assert backend.ensure_pre_launch(session_dir=self.session_dir) == []
+        role_names = backend.setup_session_dir(self.session_dir)
+
+        eligible_bundled = {
+            definition.name
+            for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name not in BUNDLED_EXPLORER_ROLES
+        }
+        assert role_names == frozenset(
+            {"default", "explorer", "worker", "valid-ambient"} | eligible_bundled
+        )
+        finalized = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        assert set(finalized["agents"]) == (
+            {"valid-ambient", "source-relative"} | eligible_bundled
+        )
+
     @pytest.mark.parametrize(
         "role",
         (
@@ -2686,10 +2738,11 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
         assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
 
-    def test_built_in_agent_name_fails_before_mutation(self) -> None:
+    @pytest.mark.parametrize("role", ("worker", "review"))
+    def test_host_reserved_agent_name_fails_before_mutation(self, role: str) -> None:
         original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
         definition = AgentDef(
-            name="explorer",
+            name=role,
             description="Reserved-role collision",
             tools=("Read",),
             model="sonnet",

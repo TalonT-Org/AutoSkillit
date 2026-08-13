@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -45,6 +46,7 @@ def _make_codex_backend() -> MagicMock:
     b.capabilities = _CODEX_CAPABILITIES
     b.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     b.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
+    b.setup_session_dir.return_value = None
     b.validate_session_layout.return_value = []
     b.adapt_skill_semantics.side_effect = CodexBackend().adapt_skill_semantics
     b.exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
@@ -519,6 +521,148 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
     assert "# MY SKILL\n" in content
     assert "## Backend-adapted semantic execution contract" in content
     assert count == 1
+
+
+@pytest.mark.parametrize(
+    ("ambient_state", "helper_available"),
+    (("absent", False), ("invalid", False), ("valid", True)),
+)
+def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ambient_state: str,
+    helper_available: bool,
+) -> None:
+    from autoskillit.core import SkillSource
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import (
+        DefaultSessionSkillManager,
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillInfo,
+        SkillsDirectoryProvider,
+        compile_session_skill_catalog,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    fake_home = tmp_path / "home"
+    source_home = fake_home / ".codex"
+    source_home.mkdir(parents=True)
+    (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
+    config = 'cli_auth_credentials_store = "keyring"\n'
+    if ambient_state == "invalid":
+        source_target = source_home / "agents" / "helper.toml"
+        source_target.parent.mkdir()
+        source_target.write_text('name = "helper"\n', encoding="utf-8")
+        config += (
+            "\n[agents.helper]\n"
+            'description = "source-relative helper"\n'
+            'config_file = "agents/helper.toml"\n'
+        )
+    elif ambient_state == "valid":
+        valid_target = tmp_path / "ambient" / "helper.toml"
+        valid_target.parent.mkdir()
+        valid_target.write_text('name = "helper"\n', encoding="utf-8")
+        config += (
+            f'\n[agents.helper]\ndescription = "absolute helper"\nconfig_file = "{valid_target}"\n'
+        )
+    (source_home / "config.toml").write_text(config, encoding="utf-8")
+
+    project_root = tmp_path / "project"
+    semantic_path = project_root / "skills" / "helper-skill" / "SKILL.md"
+    semantic_path.parent.mkdir(parents=True)
+    semantic_path.write_text(
+        "---\n"
+        "name: helper-skill\n"
+        "description: Delegate to an ambient helper.\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  logical_roles:\n"
+        "  - name: helper\n"
+        "    purpose: perform delegated work\n"
+        "  child_spawns:\n"
+        "  - role: helper\n"
+        "    count: 1\n"
+        "---\n"
+        "Delegate the work.\n",
+        encoding="utf-8",
+    )
+    helper_skill = _skill_info_from_frontmatter(
+        "helper-skill",
+        SkillSource.PROJECT_LOCAL,
+        semantic_path,
+    )
+    unrelated = SkillInfo(
+        name="unrelated-skill",
+        source=SkillSource.PROJECT_LOCAL,
+        path=project_root / "skills" / "unrelated-skill" / "SKILL.md",
+        canonical_content=(
+            "---\n"
+            "name: unrelated-skill\n"
+            "description: Supported without child delegation.\n"
+            "---\n"
+            "Run directly.\n"
+        ),
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=tuple(
+            SkillCatalogEntry.from_skill_info(skill) for skill in (helper_skill, unrelated)
+        ),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    provider = SkillsDirectoryProvider()
+    context = provider.catalog_projection_context(
+        catalog,
+        project_root,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
+    manager = DefaultSessionSkillManager(
+        provider,
+        ephemeral_root=tmp_path / "ephemeral",
+        persistent_roots={"codex": tmp_path / "persistent" / "codex-sessions"},
+    )
+    session_id = f"ambient-{ambient_state}"
+    expected_names = {"unrelated-skill"}
+    if helper_available:
+        expected_names.add("helper-skill")
+
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+    monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
+    with manager.managed_session(
+        session_id,
+        compile_session_skill_catalog(catalog, backend),
+        context,
+    ) as managed:
+        projected_root = Path(managed.skills_dir.path) / "skills"
+        projected_names = {entry.name for entry in projected_root.iterdir()}
+        metadata = json.loads(
+            (Path(managed.skills_dir.path) / "skill-unavailability.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        unavailable = metadata["unavailable"]
+
+        assert projected_names == expected_names
+        assert set(manager._session_skill_infos[session_id]) == expected_names
+        assert (managed.generated_home / "skills" / "unrelated-skill").is_symlink()
+        if helper_available:
+            assert unavailable == []
+            assert (managed.generated_home / "skills" / "helper-skill").is_symlink()
+        else:
+            assert unavailable == [
+                {
+                    "backend": "codex",
+                    "diagnostic": "native child-spawn targets are unavailable: ['helper']",
+                    "operation": "child_spawn",
+                    "skill": "helper-skill",
+                }
+            ]
+            assert not (managed.generated_home / "skills" / "helper-skill").exists()
+
+    assert session_id not in manager._session_skill_infos
+    assert not (tmp_path / "persistent" / "codex-sessions" / session_id).exists()
 
 
 def test_missing_profile_skills_dir_does_not_raise(tmp_path, monkeypatch) -> None:

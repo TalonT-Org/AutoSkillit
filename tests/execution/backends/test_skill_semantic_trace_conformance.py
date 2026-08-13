@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    CODEX_EFFORT_MAPPING,
+    CODEX_MODEL_ALIASES,
     ChildModelPolicySpec,
     ChildSpawnSpec,
     ConcurrencySpec,
@@ -402,6 +404,107 @@ def test_codex_semantic_policy_matches_generated_native_role_toml(tmp_path: Path
     assert adaptation.model_effort_policy[native_role] == (
         agent_config["model"],
         agent_config["model_reasoning_effort"],
+    )
+
+
+def test_compose_pr_real_codex_trace_spawns_then_joins_registered_roles() -> None:
+    skill_md = pkg_root() / "skills_extended" / "compose-pr" / "SKILL.md"
+    info = _skill_info_from_frontmatter("compose-pr", SkillSource.BUNDLED, skill_md)
+    assert not info.invalidities
+    assert info.semantic_plan is not None
+    plan = info.semantic_plan
+    adaptation = CodexBackend().adapt_skill_semantics(plan)
+    reader = adaptation.logical_role_mapping["pr-source-reader"]
+    synthesizer = adaptation.logical_role_mapping["pr-synthesizer"]
+    model, effort = adaptation.model_effort_policy[synthesizer]
+    assert (reader, synthesizer) == ("pr-source-reader", "pr-synthesizer")
+    assert (model, effort) == (
+        CODEX_MODEL_ALIASES["sonnet"],
+        CODEX_EFFORT_MAPPING["sonnet"],
+    )
+
+    parent_events = [
+        _codex_call(
+            "spawn-reader",
+            "spawn_agent",
+            {
+                "agent_type": reader,
+                "fork_turns": "none",
+                "task_name": "reader",
+            },
+        ),
+        _codex_output("spawn-reader", {"task_name": "/root/reader"}),
+        _codex_call(
+            "spawn-synthesizer",
+            "spawn_agent",
+            {
+                "agent_type": synthesizer,
+                "fork_turns": "none",
+                "model": model,
+                "reasoning_effort": effort,
+                "task_name": "synthesizer",
+            },
+        ),
+        _codex_output("spawn-synthesizer", {"task_name": "/root/synthesizer"}),
+        _codex_call("wait", "wait_agent", {"timeout_ms": 3_600_000}),
+        _codex_output("wait", {"timed_out": False}),
+    ]
+    for task_name in ("reader", "synthesizer"):
+        parent_events.append(
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": (
+                                "<subagent_notification>\n"
+                                f'{{"agent_path":"/root/{task_name}","status":'
+                                f'{{"completed":"child-delivery-complete {task_name}"}}}}\n'
+                                "</subagent_notification>"
+                            ),
+                        }
+                    ],
+                },
+            }
+        )
+    parent_events.append(
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "parent-delivery-complete"}],
+            },
+        }
+    )
+    child_events = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": f"child-{task_name}",
+                "parent_thread_id": "parent",
+                "agent_role": role,
+                "agent_path": f"/root/{task_name}",
+                "base_instructions": {"text": _DISCIPLINE_DIGEST},
+            },
+        }
+        for task_name, role in (("reader", reader), ("synthesizer", synthesizer))
+    ]
+
+    assert_generated_child_delivery(
+        parent_events,
+        child_events,
+        parent_id="parent",
+        agent_role=synthesizer,
+        output_discipline_digest=_DISCIPLINE_DIGEST,
+        backend="codex",
+        semantic_plan=plan,
+        semantic_adaptation=adaptation,
+        child_terminal_sentinel="child-delivery-complete",
+        parent_terminal_sentinel="parent-delivery-complete",
     )
 
 

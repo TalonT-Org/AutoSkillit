@@ -353,7 +353,7 @@ class CodingAgentBackend(Protocol):
         parent_sandbox_mode: str = "workspace-write",
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-    ) -> None: ...
+    ) -> frozenset[str] | None: ...
 
     def refresh_explorer_binding_env(
         self,

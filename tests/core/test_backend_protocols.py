@@ -352,7 +352,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             *,
             parent_sandbox_mode: str = "workspace-write",
             explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
-        ) -> None: ...
+        ) -> frozenset[str] | None: ...
 
         def refresh_explorer_binding_env(
             self,

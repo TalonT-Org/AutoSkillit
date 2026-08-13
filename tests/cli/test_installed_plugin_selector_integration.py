@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
@@ -209,7 +210,7 @@ def _install_cook_harness(
 
     generated_home.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(shutil, "which", lambda _binary, **_kwargs: "/usr/bin/agent")
+    monkeypatch.setattr(shutil, "which", lambda _binary, **_kwargs: sys.executable)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager",

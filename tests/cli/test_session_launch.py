@@ -423,6 +423,17 @@ def test_run_interactive_session_state_root_survives_alongside_extra_env(
     assert captured["env"].get(AUTOSKILLIT_STATE_ROOT_ENV_VAR) == str(tmp_path)
 
 
+@pytest.mark.parametrize(("action", "expected_returncode"), [("terminate", -15), ("kill", -9)])
+def test_interactive_process_stub_preserves_signal_returncode(
+    action: str, expected_returncode: int
+) -> None:
+    process = InteractiveProcessStub(returncode=0)
+
+    getattr(process, action)()
+
+    assert process.wait() == expected_returncode
+
+
 def test_run_interactive_session_binds_launch_owner_before_wait(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -10,14 +10,15 @@ class InteractiveProcessStub:
     def __init__(self, returncode: int = 0, *, pid: int | None = None) -> None:
         self.pid = os.getpid() if pid is None else pid
         self.returncode: int | None = None
-        self._final_returncode = returncode
+        self._final_returncode: int = returncode
         self.terminated = False
         self.killed = False
 
     def wait(self, timeout: float | None = None) -> int:
         del timeout
-        self.returncode = self._final_returncode
-        return self._final_returncode
+        if self.returncode is None:
+            self.returncode = self._final_returncode
+        return self.returncode
 
     def poll(self) -> int | None:
         return self.returncode

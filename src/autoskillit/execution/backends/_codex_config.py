@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
@@ -34,6 +35,12 @@ from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 CODEX_MCP_TOOL_TIMEOUT_FLOOR: float = 14364.0
 
 CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
+
+CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = frozenset({"default", "explorer", "worker"})
+_CODEX_RESERVED_ONLY_AGENT_NAMES = frozenset({"review", "reviewer"})
+_CODEX_AGENT_NAME_COLLISIONS = (
+    CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES | _CODEX_RESERVED_ONLY_AGENT_NAMES
+)
 
 # The configured history-retention requirement is derived from the largest
 # measured recipe exemption plus explicit serialized-response headroom.
@@ -501,8 +508,6 @@ def _serialize_toml(data: dict[str, Any]) -> str:
 
 
 def _read_codex_config(path: Path) -> ReadResult:
-    import tomllib
-
     try:
         raw_bytes = path.read_bytes()
     except FileNotFoundError:
@@ -513,6 +518,33 @@ def _read_codex_config(path: Path) -> ReadResult:
         logger.warning("corrupt_codex_config", path=str(path))
         return ReadResult.corrupt(raw_bytes)
     return ReadResult.ok(data)
+
+
+def effective_codex_agent_names(session_dir: Path) -> frozenset[str]:
+    """Return roles backed by readable TOML in the finalized generated home."""
+    config = tomllib.loads((session_dir / "config.toml").read_text(encoding="utf-8"))
+    configured_agents = config.get("agents", {})
+    if not isinstance(configured_agents, dict):
+        raise ValueError("Codex config agents table must be a mapping")
+
+    effective = set(CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES)
+    for name, registration in configured_agents.items():
+        if not name.strip() or not isinstance(registration, dict):
+            continue
+        config_file = registration.get("config_file")
+        if not isinstance(config_file, str) or not config_file.strip():
+            continue
+        target = Path(config_file)
+        if not target.is_absolute():
+            target = session_dir / target
+        try:
+            if not target.is_file():
+                continue
+            tomllib.loads(target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            continue
+        effective.add(name)
+    return frozenset(effective)
 
 
 def _write_codex_config(path: Path, data: dict[str, Any], *, source: ReadResult) -> None:

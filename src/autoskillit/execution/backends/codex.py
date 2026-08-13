@@ -123,8 +123,10 @@ from autoskillit.execution.backends._codex.explorer_projection import (
     _validated_explorer_binding_envs,
 )
 from autoskillit.execution.backends._codex_config import (
+    _CODEX_AGENT_NAME_COLLISIONS,
     CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
+    effective_codex_agent_names,
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_execution_identity import (
@@ -879,10 +881,6 @@ def _canonical_codex_model_effort(
     )
 
 
-CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = frozenset({"default", "explorer", "worker"})
-_CODEX_RESERVED_ONLY_AGENT_NAMES = frozenset({"review", "reviewer"})
-
-
 def _preflight_agent_projection(
     session_dir: Path,
     definitions: tuple[AgentDef, ...],
@@ -894,9 +892,7 @@ def _preflight_agent_projection(
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise ValueError(f"duplicate Codex agent definitions: {duplicates}")
-    built_in_collisions = sorted(
-        set(names) & (CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES | _CODEX_RESERVED_ONLY_AGENT_NAMES)
-    )
+    built_in_collisions = sorted(set(names) & _CODEX_AGENT_NAME_COLLISIONS)
     if built_in_collisions:
         raise ValueError(f"Codex built-in agent name collision: {built_in_collisions}")
     config_path = session_dir / "config.toml"
@@ -1076,33 +1072,6 @@ def _register_agent_tomls(
     tomllib.loads(updated)
     atomic_write(config_path, updated)
     return len(registrations) // 4
-
-
-def _effective_agent_names(session_dir: Path) -> frozenset[str]:
-    """Return roles backed by readable TOML in the finalized generated home."""
-    config = tomllib.loads((session_dir / "config.toml").read_text(encoding="utf-8"))
-    configured_agents = config.get("agents", {})
-    if not isinstance(configured_agents, dict):
-        raise ValueError("Codex config agents table must be a mapping")
-
-    effective = set(CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES)
-    for name, registration in configured_agents.items():
-        if not name.strip() or not isinstance(registration, dict):
-            continue
-        config_file = registration.get("config_file")
-        if not isinstance(config_file, str) or not config_file.strip():
-            continue
-        target = Path(config_file)
-        if not target.is_absolute():
-            target = session_dir / target
-        try:
-            if not target.is_file():
-                continue
-            tomllib.loads(target.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
-            continue
-        effective.add(name)
-    return frozenset(effective)
 
 
 def _validate_existing_explorer_role_toml(
@@ -2308,7 +2277,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 session_dir,
                 source_codex_home=codex_home_source,
             )
-        return _effective_agent_names(session_dir)
+        return effective_codex_agent_names(session_dir)
 
     def refresh_explorer_binding_env(
         self,

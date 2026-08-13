@@ -156,6 +156,24 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Generated session homes are ephemeral lease-owned artifacts, and cleanup "
         "refuses symlinks before recursively removing the exact requested home.",
     ),
+    (
+        "workspace/session_skills.py",
+        "_remove_generated_home_skill_entry",
+        "path.unlink",
+    ): (
+        1,
+        "Reachability filtering removes only the exact generated-home profile-skill "
+        "symlink selected by the finalized catalog; the source profile is untouched.",
+    ),
+    (
+        "workspace/session_skills.py",
+        "_remove_generated_home_skill_entry",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Reachability filtering removes only the exact generated-home profile-skill "
+        "directory selected by the finalized catalog; the source profile is untouched.",
+    ),
     ("workspace/session_skills.py", "resolve_ephemeral_root", "probe.unlink"): (
         1,
         "The writable-root probe removes only the sentinel file it created in the "

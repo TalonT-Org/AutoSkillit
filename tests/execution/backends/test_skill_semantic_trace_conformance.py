@@ -441,7 +441,6 @@ def test_compose_pr_real_codex_trace_spawns_then_joins_registered_roles() -> Non
                 "agent_type": synthesizer,
                 "fork_turns": "none",
                 "model": model,
-                "reasoning_effort": effort,
                 "task_name": "synthesizer",
             },
         ),

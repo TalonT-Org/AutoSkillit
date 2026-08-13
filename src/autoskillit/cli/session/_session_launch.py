@@ -41,6 +41,12 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _bind_launch_owner(project_dir: Path, launch_id: str, pid: int) -> None:
+    from autoskillit.core import bind_session_owner
+
+    bind_session_owner(project_dir, launch_id, pid)
+
+
 def render_skill_contract_composition_failure(exc: SkillContractError) -> None:
     """Print a clean, actionable message for a composition-root contract failure.
 
@@ -321,9 +327,7 @@ def _run_interactive_session(
                 attempt_handle.record_spawn(pid, pgid)
                 launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
                 if launch_id:
-                    from autoskillit.core import bind_session_owner
-
-                    bind_session_owner(_project_dir, launch_id, pid)
+                    _bind_launch_owner(_project_dir, launch_id, pid)
 
             managed_result = run_cook_attempt(
                 spec,
@@ -385,9 +389,7 @@ def _run_interactive_session(
                 try:
                     launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
                     if launch_id:
-                        from autoskillit.core import bind_session_owner
-
-                        bind_session_owner(_project_dir, launch_id, process.pid)
+                        _bind_launch_owner(_project_dir, launch_id, process.pid)
                     returncode = process.wait()
                 except BaseException:
                     try:

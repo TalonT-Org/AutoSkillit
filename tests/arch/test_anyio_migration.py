@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+
 import pytest
 
 from tests.arch._helpers import (
@@ -74,9 +76,22 @@ class TestAnyioPrimitivesUsed:
         assert ".monotonic()" in source
 
     def test_owned_popen_spawn_is_offloaded(self):
-        source = PROCESS_PY.read_text()
-        assert "spawn_owned_process," in source
-        assert "anyio.to_thread.run_sync(" in source
+        tree = ast.parse(PROCESS_PY.read_text())
+        assert any(
+            isinstance(call.func, ast.Attribute)
+            and call.func.attr == "run_sync"
+            and call.args
+            and isinstance(call.args[0], ast.Call)
+            and isinstance(call.args[0].func, ast.Attribute)
+            and isinstance(call.args[0].func.value, ast.Name)
+            and call.args[0].func.value.id == "functools"
+            and call.args[0].func.attr == "partial"
+            and call.args[0].args
+            and isinstance(call.args[0].args[0], ast.Name)
+            and call.args[0].args[0].id == "spawn_owned_process"
+            for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+        )
 
     def test_anyio_event_present(self):
         source = PROCESS_PY.read_text()

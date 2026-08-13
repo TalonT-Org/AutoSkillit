@@ -34,6 +34,7 @@ def run_daemon_orphans(*, reap: bool = False, output_json: bool = False) -> None
                         {
                             "pid": result.pid,
                             "action": result.action,
+                            "observation_complete": result.observation_complete,
                             "survivor_pids": list(result.survivor_pids),
                             "access_denied_pids": list(result.access_denied_pids),
                         }
@@ -69,6 +70,8 @@ def run_daemon_orphans(*, reap: bool = False, output_json: bool = False) -> None
                 details.append(f"survivors: {', '.join(map(str, result.survivor_pids))}")
             if result.access_denied_pids:
                 details.append(f"access denied: {', '.join(map(str, result.access_denied_pids))}")
+            if not result.observation_complete:
+                details.append("observation incomplete")
             print(f"incomplete pid {result.pid} ({'; '.join(details)})")
         else:
             assert_never(result.action)

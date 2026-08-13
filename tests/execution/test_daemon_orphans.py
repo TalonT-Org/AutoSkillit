@@ -210,6 +210,7 @@ def test_reap_classifies_verified_cleanup(
     monkeypatch.setattr(subject, "kill_process_tree", fake_kill)
     result = reap_orphaned_autoskillit_daemons([candidate])[0]
     assert result.action == action
+    assert result.observation_complete is cleanup.observation_complete
     assert calls == [
         (
             _PID,

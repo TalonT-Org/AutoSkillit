@@ -53,6 +53,7 @@ class DaemonOrphanReapResult:
 
     pid: int
     action: Literal["terminated", "skipped", "incomplete"]
+    observation_complete: bool = False
     survivor_pids: tuple[int, ...] = ()
     access_denied_pids: tuple[int, ...] = ()
 
@@ -212,12 +213,19 @@ def reap_orphaned_autoskillit_daemons(
             logger.info("daemon_orphan_reap_skipped", pid=candidate.pid)
             results.append(DaemonOrphanReapResult(candidate.pid, "skipped"))
         elif cleanup.complete:
-            results.append(DaemonOrphanReapResult(candidate.pid, "terminated"))
+            results.append(
+                DaemonOrphanReapResult(
+                    candidate.pid,
+                    "terminated",
+                    observation_complete=cleanup.observation_complete,
+                )
+            )
         else:
             results.append(
                 DaemonOrphanReapResult(
                     candidate.pid,
                     "incomplete",
+                    observation_complete=cleanup.observation_complete,
                     survivor_pids=cleanup.survivor_pids,
                     access_denied_pids=cleanup.access_denied_pids,
                 )

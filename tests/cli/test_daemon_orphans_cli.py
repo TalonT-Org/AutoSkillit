@@ -108,6 +108,7 @@ def test_json_contains_candidates_and_explicit_results(
         {
             "pid": 44,
             "action": action,
+            "observation_complete": False,
             "survivor_pids": [45] if action == "incomplete" else [],
             "access_denied_pids": [],
         }

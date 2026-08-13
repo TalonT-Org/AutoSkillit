@@ -227,6 +227,7 @@ class TestCookAddDirStructure:
     def test_cook_add_dir_target_has_correct_structure(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        import shutil
         from types import SimpleNamespace
 
         from autoskillit.core import CmdSpec
@@ -293,6 +294,7 @@ class TestCookAddDirStructure:
             "ensure_pre_launch",
             lambda _self, **_kwargs: PreLaunchReadiness((), {}),
         )
+        monkeypatch.setattr(shutil, "which", lambda _name: str(tmp_path / "claude"))
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
         monkeypatch.setattr(

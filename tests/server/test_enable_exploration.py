@@ -68,9 +68,6 @@ async def test_enable_exploration_succeeds_for_skill_session(
     )
     tool_ctx.exploration_context_store = store
     (tool_ctx.project_dir / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
-    token = write_exploration_request_record(
-        tool_ctx.project_dir, "enable_exploration", "test-session"
-    )
     bind = MagicMock(wraps=store.bind_session_scoped)
     monkeypatch.setattr(store, "bind_session_scoped", bind)
     monkeypatch.setattr(
@@ -79,6 +76,9 @@ async def test_enable_exploration_succeeds_for_skill_session(
     )
 
     async with Client(mcp) as client:
+        token = write_exploration_request_record(
+            tool_ctx.project_dir, "enable_exploration", "test-session"
+        )
         wire_result = await client.call_tool(
             "enable_exploration",
             {"_autoskillit_exploration_request_token": token},

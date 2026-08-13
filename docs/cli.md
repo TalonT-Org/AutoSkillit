@@ -85,7 +85,7 @@ Run health checks on your setup.
 Runs 47 ungated checks (up to 53 with fleet enabled) enumerated by `run_doctor`
 in `cli/doctor/__init__.py`: 38 numbered checks (1–23, excluding 5, and 30–45)
 and 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`, `7b`, `7c`, `17b`,
-`31b`). With fleet enabled the structural total is 43 numbered plus 9 lettered
+`31b`). With fleet enabled the structural total is 44 numbered plus 9 lettered
 checks. The checks cover stale MCP
 servers, plugin registration, plugin cache existence and integrity, PATH,
 project config, secrets placement, shared exact-artifact/install-state consistency,

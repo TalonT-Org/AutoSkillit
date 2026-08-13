@@ -16,7 +16,7 @@ import psutil
 import pytest
 import regex as re
 
-from autoskillit.core import ProcessCleanupResult, read_starttime_ticks
+from autoskillit.core import ProcessCleanupResult, read_boot_id, read_starttime_ticks
 from autoskillit.execution import (
     OrphanedCodexProcess,
     find_orphaned_codex_processes,
@@ -139,6 +139,7 @@ def test_detects_orphan_after_pty_master_close(_spawn_fake_codex):
     assert re.match(r"^/dev/pts/\d+ \(deleted\)$", orphan.fd0_target)
     assert orphan.exe_target is not None
     assert orphan.starttime_ticks is not None
+    assert orphan.boot_id == read_boot_id()
     assert orphan.started_at == pytest.approx(psutil.Process(child.pid).create_time(), abs=1)
 
 
@@ -411,7 +412,7 @@ def test_reap_reports_incomplete_when_observation_is_incomplete(_spawn_fake_code
     assert len(orphans) == 1
     monkeypatch.setattr(
         "autoskillit.execution.process._codex_orphans.kill_process_tree",
-        lambda _pid: ProcessCleanupResult(root_pid=orphans[0].pid),
+        lambda _pid, **_kwargs: ProcessCleanupResult(root_pid=orphans[0].pid),
     )
 
     result = reap_orphaned_codex_processes(orphans)[0]
@@ -420,3 +421,43 @@ def test_reap_reports_incomplete_when_observation_is_incomplete(_spawn_fake_code
     assert result.observation_complete is False
     assert result.survivor_pids == ()
     assert result.access_denied_pids == ()
+
+
+def test_reap_passes_boot_and_ticks_and_skips_identity_refusal(_spawn_fake_codex, monkeypatch):
+    import autoskillit.execution.process._codex_orphans as codex_orphans
+
+    name = _unique_name("cdxref")
+    _spawn_fake_codex(name=name, stdin_mode="orphan_pty")
+    orphan = find_orphaned_codex_processes(process_name=name)[0]
+    calls: list[tuple[int, str, int]] = []
+
+    def refuse(
+        pid: int, *, expected_boot_id: str, expected_starttime_ticks: int
+    ) -> ProcessCleanupResult:
+        calls.append((pid, expected_boot_id, expected_starttime_ticks))
+        return ProcessCleanupResult(root_pid=pid, identity_refused=True)
+
+    monkeypatch.setattr(codex_orphans, "kill_process_tree", refuse)
+
+    result = reap_orphaned_codex_processes([orphan])[0]
+
+    assert calls == [(orphan.pid, orphan.boot_id, orphan.starttime_ticks)]
+    assert result.action == "skipped"
+
+
+def test_reap_reports_incomplete_on_access_denied(_spawn_fake_codex, monkeypatch):
+    import autoskillit.execution.process._codex_orphans as codex_orphans
+
+    name = _unique_name("cdxdeny")
+    _spawn_fake_codex(name=name, stdin_mode="orphan_pty")
+    orphan = find_orphaned_codex_processes(process_name=name)[0]
+    monkeypatch.setattr(
+        codex_orphans,
+        "kill_process_tree",
+        lambda pid, **_kwargs: ProcessCleanupResult(root_pid=pid, access_denied_pids=(pid,)),
+    )
+
+    result = reap_orphaned_codex_processes([orphan])[0]
+
+    assert result.action == "incomplete"
+    assert result.access_denied_pids == (orphan.pid,)

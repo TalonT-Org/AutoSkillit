@@ -351,6 +351,14 @@ def codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
 
 
 @app.command
+def daemon_orphans(*, reap: bool = False, output_json: bool = False) -> None:
+    """Report orphaned registered-stdio daemons, or terminate them with --reap."""
+    from autoskillit.cli._daemon_orphans import run_daemon_orphans
+
+    run_daemon_orphans(reap=reap, output_json=output_json)
+
+
+@app.command
 def codex_attempts(
     *,
     discard_view: str | None = None,

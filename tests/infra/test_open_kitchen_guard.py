@@ -181,10 +181,17 @@ def test_open_kitchen_guard_fleet_denial_has_specific_message() -> None:
 
 def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     """open_kitchen_guard bridges AUTOSKILLIT_LAUNCH_ID to claude_session_id in registry."""
-    from autoskillit.core.runtime.session_registry import read_registry, write_registry_entry
+    from autoskillit.core.runtime.session_registry import (
+        read_registry,
+        registry_path,
+        write_registry_entry,
+    )
 
     project_dir = tmp_path
     write_registry_entry(project_dir, "abc", "cook", None)
+    registry = read_registry(project_dir)
+    registry["abc"].update(owner_pid=321, owner_boot_id="boot-id", owner_starttime_ticks=654)
+    registry_path(project_dir).write_text(json.dumps(registry))
     assert read_registry(project_dir)["abc"]["claude_session_id"] is None
 
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
@@ -207,6 +214,9 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     assert result.returncode == 0, f"Hook failed: {result.stderr}"
     registry = read_registry(project_dir)
     assert registry["abc"]["claude_session_id"] == "claude-xyz"
+    assert registry["abc"]["owner_pid"] == 321
+    assert registry["abc"]["owner_boot_id"] == "boot-id"
+    assert registry["abc"]["owner_starttime_ticks"] == 654
 
 
 def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:

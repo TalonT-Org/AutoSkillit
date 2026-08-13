@@ -70,6 +70,7 @@ from ._doctor_runtime import (
     _check_codex_limits_verified,
     _check_codex_model_alias_staleness,
     _check_codex_ndjson_drift,
+    _check_orphaned_autoskillit_daemons,
     _check_orphaned_codex_processes,
     _check_quota_cache_schema,
     _check_script_binary,
@@ -245,6 +246,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_session_index_projection(log_dir=cfg.linux_tracing.log_dir))
     # Check 44: Orphaned codex TUI processes (deleted pty)
     results.extend(_check_orphaned_codex_processes())
+    # Check 45: Registered-stdio AutoSkillit daemons with dead logical owners
+    results.extend(_check_orphaned_autoskillit_daemons())
     # Output
     for line in _format_results(results, output_json=output_json):
         print(line)

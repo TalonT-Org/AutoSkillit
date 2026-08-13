@@ -673,11 +673,13 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     - BaseException handler in run_managed_async in process.py (cleanup path)
     - run_managed_sync in process.py (sync cleanup path)
     - reap_orphaned_codex_processes in _codex_orphans.py (orphan reaper)
+    - reap_orphaned_autoskillit_daemons in _daemon_orphans.py (registered daemon reaper)
     """
     allowed_files = {
         SRC_ROOT / "execution" / "process" / "_process_kill.py",
         SRC_ROOT / "execution" / "process" / "__init__.py",
         SRC_ROOT / "execution" / "process" / "_codex_orphans.py",
+        SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",
         # _api.py's _write_pid callback (fail-closed layer IL-2) kills the spawned
         # child via the canonical sync primitive when mark_dispatch_running

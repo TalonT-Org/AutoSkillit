@@ -213,24 +213,21 @@ def reap_stale_dispatches(
                 continue
 
             current_ticks = read_starttime_ticks(pid)
-            if current_ticks is not None and current_ticks == dispatch.dispatched_starttime_ticks:
+            use_tick_identity = False
+            if (
+                dispatch.dispatched_boot_id
+                and dispatch.dispatched_starttime_ticks > 0
+                and current_ticks is not None
+                and current_ticks == dispatch.dispatched_starttime_ticks
+            ):
                 identity_confirmed = True
-            elif current_ticks is None and dispatch.dispatched_create_time > 0.0:
-                try:
-                    actual_ct = psutil.Process(pid).create_time()
-                    identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
-                except psutil.NoSuchProcess:
-                    _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
-                    continue
-                except psutil.AccessDenied:
-                    identity_confirmed = False
+                use_tick_identity = True
             elif (
                 dispatch.dispatched_starttime_ticks == 0 and dispatch.dispatched_create_time > 0.0
             ):
                 try:
                     actual_ct = psutil.Process(pid).create_time()
                     identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
-                    logger.info("reap: ticks=0 fallback to create_time for %s pid=%d", name, pid)
                 except psutil.NoSuchProcess:
                     _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
                     continue
@@ -255,7 +252,17 @@ def reap_stale_dispatches(
                     )
                 else:
                     try:
-                        cleanup_result = kill_process_tree(pid)
+                        if use_tick_identity:
+                            cleanup_result = kill_process_tree(
+                                pid,
+                                expected_boot_id=dispatch.dispatched_boot_id,
+                                expected_starttime_ticks=dispatch.dispatched_starttime_ticks,
+                            )
+                        else:
+                            cleanup_result = kill_process_tree(
+                                pid,
+                                expected_create_time=dispatch.dispatched_create_time,
+                            )
                     except Exception:
                         logger.warning(
                             "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
@@ -264,12 +271,13 @@ def reap_stale_dispatches(
                     if not cleanup_result.complete:
                         logger.warning(
                             "reap: [INCOMPLETE]  %s  pid=%d survivors=%s denied=%s "
-                            "observation_complete=%s",
+                            "observation_complete=%s identity_refused=%s",
                             name,
                             pid,
                             cleanup_result.survivor_pids,
                             cleanup_result.access_denied_pids,
                             cleanup_result.observation_complete,
+                            cleanup_result.identity_refused,
                         )
                         continue
                     _apply_stale_dispatch(dispatch, "reaped_orphan", m, reaper_dispatch_id)

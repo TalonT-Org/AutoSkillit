@@ -294,7 +294,9 @@ def test_order_fleet_launch_path_owns_one_guarded_popen() -> None:
     launch_path = CLI_DIR / "session" / "_session_launch.py"
     tree = ast.parse(launch_path.read_text(encoding="utf-8"), filename=str(launch_path))
     run_interactive = _function(tree, "_run_interactive_session")
+    terminal_guards = _with_context_calls(run_interactive, name="terminal_guard")
 
     assert len(_calls_in(run_interactive, owner="subprocess", attr="Popen")) == 1
-    assert _popen_outside_terminal_guard(run_interactive) == []
+    assert len(terminal_guards) == 1
+    assert len(_calls_in(terminal_guards[0], owner="subprocess", attr="Popen")) == 1
     assert _calls_in(run_interactive, owner="subprocess", attr="run") == []

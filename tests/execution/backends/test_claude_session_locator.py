@@ -9,6 +9,8 @@ from autoskillit.core import (
     SessionLocator,
     SessionSummary,
     bridge_claude_session_id,
+    read_registry,
+    registry_path,
     write_registry_entry,
 )
 from autoskillit.execution.backends import ClaudeSessionLocator
@@ -23,6 +25,11 @@ class TestClaudeSessionLocator:
         project = tmp_path / "project"
         project.mkdir()
         write_registry_entry(project, "0123456789abcdef", "cook", None)
+        registry = read_registry(project)
+        registry["0123456789abcdef"].update(
+            owner_pid=321, owner_boot_id="boot-id", owner_starttime_ticks=654
+        )
+        registry_path(project).write_text(json.dumps(registry))
         bridge_claude_session_id(project, "0123456789abcdef", "claude-1")
         fake_home = tmp_path / "home"
         index_dir = fake_home / ".claude" / "projects" / "-ignored"
@@ -63,6 +70,10 @@ class TestClaudeSessionLocator:
                 session_type_hint="cook",
             ),
         )
+        entry = read_registry(project)["0123456789abcdef"]
+        assert entry["owner_pid"] == 321
+        assert entry["owner_boot_id"] == "boot-id"
+        assert entry["owner_starttime_ticks"] == 654
 
     def test_list_sessions_filters_sidechains_and_other_projects(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

@@ -29,6 +29,9 @@
   "src/autoskillit/cli/_codex_orphans.py": [
     "tests/cli/test_codex_orphans_cmd.py"
   ],
+  "src/autoskillit/cli/_daemon_orphans.py": [
+    "tests/cli/test_daemon_orphans_cli.py"
+  ],
   "src/autoskillit/cli/_features.py": [
     "tests/cli/test_features_cli.py"
   ],
@@ -63,6 +66,7 @@
     "tests/cli/test_install.py",
     "tests/cli/test_install_transaction.py",
     "tests/cli/test_onboarding.py",
+    "tests/cli/test_real_backend_mcp_lifecycle.py",
     "tests/cli/test_session_picker.py",
     "tests/cli/test_update_checks_guards.py",
     "tests/cli/test_update_checks_lifecycle.py",
@@ -2077,7 +2081,6 @@
     "tests/workspace/test_projection_destination_location.py"
   ],
   "src/autoskillit/core/_terminal_table.py": [
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_features_cli.py",
     "tests/cli/test_fleet_list.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -2655,6 +2658,7 @@
     "tests/cli/test_order_config.py",
     "tests/cli/test_plugin_cache.py",
     "tests/cli/test_plugin_source_authority.py",
+    "tests/cli/test_real_backend_mcp_lifecycle.py",
     "tests/cli/test_reap_sidecar_check.py",
     "tests/cli/test_reload_loop.py",
     "tests/cli/test_routing_completeness.py",
@@ -3959,8 +3963,14 @@
     "tests/server/test_wire_compat.py"
   ],
   "src/autoskillit/core/runtime/_linux_proc.py": [
+    "tests/cli/test_doctor_backend_guards.py",
+    "tests/cli/test_doctor_broken_config.py",
+    "tests/cli/test_doctor_fleet_checks.py",
+    "tests/cli/test_doctor_scripts.py",
     "tests/cli/test_reap_sidecar_check.py",
+    "tests/contracts/test_claude_code_interface_contracts.py",
     "tests/core/test_session_liveness.py",
+    "tests/core/test_session_registry.py",
     "tests/execution/test_codex_orphans.py",
     "tests/execution/test_linux_tracing.py",
     "tests/execution/test_linux_tracing_pty_integration.py",
@@ -5645,7 +5655,6 @@
     "tests/arch/test_pty_coherence.py",
     "tests/arch/test_skill_capability_registry.py",
     "tests/cli/test_cook_order_picker.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_standing_pins.py",
     "tests/contracts/test_backend_compliance.py",
@@ -6361,7 +6370,6 @@
   "src/autoskillit/core/types/_type_recipe_binding.py": [
     "tests/arch/test_run_python_path_resolution.py",
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -7357,9 +7365,14 @@
   ],
   "src/autoskillit/core/types/_type_subprocess.py": [
     "tests/core/test_process_cleanup_result.py",
+    "tests/execution/test_codex_orphans.py",
+    "tests/execution/test_daemon_orphans.py",
     "tests/execution/test_process_cleanup_result.py",
+    "tests/execution/test_process_kill.py",
     "tests/fleet/test_api.py",
-    "tests/fleet/test_dispatch_effect_provenance.py"
+    "tests/fleet/test_dispatch_effect_provenance.py",
+    "tests/fleet/test_dispatch_reaper.py",
+    "tests/fleet/test_fleet_e2e.py"
   ],
   "src/autoskillit/core/types/_type_token.py": [
     "tests/core/test_canonical_token_usage.py",
@@ -7706,6 +7719,7 @@
     "tests/cli/test_init.py",
     "tests/cli/test_init_helpers.py",
     "tests/cli/test_orchestrator_prompt_contract.py",
+    "tests/cli/test_real_backend_mcp_lifecycle.py",
     "tests/cli/test_routing_completeness.py",
     "tests/cli/test_session_launch.py",
     "tests/contracts/test_backend_compliance.py",
@@ -7748,6 +7762,7 @@
     "tests/cli/test_cli_hooks.py",
     "tests/cli/test_init.py",
     "tests/cli/test_init_helpers.py",
+    "tests/cli/test_real_backend_mcp_lifecycle.py",
     "tests/execution/backends/test_codex_capture_lifecycle_integration.py",
     "tests/execution/backends/test_codex_config.py",
     "tests/execution/backends/test_codex_config_validation.py",
@@ -9191,12 +9206,18 @@
     "tests/execution/test_termination_executor.py"
   ],
   "src/autoskillit/execution/process/_codex_orphans.py": [
-    "tests/cli/test_doctor.py",
     "tests/cli/test_doctor_backend_guards.py",
     "tests/cli/test_doctor_broken_config.py",
     "tests/cli/test_doctor_fleet_checks.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/execution/test_codex_orphans.py"
+  ],
+  "src/autoskillit/execution/process/_daemon_orphans.py": [
+    "tests/cli/test_doctor_backend_guards.py",
+    "tests/cli/test_doctor_broken_config.py",
+    "tests/cli/test_doctor_fleet_checks.py",
+    "tests/cli/test_doctor_scripts.py",
+    "tests/execution/test_daemon_orphans.py"
   ],
   "src/autoskillit/execution/process/_process_io.py": [
     "tests/contracts/test_protocol_satisfaction.py",
@@ -12413,7 +12434,6 @@
   ],
   "src/autoskillit/recipe/_analysis.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -12569,7 +12589,6 @@
   ],
   "src/autoskillit/recipe/_analysis_bfs.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -12930,7 +12949,6 @@
   ],
   "src/autoskillit/recipe/_analysis_detectors.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -13290,7 +13308,6 @@
   ],
   "src/autoskillit/recipe/_api.py": [
     "tests/cli/test_cook_order_picker.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/contracts/test_completion_receipt_fitness.py",
     "tests/contracts/test_delivery_bound_fitness.py",
     "tests/contracts/test_package_gateways.py",
@@ -13332,7 +13349,6 @@
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_picker.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_api_surface_alignment.py",
@@ -13574,7 +13590,6 @@
   ],
   "src/autoskillit/recipe/_binding.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -13748,7 +13763,6 @@
     "tests/recipe/test_cmd_rpc_merge.py"
   ],
   "src/autoskillit/recipe/_contracts_card.py": [
-    "tests/cli/test_cook_order_prompt.py",
     "tests/contracts/test_completion_receipt_fitness.py",
     "tests/contracts/test_delivery_bound_fitness.py",
     "tests/contracts/test_package_gateways.py",
@@ -13794,7 +13808,6 @@
   ],
   "src/autoskillit/recipe/_contracts_manifest.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_api_surface_alignment.py",
@@ -14392,7 +14405,6 @@
     "tests/skills/test_planner_skill_contracts.py"
   ],
   "src/autoskillit/recipe/_recipe_composition.py": [
-    "tests/cli/test_cook_order_prompt.py",
     "tests/contracts/test_completion_receipt_fitness.py",
     "tests/contracts/test_delivery_bound_fitness.py",
     "tests/contracts/test_package_gateways.py",
@@ -14490,7 +14502,6 @@
   ],
   "src/autoskillit/recipe/_recipe_ingredients.py": [
     "tests/cli/test_cli_prompts.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_preview.py",
     "tests/contracts/test_completion_receipt_fitness.py",
     "tests/contracts/test_delivery_bound_fitness.py",
@@ -14572,7 +14583,6 @@
   ],
   "src/autoskillit/recipe/_rule_helpers.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -14725,7 +14735,6 @@
   ],
   "src/autoskillit/recipe/_skill_helpers.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -15010,7 +15019,6 @@
     "tests/arch/test_recipe_diagram_freshness.py",
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_order_picker.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_preview.py",
     "tests/contracts/test_completion_receipt_fitness.py",
     "tests/contracts/test_delivery_bound_fitness.py",
@@ -15056,7 +15064,6 @@
     "tests/test_smoke_utils.py"
   ],
   "src/autoskillit/recipe/identity.py": [
-    "tests/cli/test_cook_order_prompt.py",
     "tests/contracts/test_completion_receipt_fitness.py",
     "tests/contracts/test_delivery_bound_fitness.py",
     "tests/contracts/test_package_gateways.py",
@@ -15372,7 +15379,6 @@
   ],
   "src/autoskillit/recipe/registry.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -15563,7 +15569,6 @@
   ],
   "src/autoskillit/recipe/rules/campaign/rules_campaign_capture.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -15715,7 +15720,6 @@
   ],
   "src/autoskillit/recipe/rules/campaign/rules_campaign_deps.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -15867,7 +15871,6 @@
   ],
   "src/autoskillit/recipe/rules/campaign/rules_campaign_dispatch.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -16019,7 +16022,6 @@
   ],
   "src/autoskillit/recipe/rules/campaign/rules_campaign_flow.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -16171,7 +16173,6 @@
   ],
   "src/autoskillit/recipe/rules/campaign/rules_campaign_ingredients.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -16324,7 +16325,6 @@
   ],
   "src/autoskillit/recipe/rules/ci/rules_ci.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -16476,7 +16476,6 @@
   ],
   "src/autoskillit/recipe/rules/ci/rules_ci_conflict.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -16628,7 +16627,6 @@
   ],
   "src/autoskillit/recipe/rules/ci/rules_ci_guards.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -16780,7 +16778,6 @@
   ],
   "src/autoskillit/recipe/rules/ci/rules_ci_merge_queue.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -16932,7 +16929,6 @@
   ],
   "src/autoskillit/recipe/rules/dataflow/rules_dataflow.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -17084,7 +17080,6 @@
   ],
   "src/autoskillit/recipe/rules/dataflow/rules_dataflow_callable.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -17236,7 +17231,6 @@
   ],
   "src/autoskillit/recipe/rules/dataflow/rules_dataflow_handoff.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -17388,7 +17382,6 @@
   ],
   "src/autoskillit/recipe/rules/dataflow/rules_dataflow_multipart.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -17540,7 +17533,6 @@
   ],
   "src/autoskillit/recipe/rules/graph/rules_graph.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -17692,7 +17684,6 @@
   ],
   "src/autoskillit/recipe/rules/graph/rules_graph_output.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -17844,7 +17835,6 @@
   ],
   "src/autoskillit/recipe/rules/graph/rules_graph_review.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -17996,7 +17986,6 @@
   ],
   "src/autoskillit/recipe/rules/graph/rules_graph_routes.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -18148,7 +18137,6 @@
   ],
   "src/autoskillit/recipe/rules/graph/rules_graph_summary.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -18300,7 +18288,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_actions.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -18452,7 +18439,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_audit_impl_plan_scope.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -18604,7 +18590,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_audit_impl_topology.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -18756,7 +18741,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_audit_outcome_routing.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -18987,7 +18971,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_bypass.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -19139,7 +19122,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_callable_scope.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -19291,7 +19273,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_clone.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -19443,7 +19424,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_cmd.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -19595,7 +19575,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_commit_guard_regression_route.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -19747,7 +19726,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_contract_recovery.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -19899,7 +19877,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_contracts.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -20051,7 +20028,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_criterion_schema_drift.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -20203,7 +20179,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_failure_verdict_bypass.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -20355,7 +20330,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_features.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -20507,7 +20481,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_fixing.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -20659,7 +20632,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_flake_loop.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -20811,7 +20783,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_food_truck.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -20963,7 +20934,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_gitignored_deliverable.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -21115,7 +21085,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_ingredient_step_name.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -21267,7 +21236,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_inline_script.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -21419,7 +21387,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_inputs.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -21571,7 +21538,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_inventory_gate_bilateral.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -21723,7 +21689,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_isolation.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -21875,7 +21840,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_issue_scope_threading.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -22027,7 +21991,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_loop_artifact_scope.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -22179,7 +22142,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_loop_counter.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -22331,7 +22293,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_loop_progress.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -22483,7 +22444,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_merge.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -22635,7 +22595,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_merge_context.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -22787,7 +22746,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_merge_queue.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -22939,7 +22897,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_model.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -23091,7 +23048,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_note_shape_contradiction.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -23243,7 +23199,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_optional_capture.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -23395,7 +23350,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_packs.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -23547,7 +23501,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_phoropter_adjacency.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -23700,7 +23653,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_pseudocode_sync.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -23852,7 +23804,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_reachability.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -24004,7 +23955,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_recipe.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -24156,7 +24106,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_remediation.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -24308,7 +24257,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_route_gate.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -24460,7 +24408,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_skill_content.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -24612,7 +24559,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_skill_write_path_alignment.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -24764,7 +24710,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_skills.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -24916,7 +24861,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_skip_inviting_notes.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -25068,7 +25012,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_stamp_ownership.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -25220,7 +25163,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_step_naming.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -25372,7 +25314,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_stop_sentinel_direction.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -25524,7 +25465,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_temp_path.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -25676,7 +25616,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_terminal_convergence.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -25828,7 +25767,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_tools.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -25980,7 +25918,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_verdict.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -26133,7 +26070,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_verdict_context.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -26285,7 +26221,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_verdict_degradation.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -26437,7 +26372,6 @@
   ],
   "src/autoskillit/recipe/rules/rules_worktree.py": [
     "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_doctor_local_recipes.py",
     "tests/cli/test_doctor_scripts.py",
     "tests/contracts/test_completion_receipt_fitness.py",
@@ -28579,6 +28513,7 @@
     "tests/server/test_tools_execution_provider.py",
     "tests/server/test_tools_execution_results.py",
     "tests/server/test_tools_execution_step_resolution.py",
+    "tests/server/test_tools_kitchen_envelope.py",
     "tests/server/test_tools_kitchen_gate.py",
     "tests/server/test_tools_kitchen_gate_features.py",
     "tests/server/test_tools_kitchen_gate_hook_config.py",

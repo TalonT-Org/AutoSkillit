@@ -30,6 +30,7 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
+    AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     BUNDLED_EXPLORER_ROLES,
     CODEX_COOK_RESERVED_ENV_VARS,
@@ -41,6 +42,7 @@ from autoskillit.core import (
     CODEX_STARTUP_TRACE_ENV_VAR,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+    LAUNCH_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
@@ -410,6 +412,8 @@ def _codex_exec_extras(
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
         }
     )
+    extras.setdefault(LAUNCH_ID_ENV_VAR, "")
+    extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
     if include_agent_backend_flat:
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
     if applicable_guards is not None:
@@ -448,8 +452,6 @@ class CodexEnvPolicy:
             )
         # This is an outer-cook control signal, never child or nested-session state.
         out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
-        out.setdefault("AUTOSKILLIT_LAUNCH_ID", "")
-        out.setdefault("AUTOSKILLIT_STATE_ROOT", "")
         if required is not None:
             missing = required - frozenset(out)
             if missing:
@@ -1713,6 +1715,8 @@ class CodexBackend(BackendCmdBuilderBase):
         extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
         extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
+        extras.setdefault(LAUNCH_ID_ENV_VAR, "")
+        extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, cwd)
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         _merge_caller_env_extras(
             extras,
@@ -1843,6 +1847,8 @@ class CodexBackend(BackendCmdBuilderBase):
         extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
         extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
+        extras.setdefault(LAUNCH_ID_ENV_VAR, "")
+        extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, cwd)
         if completion_marker:
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         _merge_caller_env_extras(
@@ -1987,6 +1993,8 @@ class CodexBackend(BackendCmdBuilderBase):
                 FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
             }
         )
+        merged_extras.setdefault(LAUNCH_ID_ENV_VAR, "")
+        merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
         _merge_caller_env_extras(merged_extras, env_extras)
         if generated_home is not None:
             for reserved_key in CODEX_COOK_RESERVED_ENV_VARS:

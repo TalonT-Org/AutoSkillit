@@ -9,13 +9,14 @@ import subprocess
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 import anyio
 import anyio.abc
 import psutil
 
-from autoskillit.core import ProcessCleanupResult, get_logger
+from autoskillit.core import ProcessCleanupResult, get_logger, read_boot_id, read_starttime_ticks
 
 logger = get_logger(__name__)
 
@@ -128,23 +129,39 @@ def _snapshot_process_tree(pid: int) -> ProcessObservationSnapshot:
 def kill_process_tree(
     pid: int,
     timeout: float = 2.0,
+    *,
+    expected_boot_id: str | None = None,
+    expected_starttime_ticks: int | None = None,
+    expected_create_time: float | None = None,
 ) -> ProcessCleanupResult:
     """Observe and signal one positively identified PID tree, never a numeric PGID.
 
     This recovery primitive cannot reconstruct ownership.  A missing root is
     therefore incomplete evidence because its descendants cannot be enumerated.
-    Expected disappearance is distinct from permission denial.
+    Expected disappearance is distinct from permission denial. Caller-supplied
+    root identity is revalidated before descendants are observed or signaled.
     """
     if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
         raise ValueError("pid must be a positive integer")
     if timeout < 0:
         raise ValueError("timeout must be non-negative")
 
+    if expected_boot_id is not None and read_boot_id() != expected_boot_id:
+        return ProcessCleanupResult(root_pid=pid, identity_refused=True)
+
+    if (
+        expected_starttime_ticks is not None
+        and read_starttime_ticks(pid) != expected_starttime_ticks
+    ):
+        return ProcessCleanupResult(root_pid=pid, identity_refused=True)
+
     denied: set[int] = set()
     complete = True
     try:
         parent = psutil.Process(pid)
     except (psutil.Error, OSError) as exc:
+        if expected_create_time is not None:
+            return ProcessCleanupResult(root_pid=pid, identity_refused=True)
         if _is_disappearance(exc):
             return ProcessCleanupResult(root_pid=pid, observation_complete=False)
         if _is_denial(exc):
@@ -155,6 +172,14 @@ def kill_process_tree(
             )
         logger.warning("process_root_lookup_failed", pid=pid, exc_info=True)
         return ProcessCleanupResult(root_pid=pid, observation_complete=False)
+
+    if expected_create_time is not None:
+        try:
+            actual_create_time = parent.create_time()
+        except (psutil.Error, OSError):
+            return ProcessCleanupResult(root_pid=pid, identity_refused=True)
+        if actual_create_time != expected_create_time:
+            return ProcessCleanupResult(root_pid=pid, identity_refused=True)
 
     try:
         children = parent.children(recursive=True)
@@ -256,9 +281,21 @@ def kill_process_tree(
 async def async_kill_process_tree(
     pid: int,
     timeout: float = 2.0,
+    *,
+    expected_boot_id: str | None = None,
+    expected_starttime_ticks: int | None = None,
+    expected_create_time: float | None = None,
 ) -> ProcessCleanupResult:
-    """Run observation-only PID-tree cleanup without group authority or event-loop blocking."""
-    return await anyio.to_thread.run_sync(kill_process_tree, pid, timeout)
+    """Run identity-verified PID-tree cleanup without blocking the event loop."""
+    cleanup = partial(
+        kill_process_tree,
+        pid,
+        timeout,
+        expected_boot_id=expected_boot_id,
+        expected_starttime_ticks=expected_starttime_ticks,
+        expected_create_time=expected_create_time,
+    )
+    return await anyio.to_thread.run_sync(cleanup)
 
 
 class OwnedProcessGroup:

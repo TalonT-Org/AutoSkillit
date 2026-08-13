@@ -19,6 +19,15 @@ from tests.fixtures.plugin_artifact_state import (
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
+@pytest.fixture(autouse=True)
+def _stub_daemon_orphan_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep doctor tests independent of host process state."""
+    from autoskillit.cli.doctor import _doctor_runtime
+
+    monkeypatch.setattr(_doctor_runtime, "find_orphaned_codex_processes", lambda: [])
+    monkeypatch.setattr(_doctor_runtime, "find_orphaned_autoskillit_daemons", lambda: [])
+
+
 def _filesystem_snapshot(path: Path) -> tuple[object, ...]:
     if path.is_symlink():
         return ("symlink", str(path.readlink()))

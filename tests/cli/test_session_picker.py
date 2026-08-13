@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,11 @@ from autoskillit.cli.session._session_picker import (
     pick_session,
 )
 from autoskillit.core import SessionSummary
-from autoskillit.core.runtime.session_registry import write_registry_entry
+from autoskillit.core.runtime.session_registry import (
+    read_registry,
+    registry_path,
+    write_registry_entry,
+)
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -76,11 +81,18 @@ def test_pick_session_filters_cook(
 
     write_registry_entry(project_dir, "lid-cook", "cook", None)
     write_registry_entry(project_dir, "lid-order", "order", None)
+    registry = read_registry(project_dir)
+    registry["lid-cook"].update(owner_pid=321, owner_boot_id="boot-id", owner_starttime_ticks=654)
+    registry_path(project_dir).write_text(json.dumps(registry))
 
     from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")
+    owner_fields = read_registry(project_dir)["lid-cook"]
+    assert owner_fields["owner_pid"] == 321
+    assert owner_fields["owner_boot_id"] == "boot-id"
+    assert owner_fields["owner_starttime_ticks"] == 654
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "1")

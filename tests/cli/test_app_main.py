@@ -4,13 +4,33 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+def _update_submodule(name: str) -> ModuleType:
+    """Resolve update internals without traversing cli.update's public command alias."""
+    return importlib.import_module(f"autoskillit.cli.update.{name}")
+
+
+def test_daemon_orphans_help_is_registered() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "autoskillit", "daemon-orphans", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--reap" in result.stdout
+    assert "--output-json" in result.stdout
 
 
 def test_main_does_not_call_app_after_update_restart(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -29,7 +49,7 @@ def test_main_does_not_call_app_after_update_restart(monkeypatch: pytest.MonkeyP
         raise SystemExit(0)
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_checks", fake_run_update_checks
+        _update_submodule("_update_checks"), "run_update_checks", fake_run_update_checks
     )
     monkeypatch.setattr(sys, "argv", ["autoskillit", "order"])
 
@@ -63,13 +83,14 @@ def test_main_install_argv_skips_obligation_repair_to_avoid_reentrancy(
         "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_checks", lambda **kwargs: None
+        _update_submodule("_update_checks"), "run_update_checks", lambda **kwargs: None
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     repair_calls: list[Path] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        _update_submodule("_obligation_repair"),
+        "attempt_obligation_repair",
         lambda home, **kwargs: repair_calls.append(home),
     )
     monkeypatch.setattr(sys, "argv", ["autoskillit", "install", "--maintenance-update"])
@@ -92,13 +113,14 @@ def test_main_version_argv_skips_obligation_repair_to_avoid_probe_recursion(
         "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_checks", lambda **kwargs: None
+        _update_submodule("_update_checks"), "run_update_checks", lambda **kwargs: None
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     repair_calls: list[Path] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        _update_submodule("_obligation_repair"),
+        "attempt_obligation_repair",
         lambda home, **kwargs: repair_calls.append(home),
     )
     monkeypatch.setattr(sys, "argv", ["autoskillit", "--version"])
@@ -119,7 +141,7 @@ def test_main_non_install_argv_still_calls_obligation_repair(
         "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_checks", lambda **kwargs: None
+        _update_submodule("_update_checks"), "run_update_checks", lambda **kwargs: None
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -130,7 +152,8 @@ def test_main_non_install_argv_still_calls_obligation_repair(
         return MagicMock(outcome="no_obligation", findings=())
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        _update_submodule("_obligation_repair"),
+        "attempt_obligation_repair",
         fake_repair,
     )
     monkeypatch.setattr(sys, "argv", ["autoskillit", "doctor"])
@@ -154,13 +177,15 @@ def test_main_repair_diagnostics_never_write_stdout(
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_checks",
+        _update_submodule("_update_checks"),
+        "run_update_checks",
         lambda **kwargs: None,
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(sys, "argv", ["autoskillit", "doctor", "--json"])
     monkeypatch.setattr(
-        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        _update_submodule("_obligation_repair"),
+        "attempt_obligation_repair",
         lambda _home: MagicMock(
             outcome=ObligationRepairOutcome.DEFERRED,
             findings=("run install externally",),
@@ -212,13 +237,15 @@ def test_main_repair_classifies_missing_expected_version_as_incomplete(
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_checks",
+        _update_submodule("_update_checks"),
+        "run_update_checks",
         lambda **kwargs: None,
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(sys, "argv", ["autoskillit", "doctor", "--json"])
     monkeypatch.setattr(
-        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        _update_submodule("_obligation_repair"),
+        "attempt_obligation_repair",
         lambda _home: ObligationRepairResult(
             outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
             findings=("obligation_stale: expected 0.9.0, observed 1.1.0",),

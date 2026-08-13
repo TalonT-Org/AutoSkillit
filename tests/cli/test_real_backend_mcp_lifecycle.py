@@ -270,12 +270,16 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
         except subprocess.TimeoutExpired:
             client.kill()
             client.wait(timeout=3)
+        stop_drain.set()
+        drain.join()
         os.close(master_fd)
         master_fd = -1
 
         assert _wait_dead(daemon, timeout=10), diagnostics.decode(errors="replace")
     finally:
         stop_drain.set()
+        if drain.is_alive():
+            drain.join(timeout=1)
         if slave_fd >= 0:
             with contextlib.suppress(OSError):
                 os.close(slave_fd)

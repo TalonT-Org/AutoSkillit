@@ -422,8 +422,7 @@ def test_owned_process_natural_exit_is_reaped(tmp_path: Path) -> None:
         )
         assert owner.pgid == owner.pid
         assert owner.wait() == 7
-        with pytest.raises(ProcessLookupError):
-            os.killpg(owner.pgid, 0)
+        assert not capture_process._process_group_exists(owner.pgid)
     finally:
         os.close(cwd_fd)
 
@@ -444,7 +443,7 @@ def test_poll_observes_exit_without_reaping_group_leader(tmp_path: Path) -> None
 
         assert owner.poll() == 0
         assert owner.returncode is None
-        os.killpg(owner.pgid, 0)
+        assert capture_process._process_group_exists(owner.pgid)
         assert owner.wait() == 0
     finally:
         if owner.returncode is None:
@@ -474,8 +473,7 @@ def test_owned_process_escalates_term_ignoring_leader(tmp_path: Path) -> None:
         assert owner.stdout is not None
         assert owner.stdout.readline() == b"ready\n"
         assert owner.settle() == -signal.SIGKILL
-        with pytest.raises(ProcessLookupError):
-            os.killpg(owner.pgid, 0)
+        assert not capture_process._process_group_exists(owner.pgid)
     finally:
         os.close(cwd_fd)
 
@@ -545,8 +543,7 @@ time.sleep(30)
 
         assert owner.settle() == 0
 
-        with pytest.raises(ProcessLookupError):
-            os.killpg(owner.pgid, 0)
+        assert not capture_process._process_group_exists(owner.pgid)
         for descendant_pid in (child_pid, grandchild_pid):
             with pytest.raises(ProcessLookupError):
                 os.kill(descendant_pid, 0)

@@ -71,6 +71,149 @@ def test_identity_denial_excludes_unverified_target_from_signals(
     assert result.complete is False
 
 
+@pytest.mark.parametrize(
+    "disappearance",
+    [
+        psutil.NoSuchProcess(pid=101),
+        ProcessLookupError(errno.ESRCH, "gone"),
+    ],
+)
+def test_signal_disappearance_is_expected_complete_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    disappearance: BaseException,
+) -> None:
+    class FakeProcess:
+        pid = 101
+
+        def children(self, *, recursive: bool) -> list[FakeProcess]:
+            assert recursive is True
+            return []
+
+        def create_time(self) -> float:
+            return 123.0
+
+        def send_signal(self, _sig: signal.Signals) -> None:
+            raise disappearance
+
+    process = FakeProcess()
+    monkeypatch.setattr(_process_kill.psutil, "Process", lambda _pid: process)
+    monkeypatch.setattr(
+        _process_kill.psutil,
+        "wait_procs",
+        lambda _procs, *, timeout: ([], []),
+    )
+
+    result = kill_process_tree(process.pid)
+
+    assert result.terminated_pids == (process.pid,)
+    assert result.access_denied_pids == ()
+    assert result.observation_complete is True
+    assert result.complete is True
+
+
+@pytest.mark.parametrize(
+    "disappearance",
+    [
+        psutil.NoSuchProcess(pid=101),
+        ProcessLookupError(errno.ESRCH, "gone"),
+    ],
+)
+def test_wait_disappearance_is_expected_complete_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    disappearance: BaseException,
+) -> None:
+    class FakeProcess:
+        pid = 101
+
+        def children(self, *, recursive: bool) -> list[FakeProcess]:
+            assert recursive is True
+            return []
+
+        def create_time(self) -> float:
+            return 123.0
+
+        def send_signal(self, _sig: signal.Signals) -> None:
+            return
+
+    process = FakeProcess()
+    monkeypatch.setattr(_process_kill.psutil, "Process", lambda _pid: process)
+    monkeypatch.setattr(
+        _process_kill.psutil,
+        "wait_procs",
+        lambda _procs, *, timeout: (_ for _ in ()).throw(disappearance),
+    )
+
+    result = kill_process_tree(process.pid)
+
+    assert result.terminated_pids == (process.pid,)
+    assert result.access_denied_pids == ()
+    assert result.observation_complete is True
+    assert result.complete is True
+
+
+@pytest.mark.parametrize(
+    ("enumeration_error", "expected_denied"),
+    [
+        (psutil.AccessDenied(pid=101), (101,)),
+        (OSError(errno.EIO, "process table unavailable"), ()),
+    ],
+)
+def test_partial_descendant_enumeration_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    enumeration_error: BaseException,
+    expected_denied: tuple[int, ...],
+) -> None:
+    class FakeProcess:
+        pid = 101
+
+        def children(self, *, recursive: bool) -> list[FakeProcess]:
+            assert recursive is True
+            raise enumeration_error
+
+        def create_time(self) -> float:
+            return 123.0
+
+        def send_signal(self, _sig: signal.Signals) -> None:
+            return
+
+    process = FakeProcess()
+    monkeypatch.setattr(_process_kill.psutil, "Process", lambda _pid: process)
+    monkeypatch.setattr(
+        _process_kill.psutil,
+        "wait_procs",
+        lambda procs, *, timeout: (list(procs), []),
+    )
+
+    result = kill_process_tree(process.pid)
+
+    assert result.process_identities == ((process.pid, 123.0),)
+    assert result.terminated_pids == (process.pid,)
+    assert result.access_denied_pids == expected_denied
+    assert result.observation_complete is False
+    assert result.complete is False
+
+
+@pytest.mark.parametrize(
+    "lookup_error",
+    [psutil.Error("process table failed"), OSError(errno.EIO, "process table failed")],
+)
+def test_operational_root_lookup_errors_return_incomplete_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    lookup_error: BaseException,
+) -> None:
+    def fail_lookup(_pid: int) -> None:
+        raise lookup_error
+
+    monkeypatch.setattr(_process_kill.psutil, "Process", fail_lookup)
+
+    result = kill_process_tree(101)
+
+    assert result.process_identities == ()
+    assert result.access_denied_pids == ()
+    assert result.observation_complete is False
+    assert result.complete is False
+
+
 def test_wait_timeout_is_positive_survivor_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

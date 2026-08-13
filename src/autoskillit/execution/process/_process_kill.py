@@ -200,13 +200,17 @@ def kill_process_tree(
         alive_after_term = list(signal_targets)
         logger.debug("process_term_wait_timed_out", pid=getattr(exc, "pid", pid))
     except (psutil.Error, OSError) as exc:
-        alive_after_term = list(signal_targets)
-        denied_pid = getattr(exc, "pid", pid)
+        if _is_disappearance(exc):
+            alive_after_term = []
+        else:
+            alive_after_term = list(signal_targets)
         if _is_denial(exc):
+            denied_pid = getattr(exc, "pid", pid)
             denied.add(denied_pid)
+            complete = False
         elif not _is_disappearance(exc):
             logger.warning("process_term_wait_failed", pid=pid, exc_info=True)
-        complete = False
+            complete = False
 
     for proc in alive_after_term:
         try:
@@ -225,13 +229,17 @@ def kill_process_tree(
     except psutil.TimeoutExpired:
         alive_after_kill = list(alive_after_term)
     except (psutil.Error, OSError) as exc:
-        alive_after_kill = list(alive_after_term)
-        denied_pid = getattr(exc, "pid", pid)
+        if _is_disappearance(exc):
+            alive_after_kill = []
+        else:
+            alive_after_kill = list(alive_after_term)
         if _is_denial(exc):
+            denied_pid = getattr(exc, "pid", pid)
             denied.add(denied_pid)
+            complete = False
         elif not _is_disappearance(exc):
             logger.warning("process_kill_wait_failed", pid=pid, exc_info=True)
-        complete = False
+            complete = False
     survivor_pids = tuple(sorted(proc.pid for proc in alive_after_kill))
     observed_pids = {observed_pid for observed_pid, _ in identities}
     terminated_pids = tuple(sorted(observed_pids - set(survivor_pids)))

@@ -105,7 +105,7 @@ async def resolve_trace_target(
 ) -> TraceTarget:
     """Walk descendants of root_pid to find the workload process by basename.
 
-    Used after anyio.open_process() in PTY mode: root_pid is the script(1) wrapper;
+    Used after an owned PTY spawn: root_pid is the script(1) wrapper;
     we need to find the actual workload (e.g., 'claude') in its subtree.
 
     Polls at 50 ms intervals up to timeout. Raises TraceTargetResolutionError on miss

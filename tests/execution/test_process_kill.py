@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import textwrap
@@ -25,7 +26,11 @@ from autoskillit.execution.process import (
     kill_process_tree,
     run_managed_async,
 )
-from tests.execution._process_group_helpers import _cleanup_process_identities
+from tests.execution import _process_group_helpers
+from tests.execution._process_group_helpers import (
+    _cleanup_owned_process_group,
+    _cleanup_process_identities,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -226,6 +231,64 @@ class TestKillProcessTreeUnit:
             assert child_pid not in result.terminated_pids
         finally:
             _cleanup_process_identities({child_pid: child_identity})
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+    def test_reaped_leader_cannot_authorize_test_group_teardown(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "pass"],
+            start_new_session=True,
+        )
+        proc.wait(timeout=5)
+        group_signals: list[tuple[int, signal.Signals]] = []
+        monkeypatch.setattr(
+            os,
+            "killpg",
+            lambda pgid, signum: group_signals.append((pgid, signum)),
+        )
+
+        cleaned = _cleanup_owned_process_group(proc)
+
+        assert cleaned == set()
+        assert group_signals == []
+
+    def test_changed_leader_identity_refuses_group_teardown(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class FakeProcess:
+            pid = 101
+            returncode: int | None = None
+
+            def wait(self, timeout: float | None = None) -> int:
+                del timeout
+                self.returncode = 0
+                return 0
+
+        process = FakeProcess()
+        group_signals: list[tuple[int, signal.Signals]] = []
+        monkeypatch.setattr(
+            _process_group_helpers,
+            "_capture_owned_group_identities",
+            lambda _process: {process.pid: 123.0},
+        )
+        monkeypatch.setattr(
+            _process_group_helpers,
+            "_owned_group_anchor_is_valid",
+            lambda _process, _created: False,
+        )
+        monkeypatch.setattr(
+            os,
+            "killpg",
+            lambda pgid, signum: group_signals.append((pgid, signum)),
+        )
+
+        cleaned = _cleanup_owned_process_group(process)  # type: ignore[arg-type]
+
+        assert cleaned == {process.pid}
+        assert group_signals == []
 
 
 class TestCancellationKillsProcess:

@@ -64,6 +64,22 @@ def _cleanup_process_identities(
     return set(targets)
 
 
+def _owned_group_anchor_is_valid(
+    process: subprocess.Popen[object],
+    leader_create_time: float,
+) -> bool:
+    """Revalidate the unreaped leader identity immediately before group signaling."""
+    if process.returncode is not None or process.pid <= 0:
+        return False
+    try:
+        return (
+            os.getpgid(process.pid) == process.pid
+            and psutil.Process(process.pid).create_time() == leader_create_time
+        )
+    except (OSError, psutil.Error):
+        return False
+
+
 def _cleanup_owned_process_group(
     process: subprocess.Popen[object],
     *,
@@ -74,10 +90,14 @@ def _cleanup_owned_process_group(
     identities = _capture_owned_group_identities(process)
     if not identities:
         return set()
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except OSError:
-        pass
+    leader_create_time = identities.get(process.pid)
+    if leader_create_time is not None and _owned_group_anchor_is_valid(
+        process, leader_create_time
+    ):
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except OSError:
+            pass
 
     nonleader = {pid: created for pid, created in identities.items() if pid != process.pid}
     deadline = time.monotonic() + timeout
@@ -85,7 +105,9 @@ def _cleanup_owned_process_group(
         time.sleep(poll_interval)
     if _live_identities(nonleader):
         try:
-            if process.returncode is None and os.getpgid(process.pid) == process.pid:
+            if leader_create_time is not None and _owned_group_anchor_is_valid(
+                process, leader_create_time
+            ):
                 os.killpg(process.pid, signal.SIGKILL)
         except OSError:
             pass
@@ -93,8 +115,12 @@ def _cleanup_owned_process_group(
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         try:
-            if process.returncode is None and os.getpgid(process.pid) == process.pid:
+            if leader_create_time is not None and _owned_group_anchor_is_valid(
+                process, leader_create_time
+            ):
                 os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
         except OSError:
             process.kill()
         process.wait(timeout=timeout)

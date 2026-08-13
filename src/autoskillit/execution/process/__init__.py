@@ -402,8 +402,8 @@ async def run_managed_async(
             process_group_id = owner.pgid
 
             # Resolve the workload TraceTarget — the PID that should be observed.
-            # anyio.open_process returns the spawn PID, which in PTY mode is the
-            # script(1) wrapper, not claude. resolve_trace_target walks descendants
+            # The spawn PID is the script(1) wrapper in PTY mode, not claude.
+            # resolve_trace_target walks descendants
             # to find the actual workload by basename. Raising here (on miss) is
             # intentional: a silent fallback to proc.pid recreates issue #806.
             _target: TraceTarget | None = None

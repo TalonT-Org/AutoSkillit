@@ -228,7 +228,7 @@ class TestKillProcessTreeUnit:
             result = kill_process_tree(proc.pid)
             assert result.observation_complete is False
             assert result.complete is False
-            assert child_pid not in result.terminated_pids
+            assert result.terminated_pids == ()
         finally:
             _cleanup_process_identities({child_pid: child_identity})
 

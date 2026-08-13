@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import ast
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+
+from autoskillit.core import atomic_write
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -63,10 +66,11 @@ def _fixture_defs() -> list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionD
     return fixtures
 
 
-def _module_usefixtures() -> set[str]:
-    names: set[str] = set()
+def _module_usefixtures() -> dict[str, frozenset[str]]:
+    uses: dict[str, frozenset[str]] = {}
     for path in sorted(_TESTS_ROOT.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        names: set[str] = set()
         for statement in tree.body:
             if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
                 continue
@@ -85,7 +89,9 @@ def _module_usefixtures() -> set[str]:
                         for arg in call.args
                         if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
                     )
-    return names
+        if names:
+            uses[path.relative_to(_TESTS_ROOT).as_posix()] = frozenset(names)
+    return uses
 
 
 def _is_autouse(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -120,10 +126,27 @@ def _patched_symbols(node: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[
 
 def _masking_hits() -> dict[str, frozenset[str]]:
     fixtures = _fixture_defs()
-    module_wide_names = _module_usefixtures()
+    fixtures_by_location = {
+        (qualified.rsplit("::", 1)[0], name): qualified for name, qualified, _node in fixtures
+    }
+    module_wide_fixtures: set[str] = set()
+    for module, names in _module_usefixtures().items():
+        module_path = Path(module)
+        visible_files = (
+            module,
+            *(
+                str(parent / "conftest.py")
+                for parent in (module_path.parent, *module_path.parent.parents)
+            ),
+        )
+        for name in names:
+            for visible_file in visible_files:
+                if qualified := fixtures_by_location.get((visible_file, name)):
+                    module_wide_fixtures.add(qualified)
+                    break
     hits: dict[str, frozenset[str]] = {}
     for name, qualified, node in fixtures:
-        if name not in module_wide_names and not _is_autouse(node):
+        if qualified not in module_wide_fixtures and not _is_autouse(node):
             continue
         symbols = _patched_symbols(node)
         if symbols:
@@ -186,6 +209,31 @@ def test_launch_transition_masking_exemptions_match_ast_hits() -> None:
     assert hits, "Launch-transition fixture scan matched no guarded symbols"
     registered = {row.fixture: row.patched_symbols for row in GUARD_MASKING_EXEMPTIONS}
     assert hits == registered
+
+
+def test_module_usefixtures_does_not_match_same_named_sibling_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    atomic_write(
+        tmp_path / "first" / "conftest.py",
+        """import pytest
+
+@pytest.fixture
+def shared_name(monkeypatch):
+    monkeypatch.setattr(backend, "ensure_pre_launch", lambda: None)
+""",
+    )
+    atomic_write(
+        tmp_path / "second" / "test_consumer.py",
+        """import pytest
+
+pytestmark = pytest.mark.usefixtures("shared_name")
+""",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_TESTS_ROOT", tmp_path)
+
+    assert _masking_hits() == {}
 
 
 def test_masking_exemptions_have_rationale_and_real_path_coverage() -> None:

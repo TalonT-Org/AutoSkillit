@@ -98,6 +98,7 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
         projection_context: SkillProjectionContextAuthority,
     ):
         assert projection_context.catalog == compilation.catalog
+        captured["launch_id"] = launch_id
         yield ManagedSessionHome(
             launch_id=launch_id,
             generated_home=generated_home,
@@ -386,7 +387,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
         patch("autoskillit.cli._onboarding.is_first_run", return_value=False),
         patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
         patch("autoskillit.core.write_registry_entry"),
-        patch("autoskillit.core.bind_session_owner"),
+        patch("autoskillit.core.bind_session_owner") as bind_session_owner,
         patch(
             "autoskillit.cli.session._session_process.run_cook_attempt",
             side_effect=run_attempt,
@@ -408,6 +409,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert "AUTOSKILLIT_CODEX_STARTUP_TRACE" not in spec.env
     assert any("sqlite_home=" in arg and str(generated_home) in arg for arg in spec.cmd)
     assert captured["pass_fds"] == (3, 5)
+    bind_session_owner.assert_called_once_with(tmp_path, captured["launch_id"], 1)
 
 
 def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> None:

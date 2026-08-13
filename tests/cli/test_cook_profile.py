@@ -98,7 +98,6 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
         projection_context: SkillProjectionContextAuthority,
     ):
         assert projection_context.catalog == compilation.catalog
-        captured["launch_id"] = launch_id
         yield ManagedSessionHome(
             launch_id=launch_id,
             generated_home=generated_home,
@@ -342,6 +341,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
         @contextmanager
         def cook_session_context(self, **kwargs: object):
             captured["context"] = kwargs
+            captured["launch_id"] = kwargs["launch_id"]
             yield CookSessionHandle(
                 view_id="view-1",
                 pass_fds=(5,),

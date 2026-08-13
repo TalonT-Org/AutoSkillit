@@ -353,6 +353,41 @@ def test_spawn_provenance_and_unreaped_leader_authorize_group_signal(
     assert signals == [(owner.pid, signal.SIGTERM)]
 
 
+def test_spawn_preserves_identity_exception_when_reap_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ReapTimeoutPopen(FakePopen):
+        def wait(self, timeout: float | None = None) -> int:
+            raise _process_kill.subprocess.TimeoutExpired("command", timeout)
+
+    identity_error = KeyboardInterrupt()
+    monkeypatch.setattr(_process_kill.subprocess, "Popen", ReapTimeoutPopen)
+    monkeypatch.setattr(
+        _process_kill.os,
+        "getpgid",
+        lambda _pid: (_ for _ in ()).throw(identity_error),
+    )
+
+    with pytest.raises(KeyboardInterrupt) as raised:
+        _process_kill.spawn_owned_process(["command"], start_new_session=True)
+
+    assert raised.value is identity_error
+
+
+def test_spawn_validation_error_is_not_masked_by_reap_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ReapTimeoutPopen(FakePopen):
+        def wait(self, timeout: float | None = None) -> int:
+            raise _process_kill.subprocess.TimeoutExpired("command", timeout)
+
+    monkeypatch.setattr(_process_kill.subprocess, "Popen", ReapTimeoutPopen)
+    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid + 1)
+
+    with pytest.raises(RuntimeError, match="did not establish owned group leadership"):
+        _process_kill.spawn_owned_process(["command"], start_new_session=True)
+
+
 def test_missing_atomic_spawn_provenance_refuses_ownership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

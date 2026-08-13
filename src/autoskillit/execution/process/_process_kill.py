@@ -563,6 +563,17 @@ class OwnedProcessGroup:
         return result
 
 
+def _cleanup_failed_owned_spawn(process: subprocess.Popen[Any]) -> None:
+    try:
+        process.kill()
+    except BaseException:
+        logger.warning("owned_process_spawn_kill_failed", pid=process.pid, exc_info=True)
+    try:
+        process.wait(timeout=_FINAL_WAIT_SECONDS)
+    except BaseException:
+        logger.warning("owned_process_spawn_reap_failed", pid=process.pid, exc_info=True)
+
+
 def spawn_owned_process(
     args: Sequence[str] | str,
     *,
@@ -587,12 +598,10 @@ def spawn_owned_process(
     try:
         pgid = os.getpgid(process.pid)
     except BaseException:
-        process.kill()
-        process.wait(timeout=_FINAL_WAIT_SECONDS)
+        _cleanup_failed_owned_spawn(process)
         raise
     if process.pid <= 0 or pgid != process.pid or process.returncode is not None:
-        process.kill()
-        process.wait(timeout=_FINAL_WAIT_SECONDS)
+        _cleanup_failed_owned_spawn(process)
         raise RuntimeError("spawned child did not establish owned group leadership")
     return OwnedProcessGroup(process, pgid, _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN)
 

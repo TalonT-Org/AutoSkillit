@@ -80,6 +80,15 @@ class OwnedProcessError(RuntimeError):
     """The runner could not prove complete process-group settlement."""
 
 
+def _add_cleanup_failure_note(
+    primary_error: BaseException,
+    context: str,
+    cleanup_error: BaseException,
+) -> None:
+    detail = str(cleanup_error)[:256]
+    primary_error.add_note(f"{context}: {type(cleanup_error).__name__}: {detail}")
+
+
 @dataclass(frozen=True, slots=True)
 class _DrainResult:
     measurement: CaptureMeasurement
@@ -346,13 +355,20 @@ def spawn_owned_process(
     if process is None:
         raise OwnedProcessError("owned process did not start")
     if restore_error is not None:
+        error = OwnedProcessError("cannot restore runner cwd")
         try:
             _settle_failed_capture(
-                _finish_owned_spawn(process, inherit_terminal=not capture_output)
+                _finish_owned_spawn(process, inherit_terminal=not capture_output),
+                primary_error=error,
             )
-        except BaseException:
+        except BaseException as cleanup_error:
             logger.error("owned_process_cwd_restore_cleanup_failed", exc_info=True)
-        raise OwnedProcessError("cannot restore runner cwd") from restore_error
+            _add_cleanup_failure_note(
+                error,
+                "owned process cwd-restore cleanup also failed",
+                cleanup_error,
+            )
+        raise error from restore_error
     return _finish_owned_spawn(process, inherit_terminal=not capture_output)
 
 
@@ -371,15 +387,26 @@ def _finish_owned_spawn(
         identity_error = exc
         valid_leader = False
     if not valid_leader:
+        error = OwnedProcessError("unsafe owned process group identity")
         try:
             process.kill()
-        except BaseException:
+        except BaseException as cleanup_error:
             logger.error("owned_process_identity_kill_failed", exc_info=True)
+            _add_cleanup_failure_note(
+                error,
+                "owned process identity cleanup kill also failed",
+                cleanup_error,
+            )
         try:
             process.wait(timeout=_KILL_TIMEOUT_SECONDS)
-        except BaseException:
+        except BaseException as cleanup_error:
             logger.error("owned_process_identity_reap_failed", exc_info=True)
-        raise OwnedProcessError("unsafe owned process group identity") from identity_error
+            _add_cleanup_failure_note(
+                error,
+                "owned process identity cleanup reap also failed",
+                cleanup_error,
+            )
+        raise error from identity_error
 
     owner = OwnedProcessGroup(
         process=process,
@@ -595,6 +622,8 @@ def _resolve_bash(candidates: Sequence[str] = _TRUSTED_BASH_CANDIDATES) -> str:
 
 def _settle_failed_capture(
     process: subprocess.Popen[bytes] | OwnedProcessGroup,
+    *,
+    primary_error: BaseException | None = None,
 ) -> _capture_replay.RunnerSettlementEvidence:
     if not isinstance(process, OwnedProcessGroup):
         return _capture_replay.settle_failed_capture(process)
@@ -603,8 +632,14 @@ def _settle_failed_capture(
             action="settled_owned_group",
             returncode=process.settle(),
         )
-    except BaseException:
+    except BaseException as cleanup_error:
         logger.error("owned_capture_settlement_failed", exc_info=True)
+        if primary_error is not None:
+            _add_cleanup_failure_note(
+                primary_error,
+                "owned capture settlement also failed",
+                cleanup_error,
+            )
         return _capture_replay.RunnerSettlementEvidence(
             action="owned_group_settlement_failed",
             returncode=None,

@@ -592,11 +592,11 @@ def test_owned_spawn_identity_error_is_preserved(
         returncode = None
 
         def kill(self) -> None:
-            return
+            raise RuntimeError("kill cleanup failed")
 
         def wait(self, timeout: float | None = None) -> int:
             del timeout
-            return 0
+            raise OSError("reap cleanup failed")
 
     identity_error = OSError("identity unavailable")
     monkeypatch.setattr(
@@ -612,3 +612,41 @@ def test_owned_spawn_identity_error_is_preserved(
         )
 
     assert raised.value.__cause__ is identity_error
+    assert any("kill cleanup failed" in note for note in raised.value.__notes__)
+    assert any("reap cleanup failed" in note for note in raised.value.__notes__)
+
+
+def test_owned_spawn_restore_error_preserves_settlement_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
+    restore_error = OSError("restore failed")
+    fchdir_calls = 0
+
+    def fail_restore(_fd: int) -> None:
+        nonlocal fchdir_calls
+        fchdir_calls += 1
+        if fchdir_calls == 2:
+            raise restore_error
+
+    monkeypatch.setattr(capture_process.os, "open", lambda *_args: 99)
+    monkeypatch.setattr(capture_process.os, "fchdir", fail_restore)
+    monkeypatch.setattr(capture_process.os, "close", lambda _fd: None)
+    monkeypatch.setattr(capture_process.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_process, "_finish_owned_spawn", lambda *_args, **_kwargs: owner)
+    monkeypatch.setattr(
+        OwnedProcessGroup,
+        "settle",
+        lambda _self: (_ for _ in ()).throw(RuntimeError("settlement failed")),
+    )
+
+    with pytest.raises(OwnedProcessError, match="cannot restore") as raised:
+        spawn_owned_process([], cwd_fd=10, env={}, capture_output=False)
+
+    assert raised.value.__cause__ is restore_error
+    assert any("settlement failed" in note for note in raised.value.__notes__)

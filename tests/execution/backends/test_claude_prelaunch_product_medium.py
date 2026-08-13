@@ -41,19 +41,15 @@ def _shim_binding(tmp_path: Path, version: str = "2.1.220") -> ExecutableLaunchB
     )
 
 
-def test_supported_probe_returns_attestation_without_module_state(tmp_path: Path) -> None:
-    readiness = ClaudeCodeBackend().ensure_pre_launch(executable=_shim_binding(tmp_path))
+def test_supported_probe_does_not_leak_attestation_to_failed_probe(tmp_path: Path) -> None:
+    backend = ClaudeCodeBackend()
+    readiness = backend.ensure_pre_launch(executable=_shim_binding(tmp_path))
+    failed_readiness = backend.ensure_pre_launch()
 
     assert readiness.errors == ()
     assert readiness.attested_env[AUTOSKILLIT_ATTESTED_META_SUPPORT] == "1"
-    assert not hasattr(claude_module, "_FROZEN_ATTESTATION_ENV")
-
-
-def test_missing_binding_returns_no_attestation() -> None:
-    readiness = ClaudeCodeBackend().ensure_pre_launch()
-
-    assert readiness.errors
-    assert readiness.attested_env == {}
+    assert failed_readiness.errors
+    assert failed_readiness.attested_env == {}
 
 
 def test_identity_drift_returns_no_attestation(tmp_path: Path) -> None:

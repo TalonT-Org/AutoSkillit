@@ -1352,9 +1352,7 @@ def _render_cli_auth_store(config_text: str, execution_role: SkillExecutionRole)
         )
     if key_indexes:
         del lines[key_indexes[0]]
-    table_start = next(
-        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
-    )
+        table_start -= 1
     lines.insert(table_start, 'cli_auth_credentials_store = "file"')
     updated = "\n".join(lines) + "\n"
     if tomllib.loads(updated).get("cli_auth_credentials_store") != "file":

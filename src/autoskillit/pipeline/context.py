@@ -251,7 +251,6 @@ class ToolContext:
     skill_contract_resolver: SkillContractResolver | None = field(default=None)
     recipe_execution_factory: RecipeExecutionFactory | None = field(default=None)
     backend: CodingAgentBackend | None = field(default=None)
-    host_client_attestation: HostClientAttestation | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
     skill_session_contract_store: SkillSessionContractStore = field(default=_MISSING)
@@ -361,6 +360,16 @@ class ToolContext:
             )
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)
+
+    @property
+    def host_client_attestation(self) -> HostClientAttestation | None:
+        """Return the launcher attestation snapshot owned by this context."""
+        value = self.__dict__.get("_host_client_attestation")
+        return value if isinstance(value, HostClientAttestation) else None
+
+    @host_client_attestation.setter
+    def host_client_attestation(self, value: HostClientAttestation | None) -> None:
+        self.__dict__["_host_client_attestation"] = value
 
     @property
     def default_ci_scope(self) -> CIRunScope:

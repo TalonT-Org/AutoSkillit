@@ -415,7 +415,6 @@ def make_context(
         runner=runner,
         launch_resolver=DefaultLaunchResolver(),
         backend=backend,
-        host_client_attestation=initialize_host_client_attestation(),
         temp_dir=temp_dir,
         project_dir=project_dir,
         plugin_retirement_coordinator=plugin_retirement_coordinator,
@@ -454,6 +453,7 @@ def make_context(
             )
         ),
     )
+    ctx.host_client_attestation = initialize_host_client_attestation()
     if runner is not None:
         ctx.tester = DefaultTestRunner(config=ctx.config, runner=runner)
 

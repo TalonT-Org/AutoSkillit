@@ -146,7 +146,7 @@ def finalize_recipe_delivery(
 ) -> FinalizedRecipeResponse:
     """Persist, decide, shape, and transactionally reserve one recipe response."""
     if host_client_attestation is None:
-        host_client_attestation = tool_ctx.host_client_attestation
+        host_client_attestation = getattr(tool_ctx, "host_client_attestation", None)
     surface_definition = RECIPE_DELIVERY_SURFACE_REGISTRY[surface]
     candidate_capabilities = (
         getattr(tool_ctx.backend, "capabilities", None) if tool_ctx.backend is not None else None

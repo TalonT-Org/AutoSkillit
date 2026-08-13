@@ -1289,7 +1289,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2442,
+        2443,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "

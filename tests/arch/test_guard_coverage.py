@@ -106,6 +106,8 @@ def _production_guards() -> Counter[tuple[str, str, str]]:
                 branch = parents.get(branch)
             if branch is None:
                 continue
+            if raise_node not in branch.body:
+                continue
             messages = _guard_messages(branch)
             function = _nearest_function(raise_node, parents)
             if function is None:

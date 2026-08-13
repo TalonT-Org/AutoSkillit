@@ -163,7 +163,10 @@ os.execvpe(command[0], command, os.environ)
         raise
     assert process.returncode == 0, stderr[-_OUTPUT_CAP:].decode(errors="replace")
     _assert_competing_lease_is_blocked(lease_path)
-    _cleanup_process_identities(owned_identities, timeout=5)
+    remaining_identities = _cleanup_process_identities(owned_identities, timeout=5)
+    assert not remaining_identities, (
+        f"Codex cleanup left matching process identities: {sorted(remaining_identities)}"
+    )
     _assert_lease_released(lease_path)
     return (
         stdout[-_OUTPUT_CAP:],

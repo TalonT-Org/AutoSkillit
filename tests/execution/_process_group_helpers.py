@@ -39,7 +39,7 @@ def _cleanup_process_identities(
     timeout: float = 1,
     poll_interval: float = 0.02,
 ) -> set[int]:
-    """Terminate only PIDs whose captured creation identity still matches."""
+    """Terminate matching identities and return any that remain live."""
     targets = dict(identities)
     for pid, create_time in targets.items():
         try:
@@ -52,7 +52,7 @@ def _cleanup_process_identities(
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not _live_identities(targets):
-            return set(targets)
+            return set()
         time.sleep(poll_interval)
     for pid in _live_identities(targets):
         try:
@@ -61,7 +61,13 @@ def _cleanup_process_identities(
                 candidate.kill()
         except (OSError, psutil.Error):
             continue
-    return set(targets)
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _live_identities(targets):
+            return set()
+        time.sleep(poll_interval)
+    return _live_identities(targets)
 
 
 def _owned_group_anchor_is_valid(

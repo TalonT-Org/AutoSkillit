@@ -20,7 +20,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: project_exploration_responsibilities
   concurrency:
     required: true
   join:
@@ -106,6 +106,10 @@ Then prompt the user:
 Store the answer for Step 1.
 
 ### Step 1: Explore Target Project (Parallel Subagents) (SINGLE MESSAGE)
+
+Set `project_exploration_responsibilities` to Subagents A–D, Subagent E when applicable,
+and one responsibility per non-empty history-file batch when history mining is enabled.
+Use the same keys for prompts, child IDs, result association, and joins.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

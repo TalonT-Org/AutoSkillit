@@ -21,7 +21,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: intent_validation_groups
   concurrency:
     required: true
   join:
@@ -382,6 +382,9 @@ When a finding matches multiple tiers, use the highest severity.
 Critical and warning findings proceed to intent validation (Step 3.5). Info findings are classified with `verdict="INFO"` — they do not enter Step 3.5. Only `ACCEPT`, `REJECT`, and `DISCUSS` verdicts are assigned by Step 3.5 sub-agents; `INFO` is assigned at classification time.
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
+
+Set `intent_validation_groups` to the non-empty critical/warning domain groups produced
+in Step 3. Use the same keys for prompts, child IDs, verdict association, and joins.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

@@ -17,7 +17,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: phase_ids
   concurrency:
     required: true
   join:
@@ -82,6 +82,10 @@ directory.
 ### Step 1: Parse inputs and validate
 
 Read `$1` (per-phase context file: `wp_refine_contexts/context_{phase_id}.json`). Extract:
+
+Set `phase_ids` to the phase IDs represented by the validated contexts. Use it for
+packets, batches, child IDs, result association, and joins; never use WP IDs as launch
+cardinality.
 - `phase_id` — the phase this session handles
 - `work_packages` — full `WPElaborated` objects for this phase
 - `peer_summaries` — stub dicts for WPs in all other phases

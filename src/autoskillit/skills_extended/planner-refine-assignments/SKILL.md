@@ -18,7 +18,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: assignment_ids
   concurrency:
     required: true
   join:
@@ -94,6 +94,9 @@ parse/validation error string:
 ```
 FATAL: failed to parse {path}: {error_detail}
 ```
+
+Set `assignment_ids` to the IDs in `assignments`; use it for packets, batches, child IDs,
+result association, and joins.
 
 Read `$2` (refined_plan.json). Build a map `phase_id → PhaseElaborated` for L0 context.
 

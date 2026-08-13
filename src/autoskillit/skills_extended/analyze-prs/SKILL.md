@@ -19,7 +19,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: candidate_pr_numbers
   concurrency:
     required: true
   join:
@@ -127,6 +127,10 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 | `QUEUE_ENTRIES` | list[dict] | Sorted queue entries `{position, state, pr_number, pr_title}` when `QUEUE_MODE = true`; empty list when `false` |
 
 ### Step 1: Fetch PR Data (SINGLE MESSAGE)
+
+Set `candidate_pr_numbers` to the PR numbers selected in Step 0 or the merge-queue
+entries selected in Step 0.5. Use that exact collection for prompts, child IDs, results,
+and joins.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

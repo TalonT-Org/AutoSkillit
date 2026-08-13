@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tomllib
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -299,6 +300,45 @@ def test_shared_oracle_accepts_backend_native_semantic_trace(
         backend=backend_name,
         semantic_plan=plan,
         semantic_adaptation=adaptation,
+        child_terminal_sentinel="child-delivery-complete",
+        sibling_result_sentinel="sibling-delivery-complete",
+        parent_terminal_sentinel="parent-delivery-complete",
+    )
+
+
+@pytest.mark.parametrize(
+    ("backend_name", "backend_type", "trace_factory"),
+    [
+        ("codex", CodexBackend, _codex_trace),
+        ("claude", ClaudeCodeBackend, _claude_trace),
+    ],
+)
+def test_shared_oracle_resolves_runtime_child_cardinality(
+    backend_name: str,
+    backend_type: type[CodexBackend] | type[ClaudeCodeBackend],
+    trace_factory,
+) -> None:
+    plan = _semantic_plan()
+    plan = replace(
+        plan,
+        child_spawns=(
+            ChildSpawnSpec(role=_REVIEW_ROLE, for_each="review_topics"),
+            plan.child_spawns[1],
+        ),
+    )
+    adaptation = backend_type().adapt_skill_semantics(plan)
+    parent_events, child_events = trace_factory(adaptation)
+
+    assert_generated_child_delivery(
+        parent_events,
+        child_events,
+        parent_id="parent",
+        agent_role=adaptation.logical_role_mapping[_REVIEW_ROLE],
+        output_discipline_digest=_DISCIPLINE_DIGEST,
+        backend=backend_name,
+        semantic_plan=plan,
+        semantic_adaptation=adaptation,
+        runtime_cardinalities={"review_topics": 1},
         child_terminal_sentinel="child-delivery-complete",
         sibling_result_sentinel="sibling-delivery-complete",
         parent_terminal_sentinel="parent-delivery-complete",

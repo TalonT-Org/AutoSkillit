@@ -22,7 +22,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: stageable_data_entries
   concurrency:
     required: true
   join:
@@ -99,6 +99,9 @@ Create any data directories for entries with non-null `location`. Emit
 `fixture`, `literature`, `database`, or `wet_lab` source types.
 
 ### Step 3 — Launch Parallel Resource Probe Subagents (SINGLE MESSAGE)
+
+Set `stageable_data_entries` to the `external` and `gitignored` manifest entries remaining
+after Step 2. Use that collection for prompts, child IDs, result association, and joins.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

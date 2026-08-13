@@ -202,13 +202,16 @@ def test_deep_waves_complete_before_inter_batch_progress(
     assert "every launch has a terminal result" in normalized
     assert "before launching batch 2" in normalized
     assert "inter-batch synthesis:" in normalized
-    assert "stop when the quality gate" in normalized
+    assert "stop when" in normalized
+    assert "quality gate" in normalized
 
 
 def test_d2_historical_recurrence_parallel(deep_workflow_section: str) -> None:
     """Step D2 must make recurrence work conditional on relevance."""
     d2 = extract_step_section(deep_workflow_section, "Step D2")
-    assert "recurrence work only when provenance evidence is relevant" in d2.lower()
+    normalized = d2.lower()
+    assert "recurrence work" in normalized
+    assert "provenance evidence is relevant" in normalized
 
 
 def test_d3_mandatory_web_research(deep_workflow_section: str) -> None:

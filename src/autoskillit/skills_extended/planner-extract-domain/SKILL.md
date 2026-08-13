@@ -17,7 +17,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: selected_domain_exploration_task_ids
   concurrency:
     required: true
   join:
@@ -71,6 +71,10 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 Read the `analysis.json` file from argument $1. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
 
 ### Step 2: Launch 4–7 parallel exploration vectors
+
+Set `selected_domain_exploration_task_ids` to the four always-applicable task IDs plus
+the deep task IDs only when their module-count or architecture-style predicate holds.
+Use that exact collection for dispatch and joins.
 
 Dispatch all ready, scope-disjoint vectors together. Do not iterate across multiple turns.
 

@@ -23,7 +23,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: intent_validation_groups
   concurrency:
     required: true
   join:
@@ -227,6 +227,9 @@ findings in `audit-claims`.
 Save `dimension_groups_{pr}.json` with findings keyed by group. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
+
+Set `intent_validation_groups` to the non-empty dimension groups produced in Step 3.
+Use the same keys for prompts, child IDs, verdict association, and joins.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

@@ -17,7 +17,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: phase_ids
   concurrency:
     required: true
   join:
@@ -78,6 +78,9 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 Read `$1` (combined_plan.json). Parse as a `PlanDocument`. Extract all phase IDs
 from `phases[*].id`. Fail immediately (exit non-zero) if `phases` is empty or the
 file is malformed — do not proceed to spawn L0s.
+
+Store the extracted collection as `phase_ids`; it controls packets, batching, child IDs,
+result association, and joins.
 
 Input schema (PlanDocument with PhaseElaborated phases):
 ```json

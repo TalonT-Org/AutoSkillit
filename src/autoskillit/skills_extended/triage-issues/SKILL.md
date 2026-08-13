@@ -21,7 +21,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: issue_analysis_responsibilities
   concurrency:
     required: true
   join:
@@ -111,6 +111,10 @@ If `gh auth status` fails, abort with a clear error message.
 If there are zero open issues (after filtering), skip to Step 7 and output an empty report.
 
 ### Step 2a: Parallel Split Analysis (SINGLE MESSAGE)
+
+Set `issue_analysis_responsibilities` to the split-analysis and issue-analysis
+responsibilities derived from the fetched issue list. Dispatch each dependency-ready
+wave from this collection and retain child IDs keyed by issue and analysis kind.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

@@ -18,7 +18,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
-    count: 1
+    for_each: alignment_responsibilities
   concurrency:
     required: true
   join:
@@ -75,6 +75,9 @@ Read `refined_wps.json` from $1 and `refined_plan.json` from $2. Extract:
 - All WP `name`, `deliverables`, and `acceptance_criteria` fields from $1
 
 ### Step 2: Spawn alignment-check subagents (SINGLE MESSAGE)
+
+Set `alignment_responsibilities` to the one or two independent plan/WP alignment checks
+selected for this input. Retain child IDs keyed by responsibility through the join.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

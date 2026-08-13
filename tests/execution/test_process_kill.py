@@ -190,7 +190,7 @@ class TestKillProcessTreeUnit:
         """kill_process_tree handles nonexistent PID gracefully."""
         kill_process_tree(999999999)  # Should not raise
 
-    def test_kill_already_dead_process(self, tmp_path):
+    def test_kill_already_dead_process(self):
         """kill_process_tree handles already-dead process gracefully."""
         import subprocess
 
@@ -203,8 +203,11 @@ class TestKillProcessTreeUnit:
         proc.kill()
         proc.wait()
 
-        # Should handle gracefully
-        kill_process_tree(pid)
+        result = kill_process_tree(pid)
+
+        assert result.root_pid == pid
+        assert result.observation_complete is False
+        assert result.complete is False
 
     def test_exited_unowned_root_cannot_reconstruct_group_authority(self):
         proc = subprocess.Popen(

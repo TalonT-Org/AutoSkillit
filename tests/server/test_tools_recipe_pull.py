@@ -2095,14 +2095,15 @@ async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open
 
 
 @pytest.mark.parametrize("field", ["artifact_blob_size_bytes", "body_size_bytes"])
+@pytest.mark.parametrize("producer_tool", ["open_kitchen", "load_recipe"])
 async def test_pull_tool_rejects_forged_unbounded_identity_sizes(
-    tool_ctx_kitchen_open, field: str
+    tool_ctx_kitchen_open, field: str, producer_tool: str
 ) -> None:
     tool_ctx_kitchen_open.kitchen_id = "pull-unbounded-identity"
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-        producer_tool="open_kitchen",
+        producer_tool=producer_tool,
         recipe_name="remediation",
         payload=_payload(),
     )

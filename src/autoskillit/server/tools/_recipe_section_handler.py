@@ -331,6 +331,8 @@ async def get_recipe_section(
                 )
             except (TypeError, ValueError):
                 return _recipe_section_failure("invalid_recipe_artifact_identity")
+            if not identity.has_valid_read_bounds():
+                return _recipe_section_failure("invalid_recipe_artifact_identity")
             if part < 0:
                 return _recipe_section_failure("invalid_recipe_section_part")
 

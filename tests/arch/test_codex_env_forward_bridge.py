@@ -42,6 +42,7 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
     from autoskillit.execution.backends.codex import CodexBackend
 
     backend = CodexBackend()
+    launch_id = "0123456789abcdef"
     skill_spec = backend.build_skill_session_cmd(
         skill_command="/test-skill",
         cwd="/work",
@@ -49,6 +50,7 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
         model=None,
         plugin_binding=None,
         output_format=OutputFormat.JSON,
+        provider_extras={LAUNCH_ID_ENV_VAR: launch_id},
     )
     with plugin_binding(Path("/projected-plugin")) as binding:
         food_truck_spec = backend.build_food_truck_cmd(
@@ -56,7 +58,10 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
             plugin_binding=binding,
             cwd="/work",
             completion_marker="%%DONE%%",
+            env_extras={LAUNCH_ID_ENV_VAR: launch_id},
         )
+    assert skill_spec.env[LAUNCH_ID_ENV_VAR] == launch_id
+    assert food_truck_spec.env[LAUNCH_ID_ENV_VAR] == launch_id
     for var in sorted(CODEX_MCP_ENV_FORWARD_VARS - {LAUNCH_ID_ENV_VAR}):
         assert var in skill_spec.env, (
             f"{var} in CODEX_MCP_ENV_FORWARD_VARS but missing from build_skill_session_cmd env"

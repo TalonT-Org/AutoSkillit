@@ -1410,7 +1410,7 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
             return CmdSpec(cmd=("codex",), env={})
 
     def _must_not_call(*a, **kw):
-        raise AssertionError("subprocess.run must not be called")
+        raise AssertionError("subprocess.Popen must not be called")
 
     monkeypatch.setattr(subprocess, "Popen", _must_not_call)
     with pytest.raises(SystemExit, match="1"):

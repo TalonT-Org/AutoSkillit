@@ -36,6 +36,7 @@ from autoskillit.core import (
     ResultParser,
     SessionCheckpoint,
     SessionLocator,
+    SkillExecutionRole,
     SkillSessionConfig,
     StreamParser,
     ValidatedAddDir,
@@ -1774,9 +1775,52 @@ class TestCodexBackendSetupSessionDir:
         with pytest.raises(FileNotFoundError):
             CodexBackend().setup_session_dir(self.session_dir)
 
-    def test_absent_auth_is_allowed(self) -> None:
+    def test_absent_auth_creates_durable_absolute_link(self) -> None:
         CodexBackend().setup_session_dir(self.session_dir)
-        assert not (self.session_dir / "auth.json").exists()
+        auth_link = self.session_dir / "auth.json"
+        assert auth_link.is_symlink()
+        assert auth_link.readlink().is_absolute()
+        assert auth_link.readlink() == (self.codex_home / "auth.json").resolve(strict=False)
+        assert not auth_link.exists()
+
+    def test_orchestrator_auth_is_file_backed_across_generated_homes(self) -> None:
+        (self.session_dir / "config.toml").write_text(
+            'cli_auth_credentials_store = "keyring"\n' + self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
+        )
+        backend = CodexBackend()
+        backend.setup_session_dir(
+            self.session_dir,
+            execution_role=SkillExecutionRole.ORCHESTRATOR,
+        )
+
+        first_config = (self.session_dir / "config.toml").read_text()
+        assert first_config.count('cli_auth_credentials_store = "file"') == 1
+        assert tomllib.loads(first_config)["cli_auth_credentials_store"] == "file"
+        first_link = self.session_dir / "auth.json"
+        target = (self.codex_home / "auth.json").resolve(strict=False)
+        assert first_link.is_symlink()
+        assert first_link.readlink() == target
+
+        fd = os.open(first_link, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.close(fd)
+        assert target.is_file()
+        assert target.stat().st_mode & 0o777 == 0o600
+        assert first_link.is_symlink()
+
+        second_home = self.session_dir.parent / "second-session"
+        second_home.mkdir()
+        (second_home / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
+        backend.setup_session_dir(
+            second_home,
+            execution_role=SkillExecutionRole.ORCHESTRATOR,
+        )
+        assert (
+            tomllib.loads((second_home / "config.toml").read_text())["cli_auth_credentials_store"]
+            == "file"
+        )
+        assert (second_home / "auth.json").is_symlink()
+        assert (second_home / "auth.json").readlink() == target
+        assert target.is_file()
 
     def test_auth_destination_collision_fails_closed(self) -> None:
         (self.codex_home / "auth.json").write_text("{}")

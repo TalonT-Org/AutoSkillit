@@ -1522,6 +1522,9 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("cli/session/_session_order.py"): {
             "DefaultSkillResolver"
         },  # interactive order launch composition
+        Path("cli/session/_session_launch.py"): {
+            "DefaultSessionSkillManager"
+        },  # managed order generated-home composition
         Path("cli/session/_session_backend.py"): {
             "DefaultLaunchResolver"
         },  # interactive backend-authority composition root

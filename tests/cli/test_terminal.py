@@ -460,7 +460,11 @@ class TestCookTerminalGuard:
             "tcsetattr must be called even when subprocess raises KeyboardInterrupt"
         )
 
-    def test_launch_cook_session_restores_terminal_on_keyboard_interrupt(self, monkeypatch):
+    def test_launch_cook_session_restores_terminal_on_keyboard_interrupt(
+        self,
+        monkeypatch,
+        launch_kwargs: dict[str, object],
+    ):
         """_launch_cook_session() must restore terminal on exception."""
         import importlib
 
@@ -489,6 +493,10 @@ class TestCookTerminalGuard:
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
 
         with pytest.raises(KeyboardInterrupt):
-            app_mod._launch_cook_session("system prompt", required_env=frozenset())
+            app_mod._launch_cook_session(
+                "system prompt",
+                required_env=frozenset(),
+                **launch_kwargs,
+            )
 
         assert tcsetattr_calls, "terminal must be restored by _launch_cook_session on exception"

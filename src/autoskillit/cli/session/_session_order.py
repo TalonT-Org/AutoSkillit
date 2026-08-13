@@ -31,7 +31,11 @@ from autoskillit.core import (
     pkg_root,
     resume_spec_from_cli,
 )
-from autoskillit.workspace import DefaultSkillResolver, validate_skill_tier_roles
+from autoskillit.workspace import (
+    DefaultSkillResolver,
+    compile_session_skill_catalog,
+    validate_skill_tier_roles,
+)
 
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
@@ -167,6 +171,8 @@ def order(
         render_skill_contract_composition_failure(exc)
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(skill_catalog.exclusions)
+    skill_compilation = compile_session_skill_catalog(skill_catalog, backend)
+    skill_catalog = skill_compilation.catalog
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
 
@@ -198,15 +204,19 @@ def order(
             if isinstance(resume_spec, NoResume)
             else ""
         )
+        launch_id, launch_env = _write_order_entry(project_dir, None)
         _launch_cook_session(
             system_prompt,
             initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
             resume_spec=resume_spec,
             project_dir=project_dir,
-            extra_env=_write_order_entry(project_dir, None),
+            extra_env=launch_env,
             required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
             backend=backend,
-            skill_catalog=skill_catalog,
+            skill_compilation=skill_compilation,
+            launch_id=launch_id,
+            default_base_branch=config.branching.default_base_branch,
+            workspace_temp_dir=config.workspace.temp_dir,
         )
         return
 
@@ -249,15 +259,19 @@ def order(
                 if isinstance(resume_spec, NoResume)
                 else ""
             )
+            launch_id, launch_env = _write_order_entry(project_dir, None)
             _launch_cook_session(
                 system_prompt,
                 initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
                 resume_spec=resume_spec,
                 project_dir=project_dir,
-                extra_env=_write_order_entry(project_dir, None),
+                extra_env=launch_env,
                 required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
                 backend=backend,
-                skill_catalog=skill_catalog,
+                skill_compilation=skill_compilation,
+                launch_id=launch_id,
+                default_base_branch=config.branching.default_base_branch,
+                workspace_temp_dir=config.workspace.temp_dir,
             )
             return
         elif resolved is None:
@@ -372,7 +386,8 @@ def order(
     if confirm.lower() in ("n", "no"):
         return
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
-    _extra_env |= _write_order_entry(Path.cwd(), recipe)
+    launch_id, launch_env = _write_order_entry(project_dir, recipe)
+    _extra_env |= launch_env
     system_prompt = (
         _build_orchestrator_prompt(
             recipe,
@@ -394,5 +409,8 @@ def order(
         project_dir=project_dir,
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
         backend=backend,
-        skill_catalog=skill_catalog,
+        skill_compilation=skill_compilation,
+        launch_id=launch_id,
+        default_base_branch=config.branching.default_base_branch,
+        workspace_temp_dir=config.workspace.temp_dir,
     )

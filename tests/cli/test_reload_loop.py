@@ -87,8 +87,8 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     from autoskillit.core import (
         BackendConventions,
         CmdSpec,
+        CompiledSessionSkillCatalogAuthority,
         CookSessionHandle,
-        EffectiveSkillCatalogAuthority,
         HookTrustPolicy,
         ManagedSessionHome,
         NamedResume,
@@ -106,10 +106,10 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     @contextmanager
     def managed_session(
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ):
-        assert projection_context.catalog == catalog
+        assert projection_context.catalog == compilation.catalog
         events.append(("managed-enter", launch_id, projection_context))
         try:
             yield ManagedSessionHome(
@@ -314,8 +314,8 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
     from autoskillit.core import (
         BackendConventions,
         CmdSpec,
+        CompiledSessionSkillCatalogAuthority,
         CookSessionHandle,
-        EffectiveSkillCatalogAuthority,
         HookTrustPolicy,
         ManagedSessionHome,
         SkillProjectionContextAuthority,
@@ -332,10 +332,10 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
     @contextmanager
     def managed_session(
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ):
-        assert projection_context.catalog == catalog
+        assert projection_context.catalog == compilation.catalog
         try:
             yield ManagedSessionHome(
                 launch_id=launch_id,

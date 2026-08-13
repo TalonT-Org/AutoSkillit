@@ -523,7 +523,10 @@ class TestOrderResumeParsing:
             resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
-            skill_catalog=None,
+            skill_compilation=None,
+            launch_id=None,
+            default_base_branch=None,
+            workspace_temp_dir=None,
             backend=None,
         ):
             captured["prompt"] = prompt
@@ -575,7 +578,10 @@ class TestOrderResumeParsing:
             resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
-            skill_catalog=None,
+            skill_compilation=None,
+            launch_id=None,
+            default_base_branch=None,
+            workspace_temp_dir=None,
             backend=None,
         ):
             captured["prompt"] = prompt
@@ -617,7 +623,10 @@ class TestOrderResumeParsing:
             resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
-            skill_catalog=None,
+            skill_compilation=None,
+            launch_id=None,
+            default_base_branch=None,
+            workspace_temp_dir=None,
             backend=None,
         ):
             captured["prompt"] = prompt

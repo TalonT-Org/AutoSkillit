@@ -212,6 +212,12 @@ def test_cook_attempt_uses_only_the_shared_spawn_bound_owner() -> None:
     assert "subprocess.run(" not in cook_source
     assert "subprocess.Popen(" not in cook_source
 
+    shared_launch_source = (session_dir / "_session_launch.py").read_text(encoding="utf-8")
+    assert "run_cook_attempt(" in shared_launch_source
+    assert "subprocess.run(" in shared_launch_source, (
+        "fleet and nonpersistent backends retain the raw interactive process owner"
+    )
+
 
 def test_cook_owner_spawn_returns_before_the_single_spawn_callback() -> None:
     process_path = CLI_DIR / "session" / "_session_process.py"

@@ -122,7 +122,6 @@ def cook(
         resolve_ephemeral_root,
         resolve_persistent_session_roots,
         validate_skill_tier_roles,
-        write_skill_unavailability_metadata,
     )
 
     config = load_config()
@@ -259,8 +258,8 @@ def cook(
         render_skill_contract_composition_failure(exc)
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(session_catalog.exclusions)
-    catalog_compilation = compile_session_skill_catalog(session_catalog, backend)
-    session_catalog = catalog_compilation.catalog
+    skill_compilation = compile_session_skill_catalog(session_catalog, backend)
+    session_catalog = skill_compilation.catalog
     requires_resolved_exploration_profile = any(
         vector.disposition is ExplorationVectorDisposition.MIGRATED
         and vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
@@ -302,7 +301,7 @@ def cook(
         ) as projection_binding,
         session_mgr.managed_session(
             launch_id,
-            session_catalog,
+            skill_compilation,
             _build_cook_projection_context(
                 skills_provider,
                 session_catalog,
@@ -316,12 +315,6 @@ def cook(
             ),
         ) as managed_home,
     ):
-        write_skill_unavailability_metadata(
-            Path(managed_home.skills_dir.path),
-            backend=backend.name,
-            unavailable=catalog_compilation.unavailable,
-        )
-
         if isinstance(resume_spec, BareResume):
             backend.recover_cook_history()
             from autoskillit.cli.session._session_picker import pick_session

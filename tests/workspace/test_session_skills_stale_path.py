@@ -54,8 +54,14 @@ def _materialize(manager, session_id: str, *, backend=None):
 
 
 def _managed(manager, session_id: str, *, backend):
+    from autoskillit.workspace import compile_session_skill_catalog
+
     catalog, context = _catalog_context(manager, backend=backend)
-    return manager.managed_session(session_id, catalog, context)
+    return manager.managed_session(
+        session_id,
+        compile_session_skill_catalog(catalog, backend),
+        context,
+    )
 
 
 def test_validate_session_exists_true_for_live_session(make_session_skill_manager) -> None:

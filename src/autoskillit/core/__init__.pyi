@@ -734,6 +734,7 @@ from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CommittedDispositionResolver as CommittedDispositionResolver
+from .types import CompiledSessionSkillCatalogAuthority as CompiledSessionSkillCatalogAuthority
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ConcurrencySpec as ConcurrencySpec
 from .types import ConflictRejectedEffect as ConflictRejectedEffect

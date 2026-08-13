@@ -36,6 +36,7 @@ __all__ = [
     "PluginArtifactRetirementOwner",
     "PluginRetirementCoordinator",
     "CloneManager",
+    "CompiledSessionSkillCatalogAuthority",
     "EffectiveSkillCatalogAuthority",
     "EffectiveSkillInvocationAuthority",
     "ResolvedSkillAuthority",
@@ -221,6 +222,20 @@ class EffectiveSkillCatalogAuthority(Protocol):
 
 
 @runtime_checkable
+class CompiledSessionSkillCatalogAuthority(Protocol):
+    """Backend-filtered catalog plus deterministic omission metadata."""
+
+    @property
+    def backend(self) -> str: ...
+
+    @property
+    def catalog(self) -> EffectiveSkillCatalogAuthority: ...
+
+    @property
+    def unavailability_payload(self) -> Mapping[str, object]: ...
+
+
+@runtime_checkable
 class EffectiveSkillInvocationAuthority(Protocol):
     """Resolved root and complete executable closure crossing the IL-0 boundary."""
 
@@ -346,7 +361,7 @@ class SessionSkillManager(Protocol):
     def managed_session(
         self,
         session_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ) -> AbstractContextManager[ManagedSessionHome]: ...
 

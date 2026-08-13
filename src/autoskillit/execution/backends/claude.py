@@ -59,6 +59,7 @@ from autoskillit.core import (
     SessionEvent,
     SessionLocator,
     SessionSummary,
+    SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
     SkillSessionConfig,
@@ -523,7 +524,9 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         *,
         parent_sandbox_mode: str = "workspace-write",
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> None:
+        del execution_role
         if explorer_binding_env:
             raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
 

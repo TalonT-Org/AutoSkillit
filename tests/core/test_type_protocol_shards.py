@@ -94,6 +94,7 @@ def test_workspace_shard_all():
         "PluginArtifactRetirementOwner",
         "PluginRetirementCoordinator",
         "CloneManager",
+        "CompiledSessionSkillCatalogAuthority",
         "EffectiveSkillCatalogAuthority",
         "EffectiveSkillInvocationAuthority",
         "ResolvedSkillAuthority",
@@ -114,7 +115,7 @@ def test_session_skill_manager_managed_session_signature():
     from contextlib import AbstractContextManager
 
     from autoskillit.core import (
-        EffectiveSkillCatalogAuthority,
+        CompiledSessionSkillCatalogAuthority,
         ManagedSessionHome,
         SessionSkillManager,
         SkillProjectionContextAuthority,
@@ -124,15 +125,15 @@ def test_session_skill_manager_managed_session_signature():
     assert tuple(signature.parameters) == (
         "self",
         "session_id",
-        "catalog",
+        "compilation",
         "projection_context",
     )
-    for name in ("session_id", "catalog", "projection_context"):
+    for name in ("session_id", "compilation", "projection_context"):
         assert signature.parameters[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
         assert signature.parameters[name].default is inspect.Parameter.empty
     assert typing.get_type_hints(SessionSkillManager.managed_session) == {
         "session_id": str,
-        "catalog": EffectiveSkillCatalogAuthority,
+        "compilation": CompiledSessionSkillCatalogAuthority,
         "projection_context": SkillProjectionContextAuthority,
         "return": AbstractContextManager[ManagedSessionHome],
     }

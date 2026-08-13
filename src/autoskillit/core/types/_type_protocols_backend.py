@@ -21,7 +21,7 @@ from ._type_backend import (
     SkillSessionConfig,
 )
 from ._type_checkpoint import SessionCheckpoint
-from ._type_enums import ObserverStatus, OutputFormat
+from ._type_enums import ObserverStatus, OutputFormat, SkillExecutionRole
 from ._type_execution_identity import ExecutionIdentity
 from ._type_exploration import ExplorationRouterPlan
 from ._type_native_shell_capture import (
@@ -352,6 +352,7 @@ class CodingAgentBackend(Protocol):
         *,
         parent_sandbox_mode: str = "workspace-write",
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> None: ...
 
     def refresh_explorer_binding_env(

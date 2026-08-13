@@ -322,6 +322,10 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Direct interactive launch forwards the command-derived descriptor tuple exactly.",
     ),
+    ("cli/session/_session_launch.py", "_run_interactive_session", "pass_fds"): (
+        1,
+        "Managed order forwards the deduplicated command, home, projection, and attempt leases.",
+    ),
     ("cli/session/_session_process.py", "run_cook_attempt", "inherited_fds"): (
         1,
         "Direct PTY-free cook launch forwards the normalized owned descriptor tuple.",

@@ -19,8 +19,8 @@ from autoskillit.core import (
     SESSION_TYPE_ENV_VAR,
     BackendConventions,
     CmdSpec,
+    CompiledSessionSkillCatalogAuthority,
     CookSessionHandle,
-    EffectiveSkillCatalogAuthority,
     HookTrustPolicy,
     ManagedSessionHome,
     NamedResume,
@@ -163,11 +163,11 @@ def _install_harness(
     @contextmanager
     def managed_session(
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ):
-        events.append(("managed-enter", launch_id, catalog, projection_context))
-        assert projection_context.catalog == catalog
+        events.append(("managed-enter", launch_id, compilation.catalog, projection_context))
+        assert projection_context.catalog == compilation.catalog
         try:
             yield ManagedSessionHome(
                 launch_id=launch_id,
@@ -529,10 +529,10 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
     @contextmanager
     def managed_session(
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ):
-        assert projection_context.catalog == catalog
+        assert projection_context.catalog == compilation.catalog
         events.append(("managed-enter", launch_id))
         try:
             yield ManagedSessionHome(

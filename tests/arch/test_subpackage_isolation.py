@@ -1289,7 +1289,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2392,
+        2433,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1336,7 +1336,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; #4488/#4489/#4492 explorer surface authority: setup_session_dir gains "
         "explorer-role TOML exclusion filter for unbound sessions (+7 net lines) and "
         "explicit session-scoped capability disposition (+1 net line); #4507 adds runtime "
-        "child cardinality rendering and protects the live-web bundled role (+12 net lines)",
+        "child cardinality rendering and protects the live-web bundled role (+12 net lines)"
+        "; #4566 pins ORCHESTRATOR file auth, durable auth linkage, and role-exact profile "
+        "materialization at the backend-owned generated-home setup boundary (+42 net lines)",
     ),
     "execution/backends/claude.py": (
         1250,
@@ -1353,7 +1355,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "#4233 keeps Claude task lifecycle normalization and immutable skill-session "
         "async hardening beside the backend parser and command builder that own them. "
         "#4557 adds Claude-only host-attestation env, version-derived annotation support, "
-        "and frozen attestation env at all 4 launch sites.",
+        "and frozen attestation env at all 4 launch sites; #4566 "
+        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines).",
     ),
     "execution/headless/_headless_result.py": (
         1033,

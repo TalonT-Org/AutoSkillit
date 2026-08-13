@@ -134,7 +134,7 @@ def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     from autoskillit.cli.session._session_cook import cook
     from autoskillit.core import (
-        EffectiveSkillCatalogAuthority,
+        CompiledSessionSkillCatalogAuthority,
         ManagedSessionHome,
         SkillProjectionContextAuthority,
         ValidatedAddDir,
@@ -149,10 +149,10 @@ def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     @contextmanager
     def managed_session(
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ):
-        assert projection_context.catalog == catalog
+        assert projection_context.catalog == compilation.catalog
         yield ManagedSessionHome(
             launch_id=launch_id,
             generated_home=generated_home,

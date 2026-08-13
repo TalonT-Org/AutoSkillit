@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -469,6 +470,7 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order() produces a valid command for each registered backend."""
+        from autoskillit.core import CookSessionHandle
         from autoskillit.execution.backends import get_backend as _real_get_backend
         from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
@@ -480,7 +482,10 @@ class TestCLIOrderCommand:
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/fake-binary")
+        fake_binary = tmp_path / real_backend.binary_name()
+        fake_binary.write_text("#!/bin/sh\nexit 0\n")
+        fake_binary.chmod(0o755)
+        monkeypatch.setattr(shutil, "which", lambda _: str(fake_binary))
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
         mock_config = MagicMock()
@@ -490,15 +495,36 @@ class TestCLIOrderCommand:
         mock_config.providers.profiles = {}
         mock_config.subsets.disabled = []
         mock_config.packs.enabled = []
+        mock_config.branching.default_base_branch = "develop"
+        mock_config.workspace.temp_dir = ".autoskillit/temp"
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
         monkeypatch.setattr(
             "autoskillit.cli.session._session_backend.resolve_global_backend",
             lambda name: _real_get_backend(name),
         )
+
+        def fake_pre_launch(_self, *, session_dir=None, executable=None, plugin_dir=None):
+            del executable, plugin_dir
+            if session_dir is not None:
+                session_dir.mkdir(parents=True, exist_ok=True)
+                (session_dir / "config.toml").write_text(
+                    '[mcp_servers.autoskillit]\ncommand = "autoskillit"\nargs = ["mcp"]\n'
+                )
+            return []
+
+        monkeypatch.setattr(CodexBackend, "ensure_pre_launch", fake_pre_launch)
+        monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda *_: [])
         monkeypatch.setattr(
             CodexBackend,
-            "ensure_pre_launch",
-            lambda _self, *, session_dir=None, executable=None: [],
+            "cook_session_context",
+            lambda _self, **_kwargs: nullcontext(
+                CookSessionHandle(
+                    view_id="test-view",
+                    pass_fds=(),
+                    _record_spawn=lambda _pid, _pgid: None,
+                    _record_reaped=lambda _pid, _pgid: None,
+                )
+            ),
         )
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
@@ -509,6 +535,18 @@ class TestCLIOrderCommand:
             return type("R", (), {"returncode": 0})()
 
         monkeypatch.setattr(subprocess, "run", fake_run)
+
+        def fake_cook_attempt(spec, **kwargs):
+            captured["cmd"] = list(spec.cmd)
+            captured["env"] = dict(spec.env)
+            kwargs["on_spawn"](12345, 12345)
+            kwargs["on_reaped"](12345, 12345)
+            return type("R", (), {"returncode": 0})()
+
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_process.run_cook_attempt",
+            fake_cook_attempt,
+        )
 
         cli.order("test-script")
 
@@ -590,6 +628,30 @@ def test_session_order_launch_calls_pass_order_interactive_required_env() -> Non
             f"Call at line {call.lineno} must pass required_env=ORDER_INTERACTIVE_REQUIRED_ENV, "
             f"got {ast.dump(value)}"
         )
+
+
+def test_session_order_launch_calls_pass_explicit_home_authorities() -> None:
+    import ast
+
+    expected_values = {
+        "skill_compilation": "skill_compilation",
+        "launch_id": "launch_id",
+        "default_base_branch": "config.branching.default_base_branch",
+        "workspace_temp_dir": "config.workspace.temp_dir",
+    }
+    for call in _launch_cook_session_calls():
+        supplied = {keyword.arg: keyword.value for keyword in call.keywords}
+        assert expected_values.keys() <= supplied.keys(), (
+            f"Call at line {call.lineno} is missing "
+            f"{sorted(expected_values.keys() - supplied.keys())}"
+        )
+        for keyword, expression in expected_values.items():
+            expected = ast.parse(expression, mode="eval").body
+            actual = supplied[keyword]
+            assert ast.dump(actual) == ast.dump(expected), (
+                f"Call at line {call.lineno} must pass {keyword}={expression}, "
+                f"got {ast.dump(actual)}"
+            )
 
 
 def test_launch_cook_session_required_env_is_required_keyword_only() -> None:

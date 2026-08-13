@@ -14,6 +14,27 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture
+def launch_kwargs() -> dict[str, object]:
+    """Return canonical launch inputs backed by the real session catalog."""
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        compile_session_skill_catalog,
+    )
+    from autoskillit.workspace.skills import SkillExecutionRole
+
+    backend = ClaudeCodeBackend()
+    catalog = DefaultSkillResolver().list_effective(None, SkillExecutionRole.SESSION)
+    return {
+        "backend": backend,
+        "skill_compilation": compile_session_skill_catalog(catalog, backend),
+        "launch_id": "test-order",
+        "default_base_branch": "main",
+        "workspace_temp_dir": None,
+    }
+
+
 @pytest.fixture(autouse=True)
 def _patch_worktree_guard_for_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent the worktree guard and plugin-installed check from firing in tests."""

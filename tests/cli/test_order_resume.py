@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestLaunchCookSessionInfraResume:
-    def test_infra_exit_triggers_resume(self) -> None:
+    def test_infra_exit_triggers_resume(self, launch_kwargs: dict[str, object]) -> None:
         call_count = 0
 
         def mock_run_interactive(system_prompt, **kwargs):
@@ -30,11 +30,11 @@ class TestLaunchCookSessionInfraResume:
             "autoskillit.cli.session._session_launch._run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt", required_env=frozenset())
+            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
 
         assert call_count == 2
 
-    def test_infra_exit_uses_named_resume(self) -> None:
+    def test_infra_exit_uses_named_resume(self, launch_kwargs: dict[str, object]) -> None:
         resume_specs: list = []
 
         def mock_run_interactive(system_prompt, **kwargs):
@@ -47,12 +47,12 @@ class TestLaunchCookSessionInfraResume:
             "autoskillit.cli.session._session_launch._run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt", required_env=frozenset())
+            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
 
         assert isinstance(resume_specs[1], NamedResume)
         assert resume_specs[1].session_id == "sess-42"
 
-    def test_max_infra_resumes_exceeded(self) -> None:
+    def test_max_infra_resumes_exceeded(self, launch_kwargs: dict[str, object]) -> None:
         def mock_run_interactive(system_prompt, **kwargs):
             return _InfraExitSignal(session_id="sess-loop", category="process_killed")
 
@@ -63,9 +63,9 @@ class TestLaunchCookSessionInfraResume:
             ),
             pytest.raises(SystemExit, match="Too many infrastructure resumes"),
         ):
-            _launch_cook_session("prompt", required_env=frozenset())
+            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
 
-    def test_no_resume_on_clean_exit(self) -> None:
+    def test_no_resume_on_clean_exit(self, launch_kwargs: dict[str, object]) -> None:
         call_count = 0
 
         def mock_run_interactive(system_prompt, **kwargs):
@@ -77,6 +77,6 @@ class TestLaunchCookSessionInfraResume:
             "autoskillit.cli.session._session_launch._run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt", required_env=frozenset())
+            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
 
         assert call_count == 1

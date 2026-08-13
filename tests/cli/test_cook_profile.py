@@ -14,8 +14,8 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     BackendConventions,
     CmdSpec,
+    CompiledSessionSkillCatalogAuthority,
     CookSessionHandle,
-    EffectiveSkillCatalogAuthority,
     HookTrustPolicy,
     ManagedSessionHome,
     RepositoryProfileId,
@@ -93,10 +93,10 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
     @contextmanager
     def managed_session(
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ):
-        assert projection_context.catalog == catalog
+        assert projection_context.catalog == compilation.catalog
         yield ManagedSessionHome(
             launch_id=launch_id,
             generated_home=generated_home,
@@ -275,10 +275,10 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     @contextmanager
     def managed_session(
         launch_id: str,
-        catalog: EffectiveSkillCatalogAuthority,
+        compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ):
-        assert projection_context.catalog == catalog
+        assert projection_context.catalog == compilation.catalog
         yield ManagedSessionHome(
             launch_id=launch_id,
             generated_home=generated_home,

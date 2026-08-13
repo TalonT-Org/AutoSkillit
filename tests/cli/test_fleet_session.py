@@ -22,6 +22,77 @@ def _make_campaign_recipe(name: str = "test-campaign") -> MagicMock:
     return recipe
 
 
+@pytest.mark.parametrize("campaign_mode", [False, True], ids=("dispatch", "campaign"))
+def test_fleet_call_sites_omit_managed_order_inputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    campaign_mode: bool,
+) -> None:
+    from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+    from autoskillit.core import FLEET_SESSION_REQUIRED_ENV, NoResume
+
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def capture_session(prompt: str, **kwargs: object) -> None:
+        calls.append((prompt, kwargs))
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_launch._run_interactive_session",
+        capture_session,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
+        lambda *args, **kwargs: "dispatch-prompt",
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+        lambda *args, **kwargs: "campaign-prompt",
+    )
+    monkeypatch.chdir(tmp_path)
+    state_path = tmp_path / "state.json"
+    state_path.write_text("{}", encoding="utf-8")
+
+    if campaign_mode:
+        _launch_fleet_session(
+            _make_campaign_recipe(),
+            "campaign-id",
+            state_path,
+            None,
+            fleet_mode="campaign",
+            initial_message="hello",
+        )
+    else:
+        _launch_fleet_session(
+            None,
+            None,
+            None,
+            None,
+            fleet_mode="dispatch",
+            initial_message="hello",
+        )
+
+    assert len(calls) == 1
+    prompt, kwargs = calls[0]
+    assert prompt == ("campaign-prompt" if campaign_mode else "dispatch-prompt")
+    assert kwargs["initial_message"] == "hello"
+    assert kwargs["project_dir"] == tmp_path
+    assert kwargs["required_env"] == FLEET_SESSION_REQUIRED_ENV
+    assert kwargs["backend"] is not None
+    assert isinstance(kwargs["resume_spec"], NoResume)
+    extra_env = kwargs["extra_env"]
+    assert isinstance(extra_env, dict)
+    assert extra_env["AUTOSKILLIT_PROJECT_DIR"] == str(tmp_path)
+    managed_order_inputs = {
+        "skill_compilation",
+        "managed_home",
+        "plugin_binding",
+        "retained_projection_binding",
+        "startup_trace",
+        "attempt",
+    }
+    assert managed_order_inputs.isdisjoint(kwargs)
+
+
 class TestLaunchFleetSessionIngredientsTable:
     def _call(
         self,

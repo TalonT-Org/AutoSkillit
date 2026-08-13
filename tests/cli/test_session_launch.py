@@ -4,18 +4,36 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from contextlib import nullcontext
+import tomllib
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
 from packaging.version import Version
 
-from autoskillit.cli.session._session_launch import _run_interactive_session
+from autoskillit.cli._plugin_artifact import (
+    interactive_plugin_authority as _production_interactive_plugin_authority,
+)
+from autoskillit.cli.session._session_launch import (
+    _launch_cook_session,
+    _run_interactive_session,
+)
 from autoskillit.core import BackendConventions, ClaudeFlags, HookTrustPolicy
+from autoskillit.core._plugin_ids import (
+    detect_autoskillit_mcp_prefix as _production_mcp_prefix,
+)
 from autoskillit.execution.backends import claude as _claude_mod
 from autoskillit.execution.backends.codex import CodexFlags
+from autoskillit.workspace import (
+    project_default_plugin_authority as _production_project_default_plugin_authority,
+)
+from tests.fixtures.plugin_artifact_state import (
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +52,7 @@ def _pre_freeze_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
 class _TestBinding:
@@ -1381,3 +1399,487 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
     assert result is None
     assert events == ["validated", "spawned"]
     trace.record_attempt_anchor.assert_called_once_with(attempt=1, view_id="launch-id-1")
+
+
+def _write_codex_mcp_probe_executable(path: Path) -> None:
+    path.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+import tomllib
+
+if "--version" in sys.argv:
+    print("codex-cli 0.147.0")
+    raise SystemExit(0)
+
+config = tomllib.loads((Path(os.environ["CODEX_HOME"]) / "config.toml").read_text())
+transport = dict(config["mcp_servers"]["autoskillit"])
+project_config = Path.cwd() / ".codex" / "config.toml"
+if project_config.is_file():
+    project = tomllib.loads(project_config.read_text())
+    override = project.get("mcp_servers", {}).get("autoskillit", {})
+    if "command" in override:
+        transport["command"] = override["command"]
+transport["type"] = "stdio"
+entry = {"name": "autoskillit", "enabled": True, "transport": transport}
+for key in ("startup_timeout_sec", "tool_timeout_sec"):
+    if key in transport:
+        entry[key] = transport.pop(key)
+print(json.dumps([entry]))
+""",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+
+
+def _prepare_codex_order_composition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    project_mcp_command: str | None = None,
+) -> tuple[dict[str, object], object]:
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
+
+    state = build_plugin_artifact_state(
+        tmp_path / "home",
+        PluginArtifactStateKind.VALID_CURRENT,
+    )
+    _production_mcp_prefix.cache_clear()
+    monkeypatch.setattr(
+        "autoskillit.core.detect_autoskillit_mcp_prefix",
+        _production_mcp_prefix,
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.project_default_plugin_authority",
+        _production_project_default_plugin_authority,
+    )
+    monkeypatch.setattr(Path, "home", lambda: state.home)
+    monkeypatch.setenv("HOME", str(state.home))
+    monkeypatch.setenv("MCP_CLIENT_BACKEND", "codex")
+
+    source_home = state.home / ".codex"
+    source_home.mkdir(parents=True)
+    (source_home / "config.toml").write_text(
+        'cli_auth_credentials_store = "keyring"\n',
+        encoding="utf-8",
+    )
+    project_dir = state.home / "project"
+    project_config = project_dir / ".codex" / "config.toml"
+    project_config.parent.mkdir(parents=True)
+    project_toml = 'sqlite_home = "/project-level-conflict"\n'
+    if project_mcp_command is not None:
+        project_toml += f'\n[mcp_servers.autoskillit]\ncommand = "{project_mcp_command}"\n'
+    project_config.write_text(project_toml, encoding="utf-8")
+
+    executable = tmp_path / "bin" / "codex"
+    executable.parent.mkdir(exist_ok=True)
+    _write_codex_mcp_probe_executable(executable)
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(executable))
+    monkeypatch.setattr(
+        "autoskillit.execution.backends.codex.default_log_dir",
+        lambda: tmp_path / "logs",
+    )
+
+    backend = CodexBackend(source_codex_home=source_home)
+    catalog = DefaultSkillResolver().list_effective(
+        project_dir,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    compilation = compile_session_skill_catalog(catalog, backend)
+    captured: dict[str, object] = {
+        "events": [],
+        "pre_launch_dirs": [],
+        "process_calls": [],
+        "projection_roots": [],
+        "validation_errors": [],
+    }
+
+    original_ensure_pre_launch = CodexBackend.ensure_pre_launch
+
+    def ensure_pre_launch(self, **kwargs):  # type: ignore[no-untyped-def]
+        session_dir = kwargs.get("session_dir")
+        if session_dir is not None:
+            cast(list[Path], captured["pre_launch_dirs"]).append(Path(session_dir))
+        return original_ensure_pre_launch(self, **kwargs)
+
+    monkeypatch.setattr(CodexBackend, "ensure_pre_launch", ensure_pre_launch)
+    original_validate = CodexBackend.validate_interactive_invocation
+
+    def validate_interactive_invocation(self, spec):  # type: ignore[no-untyped-def]
+        cast(list[str], captured["events"]).append("validated")
+        captured["spec"] = spec
+        generated_home = Path(spec.env["CODEX_HOME"])
+        captured["config_text"] = (generated_home / "config.toml").read_text()
+        captured["config"] = tomllib.loads(cast(str, captured["config_text"]))
+        errors = original_validate(self, spec)
+        cast(list[list[str]], captured["validation_errors"]).append(errors)
+        return errors
+
+    monkeypatch.setattr(
+        CodexBackend,
+        "validate_interactive_invocation",
+        validate_interactive_invocation,
+    )
+
+    class _CapturingAuthority:
+        def __init__(self, delegate: object) -> None:
+            self._delegate = delegate
+
+        def acquire_launch_binding(self, **kwargs):  # type: ignore[no-untyped-def]
+            binding = self._delegate.acquire_launch_binding(**kwargs)  # type: ignore[attr-defined]
+            cast(list[Path], captured["projection_roots"]).append(binding.identity.managed_path)
+            return binding
+
+    def capture_interactive_authority(**kwargs):  # type: ignore[no-untyped-def]
+        authority, load_mode = _production_interactive_plugin_authority(**kwargs)
+        assert authority is not None
+        return _CapturingAuthority(authority), load_mode
+
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        capture_interactive_authority,
+    )
+
+    def record_final_process(spec, **kwargs):  # type: ignore[no-untyped-def]
+        cast(list[str], captured["events"]).append("spawned")
+        cast(list[tuple[object, dict[str, object]]], captured["process_calls"]).append(
+            (spec, kwargs)
+        )
+        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        record_final_process,
+    )
+
+    def launch() -> None:
+        _launch_cook_session(
+            "composition contract",
+            project_dir=project_dir,
+            required_env=frozenset(),
+            backend=backend,
+            skill_compilation=compilation,
+            launch_id="0123456789abcdef",
+            default_base_branch="main",
+            workspace_temp_dir=None,
+        )
+
+    return captured, launch
+
+
+def test_codex_order_composition_produces_canonical_generated_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import CmdSpec
+
+    captured, launch = _prepare_codex_order_composition(tmp_path, monkeypatch)
+    launch()  # type: ignore[operator]
+
+    assert captured["events"] == ["validated", "spawned"]
+    assert captured["validation_errors"] == [[]]
+    assert len(cast(list[object], captured["process_calls"])) == 1
+    spec = cast(CmdSpec, captured["spec"])
+    generated_home = Path(spec.env["CODEX_HOME"])
+    assert generated_home == generated_home.resolve()
+    assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
+    assert captured["pre_launch_dirs"] == [generated_home]
+
+    assert spec.origin is not None
+    config_overrides = [
+        value for flag, value in spec.origin.kv_flags if flag == CodexFlags.CONFIG_OVERRIDE
+    ]
+    assert config_overrides[-1] == f'sqlite_home="{generated_home}"'
+
+    config = cast(dict[str, object], captured["config"])
+    config_text = cast(str, captured["config_text"])
+    assert config["cli_auth_credentials_store"] == "file"
+    assert config_text.count('cli_auth_credentials_store = "file"') == 1
+    assert all(
+        f'cli_auth_credentials_store = "{value}"' not in config_text
+        for value in ("keyring", "auto", "ephemeral")
+    )
+    mcp = cast(dict[str, object], cast(dict[str, object], config["mcp_servers"])["autoskillit"])
+    assert mcp["command"] == "autoskillit"
+    assert mcp.get("args", []) == []
+    assert isinstance(mcp["env_vars"], list)
+    assert mcp["startup_timeout_sec"] > 0  # type: ignore[operator]
+    assert mcp["tool_timeout_sec"] > 0  # type: ignore[operator]
+
+    add_dirs = [
+        Path(value) for flag, value in spec.origin.variadic_pairs if flag == CodexFlags.ADD_DIR
+    ]
+    assert len(add_dirs) == 1
+    assert add_dirs[0].is_relative_to(generated_home)
+    projection_roots = cast(list[Path], captured["projection_roots"])
+    assert len(projection_roots) == 1
+    assert not add_dirs[0].is_relative_to(projection_roots[0])
+
+
+def test_codex_order_composition_rejects_effective_mcp_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured, launch = _prepare_codex_order_composition(
+        tmp_path,
+        monkeypatch,
+        project_mcp_command="conflicting-command",
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        launch()  # type: ignore[operator]
+
+    assert captured["events"] == ["validated"]
+    assert captured["process_calls"] == []
+    errors = cast(list[list[str]], captured["validation_errors"])
+    assert len(errors) == 1
+    assert any("command does not match final config" in error for error in errors[0])
+    assert "command does not match final config" in capsys.readouterr().err
+
+
+def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import (
+        CmdSpec,
+        CompiledSessionSkillCatalogAuthority,
+        CookSessionHandle,
+        InfraExitCategory,
+        ManagedSessionHome,
+        NamedResume,
+        NoResume,
+        PluginLoadMode,
+        SkillExecutionRole,
+        SkillProjectionContextAuthority,
+        ValidatedAddDir,
+    )
+    from autoskillit.execution import SessionState
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
+
+    events: list[tuple[object, ...]] = []
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "autoskillit-add-dir"
+    skills_dir.mkdir(parents=True)
+    projection_root = tmp_path / "projection"
+    projection_root.mkdir()
+    launch_id = "fedcba9876543210"
+
+    class _LifecycleManager:
+        def cleanup_stale(self) -> None:
+            return None
+
+        @contextmanager
+        def managed_session(
+            self,
+            session_id: str,
+            compilation: CompiledSessionSkillCatalogAuthority,
+            projection_context: SkillProjectionContextAuthority,
+        ):
+            assert projection_context.catalog == compilation.catalog
+            events.append(("managed-enter", session_id))
+            try:
+                yield ManagedSessionHome(
+                    launch_id=session_id,
+                    generated_home=generated_home,
+                    skills_dir=ValidatedAddDir(str(skills_dir)),
+                    pass_fds=(7,),
+                )
+            finally:
+                events.append(("managed-exit", session_id))
+
+    class _LifecycleBinding:
+        def __init__(self) -> None:
+            self.identity = SimpleNamespace(managed_path=projection_root)
+            self.inherited_fds = (5, 7)
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+            events.append(("projection-exit",))
+
+    binding = _LifecycleBinding()
+
+    class _LifecycleAuthority:
+        def acquire_launch_binding(self, **_kwargs):  # type: ignore[no-untyped-def]
+            events.append(("projection-enter",))
+            return binding
+
+    class _LifecycleCodexBackend(CodexBackend):
+        def binary_name(self) -> str:
+            return "true"
+
+        def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
+            return CmdSpec(
+                cmd=("true",),
+                env={
+                    "INITIAL": kwargs.get("initial_prompt") or "",
+                    "RESUME": type(kwargs["resume_spec"]).__name__,
+                },
+                inherited_fds=(3,),
+            )
+
+        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+            events.append(("validated", spec.env["RESUME"]))
+            return []
+
+        @contextmanager
+        def cook_session_context(
+            self,
+            *,
+            session_home: Path,
+            project_dir: Path,
+            launch_id: str,
+            attempt: int,
+            current_resume_spec: object,
+        ):
+            events.append(
+                (
+                    "attempt-enter",
+                    attempt,
+                    current_resume_spec,
+                    session_home,
+                    project_dir,
+                    launch_id,
+                )
+            )
+            try:
+                yield CookSessionHandle(
+                    view_id=f"{launch_id}-{attempt}",
+                    pass_fds=(11,),
+                    _record_spawn=lambda pid, pgid: events.append(("spawn", attempt, pid, pgid)),
+                    _record_reaped=lambda pid, pgid: events.append(("reaped", attempt, pid, pgid)),
+                )
+            finally:
+                events.append(("attempt-exit", attempt, current_resume_spec))
+
+    source_home = tmp_path / "source-codex"
+    source_home.mkdir()
+    backend = _LifecycleCodexBackend(source_codex_home=source_home)
+    catalog = DefaultSkillResolver().list_effective(
+        tmp_path,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    compilation = compile_session_skill_catalog(catalog, backend)
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/true")
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: _LifecycleManager(),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        lambda **_kwargs: (_LifecycleAuthority(), PluginLoadMode.GENERATED_HOME),
+    )
+
+    results = iter(
+        (
+            SimpleNamespace(pid=101, pgid=101, returncode=17),
+            SimpleNamespace(pid=102, pgid=102, returncode=42),
+            SimpleNamespace(pid=103, pgid=103, returncode=0),
+        )
+    )
+
+    def run_attempt(
+        spec: CmdSpec,
+        *,
+        pass_fds: tuple[int, ...],
+        on_spawn,
+        on_reaped,
+        trace,
+        **_kwargs: object,
+    ) -> object:
+        attempt = sum(event[0] == "run" for event in events) + 1
+        events.append(
+            (
+                "run",
+                attempt,
+                spec.env["INITIAL"],
+                spec.env["RESUME"],
+                pass_fds,
+            )
+        )
+        on_spawn(100 + attempt, 100 + attempt)
+        trace.record_spawn()
+        on_reaped(100 + attempt, 100 + attempt)
+        return next(results)
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        run_attempt,
+    )
+    sentinels = iter(("reload-id", None, None))
+
+    def consume_sentinel(_project_dir: Path) -> str | None:
+        value = next(sentinels)
+        events.append(("sentinel", value))
+        return value
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        consume_sentinel,
+    )
+    infra_state = SessionState(
+        session_id="infra-id",
+        pid=102,
+        boot_id="boot",
+        starttime_ticks=1,
+        infra_exit_category=InfraExitCategory.API_ERROR,
+    )
+
+    def read_state(_state_dir: Path) -> SessionState:
+        events.append(("infra-classified", infra_state.infra_exit_category))
+        return infra_state
+
+    monkeypatch.setattr("autoskillit.execution.read_session_state", read_state)
+
+    _launch_cook_session(
+        "lifecycle contract",
+        initial_message="greeting",
+        project_dir=tmp_path,
+        required_env=frozenset(),
+        backend=backend,
+        skill_compilation=compilation,
+        launch_id=launch_id,
+        default_base_branch="main",
+        workspace_temp_dir=None,
+    )
+
+    attempt_enters = [event for event in events if event[0] == "attempt-enter"]
+    assert [event[1] for event in attempt_enters] == [1, 2, 3]
+    assert {event[5] for event in attempt_enters} == {launch_id}
+    assert all(event[3] == generated_home for event in attempt_enters)
+    assert isinstance(attempt_enters[0][2], NoResume)
+    assert [cast(NamedResume, event[2]).session_id for event in attempt_enters[1:]] == [
+        "reload-id",
+        "infra-id",
+    ]
+
+    run_events = [event for event in events if event[0] == "run"]
+    assert [event[2] for event in run_events] == ["greeting", "", ""]
+    assert [event[3] for event in run_events] == ["NoResume", "NamedResume", "NamedResume"]
+    assert [event[4] for event in run_events] == [(3, 7, 5, 11)] * 3
+    assert len([event for event in events if event[0] == "spawn"]) == 3
+    assert len([event for event in events if event[0] == "reaped"]) == 3
+    for attempt in (1, 2, 3):
+        assert events.index(("attempt-enter", *attempt_enters[attempt - 1][1:])) < events.index(
+            next(event for event in events if event[:2] == ("run", attempt))
+        )
+
+    first_exit = events.index(next(event for event in events if event[:2] == ("attempt-exit", 1)))
+    first_sentinel = events.index(("sentinel", "reload-id"))
+    second_exit = events.index(next(event for event in events if event[:2] == ("attempt-exit", 2)))
+    infra_classified = events.index(("infra-classified", InfraExitCategory.API_ERROR))
+    assert first_exit < first_sentinel
+    assert second_exit < infra_classified
+    assert events.index(("managed-enter", launch_id)) < events.index(("run", *run_events[0][1:]))
+    assert events.index(("managed-exit", launch_id)) > events.index(
+        next(event for event in events if event[:2] == ("attempt-exit", 3))
+    )
+    assert events.index(("projection-exit",)) > events.index(("managed-exit", launch_id))
+    assert binding.closed

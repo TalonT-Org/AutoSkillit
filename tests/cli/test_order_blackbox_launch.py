@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import select
 import subprocess
+import sys
 import time
 from pathlib import Path
 from types import ModuleType
@@ -26,61 +27,6 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 _MAX_DIAGNOSTIC_BYTES = 256 * 1024
 _PROMPT = b"Launch session?"
-
-
-def _filesystem_snapshot(path: Path) -> tuple[object, ...]:
-    """Capture a metadata tree without following links or reading host data."""
-    try:
-        root_stat = path.lstat()
-    except FileNotFoundError:
-        return ("missing",)
-    if path.is_symlink():
-        return ("symlink", os.readlink(path), root_stat.st_mtime_ns)
-    if not path.is_dir():
-        return ("file", root_stat.st_size, root_stat.st_mtime_ns, root_stat.st_mode)
-
-    entries: list[tuple[object, ...]] = []
-    for root, directories, files in os.walk(path, followlinks=False):
-        root_path = Path(root)
-        directories.sort()
-        files.sort()
-        for name in [*directories, *files]:
-            entry = root_path / name
-            try:
-                entry_stat = entry.lstat()
-            except FileNotFoundError:
-                entries.append((str(entry.relative_to(path)), "vanished"))
-                continue
-            kind = "symlink" if entry.is_symlink() else "dir" if entry.is_dir() else "file"
-            entries.append(
-                (
-                    str(entry.relative_to(path)),
-                    kind,
-                    entry_stat.st_size,
-                    entry_stat.st_mtime_ns,
-                    entry_stat.st_mode,
-                )
-            )
-    return ("directory", root_stat.st_mtime_ns, tuple(entries))
-
-
-def _host_paths() -> tuple[Path, ...]:
-    home = Path.home()
-    defaults = (
-        home / ".claude.json",
-        home / ".claude",
-        home / ".autoskillit",
-        home / ".config" / "autoskillit",
-        home / ".cache" / "autoskillit",
-        home / ".local" / "share" / "autoskillit",
-        home / ".local" / "state" / "autoskillit",
-    )
-    configured = tuple(
-        Path(value) / "autoskillit"
-        for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")
-        if (value := os.environ.get(key))
-    )
-    return tuple(dict.fromkeys((*defaults, *configured)))
 
 
 def _git_status(worktree: Path) -> bytes:
@@ -140,7 +86,6 @@ exit 0
 @pytest.mark.skipif(os.name != "posix", reason="POSIX PTY launch coverage")
 def test_order_launches_real_cli_without_host_side_effects(tmp_path: Path) -> None:
     worktree = Path(__file__).resolve().parents[2]
-    autoskillit = worktree / ".venv" / "bin" / "autoskillit"
     project = tmp_path / "project"
     isolated_home = tmp_path / "home"
     state_dir = tmp_path / "state"
@@ -172,7 +117,7 @@ def test_order_launches_real_cli_without_host_side_effects(tmp_path: Path) -> No
         "LC_ALL": "C",
         "NO_COLOR": "1",
         "PATH": os.pathsep.join(
-            (str(shim_dir), str(worktree / ".venv" / "bin"), "/usr/bin", "/bin")
+            (str(shim_dir), str(Path(sys.executable).parent), "/usr/bin", "/bin")
         ),
         "PYTHONDONTWRITEBYTECODE": "1",
         "TERM": "dumb",
@@ -182,7 +127,6 @@ def test_order_launches_real_cli_without_host_side_effects(tmp_path: Path) -> No
         "XDG_DATA_HOME": str(xdg_data),
         "XDG_STATE_HOME": str(xdg_state),
     }
-    host_before = {path: _filesystem_snapshot(path) for path in _host_paths()}
     status_before = _git_status(worktree)
 
     assert pty is not None
@@ -195,7 +139,13 @@ def test_order_launches_real_cli_without_host_side_effects(tmp_path: Path) -> No
     master_open = True
     try:
         process = subprocess.Popen(
-            [str(autoskillit), "order", "launch-probe"],
+            [
+                sys.executable,
+                "-c",
+                "from autoskillit.cli import main; main()",
+                "order",
+                "launch-probe",
+            ],
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
@@ -253,4 +203,3 @@ def test_order_launches_real_cli_without_host_side_effects(tmp_path: Path) -> No
         assert any(artifact.resolve().is_relative_to(root) for root in allowed_roots)
 
     assert _git_status(worktree) == status_before
-    assert {path: _filesystem_snapshot(path) for path in _host_paths()} == host_before

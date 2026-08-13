@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests._subprocess_ready import wait_for_subprocess_ready
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -20,11 +20,10 @@ def test_stdio_eof_exits_and_cleans_lifespan_state(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     state_dir.mkdir()
     home_dir.mkdir()
-    env = {
-        **os.environ,
-        "AUTOSKILLIT_STATE_DIR": str(state_dir),
-        "HOME": str(home_dir),
-    }
+    env = production_interpreter_env()
+    env.pop("AUTOSKILLIT_LAUNCH_ID", None)
+    env.pop("AUTOSKILLIT_STATE_ROOT", None)
+    env.update(AUTOSKILLIT_STATE_DIR=str(state_dir), HOME=str(home_dir))
     process = subprocess.Popen(
         [sys.executable, "-m", "autoskillit"],
         stdin=subprocess.PIPE,

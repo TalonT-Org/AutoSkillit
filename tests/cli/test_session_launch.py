@@ -141,8 +141,41 @@ class _BackendLifecycleStub:
 # ---------------------------------------------------------------------------
 
 
+class _FakePopen:
+    def __init__(self, returncode: int = 0, *, pid: int = 4242) -> None:
+        self.pid = pid
+        self.returncode: int | None = None
+        self._final_returncode = returncode
+        self.terminated = False
+        self.killed = False
+
+    def wait(self, timeout: float | None = None) -> int:
+        del timeout
+        self.returncode = self._final_returncode
+        return self._final_returncode
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.returncode = -15
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+
+
+def _popen_from_run(run):  # type: ignore[no-untyped-def]
+    def popen(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        result = run(cmd, **kwargs)
+        return _FakePopen(result.returncode)
+
+    return popen
+
+
 def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Replace subprocess.run with a capturing stub."""
+    """Replace the interactive Popen boundary with a capturing stub."""
     captured: dict = {}
 
     def mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
@@ -162,6 +195,7 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     return captured
 
 
@@ -288,7 +322,7 @@ def test_run_interactive_session_holds_binding_through_reap_and_passes_descripto
         events.append("reaped")
         return type("Result", (), {"returncode": 0})()
 
-    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(run))
     _run_interactive_session(system_prompt="test", backend=backend)
 
     assert captured_kwargs[0]["plugin_binding"] is binding
@@ -324,7 +358,7 @@ def test_run_interactive_session_closes_binding_on_launch_failure(
         def fail_spawn(*_args, **_kwargs):
             raise expected
 
-        monkeypatch.setattr(subprocess, "run", fail_spawn)
+        monkeypatch.setattr(subprocess, "Popen", fail_spawn)
 
     with pytest.raises(RuntimeError) as caught:
         _run_interactive_session(system_prompt="test", backend=backend)
@@ -411,6 +445,60 @@ def test_run_interactive_session_state_root_survives_alongside_extra_env(
     )
     assert captured["env"].get("MY_UNIQUE_KEY") == "MY_VAL"
     assert captured["env"].get(AUTOSKILLIT_STATE_ROOT_ENV_VAR) == str(tmp_path)
+
+
+def test_run_interactive_session_binds_launch_owner_before_wait(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.core import LAUNCH_ID_ENV_VAR
+
+    events: list[tuple[str, object]] = []
+
+    class _Process(_FakePopen):
+        def wait(self, timeout: float | None = None) -> int:
+            events.append(("wait", timeout))
+            return super().wait(timeout)
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: _Process(pid=777))
+    monkeypatch.setattr(
+        "autoskillit.core.bind_session_owner",
+        lambda project_dir, launch_id, pid: events.append(("bind", (project_dir, launch_id, pid))),
+    )
+    backend, _captured_kwargs = _make_capturing_backend()
+
+    _run_interactive_session(
+        system_prompt="test",
+        extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
+        project_dir=tmp_path,
+        backend=backend,
+    )
+
+    assert events == [("bind", (tmp_path, "launch-1", 777)), ("wait", None)]
+
+
+def test_run_interactive_session_reaps_child_when_owner_binding_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.core import LAUNCH_ID_ENV_VAR
+
+    process = _FakePopen(pid=888)
+    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        "autoskillit.core.bind_session_owner",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("bind failed")),
+    )
+    backend, _captured_kwargs = _make_capturing_backend()
+
+    with pytest.raises(RuntimeError, match="bind failed"):
+        _run_interactive_session(
+            system_prompt="test",
+            extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
+            project_dir=tmp_path,
+            backend=backend,
+        )
+
+    assert process.terminated
+    assert process.returncode is not None
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +642,7 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         captured["env"] = kwargs.get("env", {}) or {}
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _run_interactive_session(system_prompt="test", backend=_NoInjectBackend())
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
@@ -619,7 +707,11 @@ def test_binary_name_from_backend_used_in_which(
         return None
 
     monkeypatch.setattr(shutil, "which", tracking_which)
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        _popen_from_run(lambda *a, **kw: type("R", (), {"returncode": 0})()),
+    )
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
     _run_interactive_session(system_prompt="test", backend=_CustomBinaryBackend())
@@ -803,7 +895,7 @@ def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
     def mock_run(cmd, **kwargs):
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _run_interactive_session(system_prompt="sentinel")
     assert build_kwargs[0]["system_prompt"] == "sentinel"
 
@@ -853,7 +945,7 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _run_interactive_session(system_prompt="test", backend=_CodexLikeBackend())
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
@@ -1099,7 +1191,7 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
@@ -1142,7 +1234,7 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
@@ -1187,7 +1279,7 @@ def test_cross_validation_contract_all_flags_known(
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
@@ -1273,7 +1365,7 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
         call_sequence.append("subprocess")
         return type("Result", (), {"returncode": 0})()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _run_interactive_session(system_prompt="test", backend=_CodexBackendStub())
     assert call_sequence == ["pre_launch", "subprocess"], (
         f"ensure_pre_launch() must be called before subprocess.run, got: {call_sequence}"
@@ -1321,7 +1413,7 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
     def _must_not_call(*a, **kw):
         raise AssertionError("subprocess.run must not be called")
 
-    monkeypatch.setattr(subprocess, "run", _must_not_call)
+    monkeypatch.setattr(subprocess, "Popen", _must_not_call)
     with pytest.raises(SystemExit, match="1"):
         _run_interactive_session(system_prompt="test", backend=_FailingCodexBackend())
 

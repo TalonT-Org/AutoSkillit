@@ -37,8 +37,8 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
-    """Every var in CODEX_MCP_ENV_FORWARD_VARS must be injected by Codex cmd builders."""
-    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, OutputFormat
+    """Every non-launch-scoped forward var is injected by Codex command builders."""
+    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, LAUNCH_ID_ENV_VAR, OutputFormat
     from autoskillit.execution.backends.codex import CodexBackend
 
     backend = CodexBackend()
@@ -57,7 +57,7 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
             cwd="/work",
             completion_marker="%%DONE%%",
         )
-    for var in sorted(CODEX_MCP_ENV_FORWARD_VARS):
+    for var in sorted(CODEX_MCP_ENV_FORWARD_VARS - {LAUNCH_ID_ENV_VAR}):
         assert var in skill_spec.env, (
             f"{var} in CODEX_MCP_ENV_FORWARD_VARS but missing from build_skill_session_cmd env"
         )

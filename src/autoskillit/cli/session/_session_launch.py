@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, NoReturn
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
+    LAUNCH_ID_ENV_VAR,
     NamedResume,
     NoResume,
     SkillContractError,
@@ -312,10 +313,21 @@ def _run_interactive_session(
                     "ERROR: interactive executable changed after capability probing\n"
                 )
                 raise SystemExit(1)
+
+            def _record_spawn(pid: int, pgid: int) -> None:
+                attempt_handle.record_spawn(pid, pgid)
+                launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
+                if launch_id is not None:
+                    if not launch_id:
+                        raise ValueError(f"{LAUNCH_ID_ENV_VAR} must be nonempty")
+                    from autoskillit.core import bind_session_owner
+
+                    bind_session_owner(_project_dir, launch_id, pid)
+
             managed_result = run_cook_attempt(
                 spec,
                 pass_fds=pass_fds,
-                on_spawn=attempt_handle.record_spawn,
+                on_spawn=_record_spawn,
                 on_reaped=attempt_handle.record_reaped,
                 trace=startup_trace,
                 observer=None,
@@ -361,14 +373,35 @@ def _run_interactive_session(
                     "ERROR: interactive executable changed after capability probing\n"
                 )
                 raise SystemExit(1)
+            cmd = [*spec.cmd]
             with terminal_guard():
-                raw_result = subprocess.run(
-                    [*spec.cmd],
+                process = subprocess.Popen(
+                    cmd,
                     env=spec.env,
                     cwd=str(executable.cwd),
                     pass_fds=spec.inherited_fds,
                 )
-        returncode = raw_result.returncode
+                try:
+                    launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
+                    if launch_id is not None:
+                        if not launch_id:
+                            raise ValueError(f"{LAUNCH_ID_ENV_VAR} must be nonempty")
+                        from autoskillit.core import bind_session_owner
+
+                        bind_session_owner(_project_dir, launch_id, process.pid)
+                    returncode = process.wait()
+                except BaseException:
+                    try:
+                        if process.poll() is None:
+                            process.terminate()
+                        try:
+                            process.wait(timeout=5.0)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5.0)
+                    except BaseException:
+                        pass
+                    raise
     reload_session_id = consume_reload_sentinel(_project_dir)
     if reload_session_id is not None:
         return reload_session_id

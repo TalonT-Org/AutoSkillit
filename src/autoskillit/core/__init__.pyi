@@ -286,6 +286,7 @@ from .runtime.session_provenance import (
     read_provenance_for_session as read_provenance_for_session,
 )
 from .runtime.session_provenance import write_provenance_record as write_provenance_record
+from .runtime.session_registry import bind_session_owner as bind_session_owner
 from .runtime.session_registry import bridge_claude_session_id as bridge_claude_session_id
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path

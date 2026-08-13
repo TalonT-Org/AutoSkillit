@@ -426,7 +426,17 @@ def test_interactive_session_reload_uses_named_resume(
 ) -> None:
     _write_sentinel(tmp_path, "isess-001")
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        lambda *a, **kw: SimpleNamespace(
+            pid=123,
+            wait=lambda timeout=None: 0,
+            poll=lambda: 0,
+            terminate=lambda: None,
+            kill=lambda: None,
+        ),
+    )
     monkeypatch.setattr("autoskillit.cli.ui._terminal.terminal_guard", _noop_terminal_guard)
     monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
 

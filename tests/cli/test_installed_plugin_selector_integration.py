@@ -273,9 +273,15 @@ def _run_session_launch(
 
     def record_spawn(*args: object, **kwargs: object) -> object:
         spawn_calls.append((args, kwargs))
-        return SimpleNamespace(returncode=0)
+        return SimpleNamespace(
+            pid=123,
+            wait=lambda timeout=None: 0,
+            poll=lambda: 0,
+            terminate=lambda: None,
+            kill=lambda: None,
+        )
 
-    monkeypatch.setattr(subprocess, "run", record_spawn)
+    monkeypatch.setattr(subprocess, "Popen", record_spawn)
     _run_interactive_session(
         system_prompt="selector integration",
         project_dir=state.home / "project",

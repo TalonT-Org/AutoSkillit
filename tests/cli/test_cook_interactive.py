@@ -240,6 +240,7 @@ def _install_harness(
             ("registry", launch_id)
         ),
     )
+    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
     monkeypatch.setattr(
         "autoskillit.cli.session._session_process.run_cook_attempt",
         run_attempt,

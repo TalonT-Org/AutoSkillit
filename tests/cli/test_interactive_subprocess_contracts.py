@@ -290,8 +290,11 @@ def test_terminal_and_lease_ownership_are_not_duplicated_across_pty_layers() -> 
     assert _calls_in(observer_tree, owner="subprocess", attr="Popen") == []
 
 
-def test_unchanged_order_fleet_launch_path_retains_its_separate_run_owner() -> None:
-    launch_source = (CLI_DIR / "session" / "_session_launch.py").read_text(encoding="utf-8")
+def test_order_fleet_launch_path_owns_one_guarded_popen() -> None:
+    launch_path = CLI_DIR / "session" / "_session_launch.py"
+    tree = ast.parse(launch_path.read_text(encoding="utf-8"), filename=str(launch_path))
+    run_interactive = _function(tree, "_run_interactive_session")
 
-    assert "subprocess.run(" in launch_source
-    assert "subprocess.Popen(" not in launch_source
+    assert len(_calls_in(run_interactive, owner="subprocess", attr="Popen")) == 1
+    assert _popen_outside_terminal_guard(run_interactive) == []
+    assert _calls_in(run_interactive, owner="subprocess", attr="run") == []

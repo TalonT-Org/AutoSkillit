@@ -8,16 +8,19 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
+from ._linux_proc import read_boot_id, read_starttime_ticks
 
 __all__ = [
     "registry_path",
     "read_registry",
     "write_registry_entry",
+    "bind_session_owner",
     "bridge_claude_session_id",
 ]
 
@@ -82,6 +85,33 @@ def bridge_claude_session_id(
         return
 
     registry[launch_id]["claude_session_id"] = claude_session_id
+    _atomic_write(path, _fast_dumps(registry))
+
+
+def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> None:
+    """Bind an existing launch row to the exact spawned client process."""
+    path = registry_path(project_dir)
+    try:
+        registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise KeyError(f"unknown launch ID: {launch_id}") from exc
+
+    if launch_id not in registry:
+        raise KeyError(f"unknown launch ID: {launch_id}")
+
+    if not sys.platform.startswith("linux"):
+        return
+
+    boot_id = read_boot_id()
+    starttime_ticks = read_starttime_ticks(owner_pid)
+    if not boot_id or not starttime_ticks:
+        raise RuntimeError(f"unable to capture Linux owner identity for PID {owner_pid}")
+
+    registry[launch_id].update(
+        owner_pid=owner_pid,
+        owner_boot_id=boot_id,
+        owner_starttime_ticks=starttime_ticks,
+    )
     _atomic_write(path, _fast_dumps(registry))
 
 

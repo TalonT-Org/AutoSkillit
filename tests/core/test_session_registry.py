@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.runtime.session_registry import (
+    bind_session_owner,
     bridge_claude_session_id,
     read_registry,
     registry_path,
@@ -62,6 +64,45 @@ def test_bridge_noop_on_missing_launch_id(tmp_path: Path) -> None:
     bridge_claude_session_id(tmp_path, "unknown-id", "claude-uuid-123")
     reg = read_registry(tmp_path)
     assert reg["abc"]["claude_session_id"] is None
+
+
+def test_bind_session_owner_preserves_launch_metadata(tmp_path: Path) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", "recipe")
+    bridge_claude_session_id(tmp_path, "abc", "claude-session")
+
+    bind_session_owner(tmp_path, "abc", os.getpid())
+
+    entry = read_registry(tmp_path)["abc"]
+    assert entry["session_type"] == "cook"
+    assert entry["recipe_name"] == "recipe"
+    assert entry["claude_session_id"] == "claude-session"
+    assert entry["owner_pid"] == os.getpid()
+    assert entry["owner_boot_id"]
+    assert entry["owner_starttime_ticks"] > 0
+
+
+def test_bind_session_owner_rejects_unknown_launch_id(tmp_path: Path) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", None)
+
+    with pytest.raises(KeyError, match="unknown launch ID"):
+        bind_session_owner(tmp_path, "missing", os.getpid())
+
+    assert set(read_registry(tmp_path)) == {"abc"}
+
+
+def test_bind_session_owner_fails_closed_without_linux_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", None)
+    monkeypatch.setattr(
+        "autoskillit.core.runtime.session_registry.read_starttime_ticks",
+        lambda _pid: None,
+    )
+
+    with pytest.raises(RuntimeError, match="unable to capture Linux owner identity"):
+        bind_session_owner(tmp_path, "abc", os.getpid())
+
+    assert "owner_pid" not in read_registry(tmp_path)["abc"]
 
 
 def test_registry_path_in_project_temp(tmp_path: Path) -> None:

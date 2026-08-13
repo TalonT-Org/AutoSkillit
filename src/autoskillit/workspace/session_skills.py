@@ -961,9 +961,9 @@ class DefaultSessionSkillManager:
         )
 
         if backend is not None and backend.capabilities.mcp_config_capable:
-            pre_launch_errors = backend.ensure_pre_launch(session_dir=generated_home)
-            if pre_launch_errors:
-                raise RuntimeError(f"Pre-launch check failed: {'; '.join(pre_launch_errors)}")
+            readiness = backend.ensure_pre_launch(session_dir=generated_home)
+            if readiness.errors:
+                raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
         if explorer_binding_env_factory is not None:
             explorer_binding_env = explorer_binding_env_factory(generated_home)
         if backend is not None:

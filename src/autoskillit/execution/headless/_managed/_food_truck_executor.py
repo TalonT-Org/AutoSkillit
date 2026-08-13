@@ -118,13 +118,14 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         if (
             backend_authority is not None
             and dispatch_backend is not None
+            and dispatch_backend.capabilities.mcp_config_capable
             and backend_authority.kind is not BackendAuthorityKind.GLOBAL
         ):
-            pre_launch_errors = dispatch_backend.ensure_pre_launch()
-            if pre_launch_errors:
+            readiness = dispatch_backend.ensure_pre_launch()
+            if readiness.errors:
                 raise RuntimeError(
                     f"Pre-launch check failed for dispatch backend "
-                    f"{dispatch_backend.name!r}: {'; '.join(pre_launch_errors)}"
+                    f"{dispatch_backend.name!r}: {'; '.join(readiness.errors)}"
                 )
         cfg = self._ctx.config
         model_identity = resolve_model_identity(

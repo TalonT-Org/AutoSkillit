@@ -71,6 +71,7 @@ from autoskillit.core import (
     ObserverStatus,
     OutputFormat,
     PluginLaunchBinding,
+    PreLaunchReadiness,
     ResumeSpec,
     SessionCheckpoint,
     SessionLocator,
@@ -1485,6 +1486,8 @@ class CodexBackend(BackendCmdBuilderBase):
             skill_sigil="$",
             session_dir_persistent=True,
             cook_startup_observer_capable=True,
+            explicit_path_env_var="",
+            cook_exact_binding_probe_required=False,
             supports_model_invocation_gating=False,
             terminal_explorer_capable=True,
             session_scoped_explorer_capable=False,
@@ -2377,9 +2380,8 @@ class CodexBackend(BackendCmdBuilderBase):
         session_dir: Path | None = None,
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
-    ) -> list[str]:
+    ) -> PreLaunchReadiness:
         del executable
-        os.environ[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         try:
             assert self.source_codex_home is not None
             with codex_prelaunch_transaction(
@@ -2389,21 +2391,20 @@ class CodexBackend(BackendCmdBuilderBase):
             ) as config_path:
                 if session_dir is not None:
                     snapshot = config_path.read_bytes()
-                    atomic_write(
-                        Path(session_dir) / "config.toml",
-                        snapshot.decode("utf-8"),
+                    atomic_write(Path(session_dir) / "config.toml", snapshot.decode("utf-8"))
+                    return PreLaunchReadiness(())
+                return PreLaunchReadiness(
+                    tuple(
+                        _validate_global_codex_home(
+                            self.source_codex_home, config_path=config_path
+                        )
                     )
-                    return []
-                return _validate_global_codex_home(
-                    self.source_codex_home,
-                    config_path=config_path,
                 )
         except Exception as exc:
-            logger.error(
-                "codex_prelaunch_transaction_failed",
-                exc_info=True,
+            logger.error("codex_prelaunch_transaction_failed", exc_info=True)
+            return PreLaunchReadiness(
+                (f"Codex pre-launch configuration failed: {type(exc).__name__}: {exc}",)
             )
-            return [f"Codex pre-launch configuration failed: {type(exc).__name__}: {exc}"]
 
     def recover_cook_history(self) -> None:
         CodexSessionStore(log_dir=default_log_dir()).recover()

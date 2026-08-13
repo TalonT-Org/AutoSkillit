@@ -522,10 +522,10 @@ def _register_all(
             backend = get_backend("claude-code")
 
     if backend.capabilities.mcp_config_capable:
-        prelaunch_errors = backend.ensure_pre_launch()
-        if prelaunch_errors:
+        readiness = backend.ensure_pre_launch()
+        if readiness.errors:
             raise RuntimeError(
-                "Backend pre-launch configuration failed: " + "; ".join(prelaunch_errors)
+                "Backend pre-launch configuration failed: " + "; ".join(readiness.errors)
             )
         plugin_ok = None
         codex_status = "ok"

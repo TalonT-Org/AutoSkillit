@@ -7,6 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from autoskillit.core import PreLaunchReadiness
 from autoskillit.fleet.state_types import _RETRY_IDENTITY_FIELDS, DispatchRecord
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -24,7 +25,7 @@ def _mock_backend(name: str = "claude-code", *, food_truck_capable: bool = True)
         project_log_dir=Mock(return_value=Path("/tmp/logs")),
         session_log_path=Mock(return_value=None),
     )
-    backend.ensure_pre_launch.return_value = []
+    backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     backend.build_food_truck_cmd.return_value = Mock(
         cmd=["claude", "--headless"],
         env={},

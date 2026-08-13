@@ -111,6 +111,7 @@ def test_backend_capabilities_field_count():
         "github_api_callable",
         "protected_recipe_delivery_capable",
         "claude_marketplace_tool_prefix_capable",
+        "cook_exact_binding_probe_required",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -133,6 +134,7 @@ def test_backend_capabilities_field_count():
         "patch_format",
         "default_skill_sandbox_mode",
         "skill_sigil",
+        "explicit_path_env_var",
     }
     assert tuple_fields == {"env_denylist_prefixes"}
     assert hook_policy_fields == {"hook_trust_policy"}
@@ -192,6 +194,8 @@ def test_backend_capabilities_field_names_locked():
         "unnegotiated_tool_result_token_limit",
         "protected_recipe_delivery_capable",
         "claude_marketplace_tool_prefix_capable",
+        "cook_exact_binding_probe_required",
+        "explicit_path_env_var",
         "recipe_delivery_budget",
         "hook_trust_policy",
     }
@@ -213,6 +217,8 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.exit_code_is_terminal is False
     assert CLAUDE_CODE_CAPABILITIES.mcp_config_capable is False
     assert CLAUDE_CODE_CAPABILITIES.claude_marketplace_tool_prefix_capable is True
+    assert CLAUDE_CODE_CAPABILITIES.explicit_path_env_var == "CLAUDE_CODE_EXECPATH"
+    assert CLAUDE_CODE_CAPABILITIES.cook_exact_binding_probe_required is True
     assert CLAUDE_CODE_CAPABILITIES.food_truck_capable is True
     assert CLAUDE_CODE_CAPABILITIES.completion_record_types == frozenset({"result"})
     assert CLAUDE_CODE_CAPABILITIES.session_record_types == frozenset({"assistant"})

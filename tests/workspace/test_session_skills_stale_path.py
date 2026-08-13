@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import ClaudeDirectoryConventions, pkg_root
+from autoskillit.core import ClaudeDirectoryConventions, PreLaunchReadiness, pkg_root
 from tests.fakes import adapt_test_skill_semantics
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
@@ -20,7 +20,7 @@ def _codex_backend() -> MagicMock:
     backend.name = "codex"
     backend.capabilities = _CODEX_CAPABILITIES
     backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-    backend.ensure_pre_launch.return_value = []
+    backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     backend.validate_session_layout.return_value = []
     backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
     return backend

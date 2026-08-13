@@ -13,6 +13,7 @@ import autoskillit.workspace.session_skills as session_skills
 from autoskillit.core import (
     ClaudeDirectoryConventions,
     ManagedSessionHome,
+    PreLaunchReadiness,
     RepositoryProfileId,
     SkillContractError,
     SkillExecutionRole,
@@ -43,7 +44,7 @@ def _make_codex_backend() -> MagicMock:
     b.name = "codex"
     b.capabilities = _CODEX_CAPABILITIES
     b.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-    b.ensure_pre_launch.return_value = []
+    b.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     b.validate_session_layout.return_value = []
     b.adapt_skill_semantics.side_effect = CodexBackend().adapt_skill_semantics
     b.exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
@@ -239,9 +240,9 @@ def test_materialization_mints_explorer_binding_between_prelaunch_and_setup(
         }
     }
 
-    def _prelaunch(**_kwargs: object) -> list[str]:
+    def _prelaunch(**_kwargs: object) -> PreLaunchReadiness:
         events.append("prelaunch")
-        return []
+        return PreLaunchReadiness((), {})
 
     def _mint(session_home: Path) -> dict[str, dict[str, str]]:
         assert session_home.is_dir()
@@ -448,7 +449,7 @@ def test_claude_backend_still_uses_dot_claude_layout(make_session_skill_manager)
 
 def test_codex_init_session_calls_ensure_pre_launch(make_session_skill_manager, codex_env) -> None:
     """init_session() must call backend.ensure_pre_launch() when mcp_config_capable is True."""
-    codex_env.backend.ensure_pre_launch.return_value = []
+    codex_env.backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
 
     mgr = make_session_skill_manager()
     skills_dir = _materialize(mgr, "sid", backend=codex_env.backend)
@@ -461,7 +462,9 @@ def test_codex_init_session_raises_when_pre_launch_fails(
     make_session_skill_manager, codex_env
 ) -> None:
     """init_session() must raise RuntimeError when ensure_pre_launch() returns errors."""
-    codex_env.backend.ensure_pre_launch.return_value = ["Failed to ensure MCP registration: err"]
+    codex_env.backend.ensure_pre_launch.return_value = PreLaunchReadiness(
+        ("Failed to ensure MCP registration: err",), {}
+    )
 
     mgr = make_session_skill_manager()
     with pytest.raises(RuntimeError, match="Pre-launch check failed"):

@@ -12,7 +12,6 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
-from packaging.version import Version
 
 from autoskillit.cli._plugin_artifact import (
     interactive_plugin_authority as _production_interactive_plugin_authority,
@@ -21,11 +20,15 @@ from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
     _run_interactive_session,
 )
-from autoskillit.core import BackendConventions, ClaudeFlags, HookTrustPolicy
+from autoskillit.core import (
+    BackendConventions,
+    ClaudeFlags,
+    HookTrustPolicy,
+    PreLaunchReadiness,
+)
 from autoskillit.core._plugin_ids import (
     detect_autoskillit_mcp_prefix as _production_mcp_prefix,
 )
-from autoskillit.execution.backends import claude as _claude_mod
 from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.workspace import (
     project_default_plugin_authority as _production_project_default_plugin_authority,
@@ -34,23 +37,6 @@ from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
     build_plugin_artifact_state,
 )
-
-
-@pytest.fixture(autouse=True)
-def _pre_freeze_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pre-freeze the Claude attestation env so the executable binding capture
-    and the final cmd build see identical values.
-
-    Without this, ensure_pre_launch() sets _FROZEN_ATTESTATION_ENV between the
-    two build_interactive_cmd calls, causing env mismatch errors. The mock
-    subprocess returns version 2.1.197 (see _capture_subprocess).
-    """
-    monkeypatch.setattr(
-        _claude_mod,
-        "_FROZEN_ATTESTATION_ENV",
-        _claude_mod._claude_host_attestation_env(Version("2.1.197")),
-    )
-
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -119,9 +105,11 @@ class _BackendLifecycleStub:
     def validate_interactive_invocation(self, spec):
         return []
 
-    def ensure_pre_launch(self, *, session_dir: Path | None = None, executable=None) -> list[str]:
+    def ensure_pre_launch(
+        self, *, session_dir: Path | None = None, executable=None
+    ) -> PreLaunchReadiness:
         del executable
-        return []
+        return PreLaunchReadiness((), {})
 
     def recover_cook_history(self) -> None:
         return None
@@ -195,7 +183,7 @@ def _stub_codex_pre_launch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         CodexBackend,
         "ensure_pre_launch",
-        lambda _self, *, session_dir=None, executable=None: [],
+        lambda _self, *, session_dir=None, executable=None: PreLaunchReadiness((), {}),
     )
 
 
@@ -1273,10 +1261,10 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
 
         def ensure_pre_launch(
             self, *, session_dir: Path | None = None, executable=None
-        ) -> list[str]:
+        ) -> PreLaunchReadiness:
             del executable
             call_sequence.append("pre_launch")
-            return []
+            return PreLaunchReadiness((), {})
 
         def build_interactive_cmd(self, **kwargs):
             return CmdSpec(cmd=("codex",), env={})
@@ -1323,9 +1311,9 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
 
         def ensure_pre_launch(
             self, *, session_dir: Path | None = None, executable=None
-        ) -> list[str]:
+        ) -> PreLaunchReadiness:
             del executable
-            return ["Failed to ensure MCP registration: some error"]
+            return PreLaunchReadiness(("Failed to ensure MCP registration: some error",), {})
 
         def build_interactive_cmd(self, **kwargs):
             return CmdSpec(cmd=("codex",), env={})
@@ -1403,6 +1391,64 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
     assert result is None
     assert events == ["validated", "spawned"]
     trace.record_attempt_anchor.assert_called_once_with(attempt=1, view_id="launch-id-1")
+
+
+def test_managed_launch_rejects_executable_drift_before_spawn(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    launch_kwargs: dict[str, object],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.core import (
+        CLAUDE_CODE_CAPABILITIES,
+        CmdSpec,
+        ManagedSessionHome,
+        ValidatedAddDir,
+    )
+
+    class _ManagedBackend(_BackendLifecycleStub):
+        @property
+        def capabilities(self):
+            return CLAUDE_CODE_CAPABILITIES
+
+        def binary_name(self) -> str:
+            return "claude"
+
+        def build_interactive_cmd(self, **kwargs):
+            executable = kwargs.get("executable")
+            command = str(executable.path) if executable is not None else "claude"
+            return CmdSpec(cmd=(command,), env={})
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        lambda *_args, **_kwargs: pytest.fail("drifted executable must not spawn"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_launch.executable_binding_matches_current_file",
+        lambda _binding: False,
+    )
+    generated_home = tmp_path / "generated"
+    generated_home.mkdir()
+    managed_home = ManagedSessionHome(
+        launch_id="launch-id",
+        generated_home=generated_home,
+        skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
+        pass_fds=(),
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        _run_interactive_session(
+            system_prompt="test",
+            backend=_ManagedBackend(),
+            project_dir=tmp_path,
+            skill_compilation=launch_kwargs["skill_compilation"],
+            managed_home=managed_home,
+            retained_projection_binding=MagicMock(inherited_fds=()),
+            startup_trace=MagicMock(),
+            attempt=1,
+        )
+
+    assert "interactive executable changed after capability probing" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

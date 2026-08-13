@@ -47,10 +47,12 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "supports_task_lifecycle_events": "REQUIRED",
     "claude_marketplace_tool_prefix_capable": "REQUIRED",
     "completion_record_types": "REQUIRED",
+    "cook_exact_binding_probe_required": "OPTIONAL",
     "default_skill_sandbox_mode": "REQUIRED",
     "unnegotiated_tool_result_token_limit": "REQUIRED",
     "env_denylist_prefixes": "REQUIRED",
     "exit_code_is_terminal": "REQUIRED",
+    "explicit_path_env_var": "OPTIONAL",
     "food_truck_capable": "OPTIONAL",
     "github_api_callable": "OPTIONAL",
     "has_unguarded_filesystem_access": "REQUIRED",
@@ -124,6 +126,17 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             self.backend.capabilities.claude_marketplace_tool_prefix_capable,
             bool,
         )
+
+    def test_cook_exact_binding_probe_capability_is_bool(self) -> None:
+        """BackendCapabilities.cook_exact_binding_probe_required — fresh-cook gate."""
+        assert isinstance(
+            self.backend.capabilities.cook_exact_binding_probe_required,
+            bool,
+        )
+
+    def test_explicit_path_env_var_capability_is_str(self) -> None:
+        """BackendCapabilities.explicit_path_env_var — cold-launch selector coverage."""
+        assert isinstance(self.backend.capabilities.explicit_path_env_var, str)
 
     def test_capabilities_returns_backend_capabilities(self) -> None:
         """BackendCapabilities contract — exercises multiple fields.

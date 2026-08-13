@@ -87,6 +87,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         CookSessionHandle,
         ExecutableLaunchBinding,
         ExecutionIdentity,
+        PreLaunchReadiness,
         ResumeSpec,
     )
 
@@ -119,7 +120,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         "session_dir": Path | None,
         "executable": ExecutableLaunchBinding | None,
         "plugin_dir": Path | None,
-        "return": list[str],
+        "return": PreLaunchReadiness,
     }
 
     recovery = inspect.signature(CodingAgentBackend.recover_cook_history)
@@ -195,6 +196,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         NoResume,
         OutputFormat,
         PluginLaunchBinding,
+        PreLaunchReadiness,
         ResultParser,
         ResumeSpec,
         SessionLocator,
@@ -303,8 +305,8 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         def list_plugins(self) -> list[dict[str, Any]]: ...
 
-        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
-            return []
+        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
 
         def recover_cook_history(self) -> None:
             return None

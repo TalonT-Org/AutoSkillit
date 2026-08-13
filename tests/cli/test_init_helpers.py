@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.cli._init_helpers import _is_plugin_installed
+from autoskillit.core import PreLaunchReadiness
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -190,7 +191,7 @@ class TestRegisterAllBackendDispatch:
         mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
         mock_backend.capabilities.hook_config_format = "toml_nested"
         mock_backend.ensure_pre_launch.side_effect = lambda: (
-            codex_calls.append("ensure_pre_launch") or []
+            codex_calls.append("ensure_pre_launch") or PreLaunchReadiness((), {})
         )
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
@@ -336,7 +337,9 @@ class TestRegisterAllCodexConfigTransaction:
         mock_backend.capabilities.mcp_config_capable = backend_name == "codex"
         mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
         mock_backend.capabilities.hook_config_format = "toml_nested"
-        mock_backend.ensure_pre_launch.side_effect = lambda: transaction_calls.append({}) or []
+        mock_backend.ensure_pre_launch.side_effect = lambda: (
+            transaction_calls.append({}) or PreLaunchReadiness((), {})
+        )
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
@@ -412,7 +415,7 @@ class TestRegisterAllBackendBranching:
         with (
             patch(
                 "autoskillit.execution.backends.codex.CodexBackend.ensure_pre_launch",
-                return_value=[],
+                return_value=PreLaunchReadiness((), {}),
             ) as mock_prelaunch,
             patch("autoskillit.execution.ensure_codex_mcp_registered") as mock_codex,
         ):
@@ -445,7 +448,7 @@ class TestRegisterAllBackendBranching:
         with (
             patch(
                 "autoskillit.execution.backends.codex.CodexBackend.ensure_pre_launch",
-                return_value=[],
+                return_value=PreLaunchReadiness((), {}),
             ),
             patch.object(_hooks_mod, "sync_hooks_to_settings") as mock_sync,
         ):
@@ -546,7 +549,7 @@ class TestRegisterAllCodexMcpRegistration:
         codex_mock = MagicMock(return_value=True)
         monkeypatch.setattr("autoskillit.execution.ensure_codex_mcp_registered", codex_mock)
         prelaunch_mock = mock_backend.ensure_pre_launch
-        prelaunch_mock.return_value = []
+        prelaunch_mock.return_value = PreLaunchReadiness((), {})
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
         return codex_mock, prelaunch_mock

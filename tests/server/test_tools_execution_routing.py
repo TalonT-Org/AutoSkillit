@@ -785,7 +785,7 @@ async def test_process_issues_l2_parent_executes_session_child_on_each_backend(
     import json
     from unittest.mock import MagicMock
 
-    from autoskillit.core import CodingAgentBackend, SkillExecutionRole
+    from autoskillit.core import CodingAgentBackend, PreLaunchReadiness, SkillExecutionRole
     from autoskillit.execution.backends import get_backend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
@@ -808,7 +808,7 @@ async def test_process_issues_l2_parent_executes_session_child_on_each_backend(
     backend.name = concrete_backend.name
     backend.capabilities = concrete_backend.capabilities
     backend.conventions = concrete_backend.conventions
-    backend.ensure_pre_launch.return_value = []
+    backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     backend.validate_session_layout.return_value = []
     backend.session_locator.return_value.project_log_dir.return_value = None
     manager = MagicMock(

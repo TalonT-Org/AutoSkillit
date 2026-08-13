@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.core import (
     BackendConventions,
+    PreLaunchReadiness,
     SkillExecutionRole,
     SkillSource,
 )
@@ -38,7 +39,7 @@ def _build_mock_backend(*, terminal: bool = False, session_scoped: bool = False)
     backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
     backend.exploration_dispatch_renderer = MagicMock()
     backend.setup_session_dir = MagicMock()
-    backend.ensure_pre_launch = MagicMock(return_value=[])
+    backend.ensure_pre_launch = MagicMock(return_value=PreLaunchReadiness((), {}))
     return backend
 
 

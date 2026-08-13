@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -283,7 +284,7 @@ async def test_backend_registration_dispatches_through_prelaunch() -> None:
     import autoskillit.server._lifespan as lifespan
 
     backend = MagicMock()
-    backend.ensure_pre_launch.return_value = []
+    backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
 
     await lifespan._run_backend_mcp_registration_async(backend)
 

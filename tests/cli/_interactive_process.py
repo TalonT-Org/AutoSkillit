@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock
+
+_ABSENT_SYNTHETIC_PID = 2_147_483_647
 
 
 class InteractiveProcessStub:
     def __init__(self, returncode: int = 0, *, pid: int | None = None) -> None:
-        self.pid = os.getpid() if pid is None else pid
+        self.pid = _ABSENT_SYNTHETIC_PID if pid is None else pid
         self.returncode: int | None = None
         self._final_returncode: int = returncode
         self.terminated = False

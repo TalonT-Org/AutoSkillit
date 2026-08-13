@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.cli.session._session_launch import (
+    _exit_launch_preparation_error,
     prepare_interactive_launch,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
@@ -391,9 +392,7 @@ def cook(
                             generated_home=managed_home.generated_home,
                         )
                     except ValueError as exc:
-                        for line in str(exc).splitlines() or [str(exc)]:
-                            sys.stderr.write(f"ERROR: {line}\n")
-                        raise SystemExit(1) from exc
+                        _exit_launch_preparation_error(exc)
                     built_spec = prepared.spec
                 else:
                     built_spec = backend.build_interactive_cmd(

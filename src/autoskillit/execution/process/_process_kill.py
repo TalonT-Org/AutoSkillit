@@ -516,9 +516,7 @@ class OwnedProcessGroup:
                         access_denied_pids=(self.pid,), observation_complete=False
                     )
                 )
-            returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)
-        else:
-            returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)
+        returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)
         if returncode is None:
             try:
                 self.process.kill()

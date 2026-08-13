@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import psutil
 import pytest
@@ -62,11 +62,14 @@ class TestOnPidResolvedTiming:
 
         mock_proc = MagicMock()
         mock_proc.pid = 0
+        mock_owner = MagicMock()
+        mock_owner.pid = 0
+        mock_owner.process = mock_proc
+        mock_owner.pgid = 0
 
         with patch(
-            "autoskillit.execution.process.anyio.open_process",
-            new_callable=AsyncMock,
-            return_value=mock_proc,
+            "autoskillit.execution.process.spawn_owned_process",
+            return_value=mock_owner,
         ):
             try:
                 await run_managed_async(

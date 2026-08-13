@@ -69,6 +69,7 @@ from autoskillit.hooks._capture_lifecycle import (
 )
 
 capture_authority = importlib.import_module(capture_artifacts.open_project_anchor.__module__)
+capture_process = importlib.import_module(capture_artifacts._spawn_bash.__module__)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -1026,11 +1027,6 @@ def test_direct_control_flow_exception_settles_and_reraises(
     )
     monkeypatch.setattr(
         capture_artifacts,
-        "_own_spawned_process",
-        lambda spawned, *, capture_output: spawned,
-    )
-    monkeypatch.setattr(
-        capture_artifacts,
         "_settle_failed_capture",
         lambda supplied: settled.append(supplied),
     )
@@ -1377,6 +1373,11 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
         monkeypatch.setenv(name, f"hostile-{name}")
     monkeypatch.setenv("PHASE4_UNRELATED_ENV", "preserved")
     monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(
+        capture_process,
+        "_finish_owned_spawn",
+        lambda process, **_kwargs: process,
+    )
     capture_artifacts._spawn_bash(
         capture_artifacts._resolve_bash(),
         "printf safe",
@@ -1435,6 +1436,11 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
     monkeypatch.setattr(capture_artifacts.os, "close", record_close)
     monkeypatch.setattr(capture_artifacts.os, "fchdir", record_fchdir)
     monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(
+        capture_process,
+        "_finish_owned_spawn",
+        lambda spawned, **_kwargs: spawned,
+    )
 
     if spawn_errno is None:
         assert (
@@ -1506,9 +1512,10 @@ def test_spawn_bash_does_not_leak_inherited_cwd_fd_to_child(
         shlex.join([sys.executable, "-c", script]),
         capture_output=capture_output,
     )
-    stdout, _stderr = process.communicate(timeout=10)
+    stdout = process.stdout.read() if process.stdout is not None else b""
+    returncode = process.wait()
 
-    assert process.returncode == 0
+    assert returncode == 0
     result = stdout.decode().strip() if capture_output else result_path.read_text()
     assert result == ""
 
@@ -1708,6 +1715,11 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
     monkeypatch.setattr(capture_artifacts.os, "close", record_close)
     monkeypatch.setattr(capture_artifacts.os, "fchdir", fail_restore)
     monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(
+        capture_process,
+        "_finish_owned_spawn",
+        lambda spawned, **_kwargs: spawned,
+    )
 
     try:
         with pytest.raises(CaptureSetupError, match="cannot restore runner cwd"):

@@ -37,6 +37,7 @@ def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
                 {
                     "pid": r.pid,
                     "action": r.action,
+                    "observation_complete": r.observation_complete,
                     "survivor_pids": list(r.survivor_pids),
                     "access_denied_pids": list(r.access_denied_pids),
                 }
@@ -78,6 +79,8 @@ def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
                 parts.append(f"survivors: {', '.join(str(p) for p in r.survivor_pids)}")
             if r.access_denied_pids:
                 parts.append(f"access denied: {', '.join(str(p) for p in r.access_denied_pids)}")
+            if not r.observation_complete:
+                parts.append("observation incomplete")
             print(f"incomplete pid {r.pid} ({'; '.join(parts)})")
         else:
             assert_never(r.action)

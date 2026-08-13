@@ -1995,7 +1995,7 @@ class TestGroupCMigration:
             "terminal_task_ids",
             "schedule_wakeup_violation",
             "completion_ceiling_expired",
-            "process_group_id",
+            "process_observation_snapshot",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):

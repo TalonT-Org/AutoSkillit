@@ -18,7 +18,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends import ClaudeStreamParser
-from autoskillit.execution.process import run_managed_async
+from autoskillit.execution.process import run_managed_async, spawn_owned_process
 from autoskillit.execution.process._process_jsonl import EventCursor
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
@@ -356,7 +356,8 @@ def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation
     assert acc.stdout_cursor is None
     assert acc.channel_b_cursor is None
     assert not acc.completion_candidate_event.is_set()
-    assert acc.process_group_id == 0
+    assert acc.process_observation_snapshot.process_identities == ()
+    assert acc.process_observation_snapshot.observation_complete is True
 
     signals = acc.to_race_signals()
     assert signals.lifecycle_observation_complete is False
@@ -364,7 +365,7 @@ def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation
     assert signals.terminal_task_ids == ()
     assert signals.schedule_wakeup_violation is False
     assert signals.completion_ceiling_expired is False
-    assert signals.process_group_id == 0
+    assert signals.process_observation_snapshot == acc.process_observation_snapshot
 
 
 def test_path_fold_includes_unterminated_final_record(tmp_path: Path) -> None:
@@ -616,14 +617,17 @@ class TestExitSnapshot:
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
-        async with await anyio.open_process(
-            [sys.executable, "-c", "import time; time.sleep(0.2)"],
-            start_new_session=True,
-        ) as proc:
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(_watch_process, proc, acc, trigger)
-                await trigger.wait()
-                tg.cancel_scope.cancel()
+        owner = await anyio.to_thread.run_sync(
+            lambda: spawn_owned_process(
+                [sys.executable, "-c", "import time; time.sleep(0.2)"],
+                start_new_session=True,
+            )
+        )
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_watch_process, owner, acc, trigger)
+            await trigger.wait()
+            tg.cancel_scope.cancel()
+        await anyio.to_thread.run_sync(owner.settle)
 
         # exit_snapshot may be None if read_proc_snapshot failed (race — process gone)
         # but the attribute must exist (not missing)
@@ -638,14 +642,17 @@ class TestExitSnapshot:
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
-        async with await anyio.open_process(
-            [sys.executable, "-c", "pass"],  # instant exit — maximises snapshot chance
-            start_new_session=True,
-        ) as proc:
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(_watch_process, proc, acc, trigger)
-                await trigger.wait()
-                tg.cancel_scope.cancel()
+        owner = await anyio.to_thread.run_sync(
+            lambda: spawn_owned_process(
+                [sys.executable, "-c", "pass"],
+                start_new_session=True,
+            )
+        )
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_watch_process, owner, acc, trigger)
+            await trigger.wait()
+            tg.cancel_scope.cancel()
+        await anyio.to_thread.run_sync(owner.settle)
 
         assert acc.exit_snapshot is None or acc.exit_snapshot.get("event") == "exit_snapshot"
 
@@ -663,15 +670,18 @@ class TestProcessExitedEvent:
         acc = RaceAccumulator()
         trigger = anyio.Event()
 
-        proc = await anyio.open_process(
-            [sys.executable, "-c", "import time; time.sleep(0.2)"],
-            start_new_session=True,
+        owner = await anyio.to_thread.run_sync(
+            lambda: spawn_owned_process(
+                [sys.executable, "-c", "import time; time.sleep(0.2)"],
+                start_new_session=True,
+            )
         )
 
         async with anyio.create_task_group() as tg:
-            tg.start_soon(_watch_process, proc, acc, trigger)
+            tg.start_soon(_watch_process, owner, acc, trigger)
             await trigger.wait()
             tg.cancel_scope.cancel()
+        await anyio.to_thread.run_sync(owner.settle)
 
         assert acc.process_exited is True
         assert acc.process_exited_event.is_set() is True
@@ -686,17 +696,20 @@ class TestProcessExitedEvent:
         acc = RaceAccumulator()
         trigger = anyio.Event()
 
-        proc = await anyio.open_process(
-            [sys.executable, "-c", "import time; time.sleep(0.1)"],
-            start_new_session=True,
+        owner = await anyio.to_thread.run_sync(
+            lambda: spawn_owned_process(
+                [sys.executable, "-c", "import time; time.sleep(0.1)"],
+                start_new_session=True,
+            )
         )
 
         async with anyio.create_task_group() as tg:
-            tg.start_soon(_watch_process, proc, acc, trigger)
+            tg.start_soon(_watch_process, owner, acc, trigger)
             await trigger.wait()
             # trigger just fired — process_exited_event must already be set
             event_was_set = acc.process_exited_event.is_set()
             tg.cancel_scope.cancel()
+        await anyio.to_thread.run_sync(owner.settle)
 
         assert event_was_set, "process_exited_event was not set before trigger fired"
 

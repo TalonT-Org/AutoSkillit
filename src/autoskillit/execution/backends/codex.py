@@ -8,7 +8,6 @@ import math
 import os
 import selectors
 import shutil
-import signal
 import sqlite3
 import stat
 import subprocess
@@ -525,21 +524,17 @@ class _BoundedProbeResult:
     failure: str | None = None
 
 
-def _terminate_probe(process: subprocess.Popen[bytes]) -> None:
+def _terminate_probe(owner: object) -> None:
+    from autoskillit.execution.process._process_kill import OwnedProcessGroup
+
+    if not isinstance(owner, OwnedProcessGroup):
+        raise TypeError("Codex probe cleanup requires its spawn-bound owner")
     try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except OSError:
-        try:
-            process.kill()
-        except OSError:
-            pass
-    try:
-        process.wait(timeout=2)
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-    for stream in (process.stdout, process.stderr):
-        if stream is not None:
-            stream.close()
+        owner.settle(timeout=2)
+    finally:
+        for stream in (owner.process.stdout, owner.process.stderr):
+            if stream is not None:
+                stream.close()
 
 
 def _run_bounded_codex_probe(
@@ -548,9 +543,10 @@ def _run_bounded_codex_probe(
     env: Mapping[str, str],
     cwd: str,
 ) -> _BoundedProbeResult:
-    """Run a normal Codex config-load probe with hard time and byte bounds."""
     try:
-        process = subprocess.Popen(
+        from autoskillit.execution.process._process_kill import spawn_owned_process
+
+        owner = spawn_owned_process(
             command,
             cwd=cwd,
             env=dict(env),
@@ -559,6 +555,7 @@ def _run_bounded_codex_probe(
             stderr=subprocess.PIPE,
             start_new_session=True,
         )
+        process = owner.process
     except OSError as exc:
         return _BoundedProbeResult(
             returncode=None,
@@ -577,10 +574,10 @@ def _run_bounded_codex_probe(
         selector = selector_factory()
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-        while selector.get_map() or process.poll() is None:
+        while selector.get_map() or owner.observe_exit() is None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                _terminate_probe(process)
+                _terminate_probe(owner)
                 return _BoundedProbeResult(
                     returncode=None,
                     stdout=bytes(output["stdout"]),
@@ -607,24 +604,29 @@ def _run_bounded_codex_probe(
                 target.extend(chunk)
                 if len(target) > _CODEX_PROBE_STREAM_LIMIT:
                     del target[_CODEX_PROBE_STREAM_LIMIT:]
-                    _terminate_probe(process)
+                    _terminate_probe(owner)
                     return _BoundedProbeResult(
                         returncode=None,
                         stdout=bytes(output["stdout"]),
                         stderr=bytes(output["stderr"]),
                         failure=f"{stream_name} exceeded {_CODEX_PROBE_STREAM_LIMIT} bytes",
                     )
-        returncode = process.wait(timeout=max(0.0, deadline - time.monotonic()))
+        returncode, _cleanup = owner.settle(timeout=max(0.0, deadline - time.monotonic()))
     except subprocess.TimeoutExpired:
-        _terminate_probe(process)
+        _terminate_probe(owner)
         return _BoundedProbeResult(
             returncode=None,
             stdout=bytes(output["stdout"]),
             stderr=bytes(output["stderr"]),
             failure="timed out while reaping",
         )
-    except BaseException:
-        _terminate_probe(process)
+    except BaseException as exc:
+        if process.returncode is None:
+            try:
+                _terminate_probe(owner)
+            except BaseException as cleanup_exc:
+                logger.error("codex_probe_cleanup_failed", exc_info=True)
+                exc.add_note(f"Codex probe cleanup failed: {type(cleanup_exc).__name__}")
         raise
     finally:
         if selector is not None:
@@ -1910,10 +1912,9 @@ class CodexBackend(BackendCmdBuilderBase):
                 builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
         builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
         if isinstance(resume_spec, NoResume):
-            # Interactive TUI sessions keep full scope-discipline coverage deliberately:
-            # the task is unknown at launch (manual $rectify/$resolve-review runs also
-            # over-size), and there is no dispatch-time skill identity to key the
-            # narrower skill-session delivery off of.
+            # Interactive TUI tasks are unknown at launch (including manual runs), so
+            # they retain full scope coverage without a dispatch-time skill identity
+            # that could select narrower skill-session delivery.
             _interactive_suffix = codex_discipline_suffix(include_scope=True)
             developer_instructions = (
                 f"{system_prompt}\n\n{_interactive_suffix}"
@@ -1967,8 +1968,7 @@ class CodexBackend(BackendCmdBuilderBase):
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
         )
-        # build_env strips this key from extras unconditionally, so it must be
-        # injected here, after build_env returns (as the other builders do).
+        # build_env strips this key, so inject it after the call like other builders.
         env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: NativeShellCaptureMode.CAPTURE.value})
         if executable is not None and dict(env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")

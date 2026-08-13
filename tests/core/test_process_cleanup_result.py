@@ -18,6 +18,7 @@ def test_process_cleanup_result_serializes_survivor_evidence() -> None:
         terminated_pids=(101,),
         survivor_pids=(102,),
         access_denied_pids=(102,),
+        observation_complete=True,
     )
 
     assert result.complete is False
@@ -30,6 +31,7 @@ def test_process_cleanup_result_serializes_survivor_evidence() -> None:
         "terminated_pids": [101],
         "survivor_pids": [102],
         "access_denied_pids": [102],
+        "observation_complete": True,
         "complete": False,
     }
 
@@ -39,3 +41,28 @@ def test_process_cleanup_result_is_frozen() -> None:
 
     with pytest.raises(FrozenInstanceError):
         result.root_pid = 202  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("observation_complete", "survivors", "denied", "expected"),
+    [
+        (True, (), (), True),
+        (True, (102,), (), False),
+        (True, (), (102,), False),
+        (False, (), (), False),
+    ],
+)
+def test_process_cleanup_result_complete_is_fail_closed(
+    observation_complete: bool,
+    survivors: tuple[int, ...],
+    denied: tuple[int, ...],
+    expected: bool,
+) -> None:
+    result = ProcessCleanupResult(
+        root_pid=101,
+        survivor_pids=survivors,
+        access_denied_pids=denied,
+        observation_complete=observation_complete,
+    )
+
+    assert result.complete is expected

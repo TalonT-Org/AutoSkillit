@@ -76,12 +76,23 @@ def _record_group_settlement(
     events.append("settle_group")
 
 
+def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
+    process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
+
+    with pytest.raises(TypeError, match="spawn helper"):
+        OwnedProcessGroup(process=process, pgid=process.pid)
+
+
 def test_wait_settles_owned_group_before_reaping_leader(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -98,7 +109,11 @@ def test_settle_settles_owned_group_before_reaping_leader(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -118,7 +133,11 @@ def test_settle_error_path_settles_owned_group_before_reaping_leader(
         "subprocess.Popen[bytes]",
         _OrderedProcess(events, poll_error=True),
     )
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -135,7 +154,11 @@ def test_remaining_group_gets_bounded_term_grace_before_kill(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     signals: list[signal.Signals] = []
     waits: list[tuple[int, float]] = []
     outcomes = iter((False, True))
@@ -175,7 +198,11 @@ def test_remaining_group_exiting_during_term_grace_is_not_killed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     signals: list[signal.Signals] = []
 
     monkeypatch.setattr(
@@ -205,7 +232,11 @@ def test_wait_cancellation_still_settles_and_reaps(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
 
     def cancel_wait(
         _process: subprocess.Popen[bytes],
@@ -240,7 +271,11 @@ def test_signal_handlers_forward_every_terminal_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     previous = {signum: object() for signum in capture_process._FORWARDED_SIGNALS}
     installed: dict[signal.Signals, object] = {}
     forwarded: list[signal.Signals] = []
@@ -275,7 +310,11 @@ def test_descendant_held_pipe_has_bounded_term_kill_drain(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _DrainProcess(events))
-    owner = OwnedProcessGroup(process=process, pgid=process.pid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
     selector = _EmptySelector()
     signals: list[signal.Signals] = []
     monotonic_values = iter((0.0, 0.3, 0.9))
@@ -349,10 +388,15 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
     )
 
     try:
-        owner = capture_process.adopt_owned_process(
-            process,
-            inherit_terminal=True,
+        owner = capture_process.OwnedProcessGroup(
+            process=process,
+            pgid=process.pid,
+            _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
         )
+        owner._previous_handlers = previous_handlers
+        terminal = capture_process._take_foreground_process_group(process.pid)
+        assert terminal is not None
+        owner._terminal_fd, owner._previous_foreground_pgid = terminal
         owner._restore_parent_state()
         owner._restore_parent_state()
     finally:
@@ -378,8 +422,7 @@ def test_owned_process_natural_exit_is_reaped(tmp_path: Path) -> None:
         )
         assert owner.pgid == owner.pid
         assert owner.wait() == 7
-        with pytest.raises(ProcessLookupError):
-            os.killpg(owner.pgid, 0)
+        assert not capture_process._process_group_exists(owner.pgid)
     finally:
         os.close(cwd_fd)
 
@@ -400,7 +443,7 @@ def test_poll_observes_exit_without_reaping_group_leader(tmp_path: Path) -> None
 
         assert owner.poll() == 0
         assert owner.returncode is None
-        os.killpg(owner.pgid, 0)
+        assert capture_process._process_group_exists(owner.pgid)
         assert owner.wait() == 0
     finally:
         if owner.returncode is None:
@@ -430,8 +473,7 @@ def test_owned_process_escalates_term_ignoring_leader(tmp_path: Path) -> None:
         assert owner.stdout is not None
         assert owner.stdout.readline() == b"ready\n"
         assert owner.settle() == -signal.SIGKILL
-        with pytest.raises(ProcessLookupError):
-            os.killpg(owner.pgid, 0)
+        assert not capture_process._process_group_exists(owner.pgid)
     finally:
         os.close(cwd_fd)
 
@@ -501,8 +543,7 @@ time.sleep(30)
 
         assert owner.settle() == 0
 
-        with pytest.raises(ProcessLookupError):
-            os.killpg(owner.pgid, 0)
+        assert not capture_process._process_group_exists(owner.pgid)
         for descendant_pid in (child_pid, grandchild_pid):
             with pytest.raises(ProcessLookupError):
                 os.kill(descendant_pid, 0)
@@ -541,3 +582,71 @@ def test_permission_limited_group_liveness_is_indeterminate(
 def test_group_identity_rejects_unsafe_values() -> None:
     with pytest.raises(OwnedProcessError, match="unsafe"):
         capture_process._process_group_exists(1)
+
+
+def test_owned_spawn_identity_error_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailedIdentityProcess:
+        pid = 4321
+        returncode = None
+
+        def kill(self) -> None:
+            raise RuntimeError("kill cleanup failed")
+
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            raise OSError("reap cleanup failed")
+
+    identity_error = OSError("identity unavailable")
+    monkeypatch.setattr(
+        capture_process.os,
+        "getpgid",
+        lambda _pid: (_ for _ in ()).throw(identity_error),
+    )
+
+    with pytest.raises(OwnedProcessError, match="unsafe") as raised:
+        capture_process._finish_owned_spawn(
+            cast("subprocess.Popen[bytes]", FailedIdentityProcess()),
+            inherit_terminal=False,
+        )
+
+    assert raised.value.__cause__ is identity_error
+    assert any("kill cleanup failed" in note for note in raised.value.__notes__)
+    assert any("reap cleanup failed" in note for note in raised.value.__notes__)
+
+
+def test_owned_spawn_restore_error_preserves_settlement_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
+    restore_error = OSError("restore failed")
+    fchdir_calls = 0
+
+    def fail_restore(_fd: int) -> None:
+        nonlocal fchdir_calls
+        fchdir_calls += 1
+        if fchdir_calls == 2:
+            raise restore_error
+
+    monkeypatch.setattr(capture_process.os, "open", lambda *_args: 99)
+    monkeypatch.setattr(capture_process.os, "fchdir", fail_restore)
+    monkeypatch.setattr(capture_process.os, "close", lambda _fd: None)
+    monkeypatch.setattr(capture_process.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_process, "_finish_owned_spawn", lambda *_args, **_kwargs: owner)
+    monkeypatch.setattr(
+        OwnedProcessGroup,
+        "settle",
+        lambda _self: (_ for _ in ()).throw(RuntimeError("settlement failed")),
+    )
+
+    with pytest.raises(OwnedProcessError, match="cannot restore") as raised:
+        spawn_owned_process([], cwd_fd=10, env={}, capture_output=False)
+
+    assert raised.value.__cause__ is restore_error
+    assert any("settlement failed" in note for note in raised.value.__notes__)

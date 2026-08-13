@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import textwrap
@@ -25,7 +26,11 @@ from autoskillit.execution.process import (
     kill_process_tree,
     run_managed_async,
 )
-from tests.execution._process_group_helpers import _cleanup_process_group
+from tests.execution import _process_group_helpers
+from tests.execution._process_group_helpers import (
+    _cleanup_owned_process_group,
+    _cleanup_process_identities,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -130,38 +135,27 @@ class TestProcessTreeKill:
         script = tmp_path / "lifecycle_tree.py"
         script.write_text(LIFECYCLE_TREE_SCRIPT)
         started = anyio.current_time()
-        spawned_pid: list[int] = []
-        result = None
-        try:
-            result = await run_managed_async(
-                [sys.executable, str(script)],
-                cwd=tmp_path,
-                timeout=10,
-                completion_marker="ORDER_UP",
-                stream_parser=ClaudeStreamParser(completion_marker="ORDER_UP"),
-                lifecycle_observation_enabled=True,
-                child_deferral_ceiling=2,
-                natural_exit_grace_seconds=0.05,
-                on_pid_resolved=lambda pid, _ticks: spawned_pid.append(pid),
-            )
-            assert anyio.current_time() - started >= 0.35
-            assert result.termination is TerminationReason.COMPLETED
-            assert result.lifecycle_observation_complete is True
-            assert result.pending_task_ids == ()
-            child_records = [
-                json.loads(line)
-                for line in result.stdout.splitlines()
-                if '"type": "child_pid"' in line
-            ]
-            assert len(child_records) == 2
-            assert all(not psutil.pid_exists(record["pid"]) for record in child_records)
-        finally:
-            process_group_id = (
-                result.process_group_id
-                if result is not None
-                else (spawned_pid[-1] if spawned_pid else 0)
-            )
-            _cleanup_process_group(process_group_id)
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            completion_marker="ORDER_UP",
+            stream_parser=ClaudeStreamParser(completion_marker="ORDER_UP"),
+            lifecycle_observation_enabled=True,
+            child_deferral_ceiling=2,
+            natural_exit_grace_seconds=0.05,
+        )
+        assert anyio.current_time() - started >= 0.35
+        assert result.termination is TerminationReason.COMPLETED
+        assert result.lifecycle_observation_complete is True
+        assert result.pending_task_ids == ()
+        child_records = [
+            json.loads(line)
+            for line in result.stdout.splitlines()
+            if '"type": "child_pid"' in line
+        ]
+        assert len(child_records) == 2
+        assert all(not psutil.pid_exists(record["pid"]) for record in child_records)
 
     @pytest.mark.anyio
     async def test_natural_exit_retains_obligation_and_cleans_owned_group(self, tmp_path):
@@ -169,35 +163,24 @@ class TestProcessTreeKill:
 
         script = tmp_path / "natural_exit_with_owned_child.py"
         script.write_text(NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT)
-        spawned_pid: list[int] = []
-        result = None
-        try:
-            result = await run_managed_async(
-                [sys.executable, str(script)],
-                cwd=tmp_path,
-                timeout=10,
-                stream_parser=ClaudeStreamParser(),
-                lifecycle_observation_enabled=True,
-                natural_exit_grace_seconds=0.05,
-                on_pid_resolved=lambda pid, _ticks: spawned_pid.append(pid),
-            )
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            stream_parser=ClaudeStreamParser(),
+            lifecycle_observation_enabled=True,
+            natural_exit_grace_seconds=0.05,
+        )
 
-            assert result.termination is TerminationReason.NATURAL_EXIT
-            assert result.lifecycle_observation_complete is True
-            assert result.pending_task_ids == ("owned-exit",)
-            child_record = next(
-                json.loads(line)
-                for line in result.stdout.splitlines()
-                if '"type": "child_pid"' in line
-            )
-            assert not psutil.pid_exists(child_record["pid"])
-        finally:
-            process_group_id = (
-                result.process_group_id
-                if result is not None
-                else (spawned_pid[-1] if spawned_pid else 0)
-            )
-            _cleanup_process_group(process_group_id)
+        assert result.termination is TerminationReason.NATURAL_EXIT
+        assert result.lifecycle_observation_complete is True
+        assert result.pending_task_ids == ("owned-exit",)
+        child_record = next(
+            json.loads(line)
+            for line in result.stdout.splitlines()
+            if '"type": "child_pid"' in line
+        )
+        assert not psutil.pid_exists(child_record["pid"])
 
 
 class TestKillProcessTreeUnit:
@@ -207,7 +190,7 @@ class TestKillProcessTreeUnit:
         """kill_process_tree handles nonexistent PID gracefully."""
         kill_process_tree(999999999)  # Should not raise
 
-    def test_kill_already_dead_process(self, tmp_path):
+    def test_kill_already_dead_process(self):
         """kill_process_tree handles already-dead process gracefully."""
         import subprocess
 
@@ -220,10 +203,13 @@ class TestKillProcessTreeUnit:
         proc.kill()
         proc.wait()
 
-        # Should handle gracefully
-        kill_process_tree(pid)
+        result = kill_process_tree(pid)
 
-    def test_process_group_cleanup_survives_exited_root(self):
+        assert result.root_pid == pid
+        assert result.observation_complete is False
+        assert result.complete is False
+
+    def test_exited_unowned_root_cannot_reconstruct_group_authority(self):
         proc = subprocess.Popen(
             [
                 sys.executable,
@@ -239,13 +225,73 @@ class TestKillProcessTreeUnit:
         )
         assert proc.stdout is not None
         child_pid = int(proc.stdout.readline())
+        child_identity = psutil.Process(child_pid).create_time()
         proc.wait(timeout=5)
         try:
-            result = kill_process_tree(proc.pid, process_group_id=proc.pid)
-            assert child_pid in result.terminated_pids
-            assert not result.survivor_pids
+            result = kill_process_tree(proc.pid)
+            assert result.observation_complete is False
+            assert result.complete is False
+            assert result.terminated_pids == ()
         finally:
-            _cleanup_process_group(proc.pid)
+            _cleanup_process_identities({child_pid: child_identity})
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+    def test_reaped_leader_cannot_authorize_test_group_teardown(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "pass"],
+            start_new_session=True,
+        )
+        proc.wait(timeout=5)
+        group_signals: list[tuple[int, signal.Signals]] = []
+        monkeypatch.setattr(
+            os,
+            "killpg",
+            lambda pgid, signum: group_signals.append((pgid, signum)),
+        )
+
+        cleaned = _cleanup_owned_process_group(proc)
+
+        assert cleaned == set()
+        assert group_signals == []
+
+    def test_changed_leader_identity_refuses_group_teardown(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class FakeProcess:
+            pid = 101
+            returncode: int | None = None
+
+            def wait(self, timeout: float | None = None) -> int:
+                del timeout
+                self.returncode = 0
+                return 0
+
+        process = FakeProcess()
+        group_signals: list[tuple[int, signal.Signals]] = []
+        monkeypatch.setattr(
+            _process_group_helpers,
+            "_capture_owned_group_identities",
+            lambda _process: {process.pid: 123.0},
+        )
+        monkeypatch.setattr(
+            _process_group_helpers,
+            "_owned_group_anchor_is_valid",
+            lambda _process, _created: False,
+        )
+        monkeypatch.setattr(
+            os,
+            "killpg",
+            lambda pgid, signum: group_signals.append((pgid, signum)),
+        )
+
+        cleaned = _cleanup_owned_process_group(process)  # type: ignore[arg-type]
+
+        assert cleaned == {process.pid}
+        assert group_signals == []
 
 
 class TestCancellationKillsProcess:

@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never, cast
+from typing import TYPE_CHECKING, Any, assert_never, cast
 
 import anyio
 import anyio.abc
@@ -26,6 +26,7 @@ from autoskillit.core import (
     ChannelBStatus,
     ChannelConfirmation,
     KillReason,
+    ProcessCleanupResult,
     SessionEvent,
     SubprocessResult,
     TerminationAction,
@@ -56,9 +57,12 @@ from autoskillit.execution.process._process_jsonl import (
     fold_event_cursor,
 )
 from autoskillit.execution.process._process_kill import (
+    OwnedProcessGroup,
+    ProcessObservationSnapshot,
     _wait_process_dead,
     async_kill_process_tree,
     kill_process_tree,
+    spawn_owned_process,
 )
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
@@ -100,6 +104,7 @@ __all__ = [
     "CodexOrphanReapResult",
     "DefaultSubprocessRunner",
     "OrphanedCodexProcess",
+    "OwnedProcessGroup",
     "_extract_stdout_session_id",
     "_resolve_session_id",
     "RaceAccumulator",
@@ -133,6 +138,7 @@ __all__ = [
     "resolve_termination",
     "run_managed_async",
     "run_managed_sync",
+    "spawn_owned_process",
     "summarize_capture",
 ]
 
@@ -199,7 +205,7 @@ def decide_termination_action(
 async def execute_termination_action(
     action: TerminationAction,
     *,
-    proc: anyio.abc.Process,
+    owner: OwnedProcessGroup,
     process_exited_event: anyio.Event,
     grace_seconds: float,
     proc_log: structlog.BoundLogger,
@@ -207,12 +213,11 @@ async def execute_termination_action(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     child_deferral_ceiling: float = 0.0,
-    process_group_id: int | None = None,
-) -> KillReason:
+    process_observation_snapshot: ProcessObservationSnapshot | None = None,
+) -> tuple[KillReason, int, ProcessCleanupResult]:
     """Single authorized executor for all kill decisions in run_managed_async.
 
-    This is the ONLY function in process.py permitted to call
-    async_kill_process_tree (enforced by test_no_direct_async_kill_process_tree_outside_executor).
+    This is the sole managed-async authority for drain, signal, settlement, and reap.
 
     On the DRAIN_THEN_KILL_IF_ALIVE path, when *pid* is provided and
     *child_deferral_ceiling* > 0, the kill is deferred (bounded by the ceiling)
@@ -220,25 +225,35 @@ async def execute_termination_action(
     the subagent is still doing active work — mirroring the stale-kill
     suppression pattern in _session_log_monitor.
 
-    Returns the KillReason that surfaces to SubprocessResult.kill_reason.
+    Returns the kill reason, authoritative final return code, and cleanup evidence.
     """
+    if process_observation_snapshot is not None:
+        owner.merge_snapshot(process_observation_snapshot)
     match action:
         case TerminationAction.NO_KILL:
-            return KillReason.NATURAL_EXIT
+            kill_reason = KillReason.NATURAL_EXIT
         case TerminationAction.DRAIN_THEN_KILL_IF_ALIVE:
             with anyio.move_on_after(grace_seconds):
                 await process_exited_event.wait()
-            if proc.returncode is not None:
-                proc_log.debug("natural_exit_after_drain", returncode=proc.returncode)
-                return KillReason.NATURAL_EXIT
+            if owner.returncode is not None:
+                proc_log.debug("natural_exit_after_drain", returncode=owner.returncode)
+                kill_reason = KillReason.NATURAL_EXIT
+                returncode, cleanup = await anyio.to_thread.run_sync(
+                    owner.settle, abandon_on_cancel=False
+                )
+                return kill_reason, returncode, cleanup
             # Child-liveness deferral: same pattern as _session_log_monitor stale-kill suppression
             if pid is not None and child_deferral_ceiling > 0:
                 deferral_start = anyio.current_time()
                 _poll_interval = 2.0
                 while (anyio.current_time() - deferral_start) < child_deferral_ceiling:
-                    if proc.returncode is not None:
-                        proc_log.debug("natural_exit_during_deferral", returncode=proc.returncode)
-                        return KillReason.NATURAL_EXIT
+                    if owner.returncode is not None:
+                        proc_log.debug("natural_exit_during_deferral", returncode=owner.returncode)
+                        kill_reason = KillReason.NATURAL_EXIT
+                        returncode, cleanup = await anyio.to_thread.run_sync(
+                            owner.settle, abandon_on_cancel=False
+                        )
+                        return kill_reason, returncode, cleanup
                     active = (
                         _has_active_child_processes(pid)
                         or _has_active_api_connection(pid)
@@ -257,18 +272,18 @@ async def execute_termination_action(
                     )
                     await anyio.sleep(_poll_interval)
             proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
-            await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
-            return KillReason.KILL_AFTER_COMPLETION
+            kill_reason = KillReason.KILL_AFTER_COMPLETION
         case TerminationAction.IMMEDIATE_KILL:
             if pid is not None and _has_active_child_processes(pid):
                 proc_log.warning(
                     "immediate_kill_with_active_children",
                     pid=pid,
                 )
-            await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
-            return KillReason.INFRA_KILL
+            kill_reason = KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
+    returncode, cleanup = await anyio.to_thread.run_sync(owner.settle, abandon_on_cancel=False)
+    return kill_reason, returncode, cleanup
 
 
 async def run_managed_async(
@@ -368,25 +383,31 @@ async def run_managed_async(
                 if resume_boundary is not None and resume_path.is_file():
                     resume_cursor = EventCursor(resume_path, run_boundary=resume_boundary)
             _spawn_time = time.time()
-            proc = await anyio.open_process(
-                cmd,
-                stdout=stdout_file,
-                stderr=stderr_file,
-                stdin=stdin_handle if stdin_handle is not None else subprocess.DEVNULL,
-                cwd=cwd,
-                env=_env,
-                start_new_session=True,
-                pass_fds=_inherited_fds,
+            owner = await anyio.to_thread.run_sync(
+                functools.partial(
+                    spawn_owned_process,
+                    cmd,
+                    stdout=stdout_file,
+                    stderr=stderr_file,
+                    stdin=(stdin_handle if stdin_handle is not None else subprocess.DEVNULL),
+                    cwd=cwd,
+                    env=_env,
+                    start_new_session=True,
+                    pass_fds=_inherited_fds,
+                ),
+                abandon_on_cancel=False,
             )
-            process_group_id = proc.pid
+            proc = owner.process
+            root_pid = owner.pid
+            process_group_id = owner.pgid
 
             # Resolve the workload TraceTarget — the PID that should be observed.
-            # anyio.open_process returns the spawn PID, which in PTY mode is the
-            # script(1) wrapper, not claude. resolve_trace_target walks descendants
+            # The spawn PID is the script(1) wrapper in PTY mode, not claude.
+            # resolve_trace_target walks descendants
             # to find the actual workload by basename. Raising here (on miss) is
             # intentional: a silent fallback to proc.pid recreates issue #806.
             _target: TraceTarget | None = None
-            _observed_pid: int = proc.pid
+            _observed_pid: int = root_pid
             _tracked_comm: str | None = None
             if linux_tracing_config is not None:
                 from autoskillit.execution.linux_tracing import (
@@ -398,14 +419,14 @@ async def run_managed_async(
                 if pty_mode and LINUX_TRACING_AVAILABLE:
                     # PTY mode: proc.pid is the script(1) wrapper — resolve to workload
                     _target = await resolve_trace_target(
-                        root_pid=proc.pid,
+                        root_pid=root_pid,
                         expected_basename=_workload_basename,
                         timeout=2.0,
                         expected_basenames=workload_basenames,
                     )
                 else:
                     # Non-PTY mode: proc.pid IS the workload (direct child)
-                    _target = trace_target_from_pid(proc.pid)
+                    _target = trace_target_from_pid(root_pid)
                 assert _target is not None
                 _observed_pid = _target.pid
                 _tracked_comm = _target.comm
@@ -447,7 +468,7 @@ async def run_managed_async(
                     EventCursor(stdout_path) if lifecycle_observation_enabled else None
                 ),
                 channel_b_cursor=resume_cursor,
-                process_group_id=process_group_id,
+                process_observation_snapshot=owner.snapshot,
             )
             trigger = anyio.Event()
             channel_b_ready = anyio.Event()
@@ -456,7 +477,7 @@ async def run_managed_async(
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
             async with anyio.create_task_group() as tg:
-                tg.start_soon(_watch_process, proc, acc, trigger)
+                tg.start_soon(_watch_process, owner, acc, trigger)
                 tg.start_soon(
                     functools.partial(
                         _watch_heartbeat,
@@ -615,6 +636,24 @@ async def run_managed_async(
                 if acc.channel_b_candidate_at is not None:
                     acc.channel_b_status = ChannelBStatus.COMPLETION
                 acc.lifecycle_observation_complete = final_fold_complete
+            if (
+                lifecycle_observation_enabled
+                and not acc.has_unresolved_obligations()
+                and (
+                    acc.channel_a_candidate_at is not None
+                    or acc.channel_b_candidate_at is not None
+                )
+                and not acc.process_exited
+            ):
+                with anyio.move_on_after(0.05):
+                    while await anyio.to_thread.run_sync(owner.observe_exit) is None:
+                        await anyio.sleep(0.001)
+            final_observed_returncode = await anyio.to_thread.run_sync(owner.observe_exit)
+            acc.process_observation_snapshot = owner.snapshot
+            if final_observed_returncode is not None:
+                acc.process_exited = True
+                acc.process_returncode = final_observed_returncode
+                acc.process_exited_event.set()
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
 
@@ -646,9 +685,9 @@ async def run_managed_async(
                 channel_a=signals.channel_a_confirmed,
                 channel_b=signals.channel_b_status,
             )
-            kill_reason = await execute_termination_action(
+            kill_reason, final_returncode, cleanup_result = await execute_termination_action(
                 action,
-                proc=proc,
+                owner=owner,
                 process_exited_event=signals.process_exited_event,
                 grace_seconds=natural_exit_grace_seconds,
                 proc_log=proc_log,
@@ -656,7 +695,7 @@ async def run_managed_async(
                 marker_dir=marker_dir,
                 session_id=session_id,
                 child_deferral_ceiling=child_deferral_ceiling,
-                process_group_id=process_group_id,
+                process_observation_snapshot=signals.process_observation_snapshot,
             )
 
             # Flush and close before reading
@@ -674,7 +713,7 @@ async def run_managed_async(
                 _stderr_path = None
 
             sub_result = SubprocessResult(
-                returncode=proc.returncode if proc.returncode is not None else -1,
+                returncode=final_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
@@ -707,7 +746,7 @@ async def run_managed_async(
                 stderr_len=len(sub_result.stderr),
             )
             return sub_result
-        except BaseException:
+        except BaseException as exc:
             # Shielded cleanup: when a task is cancelled, the BaseException handler
             # runs with cancellation active. Without shielding, the await in
             # async_kill_process_tree would be immediately cancelled, leaking the
@@ -716,10 +755,10 @@ async def run_managed_async(
             with anyio.CancelScope(shield=True):
                 if "tracing_handle" in locals() and tracing_handle is not None:
                     tracing_handle.stop()
-                if "proc" in locals():
-                    await async_kill_process_tree(
-                        proc.pid,
-                        process_group_id=process_group_id,
+                if "owner" in locals():
+                    await anyio.to_thread.run_sync(
+                        functools.partial(owner.settle_preserving, exc),
+                        abandon_on_cancel=False,
                     )
             raise
         finally:
@@ -759,10 +798,11 @@ def run_managed_sync(
         if stdin_path is not None:
             stdin_handle = open(stdin_path)  # noqa: SIM115
 
-        process = None
+        owner: OwnedProcessGroup | None = None
+        process: subprocess.Popen[Any] | None = None
         try:
             _env: dict[str, str] | None = dict(env) if env is not None else None
-            process = subprocess.Popen(
+            owner = spawn_owned_process(
                 cmd,
                 stdout=stdout_file,
                 stderr=stderr_file,
@@ -771,18 +811,20 @@ def run_managed_sync(
                 env=_env,
                 start_new_session=True,
             )
+            process = owner.process
 
             termination = TerminationReason.NATURAL_EXIT
-            try:
-                process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
+            deadline = time.monotonic() + timeout
+            while owner.observe_exit() is None and time.monotonic() < deadline:
+                time.sleep(min(0.02, max(0.0, deadline - time.monotonic())))
+            if owner.returncode is None:
                 termination = TerminationReason.TIMED_OUT
                 logger.warning(
                     "Process %d timed out after %ss, killing tree",
                     process.pid,
                     timeout,
                 )
-                kill_process_tree(process.pid)
+            final_returncode, cleanup_result = owner.settle()
 
             # Flush and close before reading
             stdout_file.close()
@@ -799,7 +841,7 @@ def run_managed_sync(
                 _stderr_path = None
 
             return SubprocessResult(
-                returncode=process.returncode if process.returncode is not None else -1,
+                returncode=final_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
@@ -809,9 +851,9 @@ def run_managed_sync(
                 stdout_path=_stdout_path,
                 stderr_path=_stderr_path,
             )
-        except Exception:
-            if process is not None and process.returncode is None:
-                kill_process_tree(process.pid)
+        except Exception as exc:
+            if owner is not None and process is not None and process.returncode is None:
+                owner.settle_preserving(exc)
             raise
         finally:
             if stdin_handle is not None:

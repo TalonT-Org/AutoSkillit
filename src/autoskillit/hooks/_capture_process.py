@@ -73,10 +73,20 @@ _FORWARDED_SIGNALS = (
 logger = logging.getLogger(__name__)  # noqa: TID251 - isolated stdlib runner
 logger.addHandler(logging.NullHandler())
 logger.propagate = False
+_OWNED_PROCESS_SPAWN_TOKEN = object()
 
 
 class OwnedProcessError(RuntimeError):
     """The runner could not prove complete process-group settlement."""
+
+
+def _add_cleanup_failure_note(
+    primary_error: BaseException,
+    context: str,
+    cleanup_error: BaseException,
+) -> None:
+    detail = str(cleanup_error)[:256]
+    primary_error.add_note(f"{context}: {type(cleanup_error).__name__}: {detail}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +106,13 @@ class OwnedProcessGroup:
     _terminal_fd: int | None = None
     _previous_foreground_pgid: int | None = None
     _restored: bool = False
+    _handlers_restored: bool = False
+    _reaping_started: bool = False
+    _spawn_token: object | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if self._spawn_token is not _OWNED_PROCESS_SPAWN_TOKEN:
+            raise TypeError("OwnedProcessGroup instances must come from a spawn helper")
 
     @property
     def stdout(self) -> IO[bytes] | None:
@@ -119,6 +136,14 @@ class OwnedProcessGroup:
         self.signal_group(signal.SIGKILL)
 
     def signal_group(self, signum: signal.Signals) -> None:
+        if self._reaping_started or self.process.returncode is not None:
+            raise OwnedProcessError("owned process group authority ended before signal")
+        try:
+            anchored = self.process.pid == self.pgid and os.getpgid(self.pid) == self.pgid
+        except OSError as exc:
+            raise OwnedProcessError("owned process group leader cannot be verified") from exc
+        if not anchored:
+            raise OwnedProcessError("owned process group leader no longer anchors its PGID")
         _signal_process_group(self.pgid, signum)
 
     def wait(self) -> int:
@@ -208,6 +233,8 @@ class OwnedProcessGroup:
                 failures.append(exc)
 
             try:
+                self._restore_signal_handlers()
+                self._reaping_started = True
                 if reap_timeout_seconds is None:
                     returncode = self.process.wait()
                 else:
@@ -222,15 +249,6 @@ class OwnedProcessGroup:
                 logger.error("owned_process_leader_reap_failed", exc_info=True)
                 failures.append(exc)
 
-        if returncode is not None:
-            try:
-                if not _wait_for_group_exit(self.pgid, _KILL_TIMEOUT_SECONDS):
-                    raise OwnedProcessError(
-                        f"owned process group {self.pgid} remains after leader reap"
-                    )
-            except BaseException as exc:
-                logger.error("owned_process_group_verification_failed", exc_info=True)
-                failures.append(exc)
         return returncode
 
     def _settle_remaining_group(self) -> None:
@@ -275,6 +293,21 @@ class OwnedProcessGroup:
             except BaseException as exc:
                 logger.error("owned_process_foreground_restore_failed", exc_info=True)
                 failures.append(exc)
+        try:
+            self._restore_signal_handlers()
+        except BaseException as exc:
+            logger.error("owned_process_signal_restore_failed", exc_info=True)
+            failures.append(exc)
+        if failures:
+            if len(failures) == 1:
+                raise failures[0]
+            raise BaseExceptionGroup("parent process state restoration failed", failures)
+
+    def _restore_signal_handlers(self) -> None:
+        if self._handlers_restored:
+            return
+        self._handlers_restored = True
+        failures: list[BaseException] = []
         for signum, previous in self._previous_handlers.items():
             try:
                 signal.signal(signum, previous)  # noqa: TID251
@@ -284,7 +317,7 @@ class OwnedProcessGroup:
         if failures:
             if len(failures) == 1:
                 raise failures[0]
-            raise BaseExceptionGroup("parent process state restoration failed", failures)
+            raise BaseExceptionGroup("parent signal restoration failed", failures)
 
 
 def spawn_owned_process(
@@ -322,34 +355,64 @@ def spawn_owned_process(
     if process is None:
         raise OwnedProcessError("owned process did not start")
     if restore_error is not None:
+        error = OwnedProcessError("cannot restore runner cwd")
         try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except (OSError, ProcessLookupError):
-            pass
-        try:
-            process.wait(timeout=_KILL_TIMEOUT_SECONDS)
-        except (OSError, subprocess.SubprocessError):
-            pass
-        raise OwnedProcessError("cannot restore runner cwd") from restore_error
-    return adopt_owned_process(process, inherit_terminal=not capture_output)
+            _settle_failed_capture(
+                _finish_owned_spawn(process, inherit_terminal=not capture_output),
+                primary_error=error,
+            )
+        except BaseException as cleanup_error:
+            logger.error("owned_process_cwd_restore_cleanup_failed", exc_info=True)
+            _add_cleanup_failure_note(
+                error,
+                "owned process cwd-restore cleanup also failed",
+                cleanup_error,
+            )
+        raise error from restore_error
+    return _finish_owned_spawn(process, inherit_terminal=not capture_output)
 
 
-def adopt_owned_process(
+def _finish_owned_spawn(
     process: subprocess.Popen[bytes],
     *,
     inherit_terminal: bool,
 ) -> OwnedProcessGroup:
-    """Attach signal, terminal, and settlement ownership to a fresh child group."""
+    """Finish ownership setup for a process atomically spawned by this module."""
 
     pgid = process.pid
-    if pgid <= 1:
+    identity_error: OSError | None = None
+    try:
+        valid_leader = pgid > 1 and process.returncode is None and os.getpgid(pgid) == pgid
+    except OSError as exc:
+        identity_error = exc
+        valid_leader = False
+    if not valid_leader:
+        error = OwnedProcessError("unsafe owned process group identity")
         try:
             process.kill()
+        except BaseException as cleanup_error:
+            logger.error("owned_process_identity_kill_failed", exc_info=True)
+            _add_cleanup_failure_note(
+                error,
+                "owned process identity cleanup kill also failed",
+                cleanup_error,
+            )
+        try:
             process.wait(timeout=_KILL_TIMEOUT_SECONDS)
-        finally:
-            raise OwnedProcessError("unsafe owned process group identity")
+        except BaseException as cleanup_error:
+            logger.error("owned_process_identity_reap_failed", exc_info=True)
+            _add_cleanup_failure_note(
+                error,
+                "owned process identity cleanup reap also failed",
+                cleanup_error,
+            )
+        raise error from identity_error
 
-    owner = OwnedProcessGroup(process=process, pgid=pgid)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=pgid,
+        _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN,
+    )
     try:
         owner._previous_handlers = _install_signal_forwarding(owner)
         if inherit_terminal:
@@ -380,7 +443,7 @@ def _spawn_bash(
     command: str,
     *,
     capture_output: bool,
-) -> subprocess.Popen[bytes]:
+) -> OwnedProcessGroup:
     try:
         inherited_cwd_fd = os.open(
             ".",
@@ -418,13 +481,15 @@ def _spawn_bash(
 
     if restore_error is not None:
         if process is not None:
-            _settle_failed_capture(_own_spawned_process(process, capture_output=capture_output))
+            _settle_failed_capture(
+                _finish_owned_spawn(process, inherit_terminal=not capture_output)
+            )
         raise CaptureSetupError.from_os_error(
             restore_error, "cannot restore runner cwd"
         ) from restore_error
     if process is None:
         raise CaptureSetupError.unknown("capture shell did not start")
-    return process
+    return _finish_owned_spawn(process, inherit_terminal=not capture_output)
 
 
 def _drain_capture(
@@ -557,6 +622,8 @@ def _resolve_bash(candidates: Sequence[str] = _TRUSTED_BASH_CANDIDATES) -> str:
 
 def _settle_failed_capture(
     process: subprocess.Popen[bytes] | OwnedProcessGroup,
+    *,
+    primary_error: BaseException | None = None,
 ) -> _capture_replay.RunnerSettlementEvidence:
     if not isinstance(process, OwnedProcessGroup):
         return _capture_replay.settle_failed_capture(process)
@@ -565,25 +632,18 @@ def _settle_failed_capture(
             action="settled_owned_group",
             returncode=process.settle(),
         )
-    except BaseException:
+    except BaseException as cleanup_error:
         logger.error("owned_capture_settlement_failed", exc_info=True)
+        if primary_error is not None:
+            _add_cleanup_failure_note(
+                primary_error,
+                "owned capture settlement also failed",
+                cleanup_error,
+            )
         return _capture_replay.RunnerSettlementEvidence(
             action="owned_group_settlement_failed",
             returncode=None,
         )
-
-
-def _own_spawned_process(
-    process: subprocess.Popen[bytes],
-    *,
-    capture_output: bool,
-) -> subprocess.Popen[bytes] | OwnedProcessGroup:
-    """Adopt real subprocesses while retaining narrow injected test doubles."""
-
-    pid = getattr(process, "pid", None)
-    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 1:
-        return process
-    return adopt_owned_process(process, inherit_terminal=not capture_output)
 
 
 def _install_signal_forwarding(
@@ -790,7 +850,6 @@ def _signal_process_group(pgid: int, signum: signal.Signals) -> None:
 
 
 __all__ = [
-    "adopt_owned_process",
     "OwnedProcessError",
     "OwnedProcessGroup",
     "spawn_owned_process",

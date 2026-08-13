@@ -85,7 +85,6 @@ if TYPE_CHECKING:
         OwnedProcessGroup,
         _DrainResult,
         _normalized_returncode,
-        _own_spawned_process,
         _settle_failed_capture,
         _spawn_bash,
     )
@@ -168,7 +167,6 @@ else:
         OwnedProcessGroup,
         _DrainResult,
         _normalized_returncode,
-        _own_spawned_process,
         _settle_failed_capture,
         _spawn_bash,
     )
@@ -699,8 +697,7 @@ def run_capture(
                 raise CaptureSetupError.unknown("runner observation recording failed")
         if effective_direct:
             try:
-                spawned = _spawn_bash(bash_path, command, capture_output=False)
-                process = _own_spawned_process(spawned, capture_output=False)
+                process = _spawn_bash(bash_path, command, capture_output=False)
                 return _normalized_returncode(process.wait())
             except BaseException as exc:
                 logger.error("direct_shell_execution_failed", exc_info=True)
@@ -739,8 +736,7 @@ def run_capture(
         finalized_capture: FinalizedCapture | None = None
         failure_stage = "capture process spawn"
         try:
-            spawned = _spawn_bash(bash_path, command, capture_output=True)
-            process = _own_spawned_process(spawned, capture_output=True)
+            process = _spawn_bash(bash_path, command, capture_output=True)
             failure_stage = "capture readback"
             result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
             artifact.close_drain_writer()

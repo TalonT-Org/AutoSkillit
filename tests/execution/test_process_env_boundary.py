@@ -12,7 +12,6 @@ import subprocess
 from types import MappingProxyType
 from typing import Any
 
-import anyio
 import pytest
 
 from autoskillit.execution.process import run_managed_async, run_managed_sync
@@ -38,16 +37,17 @@ async def test_mappingproxy_env_through_run_managed_async(tmp_path: Any) -> None
 async def test_run_managed_async_coerces_env_to_dict(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """run_managed_async must coerce env to dict before anyio.open_process."""
+    """run_managed_async must coerce env to dict before owned Popen spawn."""
     captured_env: dict[str, Any] = {}
 
-    real_open_process = anyio.open_process
+    real_popen = subprocess.Popen
 
-    async def spy_open_process(*args: Any, **kwargs: Any) -> Any:
-        captured_env["env"] = kwargs.get("env")
-        return await real_open_process(*args, **kwargs)
+    class SpyPopen(real_popen):  # type: ignore[misc]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            captured_env["env"] = kwargs.get("env")
+            super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr("autoskillit.execution.process.anyio.open_process", spy_open_process)
+    monkeypatch.setattr(subprocess, "Popen", SpyPopen)
     env = MappingProxyType({"PATH": os.environ["PATH"], "FOO": "bar"})
     await run_managed_async(
         cmd=["echo", "ok"],

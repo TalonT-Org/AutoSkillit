@@ -131,7 +131,9 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
     )
 
     assert result.failure == "timed out"
-    assert group_signals == [(processes[0].pid, signal.SIGKILL)]
+    assert group_signals
+    assert {pgid for pgid, _sig in group_signals} == {processes[0].pid}
+    assert group_signals[0][1] is signal.SIGTERM
     assert processes[0].poll() is not None
 
 

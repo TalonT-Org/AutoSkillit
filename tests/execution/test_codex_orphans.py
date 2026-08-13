@@ -393,10 +393,30 @@ def test_reap_reports_incomplete_on_survivors(_spawn_fake_codex, monkeypatch):
 
     assert len(results) == 1
     assert results[0].action == "incomplete"
+    assert results[0].observation_complete is False
     assert results[0].survivor_pids == (orphan.pid,)
     logger.warning.assert_called_once_with(
         "codex_orphan_reap_incomplete",
         pid=orphan.pid,
         survivor_pids=(orphan.pid,),
         access_denied_pids=(),
+        observation_complete=False,
     )
+
+
+def test_reap_reports_incomplete_when_observation_is_incomplete(_spawn_fake_codex, monkeypatch):
+    name = _unique_name("cdxobs")
+    _spawn_fake_codex(name=name, stdin_mode="orphan_pty")
+    orphans = find_orphaned_codex_processes(process_name=name)
+    assert len(orphans) == 1
+    monkeypatch.setattr(
+        "autoskillit.execution.process._codex_orphans.kill_process_tree",
+        lambda _pid: ProcessCleanupResult(root_pid=orphans[0].pid),
+    )
+
+    result = reap_orphaned_codex_processes(orphans)[0]
+
+    assert result.action == "incomplete"
+    assert result.observation_complete is False
+    assert result.survivor_pids == ()
+    assert result.access_denied_pids == ()

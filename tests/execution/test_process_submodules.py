@@ -19,6 +19,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "CodexOrphanReapResult",
         "DefaultSubprocessRunner",
         "OrphanedCodexProcess",
+        "OwnedProcessGroup",
         "_extract_stdout_session_id",
         "_resolve_session_id",
         "RaceAccumulator",
@@ -51,6 +52,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "run_managed_async",
         "run_managed_sync",
         "summarize_capture",
+        "spawn_owned_process",
     }
 )
 

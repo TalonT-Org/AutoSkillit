@@ -44,6 +44,7 @@ class CodexOrphanReapResult:
 
     pid: int
     action: Literal["terminated", "skipped", "incomplete"]
+    observation_complete: bool = False
     survivor_pids: tuple[int, ...] = ()  # from ProcessCleanupResult
     access_denied_pids: tuple[int, ...] = ()  # from ProcessCleanupResult
 
@@ -169,22 +170,30 @@ def reap_orphaned_codex_processes(
             continue
 
         result = kill_process_tree(o.pid)
-        if result.survivor_pids or result.access_denied_pids:
+        if not result.complete:
             logger.warning(
                 "codex_orphan_reap_incomplete",
                 pid=o.pid,
                 survivor_pids=result.survivor_pids,
                 access_denied_pids=result.access_denied_pids,
+                observation_complete=result.observation_complete,
             )
             results.append(
                 CodexOrphanReapResult(
                     o.pid,
                     "incomplete",
+                    observation_complete=result.observation_complete,
                     survivor_pids=result.survivor_pids,
                     access_denied_pids=result.access_denied_pids,
                 )
             )
         else:
-            results.append(CodexOrphanReapResult(o.pid, "terminated"))
+            results.append(
+                CodexOrphanReapResult(
+                    o.pid,
+                    "terminated",
+                    observation_complete=result.observation_complete,
+                )
+            )
 
     return results

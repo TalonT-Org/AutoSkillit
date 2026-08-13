@@ -1,8 +1,4 @@
-"""Campaign state file management — DispatchRecord, atomic writes, resume algorithm.
-
-Provides the single-file state format for fleet campaign execution.
-All writes use core.io.atomic_write for crash-safety (tmp + os.replace).
-"""
+"""Fleet campaign state records with atomic crash-safe writes and resume support."""
 
 from __future__ import annotations
 
@@ -228,17 +224,24 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
-_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9, 10})
+_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9, 10, 11})
 
 
-def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
+def read_fleet_state_payload(state_path: Path) -> dict[str, Any] | None:
+    """Read a current or supported legacy fleet-state payload."""
+    if (
+        data := read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+    ) is not None:
+        return data
     import json as _json
 
     try:
-        raw = _json.loads(state_path.read_text(encoding="utf-8"))
+        legacy = _json.loads(state_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, _json.JSONDecodeError, OSError):
         return None
-    return raw if isinstance(raw, dict) else None
+    if isinstance(legacy, dict) and legacy.get("schema_version") in _LEGACY_SCHEMA_VERSIONS:
+        return legacy
+    return None
 
 
 def read_state(state_path: Path) -> CampaignState | None:
@@ -248,12 +251,9 @@ def read_state(state_path: Path) -> CampaignState | None:
     Accepts the current schema version and legacy versions in _LEGACY_SCHEMA_VERSIONS.
     Never raises.
     """
-    data = read_versioned_json(state_path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+    data = read_fleet_state_payload(state_path)
     if data is None:
-        raw = _read_raw_json(state_path)
-        if raw is None or raw.get("schema_version") not in _LEGACY_SCHEMA_VERSIONS:
-            return None
-        data = raw
+        return None
     try:
         dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
         return CampaignState(
@@ -634,7 +634,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
         if not dispatches_dir.is_dir():
             return frozenset()
         for state_file in dispatches_dir.glob("*.json"):
-            data = read_versioned_json(state_file, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+            data = read_fleet_state_payload(state_file)
             if data is None:
                 continue
             try:
@@ -705,7 +705,7 @@ def read_all_campaign_captures(
         return result
     entries: list[tuple[float, dict[str, str]]] = []
     for path in dispatches_dir.glob("*.json"):
-        data = read_versioned_json(path, FLEET_STATE_SCHEMA_VERSION, logger=logger)
+        data = read_fleet_state_payload(path)
         if data is None:
             continue
         try:

@@ -324,7 +324,7 @@ RULES: tuple[RuleDescriptor, ...] = (
             "Call resolve_trace_target() (or trace_target_from_pid()) first."
         ),
         rationale=(
-            "anyio.open_process() returns the PID of any PTY wrapper (script(1)), not the "
+            "The owned spawn returns the PID of any PTY wrapper (script(1)), not the "
             "workload binary. Passing proc.pid directly to start_linux_tracing causes the "
             "tracer to observe the wrapper (~2 MB RSS, 1 thread) instead of claude, producing "
             "silently wrong telemetry in proc_trace.jsonl, sessions.jsonl, and GitHub issue "

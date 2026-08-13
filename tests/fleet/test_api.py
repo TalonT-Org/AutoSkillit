@@ -10,8 +10,12 @@ from pathlib import Path
 import anyio
 import pytest
 
+from autoskillit.core import ProcessCleanupResult
 from autoskillit.fleet import (
+    DispatchEffectName,
+    DispatchEffectPhase,
     DispatchEffectProvenance,
+    DispatchProvenanceTracker,
     DispatchRecord,
     _write_pid,
     write_initial_state,
@@ -156,6 +160,51 @@ class TestOnSpawnFailClosed:
         assert result is not None
         # The wrapped message preserves the original failure context.
         assert "FAILURE" in result and "RUNNING" in result and "illegal" in result
+
+    @pytest.mark.parametrize(
+        ("cleanup_result", "expected_phase", "expected_ambiguity"),
+        [
+            (
+                ProcessCleanupResult(root_pid=42, observation_complete=True),
+                DispatchEffectPhase.CONFIRMED,
+                "",
+            ),
+            (
+                ProcessCleanupResult(root_pid=42),
+                DispatchEffectPhase.STARTED,
+                "local process-tree cleanup observation was incomplete",
+            ),
+        ],
+    )
+    def test_on_spawn_cleanup_provenance_uses_full_completeness(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        cleanup_result: ProcessCleanupResult,
+        expected_phase: DispatchEffectPhase,
+        expected_ambiguity: str,
+    ) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        monkeypatch.setattr(
+            "autoskillit.execution.kill_process_tree",
+            lambda _pid, timeout=2.0: cleanup_result,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.mark_dispatch_running",
+            lambda *a, **kw: (_ for _ in ()).throw(ValueError("boom")),
+        )
+        provenance = DispatchProvenanceTracker(operation_id="cleanup-operation")
+
+        _write_pid(sp, "d1", "id1", pid=42, starttime_ticks=0, provenance=provenance)
+
+        effect = next(
+            item
+            for item in provenance.snapshot().effects
+            if item.name is DispatchEffectName.LOCAL_PROCESS_CLEANUP
+        )
+        assert effect.phase is expected_phase
+        assert effect.ambiguity == expected_ambiguity
 
 
 class TestExecuteDispatchCancelledErrorLockRelease:
@@ -965,7 +1014,7 @@ class TestSessionIdEagerPersistence:
         d = state["dispatches"][0]
         assert d["dispatched_session_id"] == "early-session-xyz"
         assert d["status"] == "interrupted"
-        assert d["effect_provenance"]["retry_disposition"] == "resume_by_identity"
+        assert d["effect_provenance"]["retry_disposition"] == "reconcile_required"
         spawn_effect = next(
             effect
             for effect in d["effect_provenance"]["effects"]

@@ -70,12 +70,15 @@ _TERMINATION_CONTRACT = None  # Marker — contract is documented above in comme
 
 @dataclass(frozen=True, slots=True)
 class ProcessCleanupResult:
-    """Observed result of terminating one local process tree.
+    """Bounded observation evidence for one local process cleanup.
 
-    ``process_identities`` captures ``(pid, create_time)`` pairs before signals
-    are sent.  ``survivor_pids`` is measured after the final bounded wait; an
-    empty tuple is therefore positive local cleanup evidence, while a non-empty
-    tuple keeps the cleanup result explicitly incomplete.
+    ``process_identities`` contains only positively identified cleanup targets.
+    ``terminated_pids`` means those identities were absent after cleanup; it
+    does not claim that AutoSkillit caused their disappearance.  Survivors are
+    verified targets still present.  Access-denied PIDs identify required
+    operations that could not be performed, not process-group membership.
+    ``observation_complete`` is true only when the requested bounded scope was
+    fully examined without an unresolved observation or signal denial.
     """
 
     root_pid: int
@@ -83,11 +86,12 @@ class ProcessCleanupResult:
     terminated_pids: tuple[int, ...] = ()
     survivor_pids: tuple[int, ...] = ()
     access_denied_pids: tuple[int, ...] = ()
+    observation_complete: bool = False
 
     @property
     def complete(self) -> bool:
-        """Whether every observed local process was confirmed absent."""
-        return not self.survivor_pids
+        """Whether bounded observation completed and every verified target is absent."""
+        return self.observation_complete and not self.survivor_pids and not self.access_denied_pids
 
     def to_dict(self) -> dict[str, object]:
         """Return the stable JSON-compatible cleanup evidence."""
@@ -100,6 +104,7 @@ class ProcessCleanupResult:
             "terminated_pids": list(self.terminated_pids),
             "survivor_pids": list(self.survivor_pids),
             "access_denied_pids": list(self.access_denied_pids),
+            "observation_complete": self.observation_complete,
             "complete": self.complete,
         }
 

@@ -207,13 +207,13 @@ def _write_pid(
                     if cleanup_result.complete:
                         provenance.confirm(
                             DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                            receipt="bounded process-tree wait confirmed no survivors",
+                            receipt="bounded process-tree observation confirmed complete cleanup",
                             identities={"pid": pid},
                         )
                     else:
                         provenance.mark_ambiguous(
                             DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                            evidence="local process-tree cleanup left survivors",
+                            evidence="local process-tree cleanup observation was incomplete",
                             identities={"pid": pid},
                         )
             except Exception:
@@ -1236,13 +1236,13 @@ async def _run_dispatch(
                     if cleanup_result.complete:
                         provenance.confirm(
                             DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                            receipt="bounded process-tree wait confirmed no survivors",
+                            receipt="bounded process-tree observation confirmed complete cleanup",
                             identities={"pid": _dispatched_pid[0]},
                         )
                     else:
                         provenance.mark_ambiguous(
                             DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                            evidence="local process-tree cleanup left survivors",
+                            evidence="local process-tree cleanup observation was incomplete",
                             identities={"pid": _dispatched_pid[0]},
                         )
                 except Exception:

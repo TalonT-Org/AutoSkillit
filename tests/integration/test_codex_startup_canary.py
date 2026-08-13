@@ -7,7 +7,6 @@ import json
 import os
 import random
 import shutil
-import signal
 import statistics
 import subprocess
 import sys
@@ -20,6 +19,11 @@ import pytest
 import zstandard
 
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.execution._process_group_helpers import (
+    _capture_owned_group_identities,
+    _cleanup_owned_process_group,
+    _cleanup_process_identities,
+)
 
 try:
     import fcntl
@@ -125,12 +129,14 @@ os.execvpe(command[0], command, os.environ)
         start_new_session=False,
     )
     os.close(lease_fd)  # close-only transfer: LOCK_UN would release the shared OFD lock
+    owned_identities = _capture_owned_group_identities(process)
     try:
         assert process.poll() is None, "Codex exited before inherited-lease observation"
         _assert_competing_lease_is_blocked(lease_path)
         observed_identity: tuple[int, int] | None = None
         observation_deadline = time.monotonic() + 30
         while observed_identity is None and time.monotonic() < observation_deadline:
+            owned_identities.update(_capture_owned_group_identities(process))
             observed = _rollouts_from_root(rollout_root)
             if observed:
                 file_stat = observed[0].stat()
@@ -139,6 +145,7 @@ os.execvpe(command[0], command, os.environ)
             if process.poll() is not None:
                 break
             time.sleep(0.01)
+        owned_identities.update(_capture_owned_group_identities(process))
         if observed_identity is None:
             stdout, stderr = process.communicate(timeout=90)
             assert process.returncode == 0, stderr[-_OUTPUT_CAP:].decode(errors="replace")
@@ -149,28 +156,17 @@ os.execvpe(command[0], command, os.environ)
             )
         stdout, stderr = process.communicate(timeout=90)
     except BaseException:
-        if process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=5)
+        if process.returncode is None:
+            _cleanup_owned_process_group(process, timeout=5)
+        else:
+            _cleanup_process_identities(owned_identities, timeout=5)
         raise
     assert process.returncode == 0, stderr[-_OUTPUT_CAP:].decode(errors="replace")
-    os.killpg(process.pid, 0)
     _assert_competing_lease_is_blocked(lease_path)
-    os.killpg(process.pid, signal.SIGTERM)
-    group_deadline = time.monotonic() + 5
-    while time.monotonic() < group_deadline:
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
-            break
-        time.sleep(0.02)
-    else:
-        os.killpg(process.pid, signal.SIGKILL)
-        pytest.fail("Codex process group remained live after descendant termination")
+    remaining_identities = _cleanup_process_identities(owned_identities, timeout=5)
+    assert not remaining_identities, (
+        f"Codex cleanup left matching process identities: {sorted(remaining_identities)}"
+    )
     _assert_lease_released(lease_path)
     return (
         stdout[-_OUTPUT_CAP:],

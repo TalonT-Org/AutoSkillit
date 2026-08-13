@@ -7,6 +7,7 @@ the investigation's test strategy recommendation.
 from __future__ import annotations
 
 import os
+import subprocess
 import termios
 from unittest.mock import Mock, patch
 
@@ -424,7 +425,6 @@ class TestCookTerminalGuard:
 
     def test_cook_restores_terminal_on_keyboard_interrupt(self, monkeypatch, tmp_path):
         """The cook process owner restores terminal state when Popen is interrupted."""
-        import autoskillit.cli.session._session_process as process_mod
         from autoskillit.cli.session._session_process import run_cook_attempt
         from autoskillit.core import CmdSpec
 
@@ -442,7 +442,7 @@ class TestCookTerminalGuard:
         )
         monkeypatch.setattr("autoskillit.cli.ui._terminal.termios.error", termios.error)
         monkeypatch.setattr(
-            process_mod.subprocess,
+            subprocess,
             "Popen",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )

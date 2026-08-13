@@ -99,7 +99,6 @@ def test_direct_attempt_owns_new_group_and_reaps_before_callback(
 ) -> None:
     if _assert_unsupported_platform(tmp_path):
         return
-    import autoskillit.cli.session._session_process as process_mod
 
     actual_popen = subprocess.Popen
     popen_kwargs: dict[str, object] = {}
@@ -108,7 +107,7 @@ def test_direct_attempt_owns_new_group_and_reaps_before_callback(
         popen_kwargs.update(kwargs)
         return actual_popen(*args, **kwargs)
 
-    monkeypatch.setattr(process_mod.subprocess, "Popen", recording_popen)
+    monkeypatch.setattr(subprocess, "Popen", recording_popen)
     events: list[tuple[str, int, int]] = []
 
     def on_spawn(pid: int, pgid: int) -> None:
@@ -206,12 +205,11 @@ def test_grandchild_cannot_outlive_group_empty_reaped_proof(tmp_path: Path) -> N
 def test_spawn_failure_has_no_callbacks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     if _assert_unsupported_platform(tmp_path):
         return
-    import autoskillit.cli.session._session_process as process_mod
 
     def fail_spawn(*_args, **_kwargs):
         raise OSError("synthetic Popen failure")
 
-    monkeypatch.setattr(process_mod.subprocess, "Popen", fail_spawn)
+    monkeypatch.setattr(subprocess, "Popen", fail_spawn)
     events: list[str] = []
 
     with pytest.raises(OSError, match="synthetic Popen failure"):
@@ -249,20 +247,6 @@ def test_callback_failure_still_terminates_and_reaps_child(tmp_path: Path) -> No
     assert len(identity) == 2
     assert identity[0] == identity[1]
     assert _wait_until_gone(identity[0][0])
-
-
-def test_process_group_permission_error_means_group_exists(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import autoskillit.cli.session._session_process as process_mod
-
-    monkeypatch.setattr(
-        process_mod.os,
-        "killpg",
-        Mock(side_effect=PermissionError("process group exists but is not signalable")),
-    )
-
-    assert process_mod._process_group_exists(12345)
 
 
 def test_pty_attempt_retains_lease_fd_and_owns_controlling_slave(

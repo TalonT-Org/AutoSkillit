@@ -255,11 +255,23 @@ def reap_stale_dispatches(
                     )
                 else:
                     try:
-                        kill_process_tree(pid)
+                        cleanup_result = kill_process_tree(pid)
                     except Exception:
                         logger.warning(
                             "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
                         )
+                        continue
+                    if not cleanup_result.complete:
+                        logger.warning(
+                            "reap: [INCOMPLETE]  %s  pid=%d survivors=%s denied=%s "
+                            "observation_complete=%s",
+                            name,
+                            pid,
+                            cleanup_result.survivor_pids,
+                            cleanup_result.access_denied_pids,
+                            cleanup_result.observation_complete,
+                        )
+                        continue
                     _apply_stale_dispatch(dispatch, "reaped_orphan", m, reaper_dispatch_id)
                     logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
             else:

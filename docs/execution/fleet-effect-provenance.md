@@ -41,9 +41,12 @@ Missing provenance fails closed and never authorizes a fresh dispatch.
 ## Cleanup is orthogonal
 
 Local process cleanup records the observed `(pid, create_time)` identities,
-terminated PIDs, survivors, and access-denied PIDs after the final bounded wait.
-An empty survivor set proves only local process cleanup. It does not erase a
-confirmed state write, commit, label mutation, or remote effect.
+terminated PIDs, survivors, access-denied PIDs, and whether the requested
+bounded observation completed. Cleanup is confirmed only when `complete` is
+true: observation completed, no verified target survived, and no required
+operation was denied. An empty survivor set alone is not confirmation. Even a
+confirmed local cleanup does not erase a confirmed state write, commit, label
+mutation, or remote effect.
 
 State cleanup, label cleanup, cancellation, and compensation remain separate
 facets. Compensation is itself a fallible effect and must have its own

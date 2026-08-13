@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import signal
 import subprocess
 from pathlib import Path
 
@@ -17,6 +16,7 @@ from autoskillit.core import (
     load_bundled_agent_definitions,
 )
 from autoskillit.hook_registry import generate_hooks_json
+from tests.execution._process_group_helpers import _cleanup_owned_process_group
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.large, pytest.mark.smoke]
 
@@ -176,14 +176,8 @@ def _run_claude(project: Path, plugin: Path, home: Path) -> str:
         try:
             process.wait(timeout=50)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=10)
+            _cleanup_owned_process_group(process, timeout=10)
             pytest.fail(f"Claude explorer live gate timed out: {output_path.read_text()[-4000:]}")
-        finally:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
     output = output_path.read_text()
     assert len(output.encode()) <= 256_000, "Claude live output exceeded its evidence bound"
     assert process.returncode == 0, output[-4000:]

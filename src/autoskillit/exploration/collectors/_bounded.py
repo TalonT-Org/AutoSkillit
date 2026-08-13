@@ -444,9 +444,19 @@ def _drain_bounded_process(
 
 def _terminate(process: subprocess.Popen[bytes]) -> None:
     try:
-        os.killpg(process.pid, signal.SIGKILL)
+        if (
+            process.returncode is None
+            and process.pid > 0
+            and os.getpgid(process.pid) == process.pid
+        ):
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
     except OSError:
-        process.kill()
+        try:
+            process.kill()
+        except OSError:
+            pass
     try:
         process.wait(timeout=1)
     except (OSError, subprocess.TimeoutExpired):

@@ -8,6 +8,7 @@ from typing import Any
 
 import psutil
 import pytest
+import structlog.testing
 
 from autoskillit.execution import async_kill_process_tree, kill_process_tree
 from autoskillit.execution.process import _process_kill
@@ -386,6 +387,30 @@ def test_reaped_leader_permanently_revokes_group_signal(
     owner._signal_group(signal.SIGKILL)
 
     assert signals == []
+    assert owner.snapshot.observation_complete is False
+
+
+def test_unexpected_group_authority_error_is_logged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(
+        _process_kill,
+        "_snapshot_process_tree",
+        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+    )
+    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    monkeypatch.setattr(
+        _process_kill.os,
+        "getpgid",
+        lambda _pid: (_ for _ in ()).throw(OSError(errno.EIO, "identity unavailable")),
+    )
+
+    with structlog.testing.capture_logs() as logs:
+        owner._signal_group(signal.SIGTERM)
+
+    assert any(entry.get("event") == "owned_group_authority_validation_failed" for entry in logs)
     assert owner.snapshot.observation_complete is False
 
 

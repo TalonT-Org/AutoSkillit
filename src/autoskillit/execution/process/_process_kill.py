@@ -378,6 +378,13 @@ class OwnedProcessGroup:
                     )
                 )
                 return False
+            if not _is_disappearance(exc):
+                logger.warning(
+                    "owned_group_authority_validation_failed",
+                    pid=self.pid,
+                    pgid=self.pgid,
+                    exc_info=True,
+                )
         if not valid:
             self._snapshot = self._snapshot.merge(
                 ProcessObservationSnapshot(observation_complete=False)

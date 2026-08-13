@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli._daemon_orphans import run_daemon_orphans
+from autoskillit.core import ProcessCleanupResult
 from autoskillit.execution import DaemonOrphanReapResult, OrphanedAutoSkillitDaemon
+from autoskillit.execution.process import _daemon_orphans as daemon_orphans
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -69,11 +71,12 @@ def test_reap_prints_target_before_signaling_and_preserves_registry(
         "autoskillit.execution.find_orphaned_autoskillit_daemons", lambda: [candidate]
     )
 
-    def fake_reap(_items: object) -> list[DaemonOrphanReapResult]:
+    def fake_kill(_pid: int, **_kwargs: object) -> ProcessCleanupResult:
         events.append(capsys.readouterr().out)
-        return [DaemonOrphanReapResult(44, "terminated")]
+        return ProcessCleanupResult(root_pid=44, observation_complete=True)
 
-    monkeypatch.setattr("autoskillit.execution.reap_orphaned_autoskillit_daemons", fake_reap)
+    monkeypatch.setattr(daemon_orphans, "_candidate_for_pid", lambda _pid: candidate)
+    monkeypatch.setattr(daemon_orphans, "kill_process_tree", fake_kill)
     run_daemon_orphans(reap=True)
     assert "orphan: pid=44" in events[0]
     assert json.loads(registry.read_text()) == {"0123456789abcdef": {"session_type": "cook"}}

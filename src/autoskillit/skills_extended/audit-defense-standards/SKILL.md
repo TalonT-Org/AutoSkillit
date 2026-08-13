@@ -176,6 +176,29 @@ Defense standards come from the `/autoskillit:design-guards` pipeline:
 
 ---
 
+### DS-013: Guard Violations Must Be Satisfied, Never Masked
+
+**Rule:** A change may not make a guard-violation test pass by pre-seeding or stubbing
+the guarded state transition; a guard's error message appearing in any test failure
+requires root-cause classification before any fixture change is accepted.
+
+**Audit Strategy:**
+Search test diffs for new autouse fixtures or conftest stubs that set, freeze, or
+replace state consumed by a fail-closed guard (registry: tests/arch/test_guard_coverage.py
+FAIL_CLOSED_GUARDS and tests/arch/test_guard_masking_policy.py
+GUARDED_TRANSITION_SYMBOLS). Any such fixture added in the same change as the guarded
+code, or whose docstring names a guard error, is a violation unless the exemption
+ledger records machine-checked rationale text and a real-path test covering the
+unstubbed transition (or a tracking issue).
+
+**Severity:** HIGH
+
+**Citations:** Issue #4572 (fixture `_pre_freeze_attestation_env` masked the
+"interactive environment changed after executable binding" guard in the same commit
+that introduced the ordering bug).
+
+---
+
 ## Audit Workflow (SINGLE MESSAGE)
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**

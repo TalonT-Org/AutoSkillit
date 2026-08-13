@@ -487,6 +487,19 @@ class TestModuleCascadeConfigGuard:
 _TESTS_ROOT = Path(__file__).parent.parent
 
 
+def test_execution_backend_changes_include_cli_tests() -> None:
+    from tests._test_filter import FilterMode, build_test_scope
+
+    scope = build_test_scope(
+        changed_files={"src/autoskillit/execution/backends/claude.py"},
+        mode=FilterMode.CONSERVATIVE,
+        tests_root=_TESTS_ROOT,
+    )
+
+    assert not isinstance(scope, str)
+    assert _TESTS_ROOT / "cli" in scope
+
+
 class TestModuleCascadeRecipeNarrowing:
     """Validate that MODULE_CASCADE_RECIPE actually narrows scope in build_test_scope."""
 

@@ -64,6 +64,97 @@ async def _run_with_backend(tool_ctx, dispatch_backend=None):
     return json.loads(result.outcome.to_envelope())
 
 
+def _caller_authority(backend: str):
+    from autoskillit.core import BackendAuthority, BackendAuthorityKind, BackendAuthorityTier
+
+    return BackendAuthority(
+        backend=backend,
+        kind=BackendAuthorityKind.CALLER,
+        tier=BackendAuthorityTier.CALLER,
+        key_path="test.backend",
+    )
+
+
+class TestFoodTruckBackendOverridePrelaunch:
+    @pytest.mark.anyio
+    async def test_non_global_claude_dispatch_skips_interactive_prelaunch(
+        self,
+        tool_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import json
+
+        from autoskillit.core import SubprocessResult, TerminationReason
+        from tests.fakes import MockSubprocessRunner
+
+        executor = tool_ctx.executor
+        _setup(tool_ctx, monkeypatch)
+        tool_ctx.executor = executor
+        backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("claude-code"))
+        monkeypatch.setattr(
+            type(backend),
+            "ensure_pre_launch",
+            lambda _self, **_kwargs: pytest.fail("Claude food-truck dispatch must skip prelaunch"),
+        )
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "result": "L3 done %%FT_DONE%%",
+                        "session_id": "ft-session",
+                        "is_error": False,
+                    }
+                ),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1234,
+            )
+        )
+        tool_ctx.runner = runner
+        tool_ctx.backend = backend
+
+        await _run_with_backend(tool_ctx, dispatch_backend=backend)
+
+        assert runner.call_args_list
+
+    @pytest.mark.anyio
+    async def test_non_global_codex_dispatch_still_runs_prelaunch(
+        self,
+        tool_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import SubprocessResult, TerminationReason
+        from tests.fakes import MockSubprocessRunner
+
+        executor = tool_ctx.executor
+        _setup(tool_ctx, monkeypatch)
+        tool_ctx.executor = executor
+        backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("codex"))
+        prelaunch = Mock(return_value=PreLaunchReadiness((), {}))
+        monkeypatch.setattr(type(backend), "ensure_pre_launch", prelaunch)
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1234,
+            )
+        )
+        tool_ctx.runner = runner
+        tool_ctx.backend = backend
+
+        await _run_with_backend(tool_ctx, dispatch_backend=backend)
+
+        assert runner.call_args_list
+        prelaunch.assert_called_once_with()
+
+
 class TestDispatchBackendOverrideThreadsToExecutor:
     @pytest.mark.anyio
     async def test_dispatch_backend_override_threads_to_executor(self, tool_ctx, monkeypatch):

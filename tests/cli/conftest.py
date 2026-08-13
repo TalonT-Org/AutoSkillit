@@ -16,22 +16,19 @@ import pytest
 
 @pytest.fixture
 def launch_kwargs() -> dict[str, object]:
-    """Return the canonical empty compiled-catalog launch inputs."""
+    """Return canonical launch inputs backed by the real session catalog."""
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
-    from autoskillit.workspace import CompiledSessionSkillCatalog, EffectiveSkillCatalog
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        compile_session_skill_catalog,
+    )
     from autoskillit.workspace.skills import SkillExecutionRole
 
     backend = ClaudeCodeBackend()
+    catalog = DefaultSkillResolver().list_effective(None, SkillExecutionRole.SESSION)
     return {
         "backend": backend,
-        "skill_compilation": CompiledSessionSkillCatalog(
-            backend=backend.name,
-            catalog=EffectiveSkillCatalog(
-                skills=(),
-                execution_role=SkillExecutionRole.SESSION,
-            ),
-            unavailable=(),
-        ),
+        "skill_compilation": compile_session_skill_catalog(catalog, backend),
         "launch_id": "test-order",
         "default_base_branch": "main",
         "workspace_temp_dir": None,

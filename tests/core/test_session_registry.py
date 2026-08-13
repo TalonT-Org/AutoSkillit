@@ -90,6 +90,12 @@ def test_bind_session_owner_rejects_unknown_launch_id(tmp_path: Path) -> None:
     assert set(read_registry(tmp_path)) == {"abc"}
 
 
+@pytest.mark.parametrize("owner_pid", [0, -1])
+def test_bind_session_owner_rejects_non_positive_pid(tmp_path: Path, owner_pid: int) -> None:
+    with pytest.raises(ValueError, match="owner_pid must be a positive integer"):
+        bind_session_owner(tmp_path, "abc", owner_pid)
+
+
 @pytest.mark.parametrize(
     ("contents", "expected_error"),
     [(None, FileNotFoundError), ("not valid json", json.JSONDecodeError)],

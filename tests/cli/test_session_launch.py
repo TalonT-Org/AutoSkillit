@@ -1197,6 +1197,7 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
+    monkeypatch.setattr(subprocess, "run", mock_run)
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
@@ -1240,6 +1241,7 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
+    monkeypatch.setattr(subprocess, "run", mock_run)
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
@@ -1285,6 +1287,7 @@ def test_cross_validation_contract_all_flags_known(
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
+    monkeypatch.setattr(subprocess, "run", mock_run)
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)

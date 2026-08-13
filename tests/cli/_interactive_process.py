@@ -7,10 +7,12 @@ from unittest.mock import MagicMock
 
 
 class InteractiveProcessStub:
-    def __init__(self, returncode: int = 0) -> None:
-        self.pid = os.getpid()
+    def __init__(self, returncode: int = 0, *, pid: int | None = None) -> None:
+        self.pid = os.getpid() if pid is None else pid
         self.returncode: int | None = None
         self._final_returncode = returncode
+        self.terminated = False
+        self.killed = False
 
     def wait(self, timeout: float | None = None) -> int:
         del timeout
@@ -21,9 +23,11 @@ class InteractiveProcessStub:
         return self.returncode
 
     def terminate(self) -> None:
+        self.terminated = True
         self.returncode = -15
 
     def kill(self) -> None:
+        self.killed = True
         self.returncode = -9
 
 

@@ -33,6 +33,7 @@ from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.workspace import (
     project_default_plugin_authority as _production_project_default_plugin_authority,
 )
+from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -141,35 +142,10 @@ class _BackendLifecycleStub:
 # ---------------------------------------------------------------------------
 
 
-class _FakePopen:
-    def __init__(self, returncode: int = 0, *, pid: int = 4242) -> None:
-        self.pid = pid
-        self.returncode: int | None = None
-        self._final_returncode = returncode
-        self.terminated = False
-        self.killed = False
-
-    def wait(self, timeout: float | None = None) -> int:
-        del timeout
-        self.returncode = self._final_returncode
-        return self._final_returncode
-
-    def poll(self) -> int | None:
-        return self.returncode
-
-    def terminate(self) -> None:
-        self.terminated = True
-        self.returncode = -15
-
-    def kill(self) -> None:
-        self.killed = True
-        self.returncode = -9
-
-
 def _popen_from_run(run):  # type: ignore[no-untyped-def]
     def popen(cmd, **kwargs):  # type: ignore[no-untyped-def]
         result = run(cmd, **kwargs)
-        return _FakePopen(result.returncode)
+        return InteractiveProcessStub(result.returncode)
 
     return popen
 
@@ -454,7 +430,7 @@ def test_run_interactive_session_binds_launch_owner_before_wait(
 
     events: list[tuple[str, object]] = []
 
-    class _Process(_FakePopen):
+    class _Process(InteractiveProcessStub):
         def wait(self, timeout: float | None = None) -> int:
             events.append(("wait", timeout))
             return super().wait(timeout)
@@ -481,7 +457,7 @@ def test_run_interactive_session_reaps_child_when_owner_binding_fails(
 ) -> None:
     from autoskillit.core import LAUNCH_ID_ENV_VAR
 
-    process = _FakePopen(pid=888)
+    process = InteractiveProcessStub(pid=888)
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         "autoskillit.core.bind_session_owner",

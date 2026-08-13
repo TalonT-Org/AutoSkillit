@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -16,9 +15,9 @@ from autoskillit.cli.session._session_picker import (
 from autoskillit.core import SessionSummary
 from autoskillit.core.runtime.session_registry import (
     read_registry,
-    registry_path,
     write_registry_entry,
 )
+from tests._helpers import seed_registry_owner
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -81,9 +80,7 @@ def test_pick_session_filters_cook(
 
     write_registry_entry(project_dir, "lid-cook", "cook", None)
     write_registry_entry(project_dir, "lid-order", "order", None)
-    registry = read_registry(project_dir)
-    registry["lid-cook"].update(owner_pid=321, owner_boot_id="boot-id", owner_starttime_ticks=654)
-    registry_path(project_dir).write_text(json.dumps(registry))
+    seed_registry_owner(project_dir, "lid-cook")
 
     from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 

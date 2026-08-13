@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from tests._helpers import seed_registry_owner
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -183,15 +184,12 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     """open_kitchen_guard bridges AUTOSKILLIT_LAUNCH_ID to claude_session_id in registry."""
     from autoskillit.core.runtime.session_registry import (
         read_registry,
-        registry_path,
         write_registry_entry,
     )
 
     project_dir = tmp_path
     write_registry_entry(project_dir, "abc", "cook", None)
-    registry = read_registry(project_dir)
-    registry["abc"].update(owner_pid=321, owner_boot_id="boot-id", owner_starttime_ticks=654)
-    registry_path(project_dir).write_text(json.dumps(registry))
+    seed_registry_owner(project_dir, "abc")
     assert read_registry(project_dir)["abc"]["claude_session_id"] is None
 
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"

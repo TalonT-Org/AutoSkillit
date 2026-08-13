@@ -10,10 +10,10 @@ from autoskillit.core import (
     SessionSummary,
     bridge_claude_session_id,
     read_registry,
-    registry_path,
     write_registry_entry,
 )
 from autoskillit.execution.backends import ClaudeSessionLocator
+from tests._helpers import seed_registry_owner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -25,11 +25,7 @@ class TestClaudeSessionLocator:
         project = tmp_path / "project"
         project.mkdir()
         write_registry_entry(project, "0123456789abcdef", "cook", None)
-        registry = read_registry(project)
-        registry["0123456789abcdef"].update(
-            owner_pid=321, owner_boot_id="boot-id", owner_starttime_ticks=654
-        )
-        registry_path(project).write_text(json.dumps(registry))
+        seed_registry_owner(project, "0123456789abcdef")
         bridge_claude_session_id(project, "0123456789abcdef", "claude-1")
         fake_home = tmp_path / "home"
         index_dir = fake_home / ".claude" / "projects" / "-ignored"

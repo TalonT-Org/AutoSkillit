@@ -69,3 +69,4 @@ async def serve_with_signal_guard(
     async with anyio.create_task_group() as tg:
         await tg.start(_watch, tg.cancel_scope)
         await mcp_server.run_async()
+        tg.cancel_scope.cancel()

@@ -454,6 +454,32 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
     assert wait_timeouts == [_process_kill._FINAL_WAIT_SECONDS]
 
 
+def test_settle_preserving_converts_cleanup_failure_to_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(
+        _process_kill,
+        "_snapshot_process_tree",
+        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+    )
+    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    cleanup_error = OSError(errno.EIO, "cleanup failed")
+    monkeypatch.setattr(
+        owner,
+        "cleanup",
+        lambda _timeout: (_ for _ in ()).throw(cleanup_error),
+    )
+    original_error = RuntimeError("original failure")
+
+    result = owner.settle_preserving(original_error)
+
+    assert result.complete is False
+    assert result.survivor_pids == (owner.pid,)
+    assert any("OSError" in note and "cleanup failed" in note for note in original_error.__notes__)
+
+
 def test_unexpected_group_authority_error_is_logged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

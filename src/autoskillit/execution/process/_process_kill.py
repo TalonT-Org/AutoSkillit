@@ -558,7 +558,31 @@ class OwnedProcessGroup:
     def settle_preserving(
         self, error: BaseException, timeout: float = 2.0
     ) -> ProcessCleanupResult:
-        _, result = self.cleanup(timeout)
+        try:
+            _, result = self.cleanup(timeout)
+        except BaseException as cleanup_error:
+            logger.error(
+                "owned_group_cleanup_failed",
+                pid=self.pid,
+                error_type=type(cleanup_error).__name__,
+                exc_info=True,
+            )
+            survivor_pids = {pid for pid, _ in self._snapshot.process_identities}
+            if self.process.returncode is None:
+                survivor_pids.add(self.pid)
+            result = ProcessCleanupResult(
+                root_pid=self.pid,
+                process_identities=self._snapshot.process_identities,
+                survivor_pids=tuple(sorted(survivor_pids)),
+                access_denied_pids=self._snapshot.access_denied_pids,
+                observation_complete=False,
+            )
+            error.add_note(
+                "owned process cleanup failed: "
+                f"{type(cleanup_error).__name__}: {cleanup_error}; "
+                f"evidence: {result.to_dict()}"
+            )
+            return result
         if not result.complete:
             logger.error("owned_group_cleanup_incomplete", evidence=result.to_dict())
             error.add_note(f"owned process cleanup evidence: {result.to_dict()}")

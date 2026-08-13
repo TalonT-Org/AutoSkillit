@@ -11,6 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.cli._interactive_process import InteractiveProcessStub
+
 if TYPE_CHECKING:
     from autoskillit.fleet import CampaignState
 
@@ -55,15 +57,15 @@ def _stub_campaign_resolution(
 
 
 def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Replace subprocess.run with a capturing stub. Returns captured dict."""
+    """Replace interactive Popen with a capturing stub. Returns captured dict."""
     captured: dict = {}
 
     def mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
         captured["cmd"] = list(cmd)
         captured["env"] = kwargs.get("env", {}) or {}
-        return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        return InteractiveProcessStub()
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", mock_run)
     return captured
 
 

@@ -249,7 +249,7 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
             inherited_fds = () if binding is None else binding.inherited_fds
             return CmdSpec(
                 cmd=("claude", "--dangerously-skip-permissions"),
-                env={},
+                env=dict(kwargs.get("env_extras") or {}),
                 inherited_fds=inherited_fds,
             )
 
@@ -1028,7 +1028,9 @@ def test_configured_codex_authority_is_not_implicitly_rerouted(
         fake_get_backend,
     )
     monkeypatch.setattr(
-        subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
+        subprocess,
+        "Popen",
+        _popen_from_run(lambda *a, **kw: type("Result", (), {"returncode": 0})()),
     )
     _run_interactive_session(system_prompt="test")
     assert backends_used == ["codex", "codex"], (
@@ -1085,7 +1087,9 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
         lambda name: _CodexStub(),
     )
     monkeypatch.setattr(
-        subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
+        subprocess,
+        "Popen",
+        _popen_from_run(lambda *a, **kw: type("Result", (), {"returncode": 0})()),
     )
     _run_interactive_session(system_prompt="test")
     assert backends_used == ["codex", "codex"], (
@@ -1122,7 +1126,9 @@ def test_launch_cook_session_accepts_backend_param(
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
     monkeypatch.setattr(
-        subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
+        subprocess,
+        "Popen",
+        _popen_from_run(lambda *a, **kw: type("Result", (), {"returncode": 0})()),
     )
     _stub_plugin_installed(monkeypatch, installed=True)
     _launch_cook_session(

@@ -21,6 +21,11 @@ pytestmark = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _stub_owner_binding(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
+
+
 class _ReloadBinding:
     def __init__(self, plugin_dir: Path) -> None:
         self.plugin_dir = plugin_dir

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +11,7 @@ import pytest
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import ClaudeFlags
+from tests.cli._interactive_process import configure_popen
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [
@@ -19,6 +19,11 @@ pytestmark = [
     pytest.mark.medium,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
 ]
+
+
+@pytest.fixture(autouse=True)
+def _stub_owner_binding(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
 
 
 @pytest.mark.parametrize(
@@ -88,7 +93,7 @@ class TestCLIOrderPrompt:
         ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_system_prompt_contains_behavioral_instructions(
         self,
         mock_run: MagicMock,
@@ -103,9 +108,7 @@ class TestCLIOrderPrompt:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -122,7 +125,7 @@ class TestCLIOrderPrompt:
         assert "--- RECIPE ---" not in system_prompt
         assert "do-something" not in system_prompt
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_orchestrator_prompt_contains_context_limit_routing(
         self,
         mock_run: MagicMock,
@@ -137,9 +140,7 @@ class TestCLIOrderPrompt:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -149,7 +150,7 @@ class TestCLIOrderPrompt:
         assert "needs_retry" in system_prompt
         assert "on_context_limit" in system_prompt
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_named_recipe_only_confirmation_prompt(
         self,
         mock_run: MagicMock,
@@ -163,9 +164,7 @@ class TestCLIOrderPrompt:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         input_calls = []
         monkeypatch.setattr("builtins.input", lambda prompt="": input_calls.append(prompt) or "")
@@ -174,7 +173,7 @@ class TestCLIOrderPrompt:
 
         assert len(input_calls) == 1, "input() should be called exactly once (confirmation)"
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_command_includes_positional_greeting(
         self,
         mock_run: MagicMock,
@@ -191,9 +190,7 @@ class TestCLIOrderPrompt:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -203,7 +200,7 @@ class TestCLIOrderPrompt:
             f"No greeting found as positional arg in: {cmd}"
         )
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_open_kitchen_includes_positional_greeting(
         self,
         mock_run: MagicMock,
@@ -219,7 +216,7 @@ class TestCLIOrderPrompt:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        configure_popen(mock_run, returncode=0)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
 
         cli.order()
@@ -253,7 +250,7 @@ class TestOrderDisplayOwnership:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         return scripts_dir
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_system_prompt_does_not_contain_recipe_yaml(
         self,
         mock_run: MagicMock,
@@ -262,9 +259,7 @@ class TestOrderDisplayOwnership:
     ) -> None:
         """System prompt must contain recipe NAME but not the raw YAML body."""
         self._setup_recipe(tmp_path, monkeypatch)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -277,7 +272,7 @@ class TestOrderDisplayOwnership:
         assert "steps:" not in system_prompt
         assert "on_success:" not in system_prompt
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_system_prompt_instructs_open_kitchen_with_recipe(
         self,
         mock_run: MagicMock,
@@ -286,9 +281,7 @@ class TestOrderDisplayOwnership:
     ) -> None:
         """System prompt must instruct Claude to call open_kitchen(name) as its first action."""
         self._setup_recipe(tmp_path, monkeypatch)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -332,7 +325,7 @@ class TestOrderMcpPrefixSelection:
         ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_prompt_uses_direct_prefix_when_no_marketplace_install(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -351,9 +344,7 @@ class TestOrderMcpPrefixSelection:
         monkeypatch.setattr(
             "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
         )
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -363,7 +354,7 @@ class TestOrderMcpPrefixSelection:
         captured_prompt = cmd[prompt_idx + 1]
         assert f"{DIRECT_PREFIX}open_kitchen" in captured_prompt
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_prompt_uses_marketplace_prefix_when_plugin_installed(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -382,9 +373,7 @@ class TestOrderMcpPrefixSelection:
         monkeypatch.setattr(
             "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
         )
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -394,7 +383,7 @@ class TestOrderMcpPrefixSelection:
         captured_prompt = cmd[prompt_idx + 1]
         assert f"{MARKETPLACE_PREFIX}open_kitchen" in captured_prompt
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_cook_passes_ingredients_table_to_orchestrator_prompt(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -430,9 +419,7 @@ class TestOrderMcpPrefixSelection:
             "autoskillit.cli.session._session_order"
         ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_build_orchestrator_prompt", _capturing_build)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 

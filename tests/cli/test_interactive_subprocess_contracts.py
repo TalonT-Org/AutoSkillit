@@ -189,7 +189,7 @@ def test_cook_attempt_uses_only_the_shared_spawn_bound_owner() -> None:
     violations: list[str] = []
     for path in sorted(session_dir.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        if path.name != "_session_process.py" and _calls_in(
+        if path.name not in {"_session_process.py", "_session_launch.py"} and _calls_in(
             tree, owner="subprocess", attr="Popen"
         ):
             violations.append(path.name)

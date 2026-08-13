@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +11,7 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags
+from tests.cli._interactive_process import configure_popen
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [
@@ -19,6 +19,11 @@ pytestmark = [
     pytest.mark.medium,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
 ]
+
+
+@pytest.fixture(autouse=True)
+def _stub_owner_binding(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
 
 
 class TestCLIOrderPicker:
@@ -46,7 +51,7 @@ class TestCLIOrderPicker:
         ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_no_recipe_prompts_user(
         self,
         mock_run: MagicMock,
@@ -60,9 +65,7 @@ class TestCLIOrderPicker:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "test-script")
 
         cli.order()  # no recipe argument
@@ -89,7 +92,7 @@ class TestCLIOrderPicker:
             cli.order()
         assert exc_info.value.code == 1
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_picker_shows_zero_option(
         self,
         mock_run: MagicMock,
@@ -104,7 +107,7 @@ class TestCLIOrderPicker:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        configure_popen(mock_run, returncode=0)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "test-script")
 
         cli.order()
@@ -112,7 +115,7 @@ class TestCLIOrderPicker:
         captured = capsys.readouterr()
         assert "0. Open kitchen" in captured.out
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_picker_zero_launches_open_kitchen(
         self,
         mock_run: MagicMock,
@@ -126,7 +129,7 @@ class TestCLIOrderPicker:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        configure_popen(mock_run, returncode=0)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
 
         cli.order()
@@ -161,7 +164,7 @@ class TestCLIOrderPicker:
         captured = capsys.readouterr()
         assert "Invalid selection" in captured.out
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_resume_bare_flag_produces_bare_resume_skips_discovery(
         self,
         mock_run: MagicMock,
@@ -176,9 +179,7 @@ class TestCLIOrderPicker:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
         discovery_calls: list = []
 
         with patch(
@@ -199,7 +200,7 @@ class TestCLIOrderPicker:
             )
         assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_resume_explicit_session_id_skips_discovery(
         self,
         mock_run: MagicMock,
@@ -214,9 +215,7 @@ class TestCLIOrderPicker:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
         discovery_calls: list = []
 
         def fake_discover(cwd=None):
@@ -233,7 +232,7 @@ class TestCLIOrderPicker:
             "find_latest_session_id must not be called when session_id is explicit"
         )
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_resume_bare_flag_always_emits_resume(
         self,
         mock_run: MagicMock,
@@ -248,9 +247,7 @@ class TestCLIOrderPicker:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script", resume=True)
 
@@ -265,7 +262,7 @@ class TestCLIOrderPicker:
                 f"bare --resume must not be followed by a session ID, got: {next_tok!r}"
             )
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_bare_resume_no_recipe_invokes_picker(
         self,
         mock_run: MagicMock,
@@ -277,9 +274,7 @@ class TestCLIOrderPicker:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
         picker_calls: list = []
 
         def fake_pick_session(session_type: str, project_dir, project_log_dir) -> str | None:

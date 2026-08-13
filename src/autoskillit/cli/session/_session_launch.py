@@ -18,6 +18,7 @@ from autoskillit.core import (
     NoResume,
     SkillContractError,
     executable_binding_matches_current_file,
+    get_logger,
     plugin_launch_binding_scope,
     resolve_executable_launch_binding,
     resolve_temp_dir,
@@ -36,6 +37,8 @@ if TYPE_CHECKING:
         ValidatedAddDir,
     )
     from autoskillit.workspace import CompiledSessionSkillCatalog, SkillExclusion
+
+logger = get_logger(__name__)
 
 
 def render_skill_contract_composition_failure(exc: SkillContractError) -> None:
@@ -317,9 +320,7 @@ def _run_interactive_session(
             def _record_spawn(pid: int, pgid: int) -> None:
                 attempt_handle.record_spawn(pid, pgid)
                 launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
-                if launch_id is not None:
-                    if not launch_id:
-                        raise ValueError(f"{LAUNCH_ID_ENV_VAR} must be nonempty")
+                if launch_id:
                     from autoskillit.core import bind_session_owner
 
                     bind_session_owner(_project_dir, launch_id, pid)
@@ -383,9 +384,7 @@ def _run_interactive_session(
                 )
                 try:
                     launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
-                    if launch_id is not None:
-                        if not launch_id:
-                            raise ValueError(f"{LAUNCH_ID_ENV_VAR} must be nonempty")
+                    if launch_id:
                         from autoskillit.core import bind_session_owner
 
                         bind_session_owner(_project_dir, launch_id, process.pid)
@@ -400,7 +399,7 @@ def _run_interactive_session(
                             process.kill()
                             process.wait(timeout=5.0)
                     except BaseException:
-                        pass
+                        logger.warning("interactive child cleanup failed", exc_info=True)
                     raise
     reload_session_id = consume_reload_sentinel(_project_dir)
     if reload_session_id is not None:

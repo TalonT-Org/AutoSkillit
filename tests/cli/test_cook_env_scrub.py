@@ -17,7 +17,6 @@ import pytest
 
 from autoskillit.core import CmdSpec, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -26,18 +25,10 @@ pytestmark = [
 ]
 
 
-def _launch_kwargs() -> dict[str, object]:
-    return {
-        "backend": ClaudeCodeBackend(),
-        "skill_compilation": SimpleNamespace(unavailable=(), catalog=None),
-        "launch_id": "test-order",
-        "default_base_branch": "main",
-        "workspace_temp_dir": None,
-    }
-
-
 def test_launch_cook_session_env_excludes_ide_vars(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    launch_kwargs: dict[str, object],
 ) -> None:
     monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
     monkeypatch.setenv("ENABLE_IDE_INTEGRATION", "true")
@@ -58,7 +49,7 @@ def test_launch_cook_session_env_excludes_ide_vars(
             "system prompt",
             initial_message="hello",
             required_env=frozenset(),
-            **_launch_kwargs(),
+            **launch_kwargs,
         )
 
     mock_run.assert_called_once()
@@ -71,7 +62,9 @@ def test_launch_cook_session_env_excludes_ide_vars(
 
 
 def test_launch_cook_session_extra_env_still_applied(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    launch_kwargs: dict[str, object],
 ) -> None:
     monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
 
@@ -89,7 +82,7 @@ def test_launch_cook_session_extra_env_still_applied(
             "system prompt",
             extra_env={"AUTOSKILLIT_SUBSETS__DISABLED": "@json []"},
             required_env=frozenset(),
-            **_launch_kwargs(),
+            **launch_kwargs,
         )
 
     env = mock_run.call_args.kwargs["env"]
@@ -99,6 +92,7 @@ def test_launch_cook_session_extra_env_still_applied(
 
 def test_launch_cook_session_env_has_max_mcp_output_tokens(
     monkeypatch: pytest.MonkeyPatch,
+    launch_kwargs: dict[str, object],
 ) -> None:
     """_launch_cook_session (order path) must produce env with MAX_MCP_OUTPUT_TOKENS."""
     from autoskillit.cli.session._session_launch import _launch_cook_session
@@ -115,7 +109,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
             "system prompt",
             initial_message="hello",
             required_env=frozenset(),
-            **_launch_kwargs(),
+            **launch_kwargs,
         )
 
     env = mock_run.call_args.kwargs["env"]
@@ -124,6 +118,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
 
 def test_launch_cook_session_env_has_mcp_connection_nonblocking(
     monkeypatch: pytest.MonkeyPatch,
+    launch_kwargs: dict[str, object],
 ) -> None:
     """_launch_cook_session (order path) must produce env with MCP_CONNECTION_NONBLOCKING=0."""
     from autoskillit.cli.session._session_launch import _launch_cook_session
@@ -140,7 +135,7 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
             "system prompt",
             initial_message="hello",
             required_env=frozenset(),
-            **_launch_kwargs(),
+            **launch_kwargs,
         )
 
     env = mock_run.call_args.kwargs["env"]

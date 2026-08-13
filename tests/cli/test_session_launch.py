@@ -1018,7 +1018,10 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
 # ---------------------------------------------------------------------------
 
 
-def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_launch_cook_session_accepts_backend_param(
+    monkeypatch: pytest.MonkeyPatch,
+    launch_kwargs: dict[str, object],
+) -> None:
     """_launch_cook_session must accept a backend= kwarg and forward it to
     _run_interactive_session, which calls backend.build_interactive_cmd."""
     from autoskillit.cli.session._session_launch import _launch_cook_session
@@ -1046,10 +1049,10 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
         system_prompt="test",
         backend=_CapturingBackend(),
         required_env=frozenset(),
-        skill_compilation=MagicMock(unavailable=(), catalog=None),
-        launch_id="test-order",
-        default_base_branch="main",
-        workspace_temp_dir=None,
+        skill_compilation=launch_kwargs["skill_compilation"],
+        launch_id=launch_kwargs["launch_id"],
+        default_base_branch=launch_kwargs["default_base_branch"],
+        workspace_temp_dir=launch_kwargs["workspace_temp_dir"],
     )
     assert build_calls, "backend.build_interactive_cmd must be called via _launch_cook_session"
 
@@ -1338,6 +1341,7 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
 def test_managed_interactive_session_validates_before_shared_process_owner(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    launch_kwargs: dict[str, object],
 ) -> None:
     from autoskillit.core import (
         CLAUDE_CODE_CAPABILITIES,
@@ -1389,7 +1393,7 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
         system_prompt="test",
         backend=_ManagedBackend(),
         project_dir=tmp_path,
-        skill_compilation=MagicMock(),
+        skill_compilation=launch_kwargs["skill_compilation"],
         managed_home=managed_home,
         retained_projection_binding=retained_binding,
         startup_trace=trace,

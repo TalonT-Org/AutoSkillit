@@ -15,12 +15,9 @@ the child must NOT attach to the IDE channel via either discovery path:
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -30,7 +27,9 @@ pytestmark = [
 
 
 def test_cook_session_ignores_ide_lock_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    launch_kwargs: dict[str, object],
 ) -> None:
     """Launch cook under simulated IDE state; assert env scrub + auto-connect disable."""
     fake_home = tmp_path / "home"
@@ -59,11 +58,7 @@ def test_cook_session_ignores_ide_lock_file(
             "system prompt",
             initial_message="hello",
             required_env=frozenset(),
-            backend=ClaudeCodeBackend(),
-            skill_compilation=SimpleNamespace(unavailable=(), catalog=None),
-            launch_id="test-order",
-            default_base_branch="main",
-            workspace_temp_dir=None,
+            **launch_kwargs,
         )
 
     # (1) Env scrub

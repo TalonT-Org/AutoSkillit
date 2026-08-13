@@ -14,7 +14,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 from autoskillit.cli.ui._terminal import _RESET_SPEC
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -461,7 +460,11 @@ class TestCookTerminalGuard:
             "tcsetattr must be called even when subprocess raises KeyboardInterrupt"
         )
 
-    def test_launch_cook_session_restores_terminal_on_keyboard_interrupt(self, monkeypatch):
+    def test_launch_cook_session_restores_terminal_on_keyboard_interrupt(
+        self,
+        monkeypatch,
+        launch_kwargs: dict[str, object],
+    ):
         """_launch_cook_session() must restore terminal on exception."""
         import importlib
 
@@ -493,11 +496,7 @@ class TestCookTerminalGuard:
             app_mod._launch_cook_session(
                 "system prompt",
                 required_env=frozenset(),
-                backend=ClaudeCodeBackend(),
-                skill_compilation=Mock(unavailable=(), catalog=None),
-                launch_id="test-order",
-                default_base_branch="main",
-                workspace_temp_dir=None,
+                **launch_kwargs,
             )
 
         assert tcsetattr_calls, "terminal must be restored by _launch_cook_session on exception"

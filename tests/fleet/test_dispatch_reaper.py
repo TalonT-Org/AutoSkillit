@@ -297,9 +297,7 @@ class TestReap:
             patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
-            patch("autoskillit.fleet._dispatch_reaper.psutil.Process") as mock_proc_cls,
         ):
-            mock_proc_cls.return_value.create_time.return_value = 1000000.5
             _reap(sp)
 
         mock_kill.assert_not_called()

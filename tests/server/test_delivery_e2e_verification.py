@@ -6,22 +6,12 @@ import json
 
 import pytest
 
-import autoskillit.server._recipe_delivery_helpers as recipe_delivery_helpers
 from autoskillit.core import CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
 from autoskillit.pipeline import ToolContext
 from autoskillit.server._recipe_delivery import initialize_host_client_attestation
 from tests.server._helpers import simulate_session_start
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.anyio]
-
-
-def _isolate_host_client_attestation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(recipe_delivery_helpers, "_CONTEXT_HOST_CLIENT_ATTESTATION", None)
-    monkeypatch.setattr(
-        recipe_delivery_helpers,
-        "_CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED",
-        False,
-    )
 
 
 async def test_claude_attested_implementation_delivers_successfully(
@@ -42,9 +32,7 @@ async def test_claude_attested_implementation_delivers_successfully(
         str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
     )
     monkeypatch.setenv("AUTOSKILLIT_ATTESTED_META_SUPPORT", "1")
-    _isolate_host_client_attestation(monkeypatch)
-    # Re-initialize attestation after monkeypatching env vars
-    initialize_host_client_attestation()
+    tool_ctx.host_client_attestation = initialize_host_client_attestation()
     counter = await simulate_session_start(
         "implementation",
         "claude-code",
@@ -81,8 +69,7 @@ async def test_claude_small_recipe_delivers_inline(
         str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
     )
     monkeypatch.setenv("AUTOSKILLIT_ATTESTED_META_SUPPORT", "1")
-    _isolate_host_client_attestation(monkeypatch)
-    initialize_host_client_attestation()
+    tool_ctx.host_client_attestation = initialize_host_client_attestation()
     counter = await simulate_session_start(
         "consolidate-health-reports",
         "claude-code",

@@ -75,7 +75,6 @@ from autoskillit.server._recipe_delivery_helpers import (
     _failure_decision,
     _initialization_requirements,
     _recipe_exemption_admitted_chars,
-    get_context_host_client_attestation,
     initialize_host_client_attestation,
     validate_compiled_recipe_delivery_budget,
     validate_recipe_exemption_fitness,
@@ -147,7 +146,7 @@ def finalize_recipe_delivery(
 ) -> FinalizedRecipeResponse:
     """Persist, decide, shape, and transactionally reserve one recipe response."""
     if host_client_attestation is None:
-        host_client_attestation = get_context_host_client_attestation()
+        host_client_attestation = tool_ctx.host_client_attestation
     surface_definition = RECIPE_DELIVERY_SURFACE_REGISTRY[surface]
     candidate_capabilities = (
         getattr(tool_ctx.backend, "capabilities", None) if tool_ctx.backend is not None else None
@@ -711,7 +710,6 @@ __all__ = [
     "document_recipe_delivery_contract",
     "enforce_recipe_resource_response",
     "finalize_recipe_delivery",
-    "get_context_host_client_attestation",
     "initialize_host_client_attestation",
     "load_recipe_artifact",
     "persist_recipe_artifact",

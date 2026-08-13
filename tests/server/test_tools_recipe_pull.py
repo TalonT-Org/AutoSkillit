@@ -1186,7 +1186,10 @@ _ATTESTED_HOST_CLIENT = HostClientAttestation(
 )
 
 
-def test_annotation_aware_inline_for_exempt_surface_within_ceiling(tool_ctx) -> None:
+@pytest.mark.parametrize("attestation_source", ["argument", "context"])
+def test_annotation_aware_inline_for_exempt_surface_within_ceiling(
+    tool_ctx, attestation_source: str
+) -> None:
     """When an attested Claude host client claims annotation support and an exempt
     surface's ordinary-rendered payload exceeds the backend's ordinary token limit
     but fits within the registered exemption ceiling, finalize_recipe_delivery()
@@ -1220,13 +1223,19 @@ def test_annotation_aware_inline_for_exempt_surface_within_ceiling(tool_ctx) -> 
     assert len(oversized_content.encode("utf-8")) > effective_unannotated
     assert len(oversized_content.encode("utf-8")) <= ceiling * 9 // 10
 
+    attestation_kwargs = {}
+    if attestation_source == "context":
+        tool_ctx.host_client_attestation = _ATTESTED_HOST_CLIENT
+    else:
+        attestation_kwargs["host_client_attestation"] = _ATTESTED_HOST_CLIENT
+
     finalized = _finalize_recipe_delivery(
         _payload(oversized_content),
         surface="open_kitchen",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
         finalized_projection=_test_projection(),
-        host_client_attestation=_ATTESTED_HOST_CLIENT,
+        **attestation_kwargs,
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE

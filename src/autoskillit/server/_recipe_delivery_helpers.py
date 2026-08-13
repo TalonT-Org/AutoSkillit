@@ -227,40 +227,14 @@ def _attested_render(
     )
 
 
-# Context-owned host client attestation — populated once by
-# initialize_host_client_attestation() (called from make_context()) and
-# consumed by finalize_recipe_delivery() when no explicit attestation
-# argument is supplied. Tests that monkeypatch env vars can either pass
-# host_client_attestation explicitly or call initialize_host_client_attestation()
-# after the monkeypatch to refresh.
-_CONTEXT_HOST_CLIENT_ATTESTATION: HostClientAttestation | None = None
-_CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED: bool = False
-
-
 def initialize_host_client_attestation() -> HostClientAttestation | None:
-    """Read the launcher-injected host client attestation once at startup.
+    """Read the launcher-injected host client attestation for a new context.
 
-    Called by ``make_context()`` — the composition root — to read the env
-    exactly once. Subsequent calls to ``finalize_recipe_delivery`` consume
-    the cached value without rereading ``os.environ``.
+    ``make_context()`` calls this once and stores the result on its ToolContext.
+    Recipe finalization then consumes that context-owned snapshot without
+    rereading ``os.environ``.
     """
-    global _CONTEXT_HOST_CLIENT_ATTESTATION, _CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED  # noqa: PLW0603
-    _CONTEXT_HOST_CLIENT_ATTESTATION = _resolve_host_client_attestation()
-    _CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED = True
-    return _CONTEXT_HOST_CLIENT_ATTESTATION
-
-
-def get_context_host_client_attestation() -> HostClientAttestation | None:
-    """Return the context-owned attestation.
-
-    Returns ``None`` when ``initialize_host_client_attestation()`` has not
-    yet run — it never falls back to reading ``os.environ`` directly, since
-    that would violate the single-read-at-startup contract this module
-    documents on ``initialize_host_client_attestation()``.
-    """
-    if _CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED:
-        return _CONTEXT_HOST_CLIENT_ATTESTATION
-    return None
+    return _resolve_host_client_attestation()
 
 
 def _resolve_host_client_attestation() -> HostClientAttestation | None:
@@ -312,7 +286,6 @@ def _failure_decision(
 
 
 __all__ = [
-    "get_context_host_client_attestation",
     "initialize_host_client_attestation",
     "validate_compiled_recipe_delivery_budget",
     "validate_recipe_exemption_fitness",

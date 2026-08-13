@@ -37,6 +37,7 @@ from autoskillit.core import (
     GitHubFetcher,
     GitHubReviewPosterProtocol,
     HeadlessExecutor,
+    HostClientAttestation,
     InputContractResolver,
     KitchenProcessIdentity,
     KitchenTransitionLock,
@@ -136,6 +137,8 @@ class ToolContext:
                           config.agent_backend. Provides command building, stream/result
                           parsing, env policy, and session location. None in test
                           ToolContext instances unless explicitly provided.
+    host_client_attestation: Launcher-provided client capabilities captured when the
+                          ToolContext is constructed.
     executor:             HeadlessExecutor — runs headless Claude Code sessions
     tester:               TestRunner — runs the project test suite
     recipes:              RecipeRepository — loads and lists pipeline recipes
@@ -248,6 +251,7 @@ class ToolContext:
     skill_contract_resolver: SkillContractResolver | None = field(default=None)
     recipe_execution_factory: RecipeExecutionFactory | None = field(default=None)
     backend: CodingAgentBackend | None = field(default=None)
+    host_client_attestation: HostClientAttestation | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
     skill_session_contract_store: SkillSessionContractStore = field(default=_MISSING)

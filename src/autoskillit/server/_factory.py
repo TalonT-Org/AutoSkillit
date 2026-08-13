@@ -309,8 +309,6 @@ def make_context(
 
     gate = DefaultGateState(enabled=False)
 
-    initialize_host_client_attestation()
-
     project_dir = project_dir if project_dir is not None else resolve_project_dir()
     exploration_trusted_root = (
         OwnerBoundExplorationContextStore.verified_repository_root_from_launch_environment()
@@ -417,6 +415,7 @@ def make_context(
         runner=runner,
         launch_resolver=DefaultLaunchResolver(),
         backend=backend,
+        host_client_attestation=initialize_host_client_attestation(),
         temp_dir=temp_dir,
         project_dir=project_dir,
         plugin_retirement_coordinator=plugin_retirement_coordinator,

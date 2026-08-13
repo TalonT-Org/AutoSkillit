@@ -1,45 +1,23 @@
-"""Single-read contract for host client attestation initialization.
+"""Context ownership contract for host client attestation initialization.
 
 ``initialize_host_client_attestation()`` is the sole authorized reader of
 ``os.environ`` for the launcher-injected attestation env vars — it is called
-once, from ``make_context()``. ``get_context_host_client_attestation()`` must
-only ever return the cached value (or ``None`` before initialization); it
-must never fall back to reading ``os.environ`` itself, since that would let a
-context-uninitialized caller observe a live env value the composition root
-never sanctioned.
+once per ``make_context()`` call and its result is owned by that ToolContext.
 """
 
 from __future__ import annotations
 
 import pytest
 
+from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
 )
-from autoskillit.server import _recipe_delivery_helpers
-from autoskillit.server._recipe_delivery import (
-    get_context_host_client_attestation,
-    initialize_host_client_attestation,
-)
+from autoskillit.server._factory import make_context
+from autoskillit.server._recipe_delivery import initialize_host_client_attestation
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-@pytest.fixture(autouse=True)
-def _reset_context_attestation_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Provide a clean module-global attestation cache for each test.
-
-    ``initialize_host_client_attestation()`` mutates process-global state
-    (``_CONTEXT_HOST_CLIENT_ATTESTATION`` / ``..._INITIALIZED``); leaving it
-    set would leak into unrelated tests sharing this xdist worker.
-    """
-    monkeypatch.setattr(_recipe_delivery_helpers, "_CONTEXT_HOST_CLIENT_ATTESTATION", None)
-    monkeypatch.setattr(
-        _recipe_delivery_helpers,
-        "_CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED",
-        False,
-    )
 
 
 def test_absent_env_vars_initialize_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,7 +28,6 @@ def test_absent_env_vars_initialize_to_none(monkeypatch: pytest.MonkeyPatch) -> 
     result = initialize_host_client_attestation()
 
     assert result is None
-    assert get_context_host_client_attestation() is None
 
 
 def test_non_numeric_gate_tokens_initialize_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,7 +38,6 @@ def test_non_numeric_gate_tokens_initialize_to_none(monkeypatch: pytest.MonkeyPa
     result = initialize_host_client_attestation()
 
     assert result is None
-    assert get_context_host_client_attestation() is None
 
 
 def test_non_boolean_meta_support_initialize_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -72,7 +48,6 @@ def test_non_boolean_meta_support_initialize_to_none(monkeypatch: pytest.MonkeyP
     result = initialize_host_client_attestation()
 
     assert result is None
-    assert get_context_host_client_attestation() is None
 
 
 def test_non_positive_gate_tokens_initialize_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,41 +58,22 @@ def test_non_positive_gate_tokens_initialize_to_none(monkeypatch: pytest.MonkeyP
     result = initialize_host_client_attestation()
 
     assert result is None
-    assert get_context_host_client_attestation() is None
 
 
-def test_get_context_before_initialization_returns_none_without_reading_env(
-    monkeypatch: pytest.MonkeyPatch,
+def test_contexts_keep_their_own_attestation_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """Before ``initialize_host_client_attestation()`` runs, the getter must
-    return None rather than falling back to a live ``os.environ`` read —
-    even when the env vars are well-formed and present.
-    """
     monkeypatch.setenv(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS, "50000")
     monkeypatch.setenv(AUTOSKILLIT_ATTESTED_META_SUPPORT, "1")
+    first = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
 
-    assert _recipe_delivery_helpers._CONTEXT_HOST_CLIENT_ATTESTATION_INITIALIZED is False
-    assert get_context_host_client_attestation() is None
-
-
-def test_get_context_after_initialization_returns_cached_value_not_live_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Once initialized, the getter must serve the cached snapshot even if
-    the env vars subsequently change — proving it does not reread ``os.environ``.
-    """
-    monkeypatch.setenv(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS, "50000")
-    monkeypatch.setenv(AUTOSKILLIT_ATTESTED_META_SUPPORT, "1")
-    initialized = initialize_host_client_attestation()
-    assert initialized is not None
-    assert initialized.attested_client_gate_tokens == 50000
-    assert initialized.annotation_support is True
-
-    # Mutate the env after initialization — the cached value must not move.
     monkeypatch.setenv(AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS, "1")
     monkeypatch.setenv(AUTOSKILLIT_ATTESTED_META_SUPPORT, "0")
+    second = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
 
-    cached = get_context_host_client_attestation()
-    assert cached is initialized
-    assert cached.attested_client_gate_tokens == 50000
-    assert cached.annotation_support is True
+    assert first.host_client_attestation is not None
+    assert first.host_client_attestation.attested_client_gate_tokens == 50000
+    assert first.host_client_attestation.annotation_support is True
+    assert second.host_client_attestation is not None
+    assert second.host_client_attestation.attested_client_gate_tokens == 1
+    assert second.host_client_attestation.annotation_support is False

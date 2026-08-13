@@ -202,6 +202,22 @@ def test_reap_classifies_verified_cleanup(
     ]
 
 
+def test_reap_logs_identity_refusal(valid_boundaries, monkeypatch: pytest.MonkeyPatch) -> None:
+    candidate = find_orphaned_autoskillit_daemons()[0]
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        subject,
+        "kill_process_tree",
+        lambda *_a, **_k: ProcessCleanupResult(root_pid=_PID, identity_refused=True),
+    )
+    monkeypatch.setattr(
+        subject.logger, "info", lambda event, **fields: events.append((event, fields))
+    )
+
+    assert reap_orphaned_autoskillit_daemons([candidate])[0].action == "skipped"
+    assert events == [("daemon_orphan_reap_skipped", {"pid": _PID})]
+
+
 def test_incomplete_candidate_remains_discoverable(
     valid_boundaries, monkeypatch: pytest.MonkeyPatch
 ) -> None:

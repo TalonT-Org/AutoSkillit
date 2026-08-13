@@ -498,9 +498,11 @@ class OwnedProcessGroup:
         self._scan_group()
         self._signal_group(signal.SIGTERM)
         members = self._wait_group_members(timeout)
+        escalated = False
         if members or self.observe_exit() is None:
             self._signal_group(signal.SIGKILL)
             members = self._wait_group_members(_FINAL_WAIT_SECONDS)
+            escalated = True
 
         returncode = self.observe_exit()
         if returncode is None:
@@ -514,9 +516,9 @@ class OwnedProcessGroup:
                         access_denied_pids=(self.pid,), observation_complete=False
                     )
                 )
-            returncode = self._bounded_direct_reap(timeout)
+            returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)
         else:
-            returncode = self._bounded_direct_reap(timeout)
+            returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)
         if returncode is None:
             try:
                 self.process.kill()

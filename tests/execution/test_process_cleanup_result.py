@@ -425,6 +425,35 @@ def test_reaped_leader_permanently_revokes_group_signal(
     assert owner.snapshot.observation_complete is False
 
 
+def test_sigkill_escalation_uses_final_direct_reap_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wait_timeouts: list[float | None] = []
+
+    class RecordingPopen(FakePopen):
+        def wait(self, timeout: float | None = None) -> int:
+            wait_timeouts.append(timeout)
+            return super().wait(timeout)
+
+    monkeypatch.setattr(_process_kill.subprocess, "Popen", RecordingPopen)
+    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(
+        _process_kill,
+        "_snapshot_process_tree",
+        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+    )
+    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    monkeypatch.setattr(owner, "capture_snapshot", lambda: owner.snapshot)
+    monkeypatch.setattr(owner, "_scan_group", lambda: ())
+    monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
+    monkeypatch.setattr(owner, "_wait_group_members", lambda _timeout: ())
+    monkeypatch.setattr(owner, "observe_exit", lambda: None)
+
+    owner.cleanup(timeout=7.0)
+
+    assert wait_timeouts == [_process_kill._FINAL_WAIT_SECONDS]
+
+
 def test_unexpected_group_authority_error_is_logged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

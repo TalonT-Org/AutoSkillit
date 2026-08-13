@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -144,6 +145,21 @@ def test_owner_probe_distinguishes_live_dead_and_unknown(monkeypatch: pytest.Mon
     assert subject._owner_is_dead(333, _BOOT, 22) is True
     monkeypatch.setattr(subject.os, "kill", lambda *_args: (_ for _ in ()).throw(PermissionError))
     assert subject._owner_is_dead(333, _BOOT, 22) is None
+
+
+@pytest.mark.parametrize(
+    ("stat", "expected"),
+    [
+        ("444 (autoskillit worker) S 37 1 1 0 0", 37),
+        ("444 malformed", None),
+    ],
+)
+def test_read_ppid_parses_proc_stat_after_command_parenthesis(
+    monkeypatch: pytest.MonkeyPatch, stat: str, expected: int | None
+) -> None:
+    monkeypatch.setattr(Path, "read_text", lambda _path: stat)
+
+    assert subject._read_ppid(_PID) == expected
 
 
 def test_reap_revalidates_every_predicate_before_signaling(

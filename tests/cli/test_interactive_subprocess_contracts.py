@@ -214,8 +214,9 @@ def test_cook_attempt_uses_only_the_shared_spawn_bound_owner() -> None:
 
     shared_launch_source = (session_dir / "_session_launch.py").read_text(encoding="utf-8")
     assert "run_cook_attempt(" in shared_launch_source
-    assert "subprocess.run(" in shared_launch_source, (
-        "fleet and nonpersistent backends retain the raw interactive process owner"
+    assert "subprocess.run(" not in shared_launch_source
+    assert "subprocess.Popen(" in shared_launch_source, (
+        "fleet and nonpersistent backends use the guarded interactive process owner"
     )
 
 

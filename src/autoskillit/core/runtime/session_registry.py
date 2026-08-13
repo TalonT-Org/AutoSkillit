@@ -6,16 +6,18 @@ Read by the scoped resume picker to classify sessions by type.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import sys
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
 from ._linux_proc import read_boot_id, read_starttime_ticks
-from .artifact_lease import ArtifactLease
 
 __all__ = [
     "registry_path",
@@ -40,9 +42,13 @@ def read_registry(project_dir: Path) -> dict[str, dict]:
         return {}
 
 
-def _registry_lock(path: Path) -> ArtifactLease:
+@contextmanager
+def _registry_lock(path: Path) -> Iterator[None]:
     """Serialize mutations of one session registry."""
-    return ArtifactLease.acquire_exclusive(path.with_suffix(".lock"), blocking=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix(".lock").open("w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        yield
 
 
 def write_registry_entry(

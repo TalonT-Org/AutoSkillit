@@ -111,13 +111,34 @@ async def test_no_kill_path_still_settles_and_reaps_natural_exit() -> None:
     assert cleanup.complete is True
 
 
+def _install_deferral_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[float]:
+    clock = [0.0]
+
+    async def advance(delay: float) -> None:
+        clock[0] += delay
+
+    monkeypatch.setattr("autoskillit.execution.process.anyio.current_time", lambda: clock[0])
+    monkeypatch.setattr("autoskillit.execution.process.anyio.sleep", advance)
+    return clock
+
+
 @pytest.mark.anyio
-async def test_owner_is_carried_through_child_liveness_deferral(
+async def test_active_child_deferral_runs_until_ceiling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    clock = _install_deferral_clock(monkeypatch)
+    liveness_checks = 0
+
+    def has_active_child(_pid: int) -> bool:
+        nonlocal liveness_checks
+        liveness_checks += 1
+        return True
+
     owner = await _spawn(30)
     monkeypatch.setattr(
-        "autoskillit.execution.process._has_active_child_processes", lambda _pid: False
+        "autoskillit.execution.process._has_active_child_processes", has_active_child
     )
     monkeypatch.setattr(
         "autoskillit.execution.process._has_active_api_connection", lambda _pid: False
@@ -127,11 +148,71 @@ async def test_owner_is_carried_through_child_liveness_deferral(
         TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
         owner=owner,
         process_exited_event=anyio.Event(),
-        grace_seconds=0.01,
+        grace_seconds=0,
         proc_log=structlog.get_logger().bind(pid=owner.pid),
         pid=owner.pid,
-        child_deferral_ceiling=1.0,
+        child_deferral_ceiling=3.0,
     )
 
     assert kill_reason is KillReason.KILL_AFTER_COMPLETION
     assert cleanup.complete is True
+    assert liveness_checks == 2
+    assert clock == [4.0]
+
+
+@pytest.mark.anyio
+async def test_zero_child_deferral_ceiling_skips_liveness_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = await _spawn(30)
+
+    def unexpected_liveness_check(_pid: int) -> bool:
+        pytest.fail("zero child deferral ceiling must skip liveness checks")
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._has_active_child_processes",
+        unexpected_liveness_check,
+    )
+
+    kill_reason, _returncode, cleanup = await execute_termination_action(
+        TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+        owner=owner,
+        process_exited_event=anyio.Event(),
+        grace_seconds=0,
+        proc_log=structlog.get_logger().bind(pid=owner.pid),
+        pid=owner.pid,
+        child_deferral_ceiling=0,
+    )
+
+    assert kill_reason is KillReason.KILL_AFTER_COMPLETION
+    assert cleanup.complete is True
+
+
+@pytest.mark.anyio
+async def test_child_deferral_stops_when_children_become_inactive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _install_deferral_clock(monkeypatch)
+    activity = iter((True, False))
+    owner = await _spawn(30)
+    monkeypatch.setattr(
+        "autoskillit.execution.process._has_active_child_processes",
+        lambda _pid: next(activity),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.process._has_active_api_connection", lambda _pid: False
+    )
+
+    kill_reason, _returncode, cleanup = await execute_termination_action(
+        TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+        owner=owner,
+        process_exited_event=anyio.Event(),
+        grace_seconds=0,
+        proc_log=structlog.get_logger().bind(pid=owner.pid),
+        pid=owner.pid,
+        child_deferral_ceiling=10,
+    )
+
+    assert kill_reason is KillReason.KILL_AFTER_COMPLETION
+    assert cleanup.complete is True
+    assert clock == [2.0]

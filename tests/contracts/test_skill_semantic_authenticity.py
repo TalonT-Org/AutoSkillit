@@ -132,7 +132,7 @@ def test_every_bundled_codex_child_spawn_targets_a_registered_role() -> None:
     )
     from autoskillit.workspace import DefaultSkillResolver
 
-    allowed = CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES | {
+    allowed = set(CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES) | {
         definition.name for definition in load_bundled_agent_definitions()
     }
     plans = tuple(

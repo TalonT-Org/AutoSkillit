@@ -36,10 +36,10 @@ CODEX_MCP_TOOL_TIMEOUT_FLOOR: float = 14364.0
 
 CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
 
-CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = frozenset({"default", "explorer", "worker"})
+CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = ("default", "explorer", "worker")
 _CODEX_RESERVED_ONLY_AGENT_NAMES = frozenset({"review", "reviewer"})
 _CODEX_AGENT_NAME_COLLISIONS = (
-    CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES | _CODEX_RESERVED_ONLY_AGENT_NAMES
+    frozenset(CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES) | _CODEX_RESERVED_ONLY_AGENT_NAMES
 )
 
 # The configured history-retention requirement is derived from the largest

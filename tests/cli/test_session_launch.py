@@ -1405,6 +1405,66 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
     trace.record_attempt_anchor.assert_called_once_with(attempt=1, view_id="launch-id-1")
 
 
+@pytest.mark.parametrize(
+    ("managed_kwargs", "message"),
+    [
+        ({"managed_home": MagicMock()}, "managed home and attempt must be supplied together"),
+        ({"attempt": 1}, "managed home and attempt must be supplied together"),
+        (
+            {
+                "managed_home": MagicMock(),
+                "attempt": 0,
+                "skill_compilation": MagicMock(),
+                "retained_projection_binding": MagicMock(),
+                "startup_trace": MagicMock(),
+            },
+            "managed attempt must be positive",
+        ),
+        (
+            {
+                "managed_home": MagicMock(),
+                "attempt": 1,
+                "retained_projection_binding": MagicMock(),
+                "startup_trace": MagicMock(),
+            },
+            "managed home requires its retained skill compilation",
+        ),
+        (
+            {
+                "managed_home": MagicMock(),
+                "attempt": 1,
+                "skill_compilation": MagicMock(),
+                "startup_trace": MagicMock(),
+            },
+            "managed home requires a retained projection binding",
+        ),
+        (
+            {
+                "managed_home": MagicMock(),
+                "attempt": 1,
+                "skill_compilation": MagicMock(),
+                "retained_projection_binding": MagicMock(),
+            },
+            "managed home requires a launch-scoped startup trace",
+        ),
+        (
+            {"plugin_binding": MagicMock()},
+            "managed launch inputs are invalid for a raw session",
+        ),
+    ],
+)
+def test_interactive_session_rejects_invalid_managed_inputs(
+    managed_kwargs: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _run_interactive_session(
+            system_prompt="test",
+            backend=_BackendLifecycleStub(),
+            **managed_kwargs,
+        )
+
+
 def _write_codex_mcp_probe_executable(path: Path) -> None:
     path.write_text(
         """#!/usr/bin/env python3

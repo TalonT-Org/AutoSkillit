@@ -6,6 +6,7 @@ import contextlib
 import importlib
 import json
 import os
+import secrets
 import select
 import shutil
 import struct
@@ -163,7 +164,7 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
     project = tmp_path / "project"
     project.mkdir()
     state_root = project
-    launch_id = f"{os.getpid():016x}"[-16:]
+    launch_id = secrets.token_hex(8)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     wrapper = bin_dir / "autoskillit"

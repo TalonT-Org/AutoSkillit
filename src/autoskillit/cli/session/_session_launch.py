@@ -9,7 +9,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
@@ -144,7 +144,7 @@ def prepare_interactive_launch(
     return PreparedInteractiveLaunch(spec=spec, executable=final)
 
 
-def _exit_launch_preparation_error(exc: ValueError) -> None:
+def _exit_launch_preparation_error(exc: ValueError) -> NoReturn:
     for line in str(exc).splitlines() or [str(exc)]:
         sys.stderr.write(f"ERROR: {line}\n")
     raise SystemExit(1)

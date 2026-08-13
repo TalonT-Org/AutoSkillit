@@ -23,7 +23,9 @@ semantic_requirements:
     purpose: independently validate one friction category and return bounded evidence
   child_spawns:
   - role: friction-batch-scanner
+    count: 1
   - role: friction-category-analyzer
+    count: 1
   concurrency:
     required: true
   join:

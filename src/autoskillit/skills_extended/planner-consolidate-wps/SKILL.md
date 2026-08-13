@@ -17,6 +17,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: phase_ids
   concurrency:
     required: true
   join:
@@ -84,6 +85,9 @@ FATAL: failed to parse {path}: {error_detail}
 ```
 
 Group WPs by `phase_id` (always populated; read directly from the field).
+
+Set `phase_ids` to the ordered keys of those groups. Use it for packets, batches, child
+IDs, result association, and joins.
 Build a map `phase_id → [WPElaborated, ...]`.
 
 ### Step 2: Create output directory

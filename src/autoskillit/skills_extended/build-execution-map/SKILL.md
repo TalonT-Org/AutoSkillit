@@ -18,6 +18,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: issue_numbers
   concurrency:
     required: true
   join:
@@ -92,6 +93,9 @@ with `"Error: --max-parallel must be a positive integer"`. Validate the issue co
 - **Zero issues**: abort immediately with `"Error: build-execution-map requires at least 1 issue number"` and exit non-zero.
 - **One issue**: emit a warning and write a trivial single-group map (single issue always gets `parallel: false`).
 - **Two or more issues**: proceed to Step 1.
+
+Store the validated issue-number collection as `issue_numbers`; it is the authority for
+child prompts, IDs, result association, and joins in Step 1.
 
 ### Step 1 — Fetch Issue Data (parallel subagents) (SINGLE MESSAGE)
 

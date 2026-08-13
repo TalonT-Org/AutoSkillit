@@ -24,6 +24,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: review_decision_batches
   concurrency:
     required: true
   join:
@@ -160,6 +161,9 @@ implemented. Identify review debt before it compounds.
 ---
 
 ### Step 2: Triage (Haiku — Broad Pass) (SINGLE MESSAGE)
+
+Set `review_decision_batches` to the non-empty triage batches and, after triage completes,
+the non-empty validation batches. Retain child IDs keyed by phase and batch through joins.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

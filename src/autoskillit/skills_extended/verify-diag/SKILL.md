@@ -19,6 +19,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: diagram_paths
   concurrency:
     required: true
   join:
@@ -224,6 +225,9 @@ Common patterns and how to represent them:
 ---
 
 ## Launching Verification (SINGLE MESSAGE)
+
+Set `diagram_paths` to the validated diagrams selected for verification. Retain child IDs
+keyed by path and join every launched verifier.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

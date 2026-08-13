@@ -21,6 +21,7 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_SEMANTIC_SCHEMA_VERSION,
     ChildModelPolicySpec,
+    ChildSpawnCardinalityError,
     ChildSpawnSpec,
     ConcurrencySpec,
     EvidenceSpec,
@@ -1011,7 +1012,7 @@ def parse_skill_semantic_plan(
         child_spawns = tuple(
             ChildSpawnSpec(
                 role=str(item.get("role", "")),
-                count=int(item.get("count", 1)),
+                count=item.get("count"),
                 for_each=item.get("for_each"),
             )
             for item in _mapping_list(raw_requirements.get("child_spawns", []), "child_spawns")
@@ -1064,6 +1065,19 @@ def parse_skill_semantic_plan(
             sibling_skills=sibling_skills,
             git_metadata_writes=git_metadata_writes,
         )
+    except ChildSpawnCardinalityError as exc:
+        diagnostics.append(
+            (
+                SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending="semantic_requirements.child_spawns cardinality",
+                    replacement=str(exc),
+                ),
+            )
+        )
+        return None, tuple(diagnostics)
     except (SkillContractError, TypeError, ValueError) as exc:
         diagnostics.append(
             (

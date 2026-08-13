@@ -12,6 +12,7 @@ semantic_requirements:
       purpose: run the named agent definition under evaluation against the prepared prompt and return its full output
   child_spawns:
     - role: evaluated-agent
+      count: 1
   join:
     required: true
 ---

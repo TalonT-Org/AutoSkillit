@@ -19,6 +19,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: selected_review_dimensions
   concurrency:
     required: true
   join:
@@ -161,6 +162,10 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
    and included in the evaluation dashboard.
 
 ### Step 1: Triage Dispatcher
+
+Set `selected_review_dimensions` to the triage responsibility and each non-SILENT,
+foothold-supported dimension selected by triage. Dispatch dependency-ready levels in
+their stated waves and retain child IDs keyed by dimension.
 
 Launch one subagent. Receives full plan text plus parsed fields. Returns:
 - `experiment_type`: one of the type names in the loaded registry (from Step 0)

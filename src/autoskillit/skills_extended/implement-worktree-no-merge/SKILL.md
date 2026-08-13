@@ -20,6 +20,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: exploration_responsibilities
   concurrency:
     required: true
   join:
@@ -181,6 +182,9 @@ Before implementing ANY code, launch parallel child delegations to understand af
 - **Test coverage** — existing tests, patterns, fixtures for affected code
 - **Integration points** — entry/exit points, contracts that must be maintained
 - **Data flow** — state management, source of truth
+
+Set `exploration_responsibilities` to these four named responsibilities and retain child
+IDs keyed by responsibility through the join.
 
 ### Step 3: Set Up Worktree Environment
 

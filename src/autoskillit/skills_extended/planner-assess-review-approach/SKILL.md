@@ -21,6 +21,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: wp_assessment_batches
   concurrency:
     required: true
   join:
@@ -82,6 +83,9 @@ established conventions. This context informs whether a WP is "following establi
 (no-benefit) versus "introducing something new" (benefit signal).
 
 ### Step 3: Evaluate each WP (SINGLE MESSAGE)
+
+Set `wp_assessment_batches` to the one or two non-empty WP batches selected from the
+validated input. Retain child IDs keyed by batch through the join.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 

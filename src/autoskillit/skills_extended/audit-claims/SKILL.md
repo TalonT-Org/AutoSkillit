@@ -20,6 +20,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: claim_analysis_responsibilities
   concurrency:
     required: true
   join:
@@ -127,6 +128,10 @@ Do NOT run deterministic diff annotation — claim positions are report-level, n
 line-level. Subagents use section structure, not line markers.
 
 ### Step 3: Two-Phase Claim Analysis
+
+Set `claim_analysis_responsibilities` to the non-empty report-section extraction tasks
+and, once extraction completes, the non-empty claim-type evidence tasks. Dispatch each
+dependency-ready phase concurrently and retain IDs keyed by responsibility.
 
 #### Phase 1 — Claim Extraction (parallel subagents by report section) (SINGLE MESSAGE)
 

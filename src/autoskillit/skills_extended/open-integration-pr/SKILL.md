@@ -25,6 +25,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    count: 1
   concurrency:
     required: true
   join:

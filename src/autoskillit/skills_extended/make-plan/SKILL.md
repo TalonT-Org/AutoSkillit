@@ -24,8 +24,11 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: plan-foundation-auditor
+    count: 1
   - role: plan-interface-mapper
+    count: 1
   - role: plan-registry-tracer
+    count: 1
   concurrency:
     required: true
   join:

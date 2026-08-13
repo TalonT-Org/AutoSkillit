@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -124,6 +125,60 @@ def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, co
     )
     assert len(skill_files) > 0
     assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
+
+
+def test_codex_materializes_exact_guarded_investigate_document(
+    make_session_skill_manager,
+) -> None:
+    from autoskillit.core import ExplorationVectorApplicabilityId
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        SkillProjectionContext,
+        project_agent_skill_document,
+    )
+
+    manager = make_session_skill_manager()
+    backend = _make_codex_backend()
+    invocation = DefaultSkillResolver().resolve_invocation(
+        "investigate",
+        manager._root,
+        SkillExecutionRole.SESSION,
+    )
+    context = SkillProjectionContext(
+        cwd=manager._root,
+        invocation=invocation,
+        backend=backend,
+        resolved_exploration_profile=RepositoryProfileId.AUTOSKILLIT,
+        active_exploration_applicabilities=frozenset(ExplorationVectorApplicabilityId),
+        parent_sandbox_mode="read-only",
+    )
+    expected = project_agent_skill_document(invocation.root, context)
+
+    add_dir = manager.materialize_invocation("investigate-materialized", invocation, context)
+    written = (
+        add_dir / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR / "investigate" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+
+    assert written == expected.content
+    assert expected.semantic_payload["child_spawns"] == (
+        {
+            "role": "delegated-worker",
+            "for_each": "selected_reasoning_responsibilities",
+        },
+        {
+            "role": "autoskillit:web-evidence-researcher",
+            "for_each": "selected_web_research_topics",
+        },
+    )
+    fragments = expected.adaptation_payload["instruction_fragments"]
+    assert any("selected_reasoning_responsibilities" in item for item in fragments)
+    assert any("selected_web_research_topics" in item for item in fragments)
+    assert expected.semantic_digest in written
+    assert expected.adaptation_digest in written
+    assert hashlib.sha256(written.encode()).hexdigest() == expected.projected_digest
+    assert "Candidate exploration task" in written
+    assert "selected_exploration_task_ids" in written
+    assert "Call spawn_agent 1 time" not in written
 
 
 def test_materialization_forwards_only_server_explorer_binding_env(

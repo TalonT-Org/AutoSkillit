@@ -386,6 +386,7 @@ async def test_report_bug_delivers_winning_override_identity_and_projection(
         "    purpose: investigate the report independently\n"
         "  child_spawns:\n"
         "  - role: report-investigator\n"
+        "    count: 1\n"
         "  child_model_policies:\n"
         "  - role: report-investigator\n"
         "    model_class: sonnet\n"

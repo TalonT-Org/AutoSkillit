@@ -9,7 +9,7 @@ from enum import StrEnum
 from hashlib import sha256
 from types import MappingProxyType
 
-from ._type_exceptions import SkillContractError
+from ._type_exceptions import ChildSpawnCardinalityError, SkillContractError
 
 __all__ = [
     "SKILL_MODEL_CLASS_REGISTRY",
@@ -79,22 +79,29 @@ class ChildSpawnSpec:
     """Spawn one or more children that perform a named logical role."""
 
     role: str
-    count: int = 1
+    count: int | None = None
     for_each: str | None = None
 
     def __post_init__(self) -> None:
         _require_nonempty(self.role, "child spawn role")
-        if self.count < 1:
-            raise SkillContractError("child spawn count must be positive")
-        if self.for_each is not None:
-            if not isinstance(self.for_each, str):
-                raise SkillContractError("child spawn for_each must be a string")
-            if not self.for_each.strip():
-                raise SkillContractError("child spawn for_each must be non-empty")
-            if self.count != 1:
-                raise SkillContractError(
-                    "child spawn for_each cannot be combined with a non-default count"
+        has_count = self.count is not None
+        has_for_each = self.for_each is not None
+        if has_count == has_for_each:
+            raise ChildSpawnCardinalityError(
+                "child spawn requires exactly one cardinality authority: "
+                "count: <positive integer> or for_each: <runtime collection>"
+            )
+        if self.count is not None:
+            if type(self.count) is not int or self.count <= 0:
+                raise ChildSpawnCardinalityError(
+                    "child spawn count must be a positive integer; use "
+                    "count: <positive integer> or for_each: <runtime collection>"
                 )
+        if has_for_each and (not isinstance(self.for_each, str) or not self.for_each.strip()):
+            raise ChildSpawnCardinalityError(
+                "child spawn for_each must be a non-empty runtime collection name; use "
+                "count: <positive integer> or for_each: <runtime collection>"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,11 +250,9 @@ class SkillSemanticPlan:
         payload: dict[str, object] = {
             "schema_version": self.schema_version,
             "child_spawns": tuple(
-                {
-                    "role": item.role,
-                    "count": item.count,
-                    **({"for_each": item.for_each} if item.for_each is not None else {}),
-                }
+                dict[str, object](role=item.role, for_each=item.for_each)
+                if item.for_each is not None
+                else dict[str, object](role=item.role, count=item.count)
                 for item in self.child_spawns
             ),
             "concurrency": (

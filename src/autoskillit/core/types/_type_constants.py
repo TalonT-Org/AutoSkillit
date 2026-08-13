@@ -394,6 +394,15 @@ _SKILL_CONTRACT_REMEDIATION_DEFS = (
         ),
     ),
     SkillContractRemediationDef(
+        kind=SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID,
+        introduced_in="0.10.964",
+        action=RemediationAction.DETERMINISTIC,
+        hint=(
+            "give each semantic_requirements.child_spawns entry exactly one authority: "
+            "count: <positive integer> or for_each: <runtime collection>"
+        ),
+    ),
+    SkillContractRemediationDef(
         kind=SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
         introduced_in="0.10.929",
         action=RemediationAction.ADVISORY,

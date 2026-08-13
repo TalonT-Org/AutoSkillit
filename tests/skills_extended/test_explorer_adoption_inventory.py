@@ -1552,6 +1552,9 @@ def test_all_actual_migrated_phase_d_vectors_render_each_native_backend_form(
             assert vector.profile is RepositoryProfileId.AUTO
             assert f'{native_prefix}{vector.role}"' in body, (skill_name, vector.id)
             assert f"task_id: {vector.task.task_id}" in body, (skill_name, vector.id)
+            assert f"Candidate exploration task '{vector.task.task_id}'" in body
+            assert "selected_exploration_task_ids" in body
+            assert "Otherwise skip this candidate" in body
             assert "profile: autoskillit" in body, (skill_name, vector.id)
             assert (
                 "relationship_classes: "
@@ -1561,6 +1564,45 @@ def test_all_actual_migrated_phase_d_vectors_render_each_native_backend_form(
             assert json.dumps(vector.body)[1:-1] in body, (skill_name, vector.id)
 
     assert migrated_count == 34
+
+
+def test_investigate_projects_adaptive_semantic_collections_and_guarded_candidates() -> None:
+    skill = _load_phase_d_skill("investigate")
+    assert skill.semantic_plan is not None
+    spawns = skill.semantic_plan.child_spawns
+    assert [(spawn.role, spawn.count, spawn.for_each) for spawn in spawns] == [
+        ("delegated-worker", None, "selected_reasoning_responsibilities"),
+        (
+            "autoskillit:web-evidence-researcher",
+            None,
+            "selected_web_research_topics",
+        ),
+    ]
+    assert tuple(policy.role for policy in skill.semantic_plan.child_model_policies) == (
+        "delegated-worker",
+    )
+
+    for backend in (ClaudeCodeBackend(), CodexBackend()):
+        projected = _project_phase_d_skill(
+            skill,
+            backend,
+            frozenset(ExplorationVectorApplicabilityId),
+        )
+        assert projected.count("Candidate exploration task") == 15
+        assert projected.count("selected_exploration_task_ids") >= 16
+        assert "rendered marker or call count is never a spawn obligation" in projected
+        assert projected.index("selected_reasoning_responsibilities") < projected.rindex(
+            "Backend-adapted semantic execution contract"
+        )
+        assert projected.index("selected_web_research_topics") < projected.rindex(
+            "Backend-adapted semantic execution contract"
+        )
+        assert "Call spawn_agent 1 time" not in projected
+        assert "Issue 1 Agent(" not in projected
+        assert "Minimum 2 batches" not in projected
+        assert "minimum of 5 parallel" not in projected
+        assert "Mandatory web research" not in projected
+        assert "spawn 2–3 independent validator" not in projected
 
 
 @pytest.mark.parametrize("skill_name", sorted(_PHASE_D_INVENTORY))

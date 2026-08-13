@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = [
     "BoundedDeliveryRoundTripBudgetExceededError",
     "CapabilityNotSupportedError",
+    "ChildSpawnCardinalityError",
     "PluginArtifactContentionError",
     "PluginArtifactPublicationError",
     "PluginArtifactUnavailableError",
@@ -91,6 +92,10 @@ class CapabilityNotSupportedError(Exception):
 
 class SkillContractError(ValueError):
     """A skill machine contract is malformed or exceeds its execution role."""
+
+
+class ChildSpawnCardinalityError(SkillContractError):
+    """A child spawn does not declare exactly one valid cardinality authority."""
 
 
 class PluginArtifactContentionError(RuntimeError):

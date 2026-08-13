@@ -17,6 +17,7 @@ semantic_requirements:
       purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
     - role: delegated-worker
+      for_each: validation_responsibilities
   concurrency:
     required: true
   join:
@@ -134,6 +135,10 @@ Collect all findings into a flat list. Record the source audit skill (`arch`, `t
 `cohesion`) for use in output filenames.
 
 ### Step 2 — Group into Thematic Batches
+
+Set `validation_responsibilities` to the code-area batches plus the history research
+responsibility. Append the two post-validation responsibilities when their input
+artifacts are ready; retain child IDs keyed by responsibility and join every launch.
 
 Cluster findings by **code area**: inspect `file:line` references in each finding and group
 by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `core/`,

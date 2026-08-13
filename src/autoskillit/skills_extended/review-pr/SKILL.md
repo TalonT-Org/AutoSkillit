@@ -19,7 +19,9 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: pr-review-auditor-abstraction-surface
+    count: 1
   - role: pr-review-auditor-reachability
+    count: 1
   concurrency:
     required: true
   join:

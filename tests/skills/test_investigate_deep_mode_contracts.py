@@ -178,14 +178,13 @@ def test_d1_reserves_completion_budget_before_each_batch(
     assert "would cross that reserve" in normalized
 
 
-def test_d2_broad_exploration_minimum_subagents(deep_workflow_section: str) -> None:
-    """Step D2 must specify a minimum of 5 parallel subagents."""
+def test_d2_broad_exploration_is_adaptively_selected(deep_workflow_section: str) -> None:
+    """Step D2 must select relevant, affordable, dependency-ready candidates."""
     d2 = extract_step_section(deep_workflow_section, "Step D2")
-    has_minimum = "minimum" in d2.lower()
-    has_five = "5" in d2
-    assert has_minimum and has_five, (
-        "Step D2 must specify a 'minimum' of '5' parallel subagents for broad exploration"
-    )
+    normalized = d2.lower()
+    assert "relevant and affordable dependency-ready" in normalized
+    assert "selected independent frontier" in normalized
+    assert "minimum of 5" not in normalized
 
 
 def test_d2_inter_batch_synthesis(deep_workflow_section: str) -> None:
@@ -199,21 +198,20 @@ def test_d2_inter_batch_synthesis(deep_workflow_section: str) -> None:
 def test_deep_waves_complete_before_inter_batch_progress(
     deep_workflow_section: str,
 ) -> None:
-    normalized = deep_workflow_section.lower()
-    assert "at least two completed agent waves" in normalized
+    normalized = " ".join(deep_workflow_section.lower().split())
     assert "every launch has a terminal result" in normalized
     assert "before launching batch 2" in normalized
     assert "inter-batch synthesis:" in normalized
+    assert "stop when" in normalized
+    assert "quality gate" in normalized
 
 
 def test_d2_historical_recurrence_parallel(deep_workflow_section: str) -> None:
-    """Step D2 must reference Step 3.5 or historical check running in parallel."""
+    """Step D2 must make recurrence work conditional on relevance."""
     d2 = extract_step_section(deep_workflow_section, "Step D2")
-    has_35 = "3.5" in d2
-    has_historical = "historical" in d2.lower()
-    assert has_35 or has_historical, (
-        "Step D2 must reference '3.5' or 'historical' check running in parallel with Batch 1"
-    )
+    normalized = d2.lower()
+    assert "recurrence work" in normalized
+    assert "provenance evidence is relevant" in normalized
 
 
 def test_d3_mandatory_web_research(deep_workflow_section: str) -> None:

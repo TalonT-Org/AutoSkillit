@@ -23,7 +23,9 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: audit-impl-deviation-evaluator
+    for_each: deviation_entries
   - role: audit-impl-slice-auditor
+    for_each: audit_slices
   concurrency:
     required: true
   join:
@@ -361,6 +363,9 @@ logic (Step 4).
 
 ### Step 3 — Audit via Parallel Subagents (SINGLE MESSAGE)
 
+Set `audit_slices` to the requirement slices produced from the exact-cycle inventory.
+Retain slice-auditor child IDs keyed by slice through the join.
+
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
@@ -394,6 +399,10 @@ Each subagent returns structured findings:
 - `CONFLICT` — two plans' implementations interfere with each other
 
 ### Step 3.5 — Deviation Evaluation
+
+Set `deviation_entries` to the validated manifest's `deviations` array, or an empty
+collection when no valid deviation manifest was supplied. Retain evaluator child IDs
+keyed by deviation entry through the join.
 
 **Skip this step entirely when no valid deviation manifest was provided in Step 0.**
 

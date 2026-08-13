@@ -709,6 +709,7 @@ from .types import CharsToTokensPolicy as CharsToTokensPolicy
 from .types import ChildExecutionIdentity as ChildExecutionIdentity
 from .types import ChildExecutionIdentityDict as ChildExecutionIdentityDict
 from .types import ChildModelPolicySpec as ChildModelPolicySpec
+from .types import ChildSpawnCardinalityError as ChildSpawnCardinalityError
 from .types import ChildSpawnSpec as ChildSpawnSpec
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher

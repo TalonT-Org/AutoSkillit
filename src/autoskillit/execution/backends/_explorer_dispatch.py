@@ -18,13 +18,19 @@ from autoskillit.core import (
 
 _PARENT_ROUTING_INSTRUCTIONS = (
     "Parent routing contract:\n"
-    "1. Submit this typed task packet to the deterministic exploration router and merge API.\n"
-    "2. Reclassify every newly discovered cross-leaf frontier explicitly; do not let leaves "
-    "spawn peers.\n"
-    "3. Run only scope-disjoint ready tasks concurrently and keep dependency chains sequential.\n"
-    "4. Wait for every dispatched leaf, preserve conflicts and unresolved frontiers, then "
-    "merge evidence.\n"
-    "5. Retain final synthesis and every artifact or repository write in the parent session."
+    "1. Projection and static applicability make tasks available only; rendered marker or "
+    "call count is never a spawn obligation.\n"
+    "2. The parent sets selected_exploration_task_ids to the relevant and affordable "
+    "dependency-ready task IDs after reserving synthesis/report/validation context and "
+    "checking current child capacity.\n"
+    "3. Submit only selected typed task packets to the deterministic exploration router and "
+    "merge API; reclassify newly discovered cross-leaf frontiers explicitly and never let "
+    "leaves spawn peers.\n"
+    "4. Run only selected, scope-disjoint, dependency-ready tasks concurrently and keep "
+    "dependency chains sequential.\n"
+    "5. Join every dispatched leaf, preserve conflicts and unresolved frontiers, then merge "
+    "evidence. Retain final synthesis and every artifact or repository write in the parent "
+    "session."
 )
 
 
@@ -121,7 +127,16 @@ class _NativeExplorationDispatchRenderer:
                 role_definition_digest=definition_digest,
                 launch_context_ref=launch_context_ref,
             )
-            replacements[vector.id] = self._native_call(definition, prompt)
+            native_call = self._native_call(definition, prompt)
+            task_id = vector.task.task_id
+            replacements[vector.id] = (
+                f"Candidate exploration task {task_id!r}:\n"
+                f"Execute if and only if {task_id!r} is in "
+                "selected_exploration_task_ids:\n"
+                f"{native_call}\n"
+                "Otherwise skip this candidate; omission from the parent-selected ready set "
+                "is not a failure."
+            )
             definition_digests[vector.id] = definition_digest
         context_ref = launch_context_ref or "runtime-bound"
         provisioning = (

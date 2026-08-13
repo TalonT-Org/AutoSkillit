@@ -128,8 +128,14 @@ def test_claude_and_codex_bind_identical_neutral_and_role_digests() -> None:
 
     assert claude.router_plan_digest == codex.router_plan_digest == plan.digest
     assert claude.role_definition_digests == codex.role_definition_digests
-    claude_call = claude.replacements[vector.id].splitlines()[-1]
-    codex_call = codex.replacements[vector.id].splitlines()[-1]
+    claude_call = next(
+        line for line in claude.replacements[vector.id].splitlines() if line.startswith("Agent(")
+    )
+    codex_call = next(
+        line
+        for line in codex.replacements[vector.id].splitlines()
+        if line.startswith("spawn_agent(")
+    )
     assert claude_call.startswith(
         'Agent(subagent_type="autoskillit:semantic-code-navigator", description='
     )
@@ -150,17 +156,17 @@ def test_projection_materializes_only_after_backend_binding(tmp_path: Path) -> N
         _context(tmp_path, skill, ClaudeCodeBackend()),
     )
     assert 'Agent(subagent_type="autoskillit:semantic-code-navigator"' in document.content
-    assert (
-        "Submit this typed task packet to the deterministic exploration router" in document.content
-    )
-    assert "Reclassify every newly discovered cross-leaf frontier explicitly" in document.content
-    assert "Wait for every dispatched leaf" in document.content
+    assert "Projection and static applicability make tasks available only" in document.content
+    assert "reclassify newly discovered cross-leaf frontiers explicitly" in document.content
+    assert "Join every dispatched leaf" in document.content
     assert "Retain final synthesis" in document.content
+    assert "selected_exploration_task_ids" in document.content
     marker_body = document.content.split(vector.marker_line, 1)[1].split(
         "<!-- /autoskillit:exploration-vector -->", 1
     )[0]
     assert f"\n{vector.body}\n" not in marker_body
-    assert marker_body.rstrip().splitlines()[-1].startswith("Agent(")
+    assert any(line.startswith("Agent(") for line in marker_body.splitlines())
+    assert marker_body.rstrip().endswith("is not a failure.")
 
 
 def test_backendless_projection_remains_valid_for_skill_without_vectors(tmp_path: Path) -> None:

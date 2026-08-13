@@ -14,6 +14,7 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: delegated-worker
+    for_each: assignment_ids
   concurrency:
     required: true
   join:
@@ -74,6 +75,9 @@ Read the context file at `$1`. Extract:
 - `metadata.assignment_names` — parallel list of assignment names
 - `prior_results` — list of paths to result files from completed prior items
 
+Set `assignment_ids = metadata.assignment_ids`. This exact collection is the launch
+authority used for packet construction, child-ID tracking, result association, and joins.
+
 ### Step 2: Load phase context
 
 Read `$2/phases/{id}_result.json` (the elaborated phase result). Extract:
@@ -90,7 +94,7 @@ instruct L0s to read the file from disk for scope creep verification.
 
 ### Step 3: Build per-L0 context packets
 
-For each assignment in the phase, build a self-contained context packet:
+For each assignment ID in `assignment_ids`, build a self-contained context packet:
 - Assignment ID, name, goal (from the phase result's assignments array)
 - All other phase assignments in short-form (id, name, goal only — for overlap detection)
 - Prior result file paths (from `prior_results`) for cross-phase dependency detection
@@ -103,7 +107,8 @@ For each assignment in the phase, build a self-contained context packet:
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Use the backend-adapted child delegation to spawn one L0 per assignment simultaneously.
+Use the backend-adapted child delegation to spawn one L0 per item in `assignment_ids`
+simultaneously, retaining child IDs keyed by assignment ID.
 All L0s must be launched in a single batch — do NOT wait for one before starting the next.
 
 Each L0 receives a self-contained prompt that:

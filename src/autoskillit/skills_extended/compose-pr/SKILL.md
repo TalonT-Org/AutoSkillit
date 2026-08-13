@@ -22,7 +22,9 @@ semantic_requirements:
     purpose: synthesize the overall PR summary from collected evidence
   child_spawns:
   - role: pr-source-reader
+    count: 1
   - role: pr-synthesizer
+    count: 1
   concurrency:
     required: true
   join:

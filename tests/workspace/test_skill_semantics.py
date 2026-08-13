@@ -8,6 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from autoskillit.core import SkillSemanticOperation, SkillSource
+from autoskillit.core.paths import pkg_root
+from autoskillit.workspace.skill_format import read_skill_frontmatter
 from autoskillit.workspace.skills import (
     _skill_info_from_frontmatter,
     render_skill_invalidities,
@@ -23,6 +25,7 @@ semantic_requirements:
       purpose: review one independent concern
   child_spawns:
     - role: reviewer
+      count: 1
   concurrency:
     required: true
   join:
@@ -39,6 +42,88 @@ semantic_requirements:
   git_metadata_writes:
     - purpose: create the requested commit
 """
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_DECLARED_SKILL_ROOTS = (
+    pkg_root() / "skills",
+    pkg_root() / "skills_extended",
+    _REPO_ROOT / ".autoskillit" / "skills",
+    _REPO_ROOT / ".claude" / "skills",
+)
+
+
+def _declared_child_spawn_cases() -> tuple[object, ...]:
+    cases: list[object] = []
+    for root in _DECLARED_SKILL_ROOTS:
+        if not root.is_dir():
+            continue
+        for skill_path in sorted(root.glob("*/SKILL.md")):
+            parsed = read_skill_frontmatter(skill_path)
+            requirements = (parsed.data or {}).get("semantic_requirements", {})
+            if not isinstance(requirements, dict):
+                continue
+            spawns = requirements.get("child_spawns", ())
+            if not isinstance(spawns, list):
+                continue
+            relative_path = skill_path.relative_to(_REPO_ROOT)
+            for index, spawn in enumerate(spawns):
+                role = spawn.get("role", "unknown") if isinstance(spawn, dict) else "unknown"
+                cases.append(
+                    pytest.param(
+                        skill_path,
+                        spawn,
+                        id=f"{relative_path}::{role}[{index}]",
+                    )
+                )
+    return tuple(cases)
+
+
+@pytest.mark.parametrize(("skill_path", "spawn"), _declared_child_spawn_cases())
+def test_declared_child_spawn_has_exactly_one_cardinality_authority(
+    skill_path: Path,
+    spawn: object,
+) -> None:
+    assert isinstance(spawn, dict), f"child spawn in {skill_path} must be a mapping"
+    assert sum(authority in spawn for authority in ("count", "for_each")) == 1
+
+
+_VARIABLE_CARDINALITY_SKILLS = {
+    "analyze-prs": (("delegated-worker", "candidate_pr_numbers"),),
+    "audit-claims": (("delegated-worker", "claim_analysis_responsibilities"),),
+    "audit-impl": (
+        ("audit-impl-deviation-evaluator", "deviation_entries"),
+        ("audit-impl-slice-auditor", "audit_slices"),
+    ),
+    "audit-review-decisions": (("delegated-worker", "review_decision_batches"),),
+    "build-execution-map": (("delegated-worker", "issue_numbers"),),
+    "planner-assess-review-approach": (("delegated-worker", "wp_assessment_batches"),),
+    "planner-consolidate-wps": (("delegated-worker", "phase_ids"),),
+    "planner-extract-domain": (("delegated-worker", "selected_domain_exploration_task_ids"),),
+    "planner-refine-assignments": (("delegated-worker", "assignment_ids"),),
+    "planner-refine-phases": (("delegated-worker", "phase_ids"),),
+    "planner-refine-wps": (("delegated-worker", "phase_ids"),),
+    "planner-validate-task-alignment": (("delegated-worker", "alignment_responsibilities"),),
+    "resolve-claims-review": (("delegated-worker", "intent_validation_groups"),),
+    "resolve-research-review": (("delegated-worker", "intent_validation_groups"),),
+    "resolve-review": (("delegated-worker", "intent_validation_groups"),),
+    "review-design": (("delegated-worker", "selected_review_dimensions"),),
+    "setup-project": (("delegated-worker", "project_exploration_responsibilities"),),
+    "stage-data": (("delegated-worker", "stageable_data_entries"),),
+    "triage-issues": (("delegated-worker", "issue_analysis_responsibilities"),),
+    "verify-diag": (("delegated-worker", "diagram_paths"),),
+}
+
+
+@pytest.mark.parametrize("skill_name", _VARIABLE_CARDINALITY_SKILLS)
+def test_variable_workflow_names_its_runtime_collection(skill_name: str) -> None:
+    skill_path = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+    parsed = read_skill_frontmatter(skill_path)
+    requirements = (parsed.data or {})["semantic_requirements"]
+
+    actual = tuple((spawn["role"], spawn["for_each"]) for spawn in requirements["child_spawns"])
+    expected = _VARIABLE_CARDINALITY_SKILLS[skill_name]
+    assert actual == expected
+    assert all(collection in parsed.body for _, collection in expected)
 
 
 def _write_skill(path: Path, *, declarations: str = _VALID_SEMANTICS, body: str = "Body.") -> None:
@@ -113,7 +198,48 @@ semantic_requirements:
     info = _skill_info_from_frontmatter("malformed-dynamic", SkillSource.PROJECT_LOCAL, skill_md)
 
     assert info.semantic_plan is None
-    assert "child spawn for_each must be a string" in render_skill_invalidities(info.invalidities)
+    assert {item.kind.value for item in info.invalidities} == {
+        "semantic_child_cardinality_invalid"
+    }
+    assert "for_each must be a non-empty runtime collection name" in render_skill_invalidities(
+        info.invalidities
+    )
+
+
+@pytest.mark.parametrize(
+    "cardinality",
+    [
+        "",
+        "      count: null\n",
+        "      count: true\n",
+        "      count: 1.5\n",
+        '      count: "1"\n',
+        "      count: 1\n      for_each: research_topics\n",
+    ],
+)
+def test_child_spawn_rejects_invalid_cardinality_authority(
+    tmp_path: Path, cardinality: str
+) -> None:
+    skill_md = tmp_path / "invalid-cardinality" / "SKILL.md"
+    declarations = f"""semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: researcher
+      purpose: research one topic
+  child_spawns:
+    - role: researcher
+{cardinality}"""
+    _write_skill(skill_md, declarations=declarations)
+
+    info = _skill_info_from_frontmatter("invalid-cardinality", SkillSource.PROJECT_LOCAL, skill_md)
+
+    assert info.semantic_plan is None
+    assert {item.kind.value for item in info.invalidities} == {
+        "semantic_child_cardinality_invalid"
+    }
+    reason = render_skill_invalidities(info.invalidities)
+    assert "semantic_requirements.child_spawns cardinality" in reason
+    assert "count: <positive integer> or for_each: <runtime collection>" in reason
 
 
 def test_child_model_policy_rejects_unregistered_logical_class(tmp_path: Path) -> None:

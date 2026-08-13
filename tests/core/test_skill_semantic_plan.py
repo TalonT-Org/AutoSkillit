@@ -48,7 +48,7 @@ def test_skill_semantic_plan_is_frozen_slotted_and_derives_operations() -> None:
 
     plan = SkillSemanticPlan(
         schema_version=1,
-        child_spawns=(ChildSpawnSpec(role="implementation-auditor"),),
+        child_spawns=(ChildSpawnSpec(role="implementation-auditor", count=1),),
         concurrency=ConcurrencySpec(required=True),
         join=JoinSpec(required=True),
         evidence=EvidenceSpec(required=True, independent=True),
@@ -69,7 +69,7 @@ def test_skill_semantic_plan_is_frozen_slotted_and_derives_operations() -> None:
     assert plan.operations == frozenset(SkillSemanticOperation)
 
 
-def test_child_spawn_for_each_is_dynamic_and_mutually_exclusive_with_count() -> None:
+def test_child_spawn_cardinality_is_explicit_and_canonical() -> None:
     from autoskillit.core import (
         ChildSpawnSpec,
         LogicalRoleSpec,
@@ -83,22 +83,39 @@ def test_child_spawn_for_each_is_dynamic_and_mutually_exclusive_with_count() -> 
         schema_version=1, child_spawns=(dynamic,), logical_roles=logical_roles
     )
 
+    assert dynamic.count is None
     assert plan.canonical_payload["child_spawns"] == (
-        {"role": "researcher", "count": 1, "for_each": "research_topics"},
+        {"role": "researcher", "for_each": "research_topics"},
     )
     fixed = SkillSemanticPlan(
         schema_version=1,
-        child_spawns=(ChildSpawnSpec(role="researcher"),),
+        child_spawns=(ChildSpawnSpec(role="researcher", count=1),),
         logical_roles=logical_roles,
     )
+    assert fixed.canonical_payload["child_spawns"] == ({"role": "researcher", "count": 1},)
     assert "for_each" not in fixed.canonical_payload["child_spawns"][0]
-    with pytest.raises(SkillContractError, match="for_each must be non-empty"):
+    with pytest.raises(SkillContractError, match="for_each must be a non-empty"):
         ChildSpawnSpec(role="researcher", for_each=" ")
-    with pytest.raises(SkillContractError, match="non-default count"):
-        ChildSpawnSpec(role="researcher", count=2, for_each="research_topics")
     assert not hasattr(plan, "__dict__")
     with pytest.raises(FrozenInstanceError):
         plan.schema_version = 2  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("count", [True, 1.5, "1", 0, -1])
+def test_child_spawn_rejects_non_positive_integer_counts(count: object) -> None:
+    from autoskillit.core import ChildSpawnCardinalityError, ChildSpawnSpec
+
+    with pytest.raises(ChildSpawnCardinalityError, match="positive integer"):
+        ChildSpawnSpec(role="researcher", count=count)  # type: ignore[arg-type]
+
+
+def test_child_spawn_rejects_missing_or_competing_authorities() -> None:
+    from autoskillit.core import ChildSpawnCardinalityError, ChildSpawnSpec
+
+    with pytest.raises(ChildSpawnCardinalityError, match="exactly one"):
+        ChildSpawnSpec(role="researcher")
+    with pytest.raises(ChildSpawnCardinalityError, match="exactly one"):
+        ChildSpawnSpec(role="researcher", count=1, for_each="research_topics")
 
 
 def test_skill_semantic_plan_rejects_incoherent_payloads() -> None:

@@ -90,6 +90,7 @@ from autoskillit.core import (
     get_logger,
     load_bundled_agent_definitions,
 )
+from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
@@ -126,7 +127,6 @@ from autoskillit.execution.backends._codex_config import (
     _CODEX_AGENT_NAME_COLLISIONS,
     CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
-    effective_codex_agent_names,
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_execution_identity import (
@@ -875,10 +875,11 @@ def _canonical_codex_model_effort(
     """Translate the one canonical semantic policy used by agents and call sites."""
     if model_class is None:
         return "", reasoning_effort
-    return (
-        CODEX_MODEL_ALIASES[model_class],
-        reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class),
-    )
+    model = CODEX_MODEL_ALIASES[model_class]
+    return model, reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class)
+
+
+CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = _codex_cfg.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES
 
 
 def _preflight_agent_projection(
@@ -2277,7 +2278,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 session_dir,
                 source_codex_home=codex_home_source,
             )
-        return effective_codex_agent_names(session_dir)
+        return _codex_cfg.effective_codex_agent_names(session_dir)
 
     def refresh_explorer_binding_env(
         self,

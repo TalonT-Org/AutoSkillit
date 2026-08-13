@@ -315,7 +315,8 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
     tmp_path: Path,
 ) -> None:
     from autoskillit.core import SkillExecutionRole
-    from autoskillit.execution.backends.codex import CodexBackend, _effective_agent_names
+    from autoskillit.execution.backends._codex_config import effective_codex_agent_names
+    from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.workspace import DefaultSkillResolver
 
     project_root = tmp_path / "project"
@@ -354,7 +355,7 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
     def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
         generated_home = Path(spec.env["CODEX_HOME"])
         compose_projection = generated_home / "add-dir" / "skills" / "compose-pr" / "SKILL.md"
-        role_names = _effective_agent_names(generated_home)
+        role_names = effective_codex_agent_names(generated_home)
         captured["compose_projected"] = compose_projection.is_file()
         captured["mapped_targets"] = mapped_targets
         captured["role_names"] = role_names

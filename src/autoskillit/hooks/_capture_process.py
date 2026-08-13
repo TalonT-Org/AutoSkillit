@@ -364,16 +364,22 @@ def _finish_owned_spawn(
     """Finish ownership setup for a process atomically spawned by this module."""
 
     pgid = process.pid
+    identity_error: OSError | None = None
     try:
         valid_leader = pgid > 1 and process.returncode is None and os.getpgid(pgid) == pgid
-    except OSError:
+    except OSError as exc:
+        identity_error = exc
         valid_leader = False
     if not valid_leader:
         try:
             process.kill()
+        except BaseException:
+            logger.error("owned_process_identity_kill_failed", exc_info=True)
+        try:
             process.wait(timeout=_KILL_TIMEOUT_SECONDS)
-        finally:
-            raise OwnedProcessError("unsafe owned process group identity")
+        except BaseException:
+            logger.error("owned_process_identity_reap_failed", exc_info=True)
+        raise OwnedProcessError("unsafe owned process group identity") from identity_error
 
     owner = OwnedProcessGroup(
         process=process,

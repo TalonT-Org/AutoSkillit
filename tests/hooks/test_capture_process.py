@@ -582,3 +582,33 @@ def test_permission_limited_group_liveness_is_indeterminate(
 def test_group_identity_rejects_unsafe_values() -> None:
     with pytest.raises(OwnedProcessError, match="unsafe"):
         capture_process._process_group_exists(1)
+
+
+def test_owned_spawn_identity_error_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailedIdentityProcess:
+        pid = 4321
+        returncode = None
+
+        def kill(self) -> None:
+            return
+
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            return 0
+
+    identity_error = OSError("identity unavailable")
+    monkeypatch.setattr(
+        capture_process.os,
+        "getpgid",
+        lambda _pid: (_ for _ in ()).throw(identity_error),
+    )
+
+    with pytest.raises(OwnedProcessError, match="unsafe") as raised:
+        capture_process._finish_owned_spawn(
+            cast("subprocess.Popen[bytes]", FailedIdentityProcess()),
+            inherit_terminal=False,
+        )
+
+    assert raised.value.__cause__ is identity_error

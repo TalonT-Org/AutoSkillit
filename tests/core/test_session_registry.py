@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -49,10 +49,12 @@ def test_registry_mutations_acquire_exclusive_lock(
     operation: str,
 ) -> None:
     write_registry_entry(tmp_path, "abc", "cook", None)
-    lock_operations: list[int] = []
+    lock_requests: list[tuple[Path, bool]] = []
     monkeypatch.setattr(
-        "autoskillit.core.runtime.session_registry.fcntl.flock",
-        lambda _lock_file, lock_operation: lock_operations.append(lock_operation),
+        "autoskillit.core.runtime.session_registry.ArtifactLease.acquire_exclusive",
+        lambda lock_path, *, blocking: (
+            lock_requests.append((lock_path, blocking)) or nullcontext()
+        ),
     )
 
     if operation == "write":
@@ -62,7 +64,7 @@ def test_registry_mutations_acquire_exclusive_lock(
     else:
         bind_session_owner(tmp_path, "abc", os.getpid())
 
-    assert lock_operations == [fcntl.LOCK_EX]
+    assert lock_requests == [(registry_path(tmp_path).with_suffix(".lock"), True)]
 
 
 def test_read_returns_empty_on_missing_file(tmp_path: Path) -> None:

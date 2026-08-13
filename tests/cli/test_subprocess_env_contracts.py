@@ -435,6 +435,8 @@ class _ClaudeLaunchWalker:
         return False, f"env= has unrecognised shape: {ast.dump(env_val)[:60]}"
 
     def _check_call(self, call: ast.Call) -> None:
+        if _call_func_name(call.func) in _CLAUDE_ENV_TYPED_FORWARDERS:
+            return
         cmd_arg = self._cmd_arg_of(call)
         if cmd_arg is None:
             return
@@ -497,6 +499,10 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         ("_session_cook.py", "cook"),
     }
 )
+
+# Typed forwarders receive a complete CmdSpec and consume ``spec.env`` at their
+# owned process boundary. They are not raw subprocess calls themselves.
+_CLAUDE_ENV_TYPED_FORWARDERS = frozenset({"replace", "run_cook_attempt"})
 
 
 def test_no_raw_claude_env() -> None:

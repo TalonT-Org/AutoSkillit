@@ -16,8 +16,13 @@ semantic_requirements:
   logical_roles:
   - name: delegated-worker
     purpose: perform the named independent responsibility and return bounded evidence
+  - name: autoskillit:web-evidence-researcher
+    purpose: research one selected external evidence topic
   child_spawns:
   - role: delegated-worker
+    for_each: selected_reasoning_responsibilities
+  - role: autoskillit:web-evidence-researcher
+    for_each: selected_web_research_topics
   concurrency:
     required: true
   join:
@@ -154,9 +159,28 @@ Identify what needs investigation:
 - **Module Investigation**: Identify the module/component to understand
 - **Question Investigation**: Clarify the specific question being asked
 
+Select exactly one runtime mode: standard or deep. Although projection makes both
+marker families available, they are mutually exclusive for an invocation. Before any
+semantic child dispatch, define:
+
+- `selected_reasoning_responsibilities`: retained non-local reasoning tasks selected
+  from the target, mode, available evidence, dependency readiness, remaining context
+  after reserving synthesis/report/validation capacity, and current child capacity.
+- `selected_web_research_topics`: relevant external questions under the same budget and
+  readiness constraints; this may be empty when external evidence cannot resolve an
+  open question.
+
+The exploration markers below are candidate evidence packets governed by the shared
+parent routing contract. Dispatch only the selected, dependency-ready independent
+frontier, and join every launched child before dependent reasoning or synthesis. Stop
+when further work is irrelevant, redundant, unaffordable, or cannot resolve an open
+question.
+
 ### Step 2: Launch Parallel Exploration (SINGLE READY WAVE)
 
-Dispatch all ready standard-mode packets and independent retained agents before awaiting any result. Join every leaf before synthesis. A reasoning agent that consumes typed packet evidence is not ready until those packets complete.
+Dispatch the selected ready standard-mode packets and independent retained agents before
+awaiting any result. A reasoning agent that consumes typed packet evidence is not ready
+until those packets complete.
 
 Do not output prose between ready dispatches. Immediately proceed to the next launch.
 
@@ -414,7 +438,7 @@ When deep analysis mode is activated, Steps D1–D6 replace standard Steps 1–3
 Parse the investigation target (same as Step 1). Then propose an adaptive batch plan:
 
 - Before authorizing each batch, reserve enough remaining context budget for synthesis, report writing, and post-report validation. Stop gathering and proceed to synthesis when another batch would cross that reserve.
-- Minimum 2 batches; typically 3–4 for complex investigations
+- Authorize another batch only when it can resolve an open question within the reserved context budget
 - State the planned batch count and scope for each batch
 - Present as "Proposed investigation plan: Batch 1 — {scope}, Batch 2 — {scope}, ..."
 
@@ -422,7 +446,10 @@ Parse the investigation target (same as Step 1). Then propose an adaptive batch 
 
 ### Step D2: Batch 1 — Broad Parallel Exploration
 
-Launch a minimum of 5 parallel subagents/packets using the five ready vectors below in one parallel wave. Run the historical recurrence check from Step 3.5 in parallel with Batch 1 through the log/history packet. Native explorer leaves return typed evidence only; they never name a root cause, generate a solution, rank candidates, or select a fix.
+Select the relevant and affordable dependency-ready packets from the candidates below.
+Launch the selected independent frontier concurrently. Run recurrence work only when
+provenance evidence is relevant. Native explorer leaves return typed evidence only; they
+never name a root cause, generate a solution, rank candidates, or select a fix.
 
 <!-- autoskillit:exploration-vector id="deep-code-paths" -->
 - **Code path tracing packet**: Trace execution paths, symbols, imports, and local data flow through the primary affected components. Return bounded typed evidence with locations and direct/inferred status only.
@@ -463,14 +490,14 @@ Do not output prose between the ready dispatches in a batch; issue them in a sin
 For each subsequent batch (Batch 2, Batch 3, ...):
 
 1. Open with an explicit synthesis from prior batches — what was confirmed, what remains uncertain
-2. Dispatch both ready vectors below before awaiting either result:
+2. Dispatch the relevant selected ready vectors below before awaiting any result:
 
 <!-- autoskillit:exploration-vector id="deep-code-deepening" -->
-   - **Mandatory local code packet**: Adapt the open questions into a batch-specific semantic navigation task covering code search, file/symbol tracing, imports, calls, and local data flow. Return bounded typed evidence only; do not choose the primary hypothesis or a fix.
+   - **Local code packet**: When local evidence is still needed, adapt the open questions into a batch-specific semantic navigation task covering code search, file/symbol tracing, imports, calls, and local data flow. Return bounded typed evidence only; do not choose the primary hypothesis or a fix.
 <!-- /autoskillit:exploration-vector -->
 
 <!-- autoskillit:exploration-vector id="deep-informed-web-research" -->
-   - **Mandatory web research agent**: Spawn the existing web-capable subagent under the declared `sonnet` model-class policy to research external documentation, known issues, and library behavior relevant to the open questions.
+   - **Web research agent**: When external evidence can resolve an open question, add that topic to `selected_web_research_topics` and research external documentation, known issues, and library behavior.
 <!-- /autoskillit:exploration-vector -->
 
 3. After each batch completes, produce inter-batch synthesis (confirmed findings, open questions, new leads)
@@ -484,7 +511,9 @@ For each subsequent batch (Batch 2, Batch 3, ...):
 
 **Empty batch handling:** If a batch produces no new findings (all subagents report the same conclusions as prior batches), treat it as an early termination signal and proceed to D4.
 
-Deep mode must execute at least two completed agent waves. Do not begin a later wave until every launch in the preceding wave has a terminal result and its `Inter-batch synthesis:` progress message has been emitted.
+Do not begin a later wave until every launch in the preceding wave has a terminal result
+and its `Inter-batch synthesis:` progress message has been emitted. Stop when the quality
+gate above says another wave is not useful or affordable.
 
 ### Step D4: Challenge Round
 
@@ -538,7 +567,8 @@ If the recommendation does not propose removal or change of an existing mechanis
 
 ### Step D6: Post-Report Validation
 
-After writing the report (Step 4), spawn 2–3 independent validator subagents through child delegation under the declared `sonnet` model-class policy with distinct roles:
+After writing the report (Step 4), select only validators needed for claims that remain
+high-risk or insufficiently cross-checked, subject to the reserved validation budget:
 
 <!-- autoskillit:exploration-vector id="deep-factual-validation" -->
 - **Validator 1 — Factual accuracy**: Cross-check every claim in the report against actual code/evidence. Flag any factual inaccuracy.

@@ -105,6 +105,7 @@ def test_migration_adapter_covers_every_deterministic_remediation() -> None:
     }
     handled = {
         SkillInvalidityKind.UNDECLARED_CAPABILITY,
+        SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID,
         SkillInvalidityKind.SEMANTIC_MISSING_VERSION,
         SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
     }
@@ -176,12 +177,14 @@ _CORPUS_FIXTURES = (
     "precontract_audit_bugs.md",
     "missing_semantic_version.md",
     "legacy_spawner.md",
+    "legacy_child_spawn_cardinality.md",
 )
 # Filename -> the `name:` value declared in that fixture's own frontmatter.
 _CORPUS_SKILL_NAMES = {
     "precontract_audit_bugs.md": "audit-bugs",
     "missing_semantic_version.md": "research-helper",
     "legacy_spawner.md": "legacy-spawner",
+    "legacy_child_spawn_cardinality.md": "legacy-child-spawn-cardinality",
 }
 
 
@@ -232,3 +235,102 @@ async def test_corpus_is_valid_or_deterministically_migratable(
         f"{render_skill_invalidities(revalidated.invalidities)}"
     )
     assert revalidated.execution_role is SkillExecutionRole.SESSION
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("cardinality", "expected_count", "expected_for_each"),
+    [
+        ("", 1, None),
+        ("      count: true\n", 1, None),
+        ("      count: 2.9\n", 2, None),
+        ('      count: "3"\n', 3, None),
+        ("      count: 1\n      for_each: work_items\n", None, "work_items"),
+    ],
+)
+async def test_cardinality_migration_preserves_old_parser_meaning(
+    tmp_path: Path,
+    cardinality: str,
+    expected_count: int | None,
+    expected_for_each: str | None,
+) -> None:
+    skill_name = "legacy-cardinality"
+    skill_path = tmp_path / ".claude" / "skills" / skill_name / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text(
+        f"""---
+name: {skill_name}
+description: Legacy cardinality fixture.
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: worker
+      purpose: Process one work item.
+  child_spawns:
+    - role: worker
+{cardinality}---
+Delegates selected work.
+""",
+        encoding="utf-8",
+    )
+    adapter = SkillMigrationAdapter()
+    result = await adapter.migrate(
+        MigrationFile(
+            name=skill_name,
+            path=skill_path,
+            file_type="skill",
+            current_version=None,
+        ),
+        temp_dir=tmp_path / "temp",
+    )
+
+    assert result.success
+    assert result.migrated_content is not None
+    skill_path.write_text(result.migrated_content, encoding="utf-8")
+    migrated = _skill_info_from_frontmatter(skill_name, SkillSource.PROJECT_LOCAL, skill_path)
+    assert not migrated.invalidities
+    assert migrated.semantic_plan is not None
+    spawn = migrated.semantic_plan.child_spawns[0]
+    assert spawn.count == expected_count
+    assert spawn.for_each == expected_for_each
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "cardinality",
+    ["      count: 0\n", "      count: null\n", "      count: 2\n      for_each: work_items\n"],
+)
+async def test_cardinality_migration_rejects_old_invalid_shapes(
+    tmp_path: Path, cardinality: str
+) -> None:
+    skill_name = "old-invalid-cardinality"
+    skill_path = tmp_path / ".claude" / "skills" / skill_name / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text(
+        f"""---
+name: {skill_name}
+description: Old-invalid cardinality fixture.
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: worker
+      purpose: Process one work item.
+  child_spawns:
+    - role: worker
+{cardinality}---
+Delegates selected work.
+""",
+        encoding="utf-8",
+    )
+
+    result = await SkillMigrationAdapter().migrate(
+        MigrationFile(
+            name=skill_name,
+            path=skill_path,
+            file_type="skill",
+            current_version=None,
+        ),
+        temp_dir=tmp_path / "temp",
+    )
+
+    assert not result.success

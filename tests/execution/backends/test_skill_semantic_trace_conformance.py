@@ -50,8 +50,8 @@ def _semantic_plan() -> SkillSemanticPlan:
             LogicalRoleSpec(name=_WORKER_ROLE, purpose="collect independent evidence"),
         ),
         child_spawns=(
-            ChildSpawnSpec(role=_REVIEW_ROLE),
-            ChildSpawnSpec(role=_WORKER_ROLE),
+            ChildSpawnSpec(role=_REVIEW_ROLE, count=1),
+            ChildSpawnSpec(role=_WORKER_ROLE, count=1),
         ),
         concurrency=ConcurrencySpec(required=True),
         join=JoinSpec(required=True),
@@ -347,7 +347,7 @@ def test_codex_semantic_policy_matches_generated_native_role_toml(tmp_path: Path
     plan = SkillSemanticPlan(
         schema_version=1,
         logical_roles=(LogicalRoleSpec(name=_REVIEW_ROLE, purpose="audit a PR"),),
-        child_spawns=(ChildSpawnSpec(role=_REVIEW_ROLE),),
+        child_spawns=(ChildSpawnSpec(role=_REVIEW_ROLE, count=1),),
         child_model_policies=(
             ChildModelPolicySpec(
                 role=_REVIEW_ROLE,
@@ -438,6 +438,41 @@ def test_analyze_pipeline_health_projects_the_real_terminal_reader() -> None:
     assert "fork_turns='none'" in codex_text
     assert "model=" not in codex_text
     assert "reasoning_effort=" not in codex_text
+
+
+@pytest.mark.parametrize(
+    ("skill_name", "role", "collection", "source_text"),
+    [
+        (
+            "planner-elaborate-assignments",
+            "delegated-worker",
+            "assignment_ids",
+            "assignment_ids = metadata.assignment_ids",
+        ),
+        (
+            "planner-elaborate-wps",
+            "wp-elaborator",
+            "pending_wp_ids",
+            "Set `pending_wp_ids` to the WP IDs remaining after that filter",
+        ),
+    ],
+)
+def test_real_planner_workflows_project_their_runtime_collections(
+    skill_name: str, role: str, collection: str, source_text: str
+) -> None:
+    skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+    info = _skill_info_from_frontmatter(skill_name, SkillSource.BUNDLED, skill_md)
+
+    assert not info.invalidities
+    assert info.semantic_plan is not None
+    assert info.semantic_plan.child_spawns == (ChildSpawnSpec(role=role, for_each=collection),)
+    assert source_text in skill_md.read_text(encoding="utf-8")
+    for backend in (ClaudeCodeBackend(), CodexBackend()):
+        rendered = "\n".join(
+            backend.adapt_skill_semantics(info.semantic_plan).instruction_fragments
+        )
+        assert collection in rendered
+        assert " 1 " not in rendered
 
 
 @pytest.mark.parametrize("skill_name", ["review-pr", "enrich-issues"])

@@ -138,15 +138,11 @@ def test_d2_includes_design_intent_subagent(deep_workflow_section: str) -> None:
     assert "Design Intent" in d2, "Step D2 must include 'Design Intent' as a parallel subagent"
 
 
-def test_d2_minimum_subagents_increased(deep_workflow_section: str) -> None:
-    """Step D2 must specify a minimum of 5 parallel subagents."""
+def test_d2_uses_adaptive_candidate_selection(deep_workflow_section: str) -> None:
+    """Step D2 must not turn the rendered candidate inventory into a minimum."""
     d2 = extract_step_section(deep_workflow_section, "Step D2")
-    has_minimum = "minimum" in d2.lower()
-    has_five = "5" in d2
-    assert has_minimum and has_five, (
-        "Step D2 must specify a 'minimum' of '5' parallel subagents"
-        " (was 4, increased for Design Intent)"
-    )
+    assert "selected independent frontier" in d2.lower()
+    assert "minimum of 5" not in d2.lower()
 
 
 def test_d3_design_intent_redispatch(d3_section: str) -> None:

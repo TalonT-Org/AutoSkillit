@@ -23,7 +23,9 @@ semantic_requirements:
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
   - role: audit-impl-deviation-evaluator
+    count: 1
   - role: audit-impl-slice-auditor
+    count: 1
   concurrency:
     required: true
   join:

@@ -53,6 +53,45 @@ def _skill_project_dir(skill_md_path: Path) -> Path:
     )
 
 
+def _normalize_legacy_child_spawn_cardinality(data: dict[str, Any]) -> str | None:
+    """Preserve cardinalities accepted by the pre-explicit-authority parser."""
+    requirements = data.get("semantic_requirements")
+    if not isinstance(requirements, dict):
+        return "semantic_requirements must be a mapping"
+    raw_spawns = requirements.get("child_spawns")
+    if not isinstance(raw_spawns, list):
+        return "semantic_requirements.child_spawns must be a list"
+
+    normalized: list[dict[str, Any]] = []
+    for raw_spawn in raw_spawns:
+        if not isinstance(raw_spawn, dict):
+            return "semantic_requirements.child_spawns entries must be mappings"
+        spawn = dict(raw_spawn)
+        raw_count = spawn.get("count", 1)
+        try:
+            legacy_count = int(raw_count)
+        except (TypeError, ValueError, OverflowError):
+            return f"legacy child spawn count {raw_count!r} was not coercible to an integer"
+        if legacy_count < 1:
+            return f"legacy child spawn count {raw_count!r} was not positive"
+
+        for_each = spawn.get("for_each")
+        if for_each is not None:
+            if not isinstance(for_each, str) or not for_each.strip():
+                return "legacy child spawn for_each was not a non-empty string"
+            if legacy_count != 1:
+                return "legacy child spawn combined for_each with a non-default count"
+            spawn.pop("count", None)
+        else:
+            spawn["count"] = legacy_count
+        normalized.append(spawn)
+
+    requirements = dict(requirements)
+    requirements["child_spawns"] = normalized
+    data["semantic_requirements"] = requirements
+    return None
+
+
 MIGRATE_RECIPES_MAX_RETRIES: int = 3
 """Max validation-retry attempts for LLM-driven recipe migration (matches SKILL.md)."""
 
@@ -419,13 +458,14 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
 class SkillMigrationAdapter(DeterministicMigrationAdapter):
     """Deterministic, frontmatter-only migration for stale project-local skills.
 
-    Handles the three SkillInvalidityKind members registered as
+    Handles the SkillInvalidityKind members registered as
     ``DETERMINISTIC`` in ``SKILL_CONTRACT_REMEDIATIONS``: UNDECLARED_CAPABILITY,
-    SEMANTIC_MISSING_VERSION, and SEMANTIC_UNDECLARED_TOKENS. Every other kind
-    is ``ADVISORY`` and left to the operator — see the hint surfaced by
-    doctor/composition-root warnings. Frontmatter is edited in-memory and
-    re-serialized as a whole block; the body is carried through byte-for-byte
-    from the parsed result and never touched.
+    SEMANTIC_MISSING_VERSION, SEMANTIC_UNDECLARED_TOKENS, and
+    SEMANTIC_CHILD_CARDINALITY_INVALID. Every other kind is ``ADVISORY`` and
+    left to the operator — see the hint surfaced by doctor/composition-root
+    warnings. Frontmatter is edited in-memory and re-serialized as a whole
+    block; the body is carried through byte-for-byte from the parsed result and
+    never touched.
     """
 
     file_type = "skill"
@@ -554,6 +594,14 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                     field = RETIRED_SEMANTIC_CAPABILITIES[capability].rsplit(".", 1)[-1]
                     requirements.setdefault(field, [])
                 data["semantic_requirements"] = requirements
+            elif kind is SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID:
+                migration_error = _normalize_legacy_child_spawn_cardinality(data)
+                if migration_error is not None:
+                    return MigrationResult(
+                        success=False,
+                        name=file.name,
+                        error=migration_error,
+                    )
             else:
                 raise SkillContractError(
                     f"SkillMigrationAdapter has no migration for invalidity kind {kind.value!r}"

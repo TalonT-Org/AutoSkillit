@@ -252,6 +252,7 @@ def assert_generated_child_delivery(
     backend: str = "codex",
     semantic_plan: SkillSemanticPlan | None = None,
     semantic_adaptation: SkillSemanticAdaptationResult | None = None,
+    runtime_cardinalities: Mapping[str, int] | None = None,
     child_terminal_sentinel: str | None = None,
     sibling_result_sentinel: str | None = None,
     parent_terminal_sentinel: str | None = None,
@@ -352,11 +353,19 @@ def assert_generated_child_delivery(
     if semantic_plan is not None and semantic_adaptation is not None:
         assert semantic_adaptation.unsupported_operation is None
         semantic_adaptation.validate_for(semantic_plan, backend=backend)
-        expected_roles = tuple(
-            semantic_adaptation.logical_role_mapping[spawn.role]
-            for spawn in semantic_plan.child_spawns
-            for _ in range(spawn.count)
-        )
+        expected_roles_list: list[str] = []
+        for spawn in semantic_plan.child_spawns:
+            if spawn.for_each is not None:
+                assert runtime_cardinalities is not None
+                assert spawn.for_each in runtime_cardinalities
+                cardinality = runtime_cardinalities[spawn.for_each]
+            else:
+                assert spawn.count is not None
+                cardinality = spawn.count
+            expected_roles_list.extend(
+                semantic_adaptation.logical_role_mapping[spawn.role] for _ in range(cardinality)
+            )
+        expected_roles = tuple(expected_roles_list)
     else:
         expected_roles = (agent_role,)
 

@@ -1070,6 +1070,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                     f"runtime item in {spawn.for_each!r}{effort_text}."
                 )
             else:
+                assert spawn.count is not None
                 fragments.append(
                     f"Issue {spawn.count} Agent(subagent_type={spawn.role!r}{model_arg}) "
                     f"call{'s' if spawn.count != 1 else ''}{effort_text}."

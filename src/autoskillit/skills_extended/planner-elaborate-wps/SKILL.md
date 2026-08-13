@@ -14,6 +14,7 @@ semantic_requirements:
     purpose: elaborate one work package and return a bounded JSON result
   child_spawns:
   - role: wp-elaborator
+    for_each: pending_wp_ids
   concurrency:
     required: true
   join:
@@ -117,12 +118,17 @@ Before spawning any L0, filter the WP list to skip any WP whose `$2/work_package
 already exists on disk. This idempotency guard prevents redundant L0 re-spawns on retry after
 partial completion (e.g., when an L1 session is resumed after context recovery).
 
+Set `pending_wp_ids` to the WP IDs remaining after that filter. This exact collection,
+not unfiltered `metadata.wp_ids`, controls batching, prompts, child-ID tracking, result
+association, and joins.
+
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Use the native child delegation with `subagent_type: "autoskillit:wp-elaborator"` to spawn one
-agent per WP simultaneously. If WP count > 6, spawn in sequential batches of 6 — await
+agent per item in `pending_wp_ids`. If its count exceeds 6, spawn sequential batches of
+at most 6 — await
 each batch before starting the next.
 
 Each agent receives its variable-data packet (from Step 3) as the `prompt` parameter.

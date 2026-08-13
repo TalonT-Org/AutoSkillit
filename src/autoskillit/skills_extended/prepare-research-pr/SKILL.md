@@ -22,7 +22,9 @@ semantic_requirements:
     purpose: synthesize research evidence and recommend lenses
   child_spawns:
   - role: research-source-reader
+    count: 1
   - role: research-synthesizer
+    count: 1
   concurrency:
     required: true
   join:

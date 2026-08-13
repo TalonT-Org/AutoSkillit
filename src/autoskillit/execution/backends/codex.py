@@ -2281,6 +2281,7 @@ class CodexBackend(BackendCmdBuilderBase):
                     f"fork_turns='none'{policy_text}; retain every returned child ID."
                 )
             else:
+                assert spawn.count is not None
                 fragments.append(
                     f"Call spawn_agent {spawn.count} time{'s' if spawn.count != 1 else ''} "
                     f"with agent_type={native_role!r}, fork_turns='none'{policy_text}; "

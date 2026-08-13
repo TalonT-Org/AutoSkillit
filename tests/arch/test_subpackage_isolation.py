@@ -1289,7 +1289,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2391,
+        2392,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1361,11 +1361,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the existing stale, idle, timeout, and content adjudication order it must preempt",
     ),
     "workspace/skill_capabilities.py": (
-        1104,
+        1120,
         "REQ-SEM-SCHEMA-001: versioned semantic declarations, closed-operation parsing, "
         "retired-key rejection, and precise per-skill diagnostics remain co-located at "
         "the sole skill-frontmatter validation boundary; #4507 parses runtime child "
-        "cardinality at that same boundary (+4 net lines).",
+        "cardinality at that same boundary and classifies its dedicated typed invalidity "
+        "before the general semantic-plan failure path.",
     ),
     "workspace/skills.py": (
         1550,

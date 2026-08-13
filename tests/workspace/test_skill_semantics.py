@@ -23,6 +23,7 @@ semantic_requirements:
       purpose: review one independent concern
   child_spawns:
     - role: reviewer
+      count: 1
   concurrency:
     required: true
   join:
@@ -113,7 +114,48 @@ semantic_requirements:
     info = _skill_info_from_frontmatter("malformed-dynamic", SkillSource.PROJECT_LOCAL, skill_md)
 
     assert info.semantic_plan is None
-    assert "child spawn for_each must be a string" in render_skill_invalidities(info.invalidities)
+    assert {item.kind.value for item in info.invalidities} == {
+        "semantic_child_cardinality_invalid"
+    }
+    assert "for_each must be a non-empty runtime collection name" in render_skill_invalidities(
+        info.invalidities
+    )
+
+
+@pytest.mark.parametrize(
+    "cardinality",
+    [
+        "",
+        "      count: null\n",
+        "      count: true\n",
+        "      count: 1.5\n",
+        '      count: "1"\n',
+        "      count: 1\n      for_each: research_topics\n",
+    ],
+)
+def test_child_spawn_rejects_invalid_cardinality_authority(
+    tmp_path: Path, cardinality: str
+) -> None:
+    skill_md = tmp_path / "invalid-cardinality" / "SKILL.md"
+    declarations = f"""semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: researcher
+      purpose: research one topic
+  child_spawns:
+    - role: researcher
+{cardinality}"""
+    _write_skill(skill_md, declarations=declarations)
+
+    info = _skill_info_from_frontmatter("invalid-cardinality", SkillSource.PROJECT_LOCAL, skill_md)
+
+    assert info.semantic_plan is None
+    assert {item.kind.value for item in info.invalidities} == {
+        "semantic_child_cardinality_invalid"
+    }
+    reason = render_skill_invalidities(info.invalidities)
+    assert "semantic_requirements.child_spawns cardinality" in reason
+    assert "count: <positive integer> or for_each: <runtime collection>" in reason
 
 
 def test_child_model_policy_rejects_unregistered_logical_class(tmp_path: Path) -> None:

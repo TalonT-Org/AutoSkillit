@@ -194,19 +194,23 @@ def test_phase_d_neutral_plan_renders_each_backend_native_form(
 
     assert rendered.router_plan_digest == plan.digest
     assert set(rendered.replacements) == {vector.id for vector in _VECTORS}
-    assert (
-        "Submit this typed task packet to the deterministic exploration router"
-        in rendered.preamble
-    )
+    assert "Projection and static applicability make tasks available only" in rendered.preamble
+    assert "selected_exploration_task_ids" in rendered.preamble
+    assert "rendered marker or call count is never a spawn obligation" in rendered.preamble
+    assert "Join every dispatched leaf" in rendered.preamble
     for vector in _VECTORS:
         replacement = rendered.replacements[vector.id]
         assert native_prefix in replacement
         assert f"task_id: {vector.task.task_id}" in replacement
-        assert "profile: autoskillit" in replacement
+        assert f"Candidate exploration task '{vector.task.task_id}'" in replacement
         assert (
-            "Submit this typed task packet to the deterministic exploration router"
-            not in replacement
+            f"if and only if '{vector.task.task_id}' is in selected_exploration_task_ids"
+            in replacement
         )
+        assert "Otherwise skip this candidate" in replacement
+        assert "is not a failure" in replacement
+        assert "profile: autoskillit" in replacement
+        assert "Projection and static applicability make tasks available only" not in replacement
         assert "Return bounded typed evidence only" in replacement
 
 

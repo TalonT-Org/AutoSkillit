@@ -16,6 +16,7 @@ semantic_requirements:
       purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
     - role: delegated-worker
+      for_each: selected_bearing_assessments
   concurrency:
     required: true
   join:
@@ -194,6 +195,10 @@ Classify each direction:
 - **NO_SIGNAL** — zero signals matched. Gets lightweight bulk assessment only.
 
 ### Step 4: Launch Parallel Direction Assessment Subagents
+
+Set `selected_bearing_assessments` to the SIGNAL_HIT direction tasks, NO_SIGNAL batch
+tasks, and any dependency-ready holistic review task selected by the workflow below.
+Retain child IDs keyed by assessment through each join.
 
 #### 4a: Full Assessment (SIGNAL_HIT directions)
 

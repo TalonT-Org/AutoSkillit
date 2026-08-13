@@ -14,6 +14,7 @@ semantic_requirements:
       purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
     - role: delegated-worker
+      for_each: selected_promotion_responsibilities
   concurrency:
     required: true
   join:
@@ -169,6 +170,10 @@ EOF
   section — graceful degradation with no error.
 
 ### Phase 1: Pre-flight Checks (parallel, blocking)
+
+Set `selected_promotion_responsibilities` to the dependency-ready pre-flight, inventory,
+domain, and synthesis responsibilities selected across the phases below. Dispatch only
+the current independent frontier and join it before dependent work.
 
 Spawn three parallel subagents via child delegation under the declared `sonnet` model-class
 policy to validate promotion readiness.

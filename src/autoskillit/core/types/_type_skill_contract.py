@@ -47,11 +47,9 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
         "uses_capabilities",
     }
 )
-# Bumped when: applicability enum narrowed (INVESTIGATE_STANDARD, INVESTIGATE_DEEP,
-# SCOPE_SOFTWARE, SCOPE_NON_SOFTWARE removed); vector metadata moved to per-skill
-# exploration.yaml sidecars; vector schema slimmed (max_results, max_report_bytes,
-# native_dispatch removed). Stale contracts may carry removed enum values/fields.
-SKILL_PROJECTION_VERSION = 6
+# Bumped because child cardinality now emits exactly one explicit authority and
+# migrated exploration calls are guarded by the parent-selected ready set.
+SKILL_PROJECTION_VERSION = 7
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 5
 PARENT_SANDBOX_MODES: frozenset[str] = frozenset({"read-only", "workspace-write"})
 _CANONICAL_IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")

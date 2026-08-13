@@ -16,6 +16,7 @@ semantic_requirements:
       purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
     - role: delegated-worker
+      for_each: selected_direction_explorations
   concurrency:
     required: true
   join:
@@ -141,7 +142,9 @@ If `compass_path` was provided:
 
 #### Step 1.3: Launch Parallel Exploration Subagents
 
-Launch ALL concurrently in a single message. Every subagent is spawned via `child delegation under the declared `sonnet` model-class policy`.
+Set `selected_direction_explorations` to the independent direction-analysis tasks selected
+for the current round. Launch them concurrently in a single message. Every subagent is
+spawned via `child delegation under the declared `sonnet` model-class policy`.
 
 **Subagent A: Architecture & Extension Points**
 Explore protocol definitions, plugin points, layering (L0/L1/L2/L3),

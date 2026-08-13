@@ -83,7 +83,7 @@ def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
 
     plan = SkillSemanticPlan(
         schema_version=1,
-        child_spawns=(ChildSpawnSpec(role="reviewer"),),
+        child_spawns=(ChildSpawnSpec(role="reviewer", count=1),),
         concurrency=ConcurrencySpec(required=True),
         join=JoinSpec(required=True),
         evidence=EvidenceSpec(required=True, independent=True),
@@ -122,7 +122,7 @@ def test_codex_adaptation_maps_namespaced_role_to_registered_agent() -> None:
     logical_role = "autoskillit:pr-review-auditor-reachability"
     plan = SkillSemanticPlan(
         schema_version=1,
-        child_spawns=(ChildSpawnSpec(role=logical_role),),
+        child_spawns=(ChildSpawnSpec(role=logical_role, count=1),),
         child_model_policies=(ChildModelPolicySpec(role=logical_role, model_class="sonnet"),),
         logical_roles=(LogicalRoleSpec(name=logical_role, purpose="prove reachability"),),
     )

@@ -14,6 +14,7 @@ semantic_requirements:
       purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
     - role: delegated-worker
+      for_each: selected_review_responsibilities
   concurrency:
     required: true
   join:
@@ -32,6 +33,10 @@ Perform deep reviewer-facing analysis of an integration-to-main promotion. This 
 partitions all changed files by domain, runs parallel domain risk analysis, assesses
 test coverage and breaking changes, synthesizes a reviewer verdict, and optionally
 posts the review report as a PR comment.
+
+Set `selected_review_responsibilities` to each dependency-ready domain, quality,
+cross-domain, and synthesis responsibility selected during the phases below. Dispatch
+only the currently independent frontier and join every launched responsibility.
 
 ## Arguments
 

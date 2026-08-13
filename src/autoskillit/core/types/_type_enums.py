@@ -173,6 +173,7 @@ class SkillInvalidityKind(StrEnum):
     SEMANTIC_UNDECLARED_TOKENS = "semantic_undeclared_tokens"
     SEMANTIC_MISSING_VERSION = "semantic_missing_version"
     SEMANTIC_VERSION_MISMATCH = "semantic_version_mismatch"
+    SEMANTIC_CHILD_CARDINALITY_INVALID = "semantic_child_cardinality_invalid"
     SEMANTIC_PLAN_INVALID = "semantic_plan_invalid"
 
 

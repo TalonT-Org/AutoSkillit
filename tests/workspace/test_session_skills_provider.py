@@ -104,6 +104,7 @@ def _child_spawn_skill(tmp_path: Path) -> SkillInfo:
         "      purpose: perform delegated work\n"
         "  child_spawns:\n"
         "    - role: worker\n"
+        "      count: 1\n"
         "---\n"
         "Delegate to the worker.\n",
         encoding="utf-8",

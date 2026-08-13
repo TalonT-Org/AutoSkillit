@@ -515,12 +515,12 @@ class TestCLIOrderCommand:
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
 
-        def fake_run(cmd, **kwargs):
+        def fake_popen(cmd, **kwargs):
             captured["cmd"] = list(cmd)
             captured["env"] = kwargs.get("env", {}) or {}
             return InteractiveProcessStub()
 
-        monkeypatch.setattr(subprocess, "Popen", fake_run)
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
 
         def fake_cook_attempt(spec, **kwargs):
             captured["cmd"] = list(spec.cmd)

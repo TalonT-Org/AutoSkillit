@@ -470,10 +470,11 @@ def test_run_interactive_session_reaps_child_when_owner_binding_fails(
 
     process = InteractiveProcessStub(pid=888)
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(
-        "autoskillit.core.bind_session_owner",
-        lambda *_args: (_ for _ in ()).throw(RuntimeError("bind failed")),
-    )
+
+    def fail_owner_binding(_project_dir: Path, _launch_id: str, _pid: int) -> None:
+        raise RuntimeError("bind failed")
+
+    monkeypatch.setattr("autoskillit.core.bind_session_owner", fail_owner_binding)
     backend, _captured_kwargs = _make_capturing_backend()
 
     with pytest.raises(RuntimeError, match="bind failed"):

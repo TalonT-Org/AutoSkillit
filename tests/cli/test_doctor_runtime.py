@@ -489,6 +489,6 @@ def test_orphaned_autoskillit_daemon_check_ok_when_none(
     import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
 
     monkeypatch.setattr(doctor_runtime, "find_orphaned_autoskillit_daemons", lambda: [])
-    result = doctor_runtime._check_orphaned_autoskillit_daemons()
-    assert len(result) == 1
-    assert result[0].severity is Severity.OK
+    results = doctor_runtime._check_orphaned_autoskillit_daemons()
+    assert len(results) == 1
+    assert results[0].severity is Severity.OK

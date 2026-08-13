@@ -211,7 +211,13 @@ def reap_orphaned_autoskillit_daemons(
         )
         if cleanup.identity_refused:
             logger.info("daemon_orphan_reap_skipped", pid=candidate.pid)
-            results.append(DaemonOrphanReapResult(candidate.pid, "skipped"))
+            results.append(
+                DaemonOrphanReapResult(
+                    candidate.pid,
+                    "skipped",
+                    observation_complete=cleanup.observation_complete,
+                )
+            )
         elif cleanup.complete:
             results.append(
                 DaemonOrphanReapResult(

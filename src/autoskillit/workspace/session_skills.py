@@ -1014,17 +1014,17 @@ class DefaultSessionSkillManager:
 
         if finalized_native_roles is not None and effective_catalog is not None:
             assert backend is not None
-            reachability_compilation = compile_session_skill_catalog(
-                effective_catalog,
-                backend,
-                finalized_native_roles=finalized_native_roles,
-            )
             if compilation is not None and not isinstance(
                 compilation, CompiledSessionSkillCatalog
             ):
                 raise SkillContractError(
                     "finalized native-role admission requires a concrete session compilation"
                 )
+            reachability_compilation = compile_session_skill_catalog(
+                effective_catalog,
+                backend,
+                finalized_native_roles=finalized_native_roles,
+            )
             prior_unavailable = compilation.unavailable if compilation is not None else ()
             compilation = CompiledSessionSkillCatalog(
                 backend=backend.name,

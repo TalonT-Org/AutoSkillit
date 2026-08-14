@@ -1171,11 +1171,22 @@ def _segment_failure_like(
 ) -> Any:
     try:
         failure = build_post_effect_segment_failure(carrier, tool_name=tool_name)
-    except RecipeSegmentDeliveryError:
+    except RecipeSegmentDeliveryError as exc:
+        source_step = carrier.get("source_step", "")
+        logger.warning(
+            "recipe_segment_post_effect_carrier_dropped",
+            tool_name=tool_name,
+            source_step=source_step,
+            error=str(exc),
+        )
         failure = {
             "success": False,
-            "error": "recipe_segment_post_effect_delivery_failure",
+            "subtype": "recipe_segment_post_effect_delivery_failure",
+            "error": "Response shaping failed after the operation ran; do not repeat it.",
             "tool_name": tool_name,
+            "step_name": source_step,
+            "operation_already_ran": True,
+            "do_not_repeat": True,
         }
     return _canonical_json(failure) if isinstance(original, str) else failure
 

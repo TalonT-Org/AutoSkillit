@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import structlog
@@ -199,6 +200,40 @@ def test_checkpoint_budget_publication_failure_returns_no_repeat_carrier(tmp_pat
     assert payload["step_name"] == "run_tests"
     assert payload["recipe_segment"] == carrier
     assert "stdout" not in payload
+
+
+def test_post_effect_carrier_rejection_preserves_no_repeat_fields(monkeypatch):
+    from autoskillit.server import _response_budget
+
+    carrier = _checkpoint_carrier()
+    mock_logger = MagicMock()
+
+    def reject_carrier(*_args, **_kwargs):
+        raise _response_budget.RecipeSegmentDeliveryError("carrier too large")
+
+    monkeypatch.setattr(_response_budget, "build_post_effect_segment_failure", reject_carrier)
+    monkeypatch.setattr(_response_budget, "logger", mock_logger)
+
+    fallback = _response_budget.post_effect_recipe_segment_failure(
+        {"success": True, "recipe_segment": carrier},
+        tool_name="test_check",
+    )
+
+    assert fallback == {
+        "success": False,
+        "subtype": "recipe_segment_post_effect_delivery_failure",
+        "error": "Response shaping failed after the operation ran; do not repeat it.",
+        "tool_name": "test_check",
+        "step_name": "run_tests",
+        "operation_already_ran": True,
+        "do_not_repeat": True,
+    }
+    mock_logger.warning.assert_called_once_with(
+        "recipe_segment_post_effect_carrier_dropped",
+        tool_name="test_check",
+        source_step="run_tests",
+        error="carrier too large",
+    )
 
 
 @pytest.mark.parametrize("kind", ["json", "plain"])

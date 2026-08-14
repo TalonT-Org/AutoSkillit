@@ -100,8 +100,8 @@ steps:
     }
     bodies = extract_recipe_step_bodies(persisted, ("second", "first"))
     assert tuple(step_name for step_name, _body in bodies) == ("second", "first")
-    assert bodies[0][1].startswith("second:")
-    assert bodies[1][1].startswith("first:")
+    assert bodies[0][1] == '{"second":{"action":"stop","message":"done"}}'
+    assert bodies[1][1] == '{"first":{"tool":"run_cmd","with":{"cmd":"echo first"}}}'
 
 
 _PAGE_TEST_BOUND = 2_000

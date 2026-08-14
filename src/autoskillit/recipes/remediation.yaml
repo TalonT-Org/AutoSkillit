@@ -1134,6 +1134,7 @@ steps:
     tool: test_check
     with:
       worktree_path: ${{ context.implementation_ref }}
+      step_name: merge_gate_test
     on_success: audit_impl
     on_failure: check_merge_test_fix_loop
   check_merge_test_fix_loop:

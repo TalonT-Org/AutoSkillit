@@ -18,7 +18,7 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
     RecipeSectionDef,
     canonical_recipe_section_json,
-    dump_yaml_str,
+    fast_dumps,
     get_logger,
     load_yaml,
     recipe_section_plan_digest,
@@ -123,7 +123,7 @@ def extract_recipe_step_bodies(
     persisted: dict[str, Any],
     ordered_step_names: tuple[str, ...],
 ) -> tuple[tuple[str, str], ...]:
-    """Extract canonical compact YAML bodies for ordered persisted steps."""
+    """Extract canonical compact bodies for ordered persisted steps."""
     steps = _persisted_recipe_steps(persisted)
     bodies: list[tuple[str, str]] = []
     for step_name in ordered_step_names:
@@ -135,16 +135,7 @@ def extract_recipe_step_bodies(
                 "recipe_section_serialization_failed", "recipe step is not a mapping"
             )
         try:
-            bodies.append(
-                (
-                    step_name,
-                    dump_yaml_str(
-                        {step_name: step_obj},
-                        default_flow_style=False,
-                        sort_keys=False,
-                    ),
-                )
-            )
+            bodies.append((step_name, fast_dumps({step_name: step_obj})))
         except Exception as exc:
             logger.warning(
                 "recipe_step_yaml_serialize_failed",
@@ -158,7 +149,7 @@ def extract_recipe_step_bodies(
 
 
 def extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:
-    """Extract one compact YAML step body from a persisted recipe artifact."""
+    """Extract one compact step body from a persisted recipe artifact."""
     if not step_name:
         return ""
     bodies = extract_recipe_step_bodies(persisted, (step_name,))

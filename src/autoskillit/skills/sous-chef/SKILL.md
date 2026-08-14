@@ -1035,8 +1035,8 @@ authority. For `kind: startup` or `kind: success`, install every canonical body 
 segment overview is a table of contents, not permission to invent or read future bodies.
 For `kind: recovery`, use its ordered `pull_closure` and `pull_requests` with the carrier's
 unchanged `recipe_pull`; reconstruct every named body before continuing. A
-`recipe_segment_post_effect_delivery_failure` means the operation already ran: do not
-repeat it. Recover only through the retained carrier.
+`recipe_segment_post_effect_delivery_failure`
+means the operation already ran; do not repeat it. Recover only through the retained carrier.
 
 When `load_recipe`/`open_kitchen` return a bounded recovery manifest, process it
 before any generic `success:false` rule. Preserve `recipe_pull`, `recipe_flow`,

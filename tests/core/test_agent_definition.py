@@ -156,6 +156,44 @@ def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
         assert not ({"Bash", "Write", "Edit"} & set(definition.tools))
 
 
+@pytest.mark.parametrize(
+    ("name", "contracts"),
+    [
+        (
+            "friction-batch-scanner",
+            ("coverage_gaps", "stop_reason", "assigned scope complete"),
+        ),
+        (
+            "friction-category-analyzer",
+            ("disposition", "rationale", "conflicts", "stop_reason"),
+        ),
+        (
+            "pr-source-reader",
+            ("representation", "coverage_gaps", "stop_reason"),
+        ),
+        (
+            "pr-synthesizer",
+            ("evidence_locations", "conflicts", "upstream inferences", "stop_reason"),
+        ),
+        (
+            "research-source-reader",
+            ("representation", "coverage_gaps", "stop_reason"),
+        ),
+        (
+            "research-synthesizer",
+            ("findings", "evidence_locations", "conflicts", "stop_reason"),
+        ),
+    ],
+)
+def test_skill_child_roles_preserve_handoff_fidelity(
+    name: str, contracts: tuple[str, ...]
+) -> None:
+    definition = load_agent_definition(pkg_root() / "agents" / f"{name}.md")
+
+    for contract in contracts:
+        assert contract in definition.body
+
+
 def test_explicit_luna_projection_is_independent_from_claude_model(tmp_path: Path) -> None:
     path = tmp_path / "semantic-code-navigator.md"
     path.write_text(

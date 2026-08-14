@@ -44,6 +44,7 @@ from autoskillit.core import (
     load_agent_definitions,
     pkg_root,
 )
+from autoskillit.execution.backends._codex_config import effective_codex_agent_names
 from autoskillit.execution.backends.codex import (
     CODEX_ENV_PREFIX_DENYLIST,
     CodexBackend,
@@ -2692,6 +2693,38 @@ class TestCodexBackendSetupSessionDir:
             "logger": "autoskillit.execution.backends._codex_config",
             "log_level": "warning",
         }
+
+    def test_effective_agent_names_warns_for_ignored_registrations(self) -> None:
+        missing_target = self.session_dir / "agents" / "missing.toml"
+        (self.session_dir / "config.toml").write_text(
+            "[agents]\n"
+            'invalid = "not a table"\n'
+            "[agents.missing_config]\n"
+            'description = "missing config file"\n'
+            "[agents.missing_target]\n"
+            'config_file = "agents/missing.toml"\n',
+            encoding="utf-8",
+        )
+
+        with structlog.testing.capture_logs() as cap_logs:
+            role_names = effective_codex_agent_names(self.session_dir)
+
+        assert "invalid" not in role_names
+        assert "missing_config" not in role_names
+        assert "missing_target" not in role_names
+        assert [
+            {key: entry[key] for key in ("agent_name", "path", "reason") if key in entry}
+            for entry in cap_logs
+            if entry.get("event") == "codex_agent_registration_ignored"
+        ] == [
+            {"agent_name": "invalid", "reason": "invalid_registration"},
+            {"agent_name": "missing_config", "reason": "invalid_config_file"},
+            {
+                "agent_name": "missing_target",
+                "path": str(missing_target),
+                "reason": "missing_config_file",
+            },
+        ]
 
     @pytest.mark.parametrize(
         "role",

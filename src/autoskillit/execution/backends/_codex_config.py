@@ -530,15 +530,31 @@ def effective_codex_agent_names(session_dir: Path) -> frozenset[str]:
     effective = set(CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES)
     for name, registration in configured_agents.items():
         if not name.strip() or not isinstance(registration, dict):
+            logger.warning(
+                "codex_agent_registration_ignored",
+                agent_name=name,
+                reason="invalid_registration",
+            )
             continue
         config_file = registration.get("config_file")
         if not isinstance(config_file, str) or not config_file.strip():
+            logger.warning(
+                "codex_agent_registration_ignored",
+                agent_name=name,
+                reason="invalid_config_file",
+            )
             continue
         target = Path(config_file)
         if not target.is_absolute():
             target = session_dir / target
         try:
             if not target.is_file():
+                logger.warning(
+                    "codex_agent_registration_ignored",
+                    agent_name=name,
+                    path=str(target),
+                    reason="missing_config_file",
+                )
                 continue
             tomllib.loads(target.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:

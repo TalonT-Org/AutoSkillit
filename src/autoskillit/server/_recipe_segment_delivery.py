@@ -19,7 +19,7 @@ from autoskillit.core import (
     load_yaml,
 )
 from autoskillit.pipeline import ReadyRecipe
-from autoskillit.recipe.validator import _edge_routes_success as _recipe_edge_routes_success
+from autoskillit.recipe import edge_routes_success
 from autoskillit.server._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
@@ -172,7 +172,7 @@ def _edge_routes_success(
 ) -> bool:
     tool_name = _delivery_tool_name(projection, edge.source)
     definition = get_tool_def(tool_name) if tool_name is not None else None
-    return _recipe_edge_routes_success(
+    return edge_routes_success(
         tool_name or "",
         edge,
         automatic=definition is not None and definition.automatic_recipe_delivery,

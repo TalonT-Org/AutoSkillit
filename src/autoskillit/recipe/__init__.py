@@ -305,6 +305,9 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     AuditOutputMode,
     select_audit_output_contract,
 )
+from autoskillit.recipe.validator import (  # noqa: E402
+    _edge_routes_success as edge_routes_success,
+)
 
 __all__ = [
     "GROUP_LABELS",
@@ -343,6 +346,7 @@ __all__ = [
     "make_validation_context",
     "run_semantic_rules",
     "analyze_dataflow",
+    "edge_routes_success",
     "check_contract_staleness",
     "generate_recipe_card",
     "get_skill_contract",

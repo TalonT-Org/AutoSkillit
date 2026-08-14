@@ -255,7 +255,11 @@ async def test_middleware_discards_draft_when_compact_delivery_is_not_preserved(
     )
     registered = _registered_tool()
     invalid_delivery = _tool_result("still rewritten")
-    monkeypatch.setattr(registered, "convert_result", lambda _value: invalid_delivery)
+    monkeypatch.setattr(
+        FunctionTool,
+        "convert_result",
+        lambda _self, _value: invalid_delivery,
+    )
     fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
     finalized: FinalizedRunSkillCompletionResponse | None = None
 

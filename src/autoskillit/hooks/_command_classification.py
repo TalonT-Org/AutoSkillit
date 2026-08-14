@@ -2223,17 +2223,26 @@ def analyze_github_mutations(
                 and _segment_is_safe_before_literal_input(executable_tokens)
             )
 
+        remaining_nested_contexts = list(nested_contexts)
         for nested in extract_shell_command_payloads(payload):
-            matching_context = next(
-                (context for context in nested_contexts if nested in context[0]),
+            matching_index = next(
                 (
+                    index
+                    for index, context in enumerate(remaining_nested_contexts)
+                    if nested in context[0]
+                ),
+                None,
+            )
+            if matching_index is None:
+                matching_context = (
                     payload_cwd,
                     payload_cwd,
                     inherited_input_safe,
                     outer_redirect_targets,
                     outer_file_redirect_count,
-                ),
-            )
+                )
+            else:
+                matching_context = remaining_nested_contexts.pop(matching_index)
             _, nested_cwd, nested_input_safe, nested_targets, nested_count = matching_context
             queue.append(
                 (

@@ -1205,6 +1205,19 @@ class TestAnalyzeGitHubMutations:
         assert analysis.request_count == 2
         assert len(analysis.mutations) == 2
 
+    def test_identical_nested_payloads_keep_per_occurrence_cwd(self, tmp_path: Path) -> None:
+        (tmp_path / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        nested = "gh api --method POST /repos/o/r/issues/7/comments --input payload.json"
+        command = (
+            f"cd {shlex.quote(str(tmp_path))} && $({nested}) && "
+            f"cd {shlex.quote(str(tmp_path / 'missing'))} && $({nested})"
+        )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "input_file_missing"
+
     def test_prior_command_that_can_rewrite_literal_input_is_unresolved(
         self,
         tmp_path: Path,

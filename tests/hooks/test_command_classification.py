@@ -178,12 +178,23 @@ class TestTokenizeCommandSegments:
         [
             ("cmd > /tmp/out", ["cmd"], ["/tmp/out"], 1),
             ("cmd 2>/tmp/err", ["cmd"], ["/tmp/err"], 1),
+            ("cmd >> /tmp/out", ["cmd"], ["/tmp/out"], 1),
+            ("cmd 2>>/tmp/err", ["cmd"], ["/tmp/err"], 1),
             ("cmd >$OUT", ["cmd"], [], 1),
             ("cmd >", ["cmd"], [], 1),
             ("cmd 2>&1", ["cmd"], [], 0),
             ("curl --output /tmp/out URL", ["curl", "--output", "/tmp/out", "URL"], [], 0),
         ],
-        ids=["separate", "merged", "dynamic", "missing", "fd-dup", "curl-option"],
+        ids=[
+            "separate",
+            "merged",
+            "append-separate",
+            "append-merged",
+            "dynamic",
+            "missing",
+            "fd-dup",
+            "curl-option",
+        ],
     )
     def test_output_control_partition(
         self,

@@ -55,6 +55,8 @@ class DefaultRunSkillCompletionAuthority:
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
+        self._tracker_outcome_condition = threading.Condition(self._lock)
+        self._tracker_outcomes_in_flight: set[str] = set()
         self._in_flight: dict[str, _Invocation] = {}
         self._drafts: dict[str, RunSkillCompletionReceipt] = {}
         self._delivered: dict[str, RunSkillCompletionReceipt] = {}
@@ -214,22 +216,40 @@ class DefaultRunSkillCompletionAuthority:
         effect: Callable[[], Mapping[str, Any]],
     ) -> Mapping[str, Any]:
         """Run and cache the tracker outcome for one acknowledged receipt."""
-        with self._lock:
-            acknowledged = self._acknowledged.get(receipt_id)
-            if acknowledged is None:
-                raise ValueError("run_skill receipt has not been acknowledged")
-            receipt = acknowledged.receipt
-            if receipt.kitchen_id != kitchen_id:
-                raise ValueError("run_skill receipt belongs to another kitchen")
-            if receipt.request_session_id != request_session_id:
-                raise ValueError("run_skill receipt belongs to another request session")
-            if acknowledged.tracker_outcome is not None:
-                return dict(acknowledged.tracker_outcome)
+        with self._tracker_outcome_condition:
+            while True:
+                acknowledged = self._acknowledged.get(receipt_id)
+                if acknowledged is None:
+                    raise ValueError("run_skill receipt has not been acknowledged")
+                receipt = acknowledged.receipt
+                if receipt.kitchen_id != kitchen_id:
+                    raise ValueError("run_skill receipt belongs to another kitchen")
+                if receipt.request_session_id != request_session_id:
+                    raise ValueError("run_skill receipt belongs to another request session")
+                if acknowledged.tracker_outcome is not None:
+                    return dict(acknowledged.tracker_outcome)
+                if receipt_id not in self._tracker_outcomes_in_flight:
+                    self._tracker_outcomes_in_flight.add(receipt_id)
+                    break
+                self._tracker_outcome_condition.wait()
+
+        try:
             outcome = dict(effect())
-            self._acknowledged[receipt_id] = replace(
-                acknowledged,
-                tracker_outcome=outcome,
-            )
+        except BaseException:
+            with self._tracker_outcome_condition:
+                self._tracker_outcomes_in_flight.remove(receipt_id)
+                self._tracker_outcome_condition.notify_all()
+            raise
+
+        with self._tracker_outcome_condition:
+            try:
+                self._acknowledged[receipt_id] = replace(
+                    acknowledged,
+                    tracker_outcome=outcome,
+                )
+            finally:
+                self._tracker_outcomes_in_flight.remove(receipt_id)
+                self._tracker_outcome_condition.notify_all()
             return dict(outcome)
 
     def apply_tracker_credit(
@@ -278,7 +298,12 @@ class DefaultRunSkillCompletionAuthority:
     def clear_if_idle(self) -> bool:
         """Clear retained credits only when no completion is active."""
         with self._lock:
-            if self._in_flight or self._drafts or self._delivered:
+            if (
+                self._in_flight
+                or self._drafts
+                or self._delivered
+                or self._tracker_outcomes_in_flight
+            ):
                 return False
             self._credits.clear()
             self._recovered.clear()

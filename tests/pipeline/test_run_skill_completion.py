@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
 
@@ -153,6 +154,48 @@ def test_acknowledged_tracker_outcome_is_cached_exactly_once() -> None:
         effect=effect,
     )
     assert first == second == {"success": True, "status": "complete"}
+    assert effects == ["applied"]
+
+
+def test_acknowledged_tracker_effect_releases_authority_lock() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    receipt = _publish(authority)
+    authority.acknowledge(
+        receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+    effect_started = Event()
+    release_effect = Event()
+    effects: list[str] = []
+
+    def effect() -> dict[str, object]:
+        effects.append("applied")
+        effect_started.set()
+        if not release_effect.wait(timeout=5):
+            raise AssertionError("test did not release tracker effect")
+        return {"success": True, "status": "complete"}
+
+    def apply_outcome() -> Mapping[str, object]:
+        return authority.apply_acknowledged_tracker_outcome(
+            receipt.receipt_id,
+            kitchen_id="kitchen",
+            request_session_id="session",
+            effect=effect,
+        )
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        first = executor.submit(apply_outcome)
+        assert effect_started.wait(timeout=5)
+        second = executor.submit(apply_outcome)
+        admission = executor.submit(authority.admission, "run_cmd")
+        try:
+            assert admission.result(timeout=5) == (True, "idle")
+        finally:
+            release_effect.set()
+        assert first.result(timeout=5) == {"success": True, "status": "complete"}
+        assert second.result(timeout=5) == {"success": True, "status": "complete"}
+
     assert effects == ["applied"]
 
 

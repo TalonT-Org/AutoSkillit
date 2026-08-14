@@ -7,11 +7,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_ci_merge_queue as tools_ci_merge_queue
+import autoskillit.server.tools.tools_ci_watch as tools_ci_watch
 from autoskillit.core import PRState, SubprocessResult, TerminationReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server.tools.tools_ci_merge_queue import wait_for_merge_queue
 from autoskillit.server.tools.tools_ci_watch import get_ci_status, wait_for_ci
 from tests.fakes import InMemoryCIWatcher, InMemoryMergeQueueWatcher
+from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 from tests.server.conftest import assert_no_timing, assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -50,7 +53,10 @@ async def test_wait_for_ci_gate_check(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_success_response(tool_ctx_kitchen_open):
+async def test_wait_for_ci_success_response(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+):
     watcher = InMemoryCIWatcher(
         wait_result={"run_id": 12345, "conclusion": "success", "failed_jobs": []}
     )
@@ -64,16 +70,21 @@ async def test_wait_for_ci_success_response(tool_ctx_kitchen_open):
             pid=0,
         )
     )
+    install_prepared_recipe_segment(monkeypatch, tools_ci_watch, step_name="ci")
 
-    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo", step_name="ci"))
 
     assert result["run_id"] == 12345
     assert result["conclusion"] == "success"
     assert result["failed_jobs"] == []
+    assert result["recipe_segment"]["kind"] == "success"
 
 
 @pytest.mark.anyio
-async def test_wait_for_ci_failure_response(tool_ctx_kitchen_open):
+async def test_wait_for_ci_failure_response(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+):
     watcher = InMemoryCIWatcher(
         wait_result={
             "run_id": 12345,
@@ -91,11 +102,13 @@ async def test_wait_for_ci_failure_response(tool_ctx_kitchen_open):
             pid=0,
         )
     )
+    install_prepared_recipe_segment(monkeypatch, tools_ci_watch, step_name="ci")
 
-    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo", step_name="ci"))
 
     assert result["conclusion"] == "failure"
     assert sorted(result["failed_jobs"]) == ["lint", "test"]
+    assert result["recipe_segment"]["kind"] == "recovery"
 
 
 # ---------------------------------------------------------------------------
@@ -263,11 +276,15 @@ async def test_gate_closed_returns_gate_error(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_delegates_to_merge_queue_watcher(tool_ctx_kitchen_open):
+async def test_delegates_to_merge_queue_watcher(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+):
     watcher = InMemoryMergeQueueWatcher(
         wait_result={"success": True, "pr_state": "merged", "reason": "PR merged"}
     )
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
+    install_prepared_recipe_segment(monkeypatch, tools_ci_merge_queue, step_name="queue")
 
     with patch(
         "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
@@ -281,13 +298,19 @@ async def test_delegates_to_merge_queue_watcher(tool_ctx_kitchen_open):
         mock_proc.return_value = proc_inst
 
         result = json.loads(
-            await wait_for_merge_queue(pr_number=42, target_branch="develop", cwd=".")
+            await wait_for_merge_queue(
+                pr_number=42,
+                target_branch="develop",
+                cwd=".",
+                step_name="queue",
+            )
         )
 
     assert result["pr_state"] == "merged"
     assert len(watcher.wait_calls) == 1
     assert watcher.wait_calls[-1]["pr_number"] == 42
     assert watcher.wait_calls[-1]["target_branch"] == "develop"
+    assert result["recipe_segment"]["kind"] == "success"
 
 
 @pytest.mark.anyio
@@ -336,12 +359,24 @@ async def test_explicit_repo_skips_subprocess(tool_ctx_kitchen_open):
 
 
 @pytest.mark.anyio
-async def test_watcher_none_returns_error(tool_ctx_kitchen_open):
+async def test_watcher_none_returns_error(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+):
     tool_ctx_kitchen_open.merge_queue_watcher = None
-    result = json.loads(await wait_for_merge_queue(pr_number=42, target_branch="main", cwd="."))
+    install_prepared_recipe_segment(monkeypatch, tools_ci_merge_queue, step_name="queue")
+    result = json.loads(
+        await wait_for_merge_queue(
+            pr_number=42,
+            target_branch="main",
+            cwd=".",
+            step_name="queue",
+        )
+    )
     assert result["success"] is False
     assert "pr_state" in result
     assert result["pr_state"] == "error"
+    assert result["recipe_segment"]["kind"] == "recovery"
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import os
 
 import pytest
 
+import autoskillit.server.tools.tools_workspace as tools_workspace
 from autoskillit.config import (
     AutomationConfig,
     ResetWorkspaceConfig,
@@ -16,6 +17,7 @@ from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
 from autoskillit.server.tools.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
+from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -148,6 +150,30 @@ class TestTestCheck:
         tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =\n", ""))
         result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
+
+    @pytest.mark.parametrize(
+        ("returncode", "output", "expected_kind"),
+        [
+            (0, "= 10 passed =\n", "success"),
+            (1, "= 1 failed, 9 passed =\n", "recovery"),
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_test_check_selects_carrier_only_from_passed_true(
+        self,
+        tool_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+        returncode: int,
+        output: str,
+        expected_kind: str,
+    ) -> None:
+        install_prepared_recipe_segment(monkeypatch, tools_workspace, step_name="gate")
+        tool_ctx.runner.push(_make_result(returncode, output, ""))
+
+        result = json.loads(await test_check(worktree_path=self.wt, step_name="gate"))
+
+        assert result["passed"] is (expected_kind == "success")
+        assert result["recipe_segment"]["kind"] == expected_kind
 
     @pytest.mark.anyio
     async def test_cross_validates_exit_code_against_output(self, tool_ctx):

@@ -6,8 +6,10 @@ import json
 
 import pytest
 
+import autoskillit.server.tools.tools_git as tools_git
 from autoskillit.server.tools.tools_git import check_pr_mergeable, create_unique_branch
 from tests.conftest import _make_result
+from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -126,28 +128,40 @@ class TestCreateUniqueBranch:
 
 class TestCheckPrMergeable:
     @pytest.mark.anyio
-    async def test_mergeable_pr(self, tool_ctx_kitchen_open):
+    async def test_mergeable_pr(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         tool_ctx_kitchen_open.runner.push(
             _make_result(
                 0, json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), ""
             )
         )
-        result = json.loads(await check_pr_mergeable(42, "."))
+        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="mergeable")
+        result = json.loads(await check_pr_mergeable(42, ".", step_name="mergeable"))
         assert result["mergeable"] is True
         assert result["merge_state_status"] == "CLEAN"
         assert result["mergeable_status"] == "MERGEABLE"
+        assert result["recipe_segment"]["kind"] == "success"
 
     @pytest.mark.anyio
-    async def test_conflicting_pr_is_not_mergeable(self, tool_ctx_kitchen_open):
+    async def test_conflicting_pr_is_not_mergeable(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         tool_ctx_kitchen_open.runner.push(
             _make_result(
                 0, json.dumps({"mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY"}), ""
             )
         )
-        result = json.loads(await check_pr_mergeable(42, "."))
+        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="mergeable")
+        result = json.loads(await check_pr_mergeable(42, ".", step_name="mergeable"))
         assert result["mergeable"] is False
         assert result["merge_state_status"] == "DIRTY"
         assert result["mergeable_status"] == "CONFLICTING"
+        assert result["recipe_segment"]["kind"] == "recovery"
 
     @pytest.mark.anyio
     async def test_unknown_mergeable_status_returned_raw(self, tool_ctx_kitchen_open):

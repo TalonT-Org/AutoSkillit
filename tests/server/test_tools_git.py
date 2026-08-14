@@ -8,9 +8,11 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.server.tools.tools_git as tools_git
 from autoskillit.core.types import MergeFailedStep, MergeState
 from autoskillit.server.tools.tools_git import merge_worktree
 from tests.conftest import _make_result
+from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -19,7 +21,12 @@ class TestMergeWorktree:
     """merge_worktree enforces test gate, rebases, and merges."""
 
     @pytest.mark.anyio
-    async def test_merge_worktree_blocks_on_failing_tests(self, tool_ctx_kitchen_open, tmp_path):
+    async def test_merge_worktree_blocks_on_failing_tests(
+        self,
+        tool_ctx_kitchen_open,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         """merge_worktree returns error with failed_step when test-check fails."""
         wt = tmp_path / "worktree"
         wt.mkdir()
@@ -40,14 +47,21 @@ class TestMergeWorktree:
         tool_ctx_kitchen_open.runner.push(
             _make_result(1, "FAIL\n= 3 failed, 97 passed =", "")
         )  # test-check
-        result = json.loads(await merge_worktree(str(wt), "dev"))
+        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="merge")
+        result = json.loads(await merge_worktree(str(wt), "dev", step_name="merge"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
         assert result["state"] == MergeState.WORKTREE_INTACT
         assert "test_summary" not in result
+        assert result["recipe_segment"]["kind"] == "recovery"
 
     @pytest.mark.anyio
-    async def test_merge_worktree_merges_on_green(self, tool_ctx_kitchen_open, tmp_path):
+    async def test_merge_worktree_merges_on_green(
+        self,
+        tool_ctx_kitchen_open,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         """merge_worktree performs rebase+merge when tests pass."""
         wt = tmp_path / "worktree"
         wt.mkdir()
@@ -88,8 +102,9 @@ class TestMergeWorktree:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
+        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="merge")
         with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
-            result = json.loads(await merge_worktree(str(wt), "dev"))
+            result = json.loads(await merge_worktree(str(wt), "dev", step_name="merge"))
         assert result["merge_succeeded"] is True
         assert result["into_branch"] == "dev"
         assert result["cleanup_succeeded"] is True
@@ -98,6 +113,7 @@ class TestMergeWorktree:
         assert "test_stdout" not in result
         assert "test_stderr" not in result
         assert "raw_output_artifact_path" not in result
+        assert result["recipe_segment"]["kind"] == "success"
         assert not (wt / ".autoskillit" / "temp" / "merge_worktree").exists()
         # Verify merge command cwd is the main_repo (/repo)
         merge_call = next(

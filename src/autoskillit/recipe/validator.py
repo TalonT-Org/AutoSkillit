@@ -10,10 +10,12 @@ from autoskillit.core import (
     FinalizedRecipeSegment,
     RecipeFlowEdge,
     get_logger,
+    get_tool_def,
 )
 from autoskillit.recipe._analysis import (  # noqa: F401
     ValidationContext,
     _build_step_graph,
+    _extract_routing_edges,
     analyze_dataflow,
     make_validation_context,
 )
@@ -367,6 +369,25 @@ def _finalize_delivery_segments(
     segment_index = {
         step_name: index for index, (_name, steps) in enumerate(normalized) for step_name in steps
     }
+    projected_targets = {
+        step_name: {edge.target for edge in ordered_flow_edges if edge.source == step_name}
+        for step_name, step in recipe.steps.items()
+        if step.action == "route"
+    }
+    for step_name, targets in projected_targets.items():
+        route_source_index = segment_index[step_name]
+        later_targets = {
+            edge.target
+            for edge in _extract_routing_edges(recipe.steps[step_name])
+            if edge.target in segment_index and segment_index[edge.target] > route_source_index
+        }
+        missing_targets = sorted(later_targets - targets)
+        if missing_targets:
+            errors.append(
+                f"Route action step {step_name!r} has later-segment targets missing from "
+                f"its finalized pull closure: {missing_targets!r}."
+            )
+
     checkpoint_sources: list[list[str]] = [[] for _ in normalized]
     for edge in ordered_flow_edges:
         source_index = segment_index.get(edge.source)
@@ -374,6 +395,42 @@ def _finalize_delivery_segments(
         if source_index is None or target_index is None or source_index >= target_index:
             continue
         step = recipe.steps[edge.source]
+        if step.tool is None:
+            if step.action != "route":
+                errors.append(
+                    f"Cross-segment route from step {edge.source!r} requires a tool carrier "
+                    "or an action: route pull closure."
+                )
+                continue
+        else:
+            tool_name = "complete_run_skill_result" if step.tool == "run_skill" else step.tool
+            definition = get_tool_def(tool_name)
+            if definition is None:
+                errors.append(
+                    f"Delivery checkpoint step {edge.source!r} uses unregistered tool "
+                    f"{step.tool!r}."
+                )
+                continue
+            success_crossing = _edge_routes_success(
+                tool_name,
+                edge,
+                automatic=definition.automatic_recipe_delivery,
+                recovery=definition.recovery_recipe_delivery,
+            )
+            capability = (
+                definition.automatic_recipe_delivery
+                if success_crossing
+                else definition.recovery_recipe_delivery
+            )
+            if not capability:
+                required = (
+                    "automatic_recipe_delivery" if success_crossing else "recovery_recipe_delivery"
+                )
+                errors.append(
+                    f"Delivery checkpoint step {edge.source!r} tool {step.tool!r} lacks "
+                    f"{required} for its {edge.edge_type!r} cross-segment route."
+                )
+                continue
         if step.tool is not None and step.with_args.get("step_name") != edge.source:
             errors.append(
                 f"Delivery checkpoint step {edge.source!r} must pass its exact recipe key "
@@ -396,6 +453,30 @@ def _finalize_delivery_segments(
         ),
         [],
     )
+
+
+def _edge_routes_success(
+    tool_name: str,
+    edge: RecipeFlowEdge,
+    *,
+    automatic: bool,
+    recovery: bool,
+) -> bool:
+    """Match the server carrier branch selected for one finalized tool edge."""
+    if not automatic and recovery:
+        return False
+    if edge.edge_type == "success":
+        return True
+    if edge.edge_type != "result_condition":
+        return False
+    condition = (edge.condition or "").replace("'", "")
+    if tool_name == "wait_for_ci":
+        return "result.conclusion" in condition and "== success" in condition
+    if tool_name == "wait_for_merge_queue":
+        return "result.pr_state" in condition and "== merged" in condition
+    if tool_name == "claim_and_resolve_issue":
+        return "result.claimed" in condition and "== true" in condition
+    return automatic
 
 
 # Re-export test-access symbols from their new locations.

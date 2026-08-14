@@ -104,7 +104,7 @@ def test_acknowledgement_rejects_wrong_binding(kitchen_id: str, request_session_
         )
 
 
-def test_acknowledgement_is_one_shot() -> None:
+def test_acknowledgement_replays_for_the_same_kitchen_and_request_session() -> None:
     authority = DefaultRunSkillCompletionAuthority()
     receipt = authority.draft(
         _begin(authority),
@@ -113,18 +113,47 @@ def test_acknowledgement_is_one_shot() -> None:
         result_digest="digest",
     )
     authority.publish(receipt.receipt_id)
+    first = authority.acknowledge(
+        receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+    second = authority.acknowledge(
+        receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+    assert first == second == receipt
+
+
+def test_acknowledged_tracker_outcome_is_cached_exactly_once() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    receipt = _publish(authority)
     authority.acknowledge(
         receipt.receipt_id,
         kitchen_id="kitchen",
         request_session_id="session",
     )
+    effects: list[str] = []
 
-    with pytest.raises(ValueError, match="already been acknowledged"):
-        authority.acknowledge(
-            receipt.receipt_id,
-            kitchen_id="kitchen",
-            request_session_id="session",
-        )
+    def effect() -> dict[str, object]:
+        effects.append("applied")
+        return {"success": True, "status": "complete"}
+
+    first = authority.apply_acknowledged_tracker_outcome(
+        receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+        effect=effect,
+    )
+    second = authority.apply_acknowledged_tracker_outcome(
+        receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+        effect=effect,
+    )
+    assert first == second == {"success": True, "status": "complete"}
+    assert effects == ["applied"]
 
 
 def test_recovery_rebinds_the_sole_delivered_receipt_once() -> None:

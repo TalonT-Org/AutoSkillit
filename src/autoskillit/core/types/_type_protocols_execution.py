@@ -107,6 +107,15 @@ class RunSkillCompletionAuthority(Protocol):
         receipt_id: str = "",
     ) -> Mapping[str, Any]: ...
 
+    def apply_acknowledged_tracker_outcome(
+        self,
+        receipt_id: str,
+        *,
+        kitchen_id: str,
+        request_session_id: str,
+        effect: Callable[[], Mapping[str, Any]],
+    ) -> Mapping[str, Any]: ...
+
     def clear_if_idle(self) -> bool: ...
 
 

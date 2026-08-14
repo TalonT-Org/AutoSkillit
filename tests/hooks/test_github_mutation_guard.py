@@ -32,32 +32,21 @@ def _run_cmd_event(command: str, *, cwd: str | None = None) -> dict:
     return {"tool_name": _RUN_CMD_TOOL, "tool_input": tool_input}
 
 
-def _run_hook(event: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
+def _run_hook(
+    event: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    headless: bool = True,
+) -> dict:
     from autoskillit.hooks.guards.github_mutation_guard import main
 
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    stdout = io.StringIO()
-    try:
-        with redirect_stdout(stdout):
-            main()
-    except SystemExit:
-        pass
-    rendered = stdout.getvalue().strip()
-    return json.loads(rendered) if rendered else {}
-
-
-def _run_interactive_hook(event: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-    return _run_hook_without_session_override(event, monkeypatch)
-
-
-def _run_hook_without_session_override(event: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
-    from autoskillit.hooks.guards.github_mutation_guard import main
-
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+    if headless:
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     stdout = io.StringIO()
     try:
         with redirect_stdout(stdout):
@@ -357,7 +346,11 @@ def test_interactive_cook_allows_literal_single_non_review_mutation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    result = _run_interactive_hook(_bash_event(command, cwd=str(tmp_path)), monkeypatch)
+    result = _run_hook(
+        _bash_event(command, cwd=str(tmp_path)),
+        monkeypatch,
+        headless=False,
+    )
 
     assert result == {}
 

@@ -26,6 +26,7 @@ from typing import Any, ClassVar, Literal
 from autoskillit.core import (
     AUDIT_REFERENCE_IDENTITY_PROFILE_V1,
     ArtifactRef,
+    AuditAdmissionAuthorityMismatchError,
     AuditAdmissionRecoveryResult,
     AuditAdmissionStorageError,
     AuditAdmissionStorageFailureReason,
@@ -177,6 +178,7 @@ _DATABASE_MODE = 0o600
 _DIRECTORY_MODE = 0o700
 _HEAD_KEY_DOMAIN = "autoskillit:audit-admission:head-key:v1:sha256"
 _HANDLE_DIGEST_DOMAIN = "autoskillit:audit-admission:reservation-handle:v1:sha256"
+_HANDLE_PREFIX = "adr1"
 _FINALIZATION_EFFECT_READ_LIFECYCLES = frozenset(
     {
         AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION,
@@ -369,6 +371,10 @@ class DefaultAuditAdmissionLedger:
         self._store_health = AuditAdmissionStoreHealth(
             status=AuditAdmissionStorageHealthStatus.UNRECOVERED,
         )
+
+    @property
+    def store_authority(self) -> AuditAdmissionStoreAuthority:
+        return self._authority
 
     # -- connection/schema -------------------------------------------------
 
@@ -998,13 +1004,13 @@ class DefaultAuditAdmissionLedger:
         )
 
     def _issue_handle(self, connection: sqlite3.Connection, attempt_id: AuditAttemptId) -> str:
-        handle = secrets.token_hex(32)
-        handle_digest = compute_bytes_hash(handle.encode("utf-8"))
+        secret = secrets.token_hex(32)
+        handle_digest = compute_bytes_hash(secret.encode("utf-8"))
         connection.execute(
             "UPDATE attempts SET handle_digest = ? WHERE attempt_id = ?",
             (f"{_HANDLE_DIGEST_DOMAIN}:{handle_digest}", attempt_id.value),
         )
-        return handle
+        return f"{_HANDLE_PREFIX}.{self._authority.authority_id}.{secret}"
 
     def _dispatch_new_slot(
         self,
@@ -1130,12 +1136,31 @@ class DefaultAuditAdmissionLedger:
         self,
         reservation_handle: str,
     ) -> AuditIdentityReservation | None:
+        if not isinstance(reservation_handle, str):
+            return None
+        parts = reservation_handle.split(".")
+        if len(parts) != 3 or parts[0] != _HANDLE_PREFIX:
+            return None
+        handle_authority_id, secret = parts[1:]
+        if (
+            len(handle_authority_id) != 69
+            or not handle_authority_id.startswith("ada1-")
+            or any(char not in "0123456789abcdef" for char in handle_authority_id[5:])
+            or len(secret) != 64
+            or any(char not in "0123456789abcdef" for char in secret)
+        ):
+            return None
+        serving_authority_id = self._authority.authority_id
+        if handle_authority_id != serving_authority_id:
+            raise AuditAdmissionAuthorityMismatchError(
+                handle_authority_id,
+                serving_authority_id,
+            )
         with self._fence:
             connection = self._ensure_recovered()
             try:
                 handle_digest = (
-                    f"{_HANDLE_DIGEST_DOMAIN}:"
-                    f"{compute_bytes_hash(reservation_handle.encode('utf-8'))}"
+                    f"{_HANDLE_DIGEST_DOMAIN}:{compute_bytes_hash(secret.encode('utf-8'))}"
                 )
                 row = connection.execute(
                     "SELECT reservation_json, lifecycle FROM attempts WHERE handle_digest = ?",

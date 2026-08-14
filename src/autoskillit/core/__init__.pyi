@@ -336,6 +336,9 @@ from .types import (
 )
 from .types import AUDIT_CYCLE_SCHEMA_VERSION as AUDIT_CYCLE_SCHEMA_VERSION
 from .types import (
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR as AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+)
+from .types import (
     AUDIT_REFERENCE_IDENTITY_PROFILE_V1 as AUDIT_REFERENCE_IDENTITY_PROFILE_V1,
 )
 from .types import AUDIT_SEMANTIC_SCHEMA_VERSION as AUDIT_SEMANTIC_SCHEMA_VERSION
@@ -617,6 +620,9 @@ from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
+from .types import (
+    AuditAdmissionAuthorityMismatchError as AuditAdmissionAuthorityMismatchError,
+)
 from .types import AuditAdmissionLedger as AuditAdmissionLedger
 from .types import AuditAdmissionRecoveryResult as AuditAdmissionRecoveryResult
 from .types import AuditAdmissionStorageError as AuditAdmissionStorageError

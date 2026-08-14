@@ -28,6 +28,7 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
@@ -452,6 +453,7 @@ class CodexEnvPolicy:
                     if key != CODEX_STARTUP_TRACE_ENV_VAR
                 }
             )
+        out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")
         # This is an outer-cook control signal, never child or nested-session state.
         out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
         if required is not None:

@@ -29,6 +29,8 @@ from autoskillit.cli.fleet import fleet_app
 from autoskillit.cli.session._session_cook import cook as cook_interactive
 from autoskillit.cli.session._session_order import _recipes_dir_for, order
 from autoskillit.core import (
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+    AuditAdmissionStoreAuthority,
     RecipeSource,
     atomic_write,
     get_logger,
@@ -150,11 +152,20 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             )
     else:
         _explicit_project_dir = None
+    _audit_admission_authority_path = os.environ.get(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR)
+    if _audit_admission_authority_path:
+        audit_admission_store_authority = AuditAdmissionStoreAuthority(
+            database_path=Path(_audit_admission_authority_path),
+            expected_owner_id=os.getuid(),
+        )
+    else:
+        audit_admission_store_authority = None
     from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
 
     ctx = make_context(
         cfg,
         project_dir=_explicit_project_dir,
+        audit_admission_store_authority=audit_admission_store_authority,
         plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
     )
     _initialize(ctx)

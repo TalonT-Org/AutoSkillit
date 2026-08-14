@@ -423,6 +423,11 @@ def _parse_recipe(
     *,
     declared_data: dict[str, Any] | None = None,
 ) -> Recipe:
+    accepted_fields = (_PARSE_RECIPE_HANDLED_FIELDS - {"version"}) | {AUTOSKILLIT_VERSION_KEY}
+    unknown_fields = set(data) - accepted_fields
+    if unknown_fields:
+        raise ValueError(f"Recipe has unknown top-level fields: {sorted(unknown_fields)!r}")
+
     name = data.get("name", "")
     description = data.get("description", "")
     summary = data.get("summary", "")

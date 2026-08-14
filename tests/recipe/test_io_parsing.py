@@ -39,6 +39,13 @@ def test_parse_recipe_accepts_raw_dict() -> None:
     assert recipe.name == "test"
 
 
+def test_parse_recipe_rejects_unknown_top_level_fields() -> None:
+    assert _parse_recipe({"name": "test", "autoskillit_version": "1.2.3"}).version == "1.2.3"
+
+    with pytest.raises(ValueError, match="unknown top-level fields.*delivery_segment"):
+        _parse_recipe({"name": "test", "delivery_segment": []})
+
+
 def test_iter_steps_with_context_empty_for_first_step() -> None:
     """iter_steps_with_context yields frozenset() for the first step."""
     from autoskillit.recipe.io import iter_steps_with_context

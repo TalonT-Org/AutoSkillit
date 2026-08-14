@@ -3,7 +3,7 @@ name: audit-impl-slice-auditor
 description: "Audits a requirements slice against an implementation diff. Checks coverage, correctness, scope creep, and test completeness — returns structured findings."
 tools: [Bash]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 # audit-impl-slice-auditor

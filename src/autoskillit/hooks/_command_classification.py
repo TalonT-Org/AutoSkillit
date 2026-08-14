@@ -896,6 +896,17 @@ def extract_shell_command_payloads(command: str) -> list[str]:
     return payloads
 
 
+def _segment_evaluates_shell_payload(tokens: list[str], payload: str) -> bool:
+    """Return whether *tokens* structurally evaluate *payload* as shell text."""
+    verb, args = command_verb_and_args(tokens)
+    if _is_shell_interpreter(verb) and args and args[0] == "-c" and len(args) >= 2:
+        return args[1] == payload
+    if verb == "eval" and args:
+        return " ".join(args) == payload
+    rendered = " ".join(tokens)
+    return f"$({payload})" in rendered or f"`{payload}`" in rendered
+
+
 def tokenize_shell_payload_segments(command: str) -> list[list[str]] | None:
     """Return tokenized segments for every evaluated shell payload in *command*.
 
@@ -2128,7 +2139,7 @@ def analyze_github_mutations(
 
         current_cwd = payload_cwd
         input_context_safe = inherited_input_safe
-        nested_contexts: list[tuple[str, str, bool, tuple[str, ...], int]] = []
+        nested_contexts: list[tuple[list[str], str, bool, tuple[str, ...], int]] = []
         for command_segment in tokenized_segments:
             raw_segment = command_segment.tokens
             executable_tokens, redirect_targets, file_redirect_count = _partition_output_redirects(
@@ -2141,7 +2152,7 @@ def analyze_github_mutations(
             segment_cwd = _segment_cwd(executable_tokens, current_cwd)
             nested_contexts.append(
                 (
-                    " ".join(raw_segment),
+                    raw_segment,
                     segment_cwd,
                     input_context_safe,
                     active_redirect_targets,
@@ -2229,13 +2240,14 @@ def analyze_github_mutations(
                 (
                     index
                     for index, context in enumerate(remaining_nested_contexts)
-                    if nested in context[0]
+                    if _segment_evaluates_shell_payload(context[0], nested)
                 ),
                 None,
             )
+            matching_context: tuple[list[str], str, bool, tuple[str, ...], int]
             if matching_index is None:
                 matching_context = (
-                    payload_cwd,
+                    [],
                     payload_cwd,
                     inherited_input_safe,
                     outer_redirect_targets,

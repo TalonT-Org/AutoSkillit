@@ -1225,6 +1225,19 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
         assert analysis.reason_code == "unsafe_input_provenance"
 
+    def test_nested_payload_uses_its_structural_segment_context(self, tmp_path: Path) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        nested = f"gh api --method POST /repos/o/r/issues/7/comments --input {payload}"
+        command = (
+            f"echo {shlex.quote(nested)} && printf x > {payload} && bash -c {shlex.quote(nested)}"
+        )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
     def test_prior_command_that_can_rewrite_literal_input_is_unresolved(
         self,
         tmp_path: Path,

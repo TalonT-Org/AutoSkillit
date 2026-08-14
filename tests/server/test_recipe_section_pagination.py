@@ -30,6 +30,7 @@ from autoskillit.core import (
 )
 from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server import _recipe_section_planning as planning
+from autoskillit.server._recipe_artifact import extract_recipe_step_bodies
 from autoskillit.server._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
@@ -38,7 +39,6 @@ from autoskillit.server._recipe_section_pagination import (
     RecipeSectionPaginationError,
     RecipeSectionRequestState,
     build_recipe_section_page_plan,
-    extract_recipe_step_bodies,
     get_or_build_recipe_section_page_plan,
     render_recipe_section_failure,
     render_recipe_section_page,

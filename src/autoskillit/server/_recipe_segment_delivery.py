@@ -23,9 +23,9 @@ from autoskillit.recipe import edge_routes_success
 from autoskillit.server._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
+    extract_recipe_step_bodies,
     load_recipe_artifact,
 )
-from autoskillit.server._recipe_section_pagination import extract_recipe_step_bodies
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext

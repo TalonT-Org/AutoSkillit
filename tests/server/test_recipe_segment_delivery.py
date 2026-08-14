@@ -18,11 +18,11 @@ from autoskillit.pipeline import NoActiveRecipe, ReadyRecipe
 from autoskillit.server._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
+    extract_recipe_step_bodies,
     load_recipe_artifact,
     persist_recipe_artifact,
 )
 from autoskillit.server._recipe_generation import RecipeGenerationStore
-from autoskillit.server._recipe_section_pagination import extract_recipe_step_bodies
 from autoskillit.server._recipe_segment_delivery import (
     RecipeSegmentDeliveryError,
     prepare_recipe_segment_delivery,

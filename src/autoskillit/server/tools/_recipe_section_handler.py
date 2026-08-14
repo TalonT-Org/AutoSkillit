@@ -26,6 +26,12 @@ from autoskillit.pipeline import InitializingRecipe, ReadyRecipe
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._recipe_artifact import (
+    RecipeStepExtractionError as _RecipeSectionError,
+)
+from autoskillit.server._recipe_artifact import (
+    extract_step_body_from_persisted as _extract_step_body_from_persisted,
+)
 from autoskillit.server._recipe_delivery import (
     RecipeArtifactError,
     RecipeArtifactSchemaError,
@@ -55,12 +61,6 @@ from autoskillit.server._recipe_section_pagination import (
     render_recipe_section_page,
     resolve_recipe_section_bound_bytes,
     select_recipe_section,
-)
-from autoskillit.server._recipe_section_pagination import (
-    RecipeStepExtractionError as _RecipeSectionError,
-)
-from autoskillit.server._recipe_section_pagination import (
-    extract_step_body_from_persisted as _extract_step_body_from_persisted,
 )
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield

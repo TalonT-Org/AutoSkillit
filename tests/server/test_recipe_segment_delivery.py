@@ -22,6 +22,7 @@ from autoskillit.server._recipe_artifact import (
     persist_recipe_artifact,
 )
 from autoskillit.server._recipe_generation import RecipeGenerationStore
+from autoskillit.server._recipe_section_pagination import extract_recipe_step_bodies
 from autoskillit.server._recipe_segment_delivery import (
     RecipeSegmentDeliveryError,
     prepare_recipe_segment_delivery,
@@ -131,7 +132,13 @@ async def test_checkpoint_delivery_reads_ready_exact_durable_artifact(
     assert prepared.success_carrier["source_step"] == "scope"
     assert [body["step"] for body in prepared.success_carrier["bodies"]] == ["select_directions"]
     assert prepared.success_carrier["recipe_pull"] == state.artifact_generation.pull_identity()
-    assert "select_directions:" in prepared.success_carrier["bodies"][0]["body"]
+    assert (
+        prepared.success_carrier["bodies"][0]["body"]
+        == extract_recipe_step_bodies(
+            persisted,
+            ("select_directions",),
+        )[0][1]
+    )
     assert persisted["content"]
 
 

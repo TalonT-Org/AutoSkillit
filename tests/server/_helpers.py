@@ -207,7 +207,23 @@ async def _credit_initialization_sections(
 
     identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
     initialization_id = envelope["initialization_id"]
-    for requirement in envelope["required_sections"]:
+    requirements = envelope.get("required_sections")
+    if requirements is None:
+        from autoskillit.pipeline import InitializingRecipe
+        from autoskillit.server import _get_ctx
+
+        state = _get_ctx().recipe_initialization_state
+        assert isinstance(state, InitializingRecipe)
+        assert state.initialization_id == initialization_id
+        requirements = [
+            {
+                "section": item.section,
+                "page_plan_sha256": item.page_plan_sha256,
+                "total_parts": item.total_parts,
+            }
+            for item in state.requirements
+        ]
+    for requirement in requirements:
         continuation: str | None = None
         for part in range(requirement["total_parts"]):
             if counter is not None:

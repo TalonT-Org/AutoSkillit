@@ -62,7 +62,10 @@ class TestRunCmd:
 
         assert result["success"] is expected_success
         assert result["exit_code"] == returncode
-        assert_recovery_recipe_segment(result, step_name="command")
+        if expected_success:
+            assert "recipe_segment" not in result
+        else:
+            assert_recovery_recipe_segment(result, step_name="command")
 
     @pytest.mark.anyio
     async def test_custom_timeout(self, tool_ctx_kitchen_open):

@@ -161,7 +161,7 @@ class TestCheckPrMergeable:
         assert result["mergeable"] is False
         assert result["merge_state_status"] == "DIRTY"
         assert result["mergeable_status"] == "CONFLICTING"
-        assert result["recipe_segment"]["kind"] == "recovery"
+        assert result["recipe_segment"]["kind"] == "success"
 
     @pytest.mark.anyio
     async def test_unknown_mergeable_status_returned_raw(self, tool_ctx_kitchen_open):
@@ -175,10 +175,16 @@ class TestCheckPrMergeable:
         assert result["mergeable_status"] == "UNKNOWN"
 
     @pytest.mark.anyio
-    async def test_gh_command_failure_returns_error(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(1, "", "pr not found"))
-        result = json.loads(await check_pr_mergeable(99, "."))
+    async def test_gh_command_failure_returns_error(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        tool_ctx_kitchen_open.runner.push(_make_result(1, "", "pr not found"))
+        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="mergeable")
+        result = json.loads(await check_pr_mergeable(99, ".", step_name="mergeable"))
         assert result["success"] is False
+        assert result["recipe_segment"]["kind"] == "recovery"
 
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):

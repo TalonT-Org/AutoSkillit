@@ -218,7 +218,7 @@ class TestClaimAndResolveIssue:
         assert result["issue_number"] == 42
         assert result["issue_title"] == "Fix bug"
         assert result["issue_slug"] == "fix-bug"
-        assert_recovery_recipe_segment(result, step_name="claim")
+        assert "recipe_segment" not in result
 
     @pytest.mark.anyio
     async def test_claim_and_resolve_issue_already_claimed(
@@ -521,7 +521,7 @@ class TestCreateAndPublishBranch:
             )
         )
         assert result["merge_target"] == "fix-bug/42"
-        assert_recovery_recipe_segment(result, step_name="publish")
+        assert "recipe_segment" not in result
 
     @pytest.mark.anyio
     async def test_create_and_publish_branch_collision(self, tool_ctx_kitchen_open, tmp_path):

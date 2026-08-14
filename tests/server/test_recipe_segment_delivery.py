@@ -142,6 +142,29 @@ async def test_checkpoint_delivery_reads_ready_exact_durable_artifact(
     assert persisted["content"]
 
 
+@pytest.mark.anyio
+async def test_persisted_generation_recomputes_original_compile_identity(
+    tool_ctx_ready_recipe,
+) -> None:
+    tool_ctx = tool_ctx_ready_recipe.tool_ctx
+    state = tool_ctx.recipe_initialization_state
+    assert isinstance(state, ReadyRecipe)
+    persisted = load_recipe_artifact(
+        tool_ctx.temp_dir,
+        kitchen_id=tool_ctx.kitchen_id,
+        identity=state.artifact_generation,
+    )
+
+    _compile_inputs, compile_key = _normalized_recipe_compile_identity(
+        persisted,
+        recipe_name=state.recipe_name,
+        finalized_projection=state.finalized_projection,
+        flow_generation=state.flow_generation,
+    )
+
+    assert compile_key == state.generation_store_key
+
+
 @pytest.mark.parametrize(
     ("mismatch", "message"),
     [

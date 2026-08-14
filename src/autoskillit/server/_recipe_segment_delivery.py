@@ -520,10 +520,8 @@ def prepare_recipe_segment_delivery(
     ).as_wire_block()
     if persisted.get(RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY) != expected_credential:
         raise RecipeSegmentDeliveryError("READY execution credential differs from artifact")
-    source_payload = dict(persisted)
-    source_payload.pop("finalized_recipe_projection", None)
     _compile_inputs, normalized_key = _normalized_recipe_compile_identity(
-        source_payload,
+        persisted,
         recipe_name=state.recipe_name,
         finalized_projection=state.finalized_projection,
         flow_generation=state.flow_generation,

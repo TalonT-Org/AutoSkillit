@@ -65,9 +65,13 @@ _RECIPE_GENERATION_SOURCE_EXCLUDED_FIELDS = frozenset(
     {
         "_finalized_projection",
         "delivery_bound_spill",
+        "finalized_recipe_projection",
+        "flow_records",
         "hook_warning",
         "initialization_id",
         "kitchen",
+        RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+        "recipe_flow",
         "recipe_pull",
         "recovery",
         "required_sections",

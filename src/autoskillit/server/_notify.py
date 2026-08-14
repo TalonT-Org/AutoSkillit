@@ -42,6 +42,7 @@ from autoskillit.server._recipe_section_pagination import resolve_recipe_section
 from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,
+    post_effect_recipe_segment_failure,
 )
 from autoskillit.server._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
@@ -251,15 +252,20 @@ def track_response_size(
                 )
             except Exception:
                 logger.error("track_response_size_enforcement_failed", tool_name=tool_name)
-                result = bounded_response_budget_failure(
-                    result,
-                    cause="internal_invariant_failed",
+                result = post_effect_recipe_segment_failure(
+                    response_value,
                     tool_name=tool_name,
-                    max_bytes=budget.response_max_bytes,
-                    original_utf8_bytes=(
-                        len(response_str.encode("utf-8")) if response_str is not None else 0
-                    ),
                 )
+                if result is None:
+                    result = bounded_response_budget_failure(
+                        response_value,
+                        cause="internal_invariant_failed",
+                        tool_name=tool_name,
+                        max_bytes=budget.response_max_bytes,
+                        original_utf8_bytes=(
+                            len(response_str.encode("utf-8")) if response_str is not None else 0
+                        ),
+                    )
 
             if exceeded:
                 try:

@@ -34,6 +34,7 @@ _RECIPE_INITIALIZATION_FIELDS: tuple[str, ...] = (
     "initialization_id",
     "recovery",
     "required_sections",
+    "recipe_segment",
 )
 
 _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
@@ -89,6 +90,19 @@ def _strip_yaml_ingredients_block(yaml_text: str) -> str:
         else:
             result.append(line)
     return "".join(result)
+
+
+def _fmt_recipe_segment(carrier: object) -> str:
+    """Render an inseparable startup, success, or recovery carrier."""
+    if not isinstance(carrier, Mapping):
+        return ""
+    rendered = json.dumps(
+        dict(carrier),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"--- RECIPE SEGMENT ---\n{rendered}\n--- END RECIPE SEGMENT ---"
 
 
 def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:

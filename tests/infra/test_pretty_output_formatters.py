@@ -17,6 +17,35 @@ from tests.infra._pretty_output_helpers import _make_run_skill_event, _run_hook
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 
+def test_checkpoint_recipe_segment_is_appended_after_base_and_preserves_error():
+    carrier = {
+        "kind": "recovery",
+        "source_step": "run_tests",
+        "target_steps": ["resolve_failures"],
+        "pull_closure": ["resolve_failures"],
+        "pull_requests": [],
+        "recipe_pull": {"recipe": "implementation", "generation_id": "g1"},
+    }
+
+    rendered = _format_response(
+        "mcp__autoskillit__test_check",
+        json.dumps(
+            {
+                "passed": False,
+                "error": "tests failed exactly",
+                "recipe_segment": carrier,
+            }
+        ),
+        pipeline=False,
+    )
+
+    assert rendered is not None
+    assert "tests failed exactly" in rendered
+    assert rendered.index("tests failed exactly") < rendered.index("--- RECIPE SEGMENT ---")
+    assert '"source_step":"run_tests"' in rendered
+    assert '"pull_closure":["resolve_failures"]' in rendered
+
+
 # PHK-6
 def test_format_run_skill_success(tmp_path):
     """run_skill success response must contain tool name, checkmark, and success field."""

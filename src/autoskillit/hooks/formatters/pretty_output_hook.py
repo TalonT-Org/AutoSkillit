@@ -95,6 +95,7 @@ from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _fmt_open_kitchen,
     _fmt_open_kitchen_plain_text,
     _fmt_recipe_body,
+    _fmt_recipe_segment,
     _strip_yaml_ingredients_block,
 )
 from _fmt_status import (  # type: ignore[import-not-found]  # noqa: E402, F401
@@ -278,6 +279,7 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
 
     # DictPayload path — envelope was successfully unwrapped (or was never an envelope).
     data = dict(payload.data)
+    recipe_segment = data.pop("recipe_segment", None)
     raw_spill_metadata = data.get(_RESPONSE_SPILL_METADATA_KEY)
     spill_metadata = _validate_response_spill_metadata(raw_spill_metadata)
     artifact_backed = spill_metadata is not None
@@ -309,6 +311,10 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
     error_text = data.get("error", "")
     if error_text and isinstance(error_text, str) and error_text not in rendered:
         rendered = f"{rendered}\nerror: {error_text}"
+
+    formatted_segment = _fmt_recipe_segment(recipe_segment)
+    if formatted_segment:
+        rendered = f"{rendered}\n\n{formatted_segment}" if rendered else formatted_segment
 
     return with_spill(rendered)
 

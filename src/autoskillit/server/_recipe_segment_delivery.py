@@ -64,6 +64,29 @@ def _admit_carrier(carrier: dict[str, Any]) -> dict[str, Any]:
     return carrier
 
 
+def build_post_effect_segment_failure(
+    carrier: dict[str, Any],
+    *,
+    tool_name: str,
+) -> dict[str, Any]:
+    """Build the bounded no-repeat fallback for a completed checkpoint effect."""
+    result = {
+        "success": False,
+        "subtype": "recipe_segment_post_effect_delivery_failure",
+        "error": "Response shaping failed after the operation ran; do not repeat it.",
+        "tool_name": tool_name,
+        "step_name": carrier.get("source_step", ""),
+        "operation_already_ran": True,
+        "do_not_repeat": True,
+        "recipe_segment": carrier,
+    }
+    if len(_serialized_bytes(result)) >= RECIPE_SEGMENT_MAX_BYTES:
+        raise RecipeSegmentDeliveryError(
+            "recipe segment post-effect failure exceeds 10,000 UTF-8 bytes"
+        )
+    return result
+
+
 def _body_records(
     persisted: dict[str, Any],
     ordered_step_names: tuple[str, ...],
@@ -373,20 +396,26 @@ def prepare_recipe_segment_delivery(
     if normalized_key != state.generation_store_key:
         raise RecipeSegmentDeliveryError("READY compile identity differs from artifact")
     validate_segment_delivery_projection(state.finalized_projection)
+    success_carrier = _checkpoint_carrier(
+        persisted,
+        ready=state,
+        step_name=step_name,
+        success=True,
+    )
+    recovery_carrier = _checkpoint_carrier(
+        persisted,
+        ready=state,
+        step_name=step_name,
+        success=False,
+    )
+    invocation = state.finalized_projection.binding_projection.invocations.get(step_name)
+    tool_name = invocation.tool_name if invocation is not None else "unknown"
+    build_post_effect_segment_failure(success_carrier, tool_name=tool_name)
+    build_post_effect_segment_failure(recovery_carrier, tool_name=tool_name)
     return PreparedRecipeSegmentDelivery(
         step_name=step_name,
-        success_carrier=_checkpoint_carrier(
-            persisted,
-            ready=state,
-            step_name=step_name,
-            success=True,
-        ),
-        recovery_carrier=_checkpoint_carrier(
-            persisted,
-            ready=state,
-            step_name=step_name,
-            success=False,
-        ),
+        success_carrier=success_carrier,
+        recovery_carrier=recovery_carrier,
     )
 
 

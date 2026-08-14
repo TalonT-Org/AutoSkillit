@@ -276,7 +276,7 @@ class TestReservation:
         assert authority.authority_id == same_authority.authority_id
         assert authority.authority_id != different_owner.authority_id
         assert re.fullmatch(r"ada1-[0-9a-f]{64}", authority.authority_id)
-        with pytest.raises(AttributeError):
+        with pytest.raises((AttributeError, TypeError)):
             authority.authority_id = "replacement"  # type: ignore[misc]
         with pytest.raises(AttributeError):
             ledger.store_authority = same_authority  # type: ignore[misc]

@@ -14,7 +14,6 @@ from autoskillit.config import (
     AutomationConfig,
     RunSkillConfig,
 )
-from autoskillit.core import AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR
 from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
 from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 from autoskillit.execution.commands import _inject_completion_directive
@@ -24,72 +23,6 @@ from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 from tests.server.conftest import _SUCCESS_JSON
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-@pytest.mark.anyio
-async def test_attested_dispatch_injects_parent_audit_authority_without_retargeting_clone(
-    tool_ctx_ready_recipe, tmp_path, monkeypatch
-) -> None:
-    from tests.server._pipeline_test_helpers import _write_tracker
-
-    ready = tool_ctx_ready_recipe
-    with_args = ready.with_args
-    work_dir = tmp_path / "clone"
-    work_dir.mkdir()
-    _write_tracker(
-        ready.tool_ctx.project_dir,
-        "AB",
-        {with_args["step_name"]: {"status": "pending"}},
-        {},
-        kitchen_id=ready.tool_ctx.kitchen_id,
-    )
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.is_feature_enabled",
-        lambda *args, **kwargs: True,
-    )
-    monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
-        lambda *args, **kwargs: (
-            "bedrock",
-            {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: ("/hostile/provider/ledger.sqlite3")},
-        ),
-    )
-    ready.tool_ctx.runner.push(_make_result(returncode=1))
-    ready.tool_ctx.runner.push(
-        _make_result(
-            0,
-            json.dumps(
-                {
-                    "type": "result",
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": "done",
-                    "session_id": "session-1",
-                }
-            ),
-            "",
-        )
-    )
-
-    await run_skill(
-        with_args["skill_command"],
-        str(work_dir),
-        step_name=with_args["step_name"],
-        output_dir=with_args["output_dir"],
-        recipe_execution_id=ready.credential["execution_id"],
-        invocation_template_digest=ready.template_digest,
-        skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
-    )
-
-    _cmd, process_cwd, _timeout, kwargs = ready.tool_ctx.runner.call_args_list[-1]
-    env = kwargs["env"]
-    expected_authority_path = str(
-        ready.tool_ctx.audit_admission_ledger.store_authority.database_path
-    )
-    assert process_cwd == work_dir.resolve()
-    assert env["AUTOSKILLIT_CWD"] == str(work_dir)
-    assert env["AUTOSKILLIT_STATE_ROOT"] == str(work_dir)
-    assert env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == expected_authority_path
 
 
 class TestRunSkillPluginDir:

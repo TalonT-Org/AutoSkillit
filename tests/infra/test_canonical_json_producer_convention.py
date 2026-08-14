@@ -131,7 +131,7 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "disposition_report": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 447),
         producer_symbol="write_audit_disposition_bundle",
-        producer_site=(_TYPED_PRODUCER_MODULE, 155),
+        producer_site=(_TYPED_PRODUCER_MODULE, 156),
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "inventory": CanonicalArtifactDef(

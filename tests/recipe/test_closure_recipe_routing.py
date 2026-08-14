@@ -10,7 +10,13 @@ from autoskillit.core import (
     BoundScalar,
     BoundStepInvocation,
     BoundValueState,
+    InvocationTemplate,
+    RecipeExecutionSnapshot,
     build_recipe_execution_credential,
+    compute_invocation_template_digest,
+    compute_recipe_execution_snapshot_digest,
+    compute_tool_contract_identity,
+    get_tool_def,
 )
 from autoskillit.core.io import load_yaml
 from autoskillit.recipe._binding import (
@@ -19,12 +25,13 @@ from autoskillit.recipe._binding import (
     bind_runtime_skill_invocation,
 )
 from autoskillit.recipe._contracts_manifest import (
+    compute_skill_contract_identity,
     get_skill_contract,
+    load_bundled_manifest,
     select_audit_output_contract,
 )
 from autoskillit.recipe._contracts_types import AuditOutputMode
 from autoskillit.recipe.io import load_recipe
-from autoskillit.server._recipe_execution import build_recipe_execution_snapshot
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -129,21 +136,48 @@ def test_audit_impl_compiles_to_attested_runtime_invocation(
     assert cwd.effective_value == expected_cwd
 
     execution_id = f"test-{recipe.name}-execution"
-    snapshot = build_recipe_execution_snapshot(
+    tool_def = get_tool_def(invocation.tool_name)
+    assert tool_def is not None
+    tool_identity = compute_tool_contract_identity(tool_def)
+    manifest = load_bundled_manifest()
+    skill_identity = compute_skill_contract_identity("audit-impl", manifest=manifest)
+    template_digest = compute_invocation_template_digest(
+        execution_id=execution_id,
         recipe_name=recipe.name,
         content_hash=recipe.content_hash,
         composite_hash=recipe.content_hash,
-        projection=projection,
-        execution_id=execution_id,
+        invocation=invocation,
+        tool_contract_identity=tool_identity,
+        skill_contract_identity=skill_identity,
     )
-    template = snapshot.templates["audit_impl"]
+    template = InvocationTemplate(
+        invocation=invocation,
+        tool_contract_identity=tool_identity,
+        skill_contract_identity=skill_identity,
+        template_digest=template_digest,
+    )
+    templates = {"audit_impl": template}
+    snapshot = RecipeExecutionSnapshot(
+        execution_id=execution_id,
+        recipe_name=recipe.name,
+        content_hash=recipe.content_hash,
+        composite_hash=recipe.content_hash,
+        templates=templates,
+        snapshot_digest=compute_recipe_execution_snapshot_digest(
+            execution_id=execution_id,
+            recipe_name=recipe.name,
+            content_hash=recipe.content_hash,
+            composite_hash=recipe.content_hash,
+            templates=templates,
+        ),
+    )
     credential = build_recipe_execution_credential(snapshot)
     assert template.invocation is invocation
     assert snapshot.execution_id == credential.execution_id == execution_id
     assert dict(credential.invocation_template_digests) == dict(snapshot.template_digests)
     assert credential.invocation_template_digests["audit_impl"] == template.template_digest
 
-    contract = get_skill_contract("audit-impl")
+    contract = get_skill_contract("audit-impl", manifest)
     assert contract is not None
     attested_contract = select_audit_output_contract(contract, AuditOutputMode.ATTESTED)
     assert attested_contract.audit_output_mode is AuditOutputMode.ATTESTED

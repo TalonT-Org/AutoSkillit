@@ -87,7 +87,7 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
     from fastmcp.client import Client
     from fastmcp.client.transports import StdioTransport
 
-    parent_project = tmp_path / "parent-project"
+    parent_project = tmp_path
     clone = tmp_path / "recipe-clone"
     _initialize_git_root(parent_project)
     _initialize_git_root(clone)
@@ -124,6 +124,13 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
 
     plugin_authority = project_default_plugin_authority(cwd=clone)
     dispatches: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *args, **kwargs: (
+            "bedrock",
+            {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: "/hostile/provider/ledger.sqlite3"},
+        ),
+    )
 
     async def _run_child(resolved_command: str, cwd: str, **kwargs):
         assert Path(cwd) == clone.resolve()
@@ -222,7 +229,7 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
     published = json.loads(published_raw)
 
     assert len(reservation_outcomes) == 1
-    assert len(dispatches) == 1
+    assert len(dispatches) == 1, published
     reservation = reservation_outcomes[0].reservation
     assert reservation is not None
     handle = dispatches[0]["handle"]

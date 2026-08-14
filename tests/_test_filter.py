@@ -278,7 +278,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),
-    "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server"}),
+    "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server", "cli"}),
     "_type_audit_protocols": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_github_review": frozenset({"core", "execution", "pipeline", "server", "smoke_utils"}),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
@@ -840,6 +840,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_sub_recipe_loading.py",
             "recipe/test_sub_recipe_validation.py",
             # Server file-level entries:
+            "server/test_audit_admission_projected_plugin_process.py",
             "server/test_explicit_backend_override.py",
             "server/test_factory.py",
             "server/test_tools_agents.py",

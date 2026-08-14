@@ -346,8 +346,13 @@ def test_interactive_cook_allows_literal_single_non_review_mutation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    from autoskillit.hooks.guards.github_mutation_guard import decide, parse_hook_command
+
+    event = _bash_event(command, cwd=str(tmp_path))
+
+    assert decide(parse_hook_command(event)).allow
     result = _run_hook(
-        _bash_event(command, cwd=str(tmp_path)),
+        event,
         monkeypatch,
         headless=False,
     )

@@ -53,7 +53,6 @@ __all__ = [
     "analyze_dataflow",
     "build_quality_dict",
     "compute_recipe_validity",
-    "edge_routes_success",
     "filter_version_rule",
     "findings_to_dicts",
     "make_validation_context",
@@ -412,7 +411,7 @@ def _finalize_delivery_segments(
                     f"{step.tool!r}."
                 )
                 continue
-            success_crossing = edge_routes_success(
+            success_crossing = _edge_routes_success(
                 tool_name,
                 edge,
                 automatic=definition.automatic_recipe_delivery,
@@ -456,7 +455,7 @@ def _finalize_delivery_segments(
     )
 
 
-def edge_routes_success(
+def _edge_routes_success(
     tool_name: str,
     edge: RecipeFlowEdge,
     *,

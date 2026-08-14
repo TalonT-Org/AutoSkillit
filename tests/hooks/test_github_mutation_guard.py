@@ -48,6 +48,26 @@ def _run_hook(event: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
     return json.loads(rendered) if rendered else {}
 
 
+def _run_interactive_hook(event: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+    return _run_hook_without_session_override(event, monkeypatch)
+
+
+def _run_hook_without_session_override(event: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
+    from autoskillit.hooks.guards.github_mutation_guard import main
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+    stdout = io.StringIO()
+    try:
+        with redirect_stdout(stdout):
+            main()
+    except SystemExit:
+        pass
+    rendered = stdout.getvalue().strip()
+    return json.loads(rendered) if rendered else {}
+
+
 def _decision(event: dict, monkeypatch: pytest.MonkeyPatch) -> str | None:
     result = _run_hook(event, monkeypatch)
     if not result:
@@ -307,14 +327,39 @@ def test_unexpected_classifier_error_fails_closed(
     from autoskillit.hooks.guards import github_mutation_guard
 
     def _raise(*_args, **_kwargs):
-        raise RuntimeError("classifier failed")
+        raise RuntimeError("classifier-private-sentinel")
 
     monkeypatch.setattr(github_mutation_guard, "analyze_github_mutations", _raise)
 
     result = _run_hook(_bash_event("gh issue edit 23 --title x", cwd=str(tmp_path)), monkeypatch)
 
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "unresolved_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "classifier_internal_error" in reason
+    assert "classifier-private-sentinel" not in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh pr edit 4581 --body-file /tmp/body",
+        (
+            "sleep 1 && gh issue edit 4581 --repo TalonT-Org/AutoSkillit "
+            "--body-file /tmp/body 2>&1 | head -c 4000"
+        ),
+        ("gh issue edit 4581 --repo TalonT-Org/AutoSkillit --body-file /tmp/body > /tmp/out 2>&1"),
+        "gh api --method PATCH repos/TalonT-Org/AutoSkillit/issues/4581 -f title=x",
+    ],
+    ids=["pr-edit", "filing-pipeline", "filing-file", "rest-patch"],
+)
+def test_interactive_cook_allows_literal_single_non_review_mutation(
+    command: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    result = _run_interactive_hook(_bash_event(command, cwd=str(tmp_path)), monkeypatch)
+
+    assert result == {}
 
 
 @pytest.mark.parametrize("raw", ["{bad", "[]"], ids=["malformed-json", "non-object"])
@@ -616,7 +661,11 @@ def test_unresolved_mutation_denies_with_unresolved_mutation_reason(
     result = _run_hook(event, monkeypatch)
 
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "unresolved_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "unresolved_mutation" in reason
+    assert "dynamic_target" in reason
+    assert "$OWNER" not in reason
+    assert "GitHub API route is dynamic" not in reason
 
 
 def test_deny_messages_mapping_is_exhaustive() -> None:
@@ -705,6 +754,7 @@ def test_guard_registration_is_exact() -> None:
     entry = entries[0]
     assert entry.event_type == "PreToolUse"
     assert entry.matcher == r"Bash|mcp__.*autoskillit.*__run_cmd"
+    assert entry.session_scope == "any"
     assert entry.mechanism == "deny"
     assert entry.codex_status == "works-as-is"
     assert entry.enforcement_strength == {

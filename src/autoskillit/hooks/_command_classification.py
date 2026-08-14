@@ -165,6 +165,7 @@ _WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
+_FD_DUPLICATION_RE = re.compile(r"^\d+>&\d+$")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 _SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
@@ -285,16 +286,91 @@ def _normalize_newlines_for_tokenize(command: str) -> str:
     return "".join(result)
 
 
-def tokenize_command_segments(command: str) -> list[list[str]]:
-    """Split a shell command into segments of (verb, args...) token lists.
+@dataclass(frozen=True, slots=True)
+class _CommandSegment:
+    tokens: list[str]
+    redirect_syntax: list[bool]
 
-    Each segment is one logical command, separated by shell operators.
-    Returns [] on shlex parse error (unclosed quotes).
-    """
+
+def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
+    """Replace recognized redirect operators with shlex-stable placeholders."""
+    rendered: list[str] = []
+    redirects: dict[str, str] = {}
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        char = command[i]
+        if char == "\\" and not in_single and i + 1 < len(command):
+            rendered.extend((char, command[i + 1]))
+            i += 2
+            continue
+        if char == "'" and not in_double:
+            in_single = not in_single
+            rendered.append(char)
+            i += 1
+            continue
+        if char == '"' and not in_single:
+            in_double = not in_double
+            rendered.append(char)
+            i += 1
+            continue
+        if in_single or in_double:
+            rendered.append(char)
+            i += 1
+            continue
+
+        start = i
+        if char.isdecimal() and (i == 0 or command[i - 1].isspace() or command[i - 1] in ";&|("):
+            while i < len(command) and command[i].isdecimal():
+                i += 1
+            if i >= len(command) or command[i] != ">":
+                rendered.append(command[start])
+                i = start + 1
+                continue
+        elif char != ">":
+            rendered.append(char)
+            i += 1
+            continue
+
+        operator_start = start
+        operator_end = i + 1
+        if operator_end < len(command) and command[operator_end] == ">":
+            operator_end += 1
+        if operator_end < len(command) and command[operator_end] == "(":
+            rendered.append(command[start])
+            i = start + 1
+            continue
+        if (
+            operator_end < len(command)
+            and command[operator_end] == "&"
+            and command[operator_start:i].isdecimal()
+        ):
+            fd_end = operator_end + 1
+            while fd_end < len(command) and command[fd_end].isdecimal():
+                fd_end += 1
+            if fd_end == operator_end + 1:
+                rendered.append(command[start])
+                i = start + 1
+                continue
+            operator_end = fd_end
+
+        marker = f"__AUTOSKILLIT_REDIRECT_{len(redirects)}__"
+        redirects[marker] = command[operator_start:operator_end]
+        rendered.extend((" ", marker, " "))
+        i = operator_end
+    return ("".join(rendered), redirects)
+
+
+def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegment]:
+    """Tokenize commands while retaining which redirect-shaped tokens are syntax."""
     try:
         stripped = _HEREDOC_MARKER_RE.sub(r"\2", strip_heredoc_bodies(command))
+        marked, redirects = _mark_unquoted_output_redirects(
+            _normalize_newlines_for_tokenize(stripped)
+        )
         lexer = shlex.shlex(
-            _normalize_newlines_for_tokenize(stripped),
+            marked,
             posix=True,
             punctuation_chars=";&|",
         )
@@ -303,89 +379,111 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     except (ValueError, TypeError):
         return []
 
-    segments: list[list[str]] = []
-    current: list[str] = []
+    segments: list[_CommandSegment] = []
+    current_tokens: list[str] = []
+    current_redirect_syntax: list[bool] = []
     for token in tokens:
         if token in _SHELL_OPERATORS:
-            if current:
-                segments.append(current)
-                current = []
+            if current_tokens:
+                segments.append(_CommandSegment(current_tokens, current_redirect_syntax))
+                current_tokens = []
+                current_redirect_syntax = []
         else:
-            current.append(token)
-    if current:
-        segments.append(current)
+            redirect = redirects.get(token)
+            current_tokens.append(redirect if redirect is not None else token)
+            current_redirect_syntax.append(redirect is not None)
+    if current_tokens:
+        segments.append(_CommandSegment(current_tokens, current_redirect_syntax))
     return segments
 
 
-def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
-    """Extract redirect target paths from shlex-tokenized command tokens.
+def tokenize_command_segments(command: str) -> list[list[str]]:
+    """Split a shell command into segments of (verb, args...) token lists."""
+    return [segment.tokens for segment in _tokenize_command_segments_with_redirects(command)]
 
-    Returns resolved paths including pseudo-devices — caller filters.
-    Relative paths are resolved against cwd when provided.
 
-    Handles three redirect forms at depth 0 only:
-    - Separate:  ['>', '/path'] or ['>>', '/path']
-    - Split:     ['2>', '/path'] (operator-only token + next token)
-    - Merged:    ['2>/path'] or ['2>>/path']
-
-    Tracks subshell nesting via '(' and ')' — both standalone and fused
-    with adjacent text (shlex merges '(' with following chars in POSIX mode).
-    """
+def _partition_output_redirects(
+    tokens: Sequence[str],
+    *,
+    cwd: str,
+    redirect_syntax: Sequence[bool] | None = None,
+) -> tuple[list[str], list[str], int]:
+    """Separate depth-zero output control from executable argv."""
+    syntax = redirect_syntax if redirect_syntax is not None else [True] * len(tokens)
+    executable: list[str] = []
     targets: list[str] = []
+    file_redirect_count = 0
     depth = 0
     i = 0
     while i < len(tokens):
-        tok = tokens[i]
-        if tok == "(" or (tok.startswith("(") and len(tok) > 1):
+        token = tokens[i]
+        if token == "(" or (token.startswith("(") and len(token) > 1):
             depth += 1
-            if tok.endswith(")") and len(tok) > 1:
+            if token.endswith(")") and len(token) > 1:
                 depth -= 1
+            executable.append(token)
             i += 1
             continue
-        if tok == ")":
+        if token == ")":
             if depth > 0:
                 depth -= 1
+            executable.append(token)
             i += 1
             continue
-        if tok.endswith(")") and len(tok) > 1:
+        if token.endswith(")") and len(token) > 1:
             if depth > 0:
                 depth -= 1
+            executable.append(token)
             i += 1
             continue
-        if depth > 0:
+        if depth > 0 or not syntax[i]:
+            executable.append(token)
             i += 1
             continue
-        if tok in (">", ">>"):
-            if i + 1 < len(tokens):
-                path = tokens[i + 1]
-                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
-                    path = path[:-1]
-                resolved = resolve_write_target(path, cwd)
-                if resolved is not None:
-                    targets.append(resolved)
+        if _FD_DUPLICATION_RE.fullmatch(token):
+            i += 1
+            continue
+
+        target: str | None = None
+        if _REDIRECT_OP_ONLY_RE.fullmatch(token):
+            file_redirect_count += 1
+            if i + 1 < len(tokens) and not (
+                syntax[i + 1]
+                and (
+                    _REDIRECT_OP_ONLY_RE.fullmatch(tokens[i + 1])
+                    or _FD_DUPLICATION_RE.fullmatch(tokens[i + 1])
+                )
+            ):
+                target = tokens[i + 1]
                 i += 2
-                continue
-        elif _REDIRECT_OP_ONLY_RE.match(tok):
-            if i + 1 < len(tokens):
-                path = tokens[i + 1]
-                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
-                    path = path[:-1]
-                resolved = resolve_write_target(path, cwd)
-                if resolved is not None:
-                    targets.append(resolved)
-                i += 2
-                continue
+            else:
+                i += 1
         else:
-            m = _REDIRECT_TOKEN_RE.match(tok)
-            if m:
-                path = m.group(2)
-                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
-                    path = path[:-1]
-                resolved = resolve_write_target(path, cwd)
-                if resolved is not None:
-                    targets.append(resolved)
-        i += 1
-    return targets
+            match = _REDIRECT_TOKEN_RE.fullmatch(token)
+            if match is None:
+                executable.append(token)
+                i += 1
+                continue
+            file_redirect_count += 1
+            target = match.group(2)
+            i += 1
+
+        if target is not None:
+            while target and target[-1] in _TRAILING_SHELL_CLOSERS:
+                target = target[:-1]
+            resolved = resolve_write_target(target, cwd)
+            if resolved is not None:
+                targets.append(resolved)
+    return (executable, targets, file_redirect_count)
+
+
+def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
+    """Extract resolved redirect target paths from already-tokenized input.
+
+    Returns resolved paths including pseudo-devices — caller filters.
+    Relative paths are resolved against cwd when provided.
+    """
+    return _partition_output_redirects(tokens, cwd=cwd)[1]
 
 
 def _is_posix_assignment(token: str) -> bool:
@@ -1129,6 +1227,7 @@ class GitHubMutationAnalysis:
     mutations: tuple[GitHubMutationRecord, ...]
     request_count: int | None
     review_comment_count: int | None
+    reason_code: str
     reason: str
 
 
@@ -1241,11 +1340,14 @@ def _none_github_analysis() -> GitHubMutationAnalysis:
         mutations=(),
         request_count=0,
         review_comment_count=None,
+        reason_code="",
         reason="",
     )
 
 
 def _unresolved_github_analysis(
+    *,
+    reason_code: str,
     reason: str,
     mutations: Sequence[GitHubMutationRecord] = (),
 ) -> GitHubMutationAnalysis:
@@ -1254,6 +1356,7 @@ def _unresolved_github_analysis(
         mutations=tuple(mutations),
         request_count=None,
         review_comment_count=None,
+        reason_code=reason_code,
         reason=reason,
     )
 
@@ -1301,24 +1404,36 @@ def _load_literal_github_input(
     value: str,
     *,
     cwd: str,
-) -> tuple[dict[str, Any] | None, str]:
+) -> tuple[dict[str, Any] | None, str, str]:
     if value == "-":
-        return (None, "GitHub --input stdin is unresolved")
+        return (None, "unsafe_input_provenance", "GitHub --input stdin is unresolved")
     if not value or _is_dynamic_shell_value(value):
-        return (None, "GitHub --input path is dynamic")
+        return (None, "dynamic_target", "GitHub --input path is dynamic")
     if os.path.isabs(value):
         path = os.path.normpath(value)
     else:
         if not cwd or not os.path.isabs(cwd):
-            return (None, "relative GitHub --input requires an absolute cwd")
+            return (
+                None,
+                "cwd_unresolved",
+                "relative GitHub --input requires an absolute cwd",
+            )
         path = os.path.normpath(os.path.join(cwd, value))
 
     try:
         before = os.lstat(path)
         if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
-            return (None, "GitHub --input must be a regular non-symlink file")
+            return (
+                None,
+                "input_inspection_failed",
+                "GitHub --input must be a regular non-symlink file",
+            )
         if before.st_size > _GITHUB_INPUT_LIMIT:
-            return (None, "GitHub --input exceeds the inspection limit")
+            return (
+                None,
+                "input_inspection_failed",
+                "GitHub --input exceeds the inspection limit",
+            )
         flags = os.O_RDONLY
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
@@ -1329,7 +1444,11 @@ def _load_literal_github_input(
                 after.st_dev,
                 after.st_ino,
             ):
-                return (None, "GitHub --input file identity changed")
+                return (
+                    None,
+                    "input_inspection_failed",
+                    "GitHub --input file identity changed",
+                )
             chunks: list[bytes] = []
             remaining = _GITHUB_INPUT_LIMIT + 1
             while remaining:
@@ -1342,10 +1461,18 @@ def _load_literal_github_input(
         finally:
             os.close(fd)
         if len(raw) > _GITHUB_INPUT_LIMIT:
-            return (None, "GitHub --input exceeds the inspection limit")
-        return (_json_object_without_duplicate_keys(raw), "")
+            return (
+                None,
+                "input_inspection_failed",
+                "GitHub --input exceeds the inspection limit",
+            )
+        return (_json_object_without_duplicate_keys(raw), "", "")
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
-        return (None, f"GitHub --input is not safely inspectable: {exc}")
+        return (
+            None,
+            "input_inspection_failed",
+            f"GitHub --input is not safely inspectable: {exc}",
+        )
 
 
 _INPUT_SAFE_PRIOR_COMMANDS: frozenset[str] = frozenset(
@@ -1353,22 +1480,24 @@ _INPUT_SAFE_PRIOR_COMMANDS: frozenset[str] = frozenset(
 )
 
 
-def _segment_is_safe_before_literal_input(segment: Sequence[str], *, cwd: str) -> bool:
+def _segment_is_safe_before_literal_input(segment: Sequence[str]) -> bool:
     """Return whether *segment* is proven unable to rewrite a later input file."""
-    if extract_redirect_targets(list(segment), cwd):
-        return False
     verb, _ = command_verb_and_args(list(segment))
     executable = _normalize_executable(verb)
     return executable in _INPUT_SAFE_PRIOR_COMMANDS
 
 
-def _comment_count_from_payload(payload: dict[str, Any]) -> tuple[int | None, str]:
+def _comment_count_from_payload(payload: dict[str, Any]) -> tuple[int | None, str, str]:
     if "comments" not in payload:
-        return (None, "")
+        return (None, "", "")
     comments = payload["comments"]
     if not isinstance(comments, list):
-        return (None, "GitHub review comments must be a JSON array")
-    return (len(comments), "")
+        return (
+            None,
+            "invalid_input_payload",
+            "GitHub review comments must be a JSON array",
+        )
+    return (len(comments), "", "")
 
 
 def _flag_value(
@@ -1395,7 +1524,9 @@ def _analyze_gh_api(
     *,
     cwd: str,
     input_context_safe: bool,
-) -> tuple[GitHubMutationRecord | None, str]:
+    resolved_redirect_targets: Sequence[str],
+    file_redirect_count: int,
+) -> tuple[GitHubMutationRecord | None, str, str]:
     method: str | None = None
     route: str | None = None
     input_value: str | None = None
@@ -1416,7 +1547,7 @@ def _analyze_gh_api(
         value, next_i, matched = _flag_value(args, i, long_name="--method", short_name="-X")
         if matched or token in {"--method", "-X"}:
             if not matched or value is None:
-                return (None, "GitHub API method is missing")
+                return (None, "missing_required_value", "GitHub API method is missing")
             method = value.upper()
             i = next_i
             continue
@@ -1424,7 +1555,7 @@ def _analyze_gh_api(
         value, next_i, matched = _flag_value(args, i, long_name="--input")
         if matched or token == "--input":
             if not matched or value is None:
-                return (None, "GitHub --input path is missing")
+                return (None, "missing_required_value", "GitHub --input path is missing")
             input_value = value
             has_body_fields = True
             i = next_i
@@ -1440,7 +1571,7 @@ def _analyze_gh_api(
             )
             if matched or token in {long_name, short_name}:
                 if not matched or value is None:
-                    return (None, f"{long_name} value is missing")
+                    return (None, "missing_required_value", f"{long_name} value is missing")
                 field_values.append(value)
                 has_body_fields = True
                 i = next_i
@@ -1455,7 +1586,7 @@ def _analyze_gh_api(
             continue
         if token in {"-H", "--header", "--hostname", "--cache"}:
             if i + 1 >= len(args):
-                return (None, f"{token} value is missing")
+                return (None, "missing_required_value", f"{token} value is missing")
             i += 2
             continue
         if token.startswith(("--header=", "--hostname=", "--cache=")):
@@ -1468,37 +1599,69 @@ def _analyze_gh_api(
             route = token
             i += 1
             continue
-        return (None, "multiple GitHub API routes are unresolved")
+        return (
+            None,
+            "request_cardinality_unresolved",
+            "multiple GitHub API routes are unresolved",
+        )
 
     if route is None:
         if method is not None or has_body_fields:
-            return (None, "GitHub API route is missing")
-        return (None, "")
+            return (None, "missing_required_value", "GitHub API route is missing")
+        return (None, "", "")
     if _is_dynamic_shell_value(route):
-        return (None, "GitHub API route is dynamic")
+        return (None, "dynamic_target", "GitHub API route is dynamic")
     if method is not None and _is_dynamic_shell_value(method):
-        return (None, "GitHub API method is dynamic")
+        return (None, "dynamic_target", "GitHub API method is dynamic")
 
     payload: dict[str, Any] = {}
     query_from_literal_input = input_value is not None
     if input_value is not None:
         if not input_context_safe:
-            return (None, "a prior command may rewrite the inspected GitHub --input file")
-        loaded, reason = _load_literal_github_input(input_value, cwd=cwd)
+            return (
+                None,
+                "unsafe_input_provenance",
+                "a prior command may rewrite the inspected GitHub --input file",
+            )
+        loaded, reason_code, reason = _load_literal_github_input(input_value, cwd=cwd)
         if loaded is None:
-            return (None, reason)
+            return (None, reason_code, reason)
+        input_path = (
+            os.path.normpath(input_value)
+            if os.path.isabs(input_value)
+            else os.path.normpath(os.path.join(cwd, input_value))
+        )
+        if file_redirect_count != len(resolved_redirect_targets):
+            return (
+                None,
+                "unsafe_input_provenance",
+                "an output redirect may alias the inspected GitHub --input file",
+            )
+        if any(
+            os.path.realpath(target) == os.path.realpath(input_path)
+            for target in resolved_redirect_targets
+        ):
+            return (
+                None,
+                "unsafe_input_provenance",
+                "an output redirect aliases the inspected GitHub --input file",
+            )
         payload = loaded
 
     effective_method = method or ("POST" if has_body_fields else "GET")
     normalized_route = _normalize_github_route(route)
     if effective_method not in _GITHUB_WRITE_METHODS:
-        return (None, "")
+        return (None, "", "")
     if paginate:
-        return (None, "mutation request count is indeterminate with --paginate")
+        return (
+            None,
+            "request_cardinality_unresolved",
+            "mutation request count is indeterminate with --paginate",
+        )
 
-    comment_count, reason = _comment_count_from_payload(payload)
+    comment_count, reason_code, reason = _comment_count_from_payload(payload)
     if reason:
-        return (None, reason)
+        return (None, reason_code, reason)
 
     if graphql:
         query = payload.get("query")
@@ -1511,9 +1674,9 @@ def _analyze_gh_api(
         if not isinstance(query, str) or (
             not query_from_literal_input and _is_dynamic_shell_value(query)
         ):
-            return (None, "GraphQL mutation document is unresolved")
+            return (None, "dynamic_target", "GraphQL mutation document is unresolved")
         if not re.search(r"\bmutation\b", query):
-            return (None, "")
+            return (None, "", "")
         kind = (
             GitHubMutationKind.GRAPHQL_REVIEW
             if any(
@@ -1532,6 +1695,7 @@ def _analyze_gh_api(
             request_count=1,
             review_comment_count=comment_count,
         ),
+        "",
         "",
     )
 
@@ -1598,7 +1762,7 @@ def _is_static_issue_edit_target(value: str) -> bool:
     )
 
 
-def _issue_edit_request_count(args: Sequence[str]) -> tuple[int | None, str]:
+def _issue_edit_request_count(args: Sequence[str]) -> tuple[int | None, str, str]:
     targets = 0
     options_ended = False
     i = 0
@@ -1614,7 +1778,11 @@ def _issue_edit_request_count(args: Sequence[str]) -> tuple[int | None, str]:
                 or token in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
             ):
                 if i + 1 >= len(args):
-                    return (None, f"gh issue edit flag {token} is missing a value")
+                    return (
+                        None,
+                        "missing_required_value",
+                        f"gh issue edit flag {token} is missing a value",
+                    )
                 i += 2
                 continue
             if any(token.startswith(f"{flag}=") for flag in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS):
@@ -1627,15 +1795,19 @@ def _issue_edit_request_count(args: Sequence[str]) -> tuple[int | None, str]:
                 i += 1
                 continue
             if token.startswith("-"):
-                return (None, f"gh issue edit flag {token} is unresolved")
+                return (
+                    None,
+                    "unsupported_grammar",
+                    f"gh issue edit flag {token} is unresolved",
+                )
         if not _is_static_issue_edit_target(token):
-            return (None, "gh issue edit target is unresolved")
+            return (None, "dynamic_target", "gh issue edit target is unresolved")
         targets += 1
         i += 1
 
     if targets == 0:
-        return (None, "gh issue edit target is missing")
-    return (targets, "")
+        return (None, "missing_required_value", "gh issue edit target is missing")
+    return (targets, "", "")
 
 
 _GH_MUTATION_SUBCOMMANDS: dict[str, frozenset[str]] = {
@@ -1683,13 +1855,15 @@ def _analyze_gh_segment(
     *,
     cwd: str,
     input_context_safe: bool,
-) -> tuple[GitHubMutationRecord | None, str]:
+    resolved_redirect_targets: Sequence[str],
+    file_redirect_count: int,
+) -> tuple[GitHubMutationRecord | None, str, str]:
     if not args:
-        return (None, "")
+        return (None, "", "")
     if _gh_args_have_bare_help_flag(args[1:]):
-        return (None, "")
+        return (None, "", "")
     if args[:2] == ["pr", "create"]:
-        return (None, "")
+        return (None, "", "")
     if args[:2] == ["pr", "review"]:
         return (
             GitHubMutationRecord(
@@ -1700,11 +1874,12 @@ def _analyze_gh_segment(
                 review_comment_count=None,
             ),
             "",
+            "",
         )
     if args[:2] == ["issue", "edit"]:
-        request_count, reason = _issue_edit_request_count(args[2:])
+        request_count, reason_code, reason = _issue_edit_request_count(args[2:])
         if request_count is None:
-            return (None, reason)
+            return (None, reason_code, reason)
         return (
             GitHubMutationRecord(
                 method="POST",
@@ -1714,15 +1889,20 @@ def _analyze_gh_segment(
                 review_comment_count=None,
             ),
             "",
+            "",
         )
     noun = args[0]
     mutation_verbs = _GH_MUTATION_SUBCOMMANDS.get(noun)
     if mutation_verbs is not None and len(args) >= 2:
         verb = args[1]
         if verb in _GH_READ_ONLY_SUBCOMMANDS.get(noun, frozenset()):
-            return (None, "")
+            return (None, "", "")
         if verb not in mutation_verbs:
-            return (None, f"gh {noun} {verb} mutation classification is unresolved")
+            return (
+                None,
+                "unsupported_grammar",
+                f"gh {noun} {verb} mutation classification is unresolved",
+            )
         return (
             GitHubMutationRecord(
                 method="POST",
@@ -1732,15 +1912,22 @@ def _analyze_gh_segment(
                 review_comment_count=None,
             ),
             "",
+            "",
         )
     if args[0] != "api":
-        return (None, "")
-    return _analyze_gh_api(args[1:], cwd=cwd, input_context_safe=input_context_safe)
+        return (None, "", "")
+    return _analyze_gh_api(
+        args[1:],
+        cwd=cwd,
+        input_context_safe=input_context_safe,
+        resolved_redirect_targets=resolved_redirect_targets,
+        file_redirect_count=file_redirect_count,
+    )
 
 
 def _analyze_curl_segment(
     args: Sequence[str],
-) -> tuple[list[GitHubMutationRecord], str]:
+) -> tuple[list[GitHubMutationRecord], str, str]:
     method: str | None = None
     has_data = False
     force_get = False
@@ -1761,14 +1948,14 @@ def _analyze_curl_segment(
         value, next_i, matched = _flag_value(args, i, long_name="--request", short_name="-X")
         if matched or token in {"--request", "-X"}:
             if not matched or value is None:
-                return ([], "curl method is missing")
+                return ([], "missing_required_value", "curl method is missing")
             method = value.upper()
             i = next_i
             continue
         value, next_i, matched = _flag_value(args, i, long_name="--url")
         if matched or token == "--url":
             if not matched or value is None:
-                return ([], "curl URL is missing")
+                return ([], "missing_required_value", "curl URL is missing")
             urls.append(value)
             i = next_i
             continue
@@ -1790,7 +1977,7 @@ def _analyze_curl_segment(
             )
             if matched or token == long_name or (short_name is not None and token == short_name):
                 if not matched or value is None:
-                    return ([], f"{token} value is missing")
+                    return ([], "missing_required_value", f"{token} value is missing")
                 has_data = True
                 i = next_i
                 matched_value_flag = True
@@ -1806,7 +1993,7 @@ def _analyze_curl_segment(
             )
             if matched or token == long_name or token == short_name:
                 if not matched or value is None:
-                    return ([], f"{token} value is missing")
+                    return ([], "missing_required_value", f"{token} value is missing")
                 i = next_i
                 matched_value_flag = True
                 break
@@ -1819,21 +2006,25 @@ def _analyze_curl_segment(
         i += 1
 
     if method is not None and _is_dynamic_shell_value(method):
-        return ([], "curl method is dynamic")
+        return ([], "dynamic_target", "curl method is dynamic")
     if any(_is_dynamic_shell_value(url) for url in urls):
-        return ([], "curl URL is dynamic")
+        return ([], "dynamic_target", "curl URL is dynamic")
     github_urls = []
     for url in urls:
         hostname = urlsplit(url).hostname
         if hostname is not None and hostname.lower() in {"api.github.com", "github.com"}:
             github_urls.append(url)
     if not github_urls:
-        return ([], "")
+        return ([], "", "")
     effective_method = method or ("GET" if force_get else ("POST" if has_data else "GET"))
     if effective_method not in _GITHUB_WRITE_METHODS:
-        return ([], "")
+        return ([], "", "")
     if saw_next or len(github_urls) != 1 or len(urls) != 1:
-        return ([], "curl mutation request count is indeterminate")
+        return (
+            [],
+            "request_cardinality_unresolved",
+            "curl mutation request count is indeterminate",
+        )
     route = urlsplit(github_urls[0]).path or "/"
     return (
         [
@@ -1845,6 +2036,7 @@ def _analyze_curl_segment(
                 review_comment_count=None,
             )
         ],
+        "",
         "",
     )
 
@@ -1873,19 +2065,23 @@ def _analyze_github_segment(
     *,
     cwd: str,
     input_context_safe: bool = True,
-) -> tuple[list[GitHubMutationRecord], str]:
+    resolved_redirect_targets: Sequence[str] = (),
+    file_redirect_count: int = 0,
+) -> tuple[list[GitHubMutationRecord], str, str]:
     verb, args = command_verb_and_args(list(segment))
     executable = _normalize_executable(verb)
     if executable == "gh":
-        record, reason = _analyze_gh_segment(
+        record, reason_code, reason = _analyze_gh_segment(
             args,
             cwd=_segment_cwd(segment, cwd),
             input_context_safe=input_context_safe,
+            resolved_redirect_targets=resolved_redirect_targets,
+            file_redirect_count=file_redirect_count,
         )
-        return (([record] if record is not None else []), reason)
+        return (([record] if record is not None else []), reason_code, reason)
     if executable == "curl":
         return _analyze_curl_segment(args)
-    return ([], "")
+    return ([], "", "")
 
 
 def analyze_github_mutations(
@@ -1898,85 +2094,200 @@ def analyze_github_mutations(
         return _none_github_analysis()
 
     records: list[GitHubMutationRecord] = []
-    reasons: list[str] = []
-    queue: list[tuple[str, str, int]] = [(command, cwd, 0)]
-    argv_payloads: list[tuple[list[str], str]] = []
+    reasons: list[tuple[str, str]] = []
+    queue: list[tuple[str, str, int, bool, tuple[str, ...], int]] = [
+        (command, cwd, 0, True, (), 0)
+    ]
+    argv_payloads: list[tuple[list[str], str, bool, tuple[str, ...], int]] = []
 
     while queue:
-        payload, payload_cwd, depth = queue.pop(0)
+        (
+            payload,
+            payload_cwd,
+            depth,
+            inherited_input_safe,
+            outer_redirect_targets,
+            outer_file_redirect_count,
+        ) = queue.pop(0)
         if depth > 32:
-            reasons.append("nested mutation command depth is unresolved")
+            reasons.append(
+                ("shell_structure_unresolved", "nested mutation command depth is unresolved")
+            )
             continue
-        segments = tokenize_command_segments(payload)
-        if not segments and payload.strip():
+        tokenized_segments = _tokenize_command_segments_with_redirects(payload)
+        segments = [segment.tokens for segment in tokenized_segments]
+        if not tokenized_segments and payload.strip():
             if _POSSIBLE_GITHUB_EXEC_RE.search(payload):
-                reasons.append("mutation-bearing shell payload could not be parsed")
+                reasons.append(
+                    (
+                        "shell_parse_unresolved",
+                        "mutation-bearing shell payload could not be parsed",
+                    )
+                )
             continue
 
         current_cwd = payload_cwd
-        input_context_safe = True
-        for segment in segments:
-            verb, args = command_verb_and_args(segment)
+        input_context_safe = inherited_input_safe
+        nested_contexts: list[tuple[str, str, bool, tuple[str, ...], int]] = []
+        for command_segment in tokenized_segments:
+            raw_segment = command_segment.tokens
+            executable_tokens, redirect_targets, file_redirect_count = _partition_output_redirects(
+                raw_segment,
+                cwd=current_cwd,
+                redirect_syntax=command_segment.redirect_syntax,
+            )
+            active_redirect_targets = outer_redirect_targets + tuple(redirect_targets)
+            active_file_redirect_count = outer_file_redirect_count + file_redirect_count
+            segment_cwd = _segment_cwd(executable_tokens, current_cwd)
+            nested_contexts.append(
+                (
+                    " ".join(raw_segment),
+                    segment_cwd,
+                    input_context_safe,
+                    active_redirect_targets,
+                    active_file_redirect_count,
+                )
+            )
+            verb, args = command_verb_and_args(executable_tokens)
             if _normalize_executable(verb) == "cd":
+                input_context_safe = input_context_safe and file_redirect_count == 0
                 if len(args) != 1 or _is_dynamic_shell_value(args[0]):
-                    reasons.append("shell cwd transition is unresolved")
+                    reasons.append(("cwd_unresolved", "shell cwd transition is unresolved"))
                 elif os.path.isabs(args[0]):
                     current_cwd = os.path.normpath(args[0])
                 elif current_cwd:
                     current_cwd = os.path.normpath(os.path.join(current_cwd, args[0]))
                 else:
-                    reasons.append("relative shell cwd transition has no authority")
+                    reasons.append(
+                        ("cwd_unresolved", "relative shell cwd transition has no authority")
+                    )
                 continue
-            found, reason = _analyze_github_segment(
-                segment,
+            found, reason_code, reason = _analyze_github_segment(
+                executable_tokens,
                 cwd=current_cwd,
                 input_context_safe=input_context_safe,
+                resolved_redirect_targets=active_redirect_targets,
+                file_redirect_count=active_file_redirect_count,
             )
             records.extend(found)
             if reason:
-                reasons.append(reason)
+                reasons.append((reason_code, reason))
 
-            interpreter_specs, has_unresolved = _extract_interpreter_segment_specs(segment)
+            interpreter_specs, has_unresolved = _extract_interpreter_segment_specs(
+                executable_tokens
+            )
             if has_unresolved and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
-                reasons.append("interpreter subprocess command or cwd is unresolved")
+                reasons.append(
+                    (
+                        "interpreter_structure_unresolved",
+                        "interpreter subprocess command or cwd is unresolved",
+                    )
+                )
             for spec in interpreter_specs:
-                interpreter_cwd = current_cwd
+                interpreter_cwd = segment_cwd
                 if spec.cwd is not None:
                     if os.path.isabs(spec.cwd):
                         interpreter_cwd = os.path.normpath(spec.cwd)
                     elif current_cwd:
                         interpreter_cwd = os.path.normpath(os.path.join(current_cwd, spec.cwd))
                     else:
-                        reasons.append("relative interpreter cwd has no authority")
+                        reasons.append(
+                            ("cwd_unresolved", "relative interpreter cwd has no authority")
+                        )
                         continue
                 if isinstance(spec.payload, str):
-                    queue.append((spec.payload, interpreter_cwd, depth + 1))
+                    queue.append(
+                        (
+                            spec.payload,
+                            interpreter_cwd,
+                            depth + 1,
+                            input_context_safe,
+                            active_redirect_targets,
+                            active_file_redirect_count,
+                        )
+                    )
                 else:
-                    argv_payloads.append((spec.payload, interpreter_cwd))
+                    argv_payloads.append(
+                        (
+                            spec.payload,
+                            interpreter_cwd,
+                            input_context_safe,
+                            active_redirect_targets,
+                            active_file_redirect_count,
+                        )
+                    )
 
-            input_context_safe = input_context_safe and _segment_is_safe_before_literal_input(
-                segment,
-                cwd=current_cwd,
+            input_context_safe = (
+                input_context_safe
+                and file_redirect_count == 0
+                and _segment_is_safe_before_literal_input(executable_tokens)
             )
 
         for nested in extract_shell_command_payloads(payload):
-            queue.append((nested, current_cwd, depth + 1))
+            matching_context = next(
+                (context for context in nested_contexts if nested in context[0]),
+                (
+                    payload_cwd,
+                    payload_cwd,
+                    inherited_input_safe,
+                    outer_redirect_targets,
+                    outer_file_redirect_count,
+                ),
+            )
+            _, nested_cwd, nested_input_safe, nested_targets, nested_count = matching_context
+            queue.append(
+                (
+                    nested,
+                    nested_cwd,
+                    depth + 1,
+                    nested_input_safe,
+                    nested_targets,
+                    nested_count,
+                )
+            )
 
         if (
             _REPEATABLE_SHELL_RE.search(payload) or _PROCESS_SUBSTITUTION_RE.search(payload)
         ) and _segments_have_possible_github_exec_token(segments):
-            reasons.append("shell loop or wrapper has unresolved mutation cardinality")
+            reasons.append(
+                (
+                    "shell_structure_unresolved",
+                    "shell loop or wrapper has unresolved mutation cardinality",
+                )
+            )
         if _segments_have_dispatch_word_exec_risk(segments):
-            reasons.append("mutation cardinality is unresolved in a shell wrapper")
+            reasons.append(
+                (
+                    "shell_structure_unresolved",
+                    "mutation cardinality is unresolved in a shell wrapper",
+                )
+            )
 
-    for argv, argv_cwd in argv_payloads:
-        found, reason = _analyze_github_segment(argv, cwd=argv_cwd)
+    for (
+        argv,
+        argv_cwd,
+        input_context_safe,
+        inherited_redirect_targets,
+        redirect_count,
+    ) in argv_payloads:
+        found, reason_code, reason = _analyze_github_segment(
+            argv,
+            cwd=argv_cwd,
+            input_context_safe=input_context_safe,
+            resolved_redirect_targets=inherited_redirect_targets,
+            file_redirect_count=redirect_count,
+        )
         records.extend(found)
         if reason:
-            reasons.append(reason)
+            reasons.append((reason_code, reason))
 
     if reasons:
-        return _unresolved_github_analysis("; ".join(dict.fromkeys(reasons)), records)
+        unique_reasons = list(dict.fromkeys(reasons))
+        return _unresolved_github_analysis(
+            reason_code=unique_reasons[0][0],
+            reason="; ".join(reason for _, reason in unique_reasons),
+            mutations=records,
+        )
     request_count = sum(record.request_count for record in records)
     if request_count == 0:
         return _none_github_analysis()
@@ -1986,6 +2297,7 @@ def analyze_github_mutations(
             mutations=tuple(records),
             request_count=request_count,
             review_comment_count=None,
+            reason_code="",
             reason="",
         )
     record = records[0]
@@ -1994,5 +2306,6 @@ def analyze_github_mutations(
         mutations=(record,),
         request_count=1,
         review_comment_count=record.review_comment_count,
+        reason_code="",
         reason="",
     )

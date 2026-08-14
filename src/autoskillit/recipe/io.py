@@ -354,6 +354,8 @@ _PARSE_RECIPE_HANDLED_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+# Skill frontmatter can share this parsing path, but its capability declaration is
+# metadata rather than part of the Recipe schema.
 _PARSE_RECIPE_IGNORED_FIELDS: frozenset[str] = frozenset({"uses_capabilities"})
 
 _RECIPE_COMPUTED_FIELDS: frozenset[str] = frozenset(

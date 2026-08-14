@@ -341,6 +341,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
         @contextmanager
         def cook_session_context(self, **kwargs: object):
             captured["context"] = kwargs
+            captured["launch_id"] = kwargs["launch_id"]
             yield CookSessionHandle(
                 view_id="view-1",
                 pass_fds=(5,),
@@ -386,6 +387,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
         patch("autoskillit.cli._onboarding.is_first_run", return_value=False),
         patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
         patch("autoskillit.core.write_registry_entry"),
+        patch("autoskillit.core.bind_session_owner") as bind_session_owner,
         patch(
             "autoskillit.cli.session._session_process.run_cook_attempt",
             side_effect=run_attempt,
@@ -407,6 +409,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert "AUTOSKILLIT_CODEX_STARTUP_TRACE" not in spec.env
     assert any("sqlite_home=" in arg and str(generated_home) in arg for arg in spec.cmd)
     assert captured["pass_fds"] == (3, 5)
+    bind_session_owner.assert_called_once_with(tmp_path, captured["launch_id"], 1)
 
 
 def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> None:

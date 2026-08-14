@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from tests._helpers import seed_registry_owner
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -181,11 +182,17 @@ def test_open_kitchen_guard_fleet_denial_has_specific_message() -> None:
 
 def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     """open_kitchen_guard bridges AUTOSKILLIT_LAUNCH_ID to claude_session_id in registry."""
-    from autoskillit.core.runtime.session_registry import read_registry, write_registry_entry
+    from autoskillit.core.runtime.session_registry import (
+        read_registry,
+        write_registry_entry,
+    )
 
     project_dir = tmp_path
     write_registry_entry(project_dir, "abc", "cook", None)
-    assert read_registry(project_dir)["abc"]["claude_session_id"] is None
+    seed_registry_owner(project_dir, "abc")
+    seeded_entry = read_registry(project_dir)["abc"]
+    assert seeded_entry["claude_session_id"] is None
+    seeded_owner = {key: value for key, value in seeded_entry.items() if key.startswith("owner_")}
 
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     hook_input = {
@@ -207,6 +214,9 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     assert result.returncode == 0, f"Hook failed: {result.stderr}"
     registry = read_registry(project_dir)
     assert registry["abc"]["claude_session_id"] == "claude-xyz"
+    assert {
+        key: value for key, value in registry["abc"].items() if key.startswith("owner_")
+    } == seeded_owner
 
 
 def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:

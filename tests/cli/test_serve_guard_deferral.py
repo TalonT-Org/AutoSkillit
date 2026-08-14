@@ -26,7 +26,17 @@ class _FakeMCPServer:
         await self._event.wait()
 
 
+class _ReturningMCPServer:
+    async def run_async(self) -> None:
+        return
+
+
 class TestServeGuardDeferral:
+    @pytest.mark.anyio
+    async def test_returns_when_server_primary_returns(self) -> None:
+        with anyio.fail_after(1.0):
+            await serve_with_signal_guard(_ReturningMCPServer())
+
     @pytest.mark.anyio
     async def test_defers_when_dispatch_active(self) -> None:
         _active = [True]

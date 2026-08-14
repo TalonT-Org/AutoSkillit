@@ -487,7 +487,7 @@ class TestCookTerminalGuard:
             "autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: False
         )
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_launch.subprocess.run",
+            "autoskillit.cli.session._session_launch.subprocess.Popen",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")

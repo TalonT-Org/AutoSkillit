@@ -30,6 +30,7 @@ from autoskillit.execution import (
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     QUOTA_CACHE_SCHEMA_VERSION,
     CodexBackend,
+    find_orphaned_autoskillit_daemons,
     find_orphaned_codex_processes,
     resolve_log_dir,
     session_index_lock_path,
@@ -563,6 +564,36 @@ def _check_orphaned_codex_processes() -> list[DoctorResult]:
             f" run: autoskillit codex-orphans --reap",
         )
         for o in orphans
+    ]
+
+
+def _check_orphaned_autoskillit_daemons() -> list[DoctorResult]:
+    """Report registered-stdio daemons whose logical client owner is dead."""
+    check_name = "orphaned_autoskillit_daemons"
+    if sys.platform != "linux":
+        return [DoctorResult(Severity.OK, check_name, "Skipped (Linux only)")]
+    try:
+        candidates = find_orphaned_autoskillit_daemons()
+    except Exception as exc:
+        logger.warning("AutoSkillit daemon orphan scan failed", exc_info=True)
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                check_name,
+                f"scan failed: {type(exc).__name__}: {exc}",
+            )
+        ]
+    if not candidates:
+        return [DoctorResult(Severity.OK, check_name, "no orphaned AutoSkillit daemons")]
+    return [
+        DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"orphaned registered-stdio daemon pid={candidate.pid}"
+            f" launch={candidate.launch_id} owner_pid={candidate.owner_pid};"
+            " run: autoskillit daemon-orphans --reap",
+        )
+        for candidate in candidates
     ]
 
 

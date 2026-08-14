@@ -15,6 +15,7 @@ from tests.cli._fleet_helpers import (
     _stub_campaign_resolution,
     _stub_guards,
 )
+from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -87,8 +88,8 @@ def test_fleet_run_exit_code_passthrough(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
     monkeypatch.setattr(
         subprocess,
-        "run",
-        lambda *a, **kw: type("R", (), {"returncode": 2, "stdout": "", "stderr": ""})(),
+        "Popen",
+        lambda *a, **kw: InteractiveProcessStub(2),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_campaign("test-campaign")

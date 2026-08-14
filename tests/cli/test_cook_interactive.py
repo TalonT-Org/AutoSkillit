@@ -31,7 +31,11 @@ from autoskillit.core import (
 )
 from tests.fakes import adapt_test_skill_semantics
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_owner_binding"),
+]
 
 
 class _CookBinding:

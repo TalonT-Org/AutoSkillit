@@ -13,10 +13,12 @@ from typing import TYPE_CHECKING, NoReturn
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
+    LAUNCH_ID_ENV_VAR,
     NamedResume,
     NoResume,
     SkillContractError,
     executable_binding_matches_current_file,
+    get_logger,
     plugin_launch_binding_scope,
     resolve_executable_launch_binding,
     resolve_temp_dir,
@@ -35,6 +37,8 @@ if TYPE_CHECKING:
         ValidatedAddDir,
     )
     from autoskillit.workspace import CompiledSessionSkillCatalog, SkillExclusion
+
+logger = get_logger(__name__)
 
 
 def render_skill_contract_composition_failure(exc: SkillContractError) -> None:
@@ -187,7 +191,7 @@ def _run_interactive_session(
             default_base_branch = configured_base_branch
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
-    from autoskillit.core import InfraExitCategory
+    from autoskillit.core import InfraExitCategory, bind_session_owner
 
     managed = managed_home is not None
     if managed != (attempt is not None):
@@ -312,10 +316,17 @@ def _run_interactive_session(
                     "ERROR: interactive executable changed after capability probing\n"
                 )
                 raise SystemExit(1)
+
+            def _record_spawn(pid: int, pgid: int) -> None:
+                attempt_handle.record_spawn(pid, pgid)
+                launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
+                if launch_id:
+                    bind_session_owner(_project_dir, launch_id, pid)
+
             managed_result = run_cook_attempt(
                 spec,
                 pass_fds=pass_fds,
-                on_spawn=attempt_handle.record_spawn,
+                on_spawn=_record_spawn,
                 on_reaped=attempt_handle.record_reaped,
                 trace=startup_trace,
                 observer=None,
@@ -361,14 +372,31 @@ def _run_interactive_session(
                     "ERROR: interactive executable changed after capability probing\n"
                 )
                 raise SystemExit(1)
+            cmd = [*spec.cmd]
             with terminal_guard():
-                raw_result = subprocess.run(
-                    [*spec.cmd],
+                process = subprocess.Popen(
+                    cmd,
                     env=spec.env,
                     cwd=str(executable.cwd),
                     pass_fds=spec.inherited_fds,
                 )
-        returncode = raw_result.returncode
+                try:
+                    launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
+                    if launch_id:
+                        bind_session_owner(_project_dir, launch_id, process.pid)
+                    returncode = process.wait()
+                except BaseException:
+                    try:
+                        if process.poll() is None:
+                            process.terminate()
+                        try:
+                            process.wait(timeout=5.0)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5.0)
+                    except BaseException:
+                        logger.warning("interactive child cleanup failed", exc_info=True)
+                    raise
     reload_session_id = consume_reload_sentinel(_project_dir)
     if reload_session_id is not None:
         return reload_session_id

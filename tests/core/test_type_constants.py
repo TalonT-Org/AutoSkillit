@@ -248,6 +248,16 @@ def test_fleet_inspector_model_crosses_only_declared_child_boundaries() -> None:
     assert FLEET_INSPECTOR_MODEL_ENV_VAR in CODEX_MCP_ENV_FORWARD_VARS
 
 
+def test_codex_mcp_receives_launch_registry_join() -> None:
+    from autoskillit.core import (
+        AUTOSKILLIT_STATE_ROOT_ENV_VAR,
+        CODEX_MCP_ENV_FORWARD_VARS,
+        LAUNCH_ID_ENV_VAR,
+    )
+
+    assert {LAUNCH_ID_ENV_VAR, AUTOSKILLIT_STATE_ROOT_ENV_VAR} <= CODEX_MCP_ENV_FORWARD_VARS
+
+
 def test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core() -> None:
     """CAMPAIGN_ID_ENV_VAR and KITCHEN_SESSION_ID_ENV_VAR are re-exported from autoskillit.core."""
     from autoskillit.core import CAMPAIGN_ID_ENV_VAR, KITCHEN_SESSION_ID_ENV_VAR

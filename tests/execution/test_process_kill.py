@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+from typing import Any
 
 import anyio
 import psutil
@@ -292,6 +293,92 @@ class TestKillProcessTreeUnit:
 
         assert cleaned == {process.pid}
         assert group_signals == []
+
+    @pytest.mark.parametrize(
+        ("identity_kwargs", "actual_boot_id", "actual_ticks", "actual_create_time"),
+        [
+            ({"expected_boot_id": "expected-boot"}, "other-boot", 123, 123.0),
+            ({"expected_boot_id": "expected-boot"}, None, 123, 123.0),
+            ({"expected_starttime_ticks": 123}, "boot", 456, 123.0),
+            ({"expected_starttime_ticks": 123}, "boot", None, 123.0),
+            ({"expected_create_time": 123.0}, "boot", 123, 456.0),
+            ({"expected_create_time": 123.0}, "boot", 123, None),
+        ],
+    )
+    def test_unverified_identity_refuses_before_signaling(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        identity_kwargs: dict[str, Any],
+        actual_boot_id: str | None,
+        actual_ticks: int | None,
+        actual_create_time: float | None,
+    ) -> None:
+        from autoskillit.execution.process import _process_kill
+
+        sent_signals: list[signal.Signals] = []
+
+        class FakeProcess:
+            pid = 101
+
+            def create_time(self) -> float:
+                if actual_create_time is None:
+                    raise psutil.AccessDenied(pid=self.pid)
+                return actual_create_time
+
+            def children(self, *, recursive: bool) -> list[FakeProcess]:
+                del recursive
+                return []
+
+            def send_signal(self, sig: signal.Signals) -> None:
+                sent_signals.append(sig)
+
+        monkeypatch.setattr(_process_kill, "read_boot_id", lambda: actual_boot_id)
+        monkeypatch.setattr(_process_kill, "read_starttime_ticks", lambda _pid: actual_ticks)
+        monkeypatch.setattr(_process_kill.psutil, "Process", lambda _pid: FakeProcess())
+
+        result = kill_process_tree(101, **identity_kwargs)
+
+        assert result.identity_refused is True
+        assert result.complete is False
+        assert sent_signals == []
+
+    @pytest.mark.anyio
+    async def test_async_kill_forwards_identity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from autoskillit.core import ProcessCleanupResult
+        from autoskillit.execution.process import _process_kill
+
+        calls: list[tuple[object, ...]] = []
+
+        def fake_kill(
+            pid: int,
+            timeout: float,
+            *,
+            expected_boot_id: str | None,
+            expected_starttime_ticks: int | None,
+            expected_create_time: float | None,
+        ) -> ProcessCleanupResult:
+            calls.append(
+                (
+                    pid,
+                    timeout,
+                    expected_boot_id,
+                    expected_starttime_ticks,
+                    expected_create_time,
+                )
+            )
+            return ProcessCleanupResult(root_pid=pid)
+
+        monkeypatch.setattr(_process_kill, "kill_process_tree", fake_kill)
+
+        await _process_kill.async_kill_process_tree(
+            101,
+            timeout=3.0,
+            expected_boot_id="boot",
+            expected_starttime_ticks=303,
+            expected_create_time=4.0,
+        )
+
+        assert calls == [(101, 3.0, "boot", 303, 4.0)]
 
 
 class TestCancellationKillsProcess:

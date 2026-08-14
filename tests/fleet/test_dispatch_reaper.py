@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-import psutil
 import pytest
 
 from autoskillit.core import ProcessCleanupResult
@@ -75,32 +74,64 @@ class TestReap:
                 "autoskillit.fleet._dispatch_reaper.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
+            patch(
+                "autoskillit.fleet._dispatch_reaper.kill_process_tree",
+                return_value=ProcessCleanupResult(root_pid=12345, observation_complete=True),
+            ) as mock_kill,
         ):
             _reap(sp)
 
-        mock_kill.assert_called_once_with(12345)
+        mock_kill.assert_called_once_with(
+            12345,
+            expected_boot_id=BOOT_ID,
+            expected_starttime_ticks=1000,
+        )
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].status == DispatchStatus.INTERRUPTED
         assert state.dispatches[0].reason == "reaped_orphan"
 
-    def test_reap_leaves_incomplete_cleanup_for_reconciliation(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
-            tmp_path,
-            dispatched_pid=12345,
-            dispatched_starttime_ticks=1000,
-        )
+    @pytest.mark.parametrize(
+        "cleanup_result",
+        [
+            ProcessCleanupResult(root_pid=12345),
+            ProcessCleanupResult(root_pid=12345, observation_complete=True, identity_refused=True),
+            ProcessCleanupResult(
+                root_pid=12345, observation_complete=True, survivor_pids=(12345,)
+            ),
+            ProcessCleanupResult(
+                root_pid=12345, observation_complete=True, access_denied_pids=(12345,)
+            ),
+        ],
+    )
+    def test_reap_keeps_incomplete_cleanup_running(
+        self, tmp_path: Path, cleanup_result: ProcessCleanupResult
+    ) -> None:
+        sp = _make_running_state(tmp_path)
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
-            patch(
-                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
-                return_value=1000,
-            ),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
             patch(
                 "autoskillit.fleet._dispatch_reaper.kill_process_tree",
-                return_value=ProcessCleanupResult(root_pid=12345),
+                return_value=cleanup_result,
+            ),
+        ):
+            _reap(sp)
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+
+    def test_reap_keeps_cleanup_exception_running(self, tmp_path: Path) -> None:
+        sp = _make_running_state(tmp_path)
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch(
+                "autoskillit.fleet._dispatch_reaper.kill_process_tree",
+                side_effect=RuntimeError("cleanup failed"),
             ),
         ):
             _reap(sp)
@@ -252,7 +283,9 @@ class TestReap:
         assert state is not None
         assert state.dispatches[0].status == DispatchStatus.INTERRUPTED
 
-    def test_reap_kills_orphan_via_create_time_fallback(self, tmp_path: Path) -> None:
+    def test_reap_does_not_substitute_create_time_for_persisted_ticks(
+        self, tmp_path: Path
+    ) -> None:
         sp = _make_running_state(
             tmp_path,
             dispatched_pid=12345,
@@ -264,15 +297,13 @@ class TestReap:
             patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
-            patch("autoskillit.fleet._dispatch_reaper.psutil.Process") as mock_proc_cls,
         ):
-            mock_proc_cls.return_value.create_time.return_value = 1000000.5
             _reap(sp)
 
-        mock_kill.assert_called_once_with(12345)
+        mock_kill.assert_not_called()
         state = read_state(sp)
         assert state is not None
-        assert state.dispatches[0].reason == "reaped_orphan"
+        assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_skips_recycled_pid_via_create_time(self, tmp_path: Path) -> None:
         sp = _make_running_state(
@@ -316,7 +347,9 @@ class TestReap:
         assert state is not None
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
-    def test_reap_create_time_nosuchprocess_marks_dead(self, tmp_path: Path) -> None:
+    def test_reap_does_not_substitute_create_time_on_tick_read_failure(
+        self, tmp_path: Path
+    ) -> None:
         sp = _make_running_state(
             tmp_path,
             dispatched_pid=12345,
@@ -328,15 +361,13 @@ class TestReap:
             patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
-            patch("autoskillit.fleet._dispatch_reaper.psutil.Process") as mock_proc_cls,
         ):
-            mock_proc_cls.return_value.create_time.side_effect = psutil.NoSuchProcess(12345)
             _reap(sp)
 
         mock_kill.assert_not_called()
         state = read_state(sp)
         assert state is not None
-        assert state.dispatches[0].reason == "reaped_dead_pid"
+        assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_kills_orphan_via_create_time_when_ticks_zero(self, tmp_path: Path) -> None:
         """When dispatched_starttime_ticks=0, reaper falls back to create_time comparison."""
@@ -344,7 +375,7 @@ class TestReap:
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=0,
-            dispatched_create_time=1000000.5,
+            dispatched_create_time=1000000.0,
         )
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
@@ -359,7 +390,7 @@ class TestReap:
             mock_proc_cls.return_value.create_time.return_value = 1000000.5
             _reap(sp)
 
-        mock_kill.assert_called_once_with(12345)
+        mock_kill.assert_called_once_with(12345, expected_create_time=1000000.5)
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].reason == "reaped_orphan"
@@ -404,7 +435,11 @@ class TestReap:
         ):
             _reap(sp)
 
-        mock_kill.assert_called_once_with(12345)
+        mock_kill.assert_called_once_with(
+            12345,
+            expected_boot_id=BOOT_ID,
+            expected_starttime_ticks=1000,
+        )
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].reason == "reaped_orphan"
@@ -614,7 +649,11 @@ class TestReap:
 
             reap_stale_dispatches(sp, own_campaign_id="campaign-1")
 
-        mock_kill.assert_called_once_with(12345)
+        mock_kill.assert_called_once_with(
+            12345,
+            expected_boot_id=BOOT_ID,
+            expected_starttime_ticks=1000,
+        )
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].reason == "reaped_orphan"
@@ -794,7 +833,11 @@ class TestReap:
 
             reap_stale_dispatches(sp, own_campaign_id="campaign-1", heartbeat_grace_seconds=90.0)
 
-        mock_kill.assert_called_once_with(12345)
+        mock_kill.assert_called_once_with(
+            12345,
+            expected_boot_id=BOOT_ID,
+            expected_starttime_ticks=1000,
+        )
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].reason == "reaped_orphan"
@@ -818,7 +861,11 @@ class TestReap:
 
             reap_stale_dispatches(sp, own_campaign_id="campaign-1", heartbeat_grace_seconds=90.0)
 
-        mock_kill.assert_called_once_with(12345)
+        mock_kill.assert_called_once_with(
+            12345,
+            expected_boot_id=BOOT_ID,
+            expected_starttime_ticks=1000,
+        )
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].reason == "reaped_orphan"
@@ -872,4 +919,8 @@ class TestReap:
         ):
             reap_stale_dispatches(sp2, own_campaign_id="campaign-1", heartbeat_grace_seconds=120.0)
 
-        mock_kill2.assert_called_once_with(99999)
+        mock_kill2.assert_called_once_with(
+            99999,
+            expected_boot_id=BOOT_ID,
+            expected_starttime_ticks=2000,
+        )

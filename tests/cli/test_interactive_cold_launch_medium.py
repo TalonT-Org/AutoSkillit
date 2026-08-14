@@ -15,6 +15,7 @@ from autoskillit.core import (
     atomic_write,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
+from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -39,17 +40,24 @@ def cold_launch(
     shim = tmp_path / "claude"
     captured: dict[str, object] = {"spawn_count": 0}
     real_run = subprocess.run
+    real_popen = subprocess.Popen
+
+    def capture_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        if len(cmd) > 1 and cmd[1] == "--version":
+            return real_run(cmd, **kwargs)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     def capture_final_spawn(cmd, **kwargs):  # type: ignore[no-untyped-def]
         if len(cmd) > 1 and cmd[1] == "--version":
-            return real_run(cmd, **kwargs)
+            return real_popen(cmd, **kwargs)
         captured["spawn_count"] = int(captured["spawn_count"]) + 1
         captured["cmd"] = tuple(cmd)
         captured["env"] = dict(kwargs["env"])
-        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        return InteractiveProcessStub()
 
     monkeypatch.delenv("CLAUDE_CODE_EXECPATH", raising=False)
-    monkeypatch.setattr(subprocess, "run", capture_final_spawn)
+    monkeypatch.setattr(subprocess, "run", capture_run)
+    monkeypatch.setattr(subprocess, "Popen", capture_final_spawn)
     monkeypatch.setattr(
         "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (None, PluginLoadMode.NONE),

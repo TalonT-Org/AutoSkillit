@@ -17,6 +17,7 @@ import pytest
 
 from autoskillit.core import CmdSpec, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
+from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -41,8 +42,8 @@ def test_launch_cook_session_env_excludes_ide_vars(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli.session._session_launch.subprocess.run",
-            return_value=MagicMock(returncode=0),
+            "autoskillit.cli.session._session_launch.subprocess.Popen",
+            return_value=InteractiveProcessStub(),
         ) as mock_run,
     ):
         _launch_cook_session(
@@ -74,8 +75,8 @@ def test_launch_cook_session_extra_env_still_applied(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli.session._session_launch.subprocess.run",
-            return_value=MagicMock(returncode=0),
+            "autoskillit.cli.session._session_launch.subprocess.Popen",
+            return_value=InteractiveProcessStub(),
         ) as mock_run,
     ):
         _launch_cook_session(
@@ -101,8 +102,8 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli.session._session_launch.subprocess.run",
-            return_value=MagicMock(returncode=0),
+            "autoskillit.cli.session._session_launch.subprocess.Popen",
+            return_value=InteractiveProcessStub(),
         ) as mock_run,
     ):
         _launch_cook_session(
@@ -127,8 +128,8 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli.session._session_launch.subprocess.run",
-            return_value=MagicMock(returncode=0),
+            "autoskillit.cli.session._session_launch.subprocess.Popen",
+            return_value=InteractiveProcessStub(),
         ) as mock_run,
     ):
         _launch_cook_session(

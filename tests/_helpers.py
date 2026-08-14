@@ -4,10 +4,26 @@ from __future__ import annotations
 
 import re
 import sys
+from pathlib import Path
 
 from autoskillit.core import (
     strip_markdown_code_regions as strip_markdown_code_regions,
 )
+
+
+def seed_registry_owner(project_dir: Path, launch_id: str) -> None:
+    """Seed stable owner identity fields into a test session registry row."""
+    import json
+
+    from autoskillit.core import read_registry, registry_path
+
+    registry = read_registry(project_dir)
+    registry[launch_id].update(
+        owner_pid=321,
+        owner_boot_id="12345678-1234-1234-1234-123456789abc",
+        owner_starttime_ticks=654,
+    )
+    registry_path(project_dir).write_text(json.dumps(registry), encoding="utf-8")
 
 
 def _collect_structlog_proxies() -> list[object]:

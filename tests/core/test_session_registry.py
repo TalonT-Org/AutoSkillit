@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
+import sys
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.runtime.session_registry import (
+    bind_session_owner,
     bridge_claude_session_id,
     read_registry,
     registry_path,
@@ -39,6 +43,29 @@ def test_write_is_atomic(tmp_path: Path) -> None:
     assert "id1" in data
 
 
+@pytest.mark.parametrize("operation", ["write", "bridge", "bind"])
+def test_registry_mutations_acquire_exclusive_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", None)
+    lock_operations: list[int] = []
+    monkeypatch.setattr(
+        "autoskillit.core.runtime.session_registry.fcntl.flock",
+        lambda _lock_file, lock_operation: lock_operations.append(lock_operation),
+    )
+
+    if operation == "write":
+        write_registry_entry(tmp_path, "new", "cook", None)
+    elif operation == "bridge":
+        bridge_claude_session_id(tmp_path, "abc", "claude-session")
+    else:
+        bind_session_owner(tmp_path, "abc", os.getpid())
+
+    assert lock_operations == [fcntl.LOCK_EX]
+
+
 def test_read_returns_empty_on_missing_file(tmp_path: Path) -> None:
     assert read_registry(tmp_path) == {}
 
@@ -62,6 +89,71 @@ def test_bridge_noop_on_missing_launch_id(tmp_path: Path) -> None:
     bridge_claude_session_id(tmp_path, "unknown-id", "claude-uuid-123")
     reg = read_registry(tmp_path)
     assert reg["abc"]["claude_session_id"] is None
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
+def test_bind_session_owner_preserves_launch_metadata(tmp_path: Path) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", "recipe")
+    bridge_claude_session_id(tmp_path, "abc", "claude-session")
+
+    bind_session_owner(tmp_path, "abc", os.getpid())
+
+    entry = read_registry(tmp_path)["abc"]
+    assert entry["session_type"] == "cook"
+    assert entry["recipe_name"] == "recipe"
+    assert entry["claude_session_id"] == "claude-session"
+    assert entry["owner_pid"] == os.getpid()
+    assert entry["owner_boot_id"]
+    assert entry["owner_starttime_ticks"] > 0
+
+
+def test_bind_session_owner_rejects_unknown_launch_id(tmp_path: Path) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", None)
+
+    with pytest.raises(KeyError, match="unknown launch ID"):
+        bind_session_owner(tmp_path, "missing", os.getpid())
+
+    assert set(read_registry(tmp_path)) == {"abc"}
+
+
+@pytest.mark.parametrize("owner_pid", [0, -1])
+def test_bind_session_owner_rejects_non_positive_pid(tmp_path: Path, owner_pid: int) -> None:
+    with pytest.raises(ValueError, match="owner_pid must be a positive integer"):
+        bind_session_owner(tmp_path, "abc", owner_pid)
+
+
+@pytest.mark.parametrize(
+    ("contents", "expected_error"),
+    [(None, FileNotFoundError), ("not valid json", json.JSONDecodeError)],
+)
+def test_bind_session_owner_preserves_registry_read_errors(
+    tmp_path: Path,
+    contents: str | None,
+    expected_error: type[Exception],
+) -> None:
+    if contents is not None:
+        path = registry_path(tmp_path)
+        path.parent.mkdir(parents=True)
+        path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(expected_error):
+        bind_session_owner(tmp_path, "abc", os.getpid())
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
+def test_bind_session_owner_fails_closed_without_linux_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", None)
+    monkeypatch.setattr(
+        "autoskillit.core.runtime.session_registry.read_starttime_ticks",
+        lambda _pid: None,
+    )
+
+    with pytest.raises(RuntimeError, match="unable to capture Linux owner identity"):
+        bind_session_owner(tmp_path, "abc", os.getpid())
+
+    assert "owner_pid" not in read_registry(tmp_path)["abc"]
 
 
 def test_registry_path_in_project_temp(tmp_path: Path) -> None:

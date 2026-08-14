@@ -219,6 +219,7 @@ def cook(
         RepositoryProfileId,
         SessionType,
         SkillExecutionRole,
+        bind_session_owner,
         configure_logging,
         resolve_temp_dir,
         resume_spec_from_cli,
@@ -456,10 +457,15 @@ def cook(
                             "ERROR: interactive executable changed after capability probing\n"
                         )
                         raise SystemExit(1)
+
+                    def _record_spawn(pid: int, pgid: int) -> None:
+                        attempt_handle.record_spawn(pid, pgid)
+                        bind_session_owner(project_dir, launch_id, pid)
+
                     result = run_cook_attempt(
                         spec,
                         pass_fds=pass_fds,
-                        on_spawn=attempt_handle.record_spawn,
+                        on_spawn=_record_spawn,
                         on_reaped=attempt_handle.record_reaped,
                         trace=trace,
                         observer=observer,

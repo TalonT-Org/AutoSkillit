@@ -989,9 +989,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
-        "cli": 26,  # +_install_contract typed install process boundary (#4409);
+        "cli": 27,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim; +_codex_orphans (#4536);
-        # +_codex_attempts (#4361)
+        # +_codex_attempts (#4361); +_daemon_orphans operator surface (#4544)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -1289,7 +1289,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2433,
+        2443,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1307,7 +1307,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and build_resume_cmd _codex_exec_extras call expansion to multi-line (+2 net lines) "
         "for T5-P4-A3-WP3 guard-hook backend dispatch"
         "; _materialize_profile_skills function (~43 lines) for T5-P4-A4-WP2 profile skill "
-        "materialization into Codex session directories"
+        "materialization into Codex session directories; registered-daemon launch identity "
+        "forwarding adds both required environment keys to all Codex command shapes (+8 net lines)"
         "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)"
         "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)"
         "; fleet inspector child-boundary defaults across Codex command builders (+5 net lines)"
@@ -1338,7 +1339,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "explicit session-scoped capability disposition (+1 net line); #4507 adds runtime "
         "child cardinality rendering and protects the live-web bundled role (+12 net lines)"
         "; #4566 pins ORCHESTRATOR file auth, durable auth linkage, and role-exact profile "
-        "materialization at the backend-owned generated-home setup boundary (+42 net lines)",
+        "materialization at the backend-owned generated-home setup boundary (+42 net lines); "
+        "launch/state MCP forwarding defaults remain in the Codex env policy (+2 net lines)",
     ),
     "execution/backends/claude.py": (
         1250,

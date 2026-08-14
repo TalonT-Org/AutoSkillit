@@ -47,6 +47,7 @@ from .session_provenance import (
     write_provenance_record,
 )
 from .session_registry import (
+    bind_session_owner,
     bridge_claude_session_id,
     read_registry,
     registry_path,
@@ -63,6 +64,7 @@ __all__ = [
     "fsync_file",
     "is_session_alive",
     "KitchenMarker",
+    "bind_session_owner",
     "bridge_claude_session_id",
     "cleanup_readiness_sentinel",
     "find_caller_session_id",

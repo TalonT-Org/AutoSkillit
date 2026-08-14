@@ -79,6 +79,8 @@ class ProcessCleanupResult:
     operations that could not be performed, not process-group membership.
     ``observation_complete`` is true only when the requested bounded scope was
     fully examined without an unresolved observation or signal denial.
+    ``identity_refused`` records failure to revalidate a caller-supplied root
+    identity before observation or signaling begins.
     """
 
     root_pid: int
@@ -87,11 +89,17 @@ class ProcessCleanupResult:
     survivor_pids: tuple[int, ...] = ()
     access_denied_pids: tuple[int, ...] = ()
     observation_complete: bool = False
+    identity_refused: bool = False
 
     @property
     def complete(self) -> bool:
         """Whether bounded observation completed and every verified target is absent."""
-        return self.observation_complete and not self.survivor_pids and not self.access_denied_pids
+        return (
+            self.observation_complete
+            and not self.identity_refused
+            and not self.survivor_pids
+            and not self.access_denied_pids
+        )
 
     def to_dict(self) -> dict[str, object]:
         """Return the stable JSON-compatible cleanup evidence."""
@@ -105,6 +113,7 @@ class ProcessCleanupResult:
             "survivor_pids": list(self.survivor_pids),
             "access_denied_pids": list(self.access_denied_pids),
             "observation_complete": self.observation_complete,
+            "identity_refused": self.identity_refused,
             "complete": self.complete,
         }
 

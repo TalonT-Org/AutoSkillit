@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from autoskillit import cli
+from tests.cli._interactive_process import configure_popen
 from tests.cli.conftest import _GITHUB_RECIPE_YAML
 
 pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.medium,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+    pytest.mark.usefixtures("_stub_owner_binding"),
 ]
 
 
@@ -68,7 +69,7 @@ class TestOrderSubsetGate:
         captured = capsys.readouterr()
         assert "requires subset" in captured.out.lower()
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_enable_temporarily_sets_env_override(
         self,
         mock_run: MagicMock,
@@ -91,9 +92,7 @@ class TestOrderSubsetGate:
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         inputs = iter(["1", ""])
         monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("github-recipe")
 

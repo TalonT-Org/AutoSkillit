@@ -15,6 +15,11 @@ from autoskillit.core.io import load_yaml
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
+def test_daemon_orphans_is_reexported() -> None:
+    assert callable(cli.daemon_orphans)
+    assert "daemon_orphans" in cli.__all__
+
+
 class TestCLIInit:
     @pytest.fixture(autouse=True)
     def _pre_commit_with_scanner(self, tmp_path: Path) -> None:

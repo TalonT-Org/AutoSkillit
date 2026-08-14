@@ -39,6 +39,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
     {
         "core/_plugin_cache.py",
         "core/runtime/artifact_lease.py",
+        "core/runtime/session_registry.py",  # session registry mutation transaction lock
         "cli/session/pty/_exec.py",
         "cli/session/pty/_observer.py",
         "execution/backends/_codex_config_lock.py",

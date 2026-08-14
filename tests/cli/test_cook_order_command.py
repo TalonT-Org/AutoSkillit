@@ -13,12 +13,14 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags, PreLaunchReadiness
+from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.medium,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+    pytest.mark.usefixtures("_stub_owner_binding"),
 ]
 
 
@@ -140,7 +142,7 @@ class TestCLIOrderCommand:
         captured = capsys.readouterr()
         assert "validation" in captured.out.lower() or "error" in captured.out.lower()
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_builds_correct_command(
         self,
         mock_run: MagicMock,
@@ -155,9 +157,7 @@ class TestCLIOrderCommand:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -181,7 +181,7 @@ class TestCLIOrderCommand:
         assert "capture_output" not in kwargs
         assert "stdin" not in kwargs
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_includes_plugin_dir_when_plugin_installed(
         self,
         mock_run: MagicMock,
@@ -239,9 +239,7 @@ class TestCLIOrderCommand:
             ),
             encoding="utf-8",
         )
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -252,7 +250,7 @@ class TestCLIOrderCommand:
         # passed — even when the marketplace registry has an entry.
         assert ClaudeFlags.PLUGIN_DIR in cmd
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_includes_plugin_dir_when_no_plugin_installed(
         self,
         mock_run: MagicMock,
@@ -273,9 +271,7 @@ class TestCLIOrderCommand:
             "autoskillit.core.detect_autoskillit_mcp_prefix",
             lambda _capabilities: DIRECT_PREFIX,
         )
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -283,7 +279,7 @@ class TestCLIOrderCommand:
         cmd = mock_run.call_args[0][0]
         assert ClaudeFlags.PLUGIN_DIR in cmd
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_propagates_exit_code(
         self,
         mock_run: MagicMock,
@@ -298,14 +294,12 @@ class TestCLIOrderCommand:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")  # should not raise
         mock_run.assert_called_once()
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_subprocess_failure_propagates(
         self,
         mock_run: MagicMock,
@@ -320,15 +314,13 @@ class TestCLIOrderCommand:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=42, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=42)
 
         with pytest.raises(SystemExit) as exc_info:
             cli.order("test-script")
         assert exc_info.value.code == 42
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_uses_dangerously_skip_permissions(
         self,
         mock_run: MagicMock,
@@ -343,9 +335,7 @@ class TestCLIOrderCommand:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
 
@@ -412,7 +402,7 @@ class TestCLIOrderCommand:
         captured = capsys.readouterr()
         assert "structure error" in captured.out
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_launch_sets_session_type_order(
         self,
         mock_run: MagicMock,
@@ -427,9 +417,7 @@ class TestCLIOrderCommand:
         (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         with patch("autoskillit.core.write_registry_entry"):
             cli.order("test-script")
@@ -437,7 +425,7 @@ class TestCLIOrderCommand:
         env = mock_run.call_args[1].get("env") or {}
         assert env.get("AUTOSKILLIT_SESSION_TYPE") == "orchestrator"
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli.subprocess.Popen")
     def test_order_launch_sets_launch_id_env(
         self,
         mock_run: MagicMock,
@@ -452,9 +440,7 @@ class TestCLIOrderCommand:
         (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        configure_popen(mock_run, returncode=0)
 
         with patch("autoskillit.core.write_registry_entry"):
             cli.order("test-script")
@@ -529,12 +515,12 @@ class TestCLIOrderCommand:
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
 
-        def fake_run(cmd, **kwargs):
+        def fake_popen(cmd, **kwargs):
             captured["cmd"] = list(cmd)
             captured["env"] = kwargs.get("env", {}) or {}
-            return type("R", (), {"returncode": 0})()
+            return InteractiveProcessStub()
 
-        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
 
         def fake_cook_attempt(spec, **kwargs):
             captured["cmd"] = list(spec.cmd)
@@ -551,7 +537,7 @@ class TestCLIOrderCommand:
         cli.order("test-script")
 
         assert "cmd" in captured, (
-            "cli.order() did not invoke subprocess.run — check for early exit"
+            "cli.order() did not invoke subprocess.Popen — check for early exit"
         )
         cmd = captured["cmd"]
         env = captured["env"]

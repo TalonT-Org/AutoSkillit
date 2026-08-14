@@ -14,7 +14,7 @@ from typing import Literal
 
 import psutil
 
-from autoskillit.core import get_logger, read_starttime_ticks
+from autoskillit.core import get_logger, read_boot_id, read_starttime_ticks
 from autoskillit.execution.process._process_kill import kill_process_tree
 
 logger = get_logger(__name__)
@@ -36,6 +36,7 @@ class OrphanedCodexProcess:
     exe_target: str | None  # readlink /proc/<pid>/exe; operator display, never a gate
     starttime_ticks: int  # /proc/<pid>/stat field 22, identity anchor for reap
     started_at: float  # psutil create_time(), operator display
+    boot_id: str = ""  # Linux boot identity paired with starttime_ticks
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +94,10 @@ def find_orphaned_codex_processes(
     except OSError:
         return []
 
+    boot_id = read_boot_id()
+    if boot_id is None:
+        return []
+
     boot_time = psutil.boot_time()
     clock_ticks_per_second = os.sysconf("SC_CLK_TCK")
     my_uid = os.geteuid()
@@ -138,6 +143,7 @@ def find_orphaned_codex_processes(
                 exe_target=exe_target,
                 starttime_ticks=ticks,
                 started_at=boot_time + ticks / clock_ticks_per_second,
+                boot_id=boot_id,
             )
         )
 
@@ -169,8 +175,15 @@ def reap_orphaned_codex_processes(
             results.append(CodexOrphanReapResult(o.pid, "skipped"))
             continue
 
-        result = kill_process_tree(o.pid)
-        if not result.complete:
+        result = kill_process_tree(
+            o.pid,
+            expected_boot_id=o.boot_id,
+            expected_starttime_ticks=o.starttime_ticks,
+        )
+        if result.identity_refused:
+            logger.info("codex_orphan_reap_skipped", pid=o.pid)
+            results.append(CodexOrphanReapResult(o.pid, "skipped"))
+        elif not result.complete:
             logger.warning(
                 "codex_orphan_reap_incomplete",
                 pid=o.pid,

@@ -12,12 +12,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.small,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+    pytest.mark.usefixtures("_stub_owner_binding"),
 ]
 
 
@@ -426,7 +428,11 @@ def test_interactive_session_reload_uses_named_resume(
 ) -> None:
     _write_sentinel(tmp_path, "isess-001")
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        lambda *a, **kw: InteractiveProcessStub(pid=123),
+    )
     monkeypatch.setattr("autoskillit.cli.ui._terminal.terminal_guard", _noop_terminal_guard)
     monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
 

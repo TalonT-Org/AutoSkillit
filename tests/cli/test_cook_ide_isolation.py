@@ -15,9 +15,11 @@ the child must NOT attach to the IDE channel via either discovery path:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+
+from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -50,8 +52,8 @@ def test_cook_session_ignores_ide_lock_file(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli.session._session_launch.subprocess.run",
-            return_value=MagicMock(returncode=0),
+            "autoskillit.cli.session._session_launch.subprocess.Popen",
+            return_value=InteractiveProcessStub(),
         ) as mock_run,
     ):
         _launch_cook_session(

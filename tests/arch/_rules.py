@@ -102,6 +102,7 @@ _PRINT_EXEMPT = frozenset(
         "_fmt_recipe.py",
         "_capture_store.py",
         "_codex_orphans.py",
+        "_daemon_orphans.py",  # operator report/reap output must precede signaling
     }
 )
 

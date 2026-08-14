@@ -450,3 +450,45 @@ def test_orphaned_codex_check_reports_scan_exception(monkeypatch: pytest.MonkeyP
     assert results[0].severity is Severity.WARNING
     assert results[0].check == "orphaned_codex_processes"
     assert results[0].message == "scan failed: PermissionError: denied"
+
+
+def test_orphaned_autoskillit_daemon_check_is_read_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
+    from autoskillit.execution import OrphanedAutoSkillitDaemon
+
+    candidate = OrphanedAutoSkillitDaemon(
+        pid=5003,
+        launch_id="0123456789abcdef",
+        state_root="/tmp/project",
+        boot_id="boot",
+        starttime_ticks=222,
+        owner_pid=4003,
+        owner_boot_id="boot",
+        owner_starttime_ticks=111,
+    )
+    monkeypatch.setattr(doctor_runtime, "find_orphaned_autoskillit_daemons", lambda: [candidate])
+    monkeypatch.setattr(
+        "autoskillit.execution.reap_orphaned_autoskillit_daemons",
+        lambda _items: pytest.fail("doctor called mutating reaper"),
+    )
+
+    results = doctor_runtime._check_orphaned_autoskillit_daemons()
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.WARNING
+    assert results[0].check == "orphaned_autoskillit_daemons"
+    assert "pid=5003" in results[0].message
+    assert "autoskillit daemon-orphans --reap" in results[0].message
+
+
+def test_orphaned_autoskillit_daemon_check_ok_when_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
+
+    monkeypatch.setattr(doctor_runtime, "find_orphaned_autoskillit_daemons", lambda: [])
+    results = doctor_runtime._check_orphaned_autoskillit_daemons()
+    assert len(results) == 1
+    assert results[0].severity is Severity.OK

@@ -872,7 +872,6 @@ def _canonical_codex_model_effort(
     model_class: str | None,
     reasoning_effort: str | None = None,
 ) -> tuple[str, str | None]:
-    """Translate the one canonical semantic policy used by agents and call sites."""
     if model_class is None:
         return "", reasoning_effort
     model = CODEX_MODEL_ALIASES[model_class]

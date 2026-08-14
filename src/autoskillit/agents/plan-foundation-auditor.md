@@ -3,7 +3,7 @@ name: plan-foundation-auditor
 description: "Step-by-step control-flow auditor for implementation plans. Traces branch scope, return placement, and guard coverage to find structural flaws that bypass new logic. Use when reviewing a draft plan before finalization."
 tools: [Read, Grep, Glob, Bash]
 model: sonnet
-maxTurns: 40
+maxTurns: 80
 color: red
 ---
 

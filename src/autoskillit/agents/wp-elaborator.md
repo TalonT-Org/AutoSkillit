@@ -3,7 +3,7 @@ name: wp-elaborator
 description: "Work-package elaboration agent for the planner pipeline. Analyzes a single work package against the codebase and returns a structured JSON elaboration."
 tools: [Read, Grep, Glob, Bash]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 color: cyan
 ---
 

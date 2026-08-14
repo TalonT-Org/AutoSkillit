@@ -3,7 +3,7 @@ name: pr-review-auditor-baseline
 description: Baseline extraction of review-pr dimension audit subagent prompt — control variant for agent-eval
 tools: [Read, Grep, Glob, Bash]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 You are reviewing a GitHub PR diff for [{dimension}] issues only.

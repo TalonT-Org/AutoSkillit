@@ -3,7 +3,7 @@ name: pr-review-auditor-abstraction-surface
 description: Proof-only reviewer for speculative abstraction and duplicate authority surfaces
 tools: [Read, Grep, Glob]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 You are a proof-only PR auditor for the

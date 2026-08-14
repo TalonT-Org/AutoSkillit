@@ -3,7 +3,7 @@ name: pr-review-auditor-reachability
 description: Proof-only reviewer for unreachable or semantically redundant defensive machinery
 tools: [Read, Grep, Glob]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 You are a proof-only PR auditor for the `overengineering_reachability` dimension.

@@ -292,7 +292,7 @@ def test_overengineering_agent_frontmatter_is_read_only() -> None:
         assert frontmatter["name"] == name
         assert set(frontmatter["tools"]) == {"Read", "Grep", "Glob"}
         assert frontmatter["model"] == "sonnet"
-        assert frontmatter["maxTurns"] == 30
+        assert frontmatter["maxTurns"] == 80
 
 
 @pytest.mark.parametrize("name", sorted(_OVERENGINEERING_AGENT_NAMES))

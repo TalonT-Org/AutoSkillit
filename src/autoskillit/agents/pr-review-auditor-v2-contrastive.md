@@ -3,7 +3,7 @@ name: pr-review-auditor-v2-contrastive
 description: Contrastive-framing reviewer that uses junior/senior split to distinguish real bugs from false alarms
 tools: [Read, Grep, Glob, Bash]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 You are a senior code reviewer examining a GitHub PR diff for [{dimension}] issues only.

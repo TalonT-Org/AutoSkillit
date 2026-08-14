@@ -3,7 +3,7 @@ name: plan-interface-mapper
 description: "Variable and data-flow tracer for implementation plans. Builds SET/READ tables to catch wrong-variable bugs where two similar names silently produce wrong results. Use when reviewing a draft plan before finalization."
 tools: [Read, Grep, Glob, Bash]
 model: sonnet
-maxTurns: 40
+maxTurns: 80
 color: blue
 ---
 

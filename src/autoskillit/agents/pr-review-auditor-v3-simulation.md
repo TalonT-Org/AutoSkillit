@@ -3,7 +3,7 @@ name: pr-review-auditor-v3-simulation
 description: Simulation-first reviewer that traces actual values through code paths before flagging
 tools: [Read, Grep, Glob, Bash]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 You are reviewing a GitHub PR diff for [{dimension}] issues only.

@@ -3,7 +3,7 @@ name: pr-review-auditor-v1-precision
 description: Precision-focused reviewer with false-positive suppression via contrastive pre-check
 tools: [Read, Grep, Glob, Bash]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 You are a senior code reviewer examining a GitHub PR diff for [{dimension}] issues only.

@@ -29,6 +29,27 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
 
+_SKILL_CHILD_ROLE_EXPECTATIONS = {
+    "pr-source-reader": (("Read",), "sonnet", 80, "gpt-5.6-luna", "xhigh"),
+    "pr-synthesizer": (("Read",), "sonnet", 80, "gpt-5.6-terra", "high"),
+    "research-source-reader": (("Read",), "sonnet", 80, "gpt-5.6-luna", "xhigh"),
+    "research-synthesizer": (("Read",), "sonnet", 80, "gpt-5.6-terra", "xhigh"),
+    "friction-batch-scanner": (
+        ("Read", "Grep"),
+        "haiku",
+        80,
+        "gpt-5.6-luna",
+        "medium",
+    ),
+    "friction-category-analyzer": (
+        ("Read", "Grep"),
+        "sonnet",
+        80,
+        "gpt-5.6-terra",
+        "xhigh",
+    ),
+}
+
 
 @pytest.mark.parametrize(
     ("name", "role_boundary"),
@@ -101,10 +122,76 @@ def test_bundled_agent_catalog_loads_with_unique_digests() -> None:
     definitions = load_bundled_agent_definitions()
     assert definitions
     assert BUNDLED_EXPLORER_ROLES <= {definition.name for definition in definitions}
+    assert all(
+        definition.max_turns is not None and definition.max_turns >= 30
+        for definition in definitions
+    )
     assert len({definition.name for definition in definitions}) == len(definitions)
     assert len({agent_definition_digest(definition) for definition in definitions}) == len(
         definitions
     )
+
+
+def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
+    definitions = {definition.name: definition for definition in load_bundled_agent_definitions()}
+
+    assert len(definitions) == 22
+    assert _SKILL_CHILD_ROLE_EXPECTATIONS.keys() <= definitions.keys()
+    for name, (
+        expected_tools,
+        expected_model,
+        expected_max_turns,
+        expected_codex_model,
+        expected_reasoning_effort,
+    ) in _SKILL_CHILD_ROLE_EXPECTATIONS.items():
+        definition = definitions[name]
+        assert definition.tools == expected_tools
+        assert definition.model == expected_model
+        assert definition.max_turns == expected_max_turns
+        assert definition.codex.model == expected_codex_model
+        assert definition.codex.reasoning_effort == expected_reasoning_effort
+        assert definition.codex.sandbox_mode == "read-only"
+        assert definition.description.startswith("Use when ")
+        assert definition.description not in definition.body
+        assert not ({"Bash", "Write", "Edit"} & set(definition.tools))
+
+
+@pytest.mark.parametrize(
+    ("name", "contracts"),
+    [
+        (
+            "friction-batch-scanner",
+            ("coverage_gaps", "stop_reason", "assigned scope complete"),
+        ),
+        (
+            "friction-category-analyzer",
+            ("disposition", "rationale", "conflicts", "stop_reason"),
+        ),
+        (
+            "pr-source-reader",
+            ("representation", "coverage_gaps", "stop_reason"),
+        ),
+        (
+            "pr-synthesizer",
+            ("evidence_locations", "conflicts", "upstream inferences", "stop_reason"),
+        ),
+        (
+            "research-source-reader",
+            ("representation", "coverage_gaps", "stop_reason"),
+        ),
+        (
+            "research-synthesizer",
+            ("findings", "evidence_locations", "conflicts", "stop_reason"),
+        ),
+    ],
+)
+def test_skill_child_roles_preserve_handoff_fidelity(
+    name: str, contracts: tuple[str, ...]
+) -> None:
+    definition = load_agent_definition(pkg_root() / "agents" / f"{name}.md")
+
+    for contract in contracts:
+        assert contract in definition.body
 
 
 def test_explicit_luna_projection_is_independent_from_claude_model(tmp_path: Path) -> None:

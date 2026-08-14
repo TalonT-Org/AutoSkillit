@@ -3,7 +3,7 @@ name: audit-impl-deviation-evaluator
 description: "Evaluates a single deviation justification against audit findings. Checks honesty, intent preservation, and evidence quality — returns ACCEPT, ACCEPT_WITH_NOTE, or REJECT."
 tools: [Bash]
 model: sonnet
-maxTurns: 20
+maxTurns: 80
 ---
 
 # audit-impl-deviation-evaluator

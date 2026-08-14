@@ -61,7 +61,9 @@ Current packless agents: `wp-elaborator`, `session-log-reader`, `audit-impl-slic
 `pr-review-auditor-baseline`, `pr-review-auditor-v1-precision`, `pr-review-auditor-v2-contrastive`,
 `pr-review-auditor-v3-simulation`, `pr-review-auditor-reachability`,
 `pr-review-auditor-abstraction-surface`, `audit-impl-deviation-evaluator`,
-`web-evidence-researcher`.
+`web-evidence-researcher`, `pr-source-reader`, `pr-synthesizer`,
+`research-source-reader`, `research-synthesizer`, `friction-batch-scanner`,
+`friction-category-analyzer`.
 The web-evidence role's Codex definition owns its Luna/xhigh/read-only/live-web/no-descendants
 policy; callers do not pass model or permission overrides. Claude inherits the configured/default
 child model because this definition omits the top-level `model` key.

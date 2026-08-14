@@ -221,11 +221,10 @@ class TestRenderAgentDefinitionsByteIdentity:
             if not any(tool.startswith("mcp__") for tool in defn.tools):
                 originals[f"{defn.name}.md"] = (agents_dir / f"{defn.name}.md").read_bytes()
 
-        assert len(bundled_definitions) == 16, (
-            "Adding session-log-reader and retiring pipeline-health-scanner must preserve "
-            "the bundled-agent count"
+        assert len(bundled_definitions) == 22, (
+            "The bundled catalog includes the six skill-specific child roles"
         )
-        assert len(originals) == 13, f"Expected 13 built-in-only agents, got {len(originals)}"
+        assert len(originals) == 19, f"Expected 19 built-in-only agents, got {len(originals)}"
 
         _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)
 

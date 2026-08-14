@@ -122,3 +122,33 @@ def test_every_bundled_semantic_plan_adapts_on_every_registered_backend() -> Non
                 violations.append(f"{skill_name}/{backend_name}: empty adaptation")
     assert plans
     assert not violations, "bundled semantic adaptation failures:\n" + "\n".join(violations)
+
+
+def test_every_bundled_codex_child_spawn_targets_a_registered_role() -> None:
+    from autoskillit.core import load_bundled_agent_definitions
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.execution.backends.codex import (
+        CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES,
+    )
+    from autoskillit.workspace import DefaultSkillResolver
+
+    allowed = set(CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES) | {
+        definition.name for definition in load_bundled_agent_definitions()
+    }
+    plans = tuple(
+        (skill.name, skill.semantic_plan)
+        for skill in DefaultSkillResolver().list_all()
+        if skill.semantic_plan is not None
+    )
+    violations: list[str] = []
+    backend = CodexBackend()
+    for skill_name, plan in plans:
+        assert plan is not None
+        adaptation = backend.adapt_skill_semantics(plan)
+        targets = {adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns}
+        missing = sorted(targets - allowed)
+        if missing:
+            violations.append(f"{skill_name}: {missing}")
+
+    assert plans
+    assert not violations, "unregistered bundled Codex child roles:\n" + "\n".join(violations)

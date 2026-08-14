@@ -40,6 +40,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceRef,
     ValidatedAddDir,
+    destination_location,
     get_logger,
     pkg_root,
     validate_skill_capability_roles,
@@ -107,6 +108,26 @@ def _remove_and_verify(path: Path) -> bool:
     if os.path.lexists(path):
         raise RuntimeError(f"Session home still exists after removal: {path}")
     return True
+
+
+def _remove_generated_home_skill_entry(discovery_root: Path, skill: str) -> None:
+    """Remove one exact generated-home discovery entry without following it."""
+    root_location = destination_location(discovery_root)
+    path = destination_location(discovery_root / skill)
+    if path.parent != root_location or path.name != skill:
+        raise SkillContractError(
+            f"generated-home skill removal requires one exact child entry: {skill!r}"
+        )
+    if not os.path.lexists(path):
+        return
+    if path.is_symlink():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+    else:
+        raise RuntimeError(f"Refusing to remove invalid generated-home skill entry: {path}")
+    if os.path.lexists(path):
+        raise RuntimeError(f"Generated-home skill entry still exists after removal: {path}")
 
 
 def resolve_persistent_session_root(
@@ -239,6 +260,8 @@ class CompiledSessionSkillCatalog:
 def compile_session_skill_catalog(
     catalog: EffectiveSkillCatalogAuthority,
     backend: CodingAgentBackend,
+    *,
+    finalized_native_roles: frozenset[str] | None = None,
 ) -> CompiledSessionSkillCatalog:
     """Publish only skills whose mandatory semantics adapt on the selected backend."""
     supported: list[SkillCatalogEntry] = []
@@ -264,6 +287,23 @@ def compile_session_skill_catalog(
             )
             continue
         adaptation.validate_for(plan, backend=backend.name)
+        if finalized_native_roles is not None:
+            native_spawn_targets = {
+                adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns
+            }
+            missing_targets = sorted(native_spawn_targets - finalized_native_roles)
+            if missing_targets:
+                unavailable.append(
+                    SkillUnavailableMetadata(
+                        skill=skill.name,
+                        backend=backend.name,
+                        operation=SkillSemanticOperation.CHILD_SPAWN,
+                        diagnostic=(
+                            f"native child-spawn targets are unavailable: {missing_targets}"
+                        ),
+                    )
+                )
+                continue
         supported.append(cast(SkillCatalogEntry, skill))
     filtered_names = {skill.name for skill in supported}
     namespace_sources = {
@@ -874,7 +914,7 @@ class DefaultSessionSkillManager:
             if persistent:
                 _remove_and_verify(generated_home)
 
-            skills_dir = self._materialize_session(
+            skills_dir, finalized_records = self._materialize_session(
                 generated_home,
                 records,
                 projection_context,
@@ -891,7 +931,9 @@ class DefaultSessionSkillManager:
             )
             self._session_roots[session_id] = effective_root
             self._session_skills_subdirs[session_id] = owned_skills_subdir
-            self._session_skill_infos[session_id] = {member.name: member for member in records}
+            self._session_skill_infos[session_id] = {
+                member.name: member for member in finalized_records
+            }
             self._session_leases[session_id] = lease
             return initialized
         except BaseException as exc:
@@ -926,7 +968,7 @@ class DefaultSessionSkillManager:
         compilation: CompiledSessionSkillCatalogAuthority | None = None,
         explorer_binding_env: _ExplorerBindingEnv | None = None,
         explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
-    ) -> ValidatedAddDir:
+    ) -> tuple[ValidatedAddDir, tuple[SkillAuthority, ...]]:
         backend = projection_context.backend
         add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
         skills_base = add_dir / skills_subdir
@@ -948,12 +990,6 @@ class DefaultSessionSkillManager:
                 adaptation = backend.adapt_skill_semantics(plan)
                 adaptation.validate_for(plan, backend=backend.name)
 
-        write_skill_unavailability_metadata(
-            add_dir,
-            compilation=compilation,
-            backend=backend.name if backend is not None else None,
-        )
-
         execution_role = (
             effective_catalog.execution_role
             if effective_catalog is not None
@@ -966,6 +1002,7 @@ class DefaultSessionSkillManager:
                 raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
         if explorer_binding_env_factory is not None:
             explorer_binding_env = explorer_binding_env_factory(generated_home)
+        finalized_native_roles: frozenset[str] | None = None
         if backend is not None:
             setup_kwargs: _SessionSetupKwargs = {
                 "parent_sandbox_mode": projection_context.parent_sandbox_mode,
@@ -973,7 +1010,43 @@ class DefaultSessionSkillManager:
             }
             if explorer_binding_env is not None:
                 setup_kwargs["explorer_binding_env"] = explorer_binding_env
-            backend.setup_session_dir(generated_home, **setup_kwargs)
+            finalized_native_roles = backend.setup_session_dir(generated_home, **setup_kwargs)
+
+        if finalized_native_roles is not None and effective_catalog is not None:
+            assert backend is not None
+            if compilation is not None and not isinstance(
+                compilation, CompiledSessionSkillCatalog
+            ):
+                raise SkillContractError(
+                    "finalized native-role admission requires a concrete session compilation"
+                )
+            reachability_compilation = compile_session_skill_catalog(
+                effective_catalog,
+                backend,
+                finalized_native_roles=finalized_native_roles,
+            )
+            prior_unavailable = compilation.unavailable if compilation is not None else ()
+            compilation = CompiledSessionSkillCatalog(
+                backend=backend.name,
+                catalog=reachability_compilation.catalog,
+                unavailable=tuple(
+                    sorted(
+                        (*prior_unavailable, *reachability_compilation.unavailable),
+                        key=lambda item: item.skill,
+                    )
+                ),
+            )
+            effective_catalog = compilation.catalog
+            records = tuple(effective_catalog.skills)
+            discovery_root = generated_home / skills_subdir
+            for unavailable in reachability_compilation.unavailable:
+                _remove_generated_home_skill_entry(discovery_root, unavailable.skill)
+
+        write_skill_unavailability_metadata(
+            add_dir,
+            compilation=compilation,
+            backend=backend.name if backend is not None else None,
+        )
 
         ungated_context = SkillProjectionContext(
             cwd=projection_context.cwd,
@@ -1022,7 +1095,7 @@ class DefaultSessionSkillManager:
             )
             if layout_errors:
                 raise RuntimeError("Session layout validation failed: " + "; ".join(layout_errors))
-        return ValidatedAddDir(path=str(add_dir))
+        return ValidatedAddDir(path=str(add_dir)), records
 
     @staticmethod
     def _create_inert_rollout_paths(

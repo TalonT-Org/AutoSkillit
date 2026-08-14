@@ -90,6 +90,7 @@ from autoskillit.core import (
     get_logger,
     load_bundled_agent_definitions,
 )
+from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
@@ -123,6 +124,7 @@ from autoskillit.execution.backends._codex.explorer_projection import (
     _validated_explorer_binding_envs,
 )
 from autoskillit.execution.backends._codex_config import (
+    _CODEX_AGENT_NAME_COLLISIONS,
     CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
     ensure_codex_mcp_registered,
@@ -870,16 +872,13 @@ def _canonical_codex_model_effort(
     model_class: str | None,
     reasoning_effort: str | None = None,
 ) -> tuple[str, str | None]:
-    """Translate the one canonical semantic policy used by agents and call sites."""
     if model_class is None:
         return "", reasoning_effort
-    return (
-        CODEX_MODEL_ALIASES[model_class],
-        reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class),
-    )
+    model = CODEX_MODEL_ALIASES[model_class]
+    return model, reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class)
 
 
-_CODEX_BUILT_IN_AGENT_NAMES = frozenset({"default", "explorer", "review", "reviewer"})
+CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = _codex_cfg.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES
 
 
 def _preflight_agent_projection(
@@ -893,7 +892,7 @@ def _preflight_agent_projection(
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise ValueError(f"duplicate Codex agent definitions: {duplicates}")
-    built_in_collisions = sorted(set(names) & _CODEX_BUILT_IN_AGENT_NAMES)
+    built_in_collisions = sorted(set(names) & _CODEX_AGENT_NAME_COLLISIONS)
     if built_in_collisions:
         raise ValueError(f"Codex built-in agent name collision: {built_in_collisions}")
     config_path = session_dir / "config.toml"
@@ -2198,7 +2197,7 @@ class CodexBackend(BackendCmdBuilderBase):
         agent_defs: tuple[AgentDef, ...] | None = None,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-    ) -> None:
+    ) -> frozenset[str]:
         assert self.source_codex_home is not None
         codex_home_source = self.source_codex_home
         config_path = session_dir / "config.toml"
@@ -2278,6 +2277,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 session_dir,
                 source_codex_home=codex_home_source,
             )
+        return _codex_cfg.effective_codex_agent_names(session_dir)
 
     def refresh_explorer_binding_env(
         self,

@@ -170,6 +170,7 @@ class RunSkillCompletionMiddleware(Middleware):
                         "run_skill_receipt_not_preserved",
                         receipt_id=finalized.receipt.receipt_id,
                     )
+                    _discard_draft(finalized)
                     return result
                 with anyio.CancelScope(shield=True):
                     finalized.authority.publish(finalized.receipt.receipt_id)

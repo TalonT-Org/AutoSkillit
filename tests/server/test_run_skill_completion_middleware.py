@@ -245,6 +245,38 @@ async def test_middleware_discards_unrepresentable_delivery(monkeypatch) -> None
 
 
 @pytest.mark.anyio
+async def test_middleware_discards_draft_when_compact_delivery_is_not_preserved(
+    monkeypatch,
+) -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    monkeypatch.setattr(
+        "autoskillit.server._state._get_ctx_or_none",
+        lambda: SimpleNamespace(run_skill_completion=authority),
+    )
+    registered = _registered_tool()
+    invalid_delivery = _tool_result("still rewritten")
+    monkeypatch.setattr(registered, "convert_result", lambda _value: invalid_delivery)
+    fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
+    finalized: FinalizedRunSkillCompletionResponse | None = None
+
+    async def call_next(_context):
+        nonlocal finalized
+        finalized = stage_run_skill_completion_response(_finalized(authority))
+        return _tool_result("rewritten")
+
+    result = await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+        _context(), call_next
+    )
+
+    assert result is invalid_delivery
+    assert finalized is not None
+    with pytest.raises(ValueError, match="unknown or already-published"):
+        authority.publish(finalized.receipt.receipt_id)
+    assert authority.admission("kitchen_status") == (True, "idle")
+    assert current_request_session_id() == ""
+
+
+@pytest.mark.anyio
 async def test_middleware_discards_staged_draft_on_base_exception(monkeypatch) -> None:
     authority = DefaultRunSkillCompletionAuthority()
     monkeypatch.setattr(

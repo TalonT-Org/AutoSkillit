@@ -11,6 +11,7 @@ from typing import Any, Literal, assert_never, cast
 
 from autoskillit.core import (
     VALID_INPUT_SPEC_TYPES,
+    BoundScalar,
     InputSpec,
     InputSpecType,
     get_logger,
@@ -48,22 +49,45 @@ def load_bundled_manifest() -> dict[str, Any]:
     return _MANIFEST_CACHE.get_or_load(manifest_path, load_yaml)
 
 
+def _parse_skill_input(skill_name: str, raw: Mapping[str, Any]) -> SkillInput:
+    input_def = SkillInput(
+        name=raw["name"],
+        type=raw["type"],
+        # Skill inputs default to optional — skills are permissive by design.
+        required=raw.get("required", False),
+        recommended=raw.get("recommended", False),
+    )
+    if "unresolved_default" not in raw:
+        return input_def
+    unresolved_default = raw["unresolved_default"]
+    if type(unresolved_default) not in (str, int, bool):
+        raise ValueError(
+            f"unresolved_default for skill '{skill_name}' input "
+            f"'{input_def.name}' must be a strict string, integer, or boolean"
+        )
+    if input_def.required:
+        raise ValueError(
+            f"required input '{input_def.name}' for skill '{skill_name}' "
+            "cannot declare unresolved_default"
+        )
+    if not input_def.accepts(unresolved_default):
+        raise ValueError(
+            f"unresolved_default for skill '{skill_name}' input "
+            f"'{input_def.name}' does not satisfy type '{input_def.type}'"
+        )
+    return dataclasses.replace(
+        input_def,
+        unresolved_default=cast(BoundScalar, unresolved_default),
+    )
+
+
 def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContract | None:
     """Look up a skill in the manifest and return a SkillContract."""
     skills = manifest.get("skills", {})
     skill_data = skills.get(skill_name)
     if skill_data is None:
         return None
-    inputs = tuple(
-        SkillInput(
-            name=inp["name"],
-            type=inp["type"],
-            # Skill inputs default to optional — skills are permissive by design.
-            required=inp.get("required", False),
-            recommended=inp.get("recommended", False),
-        )
-        for inp in skill_data.get("inputs", [])
-    )
+    inputs = tuple(_parse_skill_input(skill_name, inp) for inp in skill_data.get("inputs", []))
     outputs = [
         SkillOutput(
             name=out["name"],
@@ -294,6 +318,7 @@ def compute_skill_contract_identity(
                     "nullable": item.nullable,
                     "required": item.required,
                     "type": item.type,
+                    "unresolved_default": item.unresolved_default,
                 }
                 for item in contract.inputs
             ],

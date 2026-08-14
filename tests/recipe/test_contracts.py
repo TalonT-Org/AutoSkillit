@@ -256,6 +256,45 @@ def test_generate_recipe_card(tmp_path: Path) -> None:
     assert "dataflow" in contract
 
 
+def test_generate_recipe_card_emits_only_declared_unresolved_defaults(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.recipe import _contracts_card
+
+    manifest = {
+        "version": "test",
+        "skills": {
+            "implement-worktree-no-merge": {
+                "inputs": [
+                    {"name": "plan_path", "type": "file_path", "required": True},
+                    {
+                        "name": "audit_cycle_path",
+                        "type": "file_path",
+                        "required": False,
+                        "unresolved_default": "",
+                    },
+                    {"name": "mode", "type": "str", "required": False},
+                ],
+                "outputs": [],
+            }
+        },
+    }
+    monkeypatch.setattr(_contracts_card, "load_bundled_manifest", lambda: manifest)
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "test-pipeline.yaml"
+    pipeline.write_text(SAMPLE_PIPELINE_YAML)
+
+    card = generate_recipe_card(pipeline, recipes_dir)
+
+    inputs = card["skills"]["implement-worktree-no-merge"]["inputs"]
+    by_name = {item["name"]: item for item in inputs}
+    assert by_name["audit_cycle_path"]["unresolved_default"] == ""
+    assert "unresolved_default" not in by_name["plan_path"]
+    assert "unresolved_default" not in by_name["mode"]
+
+
 def test_generate_recipe_card_returns_dict(tmp_path: Path) -> None:
     """generate_recipe_card returns a dict directly (not a Path)."""
     recipes_dir = tmp_path / ".autoskillit" / "scripts"

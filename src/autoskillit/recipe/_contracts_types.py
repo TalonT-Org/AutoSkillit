@@ -7,7 +7,7 @@ from enum import StrEnum
 
 import regex as re
 
-from autoskillit.core import PreflightKind
+from autoskillit.core import BoundScalar, PreflightKind
 
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
@@ -22,6 +22,7 @@ class SkillInput:
     required: bool
     recommended: bool = False
     nullable: bool = True
+    unresolved_default: BoundScalar | None = None
 
     def accepts(self, value: object) -> bool:
         normalized = self.type

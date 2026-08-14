@@ -1277,11 +1277,11 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
 
     @pytest.mark.parametrize(
-        ("redirect", "expected_status"),
+        ("redirect", "expected_status", "expected_reason_code"),
         [
-            ("> different.out", GitHubMutationStatus.SINGLE_RESOLVED),
-            ("> payload.json", GitHubMutationStatus.UNRESOLVED),
-            ("> $OUT", GitHubMutationStatus.UNRESOLVED),
+            ("> different.out", GitHubMutationStatus.SINGLE_RESOLVED, ""),
+            ("> payload.json", GitHubMutationStatus.UNRESOLVED, "unsafe_input_provenance"),
+            ("> $OUT", GitHubMutationStatus.UNRESOLVED, "unsafe_input_provenance"),
         ],
         ids=["distinct", "same-path", "unresolved-target"],
     )
@@ -1289,6 +1289,7 @@ class TestAnalyzeGitHubMutations:
         self,
         redirect: str,
         expected_status: GitHubMutationStatus,
+        expected_reason_code: str,
         tmp_path: Path,
     ) -> None:
         (tmp_path / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")
@@ -1301,6 +1302,7 @@ class TestAnalyzeGitHubMutations:
         analysis = analyze_github_mutations(command, cwd=str(tmp_path))
 
         assert analysis.status is expected_status
+        assert analysis.reason_code == expected_reason_code
 
     @pytest.mark.parametrize("wrapper", ["shell", "argv"])
     def test_parent_redirect_provenance_reaches_nested_mutation(

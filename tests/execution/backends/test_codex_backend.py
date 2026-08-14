@@ -2648,7 +2648,7 @@ class TestCodexBackendSetupSessionDir:
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "pre-test-backend")
         backend = CodexBackend()
 
-        assert backend.ensure_pre_launch(session_dir=self.session_dir) == []
+        assert not backend.ensure_pre_launch(session_dir=self.session_dir).errors
         role_names = backend.setup_session_dir(self.session_dir)
 
         eligible_bundled = {
@@ -2677,7 +2677,7 @@ class TestCodexBackendSetupSessionDir:
         (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
         backend = CodexBackend()
 
-        assert backend.ensure_pre_launch(session_dir=self.session_dir) == []
+        assert not backend.ensure_pre_launch(session_dir=self.session_dir).errors
         with structlog.testing.capture_logs() as cap_logs:
             role_names = backend.setup_session_dir(self.session_dir)
 

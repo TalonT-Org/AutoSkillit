@@ -112,7 +112,8 @@ def test_inline_payload_schema_is_exact(
         assert payload_fields == _SEGMENTED_INLINE_FIELDS
         carrier = envelope["recipe_segment"]
         assert carrier["kind"] == "startup"
-        assert carrier["bodies"]
+        bodies = carrier["bodies"]
+        assert isinstance(bodies, list) and bodies
         assert len(json.dumps(envelope, separators=(",", ":")).encode("utf-8")) < 10_000
         return
     present_excluded = _EXCLUDED_INLINE_FIELDS & payload_fields

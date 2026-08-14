@@ -4,6 +4,10 @@ description: "Use when one parent-specified research artifact must yield bounded
 tools: [Read]
 model: sonnet
 maxTurns: 20
+codex:
+  model: gpt-5.6-luna
+  reasoning_effort: xhigh
+  sandbox_mode: read-only
 ---
 
 # Research source reader

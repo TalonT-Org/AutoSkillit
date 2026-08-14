@@ -51,6 +51,7 @@ def test_codex_native_model_allowlist_preserves_compatibility() -> None:
 
     assert is_valid_codex_model_id("gpt-5.6-sol")
     assert is_valid_codex_model_id("gpt-5.6-luna")
+    assert is_valid_codex_model_id("gpt-5.6-terra")
     assert is_valid_codex_model_id("gpt-5.5")
     assert not is_valid_codex_model_id("gpt-5.4")
     assert not is_valid_codex_model_id("gpt-5.4-mini")

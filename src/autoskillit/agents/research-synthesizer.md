@@ -4,6 +4,10 @@ description: "Use when collected research evidence needs a direction and experim
 tools: [Read]
 model: sonnet
 maxTurns: 20
+codex:
+  model: gpt-5.6-terra
+  reasoning_effort: xhigh
+  sandbox_mode: read-only
 ---
 
 # Research synthesizer

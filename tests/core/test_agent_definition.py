@@ -30,12 +30,24 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 _EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
 
 _SKILL_CHILD_ROLE_EXPECTATIONS = {
-    "pr-source-reader": (("Read",), "sonnet", 20),
-    "pr-synthesizer": (("Read",), "sonnet", 20),
-    "research-source-reader": (("Read",), "sonnet", 20),
-    "research-synthesizer": (("Read",), "sonnet", 20),
-    "friction-batch-scanner": (("Read", "Grep"), "haiku", 80),
-    "friction-category-analyzer": (("Read", "Grep"), "sonnet", 80),
+    "pr-source-reader": (("Read",), "sonnet", 20, "gpt-5.6-luna", "xhigh"),
+    "pr-synthesizer": (("Read",), "sonnet", 20, "gpt-5.6-terra", "high"),
+    "research-source-reader": (("Read",), "sonnet", 20, "gpt-5.6-luna", "xhigh"),
+    "research-synthesizer": (("Read",), "sonnet", 20, "gpt-5.6-terra", "xhigh"),
+    "friction-batch-scanner": (
+        ("Read", "Grep"),
+        "haiku",
+        80,
+        "gpt-5.6-luna",
+        "medium",
+    ),
+    "friction-category-analyzer": (
+        ("Read", "Grep"),
+        "sonnet",
+        80,
+        "gpt-5.6-terra",
+        "xhigh",
+    ),
 }
 
 
@@ -125,11 +137,16 @@ def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
         expected_tools,
         expected_model,
         expected_max_turns,
+        expected_codex_model,
+        expected_reasoning_effort,
     ) in _SKILL_CHILD_ROLE_EXPECTATIONS.items():
         definition = definitions[name]
         assert definition.tools == expected_tools
         assert definition.model == expected_model
         assert definition.max_turns == expected_max_turns
+        assert definition.codex.model == expected_codex_model
+        assert definition.codex.reasoning_effort == expected_reasoning_effort
+        assert definition.codex.sandbox_mode == "read-only"
         assert definition.description.startswith("Use when ")
         assert definition.description not in definition.body
         assert not ({"Bash", "Write", "Edit"} & set(definition.tools))

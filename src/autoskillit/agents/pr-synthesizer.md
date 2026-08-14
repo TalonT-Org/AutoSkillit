@@ -4,6 +4,10 @@ description: "Use when collected PR source evidence needs an overall pull reques
 tools: [Read]
 model: sonnet
 maxTurns: 20
+codex:
+  model: gpt-5.6-terra
+  reasoning_effort: high
+  sandbox_mode: read-only
 ---
 
 # PR synthesizer

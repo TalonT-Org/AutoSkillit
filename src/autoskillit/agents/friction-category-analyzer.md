@@ -4,6 +4,10 @@ description: "Use when supplied indicators need validation for one parent-assign
 tools: [Read, Grep]
 model: sonnet
 maxTurns: 80
+codex:
+  model: gpt-5.6-terra
+  reasoning_effort: xhigh
+  sandbox_mode: read-only
 ---
 
 # Friction category analyzer

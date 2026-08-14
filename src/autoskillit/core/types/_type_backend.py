@@ -264,9 +264,11 @@ CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
     }
 )
 
-CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-08-10"
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-08-13"
 
-CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol"})
+CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset(
+    {"gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
+)
 CODEX_VALID_REASONING_EFFORTS: frozenset[str] = frozenset(
     {"low", "medium", "high", "xhigh", "max", "ultra"}
 )

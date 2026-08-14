@@ -4,6 +4,10 @@ description: "Use when one parent-specified PR source artifact must yield bounde
 tools: [Read]
 model: sonnet
 maxTurns: 20
+codex:
+  model: gpt-5.6-luna
+  reasoning_effort: xhigh
+  sandbox_mode: read-only
 ---
 
 # PR source reader

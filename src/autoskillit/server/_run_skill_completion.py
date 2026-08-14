@@ -105,6 +105,16 @@ def _compact_response(finalized: FinalizedRunSkillCompletionResponse) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
+def _discard_draft(finalized: FinalizedRunSkillCompletionResponse) -> None:
+    try:
+        finalized.authority.discard_draft(finalized.receipt.receipt_id)
+    except BaseException:
+        logger.exception(
+            "run_skill_discard_draft_failed",
+            receipt_id=finalized.receipt.receipt_id,
+        )
+
+
 class RunSkillCompletionMiddleware(Middleware):
     """Enforce completion admission and publish only exact delivered receipts."""
 
@@ -152,7 +162,7 @@ class RunSkillCompletionMiddleware(Middleware):
                 if not _exact_receipt(result, finalized.receipt.receipt_id):
                     if not isinstance(registered_tool, FunctionTool):
                         logger.error("run_skill_receipt_unrepresentable")
-                        finalized.authority.discard_draft(finalized.receipt.receipt_id)
+                        _discard_draft(finalized)
                         return result
                     result = registered_tool.convert_result(_compact_response(finalized))
                 if not _exact_receipt(result, finalized.receipt.receipt_id):
@@ -167,7 +177,7 @@ class RunSkillCompletionMiddleware(Middleware):
             except BaseException:
                 finalized = _staged_response.get()
                 if finalized is not None:
-                    finalized.authority.discard_draft(finalized.receipt.receipt_id)
+                    _discard_draft(finalized)
                 raise
         finally:
             _staged_response.reset(staged_token)

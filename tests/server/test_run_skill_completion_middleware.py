@@ -276,3 +276,34 @@ async def test_middleware_discards_staged_draft_on_base_exception(monkeypatch) -
         authority.publish(staged.receipt.receipt_id)
     assert authority.admission("kitchen_status") == (True, "idle")
     assert current_request_session_id() == ""
+
+
+@pytest.mark.anyio
+async def test_middleware_preserves_original_exception_when_discard_fails(monkeypatch) -> None:
+    class FailingDiscardAuthority(DefaultRunSkillCompletionAuthority):
+        def discard_draft(self, receipt_id: str) -> bool:
+            raise RuntimeError(f"cannot discard {receipt_id}")
+
+    authority = FailingDiscardAuthority()
+    monkeypatch.setattr(
+        "autoskillit.server._state._get_ctx_or_none",
+        lambda: SimpleNamespace(run_skill_completion=authority),
+    )
+    fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=_registered_tool()))
+
+    class Sentinel(BaseException):
+        pass
+
+    sentinel = Sentinel()
+
+    async def call_next(_context):
+        stage_run_skill_completion_response(_finalized(authority))
+        raise sentinel
+
+    with pytest.raises(Sentinel) as raised:
+        await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+            _context(), call_next
+        )
+
+    assert raised.value is sentinel
+    assert current_request_session_id() == ""

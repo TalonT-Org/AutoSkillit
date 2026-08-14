@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.recipe.rules.dataflow.rules_dataflow_callable as callable_rules
 from autoskillit.core.types import Severity
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _make_workflow
@@ -58,3 +59,122 @@ class TestNullableOptionalContextRefRule:
         assert not any(f.severity == Severity.ERROR for f in nullable_findings), (
             f"Should not flag when optional_context_refs is absent, got: {nullable_findings}"
         )
+
+    @staticmethod
+    def _run_skill_recipe(
+        *,
+        value: str,
+        optional_refs: list[str],
+        required: bool,
+        unresolved_default: str | None,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        input_def: dict[str, object] = {
+            "name": "value",
+            "type": "str",
+            "required": required,
+        }
+        if unresolved_default is not None:
+            input_def["unresolved_default"] = unresolved_default
+        manifest = {
+            "skills": {
+                "demo-skill": {
+                    "inputs": [input_def],
+                    "outputs": [],
+                }
+            }
+        }
+        monkeypatch.setattr(callable_rules, "load_bundled_manifest", lambda: manifest)
+        return _make_workflow(
+            {
+                "invoke": {
+                    "tool": "run_skill",
+                    "with": {
+                        "skill_command": "/autoskillit:demo-skill",
+                        "skill_inputs": {"value": value},
+                    },
+                    "optional_context_refs": optional_refs,
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "done"},
+            }
+        )
+
+    def test_optional_run_skill_input_requires_unresolved_default(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        recipe = self._run_skill_recipe(
+            value="${{ context.optional_value }}",
+            optional_refs=["optional_value"],
+            required=False,
+            unresolved_default=None,
+            monkeypatch=monkeypatch,
+        )
+
+        findings = run_semantic_rules(recipe)
+
+        assert any(
+            finding.rule == "nullable-optional-context-ref"
+            and "unresolved_default" in finding.message
+            for finding in findings
+        )
+
+    def test_optional_run_skill_input_accepts_declared_default(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        recipe = self._run_skill_recipe(
+            value="${{ context.optional_value }}",
+            optional_refs=["optional_value"],
+            required=False,
+            unresolved_default="",
+            monkeypatch=monkeypatch,
+        )
+
+        findings = run_semantic_rules(recipe)
+
+        assert not any(finding.rule == "nullable-optional-context-ref" for finding in findings)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "${{ context.optional_value }}",
+            "/receipts/${{ context.optional_value }}/review.json",
+        ],
+    )
+    def test_required_run_skill_input_rejects_optional_context_dependency(
+        self,
+        value: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        recipe = self._run_skill_recipe(
+            value=value,
+            optional_refs=["optional_value"],
+            required=True,
+            unresolved_default=None,
+            monkeypatch=monkeypatch,
+        )
+
+        findings = run_semantic_rules(recipe)
+
+        assert any(
+            finding.rule == "nullable-optional-context-ref" and "required input" in finding.message
+            for finding in findings
+        )
+
+    def test_unlisted_context_dependency_does_not_project_default_rule(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        recipe = self._run_skill_recipe(
+            value="${{ context.optional_value }}",
+            optional_refs=["different_value"],
+            required=False,
+            unresolved_default=None,
+            monkeypatch=monkeypatch,
+        )
+
+        findings = run_semantic_rules(recipe)
+
+        assert not any(finding.rule == "nullable-optional-context-ref" for finding in findings)

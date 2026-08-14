@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any, Final, TypeGuard
 
 import regex as re
@@ -453,6 +454,7 @@ def _structured_skill_inputs(
     contract: SkillContract,
     hidden_inputs: frozenset[str],
     ingredient_values: Mapping[str, BoundScalar],
+    optional_context_refs: frozenset[str],
 ) -> tuple[tuple[BoundValue, ...], tuple[BindingFailure, ...]]:
     input_by_name = {input_def.name: input_def for input_def in contract.inputs}
     failures: list[BindingFailure] = []
@@ -501,6 +503,11 @@ def _structured_skill_inputs(
             ingredient_values=ingredient_values,
         )
         value = _bound_value(input_def.name, declared, resolved)
+        if (
+            not input_def.required
+            and frozenset(value.context_dependencies) & optional_context_refs
+        ):
+            value = replace(value, unresolved_default=input_def.unresolved_default)
         bound.append(value)
         unresolved = bool(value.context_dependencies or value.input_dependencies)
         if not unresolved and not _skill_value_is_valid(resolved, input_def):
@@ -783,6 +790,7 @@ def bind_step_invocation(
                 contract=contract,
                 hidden_inputs=hidden_inputs,
                 ingredient_values=ingredients,
+                optional_context_refs=frozenset(step.optional_context_refs),
             )
             failures.extend(skill_failures)
     else:

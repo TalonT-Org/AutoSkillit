@@ -80,6 +80,7 @@ def _bound_value_payload(value: BoundValue) -> dict[str, object]:
         "origin": value.origin.value,
         "state": value.state.value,
         "template_dependencies": list(value.template_dependencies),
+        "unresolved_default": value.unresolved_default,
     }
 
 

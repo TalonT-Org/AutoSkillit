@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ from autoskillit.core import (
     BoundValue,
     BoundValueOrigin,
     BoundValueState,
+    compute_invocation_template_digest,
 )
 from autoskillit.recipe._binding import bind_recipe, bind_step_invocation
 from autoskillit.recipe._contracts_manifest import get_skill_contract
@@ -52,6 +54,8 @@ def _manifest() -> dict[str, object]:
 
 def _step(
     skill_inputs: dict[str, str | int | bool],
+    *,
+    optional_context_refs: list[str] | None = None,
     **extra: str,
 ) -> RecipeStep:
     return RecipeStep(
@@ -63,6 +67,7 @@ def _step(
             "skill_inputs": skill_inputs,
             **extra,
         },
+        optional_context_refs=optional_context_refs or [],
     )
 
 
@@ -135,6 +140,23 @@ def test_bound_value_rejects_raw_enum_values(
         BoundValue(**kwargs)  # type: ignore[arg-type]
 
 
+def test_bound_value_rejects_non_scalar_unresolved_default() -> None:
+    with pytest.raises(ValueError, match="unresolved_default"):
+        BoundValue(
+            name="value",
+            declared_value="declared",
+            effective_value="effective",
+            state=BoundValueState.PRESENT,
+            origin=BoundValueOrigin.LITERAL,
+            unresolved_default=1.5,  # type: ignore[arg-type]
+        )
+
+
+def test_absent_bound_value_rejects_unresolved_default() -> None:
+    with pytest.raises(ValueError, match="unresolved_default"):
+        dataclasses.replace(BoundValue.absent("value"), unresolved_default="")
+
+
 def test_bound_step_invocation_freezes_collection_inputs() -> None:
     value = BoundValue(
         name="value",
@@ -203,6 +225,43 @@ def test_structured_binding_uses_contract_order_not_mapping_order() -> None:
         "audit_cycle_path",
         "plan_disposition_path",
     )
+
+
+def test_structured_binding_projects_step_local_unresolved_default_into_digest() -> None:
+    manifest = _manifest()
+    optional_note = manifest["skills"]["dry-walkthrough"]["inputs"][2]  # type: ignore[index]
+    optional_note["unresolved_default"] = ""  # type: ignore[index]
+    values = {**_required_inputs(), "optional_note": "${{ context.note }}"}
+
+    with_default = bind_step_invocation(
+        "verify",
+        _step(values, optional_context_refs=["note"]),
+        manifest=manifest,
+    )
+    without_default = bind_step_invocation(
+        "verify",
+        _step(values),
+        manifest=manifest,
+    )
+
+    projected = with_default.skill_input("optional_note")
+    unprojected = without_default.skill_input("optional_note")
+    omitted = with_default.skill_input("enabled")
+    assert projected is not None and projected.unresolved_default == ""
+    assert unprojected is not None and unprojected.unresolved_default is None
+    assert omitted is not None and omitted.state is BoundValueState.ABSENT
+
+    digest_kwargs = {
+        "execution_id": "exec-1",
+        "recipe_name": "demo",
+        "content_hash": "sha256:" + "1" * 64,
+        "composite_hash": "sha256:" + "2" * 64,
+        "tool_contract_identity": "sha256:" + "3" * 64,
+        "skill_contract_identity": "sha256:" + "4" * 64,
+    }
+    assert compute_invocation_template_digest(
+        invocation=with_default, **digest_kwargs
+    ) != compute_invocation_template_digest(invocation=without_default, **digest_kwargs)
 
 
 def test_explicit_empty_manifest_is_not_replaced(

@@ -105,7 +105,7 @@ def _compact_response(finalized: FinalizedRunSkillCompletionResponse) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
-def _discard_draft(finalized: FinalizedRunSkillCompletionResponse) -> None:
+def _safe_discard_draft(finalized: FinalizedRunSkillCompletionResponse) -> None:
     try:
         finalized.authority.discard_draft(finalized.receipt.receipt_id)
     except BaseException:
@@ -162,7 +162,7 @@ class RunSkillCompletionMiddleware(Middleware):
                 if not _exact_receipt(result, finalized.receipt.receipt_id):
                     if not isinstance(registered_tool, FunctionTool):
                         logger.error("run_skill_receipt_unrepresentable")
-                        _discard_draft(finalized)
+                        _safe_discard_draft(finalized)
                         return result
                     result = registered_tool.convert_result(_compact_response(finalized))
                 if not _exact_receipt(result, finalized.receipt.receipt_id):
@@ -170,7 +170,7 @@ class RunSkillCompletionMiddleware(Middleware):
                         "run_skill_receipt_not_preserved",
                         receipt_id=finalized.receipt.receipt_id,
                     )
-                    _discard_draft(finalized)
+                    _safe_discard_draft(finalized)
                     return result
                 with anyio.CancelScope(shield=True):
                     finalized.authority.publish(finalized.receipt.receipt_id)
@@ -178,7 +178,7 @@ class RunSkillCompletionMiddleware(Middleware):
             except BaseException:
                 finalized = _staged_response.get()
                 if finalized is not None:
-                    _discard_draft(finalized)
+                    _safe_discard_draft(finalized)
                 raise
         finally:
             _staged_response.reset(staged_token)

@@ -48,7 +48,7 @@ class TestRunCmd:
         [(0, True), (1, False)],
     )
     @pytest.mark.anyio
-    async def test_run_cmd_always_attaches_recovery_carrier(
+    async def test_run_cmd_attaches_recovery_carrier_only_on_failure(
         self,
         tool_ctx_kitchen_open,
         monkeypatch: pytest.MonkeyPatch,

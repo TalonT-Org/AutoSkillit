@@ -89,6 +89,11 @@ from autoskillit.server._recipe_initialization import (
     stage_recipe_initialization,
 )
 from autoskillit.server._recipe_section_pagination import resolve_recipe_section_bound_bytes
+from autoskillit.server._recipe_segment_delivery import (
+    RECIPE_SEGMENT_MAX_BYTES,
+    RecipeSegmentDeliveryError,
+    build_startup_recipe_segment,
+)
 from autoskillit.server._response_budget import enforce_response_budget
 
 if TYPE_CHECKING:
@@ -124,6 +129,46 @@ class FinalizedRecipeResponse:
     initialization_id: str | None = None
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
     kitchen_transition_token: KitchenTransitionToken | None = None
+
+
+_SEGMENTED_STARTUP_SURFACES = frozenset({"open_kitchen", "open_kitchen_deferred_recall"})
+_SEGMENTED_STARTUP_EXCLUDED_FIELDS = frozenset(
+    {
+        "content",
+        "deferred_guards",
+        "delivery_bound_spill",
+        "diagram",
+        "flow_records",
+        "ingredients_table",
+        "post_prune_routing_edges",
+        "post_prune_step_names",
+        RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+        "recovery",
+        "required_sections",
+        "suggestions",
+    }
+)
+
+
+def _uses_segmented_startup(
+    surface: str,
+    projection: FinalizedRecipeProjection,
+) -> bool:
+    return bool(projection.delivery_segments) and surface in _SEGMENTED_STARTUP_SURFACES
+
+
+def _compact_segmented_startup_payload(
+    payload: dict[str, Any],
+    *,
+    recipe_segment: dict[str, Any],
+) -> dict[str, Any]:
+    compact = {
+        key: value
+        for key, value in payload.items()
+        if key not in _SEGMENTED_STARTUP_EXCLUDED_FIELDS
+    }
+    compact["recipe_segment"] = recipe_segment
+    return compact
 
 
 def finalize_recipe_delivery(
@@ -227,6 +272,31 @@ def finalize_recipe_delivery(
         )
 
     surface_payload["recipe_pull"] = generation.pull_identity()
+    if _uses_segmented_startup(surface, finalized_projection):
+        try:
+            surface_payload = _compact_segmented_startup_payload(
+                surface_payload,
+                recipe_segment=build_startup_recipe_segment(
+                    candidate_payload,
+                    projection=finalized_projection,
+                    generation=generation,
+                    execution_snapshot=execution_snapshot,
+                ),
+            )
+        except (RecipeSegmentDeliveryError, TypeError, ValueError):
+            decision = _failure_decision(
+                producer=surface_definition.producer_tool,
+                reason="recipe_segment_startup_failed",
+                selected_limit=ordinary_limit,
+                contract_digest=(delivery_budget.contract_digest if delivery_budget else ""),
+            )
+            return FinalizedRecipeResponse(
+                rendered=json.dumps(
+                    {"success": False, "error": "recipe_segment_startup_failed"},
+                    separators=(",", ":"),
+                ),
+                decision=decision,
+            )
     if initialization_id is None:
         with tool_ctx.recipe_execution_lock:
             current_initialization = tool_ctx.recipe_initialization_state
@@ -247,6 +317,23 @@ def finalize_recipe_delivery(
         ensure_ascii=False,
         separators=(",", ":"),
     )
+    if (
+        _uses_segmented_startup(surface, finalized_projection)
+        and len(ordinary_rendered.encode("utf-8")) >= RECIPE_SEGMENT_MAX_BYTES
+    ):
+        decision = _failure_decision(
+            producer=surface_definition.producer_tool,
+            reason="recipe_segment_startup_exceeds_bound",
+            selected_limit=ordinary_limit,
+            contract_digest=(delivery_budget.contract_digest if delivery_budget else ""),
+        )
+        return FinalizedRecipeResponse(
+            rendered=json.dumps(
+                {"success": False, "error": "recipe_segment_startup_exceeds_bound"},
+                separators=(",", ":"),
+            ),
+            decision=decision,
+        )
     backend_name = (
         (tool_ctx.backend.name if tool_ctx.backend is not None else None)
         or capabilities.process_name

@@ -88,6 +88,19 @@ def _body_records(
     ]
 
 
+def _segment_execution_credential(
+    execution_snapshot: RecipeExecutionSnapshot,
+    ordered_step_names: tuple[str, ...],
+) -> dict[str, Any]:
+    credential = build_recipe_execution_credential(execution_snapshot).as_wire_block()
+    digests = credential["invocation_template_digests"]
+    assert isinstance(digests, dict)
+    credential["invocation_template_digests"] = {
+        step_name: digests[step_name] for step_name in ordered_step_names if step_name in digests
+    }
+    return credential
+
+
 def _segment_index(projection: FinalizedRecipeProjection) -> dict[str, int]:
     return {
         step_name: index
@@ -249,6 +262,10 @@ def build_startup_recipe_segment(
                 for index, segment in enumerate(projection.delivery_segments)
             ],
             "bodies": bodies,
+            RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY: _segment_execution_credential(
+                execution_snapshot,
+                initial.ordered_step_names,
+            ),
             "pull_closures": _route_pull_closures(projection, bodies, generation),
             "recipe_pull": generation.pull_identity(),
         }
@@ -280,6 +297,10 @@ def _checkpoint_carrier(
                     for index in target_indices
                 ],
                 "bodies": bodies,
+                RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY: _segment_execution_credential(
+                    ready.installed_execution.snapshot,
+                    target_steps,
+                ),
                 "pull_closures": _route_pull_closures(projection, bodies, generation),
                 "recipe_pull": generation.pull_identity(),
             }

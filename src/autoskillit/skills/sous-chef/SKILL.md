@@ -1078,6 +1078,12 @@ delivered in the response will cause `recipe_execution_attestation_missing` or
 Segmented delivery narrows this lookup to the latest delivered carrier. Do not assume the
 startup credential contains invocation digests for the full recipe horizon.
 
+For structured child inputs, select `recipe_execution.skill_input_shapes[step_name]` and
+initialize `skill_inputs` with exactly its ordered keys. Replace available values in place;
+for unavailable context, copy a value only from that key's advertised
+`unresolved_defaults` entry. Test key presence rather than truthiness so `""`, `0`, and
+`False` are forwarded verbatim. Never delete or invent a key.
+
 Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
 to load skill instructions — it applies runtime transformations (namespace rewriting,
 temp directory substitution, disable-model-invocation injection) that raw files lack.

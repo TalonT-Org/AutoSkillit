@@ -83,3 +83,19 @@ def test_sous_chef_requires_progressive_segment_consumption() -> None:
         "full recipe horizon",
     ):
         assert required in content
+
+
+def test_sous_chef_preserves_attested_skill_input_shape_and_falsey_defaults() -> None:
+    content = _read_full_sous_chef()
+
+    for required in (
+        "skill_input_shapes[step_name]",
+        "ordered keys",
+        "unresolved_defaults",
+        "replace available values in place",
+        "never delete or invent a key",
+        '""',
+        "0",
+        "False",
+    ):
+        assert required in content

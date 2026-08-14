@@ -105,3 +105,4 @@ def test_completion_receipt_fits_every_delivery_bound(
     assert measured["invocation_template_digests"] == dict(
         prepared.execution_snapshot.template_digests
     ), f"{recipe_name}: the measured receipt must carry the real credential"
+    assert measured["skill_input_shapes"] == credential.as_wire_block()["skill_input_shapes"]

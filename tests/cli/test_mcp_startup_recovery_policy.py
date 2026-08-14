@@ -49,3 +49,19 @@ def test_every_clause_is_rendered_once_in_its_declared_phase() -> None:
 
 def test_canonical_instruction_is_rendered_from_the_policy() -> None:
     assert _prompts._MCP_RETRY_INSTRUCTION == _prompts._MCP_STARTUP_RECOVERY_SPEC.render()
+
+
+def test_startup_policy_preserves_attested_skill_input_shape() -> None:
+    rendered = _prompts._MCP_STARTUP_RECOVERY_SPEC.render()
+
+    for required in (
+        "skill_input_shapes[step_name]",
+        "ordered keys",
+        "unresolved_defaults",
+        "replace available values in place",
+        "never delete or invent a key",
+        '""',
+        "0",
+        "False",
+    ):
+        assert required in rendered

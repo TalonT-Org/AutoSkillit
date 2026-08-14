@@ -164,6 +164,7 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
     assert set(parsed_initial["recipe_execution"].keys()) == {
         "execution_id",
         "invocation_template_digests",
+        "skill_input_shapes",
         "snapshot_digest",
     }
     assert parsed_initial["recipe_execution"] == parsed_replay["recipe_execution"]

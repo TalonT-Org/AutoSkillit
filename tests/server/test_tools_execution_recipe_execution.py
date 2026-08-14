@@ -29,6 +29,19 @@ class TestAttestationErrorMessages:
     def test_attestation_missing_message_names_remedy_tool(self) -> None:
         assert "complete_recipe_initialization" in RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE
 
+    def test_attestation_missing_message_preserves_delivered_skill_input_shape(self) -> None:
+        for required in (
+            "skill_input_shapes[step_name]",
+            "ordered keys",
+            "unresolved_defaults",
+            "replace available values in place",
+            "never delete or invent a key",
+            '""',
+            "0",
+            "False",
+        ):
+            assert required in RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE
+
     def test_inactive_message_does_not_say_standalone_mode(self) -> None:
         assert "standalone mode" not in RECIPE_EXECUTION_INACTIVE_MESSAGE.lower()
 

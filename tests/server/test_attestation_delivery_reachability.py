@@ -82,6 +82,10 @@ async def test_bounded_initialization_delivers_attestation_credential(
         assert len(value) == len("sha256:") + 64
         assert value.removeprefix("sha256:").islower()
     assert _ATTESTED_STEP in digests
+    shapes = credential["skill_input_shapes"]
+    assert _ATTESTED_STEP in shapes
+    assert shapes[_ATTESTED_STEP]["keys"] == list(ready.with_args["skill_inputs"])
+    assert isinstance(shapes[_ATTESTED_STEP]["unresolved_defaults"], dict)
     assert credential["execution_id"]
     assert isinstance(ready.tool_ctx.recipe_initialization_state, ReadyRecipe)
 

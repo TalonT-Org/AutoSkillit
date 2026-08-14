@@ -217,11 +217,15 @@ class RecipeExecutionCredential:
     execution_id: str
     snapshot_digest: str
     invocation_template_digests: Mapping[str, str]
+    skill_input_shapes: Mapping[str, Mapping[str, object]]
 
     def as_wire_block(self) -> dict[str, Any]:
         return {
             "execution_id": self.execution_id,
             "invocation_template_digests": dict(self.invocation_template_digests),
+            "skill_input_shapes": {
+                step_name: dict(shape) for step_name, shape in self.skill_input_shapes.items()
+            },
             "snapshot_digest": self.snapshot_digest,
         }
 
@@ -235,10 +239,22 @@ def build_recipe_execution_credential(
     snapshot: RecipeExecutionSnapshot,
 ) -> RecipeExecutionCredential:
     """Project the sole caller-visible credential for an execution snapshot."""
+    skill_input_shapes: dict[str, Mapping[str, object]] = {}
+    for step_name, template in snapshot.templates.items():
+        present = tuple(value for value in template.invocation.skill_inputs if value.is_present)
+        skill_input_shapes[step_name] = {
+            "keys": [value.name for value in present],
+            "unresolved_defaults": {
+                value.name: value.unresolved_default
+                for value in present
+                if value.unresolved_default is not None
+            },
+        }
     return RecipeExecutionCredential(
         execution_id=snapshot.execution_id,
         snapshot_digest=snapshot.snapshot_digest,
         invocation_template_digests=dict(snapshot.template_digests),
+        skill_input_shapes=skill_input_shapes,
     )
 
 

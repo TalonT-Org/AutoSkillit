@@ -169,7 +169,13 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
                 "the unchanged recipe_pull. The overview is only a table of contents. "
                 "If subtype=recipe_segment_post_effect_delivery_failure, the operation "
                 "already ran; do not repeat it. Do not assume startup contains "
-                "full-horizon invocation_template_digests."
+                "full-horizon invocation_template_digests. For structured child inputs, "
+                "select "
+                "recipe_execution.skill_input_shapes[step_name], initialize skill_inputs "
+                "with exactly its ordered keys, and replace available values in place. "
+                "For unavailable context, copy only that key's advertised "
+                'unresolved_defaults entry by key presence, so "", 0, and False remain '
+                "verbatim; never delete or invent a key."
             ),
         ),
         _McpStartupRecoveryClause(

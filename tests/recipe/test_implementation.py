@@ -126,6 +126,29 @@ def _assert_delivery_projection_contract(
     } == {key: key for key in _CHECKPOINT_HANDLER_TABLE}
 
 
+@pytest.mark.parametrize(
+    ("condition", "expected"),
+    [
+        (" result.conclusion == 'success' ", True),
+        ('result.conclusion=="success"', True),
+        ("other.result.conclusion == 'success'", False),
+        ("result.conclusion == 'success' == true", False),
+    ],
+)
+def test_edge_routes_success_requires_exact_result_equality(
+    condition: str,
+    expected: bool,
+) -> None:
+    edge = RecipeFlowEdge(
+        source="wait",
+        edge_type="result_condition",
+        target="done",
+        condition=condition,
+    )
+
+    assert edge_routes_success("wait_for_ci", edge, automatic=True, recovery=True) is expected
+
+
 @pytest.fixture(scope="module")
 def recipe():
     return load_recipe(RECIPE_PATH)

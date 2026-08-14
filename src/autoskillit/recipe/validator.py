@@ -469,13 +469,19 @@ def edge_routes_success(
         return True
     if edge.edge_type != "result_condition":
         return False
-    condition = (edge.condition or "").replace("'", "")
-    if tool_name == "wait_for_ci":
-        return "result.conclusion" in condition and "== success" in condition
-    if tool_name == "wait_for_merge_queue":
-        return "result.pr_state" in condition and "== merged" in condition
-    if tool_name == "claim_and_resolve_issue":
-        return "result.claimed" in condition and "== true" in condition
+    condition_parts = (edge.condition or "").split("==")
+    if len(condition_parts) != 2:
+        return False
+    field, value = (part.strip() for part in condition_parts)
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    success_result = {
+        "wait_for_ci": ("result.conclusion", "success"),
+        "wait_for_merge_queue": ("result.pr_state", "merged"),
+        "claim_and_resolve_issue": ("result.claimed", "true"),
+    }.get(tool_name)
+    if success_result is not None:
+        return (field, value) == success_result
     return automatic
 
 

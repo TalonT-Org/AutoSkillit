@@ -24,6 +24,7 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
+    YAMLError,
     atomic_write,
     build_recipe_execution_credential,
     fast_dumps,
@@ -65,7 +66,7 @@ def _persisted_recipe_steps(persisted: dict[str, Any]) -> dict[str, Any]:
         return {}
     try:
         parsed = load_yaml(content)
-    except Exception as exc:
+    except YAMLError as exc:
         get_logger(__name__).warning("recipe_step_yaml_parse_failed", exc_info=True)
         raise RecipeStepExtractionError(
             "recipe_artifact_parse_failed", f"{type(exc).__name__}: {exc}"

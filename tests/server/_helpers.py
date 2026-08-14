@@ -263,6 +263,40 @@ async def _pull_step_section(envelope: dict[str, Any], step_name: str) -> dict[s
     return step_obj
 
 
+def _ready_recipe_segment_step(
+    tool_ctx: ToolContext,
+    step_name: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return one automatically delivered READY step and its scoped credential."""
+    from autoskillit.core import RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY
+    from autoskillit.core.io import load_yaml
+    from autoskillit.pipeline import ReadyRecipe
+    from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
+
+    state = tool_ctx.recipe_initialization_state
+    assert isinstance(state, ReadyRecipe)
+    target_segment = next(
+        segment
+        for segment in state.finalized_projection.delivery_segments
+        if step_name in segment.ordered_step_names
+    )
+    for source_step in target_segment.checkpoint_sources:
+        prepared = prepare_recipe_segment_delivery(tool_ctx, source_step)
+        assert prepared is not None
+        for carrier in (prepared.success_carrier, prepared.recovery_carrier):
+            for body in carrier.get("bodies", ()):
+                if body.get("step") != step_name:
+                    continue
+                parsed = load_yaml(body["body"])
+                assert isinstance(parsed, dict)
+                step = parsed[step_name]
+                assert isinstance(step, dict)
+                credential = carrier[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+                assert step_name in credential["invocation_template_digests"]
+                return step, credential
+    raise AssertionError(f"step {step_name!r} was not delivered by its checkpoint carrier")
+
+
 def _with_finalized_projection(
     result: dict[str, Any],
     *,

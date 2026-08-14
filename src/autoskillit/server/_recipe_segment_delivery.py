@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 RECIPE_SEGMENT_MAX_BYTES = 10_000
-_SUCCESS_EDGE_TYPES = frozenset({"success", "result_condition"})
+_SUCCESS_EDGE_TYPES = frozenset({"success"})
 
 
 class RecipeSegmentDeliveryError(RuntimeError):
@@ -132,6 +132,44 @@ def _segment_index(projection: FinalizedRecipeProjection) -> dict[str, int]:
     }
 
 
+def _delivery_tool_name(projection: FinalizedRecipeProjection, source_step: str) -> str | None:
+    invocation = projection.binding_projection.invocations.get(source_step)
+    if invocation is None:
+        return None
+    return (
+        "complete_run_skill_result"
+        if invocation.tool_name == "run_skill"
+        else invocation.tool_name
+    )
+
+
+def _edge_routes_success(
+    projection: FinalizedRecipeProjection,
+    edge: object,
+) -> bool:
+    tool_name = _delivery_tool_name(projection, getattr(edge, "source", ""))
+    definition = get_tool_def(tool_name) if tool_name is not None else None
+    if (
+        definition is not None
+        and not definition.automatic_recipe_delivery
+        and definition.recovery_recipe_delivery
+    ):
+        return False
+    edge_type = getattr(edge, "edge_type", "")
+    if edge_type in _SUCCESS_EDGE_TYPES:
+        return True
+    if edge_type != "result_condition":
+        return False
+    condition = (getattr(edge, "condition", None) or "").replace("'", "")
+    if tool_name == "wait_for_ci":
+        return "result.conclusion" in condition and "== success" in condition
+    if tool_name == "wait_for_merge_queue":
+        return "result.pr_state" in condition and "== merged" in condition
+    if tool_name == "claim_and_resolve_issue":
+        return "result.claimed" in condition and "== true" in condition
+    return definition is not None and definition.automatic_recipe_delivery
+
+
 def _target_segment_indices(
     projection: FinalizedRecipeProjection,
     source_step: str,
@@ -149,7 +187,7 @@ def _target_segment_indices(
             edge.source != source_step
             or target_index is None
             or target_index <= source_index
-            or ((edge.edge_type in _SUCCESS_EDGE_TYPES) is not success)
+            or (_edge_routes_success(projection, edge) is not success)
         ):
             continue
         if target_index not in selected:
@@ -161,8 +199,8 @@ def _pull_requests(
     generation: RecipeArtifactGeneration,
     step_names: tuple[str, ...],
 ) -> list[dict[str, str | int]]:
-    pull = generation.pull_identity()
-    return [{**pull, "section": step_name, "part": 0} for step_name in step_names]
+    del generation  # The carrier's top-level recipe_pull owns the immutable identity.
+    return [{"section": step_name, "part": 0} for step_name in step_names]
 
 
 def _manual_closure(
@@ -175,11 +213,8 @@ def _manual_closure(
         source
         for segment in projection.delivery_segments
         for source in segment.checkpoint_sources
-        if source in projection.binding_projection.invocations
-        if (
-            definition := get_tool_def(projection.binding_projection.invocations[source].tool_name)
-        )
-        is not None
+        if (tool_name := _delivery_tool_name(projection, source)) is not None
+        if (definition := get_tool_def(tool_name)) is not None
         and definition.automatic_recipe_delivery
     )
     visited: set[str] = set()
@@ -242,14 +277,15 @@ def validate_segment_delivery_projection(projection: FinalizedRecipeProjection) 
         invocation = invocations.get(edge.source)
         if invocation is None:
             continue
-        definition = get_tool_def(invocation.tool_name)
+        tool_name = _delivery_tool_name(projection, edge.source)
+        definition = get_tool_def(tool_name) if tool_name is not None else None
         if definition is None:
             raise RecipeSegmentDeliveryError(
                 f"delivery checkpoint tool {invocation.tool_name!r} is not registered"
             )
         capability = (
             definition.automatic_recipe_delivery
-            if edge.edge_type in _SUCCESS_EDGE_TYPES
+            if _edge_routes_success(projection, edge)
             else definition.recovery_recipe_delivery
         )
         if not capability:
@@ -301,40 +337,78 @@ def _checkpoint_carrier(
     ready: ReadyRecipe,
     step_name: str,
     success: bool,
+    target_index: int | None = None,
+    recovery_target: str | None = None,
 ) -> dict[str, Any]:
     projection = ready.finalized_projection
-    target_indices = _target_segment_indices(projection, step_name, success=success)
+    target_indices = (
+        (target_index,)
+        if target_index is not None
+        else _target_segment_indices(projection, step_name, success=success)
+    )
     generation = ready.artifact_generation
     if success:
-        target_segments = tuple(projection.delivery_segments[index] for index in target_indices)
-        target_steps = tuple(
-            step for segment in target_segments for step in segment.ordered_step_names
-        )
-        bodies = _body_records(persisted, target_steps, ready.installed_execution.snapshot)
-        return _admit_carrier(
-            {
+        body_indices = [
+            index for index in target_indices if index < len(projection.delivery_segments) - 1
+        ]
+        while True:
+            target_segments = tuple(projection.delivery_segments[index] for index in body_indices)
+            target_steps = tuple(
+                step for segment in target_segments for step in segment.ordered_step_names
+            )
+            bodies = _body_records(persisted, target_steps, ready.installed_execution.snapshot)
+            pull_closures = _route_pull_closures(projection, bodies, generation)
+            manual_roots = tuple(
+                projection.delivery_segments[index].ordered_step_names[0]
+                for index in target_indices
+                if index not in body_indices
+            )
+            manual_closure = _manual_closure(projection, manual_roots)
+            if manual_closure:
+                pull_closures.append(
+                    {
+                        "source_step": step_name,
+                        "steps": list(manual_closure),
+                        "pull_requests": _pull_requests(generation, manual_closure),
+                    }
+                )
+            carrier = {
                 "kind": "success",
                 "source_step": step_name,
                 "segments": [
                     {"index": index, "name": projection.delivery_segments[index].name}
-                    for index in target_indices
+                    for index in body_indices
                 ],
                 "bodies": bodies,
                 RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY: _segment_execution_credential(
                     ready.installed_execution.snapshot,
                     target_steps,
                 ),
-                "pull_closures": _route_pull_closures(projection, bodies, generation),
+                "pull_closures": pull_closures,
                 "recipe_pull": generation.pull_identity(),
             }
-        )
+            try:
+                admitted = _admit_carrier(carrier)
+                build_post_effect_segment_failure(
+                    admitted,
+                    tool_name="complete_run_skill_result",
+                )
+                return admitted
+            except RecipeSegmentDeliveryError:
+                if not body_indices:
+                    raise
+                body_indices.pop()
 
-    recovery_targets = tuple(
-        edge.target
-        for edge in projection.ordered_flow_edges
-        if edge.source == step_name
-        and edge.target in projection.ordered_step_names
-        and edge.target not in projection.delivery_segments[0].ordered_step_names
+    recovery_targets = (
+        (recovery_target,)
+        if recovery_target is not None
+        else tuple(
+            edge.target
+            for edge in projection.ordered_flow_edges
+            if edge.source == step_name
+            and edge.target in projection.ordered_step_names
+            and edge.target not in projection.delivery_segments[0].ordered_step_names
+        )
     )
     closure = _manual_closure(projection, recovery_targets)
     return _admit_carrier(
@@ -408,8 +482,7 @@ def prepare_recipe_segment_delivery(
         step_name=step_name,
         success=False,
     )
-    invocation = state.finalized_projection.binding_projection.invocations.get(step_name)
-    tool_name = invocation.tool_name if invocation is not None else "unknown"
+    tool_name = _delivery_tool_name(state.finalized_projection, step_name) or "unknown"
     build_post_effect_segment_failure(success_carrier, tool_name=tool_name)
     build_post_effect_segment_failure(recovery_carrier, tool_name=tool_name)
     return PreparedRecipeSegmentDelivery(

@@ -234,18 +234,18 @@ def _has_fresh_matching_marker(transcript: Path, session_id: str) -> bool:
 def _is_fabricated_completion(text: str) -> bool:
     position = 0
     blocked_names: set[str] = set()
-    lowered = text.lower()
     while opener := _ELEMENT_OPEN_RE.search(text, position):
         name = opener.group("name").lower()
         if name in blocked_names:
             position = opener.end()
             continue
         closer = f"</{name}>"
-        close_start = lowered.find(closer, opener.end())
-        if close_start < 0:
+        close_match = re.search(re.escape(closer), text[opener.end() :], re.IGNORECASE)
+        if close_match is None:
             blocked_names.add(name)
             position = opener.end()
             continue
+        close_start = opener.end() + close_match.start()
 
         nested = _ELEMENT_OPEN_RE.search(text, opener.end())
         while nested is not None and nested.start() < close_start:

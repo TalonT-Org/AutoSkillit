@@ -178,6 +178,12 @@ def test_denies_completed_task_notification(tmp_path: Path) -> None:
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_empty_unicode_prefixed_notification_fails_open(tmp_path: Path) -> None:
+    result = _run_guard(tmp_path, [_claude_record("İ<bg_result></bg_result>")])
+
+    assert result is None
+
+
 @pytest.mark.parametrize(
     "text",
     [

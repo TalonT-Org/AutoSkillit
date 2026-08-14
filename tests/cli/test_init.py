@@ -67,6 +67,7 @@ class TestCLIInit:
         data = load_yaml(config_path)
         assert data["test_check"]["command"] == ["pytest", "-v"]
         assert data["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
+        assert data["safety"]["confirm_cook_launch"] is True
 
     # CL5
     def test_init_interactive_prompts_for_test_command(
@@ -146,6 +147,7 @@ class TestCLIInit:
         parsed = load_yaml(yaml_str)
         assert parsed["test_check"]["command"] == ["task", "test-all"]
         assert parsed["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
+        assert parsed["safety"]["confirm_cook_launch"] is True
 
     def test_generate_config_yaml_forbids_secret_fields(self) -> None:
         """SEC-6: _generate_config_yaml() output contains no token, secret, or password keys."""

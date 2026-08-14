@@ -260,6 +260,7 @@ safety:
   reset_guard_marker: ".autoskillit-workspace"
   require_dry_walkthrough: true
   test_gate_on_merge: true
+  confirm_cook_launch: true
 ```
 
 These defaults are usually fine. Override per-project if needed.

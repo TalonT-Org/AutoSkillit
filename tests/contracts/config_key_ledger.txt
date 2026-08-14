@@ -110,6 +110,7 @@ run_skill.natural_exit_grace_seconds
 run_skill.stale_threshold
 run_skill.stream_idle_timeout_ms
 run_skill.timeout
+safety.confirm_cook_launch
 safety.protected_branches
 safety.require_dry_walkthrough
 safety.reset_guard_marker

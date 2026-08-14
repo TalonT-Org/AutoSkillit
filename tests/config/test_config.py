@@ -34,6 +34,7 @@ class TestDefaultConfig:
         assert cfg.safety.reset_guard_marker == ".autoskillit-workspace"
         assert cfg.safety.require_dry_walkthrough is True
         assert cfg.safety.test_gate_on_merge is True
+        assert cfg.safety.confirm_cook_launch is True
         assert isinstance(cfg.safety.protected_branches, list)
         assert "main" in cfg.safety.protected_branches
         assert "develop" in cfg.safety.protected_branches
@@ -178,6 +179,7 @@ class TestLoadConfig:
                 "reset_guard_marker": ".custom-marker",
                 "require_dry_walkthrough": False,
                 "test_gate_on_merge": False,
+                "confirm_cook_launch": False,
                 "protected_branches": ["main", "production"],
             },
             "worktree_setup": {"command": ["task", "install-worktree"]},
@@ -196,8 +198,18 @@ class TestLoadConfig:
         assert cfg.safety.reset_guard_marker == ".custom-marker"
         assert cfg.safety.require_dry_walkthrough is False
         assert cfg.safety.test_gate_on_merge is False
+        assert cfg.safety.confirm_cook_launch is False
         assert cfg.safety.protected_branches == ["main", "production"]
         assert cfg.worktree_setup.command == ["task", "install-worktree"]
+
+    def test_safety_confirm_cook_launch_explicit_true(self, tmp_path):
+        """REQ-CFG-002: confirm_cook_launch resolves to True when explicitly set true."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"safety": {"confirm_cook_launch": True}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.safety.confirm_cook_launch is True
 
     def test_load_diagnostics_config(self, tmp_path):
         """DIAG_C2: diagnostics.pipeline_health can be set via YAML."""

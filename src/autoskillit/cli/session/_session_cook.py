@@ -337,14 +337,15 @@ def cook(
         from autoskillit.cli.ui._timed_input import timed_prompt
 
         trace = StartupTrace(project_dir, launch_id, enabled=trace_enabled)
-        confirm = timed_prompt(
-            "\nLaunch session? [Enter/n]",
-            default="",
-            timeout=120,
-            label="autoskillit cook",
-        )
-        if confirm.lower() in ("n", "no"):
-            return
+        if config.safety.confirm_cook_launch:
+            confirm = timed_prompt(
+                "\nLaunch session? [Enter/n]",
+                default="",
+                timeout=120,
+                label="autoskillit cook",
+            )
+            if confirm.lower() in ("n", "no"):
+                return
         trace.record_launch_anchor()
         write_registry_entry(project_dir, launch_id, SESSION_TYPE_COOK, None)
 

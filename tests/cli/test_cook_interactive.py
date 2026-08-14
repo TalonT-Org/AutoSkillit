@@ -782,3 +782,33 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
     assert CODEX_COOK_RESERVED_ENV_VARS.isdisjoint(spec.env)
     assert CODEX_STARTUP_TRACE_ENV_VAR not in spec.env
     assert backend.context_calls[0]["session_home"] == captured["generated_home"]
+
+
+def test_cook_confirm_cook_launch_disabled_skips_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """REQ-COOK-002/003: with safety.confirm_cook_launch=False, the timed_prompt is
+    skipped and the launch path (registry, run, managed-exit) still proceeds through
+    the with-block that owns managed_session."""
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir(exist_ok=True)
+    (config_dir / "config.yaml").write_text("safety:\n  confirm_cook_launch: false\n")
+    captured = _install_harness(monkeypatch, tmp_path)
+
+    def _fail_if_called(*args: object, **kwargs: object) -> object:
+        raise AssertionError("timed_prompt must not be called when confirm_cook_launch is False")
+
+    monkeypatch.setattr(
+        "autoskillit.cli.ui._timed_input.timed_prompt",
+        _fail_if_called,
+    )
+
+    cli.cook(backend=_Backend())
+
+    events = captured["events"]
+    names = [event[0] for event in events]
+    assert "registry" in names
+    assert "run" in names
+    assert "managed-exit" in names
+    assert names.index("registry") < names.index("run")
+    assert names.index("run") < names.index("managed-exit")

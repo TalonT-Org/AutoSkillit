@@ -562,6 +562,7 @@ safety:
   protected_branches: ["main", "develop", "stable"]
   require_dry_walkthrough: true
   test_gate_on_merge: true
+  confirm_cook_launch: true
   reset_guard_marker: ".autoskillit-workspace"
 
 quota_guard:

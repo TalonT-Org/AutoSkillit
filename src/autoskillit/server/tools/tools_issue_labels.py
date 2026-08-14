@@ -17,6 +17,11 @@ from autoskillit.core import (
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._recipe_segment_delivery import (
+    PreparedRecipeSegmentDelivery,
+    attach_recipe_segment,
+    prepare_recipe_segment_delivery,
+)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._claim_helpers import (
     _get_campaign_state_paths,
@@ -192,6 +197,7 @@ async def release_issue(
     staged_label: str | None = None,
     fail_label: str | None = None,
     close_issue: str | None = None,
+    step_name: str = "",
 ) -> str:
     """Remove the in-progress label from a GitHub issue to release it.
 
@@ -213,11 +219,17 @@ async def release_issue(
         target_branch: Branch the PR was merged into. When non-default, applies staged label.
         staged_label: Label name for staged state. Defaults to github.staged_label from config.
         fail_label: Label name for failure state. When provided, swaps in-progress for this label.
+        step_name: Exact YAML step key used for recovery segment delivery.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
+
+    def _render(result: dict[str, Any]) -> str:
+        return json.dumps(attach_recipe_segment(result, prepared_segment, success=False))
+
     try:
         with structlog.contextvars.bound_contextvars(tool="release_issue", issue_url=issue_url):
             logger.info("release_issue", issue_url=issue_url)
@@ -227,8 +239,9 @@ async def release_issue(
             )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             if tool_ctx.github_client is None:
-                return json.dumps(
+                return _render(
                     {"success": False, "error": "GitHub token required for label management"}
                 )
 
@@ -237,7 +250,7 @@ async def release_issue(
             try:
                 owner, repo, issue_number = _parse_issue_ref(issue_url)
             except ValueError as exc:
-                return json.dumps({"success": False, "error": str(exc)})
+                return _render({"success": False, "error": str(exc)})
 
             # Determine if staging is needed
             promotion_target = tool_ctx.config.branching.promotion_target
@@ -250,7 +263,7 @@ async def release_issue(
             # close_issue is intentionally not checked here — staging takes precedence over closing
             if should_stage:
                 if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
-                    return json.dumps(
+                    return _render(
                         {
                             "success": False,
                             "issue_number": issue_number,
@@ -282,7 +295,7 @@ async def release_issue(
                     description=staged_description,
                 )
                 if not ensure_result.get("success"):
-                    return json.dumps(
+                    return _render(
                         {
                             "success": False,
                             "issue_number": issue_number,
@@ -301,7 +314,7 @@ async def release_issue(
                     add_labels=[effective_staged_label],
                 )
                 if not swap_result.get("success"):
-                    return json.dumps(
+                    return _render(
                         {
                             "success": False,
                             "issue_number": issue_number,
@@ -314,7 +327,7 @@ async def release_issue(
                 staged = True
             elif fail_label is not None:
                 if err := tool_ctx.config.github.check_label_allowed(fail_label):
-                    return json.dumps(
+                    return _render(
                         {
                             "success": False,
                             "issue_number": issue_number,
@@ -340,7 +353,7 @@ async def release_issue(
                     description=fail_description,
                 )
                 if not ensure_result.get("success"):
-                    return json.dumps(
+                    return _render(
                         {
                             "success": False,
                             "issue_number": issue_number,
@@ -359,7 +372,7 @@ async def release_issue(
                     add_labels=[fail_label],
                 )
                 if not swap_result.get("success"):
-                    return json.dumps(
+                    return _render(
                         {
                             "success": False,
                             "issue_number": issue_number,
@@ -370,7 +383,7 @@ async def release_issue(
                         }
                     )
 
-                return json.dumps(
+                return _render(
                     {
                         "success": True,
                         "issue_number": issue_number,
@@ -392,7 +405,7 @@ async def release_issue(
                     add_labels=[],
                 )
                 if not swap_result.get("success"):
-                    return json.dumps(
+                    return _render(
                         {
                             "success": False,
                             "issue_number": issue_number,
@@ -403,7 +416,7 @@ async def release_issue(
                 if close_issue == "true":
                     await tool_ctx.github_client.close_issue(owner, repo, issue_number)
 
-            return json.dumps(
+            return _render(
                 {
                     "success": True,
                     "issue_number": issue_number,
@@ -414,4 +427,4 @@ async def release_issue(
             )
     except Exception as exc:
         logger.error("release_issue unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return _render({"success": False, "error": f"{type(exc).__name__}: {exc}"})

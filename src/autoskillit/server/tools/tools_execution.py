@@ -130,6 +130,11 @@ from autoskillit.server._recipe_execution import (
 from autoskillit.server._recipe_execution import (
     required_audit_finalization_effect_names as _required_audit_finalization_effect_names,
 )
+from autoskillit.server._recipe_segment_delivery import (
+    PreparedRecipeSegmentDelivery,
+    attach_recipe_segment,
+    prepare_recipe_segment_delivery,
+)
 from autoskillit.server._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
     _request_session_identity,
@@ -661,6 +666,7 @@ async def run_cmd(
         gate := _check_write_target_boundary(cmd, cwd, _derive_run_cmd_write_prefixes())
     ) is not None:
         return gate
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
             if not _derive_run_cmd_write_prefixes():
@@ -675,6 +681,7 @@ async def run_cmd(
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             _start = time.monotonic()
             try:
                 m = _PURE_SLEEP_RE.match(cmd.strip())
@@ -706,7 +713,13 @@ async def run_cmd(
                         stderr="",
                         capture_error=str(exc),
                     )
-                    return json.dumps(result)
+                    return json.dumps(
+                        attach_recipe_segment(
+                            result,
+                            prepared_segment,
+                            success=False,
+                        )
+                    )
 
                 spec = _spill_spec(tool_ctx)
                 returncode = sub_result.returncode
@@ -752,19 +765,25 @@ async def run_cmd(
                         "autoskillit.run_cmd",
                         extra={"exit_code": returncode},
                     )
-                return json.dumps(result)
+                if result.get("success") is True:
+                    return json.dumps(result)
+                return json.dumps(attach_recipe_segment(result, prepared_segment, success=False))
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("run_cmd unhandled exception", exc_info=True)
         return json.dumps(
-            {
-                "success": False,
-                "exit_code": -1,
-                "stdout": "",
-                "stderr": f"{type(exc).__name__}: {exc}",
-            }
+            attach_recipe_segment(
+                {
+                    "success": False,
+                    "exit_code": -1,
+                    "stdout": "",
+                    "stderr": f"{type(exc).__name__}: {exc}",
+                },
+                prepared_segment,
+                success=False,
+            )
         )
 
 
@@ -776,6 +795,7 @@ async def run_python(
     args: dict[str, object] | None = None,
     timeout: int = 30,
     work_dir: str = "",
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Call a Python function directly by dotted module path.
@@ -794,6 +814,7 @@ async def run_python(
         timeout: Max seconds before aborting the call (default 30).
         work_dir: When set, relative path-like args (output_dir, etc.) are
             anchored to this directory before the callable is invoked.
+        step_name: Optional YAML step key for progressive recipe delivery.
 
     Never raises.
     """
@@ -803,10 +824,12 @@ async def run_python(
         return gate
     if (gate := _check_recipe_read_prohibition(callable_name=callable)) is not None:
         return gate
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
         from autoskillit.server import _get_ctx  # circular-break
 
         tool_ctx = _get_ctx()
+        prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
         with structlog.contextvars.bound_contextvars(tool="run_python"):
             logger.info("run_python", callable=callable, timeout=timeout)
             await _notify(
@@ -818,7 +841,13 @@ async def run_python(
             )
             anchor_err = validate_path_arg_anchoring(args, work_dir)
             if anchor_err:
-                return json.dumps({"success": False, "error": anchor_err})
+                return json.dumps(
+                    attach_recipe_segment(
+                        {"success": False, "error": anchor_err},
+                        prepared_segment,
+                        success=False,
+                    )
+                )
             promoted = maybe_promote_work_dir(args, work_dir)
             if promoted != work_dir:
                 logger.warning(
@@ -829,10 +858,14 @@ async def run_python(
                 work_dir = promoted
             if work_dir and not Path(work_dir).is_absolute():
                 return json.dumps(
-                    {
-                        "success": False,
-                        "error": f"run_python: work_dir must be absolute, got {work_dir!r}",
-                    }
+                    attach_recipe_segment(
+                        {
+                            "success": False,
+                            "error": f"run_python: work_dir must be absolute, got {work_dir!r}",
+                        },
+                        prepared_segment,
+                        success=False,
+                    )
                 )
             resolved_args = args
             if work_dir:
@@ -851,15 +884,33 @@ async def run_python(
                     "autoskillit.run_python",
                     extra={"callable": callable},
                 )
-            return shape_execution_response(
+            rendered = shape_execution_response(
                 tool_ctx,
                 result,
                 tool_name="run_python",
                 work_dir=work_dir,
             )
+            shaped = json.loads(rendered)
+            if not isinstance(shaped, dict):
+                raise TypeError("run_python response must be a JSON object")
+            return json.dumps(
+                attach_recipe_segment(
+                    shaped,
+                    prepared_segment,
+                    success=result.get("success") is True,
+                ),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
     except Exception as exc:
         logger.error("run_python unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(
+            attach_recipe_segment(
+                {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+                prepared_segment,
+                success=False,
+            )
+        )
 
 
 def _build_actual_mcp_kwargs(

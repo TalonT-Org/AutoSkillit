@@ -16,6 +16,11 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import condense_test_output
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._recipe_segment_delivery import (
+    PreparedRecipeSegmentDelivery,
+    attach_recipe_segment,
+    prepare_recipe_segment_delivery,
+)
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
@@ -61,6 +66,7 @@ async def test_check(
 
     Never raises.
     """
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
         with structlog.contextvars.bound_contextvars(tool="test_check", cwd=worktree_path):
             logger.info("test_check", worktree=worktree_path)
@@ -75,28 +81,43 @@ async def test_check(
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             if tool_ctx.tester is None:
-                return json.dumps({"passed": False, "error": "Test runner not configured"})
+                return json.dumps(
+                    attach_recipe_segment(
+                        {"passed": False, "error": "Test runner not configured"},
+                        prepared_segment,
+                        success=False,
+                    )
+                )
 
             resolved = os.path.realpath(worktree_path)
             if not os.path.isdir(resolved):
                 logger.warning("test_check path does not exist", path=resolved)
                 return json.dumps(
-                    {
-                        "passed": False,
-                        "error": f"Worktree path does not exist: {resolved}",
-                        "infrastructure_missing": True,
-                    }
+                    attach_recipe_segment(
+                        {
+                            "passed": False,
+                            "error": f"Worktree path does not exist: {resolved}",
+                            "infrastructure_missing": True,
+                        },
+                        prepared_segment,
+                        success=False,
+                    )
                 )
             infra_issue = tool_ctx.tester.check_infrastructure(Path(resolved))
             if infra_issue is not None:
                 logger.warning("test_check infrastructure missing", detail=infra_issue)
                 return json.dumps(
-                    {
-                        "passed": False,
-                        "error": f"Test infrastructure not found: {infra_issue}",
-                        "infrastructure_missing": True,
-                    }
+                    attach_recipe_segment(
+                        {
+                            "passed": False,
+                            "error": f"Test infrastructure not found: {infra_issue}",
+                            "infrastructure_missing": True,
+                        },
+                        prepared_segment,
+                        success=False,
+                    )
                 )
 
             _start = time.monotonic()
@@ -161,13 +182,25 @@ async def test_check(
                     response["tests_deselected"] = test_result.tests_deselected
                 if test_result.full_run_reason is not None:
                     response["full_run_reason"] = test_result.full_run_reason
-                return json.dumps(response)
+                return json.dumps(
+                    attach_recipe_segment(
+                        response,
+                        prepared_segment,
+                        success=test_result.passed is True,
+                    )
+                )
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("test_check unhandled exception", exc_info=True)
-        return json.dumps({"passed": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(
+            attach_recipe_segment(
+                {"passed": False, "error": f"{type(exc).__name__}: {exc}"},
+                prepared_segment,
+                success=False,
+            )
+        )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})

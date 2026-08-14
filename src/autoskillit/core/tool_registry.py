@@ -448,7 +448,7 @@ _TOOL_DEFS = (
     ),
     _tool(
         "run_python",
-        ("callable", "args", "timeout", "work_dir"),
+        ("callable", "args", "timeout", "work_dir", "step_name"),
         required=("callable",),
         wire_types={"args": ToolWireType.OBJECT},
         automatic_recipe_delivery=True,
@@ -527,7 +527,7 @@ _TOOL_DEFS = (
     ),
     _tool(
         "check_pr_mergeable",
-        ("pr_number", "cwd", "repo"),
+        ("pr_number", "cwd", "repo", "step_name"),
         required=("pr_number", "cwd"),
         automatic_recipe_delivery=True,
         recovery_recipe_delivery=True,
@@ -611,7 +611,7 @@ _TOOL_DEFS = (
     ),
     _tool(
         "claim_and_resolve_issue",
-        ("issue_url", "label", "allow_reentry"),
+        ("issue_url", "label", "allow_reentry", "step_name"),
         required=("issue_url",),
         recovery_recipe_delivery=True,
     ),
@@ -624,7 +624,15 @@ _TOOL_DEFS = (
     _tool("claim_issue", ("issue_url", "label", "allow_reentry"), required=("issue_url",)),
     _tool(
         "release_issue",
-        ("issue_url", "label", "target_branch", "staged_label", "fail_label", "close_issue"),
+        (
+            "issue_url",
+            "label",
+            "target_branch",
+            "staged_label",
+            "fail_label",
+            "close_issue",
+            "step_name",
+        ),
         required=("issue_url",),
         recovery_recipe_delivery=True,
     ),

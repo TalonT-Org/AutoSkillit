@@ -15,6 +15,11 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import fetch_repo_merge_state, resolve_repo_from_remote
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._recipe_segment_delivery import (
+    PreparedRecipeSegmentDelivery,
+    attach_recipe_segment,
+    prepare_recipe_segment_delivery,
+)
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
@@ -150,25 +155,31 @@ async def check_repo_merge_state(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
         from autoskillit.server import (  # circular-break
             _get_ctx,
         )  # circular-break: server-internal circular dependency
 
         tool_ctx = _get_ctx()
+        prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
         _start = time.monotonic()
         try:
             resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or None)
             if not resolved_repo or "/" not in resolved_repo:
                 return json.dumps(
-                    {
-                        "error": f"Could not resolve owner/repo from cwd={cwd!r}",
-                        "queue_available": False,
-                        "merge_group_trigger": False,
-                        "auto_merge_available": False,
-                        "ci_event": None,
-                        "ci_applicable": False,
-                    }
+                    attach_recipe_segment(
+                        {
+                            "error": f"Could not resolve owner/repo from cwd={cwd!r}",
+                            "queue_available": False,
+                            "merge_group_trigger": False,
+                            "auto_merge_available": False,
+                            "ci_event": None,
+                            "ci_applicable": False,
+                        },
+                        prepared_segment,
+                        success=False,
+                    )
                 )
             owner, repo = resolved_repo.split("/", 1)
             resolved_token = (
@@ -183,7 +194,13 @@ async def check_repo_merge_state(
                 token=resolved_token,
                 base_branch=base_branch or None,
             )
-            return json.dumps(state)
+            return json.dumps(
+                attach_recipe_segment(
+                    state,
+                    prepared_segment,
+                    success="error" not in state,
+                )
+            )
         except Exception as exc:
             logger.error("autoskillit.check_repo_merge_state failed", exc_info=True)
             envelope: dict[str, object] = {
@@ -196,19 +213,23 @@ async def check_repo_merge_state(
             }
             if isinstance(exc, httpx.HTTPStatusError):
                 envelope["http_status"] = exc.response.status_code
-            return json.dumps(envelope)
+            return json.dumps(attach_recipe_segment(envelope, prepared_segment, success=False))
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("check_repo_merge_state unhandled exception", exc_info=True)
         return json.dumps(
-            {
-                "error": f"{type(exc).__name__}: {exc}",
-                "queue_available": False,
-                "merge_group_trigger": False,
-                "auto_merge_available": False,
-                "ci_event": None,
-                "ci_applicable": False,
-            }
+            attach_recipe_segment(
+                {
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "queue_available": False,
+                    "merge_group_trigger": False,
+                    "auto_merge_available": False,
+                    "ci_event": None,
+                    "ci_applicable": False,
+                },
+                prepared_segment,
+                success=False,
+            )
         )

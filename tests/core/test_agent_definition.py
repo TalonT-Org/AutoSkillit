@@ -30,10 +30,10 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 _EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
 
 _SKILL_CHILD_ROLE_EXPECTATIONS = {
-    "pr-source-reader": (("Read",), "sonnet", 20, "gpt-5.6-luna", "xhigh"),
-    "pr-synthesizer": (("Read",), "sonnet", 20, "gpt-5.6-terra", "high"),
-    "research-source-reader": (("Read",), "sonnet", 20, "gpt-5.6-luna", "xhigh"),
-    "research-synthesizer": (("Read",), "sonnet", 20, "gpt-5.6-terra", "xhigh"),
+    "pr-source-reader": (("Read",), "sonnet", 80, "gpt-5.6-luna", "xhigh"),
+    "pr-synthesizer": (("Read",), "sonnet", 80, "gpt-5.6-terra", "high"),
+    "research-source-reader": (("Read",), "sonnet", 80, "gpt-5.6-luna", "xhigh"),
+    "research-synthesizer": (("Read",), "sonnet", 80, "gpt-5.6-terra", "xhigh"),
     "friction-batch-scanner": (
         ("Read", "Grep"),
         "haiku",
@@ -122,6 +122,10 @@ def test_bundled_agent_catalog_loads_with_unique_digests() -> None:
     definitions = load_bundled_agent_definitions()
     assert definitions
     assert BUNDLED_EXPLORER_ROLES <= {definition.name for definition in definitions}
+    assert all(
+        definition.max_turns is not None and definition.max_turns >= 30
+        for definition in definitions
+    )
     assert len({definition.name for definition in definitions}) == len(definitions)
     assert len({agent_definition_digest(definition) for definition in definitions}) == len(
         definitions

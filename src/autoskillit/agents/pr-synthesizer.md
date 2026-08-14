@@ -3,7 +3,7 @@ name: pr-synthesizer
 description: "Use when collected PR source evidence needs an overall pull request summary."
 tools: [Read]
 model: sonnet
-maxTurns: 20
+maxTurns: 80
 codex:
   model: gpt-5.6-terra
   reasoning_effort: high

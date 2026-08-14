@@ -3,7 +3,7 @@ name: research-synthesizer
 description: "Use when collected research evidence needs a direction and experiment-lens recommendation."
 tools: [Read]
 model: sonnet
-maxTurns: 20
+maxTurns: 80
 codex:
   model: gpt-5.6-terra
   reasoning_effort: xhigh

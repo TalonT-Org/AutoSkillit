@@ -3,7 +3,7 @@ name: pr-source-reader
 description: "Use when one parent-specified PR source artifact must yield bounded evidence."
 tools: [Read]
 model: sonnet
-maxTurns: 20
+maxTurns: 80
 codex:
   model: gpt-5.6-luna
   reasoning_effort: xhigh

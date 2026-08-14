@@ -3,7 +3,7 @@ name: repository-impact-profiler
 description: "Terminal read-only specialist for repository impact and consumer-surface profiling."
 tools: [mcp__autoskillit__submit_exploration_query, mcp__autoskillit__get_exploration_page, mcp__autoskillit__resume_exploration_context]
 model: sonnet
-maxTurns: 20
+maxTurns: 80
 codex:
   model: gpt-5.6-luna
   reasoning_effort: max

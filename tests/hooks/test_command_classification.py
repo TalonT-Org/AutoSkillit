@@ -158,10 +158,17 @@ class TestTokenizeCommandSegments:
             ["gh", "issue", "edit", "23", "--title", "x", redirect]
         ]
 
-    def test_quoted_redirect_shape_remains_literal_argv(self) -> None:
-        segments = command_classification._tokenize_command_segments_with_redirects(
-            "printf '%s' '2>/tmp/out'"
-        )
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "printf '%s' '2>/tmp/out'",
+            'printf "%s" "2>/tmp/out"',
+            r"printf %s 2\>/tmp/out",
+        ],
+        ids=["single-quoted", "double-quoted", "escaped"],
+    )
+    def test_quoted_or_escaped_redirect_shape_remains_literal_argv(self, command: str) -> None:
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
 
         assert segments[0].tokens == ["printf", "%s", "2>/tmp/out"]
         assert segments[0].redirect_syntax == [False, False, False]

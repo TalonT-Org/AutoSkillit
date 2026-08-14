@@ -66,6 +66,7 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd:
 
 def _bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
     """Bridge AUTOSKILLIT_LAUNCH_ID to claude_session_id in the session registry."""
+    import fcntl
     import tempfile
 
     launch_id = os.environ.get("AUTOSKILLIT_LAUNCH_ID", "")
@@ -75,29 +76,34 @@ def _bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
     registry_file = (
         resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "session_registry.json"
     )
-    try:
-        registry: dict = json.loads(registry_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    if not registry_file.is_file():
         return
-
-    if launch_id not in registry:
-        return
-
-    registry[launch_id]["claude_session_id"] = session_id
-
     registry_file.parent.mkdir(parents=True, exist_ok=True)
-    content = json.dumps(registry)
-    fd, tmp = tempfile.mkstemp(dir=registry_file.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-        os.replace(tmp, registry_file)
-    except Exception:
+    with registry_file.with_suffix(".lock").open("w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
         try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+            registry = json.loads(registry_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(registry, dict):
+            return
+        row = registry.get(launch_id)
+        if not isinstance(row, dict):
+            return
+
+        row["claude_session_id"] = session_id
+        content = json.dumps(registry)
+        fd, tmp = tempfile.mkstemp(dir=registry_file.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, registry_file)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
 
 def _check_recipe_reload_block(

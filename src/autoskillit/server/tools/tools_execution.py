@@ -25,6 +25,7 @@ from autoskillit.core import (
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
+    LAUNCH_ID_ENV_VAR,
     RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
     RECIPE_EXECUTION_INACTIVE_MESSAGE,
     SKILL_COMMAND_DISPLAY_MAX,
@@ -75,6 +76,7 @@ from autoskillit.core import (
     get_tool_def,
     is_feature_enabled,
     parse_plan_paths,
+    read_registry,
     read_tracker_authority,
     render_target_skill_command,
     resolve_temp_dir,
@@ -2246,7 +2248,37 @@ async def run_skill(
                 if tool_ctx.backend is not None
                 else None
             )
-            _orchestrator_sid = find_caller_session_id(project_dir=tool_ctx.project_dir)
+            _launch_id = os.environ.get(LAUNCH_ID_ENV_VAR, "")
+            if _launch_id:
+                _session_registry = read_registry(tool_ctx.project_dir)
+                _registry_row = (
+                    _session_registry.get(_launch_id)
+                    if isinstance(_session_registry, Mapping)
+                    else None
+                )
+                _registered_session_id = (
+                    _registry_row.get("claude_session_id")
+                    if isinstance(_registry_row, Mapping)
+                    else None
+                )
+                if not (
+                    isinstance(_registered_session_id, str)
+                    and bool(_registered_session_id.strip())
+                ):
+                    return json.dumps(
+                        ToolFailureEnvelope(
+                            success=False,
+                            error=(
+                                "run_skill: current launch has no exact caller session binding: "
+                                f"{_launch_id!r}"
+                            ),
+                            stage="preflight:caller_session",
+                            retriable=False,
+                        )
+                    )
+                _caller_hook_session_id = _registered_session_id
+            else:
+                _caller_hook_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
 
             # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
             provider_extras = propagate_session_deadline(
@@ -2270,7 +2302,7 @@ async def run_skill(
                     with anyio.fail_after(_cfg.run_skill.mcp_tool_timeout_sec):
                         async with execution_marker(
                             _marker_dir,
-                            _orchestrator_sid,
+                            _caller_hook_session_id,
                             "run-skill",
                         ):
                             contract_lifecycle.execution_started = True
@@ -2308,7 +2340,7 @@ async def run_skill(
                                 resume_session_id=resume_session_id,
                                 resume_launch_contract=_resume_launch_contract,
                                 marker_dir=_marker_dir,
-                                caller_session_id=_orchestrator_sid,
+                                caller_session_id=_caller_hook_session_id,
                                 inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
                                 inspector_model=_inspector_model,
                                 network_access=_network_access,

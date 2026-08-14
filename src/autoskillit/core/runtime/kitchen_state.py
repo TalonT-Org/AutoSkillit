@@ -101,12 +101,7 @@ def write_marker(
         raise
 
 
-def read_marker(session_id: str) -> KitchenMarker | None:
-    """Read and validate the kitchen marker for session_id.
-
-    Returns None on missing file, malformed JSON, or schema mismatch.
-    """
-    path = marker_path(session_id)
+def _read_marker_path(path: Path) -> KitchenMarker | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -122,6 +117,14 @@ def read_marker(session_id: str) -> KitchenMarker | None:
         )
     except (KeyError, ValueError, TypeError):
         return None
+
+
+def read_marker(session_id: str) -> KitchenMarker | None:
+    """Read and validate the kitchen marker for session_id.
+
+    Returns None on missing file, malformed JSON, or schema mismatch.
+    """
+    return _read_marker_path(marker_path(session_id))
 
 
 def is_marker_fresh(marker: KitchenMarker, ttl_hours: int = 24) -> bool:
@@ -227,7 +230,7 @@ def find_caller_session_id(project_dir: Path | None = None) -> str:
     markers = sorted(base.glob("*.json"), key=lambda p: os.path.getmtime(p), reverse=True)
 
     for p in markers:
-        marker = read_marker(p.stem)
+        marker = _read_marker_path(p)
         if marker is not None and is_marker_fresh(marker):
             return marker.session_id
     return ""

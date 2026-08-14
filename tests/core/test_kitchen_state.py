@@ -288,6 +288,28 @@ def test_find_caller_session_id_project_dir_argument(tmp_path, monkeypatch):
     assert result == "sess-proj"
 
 
+def test_find_caller_session_id_reads_explicit_project_candidate(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
+
+    project_dir = tmp_path / "project"
+    foreign_cwd = tmp_path / "foreign"
+    project_dir.mkdir()
+    foreign_cwd.mkdir()
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+
+    monkeypatch.chdir(project_dir)
+    write_marker("shared-name", "project-recipe")
+    monkeypatch.chdir(foreign_cwd)
+    write_marker("shared-name", "foreign-recipe")
+    foreign_marker = foreign_cwd / ".autoskillit/temp/kitchen_state/shared-name.json"
+    foreign_data = json.loads(foreign_marker.read_text(encoding="utf-8"))
+    foreign_data["session_id"] = "foreign-session"
+    foreign_marker.write_text(json.dumps(foreign_data), encoding="utf-8")
+
+    assert find_caller_session_id(project_dir=project_dir) == "shared-name"
+
+
 @pytest.mark.parametrize("overlay", ([], {"core": []}, {"quota_guard": []}))
 def test_read_kitchen_id_rejects_invalid_overlay_shapes(tmp_path, overlay):
     from autoskillit.core.runtime.kitchen_state import read_kitchen_id_from_marker

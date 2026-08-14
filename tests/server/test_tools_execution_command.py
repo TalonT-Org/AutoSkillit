@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -294,6 +295,144 @@ class TestRunSkillPerInvocationMarker:
 
 class TestRunSkillExecutionMarker:
     """Execution marker directory routes through backend session locator."""
+
+    @pytest.mark.anyio
+    async def test_launch_registry_selects_exact_caller_session(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        from autoskillit.core import LAUNCH_ID_ENV_VAR, find_caller_session_id
+        from autoskillit.core.runtime.kitchen_state import write_marker
+        from autoskillit.core.runtime.session_registry import (
+            bridge_claude_session_id,
+            read_registry,
+            write_registry_entry,
+        )
+        from autoskillit.server.tools import tools_execution
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        project_dir = tmp_path / "project"
+        state_root = tmp_path / "state"
+        foreign_cwd = tmp_path / "foreign"
+        foreign_cwd.mkdir()
+        write_registry_entry(project_dir, "launch-a", "cook", None)
+        write_registry_entry(project_dir, "launch-b", "cook", None)
+        bridge_claude_session_id(project_dir, "launch-a", "session-a")
+        bridge_claude_session_id(project_dir, "launch-b", "session-b")
+
+        monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(state_root))
+        write_marker("session-a", "recipe")
+        marker_a = state_root / "kitchen_state" / "session-a.json"
+        past = marker_a.stat().st_mtime - 10
+        os.utime(marker_a, (past, past))
+        write_marker("session-b", "recipe")
+        assert find_caller_session_id(project_dir=project_dir) == "session-b"
+
+        monkeypatch.chdir(foreign_cwd)
+        monkeypatch.setenv(LAUNCH_ID_ENV_VAR, "launch-a")
+        monkeypatch.setattr(
+            tools_execution, "read_registry", lambda _project: read_registry(project_dir)
+        )
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx_kitchen_open.executor = executor
+        captured: dict[str, str] = {}
+
+        @contextlib.asynccontextmanager
+        async def _capture_marker(_marker_dir, session_id, _label):
+            captured["session_id"] = session_id
+            yield
+
+        monkeypatch.setattr(tools_execution, "execution_marker", _capture_marker)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+
+        payload = json.loads(await run_skill("/investigate exact binding", "/tmp"))
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
+
+        assert captured["session_id"] == "session-a"
+        assert executor.calls[0].caller_session_id == "session-a"
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "registry",
+        [
+            {},
+            {"launch-a": {"claude_session_id": None}},
+            {"launch-a": []},
+            {"launch-a": {"claude_session_id": " \t"}},
+            [],
+        ],
+        ids=("missing-row", "unbound-row", "malformed-row", "blank-session", "malformed-registry"),
+    )
+    async def test_invalid_launch_binding_fails_before_execution(
+        self, tool_ctx_kitchen_open, monkeypatch, registry
+    ):
+        from autoskillit.core import LAUNCH_ID_ENV_VAR
+        from autoskillit.server.tools import tools_execution
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        monkeypatch.setenv(LAUNCH_ID_ENV_VAR, "launch-a")
+        monkeypatch.setattr(tools_execution, "read_registry", lambda _project: registry)
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx_kitchen_open.executor = executor
+        marker_entered = False
+
+        @contextlib.asynccontextmanager
+        async def _capture_marker(*_args, **_kwargs):
+            nonlocal marker_entered
+            marker_entered = True
+            yield
+
+        monkeypatch.setattr(tools_execution, "execution_marker", _capture_marker)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+
+        result = json.loads(await run_skill("/investigate invalid binding", "/tmp"))
+
+        assert result == {
+            "success": False,
+            "error": "run_skill: current launch has no exact caller session binding: 'launch-a'",
+            "stage": "preflight:caller_session",
+            "retriable": False,
+        }
+        assert tool_ctx_kitchen_open.run_skill_completion.admission("open_kitchen") == (
+            True,
+            "idle",
+        )
+        assert marker_entered is False
+        assert executor.calls == []
+
+    @pytest.mark.anyio
+    async def test_no_launch_id_uses_marker_fallback(self, tool_ctx_kitchen_open, monkeypatch):
+        from autoskillit.core import LAUNCH_ID_ENV_VAR
+        from autoskillit.server.tools import tools_execution
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        monkeypatch.delenv(LAUNCH_ID_ENV_VAR, raising=False)
+        monkeypatch.setattr(
+            tools_execution,
+            "find_caller_session_id",
+            lambda **_kwargs: "fallback-session",
+        )
+        monkeypatch.setattr(
+            tools_execution,
+            "read_registry",
+            lambda _project: pytest.fail("registry must not be read without a launch ID"),
+        )
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx_kitchen_open.executor = executor
+        captured: dict[str, str] = {}
+
+        @contextlib.asynccontextmanager
+        async def _capture_marker(_marker_dir, session_id, _label):
+            captured["session_id"] = session_id
+            yield
+
+        monkeypatch.setattr(tools_execution, "execution_marker", _capture_marker)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+
+        payload = json.loads(await run_skill("/investigate fallback binding", "/tmp"))
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
+
+        assert captured["session_id"] == "fallback-session"
+        assert executor.calls[0].caller_session_id == "fallback-session"
 
     @pytest.mark.anyio
     async def test_marker_dir_routes_through_session_locator(

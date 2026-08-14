@@ -13,6 +13,7 @@ from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RECIPE_SECTION_PAGINATION_VERSION,
     RECIPE_SECTION_REGISTRY_DIGEST,
+    FinalizedRecipeProjection,
     RecipeArtifactGeneration,
     RecipeExecutionCredential,
     RecipeExecutionId,
@@ -202,6 +203,7 @@ def stage_recipe_initialization(
     staged_snapshot: RecipeExecutionSnapshot,
     requirements: tuple[RecipeInitializationRequirement, ...],
     generation_store_key: str,
+    finalized_projection: FinalizedRecipeProjection,
 ) -> InitializingRecipe:
     """Replace all prior recipe authority with one immutable INITIALIZING state."""
     with tool_ctx.recipe_execution_lock:
@@ -236,6 +238,7 @@ def stage_recipe_initialization(
             installation_version=installation_version,
             requirements=requirements,
             generation_store_key=generation_store_key,
+            finalized_projection=finalized_projection,
         )
         if previous_identity is not None and previous_identity != (
             execution_id,

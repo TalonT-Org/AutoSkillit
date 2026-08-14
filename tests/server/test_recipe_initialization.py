@@ -14,6 +14,7 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_FLOW_SCHEMA_VERSION,
+    FinalizedRecipeProjection,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
     RecipeFlowGeneration,
@@ -101,6 +102,12 @@ def _stage(tool_ctx, tmp_path) -> InitializingRecipe:
             ),
         ),
         generation_store_key="compile-key",
+        finalized_projection=FinalizedRecipeProjection(
+            binding_projection=RecipeBindingProjection({}),
+            ordered_step_names=("step",),
+            entrypoint="step",
+            ordered_flow_edges=(),
+        ),
     )
 
 

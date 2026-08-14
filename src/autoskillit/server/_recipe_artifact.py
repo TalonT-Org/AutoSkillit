@@ -122,6 +122,29 @@ def _recipe_generation_source_payload(payload: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _normalized_recipe_compile_identity(
+    payload: dict[str, Any],
+    *,
+    recipe_name: str,
+    finalized_projection: FinalizedRecipeProjection,
+    flow_generation: RecipeFlowGeneration,
+) -> tuple[dict[str, Any], str]:
+    """Return the canonical compile inputs and their generation identity."""
+    source_payload = _recipe_generation_source_payload(payload)
+    compile_inputs = {
+        "recipe_name": recipe_name,
+        "content_hash": source_payload.get("content_hash"),
+        "composite_hash": source_payload.get("composite_hash"),
+        "source_payload": generation_json_primitive(source_payload),
+        "finalized_projection": _finalized_projection_payload(finalized_projection),
+        "flow_generation": flow_generation.identity(),
+    }
+    return compile_inputs, _domain_sha256(
+        "autoskillit.recipe-compile-generation.v1",
+        _canonical_payload(compile_inputs),
+    )
+
+
 def build_recipe_flow_generation(
     projection: FinalizedRecipeProjection,
 ) -> RecipeFlowGeneration:
@@ -198,17 +221,11 @@ def prepare_recipe_delivery_generation(
 
     flow_generation = build_recipe_flow_generation(finalized_projection)
     source_payload = _recipe_generation_source_payload(payload)
-    compile_inputs = {
-        "recipe_name": recipe_name,
-        "content_hash": source_payload.get("content_hash"),
-        "composite_hash": source_payload.get("composite_hash"),
-        "source_payload": generation_json_primitive(source_payload),
-        "finalized_projection": _finalized_projection_payload(finalized_projection),
-        "flow_generation": flow_generation.identity(),
-    }
-    normalized_compile_key = _domain_sha256(
-        "autoskillit.recipe-compile-generation.v1",
-        _canonical_payload(compile_inputs),
+    compile_inputs, normalized_compile_key = _normalized_recipe_compile_identity(
+        source_payload,
+        recipe_name=recipe_name,
+        finalized_projection=finalized_projection,
+        flow_generation=flow_generation,
     )
     store = get_recipe_generation_store()
     existing = store.lookup_compile(tool_ctx.kitchen_id, normalized_compile_key)

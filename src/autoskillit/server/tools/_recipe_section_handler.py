@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import structlog
 
@@ -19,9 +19,7 @@ from autoskillit.core import (
     BackendCapabilities,
     RecipeArtifactGeneration,
     client_serialized_char_len,
-    fast_dumps,
     get_logger,
-    load_yaml,
     resolve_general_output_token_limit,
 )
 from autoskillit.pipeline import InitializingRecipe, ReadyRecipe
@@ -58,19 +56,17 @@ from autoskillit.server._recipe_section_pagination import (
     resolve_recipe_section_bound_bytes,
     select_recipe_section,
 )
+from autoskillit.server._recipe_section_pagination import (
+    RecipeStepExtractionError as _RecipeSectionError,
+)
+from autoskillit.server._recipe_section_pagination import (
+    extract_step_body_from_persisted as _extract_step_body_from_persisted,
+)
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import response_backstop_tool_meta
 
 logger = get_logger(__name__)
-
-
-class _RecipeSectionError(Exception):
-    """Structured artifact failure surfaced by ``get_recipe_section``."""
-
-    def __init__(self, code: str, detail: str) -> None:
-        super().__init__(detail)
-        self.code = code
 
 
 def _inject_initialization_counters(
@@ -161,60 +157,6 @@ def _recipe_section_failure(
         bound_bytes=state.recipe_section_bound_bytes,
         context=context,
     )
-
-
-def _extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:
-    """Extract a single step's YAML subtree from the persisted full payload.
-
-    The persisted payload's ``content`` field is the full recipe YAML
-    rendered as a string (from ``load_and_validate``). We re-parse it
-    via ``load_yaml`` to access the structured steps dict, then return
-    only the requested step's sub-mapping serialized back to YAML.
-    Returns an empty string only when the step is not present. Artifact parse
-    and section serialization failures raise ``_RecipeSectionError`` so the
-    caller can distinguish them from an absent section.
-    """
-    content = persisted.get("content", "") or ""
-    if not content or not step_name:
-        return ""
-    try:
-        parsed = load_yaml(content)
-    except Exception as exc:
-        logger.warning(
-            "get_recipe_section_step_yaml_parse_failed",
-            step_name=step_name,
-            exc_info=True,
-        )
-        raise _RecipeSectionError(
-            "recipe_artifact_parse_failed", f"{type(exc).__name__}: {exc}"
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise _RecipeSectionError(
-            "recipe_artifact_parse_failed", "recipe content is not a mapping"
-        )
-    steps = parsed.get("steps")
-    if not isinstance(steps, dict):
-        raise _RecipeSectionError("recipe_artifact_parse_failed", "recipe steps are not a mapping")
-    step_obj = steps.get(step_name)
-    if step_obj is None:
-        return ""
-    if not isinstance(step_obj, dict):
-        raise _RecipeSectionError(
-            "recipe_section_serialization_failed",
-            "recipe step is not a mapping",
-        )
-    # Render just this step's subtree as compact YAML.
-    try:
-        return fast_dumps({step_name: step_obj})
-    except Exception as exc:
-        logger.warning(
-            "get_recipe_section_step_yaml_serialize_failed",
-            step_name=step_name,
-            exc_info=True,
-        )
-        raise _RecipeSectionError(
-            "recipe_section_serialization_failed", f"{type(exc).__name__}: {exc}"
-        ) from exc
 
 
 @mcp.tool(

@@ -38,6 +38,7 @@ from autoskillit.server._recipe_section_pagination import (
     RecipeSectionPaginationError,
     RecipeSectionRequestState,
     build_recipe_section_page_plan,
+    extract_recipe_step_bodies,
     get_or_build_recipe_section_page_plan,
     render_recipe_section_failure,
     render_recipe_section_page,
@@ -82,6 +83,27 @@ _RANGE_FIELDS_BY_FORMAT = {
         "fragment_byte_total",
     },
 }
+
+
+def test_extract_recipe_step_bodies_preserves_requested_order() -> None:
+    persisted = {
+        "content": """name: segmented
+steps:
+  first:
+    tool: run_cmd
+    with:
+      cmd: echo first
+  second:
+    action: stop
+    message: done
+"""
+    }
+    bodies = extract_recipe_step_bodies(persisted, ("second", "first"))
+    assert tuple(step_name for step_name, _body in bodies) == ("second", "first")
+    assert bodies[0][1].startswith("second:")
+    assert bodies[1][1].startswith("first:")
+
+
 _PAGE_TEST_BOUND = 2_000
 
 

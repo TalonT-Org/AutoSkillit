@@ -6,6 +6,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from threading import Event, Lock, RLock
+from typing import Any
 
 from autoskillit.core import (
     DYNAMIC_RECIPE_SECTION_DEF,
@@ -17,7 +18,9 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
     RecipeSectionDef,
     canonical_recipe_section_json,
+    fast_dumps,
     get_logger,
+    load_yaml,
     recipe_section_plan_digest,
     resolve_recipe_section_response_bound,
 )
@@ -69,8 +72,11 @@ __all__ = [
     "RecipeSectionPaginationError",
     "RecipeSectionPlanManifest",
     "RecipeSectionRequestState",
+    "RecipeStepExtractionError",
     "SelectedRecipeSection",
     "build_recipe_section_page_plan",
+    "extract_recipe_step_bodies",
+    "extract_step_body_from_persisted",
     "evict_kitchen",
     "get_or_build_recipe_section_page_plan",
     "render_recipe_section_failure",
@@ -80,6 +86,74 @@ __all__ = [
     "resolve_recipe_section_bound_bytes",
     "select_recipe_section",
 ]
+
+
+class RecipeStepExtractionError(Exception):
+    """A persisted recipe body could not be parsed or serialized."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+
+
+def _persisted_recipe_steps(persisted: dict[str, Any]) -> dict[str, Any]:
+    content = persisted.get("content", "") or ""
+    if not isinstance(content, str) or not content:
+        return {}
+    try:
+        parsed = load_yaml(content)
+    except Exception as exc:
+        logger.warning("recipe_step_yaml_parse_failed", exc_info=True)
+        raise RecipeStepExtractionError(
+            "recipe_artifact_parse_failed", f"{type(exc).__name__}: {exc}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise RecipeStepExtractionError(
+            "recipe_artifact_parse_failed", "recipe content is not a mapping"
+        )
+    steps = parsed.get("steps")
+    if not isinstance(steps, dict):
+        raise RecipeStepExtractionError(
+            "recipe_artifact_parse_failed", "recipe steps are not a mapping"
+        )
+    return steps
+
+
+def extract_recipe_step_bodies(
+    persisted: dict[str, Any],
+    ordered_step_names: tuple[str, ...],
+) -> tuple[tuple[str, str], ...]:
+    """Extract canonical compact YAML bodies for ordered persisted steps."""
+    steps = _persisted_recipe_steps(persisted)
+    bodies: list[tuple[str, str]] = []
+    for step_name in ordered_step_names:
+        step_obj = steps.get(step_name)
+        if step_obj is None:
+            continue
+        if not isinstance(step_obj, dict):
+            raise RecipeStepExtractionError(
+                "recipe_section_serialization_failed", "recipe step is not a mapping"
+            )
+        try:
+            bodies.append((step_name, fast_dumps({step_name: step_obj})))
+        except Exception as exc:
+            logger.warning(
+                "recipe_step_yaml_serialize_failed",
+                step_name=step_name,
+                exc_info=True,
+            )
+            raise RecipeStepExtractionError(
+                "recipe_section_serialization_failed", f"{type(exc).__name__}: {exc}"
+            ) from exc
+    return tuple(bodies)
+
+
+def extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:
+    """Extract one compact YAML step body from a persisted recipe artifact."""
+    if not step_name:
+        return ""
+    bodies = extract_recipe_step_bodies(persisted, (step_name,))
+    return bodies[0][1] if bodies else ""
 
 
 @dataclass(frozen=True, slots=True)

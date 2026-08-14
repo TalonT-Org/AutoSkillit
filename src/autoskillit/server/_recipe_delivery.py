@@ -524,6 +524,7 @@ def complete_finalized_recipe_response(
         assert finalized.artifact_generation is not None
         assert finalized.flow_generation is not None
         assert finalized.execution_snapshot is not None
+        assert finalized.finalized_projection is not None
         assert finalized.normalized_compile_key is not None
         assert finalized.initialization_id is not None
         assert parsed is not None
@@ -543,6 +544,7 @@ def complete_finalized_recipe_response(
                     else ()
                 ),
                 generation_store_key=finalized.normalized_compile_key,
+                finalized_projection=finalized.finalized_projection,
             )
             if parsed.get("delivery_bound_spill") is not True:
                 prepared_execution = prepare_recipe_execution(

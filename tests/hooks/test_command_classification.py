@@ -1223,7 +1223,7 @@ class TestAnalyzeGitHubMutations:
         analysis = analyze_github_mutations(command, cwd=str(tmp_path))
 
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
-        assert analysis.reason_code == "input_file_missing"
+        assert analysis.reason_code == "unsafe_input_provenance"
 
     def test_prior_command_that_can_rewrite_literal_input_is_unresolved(
         self,

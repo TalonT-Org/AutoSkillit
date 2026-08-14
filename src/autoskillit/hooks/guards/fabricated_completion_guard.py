@@ -100,7 +100,7 @@ def _claude_turn_key(
     return True, None
 
 
-def _newest_parent_assistant_text(path: Path, session_id: str) -> str | None:
+def _newest_logical_turn_assistant_text(path: Path, session_id: str) -> str | None:
     tail = _bounded_tail(path)
     if tail is None:
         return None
@@ -286,7 +286,7 @@ def main() -> None:
     transcript = Path(transcript_path)
     if not _has_fresh_matching_marker(transcript, session_id):
         return
-    assistant_text = _newest_parent_assistant_text(transcript, session_id)
+    assistant_text = _newest_logical_turn_assistant_text(transcript, session_id)
     if assistant_text is None or not _is_fabricated_completion(assistant_text):
         return
 

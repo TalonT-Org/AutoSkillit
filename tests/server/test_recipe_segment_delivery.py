@@ -63,6 +63,30 @@ def test_compact_startup_is_limited_to_open_kitchen_surfaces(
     assert uses_segmented_startup(surface, _projection(segmented=False)) is False
 
 
+def test_segmented_startup_preserves_domain_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    def reject_startup(*_args, **_kwargs):
+        raise RecipeSegmentDeliveryError("persisted recipe is missing a finalized step body")
+
+    monkeypatch.setattr(
+        segment_delivery_module,
+        "build_startup_recipe_segment",
+        reject_startup,
+    )
+
+    with pytest.raises(
+        RecipeSegmentDeliveryError,
+        match="persisted recipe is missing a finalized step body",
+    ):
+        segment_delivery_module.shape_segmented_startup_payload(
+            {},
+            {},
+            surface="open_kitchen",
+            projection=_projection(segmented=True),
+            generation=object(),
+            execution_snapshot=object(),
+        )
+
+
 def _install_segmented_ready(ready_context):
     tool_ctx = ready_context.tool_ctx
     state = tool_ctx.recipe_initialization_state

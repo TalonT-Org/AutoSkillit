@@ -367,7 +367,9 @@ def shape_segmented_startup_payload(
             generation=generation,
             execution_snapshot=execution_snapshot,
         )
-    except (RecipeSegmentDeliveryError, TypeError, ValueError) as exc:
+    except RecipeSegmentDeliveryError:
+        raise
+    except (TypeError, ValueError) as exc:
         raise RecipeSegmentDeliveryError("recipe_segment_startup_failed") from exc
     compact = {
         key: value

@@ -142,7 +142,7 @@ def _newest_parent_assistant_text(path: Path, session_id: str) -> str | None:
             ):
                 if candidate_found:
                     break
-                return None
+                continue
             valid_key, logical_key = _claude_turn_key(record, message)
             if not valid_key:
                 return None
@@ -186,7 +186,7 @@ def _newest_parent_assistant_text(path: Path, session_id: str) -> str | None:
                 ):
                     if candidate_found:
                         break
-                    return None
+                    continue
                 if candidate_found:
                     break
                 candidate_found = True

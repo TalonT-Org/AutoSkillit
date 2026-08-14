@@ -56,15 +56,23 @@ def _claude_record(
     return record
 
 
-def _codex_record(text: str) -> dict[str, object]:
-    return {
-        "type": "response_item",
-        "payload": {
-            "type": "message",
-            "role": "assistant",
-            "content": [{"type": "output_text", "text": text}],
-        },
+def _codex_record(
+    text: str, *, agent_id: str | None = None, session_id: str | None = None
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": text}],
     }
+    if agent_id is not None:
+        payload["agent_id"] = agent_id
+    record: dict[str, object] = {
+        "type": "response_item",
+        "payload": payload,
+    }
+    if session_id is not None:
+        record["session_id"] = session_id
+    return record
 
 
 def _claude_tool_record(
@@ -202,6 +210,32 @@ def test_skips_message_less_system_metadata(tmp_path: Path) -> None:
         {"type": "system", "subtype": "stop_hook_summary", "summary": "hook stopped"},
     ]
 
+    result = _run_guard(tmp_path, records)
+
+    assert result is not None
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize(
+    "records",
+    [
+        [_claude_record(_BG_RESULT), _claude_record("child", isSidechain=True)],
+        [_claude_record(_BG_RESULT), _claude_record("meta", isMeta=True)],
+        [_claude_record(_BG_RESULT), _claude_record("child", agent_id="child")],
+        [
+            _claude_record(_BG_RESULT),
+            _claude_record("foreign", sessionId="different-session"),
+        ],
+        [_codex_record(_BG_RESULT), _codex_record("child", agent_id="child")],
+        [
+            _codex_record(_BG_RESULT),
+            _codex_record("foreign", session_id="different-session"),
+        ],
+    ],
+)
+def test_newer_excluded_assistant_does_not_hide_parent_completion(
+    tmp_path: Path, records: list[dict[str, object]]
+) -> None:
     result = _run_guard(tmp_path, records)
 
     assert result is not None

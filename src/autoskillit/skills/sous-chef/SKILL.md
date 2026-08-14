@@ -1036,7 +1036,7 @@ segment overview is a table of contents, not permission to invent or read future
 For `kind: recovery`, use its ordered `pull_closure` and `pull_requests` with the carrier's
 unchanged `recipe_pull`; reconstruct every named body before continuing. A
 `recipe_segment_post_effect_delivery_failure` means the operation already ran: do not
-repeat it, and recover only through the retained carrier.
+repeat it. Recover only through the retained carrier.
 
 When `load_recipe`/`open_kitchen` return a bounded recovery manifest, process it
 before any generic `success:false` rule. Preserve `recipe_pull`, `recipe_flow`,

@@ -155,8 +155,8 @@ async def check_repo_merge_state(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         from autoskillit.server import (  # circular-break
             _get_ctx,
         )  # circular-break: server-internal circular dependency

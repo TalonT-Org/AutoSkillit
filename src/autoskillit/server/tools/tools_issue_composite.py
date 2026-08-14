@@ -65,14 +65,14 @@ async def claim_and_resolve_issue(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
-
-    def _render(result: dict[str, Any]) -> str:
-        if result.get("success") is True and result.get("claimed") is True:
-            return json.dumps(result)
-        return json.dumps(attach_recipe_segment(result, prepared_segment, success=False))
-
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
+
+        def _render(result: dict[str, Any]) -> str:
+            if result.get("success") is True and result.get("claimed") is True:
+                return json.dumps(result)
+            return json.dumps(attach_recipe_segment(result, prepared_segment, success=False))
+
         with structlog.contextvars.bound_contextvars(
             tool="claim_and_resolve_issue", issue_url=issue_url
         ):

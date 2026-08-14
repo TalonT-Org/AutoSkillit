@@ -225,8 +225,8 @@ async def push_to_remote(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="push_to_remote", clone_path=clone_path):
             logger.info(
                 "push_to_remote",
@@ -564,8 +564,8 @@ async def bootstrap_clone(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="bootstrap_clone", source_dir=source_dir, base_branch=base_branch
         ):

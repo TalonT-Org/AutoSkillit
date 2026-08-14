@@ -90,8 +90,8 @@ async def wait_for_ci(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         _start = time.monotonic()
         _timing_ctx = None
         event = _coerce_none_string(event, tool="wait_for_ci")

@@ -666,8 +666,8 @@ async def run_cmd(
         gate := _check_write_target_boundary(cmd, cwd, _derive_run_cmd_write_prefixes())
     ) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
             if not _derive_run_cmd_write_prefixes():
                 logger.debug(
@@ -824,8 +824,8 @@ async def run_python(
         return gate
     if (gate := _check_recipe_read_prohibition(callable_name=callable)) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         from autoskillit.server import _get_ctx  # circular-break
 
         tool_ctx = _get_ctx()
@@ -898,9 +898,7 @@ async def run_python(
                     shaped,
                     prepared_segment,
                     success=result.get("success") is True,
-                ),
-                ensure_ascii=False,
-                separators=(",", ":"),
+                )
             )
     except Exception as exc:
         logger.error("run_python unhandled exception", exc_info=True)

@@ -9,7 +9,7 @@ from autoskillit.core import (
     FinalizedRecipeSegment,
     RecipeBindingProjection,
 )
-from autoskillit.server._recipe_delivery import _uses_segmented_startup
+from autoskillit.server._recipe_segment_delivery import uses_segmented_startup
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -41,5 +41,5 @@ def test_compact_startup_is_limited_to_open_kitchen_surfaces(
     surface: str,
     expected: bool,
 ) -> None:
-    assert _uses_segmented_startup(surface, _projection(segmented=True)) is expected
-    assert _uses_segmented_startup(surface, _projection(segmented=False)) is False
+    assert uses_segmented_startup(surface, _projection(segmented=True)) is expected
+    assert uses_segmented_startup(surface, _projection(segmented=False)) is False

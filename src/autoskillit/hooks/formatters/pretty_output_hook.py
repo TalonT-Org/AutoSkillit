@@ -5,18 +5,9 @@ Intercepts MCP tool responses and reformats them from raw JSON to Markdown-KV
 before Claude consumes them. Reduces token overhead 30-77% and improves
 LLM field-extraction accuracy.
 
-This module is the dispatch entrypoint. The per-tool formatters live in four
-private helper modules to keep this file under its line budget:
-
-  * ``_fmt_primitives`` — payload dataclasses, token formatter, pipeline-mode
-    detector, and short-name extractor.
-  * ``_fmt_response_spill`` — artifact metadata trust and integrity validation.
-  * ``_fmt_execution``  — ``run_skill``, ``run_cmd``, ``test_check``,
-    ``merge_worktree``.
-  * ``_fmt_status``     — ``get_token_summary``, ``get_timing_summary``,
-    ``kitchen_status``, ``clone_repo``.
-  * ``_fmt_recipe``     — ``load_recipe``, ``open_kitchen``, ``list_recipes``
-    plus the recipe field-coverage contracts.
+This dispatch entrypoint delegates to the ``_fmt_primitives``,
+``_fmt_response_spill``, ``_fmt_execution``, ``_fmt_status``, and
+``_fmt_recipe`` helpers to stay within its line budget.
 
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """

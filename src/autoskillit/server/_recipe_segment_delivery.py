@@ -30,6 +30,26 @@ if TYPE_CHECKING:
 
 RECIPE_SEGMENT_MAX_BYTES = 10_000
 _SUCCESS_EDGE_TYPES = frozenset({"success"})
+_SEGMENTED_STARTUP_SURFACES = frozenset({"open_kitchen", "open_kitchen_deferred_recall"})
+_SEGMENTED_STARTUP_EXCLUDED_FIELDS = frozenset(
+    {
+        "content",
+        "deferred_guards",
+        "delivery_bound_spill",
+        "diagram",
+        "flow_records",
+        "ingredients_table",
+        "kitchen_rules",
+        "orchestration_rules",
+        "post_prune_routing_edges",
+        "post_prune_step_names",
+        RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+        "recovery",
+        "required_sections",
+        "suggestions",
+        "stop_step_semantics",
+    }
+)
 
 
 class RecipeSegmentDeliveryError(RuntimeError):
@@ -329,6 +349,45 @@ def build_startup_recipe_segment(
             "recipe_pull": generation.pull_identity(),
         }
     )
+
+
+def uses_segmented_startup(
+    surface: str,
+    projection: FinalizedRecipeProjection,
+) -> bool:
+    return bool(projection.delivery_segments) and surface in _SEGMENTED_STARTUP_SURFACES
+
+
+def shape_segmented_startup_payload(
+    payload: dict[str, Any],
+    persisted: dict[str, Any],
+    *,
+    surface: str,
+    projection: FinalizedRecipeProjection,
+    generation: RecipeArtifactGeneration,
+    execution_snapshot: RecipeExecutionSnapshot,
+) -> dict[str, Any]:
+    """Replace a segmented open surface with its admitted compact startup view."""
+    if not uses_segmented_startup(surface, projection):
+        return payload
+    try:
+        recipe_segment = build_startup_recipe_segment(
+            persisted,
+            projection=projection,
+            generation=generation,
+            execution_snapshot=execution_snapshot,
+        )
+    except (RecipeSegmentDeliveryError, TypeError, ValueError) as exc:
+        raise RecipeSegmentDeliveryError("recipe_segment_startup_failed") from exc
+    compact = {
+        key: value
+        for key, value in payload.items()
+        if key not in _SEGMENTED_STARTUP_EXCLUDED_FIELDS
+    }
+    compact["recipe_segment"] = recipe_segment
+    if len(_serialized_bytes(compact)) >= RECIPE_SEGMENT_MAX_BYTES:
+        raise RecipeSegmentDeliveryError("recipe_segment_startup_exceeds_bound")
+    return compact
 
 
 def _checkpoint_carrier(

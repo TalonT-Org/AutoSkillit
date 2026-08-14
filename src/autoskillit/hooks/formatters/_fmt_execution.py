@@ -229,6 +229,7 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "provider_used",
         "provider_fallback",
         "pipeline_tracker",
+        "recipe_segment",
         "receipt_id",
         "error",
     }
@@ -269,6 +270,7 @@ _FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset(
         "stderr",
         "stdout_artifact_path",
         "stderr_artifact_path",
+        "recipe_segment",
         "error",
     }
 )
@@ -287,6 +289,7 @@ _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
         "error",
         "infrastructure_missing",
         "raw_output_artifact_path",
+        "recipe_segment",
     }
 )
 _FMT_TEST_CHECK_SUPPRESSED: frozenset[str] = frozenset()
@@ -350,6 +353,7 @@ _FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
         "remote_sha",
         "remote_is_ancestor",
         "raw_output_artifact_path",
+        "recipe_segment",
     }
 )
 _FMT_MERGE_WORKTREE_SUPPRESSED: frozenset[str] = frozenset()

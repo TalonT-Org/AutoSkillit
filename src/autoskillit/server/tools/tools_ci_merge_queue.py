@@ -131,8 +131,8 @@ async def enqueue_pr(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="enqueue_pr", pr_number=pr_number, target_branch=target_branch
         ):
@@ -276,8 +276,8 @@ async def wait_for_merge_queue(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
         ):

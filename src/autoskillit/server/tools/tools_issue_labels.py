@@ -225,12 +225,12 @@ async def release_issue(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
-
-    def _render(result: dict[str, Any]) -> str:
-        return json.dumps(attach_recipe_segment(result, prepared_segment, success=False))
-
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
+
+        def _render(result: dict[str, Any]) -> str:
+            return json.dumps(attach_recipe_segment(result, prepared_segment, success=False))
+
         with structlog.contextvars.bound_contextvars(tool="release_issue", issue_url=issue_url):
             logger.info("release_issue", issue_url=issue_url)
 

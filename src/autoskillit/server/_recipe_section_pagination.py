@@ -18,7 +18,7 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
     RecipeSectionDef,
     canonical_recipe_section_json,
-    fast_dumps,
+    dump_yaml_str,
     get_logger,
     load_yaml,
     recipe_section_plan_digest,
@@ -135,7 +135,16 @@ def extract_recipe_step_bodies(
                 "recipe_section_serialization_failed", "recipe step is not a mapping"
             )
         try:
-            bodies.append((step_name, fast_dumps({step_name: step_obj})))
+            bodies.append(
+                (
+                    step_name,
+                    dump_yaml_str(
+                        {step_name: step_obj},
+                        default_flow_style=False,
+                        sort_keys=False,
+                    ),
+                )
+            )
         except Exception as exc:
             logger.warning(
                 "recipe_step_yaml_serialize_failed",

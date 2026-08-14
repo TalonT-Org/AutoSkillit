@@ -401,6 +401,7 @@ def test_interactive_github_mutation_replay_reaches_global_guard(tmp_path: Path)
     )
 
     assert_replay_clean(replayed)
+    assert len(replayed) == 2
     allow_event, allow_results = replayed[0]
     review_event, review_results = replayed[1]
     guard_name = "guards/github_mutation_guard.py"

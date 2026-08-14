@@ -39,7 +39,7 @@ def test_parse_recipe_accepts_raw_dict() -> None:
     assert recipe.name == "test"
 
 
-def test_parse_recipe_rejects_unknown_top_level_fields() -> None:
+def test_parse_recipe_accepts_metadata_and_rejects_unknown_top_level_fields() -> None:
     assert _parse_recipe({"name": "test", "autoskillit_version": "1.2.3"}).version == "1.2.3"
     assert _parse_recipe({"name": "test", "version": "1.2.3"}).version == "1.2.3"
     assert _parse_recipe({"name": "test", "uses_capabilities": []}).name == "test"

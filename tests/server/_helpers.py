@@ -209,10 +209,13 @@ async def _credit_initialization_sections(
     initialization_id = envelope["initialization_id"]
     requirements = envelope.get("required_sections")
     if requirements is None:
-        from autoskillit.pipeline import InitializingRecipe
+        from autoskillit.pipeline import InitializingRecipe, ReadyRecipe
         from autoskillit.server import _get_ctx
 
         state = _get_ctx().recipe_initialization_state
+        if isinstance(state, ReadyRecipe):
+            assert state.initialization_id == initialization_id
+            return
         assert isinstance(state, InitializingRecipe)
         assert state.initialization_id == initialization_id
         requirements = [

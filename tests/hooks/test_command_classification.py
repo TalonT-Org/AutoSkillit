@@ -1340,18 +1340,25 @@ class TestAnalyzeGitHubMutations:
         payload = tmp_path / "payload.json"
         payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
         analyses = {
-            analyze_github_mutations("gh issue edit $ISSUE --title x").reason_code,
-            analyze_github_mutations(
+            "dynamic target": analyze_github_mutations(
+                "gh issue edit $ISSUE --title x"
+            ).reason_code,
+            "shell structure": analyze_github_mutations(
                 "for x in 1 2; do gh issue edit 1 --title x; done"
             ).reason_code,
-            analyze_github_mutations(
+            "unsafe input provenance": analyze_github_mutations(
                 f"python3 -c 'print(1)' && gh api --method POST /repos/o/r/issues/7/comments "
                 f"--input {payload}"
             ).reason_code,
-            analyze_github_mutations("cd $DIR && gh issue edit 1 --title x").reason_code,
+            "cwd": analyze_github_mutations("cd $DIR && gh issue edit 1 --title x").reason_code,
         }
 
-        assert len(analyses) == 4
+        assert analyses == {
+            "dynamic target": "dynamic_target",
+            "shell structure": "shell_structure_unresolved",
+            "unsafe input provenance": "unsafe_input_provenance",
+            "cwd": "cwd_unresolved",
+        }
 
     def test_literal_interpreter_cwd_is_used_for_input_resolution(self, tmp_path: Path) -> None:
         nested = tmp_path / "nested"

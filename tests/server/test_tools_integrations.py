@@ -278,7 +278,7 @@ class TestReleaseIssueTool:
         assert_recovery_recipe_segment(result, step_name="release")
 
     @pytest.mark.anyio
-    async def test_release_issue_success(
+    async def test_release_issue_success_returns_recovery_segment(
         self,
         tool_ctx_kitchen_open,
         monkeypatch: pytest.MonkeyPatch,

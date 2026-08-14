@@ -134,6 +134,8 @@ def _tool(
     required: tuple[str, ...] = (),
     wire_types: Mapping[str, ToolWireType] | None = None,
     roles: Mapping[str, ToolParamRole] | None = None,
+    automatic_recipe_delivery: bool = False,
+    recovery_recipe_delivery: bool = False,
 ) -> ToolDef:
     required_set = frozenset(required)
     declared_wire_types = wire_types or {}
@@ -155,6 +157,8 @@ def _tool(
             for param in params
         ),
         initialization_operation=_initialization_operation(name),
+        automatic_recipe_delivery=automatic_recipe_delivery,
+        recovery_recipe_delivery=recovery_recipe_delivery,
     )
 
 
@@ -268,6 +272,8 @@ _TOOL_DEFS = (
         "check_repo_merge_state",
         ("branch", "cwd", "remote_url", "step_name", "base_branch"),
         required=("branch",),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "toggle_auto_merge",
@@ -286,6 +292,8 @@ _TOOL_DEFS = (
             "step_name",
         ),
         required=("pr_number", "target_branch", "cwd", "auto_merge_available"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "wait_for_merge_queue",
@@ -307,6 +315,8 @@ _TOOL_DEFS = (
             "step_name",
         ),
         required=("pr_number", "target_branch", "cwd"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "wait_for_ci",
@@ -324,6 +334,8 @@ _TOOL_DEFS = (
             "auto_trigger",
         ),
         required=("branch",),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool("get_ci_status", ("branch", "run_id", "repo", "workflow", "event", "cwd")),
     _tool(
@@ -372,6 +384,8 @@ _TOOL_DEFS = (
         "push_to_remote",
         ("clone_path", "branch", "source_dir", "remote_url", "force", "step_name"),
         required=("clone_path", "branch"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "register_clone_status",
@@ -386,6 +400,8 @@ _TOOL_DEFS = (
         "bootstrap_clone",
         ("source_dir", "run_name", "base_branch", "branch", "strategy", "remote_url", "step_name"),
         required=("source_dir", "run_name", "base_branch"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "configure_fleet",
@@ -424,16 +440,29 @@ _TOOL_DEFS = (
             "max_suppression_seconds": ToolWireType.INTEGER,
         },
     ),
-    _tool("run_cmd", ("cmd", "cwd", "timeout", "step_name"), required=("cmd", "cwd")),
+    _tool(
+        "run_cmd",
+        ("cmd", "cwd", "timeout", "step_name"),
+        required=("cmd", "cwd"),
+        recovery_recipe_delivery=True,
+    ),
     _tool(
         "run_python",
         ("callable", "args", "timeout", "work_dir"),
         required=("callable",),
         wire_types={"args": ToolWireType.OBJECT},
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _run_skill(),
     _tool("recover_run_skill_result", ()),
-    _tool("complete_run_skill_result", ("receipt_id",), required=("receipt_id",)),
+    _tool(
+        "complete_run_skill_result",
+        ("receipt_id",),
+        required=("receipt_id",),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
+    ),
     _tool(
         "dispatch_food_truck",
         (
@@ -484,6 +513,8 @@ _TOOL_DEFS = (
         "merge_worktree",
         ("worktree_path", "base_branch", "step_name"),
         required=("worktree_path", "base_branch"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "classify_fix",
@@ -494,11 +525,18 @@ _TOOL_DEFS = (
         "create_unique_branch",
         ("slug", "issue_number", "remote", "cwd", "base_branch_name", "step_name"),
     ),
-    _tool("check_pr_mergeable", ("pr_number", "cwd", "repo"), required=("pr_number", "cwd")),
+    _tool(
+        "check_pr_mergeable",
+        ("pr_number", "cwd", "repo"),
+        required=("pr_number", "cwd"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
+    ),
     _tool(
         "create_and_publish_branch",
         ("issue_slug", "run_name", "issue_number", "work_dir", "remote_url", "step_name"),
         required=("issue_slug", "run_name", "issue_number", "work_dir", "remote_url"),
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "commit_files",
@@ -575,6 +613,7 @@ _TOOL_DEFS = (
         "claim_and_resolve_issue",
         ("issue_url", "label", "allow_reentry"),
         required=("issue_url",),
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "prepare_issue",
@@ -587,6 +626,7 @@ _TOOL_DEFS = (
         "release_issue",
         ("issue_url", "label", "target_branch", "staged_label", "fail_label", "close_issue"),
         required=("issue_url",),
+        recovery_recipe_delivery=True,
     ),
     _tool(
         "open_kitchen",
@@ -724,7 +764,13 @@ _TOOL_DEFS = (
         required=("db_path", "query"),
         wire_types={"params": ToolWireType.ARRAY},
     ),
-    _tool("test_check", ("worktree_path", "step_name"), required=("worktree_path",)),
+    _tool(
+        "test_check",
+        ("worktree_path", "step_name"),
+        required=("worktree_path",),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
+    ),
     _tool("reset_test_dir", ("test_dir", "force", "step_name"), required=("test_dir",)),
     _tool("reset_workspace", ("test_dir",), required=("test_dir",)),
 )

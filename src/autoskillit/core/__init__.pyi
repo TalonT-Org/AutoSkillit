@@ -795,6 +795,7 @@ from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
 from .types import FinalizedRecipeProjection as FinalizedRecipeProjection
+from .types import FinalizedRecipeSegment as FinalizedRecipeSegment
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetLock as FleetLock
 from .types import FleetSessionEnv as FleetSessionEnv

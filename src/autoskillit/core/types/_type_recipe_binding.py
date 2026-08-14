@@ -23,6 +23,7 @@ __all__ = [
     "BoundValue",
     "BoundValueOrigin",
     "BoundValueState",
+    "FinalizedRecipeSegment",
     "FinalizedRecipeProjection",
     "RecipeBindingProjection",
     "RecipeFlowEdge",
@@ -105,6 +106,8 @@ class ToolDef:
     name: str
     params: tuple[ToolParamDef, ...]
     initialization_operation: ToolInitializationOperation
+    automatic_recipe_delivery: bool = False
+    recovery_recipe_delivery: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.initialization_operation, ToolInitializationOperation):
@@ -350,6 +353,40 @@ class RecipeFlowEdge:
 
 
 @dataclass(frozen=True, slots=True)
+class FinalizedRecipeSegment:
+    """One finalized segment and the earlier steps that can deliver it."""
+
+    name: str
+    ordered_step_names: tuple[str, ...]
+    checkpoint_sources: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("FinalizedRecipeSegment.name must be a non-empty string")
+        ordered_step_names = tuple(self.ordered_step_names)
+        if not ordered_step_names or any(
+            not isinstance(step_name, str) or not step_name for step_name in ordered_step_names
+        ):
+            raise ValueError(
+                "FinalizedRecipeSegment.ordered_step_names must contain non-empty strings"
+            )
+        if len(ordered_step_names) != len(set(ordered_step_names)):
+            raise ValueError("FinalizedRecipeSegment.ordered_step_names contains duplicates")
+        checkpoint_sources = tuple(self.checkpoint_sources)
+        if any(
+            not isinstance(step_name, str) or not step_name for step_name in checkpoint_sources
+        ):
+            raise ValueError(
+                "FinalizedRecipeSegment.checkpoint_sources must contain non-empty strings"
+            )
+        if len(checkpoint_sources) != len(set(checkpoint_sources)):
+            raise ValueError("FinalizedRecipeSegment.checkpoint_sources contains duplicates")
+        object.__setattr__(self, "name", self.name.strip())
+        object.__setattr__(self, "ordered_step_names", ordered_step_names)
+        object.__setattr__(self, "checkpoint_sources", checkpoint_sources)
+
+
+@dataclass(frozen=True, slots=True)
 class FinalizedRecipeProjection:
     """Immutable execution projection of one fully finalized recipe."""
 
@@ -357,6 +394,7 @@ class FinalizedRecipeProjection:
     ordered_step_names: tuple[str, ...]
     entrypoint: str
     ordered_flow_edges: tuple[RecipeFlowEdge, ...]
+    delivery_segments: tuple[FinalizedRecipeSegment, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.binding_projection, RecipeBindingProjection):
@@ -389,5 +427,42 @@ class FinalizedRecipeProjection:
                 "FinalizedRecipeProjection flow-edge sources must be finalized step names"
             )
 
+        delivery_segments = tuple(self.delivery_segments)
+        if any(not isinstance(segment, FinalizedRecipeSegment) for segment in delivery_segments):
+            raise TypeError(
+                "FinalizedRecipeProjection.delivery_segments must contain "
+                "FinalizedRecipeSegment entries"
+            )
+        if delivery_segments:
+            segment_names = tuple(segment.name for segment in delivery_segments)
+            if len(segment_names) != len(set(segment_names)):
+                raise ValueError("FinalizedRecipeProjection delivery segment names must be unique")
+            flattened_steps = tuple(
+                step_name
+                for segment in delivery_segments
+                for step_name in segment.ordered_step_names
+            )
+            if flattened_steps != ordered_step_names:
+                raise ValueError(
+                    "FinalizedRecipeProjection delivery segments must partition ordered steps"
+                )
+            segment_index = {
+                step_name: index
+                for index, segment in enumerate(delivery_segments)
+                for step_name in segment.ordered_step_names
+            }
+            for target_index, segment in enumerate(delivery_segments):
+                if any(source not in step_names for source in segment.checkpoint_sources):
+                    raise ValueError(
+                        "FinalizedRecipeProjection checkpoint sources must be finalized steps"
+                    )
+                if any(
+                    segment_index[source] >= target_index for source in segment.checkpoint_sources
+                ):
+                    raise ValueError(
+                        "FinalizedRecipeProjection checkpoint sources must precede their target"
+                    )
+
         object.__setattr__(self, "ordered_step_names", ordered_step_names)
         object.__setattr__(self, "ordered_flow_edges", ordered_flow_edges)
+        object.__setattr__(self, "delivery_segments", delivery_segments)

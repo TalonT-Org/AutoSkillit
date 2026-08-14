@@ -7,6 +7,8 @@ to break the circular import between validator.py and the rule modules.
 from __future__ import annotations
 
 from autoskillit.core import (
+    FinalizedRecipeSegment,
+    RecipeFlowEdge,
     get_logger,
 )
 from autoskillit.recipe._analysis import (  # noqa: F401
@@ -99,6 +101,32 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
         errors.append("Recipe must have at least one step." + _SKILL_HINT)
 
     step_names = set(recipe.steps.keys())
+
+    if recipe.delivery_segments:
+        segment_names = [segment.name.strip() for segment in recipe.delivery_segments]
+        if any(not name for name in segment_names):
+            errors.append("Delivery segment names must be non-empty.")
+        if len(segment_names) != len(set(segment_names)):
+            errors.append("Delivery segment names must be unique.")
+        declared_steps = [
+            step_name for segment in recipe.delivery_segments for step_name in segment.steps
+        ]
+        if any(not segment.steps for segment in recipe.delivery_segments):
+            errors.append("Delivery segments must each contain at least one step.")
+        unknown_steps = sorted(set(declared_steps) - step_names)
+        if unknown_steps:
+            errors.append(f"Delivery segments reference unknown steps: {unknown_steps!r}.")
+        duplicates = sorted(
+            step_name for step_name in set(declared_steps) if declared_steps.count(step_name) > 1
+        )
+        if duplicates:
+            errors.append(f"Delivery segments contain duplicate steps: {duplicates!r}.")
+        ordered_steps = list(recipe.steps)
+        if not unknown_steps and not duplicates and declared_steps != ordered_steps:
+            errors.append(
+                "Delivery segments must contain every recipe step exactly once in "
+                "declaration order."
+            )
 
     ingredient_names = set(recipe.ingredients.keys())
 
@@ -308,6 +336,66 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
         )
 
     return errors
+
+
+def _finalize_delivery_segments(
+    recipe: Recipe,
+    ordered_flow_edges: tuple[RecipeFlowEdge, ...],
+) -> tuple[tuple[FinalizedRecipeSegment, ...], list[str]]:
+    """Normalize declared segments against one post-prune recipe graph."""
+    if not recipe.delivery_segments:
+        return (), []
+
+    surviving_steps = set(recipe.steps)
+    normalized = [
+        (segment.name.strip(), tuple(step for step in segment.steps if step in surviving_steps))
+        for segment in recipe.delivery_segments
+    ]
+    normalized = [(name, steps) for name, steps in normalized if steps]
+    flattened = tuple(step for _name, steps in normalized for step in steps)
+    ordered_steps = tuple(recipe.steps)
+    errors: list[str] = []
+    if flattened != ordered_steps:
+        errors.append(
+            "Finalized delivery segments must partition post-prune steps in declaration order."
+        )
+        return (), errors
+    if not normalized or ordered_steps[0] not in normalized[0][1]:
+        errors.append("The initial delivery segment must contain the finalized entrypoint.")
+        return (), errors
+
+    segment_index = {
+        step_name: index for index, (_name, steps) in enumerate(normalized) for step_name in steps
+    }
+    checkpoint_sources: list[list[str]] = [[] for _ in normalized]
+    for edge in ordered_flow_edges:
+        source_index = segment_index.get(edge.source)
+        target_index = segment_index.get(edge.target)
+        if source_index is None or target_index is None or source_index >= target_index:
+            continue
+        step = recipe.steps[edge.source]
+        if step.tool is not None and step.with_args.get("step_name") != edge.source:
+            errors.append(
+                f"Delivery checkpoint step {edge.source!r} must pass its exact recipe key "
+                "as with.step_name."
+            )
+            continue
+        if edge.source not in checkpoint_sources[target_index]:
+            checkpoint_sources[target_index].append(edge.source)
+
+    if errors:
+        return (), errors
+    return (
+        tuple(
+            FinalizedRecipeSegment(
+                name=name,
+                ordered_step_names=steps,
+                checkpoint_sources=tuple(checkpoint_sources[index]),
+            )
+            for index, (name, steps) in enumerate(normalized)
+        ),
+        [],
+    )
 
 
 # Re-export test-access symbols from their new locations.

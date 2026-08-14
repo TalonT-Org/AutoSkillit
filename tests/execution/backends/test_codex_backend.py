@@ -2689,6 +2689,7 @@ class TestCodexBackendSetupSessionDir:
             "path": str(invalid_target),
             "error_type": "TOMLDecodeError",
             "event": "codex_agent_config_unreadable",
+            "logger": "autoskillit.execution.backends._codex_config",
             "log_level": "warning",
         }
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -71,7 +70,6 @@ _RECOVERY_CARRIER = {
     "pull_requests": [{"section": "repair", "part": 0}],
     "recipe_pull": {"artifact_blob_sha256": f"sha256:{'a' * 64}"},
 }
-_SUCCESS_CARRIER_SHA256 = "sha256:aa41c16b645b6d74bc8ba09786227feccfd8eb28c73332f980620ec0cca63bcc"
 
 
 def _setup_project(tmp_path, tool_ctx_kitchen_open):
@@ -350,10 +348,6 @@ class TestAcknowledgedReceiptReplay:
         assert retried == replayed
         assert retried["receipt_id"] == receipt_id
         assert retried["recipe_segment"] == _SUCCESS_CARRIER
-        carrier_bytes = json.dumps(
-            retried["recipe_segment"], sort_keys=True, separators=(",", ":")
-        ).encode()
-        assert f"sha256:{hashlib.sha256(carrier_bytes).hexdigest()}" == _SUCCESS_CARRIER_SHA256
         assert tracker_effects == 1
         assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
 

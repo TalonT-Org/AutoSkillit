@@ -24,13 +24,14 @@ _MAX_TRANSCRIPT_TAIL_BYTES = 256 * 1024
 _MAX_MARKER_AGE_SECONDS = 90.0
 _MAX_FUTURE_MARKER_SKEW_SECONDS = 5.0
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-_BG_RESULT_RE = re.compile(
-    r"\s*<bg_result(?:\s+[^>]*)?>.+?</bg_result>\s*", re.IGNORECASE | re.DOTALL
+_ELEMENT_OPEN_RE = re.compile(
+    r"<(?P<name>bg_result|task-notification|task_notification)"
+    r"(?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*"
+    r"(?:\s*=\s*(?:\"[^\"<>]*\"|'[^'<>]*'|[^\s\"'=<>`]+))?)*\s*>",
+    re.IGNORECASE,
 )
-_TASK_NOTIFICATION_RE = re.compile(
-    r"\s*<task[-_]notification(?:\s+[^>]*)?>"
-    r"(?=[\s\S]*?<status>\s*(?:completed|failed|cancelled)\s*</status>)"
-    r"[\s\S]+?</task[-_]notification>\s*",
+_TERMINAL_STATUS_RE = re.compile(
+    r"<status>\s*(?:completed|failed|cancelled)\s*</status>",
     re.IGNORECASE,
 )
 
@@ -56,60 +57,54 @@ def _bounded_tail(path: Path) -> str | None:
         return None
 
 
-def _content_text(content: object) -> str | None:
+def _content_text(content: object) -> tuple[bool, str | None]:
     if isinstance(content, str):
-        return content
+        return True, content
     if not isinstance(content, list):
-        return None
+        return False, None
     parts: list[str] = []
     for block in content:
         if not isinstance(block, dict):
-            return None
+            return False, None
         block_type = block.get("type")
+        if block_type == "tool_use":
+            continue
         text = block.get("text")
         if block_type not in ("text", "output_text") or not isinstance(text, str):
-            return None
+            return False, None
         parts.append(text)
-    return "".join(parts)
+    return True, "".join(parts) if parts else None
 
 
-def _assistant_text(record: dict[str, Any], session_id: str) -> str | None:
-    record_session = record.get("session_id", record.get("sessionId"))
-    if record_session is not None and record_session != session_id:
-        return None
-
-    if record.get("type") == "assistant":
-        message = record.get("message")
-        if (
-            not isinstance(message, dict)
-            or message.get("role") != "assistant"
-            or record.get("isSidechain") is True
-            or record.get("isMeta") is True
-            or record.get("agent_id")
-            or record.get("agentId")
-        ):
-            return None
-        return _content_text(message.get("content"))
-
-    if record.get("type") == "response_item":
-        payload = record.get("payload")
-        if (
-            not isinstance(payload, dict)
-            or payload.get("type") != "message"
-            or payload.get("role") != "assistant"
-            or payload.get("agent_id")
-            or payload.get("agentId")
-        ):
-            return None
-        return _content_text(payload.get("content"))
-    return None
+def _claude_turn_key(
+    record: dict[str, Any], message: dict[str, Any]
+) -> tuple[bool, tuple[str, ...] | None]:
+    request_present = "requestId" in record
+    message_present = "id" in message
+    request_id = record.get("requestId")
+    message_id = message.get("id")
+    if request_present and (not isinstance(request_id, str) or not request_id):
+        return False, None
+    if message_present and (not isinstance(message_id, str) or not message_id):
+        return False, None
+    if request_present and message_present:
+        assert isinstance(request_id, str)
+        assert isinstance(message_id, str)
+        return True, ("both", request_id, message_id)
+    if request_present:
+        assert isinstance(request_id, str)
+        return True, ("request", request_id)
+    if message_present:
+        assert isinstance(message_id, str)
+        return True, ("message", message_id)
+    return True, None
 
 
 def _newest_parent_assistant_text(path: Path, session_id: str) -> str | None:
     tail = _bounded_tail(path)
     if tail is None:
         return None
-    newest: str | None = None
+    records: list[dict[str, Any]] = []
     for line in tail.splitlines():
         try:
             record = json.loads(line)
@@ -117,24 +112,98 @@ def _newest_parent_assistant_text(path: Path, session_id: str) -> str | None:
             return None
         if not isinstance(record, dict):
             return None
-        if record.get("type") in {"assistant", "user", "system", "tool"}:
+        records.append(record)
+
+    candidate_found = False
+    candidate_key: tuple[str, ...] | None = None
+    parts: list[str] = []
+    for record in reversed(records):
+        record_type = record.get("type")
+        if record_type in {"assistant", "user", "system", "tool"}:
             message = record.get("message")
-            if not isinstance(message, dict) or message.get("role") not in {
-                "assistant",
-                "user",
-                "system",
-                "tool",
-            }:
+            if not isinstance(message, dict):
+                if record_type == "system" and isinstance(record.get("subtype"), str):
+                    continue
                 return None
-            newest = _assistant_text(record, session_id)
+            role = message.get("role")
+            if role not in {"assistant", "user", "system", "tool"}:
+                return None
+            if role != "assistant":
+                if candidate_found:
+                    break
+                return None
+            record_session = record.get("session_id", record.get("sessionId"))
+            if (
+                (record_session is not None and record_session != session_id)
+                or record.get("isSidechain") is True
+                or record.get("isMeta") is True
+                or record.get("agent_id")
+                or record.get("agentId")
+            ):
+                if candidate_found:
+                    break
+                return None
+            valid_key, logical_key = _claude_turn_key(record, message)
+            if not valid_key:
+                return None
+            if candidate_found and (
+                candidate_key is None or logical_key is None or logical_key != candidate_key
+            ):
+                break
+            if not candidate_found:
+                candidate_found = True
+                candidate_key = logical_key
+            valid_content, text = _content_text(message.get("content"))
+            if not valid_content:
+                return None
+            if text is not None:
+                parts.append(text)
             continue
-        if record.get("type") == "response_item":
+        if record_type == "response_item":
             payload = record.get("payload")
-            if isinstance(payload, dict) and payload.get("type") == "message":
-                if payload.get("role") not in {"assistant", "user", "system", "tool"}:
+            if not isinstance(payload, dict):
+                return None
+            payload_type = payload.get("type")
+            if payload_type in {"function_call_output", "custom_tool_call_output"}:
+                if candidate_found:
+                    break
+                return None
+            if payload_type == "function_call":
+                continue
+            if payload_type == "message":
+                role = payload.get("role")
+                if role not in {"assistant", "user", "system", "tool"}:
                     return None
-                newest = _assistant_text(record, session_id)
-    return newest
+                if role != "assistant":
+                    if candidate_found:
+                        break
+                    return None
+                record_session = record.get("session_id", record.get("sessionId"))
+                if (
+                    (record_session is not None and record_session != session_id)
+                    or payload.get("agent_id")
+                    or payload.get("agentId")
+                ):
+                    if candidate_found:
+                        break
+                    return None
+                if candidate_found:
+                    break
+                candidate_found = True
+                valid_content, text = _content_text(payload.get("content"))
+                if not valid_content:
+                    return None
+                if text is not None:
+                    parts.append(text)
+                continue
+            if not isinstance(payload_type, str):
+                return None
+            continue
+        if not isinstance(record_type, str):
+            return None
+    if not candidate_found or not parts:
+        return None
+    return "".join(reversed(parts))
 
 
 def _has_fresh_matching_marker(transcript: Path, session_id: str) -> bool:
@@ -163,7 +232,37 @@ def _has_fresh_matching_marker(transcript: Path, session_id: str) -> bool:
 
 
 def _is_fabricated_completion(text: str) -> bool:
-    return bool(_BG_RESULT_RE.fullmatch(text) or _TASK_NOTIFICATION_RE.fullmatch(text))
+    position = 0
+    blocked_names: set[str] = set()
+    lowered = text.lower()
+    while opener := _ELEMENT_OPEN_RE.search(text, position):
+        name = opener.group("name").lower()
+        if name in blocked_names:
+            position = opener.end()
+            continue
+        closer = f"</{name}>"
+        close_start = lowered.find(closer, opener.end())
+        if close_start < 0:
+            blocked_names.add(name)
+            position = opener.end()
+            continue
+
+        nested = _ELEMENT_OPEN_RE.search(text, opener.end())
+        while nested is not None and nested.start() < close_start:
+            if nested.group("name").lower() == name:
+                break
+            nested = _ELEMENT_OPEN_RE.search(text, nested.end())
+        if nested is not None and nested.start() < close_start:
+            position = close_start + len(closer)
+            continue
+
+        body = text[opener.end() : close_start]
+        position = close_start + len(closer)
+        if not body.strip():
+            continue
+        if name == "bg_result" or _TERMINAL_STATUS_RE.search(body):
+            return True
+    return False
 
 
 def main() -> None:
@@ -174,9 +273,9 @@ def main() -> None:
     if not isinstance(data, dict):
         return
     if (
-        os.environ.get("AUTOSKILLIT_HEADLESS") != "1"
-        or os.environ.get("AUTOSKILLIT_SESSION_TYPE") != "orchestrator"
+        os.environ.get("AUTOSKILLIT_SESSION_TYPE") != "orchestrator"
         or data.get("agent_id")
+        or data.get("agentId")
     ):
         return
 

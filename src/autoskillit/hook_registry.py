@@ -141,7 +141,7 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r".*",
         scripts=["guards/fabricated_completion_guard.py"],
-        session_scope="headless_only",
+        session_scope="any",
         mechanism="deny",
         enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),

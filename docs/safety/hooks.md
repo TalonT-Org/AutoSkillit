@@ -380,12 +380,22 @@ in `run_skill` is the primary enforcer. Fails open on missing tracker or
 malformed input.
 
 ### `fabricated_completion_guard.py`
-**Guarded tools:** all tools in headless orchestrator sessions
-Denies the next tool call only when the newest role-attributed parent-assistant
-record is a standalone `<bg_result>` or completed task-notification shape and a
-fresh `run-skill-in-progress` marker binds it to the same hook session. Transcript
-paths come only from the trusted hook payload; missing, malformed, older, quoted,
-code-fenced, subagent, synthetic, wrong-session, or stale provenance fails open.
+**Guarded tools:** all tools in top-level orchestrator sessions
+Denies the next tool call when the newest logical parent-assistant turn contains a
+complete `<bg_result>` or terminal task-notification and a fresh
+`run-skill-in-progress` marker binds it to the exact hook session. The element may be
+embedded in prose, quoted, wrapped, or code-fenced. Claude physical records coalesce
+only when their exact tagged identity matches: the full `requestId`/`message.id` pair,
+`requestId` alone, or `message.id` alone. Identity shapes never merge with each other.
+
+The bounded fragment grammar accepts `bg_result`, `task-notification`, and
+`task_notification`, simple attributes, a non-empty body, and an exactly matching
+closer. Task status is inspected only inside that element and must be `completed`,
+`failed`, or `cancelled`. Mismatched, nested, empty, incomplete, and nonterminal
+fragments fail open. Transcript paths come only from the trusted hook payload;
+malformed records, later logical-turn boundaries, subagents, wrong sessions, and
+missing or stale exact-session markers also fail open. Interactive orders and headless
+orchestrators receive the same protection.
 This hook is defense in depth: the server's one-shot `run_skill` receipt and
 `complete_run_skill_result` acknowledgement are the completion authority. After transport
 loss, `recover_run_skill_result` may rebind the sole delivered receipt once to the current

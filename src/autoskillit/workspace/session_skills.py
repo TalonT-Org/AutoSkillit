@@ -40,6 +40,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceRef,
     ValidatedAddDir,
+    destination_location,
     get_logger,
     pkg_root,
     validate_skill_capability_roles,
@@ -109,8 +110,14 @@ def _remove_and_verify(path: Path) -> bool:
     return True
 
 
-def _remove_generated_home_skill_entry(path: Path) -> None:
+def _remove_generated_home_skill_entry(discovery_root: Path, skill: str) -> None:
     """Remove one exact generated-home discovery entry without following it."""
+    root_location = destination_location(discovery_root)
+    path = destination_location(discovery_root / skill)
+    if path.parent != root_location or path.name != skill:
+        raise SkillContractError(
+            f"generated-home skill removal requires one exact child entry: {skill!r}"
+        )
     if not os.path.lexists(path):
         return
     if path.is_symlink():
@@ -1033,7 +1040,7 @@ class DefaultSessionSkillManager:
             records = tuple(effective_catalog.skills)
             discovery_root = generated_home / skills_subdir
             for unavailable in reachability_compilation.unavailable:
-                _remove_generated_home_skill_entry(discovery_root / unavailable.skill)
+                _remove_generated_home_skill_entry(discovery_root, unavailable.skill)
 
         write_skill_unavailability_metadata(
             add_dir,

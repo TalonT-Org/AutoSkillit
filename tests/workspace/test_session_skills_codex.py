@@ -53,6 +53,18 @@ def _make_codex_backend() -> MagicMock:
     return b
 
 
+def test_generated_home_skill_removal_rejects_non_child_path(tmp_path: Path) -> None:
+    discovery_root = tmp_path / "skills"
+    discovery_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    with pytest.raises(SkillContractError, match="one exact child entry"):
+        session_skills._remove_generated_home_skill_entry(discovery_root, "../outside")
+
+    assert outside.is_dir()
+
+
 def _catalog_context(
     manager,
     *,

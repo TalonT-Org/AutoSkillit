@@ -152,7 +152,7 @@ class TestTokenizeCommandSegments:
         result = tokenize_command_segments("echo ok&pip install -e .")
         assert len(result) == 2
 
-    @pytest.mark.parametrize("redirect", ["2>&1", "1>&2"])
+    @pytest.mark.parametrize("redirect", ["2>&1", "1>&2", ">&1"])
     def test_fd_duplication_does_not_create_a_command_boundary(self, redirect: str) -> None:
         assert tokenize_command_segments(f"gh issue edit 23 --title x {redirect}") == [
             ["gh", "issue", "edit", "23", "--title", "x", redirect]
@@ -1246,12 +1246,17 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
         assert analysis.reason_code == "unsafe_input_provenance"
 
-    def test_fd_duplication_does_not_make_later_input_unsafe(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("redirect", ["2>&1", ">&1"])
+    def test_fd_duplication_does_not_make_later_input_unsafe(
+        self,
+        redirect: str,
+        tmp_path: Path,
+    ) -> None:
         payload = tmp_path / "payload.json"
         payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
 
         analysis = analyze_github_mutations(
-            f"printf ok 2>&1 && gh api --method POST /repos/o/r/issues/7/comments "
+            f"printf ok {redirect} && gh api --method POST /repos/o/r/issues/7/comments "
             f"--input {payload}",
             cwd=str(tmp_path),
         )

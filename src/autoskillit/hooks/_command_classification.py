@@ -165,7 +165,7 @@ _WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
-_FD_DUPLICATION_RE = re.compile(r"^\d+>&\d+$")
+_FD_DUPLICATION_RE = re.compile(r"^\d*>&\d+$")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 _SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
@@ -344,7 +344,7 @@ def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
         if (
             operator_end < len(command)
             and command[operator_end] == "&"
-            and command[operator_start:i].isdecimal()
+            and (not command[operator_start:i] or command[operator_start:i].isdecimal())
         ):
             fd_end = operator_end + 1
             while fd_end < len(command) and command[fd_end].isdecimal():

@@ -875,8 +875,10 @@ def _canonical_codex_model_effort(
     """Translate the one canonical semantic policy used by agents and call sites."""
     if model_class is None:
         return "", reasoning_effort
-    model = CODEX_MODEL_ALIASES[model_class]
-    return model, reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class)
+    return (
+        CODEX_MODEL_ALIASES[model_class],
+        reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class),
+    )
 
 
 CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = _codex_cfg.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES

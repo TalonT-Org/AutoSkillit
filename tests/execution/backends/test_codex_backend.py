@@ -2663,6 +2663,35 @@ class TestCodexBackendSetupSessionDir:
             {"valid-ambient", "source-relative"} | eligible_bundled
         )
 
+    def test_setup_warns_when_ambient_agent_config_is_unreadable(self) -> None:
+        invalid_target = self.codex_home / "invalid-ambient.toml"
+        invalid_target.write_text("[", encoding="utf-8")
+        (self.codex_home / "config.toml").write_text(
+            self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
+            + '\n[agents."invalid-ambient"]\n'
+            + 'description = "invalid ambient role"\n'
+            + f'config_file = "{invalid_target}"\n',
+            encoding="utf-8",
+        )
+        (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
+        backend = CodexBackend()
+
+        assert backend.ensure_pre_launch(session_dir=self.session_dir) == []
+        with structlog.testing.capture_logs() as cap_logs:
+            role_names = backend.setup_session_dir(self.session_dir)
+
+        assert "invalid-ambient" not in role_names
+        warning = next(
+            entry for entry in cap_logs if entry.get("event") == "codex_agent_config_unreadable"
+        )
+        assert warning == {
+            "agent_name": "invalid-ambient",
+            "path": str(invalid_target),
+            "error_type": "TOMLDecodeError",
+            "event": "codex_agent_config_unreadable",
+            "log_level": "warning",
+        }
+
     @pytest.mark.parametrize(
         "role",
         (

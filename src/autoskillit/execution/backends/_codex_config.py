@@ -541,7 +541,13 @@ def effective_codex_agent_names(session_dir: Path) -> frozenset[str]:
             if not target.is_file():
                 continue
             tomllib.loads(target.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+            logger.warning(
+                "codex_agent_config_unreadable",
+                agent_name=name,
+                path=str(target),
+                error_type=type(exc).__name__,
+            )
             continue
         effective.add(name)
     return frozenset(effective)

@@ -106,7 +106,9 @@ class ToolDef:
     name: str
     params: tuple[ToolParamDef, ...]
     initialization_operation: ToolInitializationOperation
+    # Successful result edges may carry the next recipe segment automatically.
     automatic_recipe_delivery: bool = False
+    # Failure edges may carry a recovery segment; this can be enabled independently.
     recovery_recipe_delivery: bool = False
 
     def __post_init__(self) -> None:

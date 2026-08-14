@@ -53,6 +53,18 @@ mode: ordinary inline, host-attested inline, or a bounded `recipe_pull` envelope
 registered FastMCP handlers still return exact strings, and the response decorator consumes
 the selected decision without applying a second static shaping pass.
 
+Checkpoint responses use one inseparable `recipe_segment` field. The universal backstop
+recognizes it before ordinary enforcement, persists only an oversized base result, and
+recombines the complete carrier. Every segmented startup, checkpoint, and carrier-only
+post-effect failure must serialize to fewer than 10,000 UTF-8 bytes; this byte gate is
+stricter than the ordinary token authority and is measured independently from FastMCP's
+outer JSON-RPC framing. The carrier is never truncated or artifactized.
+
+If base publication, serialization, recombination, or final enforcement fails after the
+operation ran, the response becomes a bounded `recipe_segment_post_effect_delivery_failure`.
+It identifies the tool and recipe step, says not to repeat the operation, and retains the
+exact pull closure. It does not masquerade as the tool's normal operational failure.
+
 ## Numeric Limits and Rationale
 
 | Limit | Decision and rationale |
@@ -60,6 +72,7 @@ the selected decision without applying a second static shaping pass.
 | `load_recipe`: `max_chars = 195_000`, `max_utf8_bytes = 195_000` | The registered 2026-07-22 all-recipe/all-mode measurement identity is `bundled-recipes-all-modes-2026-07-22/load-recipe`. Growth beyond the measured ceiling fails closed to an immutable pull generation. |
 | `open_kitchen`: `max_chars = 195_000`, `max_utf8_bytes = 195_000` | The independent registered identity is `bundled-recipes-all-modes-2026-07-22/open-kitchen`; the deferred branch shares the producer but remains a separate delivery surface. |
 | `ordinary_omitted_result_token_limit = 10_000` | Conservative outer result for ordinary Codex calls and every untrusted or unsupported recipe request. |
+| Progressive recipe carrier `< 10_000 UTF-8 bytes` | Exact admission bound for segmented startup, checkpoint, and no-repeat recovery values; base-result spilling reserves the carrier intact. |
 | `authoritative_attested_recipe_result_token_limit = 56_750` | Derived as `((195_000 + 3) // 4) + 8_000`. It is selectable only from protected host evidence for the current call, never from nested arguments or rollout files. |
 | `CODEX_HISTORY_RETENTION_TOKEN_LIMIT = 56_750` | Written to upstream `tool_output_token_limit`; controls later stored history and does not select the current outer result. Equality with the attested result limit is intentional but does not merge the authority domains. |
 | `CODEX_AUTO_COMPACT_LIMIT = 999_999_999` | Retain the unreachable sentinel and the recovery obligation accepted in [ADR-0004](0004-recipe-redelivery.md). This protocol does not relax recipe-preservation policy. |

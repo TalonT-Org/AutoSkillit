@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
@@ -15,8 +17,10 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_FLOW_SCHEMA_VERSION,
     FinalizedRecipeProjection,
+    FinalizedRecipeSegment,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
+    RecipeExecutionSnapshot,
     RecipeFlowGeneration,
 )
 from autoskillit.pipeline import (
@@ -165,6 +169,31 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
         "snapshot_digest",
     }
     assert parsed_initial["recipe_execution"] == parsed_replay["recipe_execution"]
+
+
+def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
+    projection = FinalizedRecipeProjection(
+        binding_projection=RecipeBindingProjection({}),
+        ordered_step_names=("initial", "future"),
+        entrypoint="initial",
+        ordered_flow_edges=(),
+        delivery_segments=(
+            FinalizedRecipeSegment(name="S0", ordered_step_names=("initial",)),
+            FinalizedRecipeSegment(name="S1", ordered_step_names=("future",)),
+        ),
+    )
+    snapshot = cast(
+        RecipeExecutionSnapshot,
+        SimpleNamespace(
+            execution_id="execution",
+            snapshot_digest=_hash("snapshot"),
+            template_digests={"initial": _hash("initial"), "future": _hash("future")},
+        ),
+    )
+
+    credential = recipe_initialization._public_completion_credential(snapshot, projection)
+
+    assert credential.invocation_template_digests == {"initial": _hash("initial")}
 
 
 def test_install_rejects_initializing_recipe_without_completion_receipt(

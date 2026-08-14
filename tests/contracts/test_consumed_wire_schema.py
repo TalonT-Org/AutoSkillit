@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -52,6 +53,25 @@ _RECIPE_PAYLOAD_FIELDS = frozenset(
 # The union of all fields with programmatic consumers.
 _CONSUMED_INLINE_FIELDS = _DELIVERY_PIPELINE_FIELDS | _RECIPE_PAYLOAD_FIELDS
 
+_SEGMENTED_INLINE_FIELDS = frozenset(
+    {
+        "composite_hash",
+        "content_hash",
+        "errors",
+        "initialization_id",
+        "kitchen",
+        "recipe_flow",
+        "recipe_pull",
+        "recipe_segment",
+        "recipe_version",
+        "requires_packs",
+        "success",
+        "summary",
+        "valid",
+        "version",
+    }
+)
+
 # Fields that MUST NOT appear on the wire: dead weight with no programmatic consumers.
 _EXCLUDED_INLINE_FIELDS = frozenset(
     {
@@ -88,6 +108,13 @@ def test_inline_payload_schema_is_exact(
         pytest.skip("resolves ENVELOPE — no inline fields to check")
 
     payload_fields = set(envelope)
+    if "recipe_segment" in envelope:
+        assert payload_fields == _SEGMENTED_INLINE_FIELDS
+        carrier = envelope["recipe_segment"]
+        assert carrier["kind"] == "startup"
+        assert carrier["bodies"]
+        assert len(json.dumps(envelope, separators=(",", ":")).encode("utf-8")) < 10_000
+        return
     present_excluded = _EXCLUDED_INLINE_FIELDS & payload_fields
     assert not present_excluded, f"Excluded fields in inline payload: {sorted(present_excluded)}"
 

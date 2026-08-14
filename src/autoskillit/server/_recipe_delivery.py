@@ -140,12 +140,15 @@ _SEGMENTED_STARTUP_EXCLUDED_FIELDS = frozenset(
         "diagram",
         "flow_records",
         "ingredients_table",
+        "kitchen_rules",
+        "orchestration_rules",
         "post_prune_routing_edges",
         "post_prune_step_names",
         RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
         "recovery",
         "required_sections",
         "suggestions",
+        "stop_step_semantics",
     }
 )
 

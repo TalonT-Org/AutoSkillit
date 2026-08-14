@@ -18,7 +18,7 @@ async def test_progress_counters_in_every_recovery_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(tool_ctx, "backend", BACKEND_REGISTRY["codex"]())
-    envelope = await _open_kitchen_patched("implementation", {}, monkeypatch)
+    envelope = await _open_kitchen_patched("research", {"task": "test"}, monkeypatch)
     assert envelope["delivery_bound_spill"] is True
     for key in ("completed_parts", "total_parts", "remaining_section_pulls"):
         assert key in envelope
@@ -58,7 +58,7 @@ async def test_progress_recheck_enforces_client_char_ceiling_too(
     client's actual truncation gate.
     """
     monkeypatch.setattr(tool_ctx, "backend", BACKEND_REGISTRY["codex"]())
-    envelope = await _open_kitchen_patched("implementation", {}, monkeypatch)
+    envelope = await _open_kitchen_patched("research", {"task": "test"}, monkeypatch)
     assert envelope["delivery_bound_spill"] is True
     identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
     requirement = envelope["required_sections"][0]

@@ -23,7 +23,7 @@ from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS, compile_bound
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-_RECIPE_PATH = next(path for path in BUNDLED_RECIPE_PATHS if path.stem == "implementation")
+_RECIPE_PATH = next(path for path in BUNDLED_RECIPE_PATHS if path.stem == "research")
 
 
 def test_claude_conservative_fallback_produces_a_live_multipage_envelope(
@@ -31,7 +31,7 @@ def test_claude_conservative_fallback_produces_a_live_multipage_envelope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Claude backend + ``page_max_bytes=None`` must resolve to a usable
-    multipage ENVELOPE plan for the bundled ``implementation`` recipe.
+    multipage ENVELOPE plan for the non-segmented bundled ``research`` recipe.
 
     The conservative bound (~46.5K bytes) is much smaller than the default
     page_max_bytes (195K), so sections that fit in one page under default
@@ -64,5 +64,5 @@ def test_claude_conservative_fallback_produces_a_live_multipage_envelope(
     assert max_pages > 1, (
         f"Conservative fallback did not produce multipage delivery — "
         f"max pages per section is {max_pages}; expected >1 under the "
-        f"~46.5K conservative bound for the implementation recipe"
+        f"~46.5K conservative bound for the research recipe"
     )

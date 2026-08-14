@@ -1028,6 +1028,16 @@ resolved state. The `load_recipe` tool is the ONLY authoritative source of recip
 it runs the full composition pipeline (sub-recipe merging, skip-guard resolution, hidden
 ingredient interpolation) before serving content to you.
 
+When a response contains `recipe_segment`, treat that carrier as mandatory recipe
+authority. For `kind: startup` or `kind: success`, install every canonical body in
+`bodies` in the advertised order, verify each `body_sha256`, and use the segment-scoped
+`recipe_execution.invocation_template_digests` for the newly delivered named steps. The
+segment overview is a table of contents, not permission to invent or read future bodies.
+For `kind: recovery`, use its ordered `pull_closure` and `pull_requests` with the carrier's
+unchanged `recipe_pull`; reconstruct every named body before continuing. A
+`recipe_segment_post_effect_delivery_failure` means the operation already ran: do not
+repeat it, and recover only through the retained carrier.
+
 When `load_recipe`/`open_kitchen` return a bounded recovery manifest, process it
 before any generic `success:false` rule. Preserve `recipe_pull`, `recipe_flow`,
 `initialization_id`, `required_sections`, page-plan identity, and pagination-policy
@@ -1065,6 +1075,8 @@ response (top level, or under `recipe_delivery.payload_metadata` when the body i
 the same forwarding rule applies. Omitting these parameters or passing values that were not
 delivered in the response will cause `recipe_execution_attestation_missing` or
 `recipe_execution_inactive` denial.
+Segmented delivery narrows this lookup to the latest delivered carrier. Do not assume the
+startup credential contains invocation digests for the full recipe horizon.
 
 Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
 to load skill instructions — it applies runtime transformations (namespace rewriting,

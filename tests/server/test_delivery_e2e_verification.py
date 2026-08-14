@@ -20,12 +20,8 @@ async def test_claude_attested_implementation_delivers_successfully(
 ) -> None:
     """Claude backend with attestation delivers the implementation recipe.
 
-    The implementation recipe's flow records cause significant JSON escaping
-    overhead (~288K serialized chars when the ~147K rendered JSON is
-    wire-encoded) — exceeding the 175,500-char annotation-aware ceiling.
-    The attested path still benefits from the raised unannotated limit
-    (46,500 vs 23,250), and the recipe completes delivery end-to-end through
-    the bounded ENVELOPE path with usable content.
+    The complete canonical artifact remains durable, while public startup is
+    the compact initial segment on both ordinary backends.
     """
     monkeypatch.setenv(
         "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
@@ -39,24 +35,19 @@ async def test_claude_attested_implementation_delivers_successfully(
         tool_ctx=tool_ctx,
         monkeypatch=monkeypatch,
     )
-    assert counter.delivery_mode is not None
-    assert counter.delivery_mode in ("claude_code_inline", "claude_code_bounded"), (
-        f"Unexpected delivery mode: {counter.delivery_mode}"
-    )
+    assert counter.delivery_mode == "ordinary_inline"
+    assert len(counter) == 1
 
     # Verify the open_kitchen response has usable content
     result = counter.responses[0]
     envelope = json.loads(result)
     assert envelope.get("success") is True
-    if counter.delivery_mode == "claude_code_inline":
-        # One-call inline: body and flow in the response
-        assert isinstance(envelope.get("content"), str) and len(envelope["content"]) > 0
-        assert isinstance(envelope.get("flow_records"), list) and len(envelope["flow_records"]) > 0
-        assert "required_sections" not in envelope
-    else:
-        # Bounded ENVELOPE: manifest with sections to pull
-        assert envelope.get("delivery_bound_spill") is True
-        assert "required_sections" in envelope
+    assert len(result.encode("utf-8")) < 10_000
+    assert envelope["recipe_segment"]["kind"] == "startup"
+    assert envelope["recipe_segment"]["bodies"]
+    assert "content" not in envelope
+    assert "flow_records" not in envelope
+    assert "required_sections" not in envelope
 
 
 async def test_claude_small_recipe_delivers_inline(
@@ -76,22 +67,25 @@ async def test_claude_small_recipe_delivers_inline(
         tool_ctx=tool_ctx,
         monkeypatch=monkeypatch,
     )
-    assert counter.delivery_mode == "claude_code_inline", (
-        f"Expected claude_code_inline for small recipe, got {counter.delivery_mode}"
+    assert counter.delivery_mode == "ordinary_inline", (
+        f"Expected ordinary_inline for small recipe, got {counter.delivery_mode}"
     )
     assert len(counter) == 1, f"Expected 1 call, got {len(counter)}"
 
 
-async def test_codex_envelope_delivery_completes(
+async def test_codex_segmented_delivery_completes(
     tool_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Codex backend delivers implementation recipe via bounded ENVELOPE."""
+    """Codex backend delivers implementation startup in one compact response."""
     counter = await simulate_session_start(
         "implementation",
         "codex",
         tool_ctx=tool_ctx,
         monkeypatch=monkeypatch,
     )
-    assert counter.delivery_mode == "codex_bounded"
-    assert len(counter) >= 3  # open_kitchen + at least 1 pull + completion
+    assert counter.delivery_mode == "ordinary_inline"
+    assert len(counter) == 1
+    envelope = json.loads(counter.responses[0])
+    assert envelope["recipe_segment"]["kind"] == "startup"
+    assert len(counter.responses[0].encode("utf-8")) < 10_000

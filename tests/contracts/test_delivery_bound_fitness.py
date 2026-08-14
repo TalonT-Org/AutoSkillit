@@ -245,6 +245,13 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         planned_calls = 1 + sum(item["total_parts"] for item in required_sections) + 1
         assert planned_calls <= MAX_OPEN_KITCHEN_CALLS[mode]
         assert len(finalized.rendered.encode("utf-8")) <= MAX_ENVELOPE_MANIFEST_BYTES
+    elif "recipe_segment" in envelope:
+        assert envelope["recipe_segment"]["kind"] == "startup"
+        assert envelope["recipe_segment"]["bodies"]
+        assert "flow_records" not in envelope
+        assert "content" not in envelope
+        assert len(finalized.rendered.encode("utf-8")) < 10_000
+        assert 1 <= MAX_OPEN_KITCHEN_CALLS["ordinary_inline"]
     else:
         assert envelope["flow_records"] == list(prepared.flow_generation.records)
         exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]

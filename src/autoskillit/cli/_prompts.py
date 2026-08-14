@@ -162,7 +162,14 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
                 "inline delivery path the same recipe_execution block appears in the "
                 "open_kitchen response (top level, or under "
                 "recipe_delivery.payload_metadata when the body is attested); the same "
-                "forwarding rule applies."
+                "forwarding rule applies. If any response contains recipe_segment, "
+                "consume it as mandatory authority: verify and install ordered bodies "
+                "for startup/success carriers, use the carrier-scoped invocation "
+                "digests, and reconstruct every recovery pull_closure entry through "
+                "the unchanged recipe_pull. The overview is only a table of contents. "
+                "If subtype=recipe_segment_post_effect_delivery_failure, the operation "
+                "already ran; do not repeat it. Do not assume startup contains "
+                "full-horizon invocation_template_digests."
             ),
         ),
         _McpStartupRecoveryClause(

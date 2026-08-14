@@ -151,7 +151,7 @@ async def simulate_session_start(
         )
         await _credit_initialization_sections(envelope, counter=counter)
     else:
-        counter.delivery_mode = "claude_code_inline"
+        counter.delivery_mode = "ordinary_inline"
     return counter
 
 

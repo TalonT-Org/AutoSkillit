@@ -46,6 +46,22 @@ re-acquire it; if the response is a bounded envelope, follow up by calling
 deny-list on raw `run_cmd`/`Bash`/`run_python` recipe access remains the operative
 constraint — raw file access is denied; the MCP tools above are the unblocked paths.
 
+### Progressive delivery for long-running recipes
+
+`implementation` and `remediation` opt into checkpoint-gated delivery. Their immutable
+artifact still persists the complete canonical, post-prune recipe, flow, and execution
+snapshot, while the public `open_kitchen` response contains only the segment overview and
+initial bodies. Each mapped checkpoint tool verifies READY against that exact durable
+generation before its effect and then returns `recipe_segment` with either authenticated
+future bodies or an ordered manual `recipe_pull` closure. No raw YAML, LRU lookup, runtime
+skip carrier, or separately persisted projection participates in recovery.
+
+Acknowledged `run_skill` receipts are replayable only for the same kitchen, request
+session, and receipt identity. Their tracker effect remains one-shot and cached, so a
+response retry can reproduce the segment without crediting progress twice. A post-effect
+delivery failure carries the selected recovery authority and explicitly forbids repeating
+the operation.
+
 This is a forward obligation: when the primary defense (unreachable auto-compact limit)
 is relaxed, the `load_recipe` / `open_kitchen` / `get_recipe_section` end-to-end
 recovery path — including envelope re-delivery plus per-step pulls — must be tested as
@@ -105,6 +121,8 @@ Four invariants are non-negotiable:
   for envelope responses, `get_recipe_section`).
 - Terminal-page delivery enforces the four invariants above while preserving the
   separate completion call as a compatibility fallback for non-receipt responses.
+- Segmented recipes recover from the latest `recipe_segment`; the startup credential is
+  intentionally scoped to delivered bodies rather than the full future recipe.
 - Future work relaxing `CODEX_AUTO_COMPACT_LIMIT` must add integration tests verifying
   `load_recipe` / `open_kitchen` / `get_recipe_section` re-delivery restores full
   pipeline execution capability, including envelope re-delivery plus per-step pulls.

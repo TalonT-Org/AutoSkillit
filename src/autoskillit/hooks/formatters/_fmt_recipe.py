@@ -34,7 +34,6 @@ _RECIPE_INITIALIZATION_FIELDS: tuple[str, ...] = (
     "initialization_id",
     "recovery",
     "required_sections",
-    "recipe_segment",
 )
 
 _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
@@ -217,6 +216,7 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "degraded_evidence",
         "ambiguity",
         "retry_disposition",
+        "recipe_segment",
         *_RECIPE_INITIALIZATION_FIELDS,
     }
 )
@@ -280,6 +280,9 @@ def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
     lines: list[str] = [f"## open_kitchen {mark} v{version}"]
     lines.extend(_fmt_kitchen_transition(data))
     lines.extend(_fmt_recipe_body(data))
+    formatted_segment = _fmt_recipe_segment(data.get("recipe_segment"))
+    if formatted_segment:
+        lines.extend(("", formatted_segment))
     formatted = "\n".join(lines)
 
     byte_len = len(formatted.encode("utf-8"))

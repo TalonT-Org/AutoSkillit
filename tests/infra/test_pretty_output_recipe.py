@@ -906,6 +906,29 @@ def test_fmt_open_kitchen_ingredients_only_no_recipe_block():
     assert "--- RECIPE ---" not in output
 
 
+def test_fmt_open_kitchen_renders_segmented_startup() -> None:
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+
+    rendered = _fmt_open_kitchen(
+        {
+            "success": True,
+            "valid": True,
+            "version": "1",
+            "recipe_segment": {
+                "kind": "startup",
+                "segment": {"index": 0, "name": "I0"},
+                "overview": [{"index": 0, "name": "I0", "steps": ["clone"]}],
+                "bodies": [{"step": "clone", "body": "clone:\n  tool: bootstrap_clone\n"}],
+            },
+        },
+        pipeline=False,
+    )
+
+    assert "--- RECIPE SEGMENT ---" in rendered
+    assert '"kind":"startup"' in rendered
+    assert '"step":"clone"' in rendered
+
+
 # Issue #4253 Part A: STEP FLOW head, diagram inclusion, compaction, and payload budget
 
 

@@ -258,13 +258,10 @@
     "review_research_pr": {
       "tool": "run_skill",
       "model": "",
-      "optional_context_refs": [
-        "worktree_path"
-      ],
       "with": {
         "skill_command": "/autoskillit:review-research-pr",
         "skill_inputs": {
-          "worktree_path": "${{ context.worktree_path }}",
+          "worktree_path": "${{ inputs.worktree_path }}",
           "base_branch": "${{ inputs.base_branch }}",
           "pr_url": "${{ context.pr_url }}",
           "repository": "${{ context.review_repository }}",
@@ -277,7 +274,7 @@
           "hunk_ranges_path": "${{ context.hunk_ranges_path }}",
           "valid_lines_path": "${{ context.valid_lines_path }}"
         },
-        "cwd": "${{ context.worktree_path }}",
+        "cwd": "${{ inputs.worktree_path }}",
         "step_name": "review_research_pr",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-research-pr/research-review"
       },
@@ -340,13 +337,10 @@
     "audit_claims": {
       "tool": "run_skill",
       "model": "",
-      "optional_context_refs": [
-        "worktree_path"
-      ],
       "with": {
         "skill_command": "/autoskillit:audit-claims",
         "skill_inputs": {
-          "worktree_path": "${{ context.worktree_path }}",
+          "worktree_path": "${{ inputs.worktree_path }}",
           "base_branch": "${{ inputs.base_branch }}",
           "pr_url": "${{ context.pr_url }}",
           "repository": "${{ context.review_repository }}",
@@ -355,7 +349,7 @@
           "logical_iteration": "audit-claims:research-review",
           "receipt_path": "{{AUTOSKILLIT_TEMP}}/audit-claims/batch_review_response_${{ context.pr_number }}.json"
         },
-        "cwd": "${{ context.worktree_path }}",
+        "cwd": "${{ inputs.worktree_path }}",
         "step_name": "audit_claims",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-claims"
       },
@@ -507,16 +501,13 @@
       "model": "",
       "stale_threshold": 2400,
       "idle_output_timeout": 0,
-      "optional_context_refs": [
-        "worktree_path"
-      ],
       "with": {
         "skill_command": "/autoskillit:run-experiment",
         "skill_inputs": {
-          "worktree_path": "${{ context.worktree_path }}",
+          "worktree_path": "${{ inputs.worktree_path }}",
           "adjust": true
         },
-        "cwd": "${{ context.worktree_path }}",
+        "cwd": "${{ inputs.worktree_path }}",
         "step_name": "re_run_experiment",
         "output_dir": "."
       },
@@ -546,19 +537,15 @@
     "re_generate_report": {
       "tool": "run_skill",
       "model": "",
-      "optional_context_refs": [
-        "worktree_path",
-        "experiment_results"
-      ],
       "with": {
         "skill_command": "/autoskillit:generate-report",
         "skill_inputs": {
-          "worktree_path": "${{ context.worktree_path }}",
+          "worktree_path": "${{ inputs.worktree_path }}",
           "results_path": "${{ context.experiment_results }}",
           "output_mode": "${{ inputs.output_mode }}",
           "issue_url": "${{ inputs.issue_url }}"
         },
-        "cwd": "${{ context.worktree_path }}",
+        "cwd": "${{ inputs.worktree_path }}",
         "step_name": "re_generate_report",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
       },

@@ -38,6 +38,68 @@ from tests.contracts.test_delivery_bound_fitness import (
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
+def test_implementation_plan_shape_supplies_unavailable_audit_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe._binding import bind_runtime_skill_invocation
+    from autoskillit.server import _recipe_generation
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
+    payload, projection = _full_open_kitchen_generation("implementation")
+    tool_ctx = cast(
+        Any,
+        SimpleNamespace(
+            backend=None,
+            kitchen_id="implementation-plan-shape",
+            temp_dir=tmp_path,
+        ),
+    )
+    prepared = prepare_recipe_delivery_generation(
+        payload,
+        recipe_name="implementation",
+        tool_ctx=tool_ctx,
+        finalized_projection=projection,
+    )
+    credential = build_recipe_execution_credential(prepared.execution_snapshot)
+    shape = credential.as_wire_block()["skill_input_shapes"]["plan"]
+    assert shape == {
+        "keys": ["task", "issue_url", "adversarial_review_level", "audit_cycle_path"],
+        "unresolved_defaults": {"audit_cycle_path": ""},
+    }
+
+    resolved = {
+        "task": "test task",
+        "issue_url": "https://github.com/test/test/issues/1",
+        "adversarial_review_level": "standard",
+    }
+    defaults = cast(dict[str, str | int | bool], shape["unresolved_defaults"])
+    assembled = {
+        name: resolved[name] if name in resolved else defaults[name]
+        for name in cast(list[str], shape["keys"])
+    }
+    template = prepared.execution_snapshot.templates["plan"]
+    actual_mcp_kwargs = {
+        value.name: value.effective_value
+        for value in template.invocation.mcp_kwargs
+        if isinstance(value.effective_value, (str, int, bool))
+    }
+
+    bound = bind_runtime_skill_invocation(
+        template,
+        execution_id=prepared.execution_snapshot.execution_id,
+        step_name="plan",
+        skill_command="/autoskillit:make-plan",
+        skill_inputs=assembled,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+    )
+
+    assert dict(bound) == assembled
+
+
 @pytest.mark.parametrize("recipe_name", _delivery_recipe_names(), ids=lambda n: n)
 def test_completion_receipt_fits_every_delivery_bound(
     recipe_name: str,

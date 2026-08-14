@@ -1296,7 +1296,7 @@ steps:
     capture:
       review_loop_count: ${{ result.value }}
     on_success: clear_review_annotation_context
-    on_failure: clear_review_annotation_context
+    on_failure: release_issue_failure
     optional_context_refs:
     - review_loop_count
   clear_review_annotation_context:
@@ -1395,7 +1395,6 @@ steps:
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
     optional_context_refs:
-    - review_loop_count
     - review_mode
     note: 'Runs after compose_pr creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds

@@ -287,6 +287,7 @@ from autoskillit.recipe.staleness_cache import (  # noqa: E402
 from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,
     analyze_dataflow,
+    edge_routes_success,
     make_validation_context,
     run_semantic_rules,
     validate_recipe_structure,
@@ -343,6 +344,7 @@ __all__ = [
     "make_validation_context",
     "run_semantic_rules",
     "analyze_dataflow",
+    "edge_routes_success",
     "check_contract_staleness",
     "generate_recipe_card",
     "get_skill_contract",

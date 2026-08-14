@@ -13,11 +13,13 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     RecipeArtifactGeneration,
     RecipeExecutionSnapshot,
+    RecipeFlowEdge,
     build_recipe_execution_credential,
     get_tool_def,
     load_yaml,
 )
 from autoskillit.pipeline import ReadyRecipe
+from autoskillit.recipe import edge_routes_success
 from autoskillit.server._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
@@ -29,7 +31,6 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 RECIPE_SEGMENT_MAX_BYTES = 10_000
-_SUCCESS_EDGE_TYPES = frozenset({"success"})
 _SEGMENTED_STARTUP_SURFACES = frozenset({"open_kitchen", "open_kitchen_deferred_recall"})
 _SEGMENTED_STARTUP_EXCLUDED_FIELDS = frozenset(
     {
@@ -167,29 +168,16 @@ def _delivery_tool_name(projection: FinalizedRecipeProjection, source_step: str)
 
 def _edge_routes_success(
     projection: FinalizedRecipeProjection,
-    edge: object,
+    edge: RecipeFlowEdge,
 ) -> bool:
-    tool_name = _delivery_tool_name(projection, getattr(edge, "source", ""))
+    tool_name = _delivery_tool_name(projection, edge.source)
     definition = get_tool_def(tool_name) if tool_name is not None else None
-    if (
-        definition is not None
-        and not definition.automatic_recipe_delivery
-        and definition.recovery_recipe_delivery
-    ):
-        return False
-    edge_type = getattr(edge, "edge_type", "")
-    if edge_type in _SUCCESS_EDGE_TYPES:
-        return True
-    if edge_type != "result_condition":
-        return False
-    condition = (getattr(edge, "condition", None) or "").replace("'", "")
-    if tool_name == "wait_for_ci":
-        return "result.conclusion" in condition and "== success" in condition
-    if tool_name == "wait_for_merge_queue":
-        return "result.pr_state" in condition and "== merged" in condition
-    if tool_name == "claim_and_resolve_issue":
-        return "result.claimed" in condition and "== true" in condition
-    return definition is not None and definition.automatic_recipe_delivery
+    return edge_routes_success(
+        tool_name or "",
+        edge,
+        automatic=definition is not None and definition.automatic_recipe_delivery,
+        recovery=definition is not None and definition.recovery_recipe_delivery,
+    )
 
 
 def _target_segment_indices(

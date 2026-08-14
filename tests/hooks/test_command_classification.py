@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 
@@ -150,6 +151,65 @@ class TestTokenizeCommandSegments:
     def test_adjacent_background_ampersand(self):
         result = tokenize_command_segments("echo ok&pip install -e .")
         assert len(result) == 2
+
+    @pytest.mark.parametrize("redirect", ["2>&1", "1>&2", ">&1"])
+    def test_fd_duplication_does_not_create_a_command_boundary(self, redirect: str) -> None:
+        assert tokenize_command_segments(f"gh issue edit 23 --title x {redirect}") == [
+            ["gh", "issue", "edit", "23", "--title", "x", redirect]
+        ]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "printf '%s' '2>/tmp/out'",
+            'printf "%s" "2>/tmp/out"',
+            r"printf %s 2\>/tmp/out",
+        ],
+        ids=["single-quoted", "double-quoted", "escaped"],
+    )
+    def test_quoted_or_escaped_redirect_shape_remains_literal_argv(self, command: str) -> None:
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+
+        assert segments[0].tokens == ["printf", "%s", "2>/tmp/out"]
+        assert segments[0].redirect_syntax == [False, False, False]
+
+    @pytest.mark.parametrize(
+        ("command", "expected_tokens", "expected_targets", "expected_count"),
+        [
+            ("cmd > /tmp/out", ["cmd"], ["/tmp/out"], 1),
+            ("cmd 2>/tmp/err", ["cmd"], ["/tmp/err"], 1),
+            ("cmd >> /tmp/out", ["cmd"], ["/tmp/out"], 1),
+            ("cmd 2>>/tmp/err", ["cmd"], ["/tmp/err"], 1),
+            ("cmd >$OUT", ["cmd"], [], 1),
+            ("cmd >", ["cmd"], [], 1),
+            ("cmd 2>&1", ["cmd"], [], 0),
+            ("curl --output /tmp/out URL", ["curl", "--output", "/tmp/out", "URL"], [], 0),
+        ],
+        ids=[
+            "separate",
+            "merged",
+            "append-separate",
+            "append-merged",
+            "dynamic",
+            "missing",
+            "fd-dup",
+            "curl-option",
+        ],
+    )
+    def test_output_control_partition(
+        self,
+        command: str,
+        expected_tokens: list[str],
+        expected_targets: list[str],
+        expected_count: int,
+    ) -> None:
+        segment = command_classification._tokenize_command_segments_with_redirects(command)[0]
+
+        assert command_classification._partition_output_redirects(
+            segment.tokens,
+            cwd="/work",
+            redirect_syntax=segment.redirect_syntax,
+        ) == (expected_tokens, expected_targets, expected_count)
 
     def test_bare_newline_separates_segments(self):
         result = tokenize_command_segments("echo ok\npip install -e .")
@@ -880,6 +940,7 @@ class TestAnalyzeGitHubMutations:
                 mutations=(),
                 request_count=0,
                 review_comment_count=None,
+                reason_code="",
                 reason="",
             )
         )
@@ -902,6 +963,7 @@ class TestAnalyzeGitHubMutations:
             ),
             request_count=1,
             review_comment_count=None,
+            reason_code="",
             reason="",
         )
 
@@ -923,8 +985,74 @@ class TestAnalyzeGitHubMutations:
             ),
             request_count=1,
             review_comment_count=None,
+            reason_code="",
             reason="",
         )
+
+    @pytest.mark.parametrize(
+        ("baseline", "redirected"),
+        [
+            (
+                "gh issue edit 4581 --repo TalonT-Org/AutoSkillit --body-file /tmp/body",
+                "sleep 1 && gh issue edit 4581 --repo TalonT-Org/AutoSkillit "
+                "--body-file /tmp/body 2>&1 | head -c 4000",
+            ),
+            (
+                "gh issue edit 4581 --repo TalonT-Org/AutoSkillit --body-file /tmp/body",
+                "gh issue edit 4581 --repo TalonT-Org/AutoSkillit "
+                "--body-file /tmp/body > /tmp/out 2>&1",
+            ),
+            (
+                "gh api --method PATCH repos/TalonT-Org/AutoSkillit/issues/4581 -f title=x",
+                "gh api --method PATCH repos/TalonT-Org/AutoSkillit/issues/4581 "
+                "-f title=x > /tmp/out 2>&1",
+            ),
+            (
+                "curl -X PATCH https://api.github.com/repos/o/r/issues/4581 -d '{}';",
+                "curl -X PATCH https://api.github.com/repos/o/r/issues/4581 "
+                "-d '{}' > /tmp/out 2>&1",
+            ),
+        ],
+        ids=["filing-pipeline", "filing-file", "gh-api", "curl"],
+    )
+    def test_output_redirection_does_not_change_mutation_identity(
+        self,
+        baseline: str,
+        redirected: str,
+    ) -> None:
+        expected = analyze_github_mutations(baseline)
+        actual = analyze_github_mutations(redirected)
+
+        assert actual.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert actual.request_count == 1
+        assert actual.mutations == expected.mutations
+
+    @pytest.mark.parametrize(
+        ("command", "expected_status"),
+        [
+            ("gh issue edit 23 24 --title x > /tmp/out", GitHubMutationStatus.MULTIPLE),
+            (
+                "gh api --method PATCH /repos/o/r/issues/23 /repos/o/r/issues/24 > /tmp/out",
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+            (
+                "curl -X PATCH https://api.github.com/repos/o/r/issues/23 "
+                "https://api.github.com/repos/o/r/issues/24 > /tmp/out",
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+            (
+                "gh api --method PATCH /repos/o/r/issues/23 > >(tee /tmp/out)",
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+        ],
+        ids=["issue-targets", "api-routes", "curl-urls", "process-substitution"],
+    )
+    def test_redirect_normalization_preserves_negative_controls(
+        self,
+        command: str,
+        expected_status: GitHubMutationStatus,
+    ) -> None:
+        assert analyze_github_mutations(command).status is expected_status
 
     @pytest.mark.parametrize(
         "command,kind",
@@ -1004,6 +1132,9 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
         assert analysis.request_count is None
         assert analysis.reason
+        assert analysis.reason_code
+        assert len(analysis.reason_code.encode("utf-8")) <= 64
+        assert re.fullmatch(r"[a-z][a-z0-9_]*", analysis.reason_code)
 
     @pytest.mark.parametrize(
         "command",
@@ -1092,6 +1223,32 @@ class TestAnalyzeGitHubMutations:
         assert analysis.request_count == 2
         assert len(analysis.mutations) == 2
 
+    def test_identical_nested_payloads_keep_per_occurrence_cwd(self, tmp_path: Path) -> None:
+        (tmp_path / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        nested = "gh api --method POST /repos/o/r/issues/7/comments --input payload.json"
+        command = (
+            f"cd {shlex.quote(str(tmp_path))} && $({nested}) && "
+            f"cd {shlex.quote(str(tmp_path / 'missing'))} && $({nested})"
+        )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
+    def test_nested_payload_uses_its_structural_segment_context(self, tmp_path: Path) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        nested = f"gh api --method POST /repos/o/r/issues/7/comments --input {payload}"
+        command = (
+            f"echo {shlex.quote(nested)} && printf x > {payload} && bash -c {shlex.quote(nested)}"
+        )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
     def test_prior_command_that_can_rewrite_literal_input_is_unresolved(
         self,
         tmp_path: Path,
@@ -1107,6 +1264,146 @@ class TestAnalyzeGitHubMutations:
 
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
         assert "prior command may rewrite" in analysis.reason
+
+    @pytest.mark.parametrize(
+        "prefix",
+        [
+            "python3 -c 'print(1)' && ",
+            "printf x > prior.out && ",
+            "cd /tmp > /tmp/cd.out && ",
+        ],
+        ids=["non-allowlisted", "prior-writer", "cd-writer"],
+    )
+    def test_prior_command_provenance_remains_fail_closed(
+        self,
+        prefix: str,
+        tmp_path: Path,
+    ) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+
+        analysis = analyze_github_mutations(
+            prefix + f"gh api --method POST /repos/o/r/issues/7/comments --input {payload}",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
+    @pytest.mark.parametrize("redirect", ["2>&1", ">&1"])
+    def test_fd_duplication_does_not_make_later_input_unsafe(
+        self,
+        redirect: str,
+        tmp_path: Path,
+    ) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+
+        analysis = analyze_github_mutations(
+            f"printf ok {redirect} && gh api --method POST /repos/o/r/issues/7/comments "
+            f"--input {payload}",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+
+    @pytest.mark.parametrize(
+        ("redirect", "expected_status", "expected_reason_code"),
+        [
+            ("> different.out", GitHubMutationStatus.SINGLE_RESOLVED, ""),
+            ("> payload.json", GitHubMutationStatus.UNRESOLVED, "unsafe_input_provenance"),
+            ("> $OUT", GitHubMutationStatus.UNRESOLVED, "unsafe_input_provenance"),
+        ],
+        ids=["distinct", "same-path", "unresolved-target"],
+    )
+    def test_current_input_redirect_alias_safety(
+        self,
+        redirect: str,
+        expected_status: GitHubMutationStatus,
+        expected_reason_code: str,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        command = (
+            "env -C nested gh api --method POST /repos/o/r/issues/7/comments "
+            f"--input ../payload.json {redirect}"
+        )
+        (tmp_path / "nested").mkdir()
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is expected_status
+        assert analysis.reason_code == expected_reason_code
+
+    def test_current_input_redirect_rejects_hard_link_alias(self, tmp_path: Path) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        alias = tmp_path / "alias.json"
+        alias.hardlink_to(payload)
+
+        analysis = analyze_github_mutations(
+            f"gh api --method POST /repos/o/r/issues/7/comments --input {payload} > {alias}",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
+    @pytest.mark.parametrize("wrapper", ["shell", "argv"])
+    def test_parent_redirect_provenance_reaches_nested_mutation(
+        self,
+        wrapper: str,
+        tmp_path: Path,
+    ) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        nested = f"gh api --method POST /repos/o/r/issues/7/comments --input {payload}"
+        if wrapper == "shell":
+            command = f"bash -c {shlex.quote(nested)} > {payload}"
+        else:
+            argv = [
+                "gh",
+                "api",
+                "--method",
+                "POST",
+                "/repos/o/r/issues/7/comments",
+                "--input",
+                str(payload),
+            ]
+            command = (
+                "python3 -c "
+                + shlex.quote(f"import subprocess; subprocess.run({argv!r})")
+                + f" > {payload}"
+            )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
+    def test_unresolved_reason_codes_are_distinct_by_failure_family(self, tmp_path: Path) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        analyses = {
+            "dynamic target": analyze_github_mutations(
+                "gh issue edit $ISSUE --title x"
+            ).reason_code,
+            "shell structure": analyze_github_mutations(
+                "for x in 1 2; do gh issue edit 1 --title x; done"
+            ).reason_code,
+            "unsafe input provenance": analyze_github_mutations(
+                f"python3 -c 'print(1)' && gh api --method POST /repos/o/r/issues/7/comments "
+                f"--input {payload}"
+            ).reason_code,
+            "cwd": analyze_github_mutations("cd $DIR && gh issue edit 1 --title x").reason_code,
+        }
+
+        assert analyses == {
+            "dynamic target": "dynamic_target",
+            "shell structure": "shell_structure_unresolved",
+            "unsafe input provenance": "unsafe_input_provenance",
+            "cwd": "cwd_unresolved",
+        }
 
     def test_literal_interpreter_cwd_is_used_for_input_resolution(self, tmp_path: Path) -> None:
         nested = tmp_path / "nested"
@@ -1312,6 +1609,7 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.MULTIPLE
         assert analysis.request_count == 2
         assert analysis.mutations[0].request_count == 2
+        assert analysis.reason_code == ""
 
     @pytest.mark.parametrize(
         "command",

@@ -45,7 +45,11 @@ from autoskillit.hooks._capture_artifacts import (
 from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
 
 from .conftest import _FAILURE_GRADE_RE
-from .fixtures.session_replays import INCIDENT_TRANSCRIPT, fixture_path
+from .fixtures.session_replays import (
+    INCIDENT_TRANSCRIPT,
+    INTERACTIVE_GITHUB_MUTATION,
+    fixture_path,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -384,6 +388,28 @@ def test_incident_transcript_replay_is_clean_and_denies_genuine_mutation(tmp_pat
             f"expected event {event.payload!r} to be denied by some matched guard, "
             f"but none of {[r.script for r in results]} denied it"
         )
+
+
+def test_interactive_github_mutation_replay_reaches_global_guard(tmp_path: Path) -> None:
+    orchestrating_root = tmp_path / "interactive-project"
+    orchestrating_root.mkdir()
+
+    replayed = replay(
+        INTERACTIVE_GITHUB_MUTATION,
+        {"{{ORCHESTRATING_ROOT}}": str(orchestrating_root)},
+        process_cwd=orchestrating_root,
+    )
+
+    assert_replay_clean(replayed)
+    assert len(replayed) == 2
+    allow_event, allow_results = replayed[0]
+    review_event, review_results = replayed[1]
+    guard_name = "guards/github_mutation_guard.py"
+    assert allow_event.allowed
+    assert any(result.script == guard_name for result in allow_results)
+    assert not any(result.denied for result in allow_results)
+    assert not review_event.allowed
+    assert any(result.script == guard_name and result.denied for result in review_results)
 
 
 def test_incident_transcript_capture_wrapped_command_over_seeded_backlog_is_clean(

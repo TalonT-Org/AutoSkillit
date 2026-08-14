@@ -510,16 +510,22 @@ relative `--input` files against the execution cwd only; a missing or
 relative execution cwd degrades cleanly to "unresolved" rather than denying
 every command that carries one.
 
-Every deny routes through one of five machine-readable triggers
+Every deny routes through one of seven machine-readable triggers
 (`DenyTrigger` in `github_mutation_guard.py`), each with its own reason text:
 
 | Trigger | Meaning |
 |---------|---------|
 | `field_confusion` | The payload carries both the Bash and run_cmd command fields, or a stray `cwd` inside a Bash `tool_input` — which text executes is ambiguous. |
 | `malformed_command` | The command field is missing or not a string. |
-| `unresolved_mutation` | Mutation cardinality or target cannot be statically proven safe (dynamic values, unresolved `--input`, repeatable/dispatch constructs reaching a possible GitHub exec). |
+| `malformed_cwd` | The command execution cwd is non-string or relative, so path-sensitive inputs cannot be resolved safely. |
+| `unresolved_mutation` | Mutation cardinality or target cannot be statically proven safe. The denial includes only a bounded static classifier code; internal prose, command text, and paths remain private. |
+| `classifier_internal_error` | The classifier failed unexpectedly. This is distinct from expected uncertainty and exposes no exception detail. |
 | `multiple_mutations` | The command issues more than one GitHub mutation request. |
 | `review_mutation` | The command is a raw pull-request review publication. |
+
+The guard is registered globally with `session_scope="any"` and permits only exactly one
+proven non-review mutation. Both expected classifier uncertainty and unexpected internal
+failure remain fail-closed.
 
 ## Drift detection
 

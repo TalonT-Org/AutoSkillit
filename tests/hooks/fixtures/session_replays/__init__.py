@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 INCIDENT_TRANSCRIPT: str = "incident_transcript_v1.jsonl"
+INTERACTIVE_GITHUB_MUTATION: str = "interactive_github_mutation_v1.jsonl"
 
 
 def fixture_path(name: str) -> Path:
@@ -21,4 +22,4 @@ def fixture_path(name: str) -> Path:
     return Path(__file__).parent / name
 
 
-__all__ = ["INCIDENT_TRANSCRIPT", "fixture_path"]
+__all__ = ["INCIDENT_TRANSCRIPT", "INTERACTIVE_GITHUB_MUTATION", "fixture_path"]

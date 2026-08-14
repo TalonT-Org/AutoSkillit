@@ -1,0 +1,3 @@
+{"session_env": {"AUTOSKILLIT_HEADLESS": "", "AUTOSKILLIT_SESSION_TYPE": ""}, "state_setup": []}
+{"payload": {"tool_name": "Bash", "tool_input": {"command": "gh issue edit 4581 --repo TalonT-Org/AutoSkillit --body-file /tmp/body > /tmp/out 2>&1"}, "cwd": "{{ORCHESTRATING_ROOT}}"}, "expectations": {"allowed": true, "max_severity": "none"}}
+{"payload": {"tool_name": "Bash", "tool_input": {"command": "gh pr review 4581 --approve"}, "cwd": "{{ORCHESTRATING_ROOT}}"}, "expectations": {"allowed": false, "max_severity": "none"}}

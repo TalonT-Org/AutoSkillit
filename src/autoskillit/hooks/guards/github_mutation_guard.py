@@ -64,6 +64,7 @@ class DenyTrigger(StrEnum):
     MALFORMED_COMMAND = "malformed_command"
     MALFORMED_CWD = "malformed_cwd"
     UNRESOLVED_MUTATION = "unresolved_mutation"
+    CLASSIFIER_INTERNAL_ERROR = "classifier_internal_error"
     MULTIPLE_MUTATIONS = "multiple_mutations"
     REVIEW_MUTATION = "review_mutation"
 
@@ -73,6 +74,7 @@ class GuardDecision(NamedTuple):
 
     allow: bool
     trigger: DenyTrigger | None
+    reason_code: str
 
 
 _POST_PR_REVIEW_POINTER = (
@@ -96,8 +98,13 @@ _DENY_MESSAGES: dict[DenyTrigger, str] = {
     ),
     DenyTrigger.UNRESOLVED_MUTATION: (
         "unresolved_mutation: this command's GitHub mutation cardinality or "
-        f"target cannot be statically proven safe. {_POST_PR_REVIEW_POINTER} "
+        "target cannot be statically proven safe. Rewrite it as exactly one literal "
+        "non-review mutation; use post_pr_review only for review publication. "
         "Unresolved mutation commands fail closed."
+    ),
+    DenyTrigger.CLASSIFIER_INTERNAL_ERROR: (
+        "classifier_internal_error: GitHub mutation classification failed "
+        "unexpectedly. The command was denied without exposing runtime details."
     ),
     DenyTrigger.MULTIPLE_MUTATIONS: (
         "multiple_mutations: this command issues more than one GitHub mutation "
@@ -118,34 +125,49 @@ def decide(parsed: ParsedHookCommand) -> GuardDecision:
     are checked before any command-content classification runs.
     """
     if parsed.tool_kind not in ("bash", "run_cmd"):
-        return GuardDecision(allow=True, trigger=None)
+        return GuardDecision(allow=True, trigger=None, reason_code="")
     if parsed.command is None:
-        return GuardDecision(allow=False, trigger=DenyTrigger.MALFORMED_COMMAND)
+        return GuardDecision(
+            allow=False,
+            trigger=DenyTrigger.MALFORMED_COMMAND,
+            reason_code="",
+        )
     if PayloadAnomaly.FIELD_CONFUSION in parsed.anomalies:
-        return GuardDecision(allow=False, trigger=DenyTrigger.FIELD_CONFUSION)
+        return GuardDecision(allow=False, trigger=DenyTrigger.FIELD_CONFUSION, reason_code="")
     if any(
         anomaly in parsed.anomalies
         for anomaly in (PayloadAnomaly.NON_STRING_CWD, PayloadAnomaly.RELATIVE_CWD)
     ):
-        return GuardDecision(allow=False, trigger=DenyTrigger.MALFORMED_CWD)
+        return GuardDecision(allow=False, trigger=DenyTrigger.MALFORMED_CWD, reason_code="")
 
     analysis = analyze_github_mutations(parsed.command, cwd=parsed.execution_cwd)
 
     if analysis.status is GitHubMutationStatus.MULTIPLE:
-        return GuardDecision(allow=False, trigger=DenyTrigger.MULTIPLE_MUTATIONS)
+        return GuardDecision(
+            allow=False,
+            trigger=DenyTrigger.MULTIPLE_MUTATIONS,
+            reason_code="",
+        )
     if analysis.status is GitHubMutationStatus.UNRESOLVED:
-        return GuardDecision(allow=False, trigger=DenyTrigger.UNRESOLVED_MUTATION)
+        return GuardDecision(
+            allow=False,
+            trigger=DenyTrigger.UNRESOLVED_MUTATION,
+            reason_code=analysis.reason_code,
+        )
     if any(record.kind in _REVIEW_KINDS for record in analysis.mutations):
-        return GuardDecision(allow=False, trigger=DenyTrigger.REVIEW_MUTATION)
-    return GuardDecision(allow=True, trigger=None)
+        return GuardDecision(allow=False, trigger=DenyTrigger.REVIEW_MUTATION, reason_code="")
+    return GuardDecision(allow=True, trigger=None, reason_code="")
 
 
-def _deny(trigger: DenyTrigger) -> NoReturn:
+def _deny(trigger: DenyTrigger, reason_code: str) -> NoReturn:
+    reason = _DENY_MESSAGES[trigger]
+    if trigger is DenyTrigger.UNRESOLVED_MUTATION:
+        reason = f"{reason} classifier_code={reason_code or 'unclassified_uncertainty'}"
     payload = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": _DENY_MESSAGES[trigger],
+            "permissionDecisionReason": reason,
         }
     }
     sys.stdout.write(json.dumps(payload) + "\n")
@@ -164,9 +186,9 @@ def main() -> None:
         decision = decide(parse_hook_command(loaded))
     except Exception:
         _LOGGER.error("GitHub mutation classification failed", exc_info=True)
-        _deny(DenyTrigger.UNRESOLVED_MUTATION)
+        _deny(DenyTrigger.CLASSIFIER_INTERNAL_ERROR, "")
     if not decision.allow and decision.trigger is not None:
-        _deny(decision.trigger)
+        _deny(decision.trigger, decision.reason_code)
     raise SystemExit(0)
 
 

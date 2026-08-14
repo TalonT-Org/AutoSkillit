@@ -550,6 +550,7 @@ async def test_active_installation_barrier_fences_prepared_authority_without_red
                     staged_snapshot=replacement_snapshot,
                     requirements=(),
                     generation_store_key=state.generation_store_key,
+                    finalized_projection=state.finalized_projection,
                 )
                 prepared = prepare_recipe_execution(
                     tool_ctx_kitchen_open,

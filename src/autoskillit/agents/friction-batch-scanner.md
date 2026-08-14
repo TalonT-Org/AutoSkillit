@@ -3,7 +3,7 @@ name: friction-batch-scanner
 description: "Use when one parent-assigned log batch must be scanned for friction evidence."
 tools: [Read, Grep]
 model: haiku
-maxTurns: 30
+maxTurns: 80
 ---
 
 # Friction batch scanner

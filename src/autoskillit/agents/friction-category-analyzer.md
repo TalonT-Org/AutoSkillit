@@ -3,7 +3,7 @@ name: friction-category-analyzer
 description: "Use when supplied indicators need validation for one parent-assigned friction category."
 tools: [Read, Grep]
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 # Friction category analyzer

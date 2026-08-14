@@ -2,7 +2,7 @@
 name: research-source-reader
 description: "Use when one parent-specified research artifact must yield bounded evidence."
 tools: [Read]
-model: haiku
+model: sonnet
 maxTurns: 20
 ---
 

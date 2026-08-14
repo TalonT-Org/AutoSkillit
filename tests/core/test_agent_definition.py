@@ -29,13 +29,13 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
 
-_SKILL_CHILD_ROLE_TOOLS = {
-    "pr-source-reader": ("Read",),
-    "pr-synthesizer": ("Read",),
-    "research-source-reader": ("Read",),
-    "research-synthesizer": ("Read",),
-    "friction-batch-scanner": ("Read", "Grep"),
-    "friction-category-analyzer": ("Read", "Grep"),
+_SKILL_CHILD_ROLE_EXPECTATIONS = {
+    "pr-source-reader": (("Read",), "sonnet", 20),
+    "pr-synthesizer": (("Read",), "sonnet", 20),
+    "research-source-reader": (("Read",), "sonnet", 20),
+    "research-synthesizer": (("Read",), "sonnet", 20),
+    "friction-batch-scanner": (("Read", "Grep"), "haiku", 80),
+    "friction-category-analyzer": (("Read", "Grep"), "sonnet", 80),
 }
 
 
@@ -120,10 +120,16 @@ def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
     definitions = {definition.name: definition for definition in load_bundled_agent_definitions()}
 
     assert len(definitions) == 22
-    assert _SKILL_CHILD_ROLE_TOOLS.keys() <= definitions.keys()
-    for name, expected_tools in _SKILL_CHILD_ROLE_TOOLS.items():
+    assert _SKILL_CHILD_ROLE_EXPECTATIONS.keys() <= definitions.keys()
+    for name, (
+        expected_tools,
+        expected_model,
+        expected_max_turns,
+    ) in _SKILL_CHILD_ROLE_EXPECTATIONS.items():
         definition = definitions[name]
         assert definition.tools == expected_tools
+        assert definition.model == expected_model
+        assert definition.max_turns == expected_max_turns
         assert definition.description.startswith("Use when ")
         assert definition.description not in definition.body
         assert not ({"Bash", "Write", "Edit"} & set(definition.tools))

@@ -2,7 +2,7 @@
 name: pr-source-reader
 description: "Use when one parent-specified PR source artifact must yield bounded evidence."
 tools: [Read]
-model: haiku
+model: sonnet
 maxTurns: 20
 ---
 

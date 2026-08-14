@@ -11,9 +11,9 @@ import pytest
 from autoskillit.core import RecipeFlowEdge, get_tool_def, load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import (
-    _edge_routes_success,
     _extract_routing_edges,
     _finalize_delivery_segments,
+    edge_routes_success,
     validate_recipe_structure,
 )
 
@@ -110,7 +110,7 @@ def _assert_delivery_projection_contract(
         tool_name = "complete_run_skill_result" if step.tool == "run_skill" else step.tool
         definition = get_tool_def(tool_name)
         assert definition is not None
-        if _edge_routes_success(
+        if edge_routes_success(
             tool_name,
             edge,
             automatic=definition.automatic_recipe_delivery,

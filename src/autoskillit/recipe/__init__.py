@@ -306,7 +306,7 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     select_audit_output_contract,
 )
 from autoskillit.recipe.validator import (  # noqa: E402
-    _edge_routes_success as edge_routes_success,
+    edge_routes_success,
 )
 
 __all__ = [

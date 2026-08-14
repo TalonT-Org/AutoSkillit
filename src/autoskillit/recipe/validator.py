@@ -411,7 +411,7 @@ def _finalize_delivery_segments(
                     f"{step.tool!r}."
                 )
                 continue
-            success_crossing = _edge_routes_success(
+            success_crossing = edge_routes_success(
                 tool_name,
                 edge,
                 automatic=definition.automatic_recipe_delivery,
@@ -455,7 +455,7 @@ def _finalize_delivery_segments(
     )
 
 
-def _edge_routes_success(
+def edge_routes_success(
     tool_name: str,
     edge: RecipeFlowEdge,
     *,

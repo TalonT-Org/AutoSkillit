@@ -185,6 +185,7 @@ def test_denies_completed_task_notification(tmp_path: Path) -> None:
         f"Task update: {_TASK_NOTIFICATION} Continue waiting.",
         f"```xml\n{_BG_RESULT}\n```",
     ],
+    ids=["function-results-wrapper", "task-update-prose", "xml-code-fence"],
 )
 def test_denies_complete_embedded_notification(tmp_path: Path, text: str) -> None:
     result = _run_guard(tmp_path, [_claude_record(text)])
@@ -231,6 +232,14 @@ def test_skips_message_less_system_metadata(tmp_path: Path) -> None:
             _codex_record(_BG_RESULT),
             _codex_record("foreign", session_id="different-session"),
         ],
+    ],
+    ids=[
+        "claude-sidechain",
+        "claude-meta",
+        "claude-agent",
+        "claude-foreign-session",
+        "codex-agent",
+        "codex-foreign-session",
     ],
 )
 def test_newer_excluded_assistant_does_not_hide_parent_completion(

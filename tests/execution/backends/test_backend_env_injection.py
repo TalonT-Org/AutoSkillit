@@ -6,6 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -54,3 +57,34 @@ def test_food_truck_cmd_injects_write_guard_tool_names() -> None:
         assert spec.env["AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES"], (
             f"{name}: AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES is empty in build_food_truck_cmd env"
         )
+
+
+@pytest.mark.parametrize(
+    ("backend_factory", "absent_value"),
+    [
+        pytest.param(ClaudeCodeBackend, None, id="claude-omits"),
+        pytest.param(CodexBackend, "", id="codex-empty-sentinel"),
+    ],
+)
+def test_skill_session_audit_authority_env_contract(
+    backend_factory: type[ClaudeCodeBackend] | type[CodexBackend],
+    absent_value: str | None,
+) -> None:
+    trusted_path = "/parent/.autoskillit/temp/audit-admission/ledger.sqlite3"
+    backend = backend_factory()
+
+    attested = backend.build_skill_session_cmd(
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        provider_extras={AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: trusted_path},
+    )
+    non_attested = backend.build_skill_session_cmd(
+        "/autoskillit:investigate", "/clone", completion_marker="DONE"
+    )
+
+    assert attested.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == trusted_path
+    if absent_value is None:
+        assert AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR not in non_attested.env
+    else:
+        assert non_attested.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == absent_value

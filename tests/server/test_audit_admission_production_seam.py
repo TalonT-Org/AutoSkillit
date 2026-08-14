@@ -188,3 +188,57 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     assert replay["audit_cycle_path"] == published["audit_cycle_path"]
     assert replay["audit_attempt_id"] == published["audit_attempt_id"]
     assert replay["receipt_id"] != published["receipt_id"]
+
+
+async def test_substantive_go_without_semantic_publication_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tool_ctx_kitchen_open,
+) -> None:
+    credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
+    work_dir = tmp_path / "worktree"
+    audit_root = resolve_temp_dir(
+        work_dir,
+        tool_ctx_kitchen_open.config.workspace.temp_dir,
+    )
+    plan_path = audit_root / "rectify" / "plan.md"
+    deviation_manifest_path = audit_root / "implement" / "deviations.json"
+    plan_path.parent.mkdir(parents=True)
+    deviation_manifest_path.parent.mkdir(parents=True)
+    plan_path.write_text("# Plan\n\nSubstantive audit input.\n")
+    deviation_manifest_path.write_text("{}\n")
+
+    async def _run_child(_resolved_command: str, _cwd: str, **_kwargs):
+        child_result = _skill_ok("Substantive analysis completed with verdict GO.")
+        child_result.outcome_fields = {"audit_verdict": "GO"}
+        return child_result
+
+    monkeypatch.setattr(tool_ctx_kitchen_open.executor, "run", _run_child)
+
+    with_args = step["with"]
+    execution_id = credential["execution_id"]
+    invocation = {
+        "skill_command": with_args["skill_command"],
+        "cwd": str(work_dir),
+        "step_name": with_args["step_name"],
+        "output_dir": with_args["output_dir"],
+        "recipe_execution_id": execution_id,
+        "invocation_template_digest": credential["invocation_template_digests"][_STEP],
+        "skill_inputs": {
+            "all_plan_paths": str(plan_path),
+            "deviation_manifest_path": str(deviation_manifest_path),
+            "branch_name": "impl-missing-semantic-publication",
+            "base_branch": "develop",
+            "prior_audit_cycle_path": "",
+        },
+        "closure_plan_paths": str(plan_path),
+        "closure_base_sha": "impl-missing-semantic-publication",
+    }
+
+    rejected = json.loads(await run_skill(**invocation))
+
+    assert rejected["success"] is False
+    assert rejected["audit_status"] == "SEMANTIC_REJECTED"
+    assert rejected["audit_verdict"] is None
+    assert rejected["audit_cycle_path"] is None
+    assert "audit_semantic_result_path" in rejected["result"]

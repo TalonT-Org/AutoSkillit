@@ -152,6 +152,7 @@ class RunSkillCompletionMiddleware(Middleware):
                 if not _exact_receipt(result, finalized.receipt.receipt_id):
                     if not isinstance(registered_tool, FunctionTool):
                         logger.error("run_skill_receipt_unrepresentable")
+                        finalized.authority.discard_draft(finalized.receipt.receipt_id)
                         return result
                     result = registered_tool.convert_result(_compact_response(finalized))
                 if not _exact_receipt(result, finalized.receipt.receipt_id):

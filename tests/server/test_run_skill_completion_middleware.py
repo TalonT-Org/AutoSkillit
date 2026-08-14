@@ -218,7 +218,7 @@ async def test_middleware_publishes_exact_and_compacted_deliveries(
 
 
 @pytest.mark.anyio
-async def test_middleware_does_not_publish_unrepresentable_delivery(monkeypatch) -> None:
+async def test_middleware_discards_unrepresentable_delivery(monkeypatch) -> None:
     authority = DefaultRunSkillCompletionAuthority()
     monkeypatch.setattr(
         "autoskillit.server._state._get_ctx_or_none",
@@ -238,7 +238,9 @@ async def test_middleware_does_not_publish_unrepresentable_delivery(monkeypatch)
 
     assert result is original
     assert finalized is not None
-    assert authority.publish(finalized.receipt.receipt_id) == finalized.receipt
+    with pytest.raises(ValueError, match="unknown or already-published"):
+        authority.publish(finalized.receipt.receipt_id)
+    assert authority.admission("kitchen_status") == (True, "idle")
     assert current_request_session_id() == ""
 
 

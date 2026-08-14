@@ -276,9 +276,15 @@ def _ready_recipe_segment_step(
     state = tool_ctx.recipe_initialization_state
     assert isinstance(state, ReadyRecipe)
     target_segment = next(
-        segment
-        for segment in state.finalized_projection.delivery_segments
-        if step_name in segment.ordered_step_names
+        (
+            segment
+            for segment in state.finalized_projection.delivery_segments
+            if step_name in segment.ordered_step_names
+        ),
+        None,
+    )
+    assert target_segment is not None, (
+        f"step {step_name!r} is not present in any finalized delivery segment"
     )
     for source_step in target_segment.checkpoint_sources:
         prepared = prepare_recipe_segment_delivery(tool_ctx, source_step)

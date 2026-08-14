@@ -2661,6 +2661,16 @@ async def run_skill(
                 )
         return _cancelled_result.to_json()
     finally:
+        _completion_authority = tool_ctx.run_skill_completion if tool_ctx is not None else None
+        if (
+            _completion_invocation_id
+            and _completion_authority is not None
+            and _completion_authority.abort(_completion_invocation_id)
+        ):
+            logger.error(
+                "run_skill_completion_invocation_escaped",
+                invocation_id=_completion_invocation_id,
+            )
         contract_lifecycle.cleanup()
         if _tracker_key is not None and tool_ctx is not None:
             _release_context_tracker(tool_ctx, _tracker_key)

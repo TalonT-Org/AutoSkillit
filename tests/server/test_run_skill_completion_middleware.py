@@ -240,3 +240,37 @@ async def test_middleware_does_not_publish_unrepresentable_delivery(monkeypatch)
     assert finalized is not None
     assert authority.publish(finalized.receipt.receipt_id) == finalized.receipt
     assert current_request_session_id() == ""
+
+
+@pytest.mark.anyio
+async def test_middleware_discards_staged_draft_on_base_exception(monkeypatch) -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    monkeypatch.setattr(
+        "autoskillit.server._state._get_ctx_or_none",
+        lambda: SimpleNamespace(run_skill_completion=authority),
+    )
+    registered = _registered_tool()
+    fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
+
+    class Sentinel(BaseException):
+        pass
+
+    sentinel = Sentinel()
+    staged: FinalizedRunSkillCompletionResponse | None = None
+
+    async def call_next(_context):
+        nonlocal staged
+        staged = stage_run_skill_completion_response(_finalized(authority))
+        raise sentinel
+
+    with pytest.raises(Sentinel) as raised:
+        await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+            _context(), call_next
+        )
+
+    assert raised.value is sentinel
+    assert staged is not None
+    with pytest.raises(ValueError, match="unknown or already-published"):
+        authority.publish(staged.receipt.receipt_id)
+    assert authority.admission("kitchen_status") == (True, "idle")
+    assert current_request_session_id() == ""

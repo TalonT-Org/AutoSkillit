@@ -131,6 +131,16 @@ class DefaultRunSkillCompletionAuthority:
             self._drafts[receipt.receipt_id] = receipt
             return receipt
 
+    def abort(self, invocation_id: str) -> bool:
+        """Discard one exact invocation that escaped before drafting."""
+        with self._lock:
+            return self._in_flight.pop(invocation_id, None) is not None
+
+    def discard_draft(self, receipt_id: str) -> bool:
+        """Discard one exact draft that escaped before publication."""
+        with self._lock:
+            return self._drafts.pop(receipt_id, None) is not None
+
     def publish(self, receipt_id: str) -> RunSkillCompletionReceipt:
         """Promote an exactly preserved draft to acknowledgeable delivery."""
         with self._lock:

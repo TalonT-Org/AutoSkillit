@@ -82,6 +82,75 @@ def test_parallel_invocations_publish_distinct_receipts() -> None:
     )
 
 
+def test_abort_removes_only_the_exact_in_flight_invocation() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    first = _begin(authority)
+    sibling = _begin(authority)
+
+    assert authority.abort(first) is True
+    assert authority.abort(first) is False
+    with pytest.raises(ValueError, match="unknown run_skill invocation"):
+        authority.draft(
+            first,
+            classification="success",
+            success=True,
+            result_digest="first",
+        )
+
+    sibling_receipt = authority.draft(
+        sibling,
+        classification="success",
+        success=True,
+        result_digest="sibling",
+    )
+    authority.publish(sibling_receipt.receipt_id)
+    authority.acknowledge(
+        sibling_receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+    assert authority.admission("kitchen_status") == (True, "idle")
+
+
+def test_discard_draft_removes_only_the_exact_unpublished_receipt() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    first = _begin(authority)
+    sibling = _begin(authority)
+    first_receipt = authority.draft(
+        first,
+        classification="success",
+        success=True,
+        result_digest="first",
+    )
+
+    assert authority.discard_draft(first_receipt.receipt_id) is True
+    assert authority.discard_draft(first_receipt.receipt_id) is False
+    with pytest.raises(ValueError, match="unknown or already-published"):
+        authority.publish(first_receipt.receipt_id)
+
+    sibling_receipt = authority.draft(
+        sibling,
+        classification="success",
+        success=True,
+        result_digest="sibling",
+    )
+    authority.publish(sibling_receipt.receipt_id)
+    authority.acknowledge(
+        sibling_receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+
+    delivered = _publish(authority)
+    assert authority.discard_draft(delivered.receipt_id) is False
+    authority.acknowledge(
+        delivered.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+    assert authority.admission("kitchen_status") == (True, "idle")
+
+
 @pytest.mark.parametrize(
     ("kitchen_id", "request_session_id"),
     [("other", "session"), ("kitchen", "other")],

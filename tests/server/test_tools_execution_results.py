@@ -908,6 +908,34 @@ async def test_run_skill_returns_structured_result_on_cancelled_error(
     assert "cancelled" in data["result"].lower()
 
 
+@pytest.mark.anyio
+async def test_run_skill_aborts_completion_when_base_exception_escapes(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    from autoskillit.core import SkillResult
+
+    class Sentinel(BaseException):
+        pass
+
+    sentinel = Sentinel()
+
+    class EscapingExecutor:
+        async def run(self, *args, **kwargs) -> SkillResult:
+            raise sentinel
+
+    tool_ctx_kitchen_open.executor = EscapingExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    with pytest.raises(Sentinel) as raised:
+        await run_skill("/test cmd", str(tmp_path))
+
+    assert raised.value is sentinel
+    assert tool_ctx_kitchen_open.run_skill_completion.admission("kitchen_status") == (
+        True,
+        "idle",
+    )
+
+
 class TestRunSkillPostSerializationValidation:
     """Post-serialization validation: run_skill must catch degraded SkillResult payloads."""
 

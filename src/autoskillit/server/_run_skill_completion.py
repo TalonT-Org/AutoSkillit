@@ -105,6 +105,16 @@ def _compact_response(finalized: FinalizedRunSkillCompletionResponse) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
+def _safe_discard_draft(finalized: FinalizedRunSkillCompletionResponse) -> None:
+    try:
+        finalized.authority.discard_draft(finalized.receipt.receipt_id)
+    except BaseException:
+        logger.exception(
+            "run_skill_discard_draft_failed",
+            receipt_id=finalized.receipt.receipt_id,
+        )
+
+
 class RunSkillCompletionMiddleware(Middleware):
     """Enforce completion admission and publish only exact delivered receipts."""
 
@@ -144,24 +154,32 @@ class RunSkillCompletionMiddleware(Middleware):
                     )
                     return registered_tool.convert_result(denial)
 
-            result = await call_next(context)
-            finalized = _staged_response.get()
-            if finalized is None:
-                return result
-            if not _exact_receipt(result, finalized.receipt.receipt_id):
-                if not isinstance(registered_tool, FunctionTool):
-                    logger.error("run_skill_receipt_unrepresentable")
+            try:
+                result = await call_next(context)
+                finalized = _staged_response.get()
+                if finalized is None:
                     return result
-                result = registered_tool.convert_result(_compact_response(finalized))
-            if not _exact_receipt(result, finalized.receipt.receipt_id):
-                logger.error(
-                    "run_skill_receipt_not_preserved",
-                    receipt_id=finalized.receipt.receipt_id,
-                )
+                if not _exact_receipt(result, finalized.receipt.receipt_id):
+                    if not isinstance(registered_tool, FunctionTool):
+                        logger.error("run_skill_receipt_unrepresentable")
+                        _safe_discard_draft(finalized)
+                        return result
+                    result = registered_tool.convert_result(_compact_response(finalized))
+                if not _exact_receipt(result, finalized.receipt.receipt_id):
+                    logger.error(
+                        "run_skill_receipt_not_preserved",
+                        receipt_id=finalized.receipt.receipt_id,
+                    )
+                    _safe_discard_draft(finalized)
+                    return result
+                with anyio.CancelScope(shield=True):
+                    finalized.authority.publish(finalized.receipt.receipt_id)
                 return result
-            with anyio.CancelScope(shield=True):
-                finalized.authority.publish(finalized.receipt.receipt_id)
-            return result
+            except BaseException:
+                finalized = _staged_response.get()
+                if finalized is not None:
+                    _safe_discard_draft(finalized)
+                raise
         finally:
             _staged_response.reset(staged_token)
             _request_session_id.reset(session_token)

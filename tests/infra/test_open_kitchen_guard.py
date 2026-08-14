@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -217,6 +219,83 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     assert {
         key: value for key, value in registry["abc"].items() if key.startswith("owner_")
     } == seeded_owner
+
+
+def test_guard_bridge_rereads_registry_under_lock(tmp_path: Path) -> None:
+    from autoskillit.core.runtime.session_registry import (
+        read_registry,
+        registry_path,
+        write_registry_entry,
+    )
+
+    project_dir = tmp_path / "project"
+    foreign_cwd = tmp_path / "foreign"
+    foreign_cwd.mkdir()
+    write_registry_entry(project_dir, "launch-a", "cook", None)
+    write_registry_entry(project_dir, "launch-b", "cook", "original")
+    seed_registry_owner(project_dir, "launch-a")
+    seed_registry_owner(project_dir, "launch-b")
+    registry_file = registry_path(project_dir)
+    lock_file = registry_file.with_suffix(".lock").open("w")
+    process: subprocess.Popen[str] | None = None
+
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {},
+        "session_id": "claude-a",
+        "hook_event_name": "PreToolUse",
+    }
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_STATE_DIR")
+    }
+    env.update(
+        AUTOSKILLIT_LAUNCH_ID="launch-a",
+        AUTOSKILLIT_STATE_ROOT=str(project_dir),
+    )
+
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        process = subprocess.Popen(
+            [sys.executable, str(pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py")],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            cwd=foreign_cwd,
+        )
+        assert process.stdin is not None
+        process.stdin.write(json.dumps(hook_input))
+        process.stdin.close()
+        process.stdin = None
+
+        marker = project_dir / ".autoskillit" / "temp" / "kitchen_state" / "claude-a.json"
+        deadline = time.monotonic() + 5
+        while not marker.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert marker.exists()
+        assert process.poll() is None
+
+        registry = read_registry(project_dir)
+        registry["launch-b"]["recipe_name"] = "preserved-while-locked"
+        registry_file.write_text(json.dumps(registry), encoding="utf-8")
+
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        stdout, stderr = process.communicate(timeout=5)
+        assert process.returncode == 0, stderr
+        assert stdout == ""
+
+        updated = read_registry(project_dir)
+        assert updated["launch-a"]["claude_session_id"] == "claude-a"
+        assert updated["launch-b"] == registry["launch-b"]
+    finally:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
+        if process is not None and process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
 
 
 def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:

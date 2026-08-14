@@ -14,7 +14,7 @@ RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:d72db48f930fefa93a58b3f29e2c8d1f12d9d932247a3ebc7d864076a6f13453"
+    "sha256:2e7315d7256ce035110cd376ada4f5403c0a1ce574220ff488c004ec2cfea6e4"
 )
 
 
@@ -24,7 +24,7 @@ def recipe():
 
 
 def test_delivery_declarations_preserve_canonical_recipe_structure(recipe) -> None:
-    _assert_delivery_projection_contract(recipe, _PRE_DELIVERY_STRUCTURE_SHA256)
+    _assert_delivery_projection_contract(recipe, RECIPE_PATH, _PRE_DELIVERY_STRUCTURE_SHA256)
 
 
 def test_remediation_recipe_has_release_issue_success_step(recipe):

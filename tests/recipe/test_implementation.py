@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
-from autoskillit.core import RecipeFlowEdge, get_tool_def
+from autoskillit.core import RecipeFlowEdge, get_tool_def, load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import (
     _edge_routes_success,
@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 RECIPE_PATH = builtin_recipes_dir() / "implementation.yaml"
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:3ef6a7e7b1b97eb0057e511badff7a171e5e754554cc43a6bdc04b2f31ae974e"
+    "sha256:c3e53626cbf7549b2bb225ff54fede2706ec85aef3296ce90678db4bcf4f8feb"
 )
 
 _CHECKPOINT_HANDLER_TABLE = {
@@ -57,34 +57,41 @@ def _flow_edges(recipe) -> tuple[RecipeFlowEdge, ...]:
     )
 
 
-def _structural_digest(recipe) -> str:
-    payload = {
-        "entrypoint": next(iter(recipe.steps)),
-        "ordered_steps": tuple(recipe.steps),
-        "routing_edges": [dataclasses.asdict(edge) for edge in _flow_edges(recipe)],
-        "steps": {
-            name: {
-                "tool": step.tool,
-                "action": step.action,
-                "python": step.python,
-                "constant": step.constant,
-                "with_args": {
-                    key: value for key, value in step.with_args.items() if key != "step_name"
-                },
-                "capture": {key: dataclasses.asdict(value) for key, value in step.capture.items()},
-                "capture_list": {
-                    key: dataclasses.asdict(value) for key, value in step.capture_list.items()
-                },
+def _source_structural_digest(recipe_path: Path) -> str:
+    data = load_yaml(recipe_path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    raw_steps = data.get("steps")
+    assert isinstance(raw_steps, dict) and raw_steps
+    normalized_steps: list[tuple[str, dict[str, object]]] = []
+    for step_name, raw_step in raw_steps.items():
+        assert isinstance(step_name, str) and isinstance(raw_step, dict)
+        step = dict(raw_step)
+        with_args = step.get("with")
+        if isinstance(with_args, dict):
+            normalized_with = {
+                key: value for key, value in with_args.items() if key != "step_name"
             }
-            for name, step in recipe.steps.items()
-        },
+            if normalized_with:
+                step["with"] = normalized_with
+            else:
+                step.pop("with")
+        normalized_steps.append((step_name, step))
+
+    payload = {
+        "entrypoint": normalized_steps[0][0],
+        "ordered_steps": [step_name for step_name, _step in normalized_steps],
+        "steps": normalized_steps,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
-def _assert_delivery_projection_contract(recipe, expected_structure_sha256: str) -> None:
-    assert _structural_digest(recipe) == expected_structure_sha256
+def _assert_delivery_projection_contract(
+    recipe,
+    recipe_path: Path,
+    expected_structure_sha256: str,
+) -> None:
+    assert _source_structural_digest(recipe_path) == expected_structure_sha256
     edges = _flow_edges(recipe)
     segments, errors = _finalize_delivery_segments(recipe, edges)
     assert not errors
@@ -125,7 +132,7 @@ def recipe():
 
 
 def test_delivery_declarations_preserve_canonical_recipe_structure(recipe) -> None:
-    _assert_delivery_projection_contract(recipe, _PRE_DELIVERY_STRUCTURE_SHA256)
+    _assert_delivery_projection_contract(recipe, RECIPE_PATH, _PRE_DELIVERY_STRUCTURE_SHA256)
 
 
 # T_IP_LOOP1

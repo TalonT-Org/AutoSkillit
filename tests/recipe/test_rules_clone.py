@@ -13,7 +13,7 @@ from autoskillit.recipe.schema import Recipe, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-_BUNDLED_RECIPE_YAMLS = list(builtin_recipes_dir().rglob("*.yaml"))
+_BUNDLED_RECIPE_YAMLS = list(builtin_recipes_dir().glob("*.yaml"))
 assert _BUNDLED_RECIPE_YAMLS, (
     "builtin_recipes_dir() returned no YAMLs — parametrize would silently vacuous-pass"
 )

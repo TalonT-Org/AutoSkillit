@@ -1648,10 +1648,24 @@ def _analyze_gh_api(
                 "unsafe_input_provenance",
                 "an output redirect may alias the inspected GitHub --input file",
             )
-        if any(
-            os.path.realpath(target) == os.path.realpath(input_path)
-            for target in resolved_redirect_targets
-        ):
+        redirect_aliases_input = False
+        for target in resolved_redirect_targets:
+            if os.path.realpath(target) == os.path.realpath(input_path):
+                redirect_aliases_input = True
+                break
+            if not os.path.exists(target):
+                continue
+            try:
+                redirect_aliases_input = os.path.samefile(target, input_path)
+            except OSError:
+                return (
+                    None,
+                    "unsafe_input_provenance",
+                    "an output redirect alias could not be inspected safely",
+                )
+            if redirect_aliases_input:
+                break
+        if redirect_aliases_input:
             return (
                 None,
                 "unsafe_input_provenance",

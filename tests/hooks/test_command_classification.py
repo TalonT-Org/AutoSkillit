@@ -1324,6 +1324,20 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is expected_status
         assert analysis.reason_code == expected_reason_code
 
+    def test_current_input_redirect_rejects_hard_link_alias(self, tmp_path: Path) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        alias = tmp_path / "alias.json"
+        alias.hardlink_to(payload)
+
+        analysis = analyze_github_mutations(
+            f"gh api --method POST /repos/o/r/issues/7/comments --input {payload} > {alias}",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
     @pytest.mark.parametrize("wrapper", ["shell", "argv"])
     def test_parent_redirect_provenance_reaches_nested_mutation(
         self,

@@ -288,8 +288,8 @@ def test_later_role_message_is_a_turn_boundary(tmp_path: Path, role: str) -> Non
     assert _run_guard(tmp_path, records) is None
 
 
-def test_simultaneous_markers_match_exact_hook_session(tmp_path: Path) -> None:
-    _write_marker(tmp_path, session_id="session-a", filename_session="session-a")
+def test_simultaneous_markers_require_exact_filename_payload_binding(tmp_path: Path) -> None:
+    _write_marker(tmp_path, session_id="session-b", filename_session="session-a")
     _write_marker(tmp_path, session_id="session-b", filename_session="session-b")
 
     result_a = _run_guard(
@@ -305,7 +305,7 @@ def test_simultaneous_markers_match_exact_hook_session(tmp_path: Path) -> None:
         hook_session="session-b",
     )
 
-    assert result_a is not None
+    assert result_a is None
     assert result_b is not None
 
 

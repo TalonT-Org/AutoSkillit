@@ -206,10 +206,8 @@ def _target_segment_indices(
 
 
 def _pull_requests(
-    generation: RecipeArtifactGeneration,
     step_names: tuple[str, ...],
 ) -> list[dict[str, str | int]]:
-    del generation  # The carrier's top-level recipe_pull owns the immutable identity.
     return [{"section": step_name, "part": 0} for step_name in step_names]
 
 
@@ -267,7 +265,7 @@ def _route_pull_closures(
                 {
                     "source_step": body["step"],
                     "steps": list(closure),
-                    "pull_requests": _pull_requests(generation, closure),
+                    "pull_requests": _pull_requests(closure),
                 }
             )
     return closures
@@ -420,7 +418,7 @@ def _checkpoint_carrier(
                     {
                         "source_step": step_name,
                         "steps": list(manual_closure),
-                        "pull_requests": _pull_requests(generation, manual_closure),
+                        "pull_requests": _pull_requests(manual_closure),
                     }
                 )
             carrier = {
@@ -468,7 +466,7 @@ def _checkpoint_carrier(
             "source_step": step_name,
             "target_steps": list(dict.fromkeys(recovery_targets)),
             "pull_closure": list(closure),
-            "pull_requests": _pull_requests(generation, closure),
+            "pull_requests": _pull_requests(closure),
             "recipe_pull": generation.pull_identity(),
         }
     )

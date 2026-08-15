@@ -24,7 +24,7 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 class CanonicalArtifactDef(NamedTuple):
     consumer_site: tuple[str, int]
     producer_symbol: str
-    producer_site: tuple[str, int]
+    producer_path: str
     skill_md_refs: tuple[tuple[str, int, int], ...]
 
 
@@ -65,11 +65,11 @@ def _scan_require_canonical_consumer_sites() -> set[tuple[str, int]]:
     return sites
 
 
-def _find_function_at_line(
-    tree: ast.Module, lineno: int
+def _find_function_by_name(
+    tree: ast.Module, name: str
 ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.lineno == lineno:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             return node
     return None
 
@@ -115,47 +115,44 @@ def _scan_child_tool_authority_producer_sites() -> set[tuple[str, int, str]]:
     return sites
 
 
-_MATERIALIZER_PRODUCER_SITE = (
-    "src/autoskillit/server/_audit_authority_materializer.py",
-    181,
-)
+_MATERIALIZER_PRODUCER_PATH = "src/autoskillit/server/_audit_authority_materializer.py"
 _TYPED_PRODUCER_MODULE = "src/autoskillit/server/tools/tools_audit_artifacts.py"
 
 _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "authority": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 427),
         producer_symbol="_write_or_verify",
-        producer_site=_MATERIALIZER_PRODUCER_SITE,
+        producer_path=_MATERIALIZER_PRODUCER_PATH,
         skill_md_refs=(),
     ),
     "disposition_report": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 447),
         producer_symbol="write_audit_disposition_bundle",
-        producer_site=(_TYPED_PRODUCER_MODULE, 156),
+        producer_path=_TYPED_PRODUCER_MODULE,
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "inventory": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 575),
         producer_symbol="_write_or_verify",
-        producer_site=_MATERIALIZER_PRODUCER_SITE,
+        producer_path=_MATERIALIZER_PRODUCER_PATH,
         skill_md_refs=(),
     ),
     "plan_association": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/recipe/_cmd_rpc_guards.py", 280),
         producer_symbol="write_audit_disposition_bundle",
-        producer_site=(_TYPED_PRODUCER_MODULE, 167),
+        producer_path=_TYPED_PRODUCER_MODULE,
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 229),
         producer_symbol="write_audit_semantic_result",
-        producer_site=(_TYPED_PRODUCER_MODULE, 112),
+        producer_path=_TYPED_PRODUCER_MODULE,
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 98, 108),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 276),
         producer_symbol="write_standalone_audit_evidence",
-        producer_site=(_TYPED_PRODUCER_MODULE, 145),
+        producer_path=_TYPED_PRODUCER_MODULE,
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 109, 118),),
     ),
 }
@@ -180,7 +177,7 @@ class TestCanonicalJsonProducerConvention:
         authority = _CANONICAL_JSON_ARTIFACT_REGISTRY["authority"]
 
         assert authority.producer_symbol == "_write_or_verify"
-        assert authority.producer_site == _MATERIALIZER_PRODUCER_SITE
+        assert authority.producer_path == _MATERIALIZER_PRODUCER_PATH
         assert _scan_child_tool_authority_producer_sites() == set()
 
     def test_require_canonical_consumers_have_registered_producers(self):
@@ -208,17 +205,18 @@ class TestCanonicalJsonProducerConvention:
     def test_registered_producers_are_sanctioned_canonical_writers(self):
         """Every registered producer writes canonical objects or prepared canonical bytes."""
         repo_root = Path(__file__).resolve().parents[2]
-        checked: set[tuple[str, int]] = set()
+        checked: set[tuple[str, str]] = set()
         for kind, entry in _CANONICAL_JSON_ARTIFACT_REGISTRY.items():
-            site = entry.producer_site
-            if site in checked:
+            producer = (entry.producer_path, entry.producer_symbol)
+            if producer in checked:
                 continue
-            checked.add(site)
-            relative_path, lineno = site
-            source_path = repo_root / relative_path
+            checked.add(producer)
+            source_path = repo_root / entry.producer_path
             tree = ast.parse(source_path.read_text(), filename=str(source_path))
-            function = _find_function_at_line(tree, lineno)
-            assert function is not None, f"{kind}: no function defined at {relative_path}:{lineno}"
+            function = _find_function_by_name(tree, entry.producer_symbol)
+            assert function is not None, (
+                f"{kind}: no function named {entry.producer_symbol} in {entry.producer_path}"
+            )
             call_names = {
                 node.func.id if isinstance(node.func, ast.Name) else node.func.attr
                 for node in ast.walk(function)
@@ -228,7 +226,7 @@ class TestCanonicalJsonProducerConvention:
                 "write_canonical_versioned_json",
                 "atomic_write",
             } & call_names, (
-                f"{kind}: producer at {relative_path}:{lineno} no longer calls "
+                f"{kind}: producer {entry.producer_path}:{entry.producer_symbol} no longer calls "
                 "a sanctioned canonical writer"
             )
 

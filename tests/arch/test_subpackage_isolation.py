@@ -1292,7 +1292,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2443,
+        2444,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1309,6 +1309,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "AGENT_BACKEND_ENV_VAR injection in build_interactive_cmd merged_extras (+1 net line) "
         "and build_resume_cmd _codex_exec_extras call expansion to multi-line (+2 net lines) "
         "for T5-P4-A3-WP3 guard-hook backend dispatch"
+        "; #4585 excludes reader-only roles from ordinary Codex agent materialization (+1 line)"
         "; _materialize_profile_skills function (~43 lines) for T5-P4-A4-WP2 profile skill "
         "materialization into Codex session directories; registered-daemon launch identity "
         "forwarding adds both required environment keys to all Codex command shapes (+8 net lines)"

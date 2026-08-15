@@ -201,6 +201,17 @@ class TestRenderAgentDefinitionsByteIdentity:
         )
         assert reader.tools == ("mcp__plugin_autoskillit_autoskillit__inspect_session_logs",)
 
+        pr_source_reader = next(
+            definition
+            for definition in load_agent_definitions(agents_dir)
+            if definition.name == "pr-source-reader"
+        )
+        assert pr_source_reader.tools == ("Read",)
+        assert pr_source_reader.reader_tools == (
+            "mcp__autoskillit__get_authorized_artifact_page",
+            "mcp__autoskillit__read_authorized_artifact",
+        )
+
     def test_all_builtin_only_agents_rendered_byte_identical(self, tmp_path: Path) -> None:
         from autoskillit.workspace._projected_artifact.materialization import (
             _render_agent_definitions,

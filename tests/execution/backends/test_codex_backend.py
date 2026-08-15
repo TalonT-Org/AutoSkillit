@@ -1797,6 +1797,22 @@ class TestCodexBackendSetupSessionDir:
         assert not (self.session_dir / "sessions").exists()
         assert not (self.session_dir / "archived_sessions").exists()
 
+    @pytest.mark.parametrize("exact", [False, True], ids=["bundled", "exact"])
+    def test_reader_eligible_agents_are_not_native_codex_agents(self, exact: bool) -> None:
+        self._write_all_source_files()
+        reader = next(
+            definition
+            for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name == "pr-source-reader"
+        )
+
+        kwargs = {"agent_defs": (reader,)} if exact else {}
+        CodexBackend().setup_session_dir(self.session_dir, **kwargs)
+
+        config = tomllib.loads((self.session_dir / "config.toml").read_text())
+        assert "pr-source-reader" not in config.get("agents", {})
+        assert not (self.session_dir / "agents" / "pr-source-reader.toml").exists()
+
     def test_missing_config_raises_and_logs_error(self) -> None:
         (self.session_dir / "config.toml").unlink()
         with pytest.raises(FileNotFoundError):

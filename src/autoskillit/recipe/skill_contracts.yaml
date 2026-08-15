@@ -2526,9 +2526,11 @@ skills:
     - name: all_diagram_paths
       type: string
       required: false
+      unresolved_default: ""
     - name: visualization_plan_path
       type: file_path
       required: false
+      unresolved_default: ""
     outputs:
     - name: html_path
       type: file_path
@@ -3363,7 +3365,7 @@ callable_contracts:
     inputs:
     - name: plan_parts
       type: str
-      required: true
+      required: false
     - name: audit_cycle_path
       type: str
       required: false

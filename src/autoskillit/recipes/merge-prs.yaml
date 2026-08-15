@@ -426,11 +426,18 @@ steps:
 
       '
   gate_ejected_conflict_plan:
-    action: route
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
+      plan_parts: ${{ context.pr_plan_path }}
+      audit_cycle_path: ''
+    capture:
+      conflict_plan_path: ${{ result.plan_path }}
     on_result:
-    - when: ${{ context.pr_plan_path }} != ''
+    - when: ${{ result.verdict }} == salvaged
       route: resolve_ejected_conflicts
     - route: register_clone_failure
+    on_failure: register_clone_failure
     optional_context_refs:
     - pr_plan_path
   resolve_ejected_conflicts:
@@ -440,7 +447,7 @@ steps:
       skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
         worktree_path: ${{ context.ejected_pr_branch }}
-        plan_path: ${{ context.pr_plan_path }}
+        plan_path: ${{ context.conflict_plan_path }}
         base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       output_dir: .
@@ -672,11 +679,18 @@ steps:
 
       '
   gate_proactive_rebase_conflict_plan:
-    action: route
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
+      plan_parts: ${{ context.pr_plan_path }}
+      audit_cycle_path: ''
+    capture:
+      conflict_plan_path: ${{ result.plan_path }}
     on_result:
-    - when: ${{ context.pr_plan_path }} != ''
+    - when: ${{ result.verdict }} == salvaged
       route: resolve_proactive_rebase_conflicts
     - route: register_clone_failure
+    on_failure: register_clone_failure
     optional_context_refs:
     - pr_plan_path
   resolve_proactive_rebase_conflicts:
@@ -686,7 +700,7 @@ steps:
       skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
         worktree_path: ${{ context.next_pr_branch }}
-        plan_path: ${{ context.pr_plan_path }}
+        plan_path: ${{ context.conflict_plan_path }}
         base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       output_dir: .

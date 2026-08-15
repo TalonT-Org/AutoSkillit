@@ -169,7 +169,7 @@ def test_merge_prs_attempt_cheap_rebase_routing(pmp_recipe) -> None:
     assert clean_routes[0].route == "push_ejected_fix"
     fallback = [c for c in conditions if c.when is None]
     assert fallback, "must have a fallback condition"
-    assert fallback[0].route == "resolve_ejected_conflicts"
+    assert fallback[0].route == "gate_ejected_conflict_plan"
 
 
 def test_merge_prs_get_ejected_routes_to_cheap_rebase(pmp_recipe) -> None:
@@ -246,7 +246,7 @@ def test_merge_prs_proactive_rebase_next_pr_routing(pmp_recipe) -> None:
         (c.route for c in step.on_result.conditions if c.when is None),
         None,
     )
-    assert fallback_route == "resolve_proactive_rebase_conflicts"
+    assert fallback_route == "gate_proactive_rebase_conflict_plan"
 
 
 def test_merge_prs_proactive_rebase_next_pr_on_failure_routes_through_ci_gate(pmp_recipe) -> None:

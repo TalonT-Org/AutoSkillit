@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:906912bf57fd88f4a30945f6ccdd9ded883daee0f28a13f4aafa923ee579f037 -->
+<!-- autoskillit-recipe-hash: sha256:111736db210cf799615a851d8a595c8feff881b16577c54b6fa22b944bf6a582 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## merge-prs
 Merge multiple PRs into an integration branch with conflict resolution and CI gates.
@@ -12,7 +12,7 @@ fetch_merge_queue_data → analyze_prs → route_by_queue_mode
 |
 +-- [queue mode]:
 |     enqueue → wait → advance → next PR
-|     → resolve ejected conflicts on failure
+|     → validate conflict plan → resolve ejected conflicts or stop on failure
 |
 +-- [integration mode]:
 |     create_batch_branch → publish → check_pr_merge_loop

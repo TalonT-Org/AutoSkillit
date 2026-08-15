@@ -50,6 +50,8 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
     expected_pairs = {
         ("audit-impl", "deviation_manifest_path"),
         ("audit-impl", "prior_audit_cycle_path"),
+        ("bundle-local-report", "all_diagram_paths"),
+        ("bundle-local-report", "visualization_plan_path"),
         ("diagnose-ci", "event"),
         ("dry-walkthrough", "audit_cycle_path"),
         ("dry-walkthrough", "plan_disposition_path"),
@@ -94,7 +96,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
                     occurrences.append(occurrence)
 
     actual_pairs = {(skill, input_name) for _, _, skill, input_name in occurrences}
-    assert len(occurrences) == 49
+    assert len(occurrences) == 54
     assert actual_pairs == expected_pairs
     assert not required_occurrences
     for skill_name, input_name in expected_pairs:
@@ -110,7 +112,11 @@ def test_required_optional_context_routes_are_gated_or_guaranteed() -> None:
         gate = merge_prs.steps[f"gate_{prefix}_conflict_plan"]
         routes = [condition.route for condition in gate.on_result.conditions]
         assert routes[-1] == "register_clone_failure"
+        assert gate.capture == {"conflict_plan_path": "${{ result.plan_path }}"}
         resolve = merge_prs.steps[f"resolve_{prefix}_conflicts"]
+        assert resolve.with_args["skill_inputs"]["plan_path"] == (
+            "${{ context.conflict_plan_path }}"
+        )
         assert "pr_plan_path" not in resolve.optional_context_refs
 
     research = load_recipe(builtin_recipes_dir() / "research.yaml")

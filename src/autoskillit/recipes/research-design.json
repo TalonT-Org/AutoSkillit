@@ -199,7 +199,7 @@
         },
         {
           "when": "${{ result.verdict }} == STOP",
-          "route": "resolve_design_review"
+          "route": "gate_design_review_inputs"
         },
         {
           "route": "vis_dial"
@@ -302,14 +302,12 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
+        "skill_command": "/autoskillit:resolve-design-review ${{ context.required_evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "resolve_design_review",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/resolve-design-review/iter_${{ context.design_review_count }}"
       },
       "optional_context_refs": [
-        "evaluation_dashboard",
-        "experiment_plan",
         "revision_guidance",
         "findings_manifest_path"
       ],
@@ -333,6 +331,30 @@
         }
       ],
       "note": "Triages STOP-verdict findings from review_design. ADDRESSABLE/DISCUSS findings generate revision_guidance and loop back. Only all-STRUCTURAL findings halt at design_rejected.\n"
+    },
+    "gate_design_review_inputs": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
+        "plan_parts": "${{ context.evaluation_dashboard }}",
+        "audit_cycle_path": ""
+      },
+      "capture": {
+        "required_evaluation_dashboard": "${{ result.plan_path }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == salvaged",
+          "route": "resolve_design_review"
+        },
+        {
+          "route": "design_rejected"
+        }
+      ],
+      "on_failure": "design_rejected",
+      "optional_context_refs": [
+        "evaluation_dashboard"
+      ]
     },
     "design_rejected": {
       "action": "stop",

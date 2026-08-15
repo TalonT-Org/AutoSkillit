@@ -371,6 +371,7 @@ class TestReservation:
         request = _reservation_request(tmp_path, execution_id, version)
         issued = ledger.reserve(request)
         assert issued.reservation_handle is not None
+        assert ledger.resolve_reservation_handle(issued.reservation_handle) is not None
 
         if scenario == "malformed":
             handle = "not-a-reservation-handle"

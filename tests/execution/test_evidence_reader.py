@@ -769,10 +769,15 @@ def test_bounded_process_timeout_and_cancellation_settle_owned_process(
 ) -> None:
     stdout_read, stdout_write = os.pipe()
     stderr_read, stderr_write = os.pipe()
-    os.close(stdout_write)
-    os.close(stderr_write)
-    stdout_file = os.fdopen(stdout_read, "rb", buffering=0)
-    stderr_file = os.fdopen(stderr_read, "rb", buffering=0)
+    try:
+        os.close(stdout_write)
+        os.close(stderr_write)
+        stdout_file = os.fdopen(stdout_read, "rb", buffering=0)
+        stderr_file = os.fdopen(stderr_read, "rb", buffering=0)
+    except BaseException:
+        os.close(stdout_read)
+        os.close(stderr_read)
+        raise
     process = SimpleNamespace(stdout=stdout_file, stderr=stderr_file)
 
     class Cancelled(BaseException):
@@ -805,9 +810,11 @@ def test_bounded_process_timeout_and_cancellation_settle_owned_process(
             deadline=time.monotonic() + 5,
             stdout_limit=100,
         )
-    assert owner.preserved is failure_exception
-    stdout_file.close()
-    stderr_file.close()
+    try:
+        assert owner.preserved is failure_exception
+    finally:
+        stdout_file.close()
+        stderr_file.close()
 
 
 def test_bounded_process_fails_when_owned_process_cleanup_is_incomplete(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: block destructive git operations in headless skill sessions.
+"""PreToolUse hook: protect checked-out refs and block destructive headless Git.
 
 Blocks commit --amend, push --force, reset --hard, clean -f, checkout .
 and related operations that rewrite history or destroy uncommitted changes.
@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -24,8 +25,15 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     _GIT_GLOBAL_FLAGS,
     _GIT_GLOBAL_FLAGS_WITH_VALUE,
     _SHELL_OPS,
+    command_verb_and_args,
+    extract_git_subcommand_and_flags,
+    extract_interpreter_command_payloads,
+    extract_interpreter_write_paths,
+    extract_redirect_targets,
     has_interpreter_wrapped_command,
     has_nested_shell,
+    tokenize_command_segments,
+    tokenize_shell_payload_segments,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
@@ -34,6 +42,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
 GIT_OPS_DENY_TRIGGER: str = "Destructive git operation blocked in headless session"
+CHECKED_OUT_REF_DENY_PREFIX = "Checked-out ref mutation blocked: "
 
 _DENY_REASON_TEMPLATE = (
     "Destructive git operation '{op}' is blocked in headless skill sessions. "
@@ -64,6 +73,11 @@ _EXEMPT_SKILLS: frozenset[str] = frozenset()
 # Must stay in sync with exempt_session_types on the git_ops_guard HookDef
 # in hook_registry.py — stdlib-only boundary prevents a shared import.
 _EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
+
+_DYNAMIC_TOKEN_RE = re.compile(r"[$`?\[]")
+_RAW_WRITE_VERBS = frozenset(
+    {"cp", "mv", "install", "tee", "truncate", "rm", "unlink", "sed", "dd"}
+)
 
 
 def _extract_git_subcommand_and_remaining(
@@ -154,10 +168,538 @@ def _contains_blocked_git_op(cmd: str) -> tuple[str, ...] | None:
     return None
 
 
-def main() -> None:
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)
+def _git_result(cwd: str, *args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", "-C", cwd, *args],
+        capture_output=True,
+        check=False,
+        text=False,
+        timeout=10,
+    )
 
+
+def _git_text(cwd: str, *args: str) -> str:
+    result = _git_result(cwd, *args)
+    if result.returncode != 0:
+        return ""
+    return result.stdout.decode("utf-8", errors="strict").strip()
+
+
+def _parse_worktree_owners(raw: bytes) -> dict[str, list[str]]:
+    owners: dict[str, list[str]] = {}
+    for raw_record in raw.split(b"\0\0"):
+        worktree_path = ""
+        branch_ref = ""
+        detached = False
+        for raw_field in raw_record.split(b"\0"):
+            if not raw_field:
+                continue
+            field = raw_field.decode("utf-8", errors="strict")
+            key, _, value = field.partition(" ")
+            if key == "worktree":
+                worktree_path = value
+            elif key == "branch":
+                branch_ref = value
+            elif key == "detached":
+                detached = True
+        if worktree_path and branch_ref.startswith("refs/heads/") and not detached:
+            owners.setdefault(branch_ref, []).append(worktree_path)
+    for paths in owners.values():
+        paths.sort()
+    return owners
+
+
+def _repository_context(execution_cwd: str) -> dict[str, object] | None:
+    git_dir = _git_text(execution_cwd, "rev-parse", "--absolute-git-dir")
+    common_raw = _git_text(execution_cwd, "rev-parse", "--git-common-dir")
+    requesting = _git_text(execution_cwd, "rev-parse", "--show-toplevel")
+    if not git_dir or not common_raw or not requesting:
+        return None
+    common_path = Path(common_raw)
+    if not common_path.is_absolute():
+        common_path = Path(execution_cwd) / common_path
+    common_git_dir = str(common_path.resolve())
+    worktrees = _git_result(execution_cwd, "worktree", "list", "--porcelain", "-z")
+    if worktrees.returncode != 0:
+        return None
+    try:
+        owners = _parse_worktree_owners(worktrees.stdout)
+    except UnicodeDecodeError:
+        return None
+    return {
+        "common_git_dir": common_git_dir,
+        "execution_cwd": execution_cwd,
+        "owners": owners,
+        "requesting_worktree_path": requesting,
+        "worktree_git_dir": git_dir,
+    }
+
+
+def _normal_branch_ref(value: str) -> str:
+    if value.startswith("refs/heads/"):
+        return value
+    if value == "HEAD" or value.startswith("refs/"):
+        return value
+    return f"refs/heads/{value}"
+
+
+def _symbolic_head(cwd: str) -> str:
+    return _git_text(cwd, "symbolic-ref", "-q", "HEAD")
+
+
+def _resolve_attempted_sha(cwd: str, value: str) -> str:
+    if value in ("", "<delete>", "<unresolved>"):
+        return ""
+    return _git_text(cwd, "rev-parse", "--verify", f"{value}^{{commit}}")
+
+
+def _all_threatened(context: dict[str, object]) -> list[dict[str, object]]:
+    owners = context["owners"]
+    assert isinstance(owners, dict)
+    rows: list[dict[str, object]] = []
+    for target_ref in sorted(owners):
+        owner_paths = owners[target_ref]
+        assert isinstance(owner_paths, list)
+        rows.append(
+            {
+                "old_sha": _git_text(str(context["execution_cwd"]), "rev-parse", target_ref),
+                "owner_paths": owner_paths,
+                "target_ref": target_ref,
+            }
+        )
+    return rows
+
+
+def _threatened_for_target(context: dict[str, object], target_ref: str) -> list[dict[str, object]]:
+    if target_ref == "HEAD":
+        return [
+            {
+                "old_sha": _git_text(str(context["execution_cwd"]), "rev-parse", "HEAD"),
+                "owner_paths": [str(context["requesting_worktree_path"])],
+                "target_ref": "HEAD",
+            }
+        ]
+    owners = context["owners"]
+    assert isinstance(owners, dict)
+    owner_paths = owners.get(target_ref)
+    if not isinstance(owner_paths, list):
+        return []
+    return [
+        {
+            "old_sha": _git_text(str(context["execution_cwd"]), "rev-parse", target_ref),
+            "owner_paths": owner_paths,
+            "target_ref": target_ref,
+        }
+    ]
+
+
+def _deny_checked_out_ref(
+    *,
+    data: dict[str, object],
+    context: dict[str, object] | None,
+    attempted_value: str,
+    threatened_refs: list[dict[str, object]],
+) -> None:
+    details = {
+        "attempted_value": attempted_value,
+        "common_git_dir": str(context["common_git_dir"]) if context else "",
+        "execution_cwd": str(context["execution_cwd"]) if context else "",
+        "requesting_worktree_path": (str(context["requesting_worktree_path"]) if context else ""),
+        "resolved_attempted_new_sha": (
+            _resolve_attempted_sha(str(context["execution_cwd"]), attempted_value)
+            if context
+            else ""
+        ),
+        "session_id": str(data.get("session_id", "")),
+        "threatened_refs": threatened_refs,
+        "worktree_git_dir": str(context["worktree_git_dir"]) if context else "",
+    }
+    reason = CHECKED_OUT_REF_DENY_PREFIX + json.dumps(
+        details, sort_keys=True, separators=(",", ":")
+    )
+    sys.stdout.write(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+        + "\n"
+    )
+    raise SystemExit(0)
+
+
+def _consume_option_value(args: list[str], index: int, option: str) -> int:
+    return index + 2 if args[index] == option and index + 1 < len(args) else index + 1
+
+
+def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
+    no_deref = False
+    delete = False
+    positional: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--stdin":
+            return ("", "<unresolved>", True)
+        if token == "--no-deref":
+            no_deref = True
+        elif token in ("-d", "--delete"):
+            delete = True
+        elif token in ("-m", "--create-reflog"):
+            index = _consume_option_value(args, index, token)
+            continue
+        elif token.startswith("-"):
+            pass
+        else:
+            positional.append(token)
+        index += 1
+    if not positional:
+        return None
+    target = positional[0]
+    attempted = "<delete>" if delete else (positional[1] if len(positional) > 1 else "")
+    if not attempted:
+        return None
+    if _DYNAMIC_TOKEN_RE.search(target) or _DYNAMIC_TOKEN_RE.search(attempted):
+        return ("", "<unresolved>", True)
+    if target == "HEAD" and no_deref:
+        return ("HEAD", attempted, False)
+    if target == "HEAD":
+        target = _symbolic_head(cwd)
+        if not target:
+            return ("HEAD", attempted, False)
+    return (_normal_branch_ref(target), attempted, False)
+
+
+def _classify_branch_position(subcommand: str, args: list[str]) -> tuple[str, str, bool] | None:
+    if subcommand == "branch":
+        try:
+            force_index = next(i for i, token in enumerate(args) if token in ("-f", "--force"))
+        except StopIteration:
+            return None
+        positional = [token for token in args[force_index + 1 :] if not token.startswith("-")]
+    else:
+        marker = "-B" if subcommand == "checkout" else "-C"
+        try:
+            marker_index = args.index(marker)
+        except ValueError:
+            return None
+        positional = args[marker_index + 1 :]
+    if not positional:
+        return None
+    target = positional[0]
+    attempted = positional[1] if len(positional) > 1 else "HEAD"
+    if _DYNAMIC_TOKEN_RE.search(target) or _DYNAMIC_TOKEN_RE.search(attempted):
+        return ("", "<unresolved>", True)
+    return (_normal_branch_ref(target), attempted, False)
+
+
+def _classify_reset(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
+    if "--" in args or any(token.startswith("--pathspec-from-file") for token in args):
+        return None
+    attempted = next((token for token in args if not token.startswith("-")), "HEAD")
+    target = _symbolic_head(cwd)
+    if not target:
+        return None
+    if _DYNAMIC_TOKEN_RE.search(attempted):
+        return ("", "<unresolved>", True)
+    old_sha = _git_text(cwd, "rev-parse", target)
+    if _resolve_attempted_sha(cwd, attempted) == old_sha:
+        return None
+    return (target, attempted, False)
+
+
+def _refspec_targets(refspec: str, owned_refs: list[str]) -> list[str]:
+    refspec = refspec.removeprefix("+")
+    if refspec.startswith("^") or ":" not in refspec:
+        return []
+    _source, destination = refspec.split(":", 1)
+    if not destination:
+        return []
+    if _DYNAMIC_TOKEN_RE.search(destination.replace("*", "")):
+        return owned_refs
+    destination = _normal_branch_ref(destination)
+    if "*" not in destination:
+        return [destination]
+    prefix, suffix = destination.split("*", 1)
+    return [ref for ref in owned_refs if ref.startswith(prefix) and ref.endswith(suffix)]
+
+
+def _classify_fetch(
+    args: list[str], cwd: str, owned_refs: list[str]
+) -> list[tuple[str, str, bool]]:
+    if "--stdin" in args:
+        return [("", "<unresolved>", True)]
+    refmaps: list[str] = []
+    positional: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--refmap" and index + 1 < len(args):
+            refmaps.append(args[index + 1])
+            index += 2
+            continue
+        if token.startswith("--refmap="):
+            refmaps.append(token.split("=", 1)[1])
+        elif token in ("--upload-pack", "-u", "--depth", "--deepen", "--shallow-since"):
+            index += 2
+            continue
+        elif not token.startswith("-"):
+            positional.append(token)
+        index += 1
+    if not positional:
+        return []
+    remote = positional[0]
+    command_refspecs = positional[1:]
+    mappings: list[str] = []
+    if refmaps:
+        mappings.extend(mapping for mapping in refmaps if mapping)
+    elif command_refspecs:
+        mappings.extend(spec for spec in command_refspecs if ":" in spec)
+    else:
+        configured = _git_result(cwd, "config", "--get-all", f"remote.{remote}.fetch")
+        if configured.returncode in (0, 1):
+            mappings.extend(
+                line for line in configured.stdout.decode("utf-8", errors="strict").splitlines()
+            )
+    result: list[tuple[str, str, bool]] = []
+    for mapping in mappings:
+        source = mapping.removeprefix("+").split(":", 1)[0]
+        for target in _refspec_targets(mapping, owned_refs):
+            result.append((target, source or "<delete>", False))
+    return result
+
+
+def _same_repository(candidate: str, context: dict[str, object]) -> bool:
+    candidate_path = candidate
+    if not os.path.isabs(candidate_path):
+        candidate_path = str(Path(str(context["execution_cwd"])) / candidate_path)
+    candidate_common = _git_text(candidate_path, "rev-parse", "--git-common-dir")
+    if not candidate_common:
+        return False
+    common_path = Path(candidate_common)
+    if not common_path.is_absolute():
+        common_path = Path(candidate_path) / common_path
+    return str(common_path.resolve()) == str(context["common_git_dir"])
+
+
+def _classify_push(
+    args: list[str], context: dict[str, object], owned_refs: list[str]
+) -> list[tuple[str, str, bool]]:
+    positional = [token for token in args if not token.startswith("-")]
+    if len(positional) < 2 or not _same_repository(positional[0], context):
+        return []
+    result: list[tuple[str, str, bool]] = []
+    for refspec in positional[1:]:
+        if ":" not in refspec:
+            continue
+        source, destination = refspec.removeprefix("+").split(":", 1)
+        if _DYNAMIC_TOKEN_RE.search(destination):
+            return [("", "<unresolved>", True)]
+        target = _normal_branch_ref(destination)
+        if target in owned_refs:
+            result.append((target, source or "<delete>", False))
+    return result
+
+
+def _classify_git_segment(
+    segment: list[str], context: dict[str, object]
+) -> list[tuple[str, str, bool]]:
+    parsed = extract_git_subcommand_and_flags(segment)
+    if parsed is None:
+        return []
+    subcommand, args = parsed
+    cwd = str(context["execution_cwd"])
+    owners = context["owners"]
+    assert isinstance(owners, dict)
+    owned_refs = sorted(owners)
+    one: tuple[str, str, bool] | None = None
+    if subcommand == "update-ref":
+        one = _classify_update_ref(args, cwd)
+    elif subcommand in ("branch", "checkout", "switch"):
+        one = _classify_branch_position(subcommand, args)
+    elif subcommand == "reset":
+        one = _classify_reset(args, cwd)
+    elif subcommand == "fetch":
+        return _classify_fetch(args, cwd, owned_refs)
+    elif subcommand == "push":
+        return _classify_push(args, context, owned_refs)
+    elif subcommand == "symbolic-ref":
+        positional = [token for token in args if not token.startswith("-")]
+        if len(positional) == 2 and positional[0] == "HEAD":
+            one = (_normal_branch_ref(positional[1]), positional[1], False)
+    return [one] if one is not None else []
+
+
+def _raw_write_targets(command: str, segments: list[list[str]]) -> tuple[list[str], bool]:
+    targets: list[str] = []
+    ambiguous = False
+    for segment in segments:
+        targets.extend(extract_redirect_targets(segment))
+        verb, args = command_verb_and_args(segment)
+        verb = os.path.basename(verb)
+        if verb not in _RAW_WRITE_VERBS:
+            continue
+        if verb == "dd":
+            candidates = [token.split("=", 1)[1] for token in args if token.startswith("of=")]
+        elif verb == "sed":
+            candidates = args[-1:] if any(token.startswith("-i") for token in args) else []
+        else:
+            candidates = args[-1:]
+        for candidate in candidates:
+            if _DYNAMIC_TOKEN_RE.search(candidate):
+                ambiguous = True
+            elif candidate:
+                targets.append(candidate)
+    interpreter_paths = extract_interpreter_write_paths(command)
+    if interpreter_paths == [] and "open(" in command:
+        ambiguous = True
+    elif interpreter_paths:
+        targets.extend(interpreter_paths)
+    return (targets, ambiguous)
+
+
+def _raw_target_mutations(
+    command: str, segments: list[list[str]], context: dict[str, object]
+) -> list[tuple[str, str, bool]]:
+    targets, ambiguous = _raw_write_targets(command, segments)
+    if ambiguous:
+        return [("", "<unresolved>", True)]
+    common = Path(str(context["common_git_dir"])).resolve()
+    worktree_git = Path(str(context["worktree_git_dir"])).resolve()
+    result: list[tuple[str, str, bool]] = []
+    for raw_target in targets:
+        target = Path(raw_target)
+        if not target.is_absolute():
+            target = Path(str(context["execution_cwd"])) / target
+        target = target.resolve()
+        if target == worktree_git / "HEAD":
+            result.append(("HEAD", "<unresolved>", False))
+        elif target == common / "HEAD":
+            result.append(("HEAD", "<unresolved>", False))
+        elif target == common / "packed-refs":
+            result.append(("", "<unresolved>", True))
+        else:
+            try:
+                relative = target.relative_to(common / "refs" / "heads")
+            except ValueError:
+                continue
+            result.append((f"refs/heads/{relative.as_posix()}", "<unresolved>", False))
+    return result
+
+
+def _git_segment_cwd(segment: list[str], cwd: str) -> str:
+    verb, args = command_verb_and_args(segment)
+    if verb != "git" and not verb.endswith("/git"):
+        return cwd
+    current = Path(cwd)
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "-C" and index + 1 < len(args):
+            candidate = Path(args[index + 1])
+            current = candidate if candidate.is_absolute() else current / candidate
+            index += 2
+            continue
+        if token in _GIT_GLOBAL_FLAGS_WITH_VALUE:
+            index += 2
+            continue
+        if token in _GIT_GLOBAL_FLAGS or token.startswith("-"):
+            index += 1
+            continue
+        break
+    return str(current.resolve())
+
+
+def _preflight_checked_out_ref_mutation(
+    data: dict[str, object], command: str, execution_cwd: str
+) -> None:
+    outer_segments = tokenize_command_segments(command)
+    nested_segments = tokenize_shell_payload_segments(command)
+    interpreter_payloads, interpreter_unresolved = extract_interpreter_command_payloads(command)
+    structural_mutation = bool(
+        re.search(
+            r"\bgit\s+(?:update-ref|branch\s+(?:-f|--force)|checkout\s+-B|switch\s+-C|"
+            r"reset\b|fetch\b|push\b|symbolic-ref\s+HEAD)\b",
+            command,
+        )
+        or any(
+            os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS
+            for segment in outer_segments
+        )
+    )
+    if not execution_cwd:
+        if structural_mutation:
+            _deny_checked_out_ref(
+                data=data,
+                context=None,
+                attempted_value="<unresolved>",
+                threatened_refs=[],
+            )
+        return
+    current_cwd = execution_cwd
+    for segment in outer_segments:
+        verb, args = command_verb_and_args(segment)
+        if verb == "cd" and len(args) == 1 and not _DYNAMIC_TOKEN_RE.search(args[0]):
+            candidate = Path(args[0])
+            current_cwd = str(
+                (candidate if candidate.is_absolute() else Path(current_cwd) / candidate).resolve()
+            )
+            continue
+        segment_context = _repository_context(_git_segment_cwd(segment, current_cwd))
+        if segment_context is None:
+            continue
+        for target_ref, attempted_value, ambiguous in _classify_git_segment(
+            segment, segment_context
+        ):
+            threatened = (
+                _all_threatened(segment_context)
+                if ambiguous
+                else _threatened_for_target(segment_context, target_ref)
+            )
+            if threatened:
+                _deny_checked_out_ref(
+                    data=data,
+                    context=segment_context,
+                    attempted_value=attempted_value,
+                    threatened_refs=threatened,
+                )
+
+    context = _repository_context(current_cwd)
+    if context is None:
+        return
+    additional_segments: list[list[str]] = []
+    if nested_segments:
+        additional_segments.extend(nested_segments)
+    for payload in interpreter_payloads:
+        if isinstance(payload, list):
+            additional_segments.append(payload)
+        else:
+            additional_segments.extend(tokenize_command_segments(payload))
+    mutations: list[tuple[str, str, bool]] = []
+    for segment in additional_segments:
+        mutations.extend(_classify_git_segment(segment, context))
+    mutations.extend(_raw_target_mutations(command, outer_segments, context))
+    if interpreter_unresolved and structural_mutation:
+        mutations.append(("", "<unresolved>", True))
+
+    for target_ref, attempted_value, ambiguous in mutations:
+        threatened = (
+            _all_threatened(context) if ambiguous else _threatened_for_target(context, target_ref)
+        )
+        if threatened:
+            _deny_checked_out_ref(
+                data=data,
+                context=context,
+                attempted_value=attempted_value,
+                threatened_refs=threatened,
+            )
+
+
+def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
         if not isinstance(data, dict):
@@ -169,6 +711,22 @@ def main() -> None:
     cmd = parsed.command or ""
 
     if not cmd:
+        sys.exit(0)
+
+    project_root = resolve_state_root(parsed.payload_cwd)
+    try:
+        cfg_path = project_root / ".autoskillit" / "temp" / ".hook_config.json"
+        kitchen_open = cfg_path.exists()
+    except OSError:
+        sys.exit(0)
+
+    if kitchen_open:
+        try:
+            _preflight_checked_out_ref_mutation(data, cmd, parsed.execution_cwd)
+        except (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError):
+            sys.exit(0)
+
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
 
     blocked = _contains_blocked_git_op(cmd)
@@ -183,15 +741,9 @@ def main() -> None:
     if session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
-    project_root = resolve_state_root(parsed.payload_cwd)
-
     # Hook config file is written by open_kitchen and removed by close_kitchen.
     # Its presence reliably signals an open kitchen without needing session ID.
-    try:
-        cfg_path = project_root / ".autoskillit" / "temp" / ".hook_config.json"
-        if not cfg_path.exists():
-            sys.exit(0)
-    except OSError:
+    if not kitchen_open:
         sys.exit(0)
 
     # Recipe-level authorization: check git_ops_policy for per-subcommand allow.

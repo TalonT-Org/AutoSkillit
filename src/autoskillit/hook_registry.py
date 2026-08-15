@@ -246,10 +246,6 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/git_ops_guard.py"],
-        session_scope="headless_only",
-        # Must stay in sync with _EXEMPT_SESSION_TYPES in guards/git_ops_guard.py —
-        # stdlib-only boundary on hook scripts prevents a shared import.
-        exempt_session_types=frozenset({"orchestrator"}),
         mechanism="deny",
         enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),

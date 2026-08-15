@@ -2863,6 +2863,9 @@ callable_contracts:
     - name: current_iteration
       type: str
       required: false
+    - name: mode
+      type: str
+      required: false
     - name: max_iterations
       type: str
       required: false

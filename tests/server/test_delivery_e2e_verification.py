@@ -112,7 +112,7 @@ async def _record_implementation_bounded_path(
         ("claude-code", "consolidate-health-reports", "NON_SEGMENTED_INLINE"),
         ("claude-code", "research", "NON_SEGMENTED_ENVELOPE"),
         ("codex", "implementation", "SEGMENTED_INLINE"),
-        ("codex", "consolidate-health-reports", "NON_SEGMENTED_INLINE"),
+        ("codex", "consolidate-health-reports", "NON_SEGMENTED_ENVELOPE"),
         ("codex", "research", "NON_SEGMENTED_ENVELOPE"),
     ],
     ids=[
@@ -233,10 +233,10 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
     totals = counter.totals()
     # Drift baseline, not a production-safe threshold.
     assert totals == {
-        "raw_chars": 22_458,
-        "utf8_bytes": 22_472,
-        "client_serialized_chars": 25_133,
-        "estimated_tokens": 5_616,
+        "raw_chars": 22_438,
+        "utf8_bytes": 22_452,
+        "client_serialized_chars": 25_113,
+        "estimated_tokens": 5_611,
         "responses": 5,
     }
     assert totals["responses"] == len(counter.responses)

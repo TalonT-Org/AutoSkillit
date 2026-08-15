@@ -23,6 +23,10 @@ class CollectorSafetyError(ValueError):
     """Raised when a collector request cannot be performed safely."""
 
 
+class CollectorMutationError(CollectorSafetyError):
+    """Raised when a descriptor-backed observation changes while being read."""
+
+
 @dataclass(frozen=True, slots=True)
 class CollectorLimits:
     """Hard resource limits shared by all observational collectors."""
@@ -52,6 +56,15 @@ class BoundedCommandResult:
     stdout: bytes
     stderr: bytes
     failure: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StableContainedFileRead:
+    """Bytes and metadata from one stable descriptor-relative file read."""
+
+    content: bytes
+    size: int
+    mode: int
 
 
 _READ_CHUNK_BYTES: Final = 64 * 1024
@@ -85,6 +98,15 @@ def _same_inode(first: os.stat_result, second: os.stat_result) -> bool:
         first.st_dev == second.st_dev
         and first.st_ino == second.st_ino
         and stat.S_IFMT(first.st_mode) == stat.S_IFMT(second.st_mode)
+    )
+
+
+def _stable_file_metadata(observation: os.stat_result) -> tuple[int, int, int, int]:
+    return (
+        observation.st_size,
+        observation.st_mode,
+        observation.st_mtime_ns,
+        observation.st_ctime_ns,
     )
 
 
@@ -272,6 +294,96 @@ def read_contained_file(root: Path, relative_path: str, limits: CollectorLimits)
         raise CollectorSafetyError("requested artifact cannot be read") from exc
     finally:
         os.close(artifact_fd)
+
+
+def read_stable_contained_file(
+    root: Path,
+    relative_path: str,
+    *,
+    max_bytes: int,
+) -> StableContainedFileRead:
+    """Read one regular file and reject any path or metadata change during the read."""
+
+    if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes <= 0:
+        raise CollectorSafetyError("requested artifact byte limit must be positive")
+    parts = _contained_parts(relative_path)
+    parent_fd = _open_verified_root_directory(root)
+    file_fd: int | None = None
+    target_observed = False
+    try:
+        for component in parts[:-1]:
+            child_fd = _open_verified_directory_at(
+                parent_fd,
+                component,
+                expected=None,
+                invalid_message="requested path must stay within collector root",
+                changed_message="requested path changed while opening",
+            )
+            os.close(parent_fd)
+            parent_fd = child_fd
+
+        name = parts[-1]
+        before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        target_observed = True
+        if not stat.S_ISREG(before.st_mode):
+            raise CollectorSafetyError("requested path must be a non-symlink regular file")
+        file_fd = os.open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
+        opened_before = os.fstat(file_fd)
+        path_opened = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(opened_before.st_mode)
+            or not _same_inode(before, opened_before)
+            or not _same_inode(opened_before, path_opened)
+        ):
+            raise CollectorMutationError("requested artifact changed while opening")
+        if opened_before.st_size > max_bytes:
+            raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+
+        payload = bytearray()
+        while len(payload) <= max_bytes:
+            chunk = os.read(file_fd, min(_READ_CHUNK_BYTES, max_bytes + 1 - len(payload)))
+            if not chunk:
+                break
+            payload.extend(chunk)
+        if len(payload) > max_bytes:
+            raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+
+        opened_after = os.fstat(file_fd)
+        path_after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            not _same_inode(opened_before, opened_after)
+            or not _same_inode(opened_after, path_after)
+            or not (
+                _stable_file_metadata(before)
+                == _stable_file_metadata(opened_before)
+                == _stable_file_metadata(path_opened)
+                == _stable_file_metadata(opened_after)
+                == _stable_file_metadata(path_after)
+            )
+            or len(payload) != opened_after.st_size
+        ):
+            raise CollectorMutationError("requested artifact changed while reading")
+        return StableContainedFileRead(
+            content=bytes(payload),
+            size=opened_after.st_size,
+            mode=stat.S_IMODE(opened_after.st_mode),
+        )
+    except CollectorMutationError:
+        raise
+    except CollectorSafetyError as exc:
+        if "changed while" in str(exc):
+            raise CollectorMutationError(str(exc)) from exc
+        raise
+    except FileNotFoundError as exc:
+        if target_observed:
+            raise CollectorMutationError("requested artifact changed while reading") from exc
+        raise CollectorSafetyError("requested artifact is unavailable") from exc
+    except OSError as exc:
+        raise CollectorSafetyError("requested artifact cannot be read safely") from exc
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        os.close(parent_fd)
 
 
 def list_contained_files(root: Path, limits: CollectorLimits) -> tuple[str, ...]:

@@ -63,6 +63,10 @@ failed, or forbidden observed calls reject the result. This proves the behavior 
 reader; it does not claim that Codex exposes a complete inventory of every built-in tool it may
 have offered.
 
+Issue #4563 separately owns the audit reader role, Git evidence tools, ref validation, and
+ready-wave scheduler; this evidence-reader corridor does not implement or authorize those
+capabilities.
+
 ## Security matrix
 
 The direct native-shell spike is not an acceptable boundary. Codex 0.146 permission profiles

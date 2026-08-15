@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -89,6 +91,11 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
 
     parent_project = tmp_path
     clone = tmp_path / "recipe-clone"
+    worktree_bin = Path(sys.executable).parent
+    monkeypatch.setenv(
+        "PATH",
+        os.pathsep.join((str(worktree_bin), os.environ.get("PATH", ""))),
+    )
     _initialize_git_root(parent_project)
     _initialize_git_root(clone)
     credential, step = await _install_attested_recipe(monkeypatch, parent_project)
@@ -153,6 +160,7 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
                 plugin_binding=binding,
                 provider_extras=provider_extras,
             )
+            assert Path(spec.env["PATH"].split(os.pathsep)[0]) == worktree_bin
             assert spec.env["AUTOSKILLIT_CWD"] == str(clone.resolve())
             assert spec.env[AUTOSKILLIT_STATE_ROOT_ENV_VAR] == str(clone.resolve())
             assert spec.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == str(

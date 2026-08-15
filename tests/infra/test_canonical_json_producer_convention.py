@@ -143,19 +143,19 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "plan_association": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/recipe/_cmd_rpc_guards.py", 280),
         producer_symbol="write_audit_disposition_bundle",
-        producer_site=(_TYPED_PRODUCER_MODULE, 166),
+        producer_site=(_TYPED_PRODUCER_MODULE, 167),
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 229),
         producer_symbol="write_audit_semantic_result",
-        producer_site=(_TYPED_PRODUCER_MODULE, 111),
+        producer_site=(_TYPED_PRODUCER_MODULE, 112),
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 98, 108),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 276),
         producer_symbol="write_standalone_audit_evidence",
-        producer_site=(_TYPED_PRODUCER_MODULE, 144),
+        producer_site=(_TYPED_PRODUCER_MODULE, 145),
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 109, 118),),
     ),
 }

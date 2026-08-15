@@ -213,6 +213,24 @@ def _delegate_results(stdout: str) -> list[dict[str, Any]]:
     return list(results.values())
 
 
+def _delegate_diagnostics(stdout: str) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for value in _json_values(_events(stdout)):
+        if isinstance(value, dict) and (
+            isinstance(value.get("status"), str)
+            or value.get("success") is False
+            or isinstance(value.get("code"), str)
+        ):
+            diagnostics.append(
+                {
+                    key: value[key]
+                    for key in ("status", "code", "success", "error", "artifact_path")
+                    if key in value
+                }
+            )
+    return diagnostics[-12:]
+
+
 def _parent_thread_id(stdout: str) -> str:
     ids = {
         event["thread_id"]
@@ -329,7 +347,9 @@ def test_live_codex_evidence_reader_gate(tmp_path: Path, monkeypatch: pytest.Mon
     assert first.returncode == 0, (first.stdout + "\n" + first.stderr)[-16_000:]
     parent_id = _parent_thread_id(first.stdout)
     results = _delegate_results(first.stdout)
-    assert {result["artifact_path"] for result in results} == set(_ARTIFACTS)
+    assert {result["artifact_path"] for result in results} == set(_ARTIFACTS), (
+        _delegate_diagnostics(first.stdout)
+    )
     child_ids: set[str] = set()
     authority_digests: set[str] = set()
     for result in results:

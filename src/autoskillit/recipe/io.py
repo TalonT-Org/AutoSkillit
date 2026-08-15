@@ -570,6 +570,12 @@ def _parse_recipe(
             )
         delivery_segments = tuple(parsed_segments)
 
+    # Recipe YAML uses the canonical key, while card-shaped metadata uses plain
+    # ``version``. Preserve canonical-key precedence when both are present.
+    declared_version = (
+        data[AUTOSKILLIT_VERSION_KEY] if AUTOSKILLIT_VERSION_KEY in data else data.get("version")
+    )
+
     return Recipe(
         name=name,
         description=description,
@@ -577,7 +583,7 @@ def _parse_recipe(
         ingredients=ingredients,
         steps=steps,
         kitchen_rules=kitchen_rules,
-        version=data.get(AUTOSKILLIT_VERSION_KEY, data.get("version")),
+        version=declared_version,
         recipe_version=_rv,
         experimental=bool(data.get("experimental", False)),
         requires_packs=requires_packs_raw,

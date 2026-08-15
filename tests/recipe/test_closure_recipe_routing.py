@@ -37,15 +37,6 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _RECIPES_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "recipes"
 
-_RECIPE_FILES = [
-    "implementation.yaml",
-    "implementation-groups.yaml",
-    "remediation.yaml",
-    "merge-prs.yaml",
-    "research.yaml",
-    "research-implement.yaml",
-]
-
 _AUDIT_CWD_BY_RECIPE = {
     "implementation.yaml": "${{ context.work_dir }}",
     "implementation-groups.yaml": "${{ context.work_dir }}",
@@ -54,6 +45,7 @@ _AUDIT_CWD_BY_RECIPE = {
     "research.yaml": "${{ context.worktree_path }}",
     "research-implement.yaml": "${{ context.worktree_path }}",
 }
+_RECIPE_FILES = list(_AUDIT_CWD_BY_RECIPE)
 
 
 def _load_recipe(name: str) -> dict:

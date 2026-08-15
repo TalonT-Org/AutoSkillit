@@ -8,7 +8,7 @@ import shutil
 import pytest
 
 from autoskillit.server.git import validate_commit_paths
-from autoskillit.server.tools.tools_git import commit_files
+from autoskillit.server.tools.tools_workspace import commit_files
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

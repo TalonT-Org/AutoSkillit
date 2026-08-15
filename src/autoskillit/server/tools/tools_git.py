@@ -23,7 +23,6 @@ from autoskillit.server._recipe_segment_delivery import (
 )
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools.tools_workspace import commit_files as commit_files
 
 _BRANCH_DATE_FORMAT = "%Y%m%d"
 

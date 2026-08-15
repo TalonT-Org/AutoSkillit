@@ -886,6 +886,36 @@ class TestEvidenceReaderBindingVisibility:
         assert gate.enabled is False
 
     @pytest.mark.anyio
+    async def test_complete_identity_with_zero_matching_tools_aborts_startup(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan, mcp
+        from autoskillit.server.tools import _evidence_reader
+
+        self._set_complete_identity(monkeypatch)
+        monkeypatch.setattr(
+            _evidence_reader,
+            "validate_evidence_reader_startup",
+            Mock(),
+        )
+
+        async def no_visible_tools():
+            return []
+
+        monkeypatch.setattr(mcp, "list_tools", no_visible_tools)
+        gate = DefaultGateState()
+
+        with pytest.raises(RuntimeError, match="tool projection is incomplete"):
+            await _lifespan._run_lifespan_session_boot(SimpleNamespace(gate=gate))
+
+        assert gate.enabled is False
+
+    @pytest.mark.anyio
     async def test_complete_ambient_identity_does_not_reveal_brokers_before_boot(
         self,
         monkeypatch: pytest.MonkeyPatch,

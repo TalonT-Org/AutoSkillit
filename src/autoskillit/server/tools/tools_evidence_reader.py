@@ -432,16 +432,18 @@ def _delegate_sync(
                     max_attempts=3,
                 )
                 if not stable_artifact_matches(capture, terminal):
-                    terminal_error = _DelegateError("artifact_stale")
+                    terminal_error = terminal_error or _DelegateError("artifact_stale")
             except ArtifactCaptureError as exc:
-                terminal_error = _DelegateError(
+                terminal_error = terminal_error or _DelegateError(
                     "artifact_stale"
                     if exc.status is ArtifactCaptureStatus.STALE
                     else "artifact_terminal_recapture_failed"
                 )
             except Exception:
                 logger.error("evidence reader terminal recapture failed", exc_info=True)
-                terminal_error = _DelegateError("artifact_terminal_recapture_failed")
+                terminal_error = terminal_error or _DelegateError(
+                    "artifact_terminal_recapture_failed"
+                )
         if terminal_error is not None:
             raise terminal_error
 

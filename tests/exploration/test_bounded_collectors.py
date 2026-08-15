@@ -59,7 +59,8 @@ def test_read_contained_file_rejects_parent_escape_and_symlink(tmp_path: Path) -
 
 
 @pytest.mark.parametrize(
-    "relative_path", ["", "/absolute", "../escape", "safe/../escape", "bad\0path"]
+    "relative_path",
+    ["", "/absolute", "../escape", "safe/../escape", "bad\0path", "bad\\path", ".git/config"],
 )
 def test_contained_path_entrypoints_share_lexical_rejection(
     tmp_path: Path,

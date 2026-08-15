@@ -6,6 +6,7 @@ import json
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from enum import StrEnum
 from pathlib import Path
 from types import SimpleNamespace
@@ -419,6 +420,7 @@ def test_cleanup_failure_overrides_otherwise_successful_delegate(
         "revoke_evidence_reader_invocation",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("cleanup failed")),
     )
+    monkeypatch.setattr(delegate_module, "stable_artifact_matches", lambda *args: False)
 
     with pytest.raises(delegate_module._DelegateError) as raised:
         delegate_module._delegate_sync(
@@ -472,3 +474,104 @@ async def test_concurrent_same_session_delegates_remain_independent(
     }
     assert {session for session, _artifact in observed} == {"shared-session"}
     assert {artifact for _session, artifact in observed} == {"first.txt", "second.txt"}
+
+
+def test_concurrent_real_authorities_isolate_stale_and_successful_delegates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "repository"
+    root.mkdir()
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "reader@example.test")
+    _git(root, "config", "user.name", "Reader Test")
+    for name in ("first.txt", "second.txt"):
+        (root / name).write_text(f"{name}-current\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "initial")
+    context = _context(tmp_path)
+    common_git = (root / ".git").resolve()
+    monkeypatch.setattr(
+        delegate_module,
+        "_trusted_repository",
+        lambda _ctx: (root.resolve(), root.resolve(), common_git),
+    )
+    monkeypatch.setattr(delegate_module, "_reader_transport", lambda _ctx: {"transport": True})
+    monkeypatch.setattr(
+        delegate_module,
+        "evidence_reader_provider_environment",
+        lambda: {"OPENAI_API_KEY": "provider-secret"},
+    )
+    invocation_dirs: list[Path] = []
+    real_create = create_evidence_reader_invocation
+
+    def track_invocation(*args: Any, **kwargs: Any) -> EvidenceReaderInvocation:
+        invocation = real_create(*args, **kwargs)
+        invocation_dirs.append(invocation.invocation_dir)
+        return invocation
+
+    monkeypatch.setattr(delegate_module, "create_evidence_reader_invocation", track_invocation)
+    barrier = threading.Barrier(2)
+
+    def launch_with_real_authority(
+        definition: Any,
+        invocation: EvidenceReaderInvocation,
+        **kwargs: Any,
+    ) -> EvidenceReaderLaunchResult:
+        artifact_path = json.loads(kwargs["prompt"])["artifact_path"]
+        page = read_bound_evidence_reader_page(
+            context,
+            dict(invocation.environment),
+            canonical_tool=definition.reader_tools[1],
+            page_size=64_000,
+            continuation=None,
+            deadline=time.monotonic() + 5,
+        )
+        barrier.wait(timeout=5)
+        if artifact_path == "first.txt":
+            (root / artifact_path).write_text("became-stale\n")
+        citation = EvidenceCitation(
+            page.citation_id,
+            page.byte_start,
+            page.byte_end,
+            page.line_start,
+            page.line_end,
+        )
+        return EvidenceReaderLaunchResult(
+            EvidenceReaderResultStatus.ANSWERED,
+            definition.name,
+            kwargs["expected_scope_digest"],
+            kwargs["expected_snapshot_digest"],
+            f"thread-{artifact_path}",
+            (citation,),
+            json.dumps({"canary": "private", "observed": page.content}),
+        )
+
+    monkeypatch.setattr(delegate_module, "launch_evidence_reader", launch_with_real_authority)
+
+    def delegate(path: str) -> str:
+        try:
+            return json.loads(
+                delegate_module._delegate_sync(
+                    context,
+                    caller_session_id="shared-session",
+                    role="pr-source-reader",
+                    artifact_path=path,
+                    requested_fields=("field",),
+                )
+            )["status"]
+        except delegate_module._DelegateError as exc:
+            return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = {
+            path: future.result(timeout=10)
+            for path, future in (
+                ("first.txt", pool.submit(delegate, "first.txt")),
+                ("second.txt", pool.submit(delegate, "second.txt")),
+            )
+        }
+
+    assert outcomes == {"first.txt": "artifact_stale", "second.txt": "answered"}
+    assert len(set(invocation_dirs)) == 2
+    assert all(not path.exists() for path in invocation_dirs)

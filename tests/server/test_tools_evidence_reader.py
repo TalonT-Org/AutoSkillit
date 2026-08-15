@@ -152,6 +152,7 @@ def test_invocations_use_unique_private_directories_and_files(tmp_path: Path) ->
         assert stat.S_IMODE(invocation.invocation_dir.stat().st_mode) == 0o700
         assert {path.name for path in invocation.invocation_dir.iterdir()} == {
             "authority.json",
+            "snapshot.json",
             "receipts.json",
         }
         assert all(
@@ -206,6 +207,7 @@ def test_call_authority_is_bound_to_session_role_policy_and_tool_pair(
     ("tamper", "code"),
     [
         ("authority", _ErrorCode.AUTHORITY_TAMPERED),
+        ("snapshot", _ErrorCode.AUTHORITY_TAMPERED),
         ("receipt", _ErrorCode.AUTHORITY_TAMPERED),
         ("capability", _ErrorCode.CAPABILITY_INVALID),
     ],
@@ -220,7 +222,11 @@ def test_tampered_authority_receipt_or_capability_fails_closed(
     if tamper == "capability":
         environment[EVIDENCE_READER_CAPABILITY_ENV_VAR] = "forged-capability"
     else:
-        filename = "authority.json" if tamper == "authority" else "receipts.json"
+        filename = {
+            "authority": "authority.json",
+            "snapshot": "snapshot.json",
+            "receipt": "receipts.json",
+        }[tamper]
         path = invocation.invocation_dir / filename
         path.write_text("{}")
         path.chmod(0o600)
@@ -360,7 +366,6 @@ def test_receipt_loader_returns_only_the_bounded_verified_suffix(tmp_path: Path)
         dict(invocation.environment),
         max_receipts=1,
     )
-
     assert tuple(receipt.sequence for receipt in receipts) == (3,)
     assert receipts[0].outcome == _ReceiptOutcome.COMPLETE
     _assert_error(
@@ -373,12 +378,29 @@ def test_receipt_loader_returns_only_the_bounded_verified_suffix(tmp_path: Path)
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("max_calls", 33),
+        ("max_pages", 33),
+        ("max_output_bytes", 1_000_001),
+        ("max_page_bytes", 64_001),
+        ("max_page_lines", 1_001),
+        ("max_receipts", 65),
+    ],
+)
+def test_limits_reject_values_above_global_maxima(field: str, value: int) -> None:
+    with pytest.raises(ValueError, match="within maxima"):
+        EvidenceReaderLimits(**{field: value})
+
+
 def test_revocation_is_synchronous_and_leaves_verified_absence(tmp_path: Path) -> None:
     context, invocation = _create(tmp_path)
     environment = dict(invocation.environment)
     authority_path = Path(environment[EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR])
     authority_digest = environment[EVIDENCE_READER_AUTHORITY_ENV_VAR]
 
+    revoke_evidence_reader_invocation(context, environment)
     revoke_evidence_reader_invocation(context, environment)
 
     assert not invocation.invocation_dir.exists()

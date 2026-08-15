@@ -66,6 +66,26 @@ def test_provider_projection_rejects_unallowlisted_caller_environment() -> None:
 
 
 @pytest.mark.parametrize(
+    "name",
+    [
+        "CODEX_BASE_URL",
+        "OPENAI_BASE_URL",
+        "OPENAI_ORGANIZATION",
+        "OPENAI_ORG_ID",
+        "OPENAI_PROJECT_ID",
+    ],
+)
+def test_provider_projection_rejects_custom_provider_routing(name: str) -> None:
+    with pytest.raises(EvidenceReaderLaunchError) as raised:
+        launcher._positive_mapping(
+            {"OPENAI_API_KEY": "key", name: "custom"},
+            launcher._PROVIDER_ENV,
+            "provider_env_invalid",
+        )
+    assert raised.value.code == "provider_env_invalid"
+
+
+@pytest.mark.parametrize(
     ("provider", "with_file", "code"),
     [
         ({}, False, "provider_auth_missing"),

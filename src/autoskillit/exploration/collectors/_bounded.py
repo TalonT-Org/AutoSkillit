@@ -179,10 +179,15 @@ def _open_verified_directory_at(
 
 
 def _contained_parts(relative_path: str) -> tuple[str, ...]:
-    if not isinstance(relative_path, str) or "\x00" in relative_path:
+    if not isinstance(relative_path, str) or "\x00" in relative_path or "\\" in relative_path:
         raise CollectorSafetyError("path must be a non-empty contained relative path")
     relative = PurePosixPath(relative_path)
-    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or ".." in relative.parts
+        or ".git" in relative.parts
+    ):
         raise CollectorSafetyError("path must be a non-empty contained relative path")
     return relative.parts
 

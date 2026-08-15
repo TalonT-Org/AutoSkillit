@@ -501,7 +501,7 @@ def test_stream_validation_accepts_exact_partial_and_blocked_partitions(
     assert result.status.value == status
 
 
-def test_stream_validation_accepts_reused_receipt_with_bounded_locations() -> None:
+def test_stream_validation_rejects_unissued_receipt_even_with_one_observed_receipt() -> None:
     payload = _payload()
     payload["evidence"] = [
         {
@@ -521,22 +521,17 @@ def test_stream_validation_accepts_reused_receipt_with_bounded_locations() -> No
         )
     ]
 
-    result = launcher._validate_stream(
-        _stream(payload=payload),
-        definition=_definition(),
-        allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
-        canary=_CANARY,
-        scope=_SCOPE,
-        snapshot=_SNAPSHOT,
-        requested_fields=("first", "second"),
-        max_result_bytes=256_000,
-    )
-
-    assert [(item.start_byte, item.end_byte) for item in result.citations] == [(0, 5), (1, 4)]
-    assert {item.citation_id for item in result.citations} == {_CITATION}
-    assert {item["citation_id"] for item in json.loads(result.payload_json)["evidence"]} == {
-        _CITATION
-    }
+    with pytest.raises(EvidenceReaderLaunchError, match="citation_invalid"):
+        launcher._validate_stream(
+            _stream(payload=payload),
+            definition=_definition(),
+            allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+            canary=_CANARY,
+            scope=_SCOPE,
+            snapshot=_SNAPSHOT,
+            requested_fields=("first", "second"),
+            max_result_bytes=256_000,
+        )
 
 
 @pytest.mark.parametrize(

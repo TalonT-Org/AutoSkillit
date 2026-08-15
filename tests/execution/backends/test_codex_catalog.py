@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.execution.backends._codex_catalog import project_codex_catalog
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _READER_MODEL = "gpt-5.6-luna"
 _READER_REASONING_EFFORT = "xhigh"

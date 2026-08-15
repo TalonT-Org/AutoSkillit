@@ -51,6 +51,7 @@ __all__ = [
 _AUTHORITY_SCHEMA: Final = 1
 _RECEIPT_SCHEMA: Final = 1
 _AUTHORITY_FILE: Final = "authority.json"
+_SNAPSHOT_FILE: Final = "snapshot.json"
 _RECEIPT_FILE: Final = "receipts.json"
 _CALL_LOCK_FILE: Final = "call.lock"
 _AUTHORITY_DOMAIN: Final = b"autoskillit.evidence-reader-authority.v1\0"
@@ -94,10 +95,11 @@ class EvidenceReaderLimits:
             self.max_page_lines,
             self.max_receipts,
         )
+        maximums = (32, 32, 1_000_000, 64_000, 1_000, 64)
         if any(
             not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in values
-        ):
-            raise ValueError("evidence reader limits must be positive integers")
+        ) or any(value > maximum for value, maximum in zip(values, maximums, strict=True)):
+            raise ValueError("evidence reader limits must be positive integers within maxima")
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,7 +283,9 @@ def _open_authority(tool_ctx: ToolContext, environment: Mapping[str, str]) -> _O
         raise EvidenceReaderError("authority_tampered")
     authority["authority_digest"] = authority_digest
     _validate_authority_fields(authority)
-    _authority_content(authority)
+    if authority["readers_root"] != str(root):
+        raise EvidenceReaderError("authority_path_invalid")
+    _snapshot_content(invocation_dir, authority)
     capability_hash = _capability_hash(env[EVIDENCE_READER_CAPABILITY_ENV_VAR])
     if not secrets.compare_digest(str(authority.get("capability_hash", "")), capability_hash):
         raise EvidenceReaderError("capability_invalid")
@@ -304,6 +308,7 @@ def _validate_authority_fields(authority: Mapping[str, Any]) -> None:
         "caller_session_id",
         "role",
         "role_definition_digest",
+        "readers_root",
         "repository_root",
         "repository_identity_digest",
         "revision",
@@ -318,10 +323,12 @@ def _validate_authority_fields(authority: Mapping[str, Any]) -> None:
         for name in required_strings
     ):
         raise EvidenceReaderError("authority_tampered")
+    readers_root = Path(authority["readers_root"])
     repository_root = Path(authority["repository_root"])
     artifact_path = PurePosixPath(authority["artifact_path"])
     if (
-        not repository_root.is_absolute()
+        not readers_root.is_absolute()
+        or not repository_root.is_absolute()
         or artifact_path.is_absolute()
         or not artifact_path.parts
         or ".." in artifact_path.parts
@@ -483,6 +490,7 @@ def create_evidence_reader_invocation(
         "caller_session_id": caller_session_id,
         "role": role,
         "role_definition_digest": role_definition_digest,
+        "readers_root": str(root),
         "repository_root": str(capture.repository_root),
         "repository_identity_digest": capture.repository_identity_digest,
         "revision": capture.revision,
@@ -497,14 +505,21 @@ def create_evidence_reader_invocation(
         "policy": policy,
         "limits": _limits_payload(active_limits),
         "capability_hash": capability_hash,
-        "content_base64": base64.b64encode(capture.content).decode("ascii"),
     }
     _validate_authority_fields(authority)
-    _authority_content(authority)
     authority["authority_digest"] = _digest(_AUTHORITY_DOMAIN, authority)
+    snapshot = {
+        "schema_version": 1,
+        "authority_digest": authority["authority_digest"],
+        "snapshot_digest": capture.snapshot_digest,
+        "content_digest": capture.content_digest,
+        "size": capture.size,
+        "content_base64": base64.b64encode(capture.content).decode("ascii"),
+    }
     authority_path = invocation_dir / _AUTHORITY_FILE
     try:
         _write_secure_json(authority_path, authority)
+        _write_secure_json(invocation_dir / _SNAPSHOT_FILE, snapshot)
         _write_secure_json(
             invocation_dir / _RECEIPT_FILE,
             _initial_receipts(authority["authority_digest"], capability_hash),
@@ -561,9 +576,27 @@ def _validate_call_binding(
         raise EvidenceReaderError("tool_not_authorized")
 
 
-def _authority_content(authority: Mapping[str, Any]) -> bytes:
+def _snapshot_content(invocation_dir: Path, authority: Mapping[str, Any]) -> bytes:
+    snapshot = _secure_json(invocation_dir / _SNAPSHOT_FILE, max_bytes=_MAX_AUTHORITY_BYTES)
+    if (
+        set(snapshot)
+        != {
+            "schema_version",
+            "authority_digest",
+            "snapshot_digest",
+            "content_digest",
+            "size",
+            "content_base64",
+        }
+        or snapshot.get("schema_version") != 1
+        or snapshot.get("authority_digest") != authority.get("authority_digest")
+        or snapshot.get("snapshot_digest") != authority.get("snapshot_digest")
+        or snapshot.get("content_digest") != authority.get("content_digest")
+        or snapshot.get("size") != authority.get("size")
+    ):
+        raise EvidenceReaderError("authority_tampered")
     try:
-        content = base64.b64decode(authority["content_base64"], validate=True)
+        content = base64.b64decode(snapshot["content_base64"], validate=True)
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceReaderError("authority_tampered") from exc
     if len(content) != authority.get(
@@ -585,9 +618,21 @@ def _scope_digest(authority: Mapping[str, Any]) -> str:
             "caller_session_id": authority["caller_session_id"],
             "role": authority["role"],
             "role_definition_digest": authority["role_definition_digest"],
+            "readers_root": authority["readers_root"],
+            "repository_root": authority["repository_root"],
+            "repository_identity_digest": authority["repository_identity_digest"],
+            "revision": authority["revision"],
+            "artifact_path": authority["artifact_path"],
+            "snapshot_digest": authority["snapshot_digest"],
+            "content_digest": authority["content_digest"],
+            "size": authority["size"],
+            "mode": authority["mode"],
+            "index_records": authority["index_records"],
             "canonical_tools": authority["canonical_tools"],
             "bare_tools": authority["bare_tools"],
             "policy": authority["policy"],
+            "limits": authority["limits"],
+            "expires_at": authority["expires_at"],
         },
     )
 
@@ -684,7 +729,7 @@ def read_evidence_reader_page(
             if not isinstance(raw_offset, int) or isinstance(raw_offset, bool) or raw_offset < 0:
                 raise EvidenceReaderError("continuation_invalid")
             offset = raw_offset
-        content = _authority_content(authority)
+        content = _snapshot_content(opened.invocation_dir, authority)
         if offset > len(content):
             raise EvidenceReaderError("continuation_invalid")
         end = _page_end(content, offset, page_size, limits.max_page_lines)
@@ -859,7 +904,24 @@ def revoke_evidence_reader_invocation(
 ) -> None:
     """Synchronously revoke one verified authority and prove its directory absent."""
 
-    opened = _open_authority(tool_ctx, environment)
+    env = _environment(environment)
+    authority_path = Path(env[EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR])
+    if not authority_path.exists() and not authority_path.is_symlink():
+        invocation_dir = authority_path.parent
+        try:
+            root = _verified_readers_root(invocation_dir.parent)
+        except EvidenceReaderError:
+            raise
+        if (
+            not authority_path.is_absolute()
+            or authority_path.name != _AUTHORITY_FILE
+            or root.name != "evidence-readers"
+            or invocation_dir.exists()
+            or invocation_dir.is_symlink()
+        ):
+            raise EvidenceReaderError("authority_path_invalid")
+        return
+    opened = _open_authority(tool_ctx, env)
     lock_fd, lock_stat = _acquire_call_lock(opened.invocation_dir)
     try:
         shutil.rmtree(opened.invocation_dir)

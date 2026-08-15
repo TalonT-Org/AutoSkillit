@@ -29,6 +29,7 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     EVIDENCE_READER_ENV_FORWARD_VARS,
+    EVIDENCE_READER_TOOLS,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
@@ -745,8 +746,10 @@ async def _evidence_reader_auto_gate_boot(ctx: Any) -> bool:
 
     environment = {name: os.environ[name] for name in EVIDENCE_READER_ENV_FORWARD_VARS}
     validate_evidence_reader_startup(ctx, environment)
-    ctx.gate.enable()
     mcp.enable(tags={"evidence-reader"}, components={"tool"}, only=True)
+    if {tool.name for tool in await mcp.list_tools()} != EVIDENCE_READER_TOOLS:
+        raise RuntimeError("evidence reader startup tool projection is incomplete")
+    ctx.gate.enable()
     return True
 
 

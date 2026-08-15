@@ -58,15 +58,10 @@ _PROVIDER_ENV = frozenset(
     {
         "ALL_PROXY",
         "CODEX_API_KEY",
-        "CODEX_BASE_URL",
         "HTTP_PROXY",
         "HTTPS_PROXY",
         "NO_PROXY",
         "OPENAI_API_KEY",
-        "OPENAI_BASE_URL",
-        "OPENAI_ORGANIZATION",
-        "OPENAI_ORG_ID",
-        "OPENAI_PROJECT_ID",
         "REQUESTS_CA_BUNDLE",
         "SSL_CERT_DIR",
         "SSL_CERT_FILE",
@@ -1159,10 +1154,7 @@ def _validate_stream(
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
         location_fields = cast(tuple[int, int, int, int], fields)
-        resolved_citation_id = raw_citation_id
-        receipt_location = observed.get(resolved_citation_id)
-        if receipt_location is None and len(observed) == 1:
-            resolved_citation_id, receipt_location = next(iter(observed.items()))
+        receipt_location = observed.get(raw_citation_id)
         if (
             receipt_location is None
             or location_fields[0] < 0
@@ -1175,8 +1167,7 @@ def _validate_stream(
             or location_fields[3] > receipt_location[3]
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
-        evidence["citation_id"] = resolved_citation_id
-        citations.append(EvidenceCitation(resolved_citation_id, *location_fields))
+        citations.append(EvidenceCitation(raw_citation_id, *location_fields))
     if any(
         not isinstance(gap, dict)
         or set(gap) != {"field", "reason"}

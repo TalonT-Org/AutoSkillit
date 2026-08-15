@@ -353,8 +353,12 @@ def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | N
             no_deref = True
         elif token in ("-d", "--delete"):
             delete = True
-        elif token in ("-m", "--create-reflog"):
+        elif token == "-m":
             index = _consume_option_value(args, index, token)
+            continue
+        elif token == "--create-reflog":
+            # Boolean flag — do NOT consume the next token as its value.
+            index += 1
             continue
         elif token.startswith("-"):
             pass

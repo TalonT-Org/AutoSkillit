@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 from autoskillit.core import (
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
@@ -2355,6 +2356,12 @@ async def run_skill(
                             "run-skill",
                         ):
                             contract_lifecycle.execution_started = True
+                            if _audit_reservation is not None:
+                                if provider_extras is None:
+                                    provider_extras = {}
+                                provider_extras[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] = str(
+                                    tool_ctx.audit_admission_ledger.store_authority.database_path
+                                )
                             skill_result = await tool_ctx.executor.run(
                                 resolved_command,
                                 _capability_contract.cwd,

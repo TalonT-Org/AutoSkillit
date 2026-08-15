@@ -332,6 +332,9 @@ from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
 from .types import ANNOTATION_HARD_CAP_CHARS as ANNOTATION_HARD_CAP_CHARS
 from .types import ASCII_YAML_POLICY as ASCII_YAML_POLICY
 from .types import (
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR as AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+)
+from .types import (
     AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY as AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY,
 )
 from .types import AUDIT_CYCLE_SCHEMA_VERSION as AUDIT_CYCLE_SCHEMA_VERSION
@@ -617,6 +620,9 @@ from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
+from .types import (
+    AuditAdmissionAuthorityMismatchError as AuditAdmissionAuthorityMismatchError,
+)
 from .types import AuditAdmissionLedger as AuditAdmissionLedger
 from .types import AuditAdmissionRecoveryResult as AuditAdmissionRecoveryResult
 from .types import AuditAdmissionStorageError as AuditAdmissionStorageError

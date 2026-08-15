@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import logging
 import os
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -13,6 +15,7 @@ import pytest
 
 from autoskillit.core import (
     ArtifactRef,
+    AuditAdmissionAuthorityMismatchError,
     AuditAdmissionStorageError,
     AuditAdmissionStorageFailureReason,
     AuditAdmissionStorageHealthStatus,
@@ -254,6 +257,145 @@ class TestInstallations:
 
 
 class TestReservation:
+    def test_authority_contract_and_versioned_handle_shape(self, tmp_path: Path) -> None:
+        authority = _authority(tmp_path)
+        same_authority = _authority(tmp_path)
+        different_owner = AuditAdmissionStoreAuthority(
+            database_path=authority.database_path,
+            expected_owner_id=authority.expected_owner_id + 1,
+        )
+        ledger = DefaultAuditAdmissionLedger(authority)
+        execution_id = RecipeExecutionId("exec-1")
+        version = ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("s"),
+        )
+
+        outcome = ledger.reserve(_reservation_request(tmp_path, execution_id, version))
+
+        assert ledger.store_authority is authority
+        assert authority.authority_id == same_authority.authority_id
+        assert authority.authority_id != different_owner.authority_id
+        assert re.fullmatch(r"ada1-[0-9a-f]{64}", authority.authority_id)
+        assert AuditAdmissionStoreAuthority.is_valid_authority_id(authority.authority_id)
+        with pytest.raises((AttributeError, TypeError)):
+            authority.authority_id = "replacement"  # type: ignore[misc]
+        with pytest.raises(AttributeError):
+            ledger.store_authority = same_authority  # type: ignore[misc]
+        assert outcome.reservation_handle is not None
+        version_prefix, handle_authority_id, secret = outcome.reservation_handle.split(".", 2)
+        assert version_prefix == "adr1"
+        assert handle_authority_id == authority.authority_id
+        assert re.fullmatch(r"[0-9a-f]{64}", secret)
+
+    @pytest.mark.parametrize(
+        "value",
+        (
+            "",
+            "ada1-",
+            f"ada1-{'0' * 63}",
+            f"ada1-{'0' * 65}",
+            f"ada1-{'g' * 64}",
+            f"ADA1-{'0' * 64}",
+        ),
+    )
+    def test_authority_id_shape_rejects_malformed_values(self, value: str) -> None:
+        assert not AuditAdmissionStoreAuthority.is_valid_authority_id(value)
+
+    def test_foreign_authority_handle_rejects_before_store_recovery(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.DEBUG)
+        authority_a = AuditAdmissionStoreAuthority(
+            database_path=(tmp_path / "a" / "ledger.sqlite3").resolve(),
+            expected_owner_id=os.getuid(),
+        )
+        ledger_a = DefaultAuditAdmissionLedger(authority_a)
+        execution_id = RecipeExecutionId("exec-1")
+        version = ledger_a.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("s"),
+        )
+        outcome = ledger_a.reserve(_reservation_request(tmp_path, execution_id, version))
+        assert outcome.reservation_handle is not None
+
+        real_b = tmp_path / "real-b"
+        real_b.mkdir()
+        linked_b = tmp_path / "linked-b"
+        linked_b.symlink_to(real_b, target_is_directory=True)
+        authority_b = AuditAdmissionStoreAuthority(
+            database_path=linked_b / "ledger.sqlite3",
+            expected_owner_id=os.getuid(),
+        )
+        ledger_b = DefaultAuditAdmissionLedger(authority_b)
+
+        with pytest.raises(AuditAdmissionAuthorityMismatchError) as captured:
+            ledger_b.resolve_reservation_handle(outcome.reservation_handle)
+
+        error = captured.value
+        assert error.handle_authority_id == authority_a.authority_id
+        assert error.serving_authority_id == authority_b.authority_id
+        diagnostic = str(error)
+        assert authority_a.authority_id in diagnostic
+        assert authority_b.authority_id in diagnostic
+        secret = outcome.reservation_handle.rsplit(".", 1)[-1]
+        logged = repr([record.__dict__ for record in caplog.records])
+        assert outcome.reservation_handle not in diagnostic
+        assert secret not in diagnostic
+        assert str(authority_a.database_path) not in diagnostic
+        assert str(authority_b.database_path) not in diagnostic
+        assert outcome.reservation_handle not in logged
+        assert secret not in logged
+        assert str(authority_a.database_path) not in logged
+        assert str(authority_b.database_path) not in logged
+
+    @pytest.mark.parametrize("scenario", ("malformed", "never-issued", "rotated", "closed"))
+    def test_same_authority_stale_or_invalid_handles_do_not_resolve(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        scenario: str,
+    ) -> None:
+        caplog.set_level(logging.DEBUG)
+        authority = _authority(tmp_path)
+        ledger = DefaultAuditAdmissionLedger(authority)
+        execution_id = RecipeExecutionId("exec-1")
+        version = ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("s"),
+        )
+        request = _reservation_request(tmp_path, execution_id, version)
+        issued = ledger.reserve(request)
+        assert issued.reservation_handle is not None
+        assert ledger.resolve_reservation_handle(issued.reservation_handle) is not None
+
+        if scenario == "malformed":
+            handle = "not-a-reservation-handle"
+        elif scenario == "never-issued":
+            handle = f"adr1.{authority.authority_id}.{'0' * 64}"
+        elif scenario == "rotated":
+            handle = issued.reservation_handle
+            ledger.reserve(request)
+        else:
+            handle = issued.reservation_handle
+            ledger.prepare(
+                AuditPrepareRequest(
+                    attempt_id=issued.attempt_id,
+                    installation_version=version,
+                    semantic_digest=_digest("semantic"),
+                    accepted=True,
+                )
+            )
+
+        assert ledger.resolve_reservation_handle(handle) is None
+        secret = handle.rsplit(".", 1)[-1]
+        logged = repr([record.__dict__ for record in caplog.records])
+        assert handle not in logged
+        assert secret not in logged
+        assert str(authority.database_path) not in logged
+
     def test_dispatch_new_then_redispatch_open_rotates_handle(self, tmp_path: Path) -> None:
         ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
         execution_id = RecipeExecutionId("exec-1")

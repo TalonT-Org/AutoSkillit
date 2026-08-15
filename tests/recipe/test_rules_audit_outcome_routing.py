@@ -122,6 +122,50 @@ def test_rule_rejects_semantic_and_infrastructure_route_conflation() -> None:
     assert "semantic correction must not share" in findings[0].message
 
 
+@pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
+def test_semantic_rejection_never_uses_a_go_continuation(recipe_name: str) -> None:
+    conditions = _recipe(recipe_name).steps["audit_impl"].on_result.conditions
+    semantic_route = next(
+        condition.route
+        for condition in conditions
+        if condition.when and "SEMANTIC_REJECTED" in condition.when
+    )
+    go_routes = {
+        condition.route
+        for condition in conditions
+        if condition.when
+        and ("PUBLISHED" in condition.when or "EXACT_REPLAY" in condition.when)
+        and "== GO" in condition.when
+    }
+
+    assert go_routes
+    assert semantic_route not in go_routes
+
+
+def test_implementation_semantic_rejection_uses_bounded_remediation_loop() -> None:
+    recipe = _recipe("implementation")
+    conditions = recipe.steps["audit_impl"].on_result.conditions
+    semantic_route = next(
+        condition.route
+        for condition in conditions
+        if condition.when and "SEMANTIC_REJECTED" in condition.when
+    )
+
+    assert semantic_route == "check_audit_remediation_loop"
+    loop_step = recipe.steps[semantic_route]
+    assert loop_step.with_args == {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.audit_remediation_count }}",
+        "max_iterations": "${{ inputs.audit_remediation_max_retries }}",
+        "step_name": "check_audit_remediation_loop",
+    }
+    loop_routes = loop_step.on_result.conditions
+    assert loop_routes[0].when == "${{ result.max_exceeded }} == true"
+    assert loop_routes[0].route == "release_issue_failure"
+    assert loop_routes[1].when is None
+    assert loop_routes[1].route == "reset_test_fix_counter"
+
+
 def test_rule_rejects_status_routing_after_verdict_branches() -> None:
     recipe = _recipe()
     conditions = recipe.steps["audit_impl"].on_result.conditions

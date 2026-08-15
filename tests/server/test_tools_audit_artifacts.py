@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +16,7 @@ from autoskillit.core import (
     AdmissionReason,
     AdmissionStatus,
     ArtifactRef,
+    AuditAdmissionStoreAuthority,
     AuditArtifactFieldOwnership,
     AuditAssessment,
     AuditAssessmentRow,
@@ -22,6 +24,8 @@ from autoskillit.core import (
     AuditCycleVerificationError,
     AuditDispositionCommitOutcome,
     AuditPreflightProjection,
+    AuditPrepareRequest,
+    AuditReservationRequest,
     AuditVerdict,
     InstallationVersion,
     RecipeExecutionId,
@@ -31,6 +35,7 @@ from autoskillit.core import (
     load_audit_semantic_result,
     load_standalone_audit_evidence,
 )
+from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
 from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.server.tools.tools_audit_artifacts import (
     _build_semantic_result,
@@ -91,6 +96,52 @@ def _semantic_args(tmp_path: Path) -> dict[str, Any]:
             content_digest=compute_bytes_hash(remediation_bytes),
         ).to_dict(),
     }
+
+
+def _issued_reservation(
+    root: Path,
+) -> tuple[
+    DefaultAuditAdmissionLedger,
+    str,
+    AuditPrepareRequest,
+    AuditReservationRequest,
+]:
+    root.mkdir(parents=True, exist_ok=True)
+    plan = root / "plan.md"
+    plan.write_bytes(b"plan")
+    authority = AuditAdmissionStoreAuthority(
+        database_path=(root / "store" / "ledger.sqlite3").resolve(),
+        expected_owner_id=os.getuid(),
+    )
+    ledger = DefaultAuditAdmissionLedger(authority)
+    execution_id = RecipeExecutionId("execution-1")
+    installation_version = ledger.create_or_get_installation(
+        recipe_execution_id=execution_id,
+        snapshot_digest=compute_bytes_hash(b"snapshot"),
+    )
+    request = AuditReservationRequest(
+        recipe_execution_id=execution_id,
+        installation_version=installation_version,
+        step_name="audit-impl",
+        invocation_template_digest=compute_bytes_hash(b"template"),
+        slot_intent_digest=compute_bytes_hash(b"intent"),
+        runtime_binding_digest=compute_bytes_hash(b"binding"),
+        audited_plan_refs=(_ref(plan, "text/markdown"),),
+        cycle_id="cycle-1",
+        scope_id="scope-1",
+        part_id="part-1",
+        allowed_root=root,
+        parent_authority_digest=None,
+    )
+    outcome = ledger.reserve(request)
+    assert outcome.reservation_handle is not None
+    prepare = AuditPrepareRequest(
+        attempt_id=outcome.attempt_id,
+        installation_version=installation_version,
+        semantic_digest=compute_bytes_hash(b"semantic"),
+        accepted=True,
+    )
+    return ledger, outcome.reservation_handle, prepare, request
 
 
 def test_private_semantic_writer_round_trips_through_strict_loader(
@@ -202,6 +253,109 @@ async def test_admission_handlers_fail_closed_for_invalid_requests_without_raisi
 
     assert semantic["success"] is False
     assert disposition["success"] is False
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("unrecoverable_serving_store", (False, True))
+async def test_semantic_handler_reports_safe_wrong_authority_before_store_recovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    unrecoverable_serving_store: bool,
+) -> None:
+    issuing_ledger, handle, _prepare, _request = _issued_reservation(tmp_path / "authority-a")
+    serving_root = tmp_path / "authority-b"
+    if unrecoverable_serving_store:
+        real_root = tmp_path / "real-authority-b"
+        real_root.mkdir()
+        serving_root.symlink_to(real_root, target_is_directory=True)
+    serving_authority = AuditAdmissionStoreAuthority(
+        database_path=serving_root / "ledger.sqlite3",
+        expected_owner_id=os.getuid(),
+    )
+    serving_ledger = DefaultAuditAdmissionLedger(serving_authority)
+
+    monkeypatch.setattr(
+        "autoskillit.server._get_ctx",
+        lambda: SimpleNamespace(
+            audit_admission_ledger=serving_ledger,
+            timing_log=SimpleNamespace(record=lambda *_args: None),
+        ),
+    )
+    semantic_root = tmp_path / "semantic-input"
+    semantic_root.mkdir()
+
+    encoded = await write_audit_semantic_result(
+        reservation_handle=handle,
+        **_semantic_args(semantic_root),
+    )
+    result = json.loads(encoded)
+
+    assert result["success"] is False
+    assert result["error_code"] == "wrong_audit_authority"
+    assert result["handle_authority_id"] == issuing_ledger.store_authority.authority_id
+    assert result["serving_authority_id"] == serving_authority.authority_id
+    assert not serving_authority.database_path.exists()
+    secret = handle.rsplit(".", 1)[-1]
+    logged = repr([record.__dict__ for record in caplog.records])
+    assert handle not in encoded
+    assert secret not in encoded
+    assert str(issuing_ledger.store_authority.database_path) not in encoded
+    assert str(serving_authority.database_path) not in encoded
+    assert handle not in logged
+    assert secret not in logged
+    assert str(issuing_ledger.store_authority.database_path) not in logged
+    assert str(serving_authority.database_path) not in logged
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("scenario", ("malformed", "never-issued", "rotated", "closed"))
+async def test_semantic_handler_classifies_same_authority_missing_handles_as_stale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    scenario: str,
+) -> None:
+    ledger, issued_handle, prepare, request = _issued_reservation(tmp_path / "authority")
+    if scenario == "malformed":
+        handle = "not-a-reservation-handle"
+    elif scenario == "never-issued":
+        handle = f"adr1.{ledger.store_authority.authority_id}.{'0' * 64}"
+    elif scenario == "rotated":
+        handle = issued_handle
+        ledger.reserve(request)
+    else:
+        handle = issued_handle
+        ledger.prepare(prepare)
+
+    monkeypatch.setattr(
+        "autoskillit.server._get_ctx",
+        lambda: SimpleNamespace(
+            audit_admission_ledger=ledger,
+            timing_log=SimpleNamespace(record=lambda *_args: None),
+        ),
+    )
+    semantic_root = tmp_path / "semantic-input"
+    semantic_root.mkdir()
+
+    encoded = await write_audit_semantic_result(
+        reservation_handle=handle,
+        **_semantic_args(semantic_root),
+    )
+    result = json.loads(encoded)
+
+    assert result["success"] is False
+    assert result["error_code"] == "stale_or_invalid_reservation"
+    assert "handle_authority_id" not in result
+    assert "serving_authority_id" not in result
+    secret = handle.rsplit(".", 1)[-1]
+    logged = repr([record.__dict__ for record in caplog.records])
+    assert handle not in encoded
+    assert secret not in encoded
+    assert str(ledger.store_authority.database_path) not in encoded
+    assert handle not in logged
+    assert secret not in logged
+    assert str(ledger.store_authority.database_path) not in logged
 
 
 def _write_disposition_authority(tmp_path: Path) -> tuple[Path, Path, AuditCycleAuthority]:

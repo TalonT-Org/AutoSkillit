@@ -177,7 +177,7 @@ def test_merge_prs_attempt_cheap_rebase_routing(pmp_recipe) -> None:
 def test_merge_prs_ejected_conflict_uses_exact_report_plan_and_worktree(pmp_recipe) -> None:
     rebase = pmp_recipe.steps["attempt_cheap_rebase"]
     report = rebase.with_args["conflict_report_path"]
-    assert "{{AUTOSKILLIT_TEMP}}/merge-prs/" in report
+    assert "/.autoskillit/temp/merge-prs/" in report
     assert "context.current_pr_number" in report
 
     plan = pmp_recipe.steps["plan_ejected_rebase_conflicts"]
@@ -279,7 +279,7 @@ def test_merge_prs_proactive_rebase_next_pr_routing(pmp_recipe) -> None:
 def test_merge_prs_proactive_conflict_uses_exact_report_plan_and_worktree(pmp_recipe) -> None:
     rebase = pmp_recipe.steps["proactive_rebase_next_pr"]
     report = rebase.with_args["conflict_report_path"]
-    assert "{{AUTOSKILLIT_TEMP}}/merge-prs/" in report
+    assert "/.autoskillit/temp/merge-prs/" in report
     assert "context.current_pr_number" in report
 
     plan = pmp_recipe.steps["plan_proactive_rebase_conflicts"]

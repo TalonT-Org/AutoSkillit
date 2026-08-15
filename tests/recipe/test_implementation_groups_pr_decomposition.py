@@ -27,25 +27,23 @@ def test_arch_lenses_defaults_to_false(recipe):
     assert recipe.ingredients["arch_lenses"].default == "false"
 
 
-def test_prepare_pr_routes_to_compose_pr_when_arch_lenses_false(recipe):
+def test_prepare_pr_routes_to_diagram_path_initialization(recipe):
     step = recipe.steps["prepare_pr"]
-    compose_cond = next(
-        (c for c in step.on_result.conditions if c.route == "compose_pr" and c.when),
-        None,
-    )
-    assert compose_cond is not None
-    assert "prep_path" in compose_cond.when
-    assert "arch_lenses" not in compose_cond.when
+    assert step.on_result is not None
+    routes = [c.route for c in step.on_result.conditions if c.when and "prep_path" in c.when]
+    assert routes == ["initialize_arch_diagram_paths", "initialize_arch_diagram_paths"]
 
 
-def test_prepare_pr_arch_lenses_route_checks_ingredient(recipe):
-    step = recipe.steps["prepare_pr"]
+def test_diagram_path_initialization_routes_on_arch_lenses_ingredient(recipe):
+    step = recipe.steps["initialize_arch_diagram_paths"]
     arch_lens_condition = next(
         (c for c in step.on_result.conditions if c.route == "run_arch_lenses" and c.when),
         None,
     )
     assert arch_lens_condition is not None
     assert "arch_lenses" in arch_lens_condition.when
+    assert step.on_result.conditions[-1].route == "compose_pr"
+    assert step.on_result.conditions[-1].when is None
 
 
 def test_run_arch_lenses_still_gated_on_open_pr(recipe):

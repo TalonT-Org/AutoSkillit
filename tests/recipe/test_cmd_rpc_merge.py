@@ -181,7 +181,7 @@ def test_attempt_cheap_rebase_publishes_bounded_conflict_report(tmp_path):
     assert result["status"] == "conflicts"
     assert result["conflict_report_path"] == str(report_path)
     report = report_path.read_text()
-    assert "src/x.py" in report
+    assert "y" * 100 in report
     assert "CONFLICT" in report
     assert report.count("...[truncated ") == 2
     assert len(report) < 11_000

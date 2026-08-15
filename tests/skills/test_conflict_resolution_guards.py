@@ -299,14 +299,18 @@ def test_resolve_merge_conflicts_contract_has_conflict_report_path(skill_contrac
     )
 
 
-def test_merge_prs_captures_conflict_report_from_resolve_integration(merge_prs_recipe):
-    """resolve_integration_conflicts step must capture conflict_report_path per REQ-PIP-001."""
-    step = merge_prs_recipe["steps"]["resolve_integration_conflicts"]
-    capture_block = {**(step.get("capture") or {}), **(step.get("capture_list") or {})}
-    assert any("conflict_report_path" in v for v in capture_block.values()), (
-        "merge-prs.yaml resolve_integration_conflicts step must capture "
-        "conflict_report_path per REQ-PIP-001"
-    )
+def test_merge_prs_rejects_unplanned_integration_conflicts(merge_prs_recipe):
+    """An integration conflict without branch-specific evidence must escalate."""
+    steps = merge_prs_recipe["steps"]
+    routes = steps["check_mergeability"]["on_result"]
+    conflicting = [route for route in routes if "CONFLICTING" in route.get("when", "")]
+    assert conflicting == [
+        {
+            "when": "${{ result.mergeable_status }} == CONFLICTING",
+            "route": "register_clone_failure",
+        }
+    ]
+    assert "resolve_integration_conflicts" not in steps
 
 
 def test_merge_prs_captures_conflict_report_from_resolve_ejected(merge_prs_recipe):

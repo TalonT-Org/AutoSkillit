@@ -1063,7 +1063,7 @@ def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypa
             if recipe_name == "remediation":
                 remediation_note_checked = True
                 rectify_note = original_parsed["steps"]["rectify"]["note"]
-                assert "all_plan_paths accumulates" in rectify_note
+                assert "Glob plan_dir for *_part_*.md" in rectify_note
                 assert compacted_parsed["steps"]["rectify"]["note"] == rectify_note
                 assert "all_plan_paths accumulates" in compacted
 

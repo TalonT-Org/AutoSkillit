@@ -14,7 +14,7 @@ RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:2e7315d7256ce035110cd376ada4f5403c0a1ce574220ff488c004ec2cfea6e4"
+    "sha256:43f7755413f46aa852670ff84f1b273245342ff20c6e8096e9e244291c4cbbea"
 )
 
 

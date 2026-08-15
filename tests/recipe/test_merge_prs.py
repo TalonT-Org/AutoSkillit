@@ -68,8 +68,8 @@ def test_pmp_check_impl_plans_routes_to_open_integration_pr_on_empty(recipe) -> 
     )
 
 
-def test_pmp_check_impl_plans_has_fallthrough_to_audit_impl(recipe) -> None:
-    """collect_and_check_impl_plans fallthrough (when=None) must go to audit_impl."""
+def test_pmp_check_impl_plans_collects_authoritative_paths_before_audit(recipe) -> None:
+    """Existing plans must be enumerated before audit receives their authority."""
     step = recipe.steps["collect_and_check_impl_plans"]
     assert step.on_result is not None
     conds = step.on_result.conditions
@@ -77,10 +77,10 @@ def test_pmp_check_impl_plans_has_fallthrough_to_audit_impl(recipe) -> None:
     assert len(fallthrough) == 1, (
         "collect_and_check_impl_plans must have exactly one fallthrough condition"
     )
-    assert fallthrough[0].route == "audit_impl", (
-        "collect_and_check_impl_plans fallthrough must route to audit_impl when "
-        "implementation plans exist"
-    )
+    assert fallthrough[0].route == "collect_impl_plan_paths"
+    collect = recipe.steps["collect_impl_plan_paths"]
+    assert collect.on_success == "audit_impl"
+    assert collect.capture["all_plan_paths"].from_ == "${{ result.stdout | trim }}"
 
 
 def test_pmp_audit_impl_has_skip_when_false(recipe) -> None:
@@ -425,74 +425,22 @@ def test_pmp_check_mergeability_routes_mergeable_to_review_pr_integration(recipe
     assert any(c.route == "clear_review_annotation_context" for c in mergeable_routes)
 
 
-def test_pmp_check_mergeability_routes_conflicting_to_resolve_integration_conflicts(
-    recipe,
-) -> None:
-    """B7: check_mergeability on_result must route CONFLICTING to resolve_integration_conflicts."""
+def test_pmp_check_mergeability_rejects_conflicts_without_branch_plan(recipe) -> None:
+    """B7: an integration conflict without exact report/plan authority escalates."""
     step = recipe.steps["check_mergeability"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     conflicting_routes = [c for c in conditions if c.when and "CONFLICTING" in c.when]
-    assert any(c.route == "resolve_integration_conflicts" for c in conflicting_routes)
+    assert [c.route for c in conflicting_routes] == ["register_clone_failure"]
 
 
-def test_pmp_has_resolve_integration_conflicts_step(recipe) -> None:
-    """B8: resolve_integration_conflicts must exist with run_skill and resolve-merge-conflicts."""
-    assert "resolve_integration_conflicts" in recipe.steps
-    step = recipe.steps["resolve_integration_conflicts"]
-    assert step.tool == "run_skill"
-    assert "resolve-merge-conflicts" in step.with_args.get("skill_command", "")
-
-
-def test_pmp_resolve_integration_conflicts_routes_to_force_push(recipe) -> None:
-    """B9: resolve_integration_conflicts must route to force_push_and_wait_mergeability."""
-    step = recipe.steps["resolve_integration_conflicts"]
-    # Step uses on_result conditions; the default (no-when) bare route must route to force_push
-    assert step.on_result is not None
-    conditions = step.on_result.conditions
-    default_routes = [c for c in conditions if c.when is None]
-    assert any(c.route == "force_push_and_wait_mergeability" for c in default_routes)
-
-
-def test_pmp_has_force_push_and_wait_mergeability_step(recipe) -> None:
-    """B10: force_push_and_wait_mergeability must exist with run_python callable."""
-    assert "force_push_and_wait_mergeability" in recipe.steps
-    step = recipe.steps["force_push_and_wait_mergeability"]
-    assert step.tool == "run_python"
-    assert (
-        step.with_args["callable"]
-        == "autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability"
-    )
-
-
-def test_pmp_force_push_and_wait_mergeability_routes_to_check_post_rebase(
-    recipe,
-) -> None:
-    """B25: force_push_and_wait_mergeability.on_success must route to check_mergeability_post_rebase."""  # noqa: E501
-    step = recipe.steps["force_push_and_wait_mergeability"]
-    assert step.on_success == "check_mergeability_post_rebase"
-
-
-def test_pmp_force_push_and_wait_mergeability_on_failure(recipe) -> None:
-    """force_push_and_wait_mergeability.on_failure must route to register_clone_failure."""
-    step = recipe.steps["force_push_and_wait_mergeability"]
-    assert step.on_failure == "register_clone_failure"
-
-
-def test_pmp_has_check_mergeability_post_rebase_step(recipe) -> None:
-    """B11: check_mergeability_post_rebase step must exist with check_pr_mergeable tool."""
-    assert "check_mergeability_post_rebase" in recipe.steps
-    step = recipe.steps["check_mergeability_post_rebase"]
-    assert step.tool == "check_pr_mergeable"
-
-
-def test_pmp_check_mergeability_post_rebase_routes_mergeable_to_review(recipe) -> None:
-    """B12: post-rebase MERGEABLE invalidates prior context before annotation."""
-    step = recipe.steps["check_mergeability_post_rebase"]
-    assert step.on_result is not None
-    conditions = step.on_result.conditions
-    mergeable_routes = [c for c in conditions if c.when and "MERGEABLE" in c.when]
-    assert any(c.route == "clear_review_annotation_context" for c in mergeable_routes)
+def test_pmp_has_no_generic_integration_conflict_resolution_chain(recipe) -> None:
+    """Only branch-specific conflict reports and plans may drive resolution."""
+    assert {
+        "resolve_integration_conflicts",
+        "force_push_and_wait_mergeability",
+        "check_mergeability_post_rebase",
+    }.isdisjoint(recipe.steps)
 
 
 def test_pmp_has_review_pr_integration_step(recipe) -> None:

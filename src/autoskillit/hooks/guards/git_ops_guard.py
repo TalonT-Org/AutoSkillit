@@ -255,11 +255,13 @@ def _resolve_attempted_sha(cwd: str, value: str) -> str:
 
 def _all_threatened(context: dict[str, object]) -> list[dict[str, object]]:
     owners = context["owners"]
-    assert isinstance(owners, dict)
+    if not isinstance(owners, dict):
+        raise TypeError("context['owners'] must be a dict")
     rows: list[dict[str, object]] = []
     for target_ref in sorted(owners):
         owner_paths = owners[target_ref]
-        assert isinstance(owner_paths, list)
+        if not isinstance(owner_paths, list):
+            raise TypeError("owner_paths must be a list")
         rows.append(
             {
                 "old_sha": _git_text(str(context["execution_cwd"]), "rev-parse", target_ref),
@@ -280,7 +282,8 @@ def _threatened_for_target(context: dict[str, object], target_ref: str) -> list[
             }
         ]
     owners = context["owners"]
-    assert isinstance(owners, dict)
+    if not isinstance(owners, dict):
+        raise TypeError("context['owners'] must be a dict")
     owner_paths = owners.get(target_ref)
     if not isinstance(owner_paths, list):
         return []
@@ -514,7 +517,8 @@ def _classify_git_segment(
     subcommand, args = parsed
     cwd = str(context["execution_cwd"])
     owners = context["owners"]
-    assert isinstance(owners, dict)
+    if not isinstance(owners, dict):
+        raise TypeError("context['owners'] must be a dict")
     owned_refs = sorted(owners)
     one: tuple[str, str, bool] | None = None
     if subcommand == "update-ref":

@@ -671,6 +671,12 @@ class AgentBackendConfig:
     backend: str = "claude-code"
     step_overrides: dict[str, str] = field(default_factory=dict)
     recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    # Repository-scoped toggle: when True, the Claude launcher neutralizes
+    # CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS in both the process env and the
+    # target repository's .claude/settings*.json files before spawn. Defaults
+    # to False — repositories with the option disabled remain byte-for-byte
+    # unchanged. Independent from join.required. Refs #4575.
+    force_claude_agent_teams_inactive: bool = False
 
     def __post_init__(self) -> None:
         if not self.backend:

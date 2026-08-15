@@ -114,6 +114,59 @@ _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer bin
 _ANNOTATION_SUPPORT_MIN = Version(CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION)
 
 
+#: Documented Claude Code env-var that enables/disables the agent-teams
+#: surface. Confirmed via code.claude.com/docs/en/agent-teams as the only
+#: public toggle. The repository-scoped force-inactive setting removes or
+#: overrides this env var before every Claude launch and any conflicting
+#: entry in the target repo's .claude/settings*.json files.
+CLAUDE_AGENT_TEAMS_ENV_VAR: str = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
+
+
+def _neutralize_agent_teams_env(env: dict[str, str]) -> None:
+    """Remove ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` from ``env`` in place."""
+    env.pop(CLAUDE_AGENT_TEAMS_ENV_VAR, None)
+
+
+def detect_repository_agent_teams_setting(
+    project_root: Path | str | None,
+) -> tuple[str | None, str]:
+    """Return (effective_value, source_path) for any conflicting settings file.
+
+    Per Claude Code's documented settings precedence, ``env.<var>`` entries
+    in ``.claude/settings.json`` or ``.claude/settings.local.json`` apply
+    after user-level settings and can re-enable teams even when the
+    launcher process env has the var unset.
+
+    Returns ``(None, "")`` when no conflicting entry is found. The caller
+    must combine the launcher-env scan with this file scan and refuse the
+    launch when neither confirms an inactive effective state.
+    """
+    if project_root is None:
+        return (None, "")
+    root = Path(project_root).expanduser().resolve()
+    candidates = (root / ".claude" / "settings.json", root / ".claude" / "settings.local.json")
+    for candidate in candidates:
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError):
+            continue
+        try:
+            import json as _json
+
+            parsed = _json.loads(content)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        env = parsed.get("env")
+        if not isinstance(env, dict):
+            continue
+        value = env.get(CLAUDE_AGENT_TEAMS_ENV_VAR)
+        if isinstance(value, str):
+            return (value, str(candidate))
+    return (None, "")
+
+
 def _claude_host_attestation_env(
     installed_version: Version | None,
 ) -> dict[str, str]:
@@ -586,12 +639,15 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         env_extras: Mapping[str, str] | None = None,
         base: Mapping[str, str] | None = None,
         required: frozenset[str] | None = None,
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec:
         cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
         if model:
             cmd += [ClaudeFlags.MODEL, self.translate_model(model)]
         env = dict(build_agent_env(base=base, extras=env_extras, required=required))
         env.update(_HEADLESS_ENV_HARDENING)
+        if force_inactive_agent_teams:
+            _neutralize_agent_teams_env(env)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_interactive_cmd(

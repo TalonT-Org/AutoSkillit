@@ -22,6 +22,19 @@ semantic_requirements:
   - name: vis-lens-chart-select
   - name: vis-lens-multi-compare
   - name: vis-lens-reproducibility
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Domain Norms Visualization Lens

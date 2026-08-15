@@ -21,6 +21,19 @@ semantic_requirements:
   - name: exp-lens-sensitivity-robustness
   - name: make-experiment-diag
   - name: mermaid
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: design_dimensions
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Iterative Learning Experimental Design Lens

@@ -23,6 +23,19 @@ semantic_requirements:
   - name: vis-lens-always-on
   - name: vis-lens-color-access
   - name: vis-lens-figure-table
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Annotative Caption Visualization Lens

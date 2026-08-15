@@ -23,6 +23,19 @@ semantic_requirements:
   - name: vis-lens-antipattern
   - name: vis-lens-caption-annot
   - name: vis-lens-color-access
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Always-On Visualization Triage Lens

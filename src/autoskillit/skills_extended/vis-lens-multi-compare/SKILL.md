@@ -24,6 +24,19 @@ semantic_requirements:
   - name: vis-lens-reproducibility
   - name: vis-lens-story-arc
   - name: vis-lens-temporal
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Compositional Layout Visualization Lens

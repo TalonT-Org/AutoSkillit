@@ -231,7 +231,6 @@
       "steps": [
         "remediate",
         "prepare_pr",
-        "initialize_arch_diagram_paths",
         "run_arch_lenses",
         "compose_pr"
       ]
@@ -1430,11 +1429,11 @@
       "on_result": [
         {
           "when": "${{ result.prep_path }} and ${{ inputs.arch_lenses }} == 'true'",
-          "route": "initialize_arch_diagram_paths"
+          "route": "run_arch_lenses"
         },
         {
           "when": "${{ result.prep_path }}",
-          "route": "initialize_arch_diagram_paths"
+          "route": "compose_pr"
         },
         {
           "route": "release_issue_failure"
@@ -1451,27 +1450,6 @@
         "issue_number"
       ],
       "note": "Reads plan(s), runs git diff, classifies changed files, selects 1–3 arch-lens slugs, writes one PR context file per lens, and writes a PR prep file. Does NOT invoke arch-lens skills.\n"
-    },
-    "initialize_arch_diagram_paths": {
-      "tool": "run_cmd",
-      "with": {
-        "cmd": ":",
-        "cwd": "${{ context.work_dir }}",
-        "step_name": "initialize_arch_diagram_paths"
-      },
-      "capture": {
-        "all_diagram_paths": "${{ result.stdout | trim }}"
-      },
-      "on_result": [
-        {
-          "when": "${{ inputs.arch_lenses }} == 'true'",
-          "route": "run_arch_lenses"
-        },
-        {
-          "route": "compose_pr"
-        }
-      ],
-      "on_failure": "release_issue_failure"
     },
     "run_arch_lenses": {
       "tool": "run_skill",
@@ -1535,6 +1513,7 @@
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
       "optional_context_refs": [
+        "all_diagram_paths",
         "issue_number"
       ],
       "note": "Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●), composes the PR body, and runs gh pr create. Degrades gracefully if gh is unavailable (emits pr_url=).\nsynthesis_algorithm: null — arch-lens readings forwarded to compose_pr without aggregation. Dial (prepare_pr) -> Apply (run_arch_lenses) -> Output (compose_pr).\n"
@@ -1585,6 +1564,7 @@
     "init_review_loop_count": {
       "tool": "run_python",
       "with": {
+        "step_name": "init_review_loop_count",
         "callable": "autoskillit.smoke_utils.init_counter",
         "counter_value": "${{ context.review_loop_count }}"
       },

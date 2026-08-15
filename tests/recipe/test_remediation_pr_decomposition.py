@@ -1,4 +1,4 @@
-"""Verify remediation.yaml has the PR decomposition and input materialization."""
+"""Verify remediation.yaml has the three-step PR decomposition."""
 
 import pytest
 
@@ -15,25 +15,19 @@ def recipe():
     return load_recipe(RECIPE_PATH)
 
 
-def test_remediation_recipe_has_pr_steps(recipe):
+def test_remediation_recipe_has_three_pr_steps(recipe):
     step_names = list(recipe.steps.keys())
     assert "open_pr_step" not in step_names
     assert "prepare_pr" in step_names
-    assert "initialize_arch_diagram_paths" in step_names
     assert "run_arch_lenses" in step_names
     assert "compose_pr" in step_names
 
 
-def test_prepare_pr_routes_to_initialize_arch_diagram_paths(recipe):
+def test_prepare_pr_routes_to_run_arch_lenses(recipe):
     step = recipe.steps["prepare_pr"]
     assert step.on_result is not None
     routes = [c.route for c in step.on_result.conditions if c.when and "prep_path" in c.when]
-    assert routes == ["initialize_arch_diagram_paths", "initialize_arch_diagram_paths"]
-
-
-def test_initialize_arch_diagram_paths_materializes_required_input(recipe):
-    step = recipe.steps["initialize_arch_diagram_paths"]
-    assert step.capture == {"all_diagram_paths": "${{ result.stdout | trim }}"}
+    assert "run_arch_lenses" in routes
 
 
 def test_run_arch_lenses_routes_to_compose_on_success(recipe):
@@ -98,21 +92,25 @@ def test_arch_lenses_is_not_hidden(recipe):
     assert recipe.ingredients["arch_lenses"].hidden is False
 
 
-def test_initialize_arch_diagram_paths_routes_to_compose_pr_when_arch_lenses_false(recipe):
-    step = recipe.steps["initialize_arch_diagram_paths"]
+def test_prepare_pr_routes_to_compose_pr_when_arch_lenses_false(recipe):
+    step = recipe.steps["prepare_pr"]
     assert step.on_result is not None
-    fallthrough_routes = [c.route for c in step.on_result.conditions if c.when is None]
-    assert fallthrough_routes == ["compose_pr"]
+    routes = [c.route for c in step.on_result.conditions if c.when and "prep_path" in c.when]
+    assert "compose_pr" in routes
 
 
-def test_initialize_arch_diagram_paths_arch_lenses_route_checks_ingredient(recipe):
-    step = recipe.steps["initialize_arch_diagram_paths"]
+def test_prepare_pr_arch_lenses_route_checks_ingredient(recipe):
+    step = recipe.steps["prepare_pr"]
     arch_lens_condition = next(
         (c for c in step.on_result.conditions if c.route == "run_arch_lenses" and c.when),
         None,
     )
     assert arch_lens_condition is not None
     assert "arch_lenses" in arch_lens_condition.when
+
+
+def test_compose_pr_declares_optional_diagram_context(recipe):
+    assert "all_diagram_paths" in recipe.steps["compose_pr"].optional_context_refs
 
 
 def test_run_arch_lenses_still_gated_on_open_pr(recipe):

@@ -2138,6 +2138,86 @@ async def reload_session() -> str:
         return json.dumps({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
 
 
+def _declare_join_batch_handler(
+    skill_name: str,
+    assignments: list[str],
+    session_id: str,
+    top_level_parent: str | None = None,
+) -> dict[str, object]:
+    """Core logic for the declare_join_batch tool — testable without FastMCP."""
+    from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
+
+    flag_dir = Path.cwd() / ".autoskillit" / "temp"
+    flag_dir.mkdir(parents=True, exist_ok=True)
+    flag_path = flag_dir / f"skill_guard_{session_id}.flag"
+    binding: dict[str, object] = {}
+    if flag_path.exists():
+        try:
+            binding = json.loads(flag_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError, OSError):
+            binding = {}
+    if not isinstance(binding, dict):
+        binding = {}
+    artifact_digest = str(binding.get("artifact_digest", "")) or _derive_artifact_digest(binding)
+    parent = top_level_parent or "top_level"
+    try:
+        batch = declare_batch(
+            flag_dir,
+            session_id=session_id,
+            top_level_parent=parent,
+            skill_name=skill_name,
+            artifact_digest=artifact_digest,
+            assignments=assignments,
+        )
+    except JoinLedgerError as exc:
+        return {"success": False, "error": str(exc)}
+    return {"success": True, "join_batch_id": batch.get("join_batch_id"), "wave": batch}
+
+
+def _derive_artifact_digest(binding: dict[str, object]) -> str:
+    """Reconstruct the artifact digest for the most recent loaded skill."""
+    loaded = binding.get("loaded_skills", [])
+    if isinstance(loaded, list) and loaded:
+        last = loaded[-1]
+        if isinstance(last, dict):
+            candidate = last.get("artifact_digest")
+            if isinstance(candidate, str) and candidate:
+                return candidate
+    return ""
+
+
+@mcp.tool(
+    tags={"autoskillit", "kitchen"},
+    annotations={"readOnlyHint": False},
+    meta={"anthropic/alwaysLoad": False},
+)
+@_cancellation_shield()
+@track_response_size("declare_join_batch")
+async def declare_join_batch(
+    skill_name: str,
+    assignments: list[str],
+    session_id: str,
+    top_level_parent: str | None = None,
+) -> str:
+    """Open one declared batch ledger for the next wave of direct children.
+
+    Validates that the loaded skill, the session flag binding, and the
+    artifact identity are all consistent. Returns the new ``join_batch_id``
+    on success; a structured refusal on conflict.
+    """
+    try:
+        result = _declare_join_batch_handler(
+            skill_name=skill_name,
+            assignments=assignments,
+            session_id=session_id,
+            top_level_parent=top_level_parent,
+        )
+    except Exception as exc:
+        logger.error("declare_join_batch unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+    return json.dumps(result, sort_keys=True)
+
+
 def _register_active_recipe_kitchen(ctx: ToolContext) -> None:
     """Publish one kitchen to both process and recipe-generation lifecycles."""
     from autoskillit.server._recipe_generation import activate_kitchen  # circular-break

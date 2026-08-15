@@ -12,6 +12,7 @@ import pytest
 
 from autoskillit.core import CODEX_EXPLORER_IDENTITY
 from autoskillit.execution.backends import _explorer_conformance as conformance
+from autoskillit.execution.backends._codex_catalog import project_codex_catalog
 from autoskillit.execution.backends._explorer_conformance import (
     EXPLORER_ATTESTATION_FILENAME,
     EXPLORER_ATTESTATION_SCHEMA_VERSION,
@@ -157,6 +158,14 @@ def test_luna_catalog_projection_changes_only_execution_surface() -> None:
     assert projection.projected_sha256.startswith("sha256:")
     assert projection.bundled_sha256 != projection.projected_sha256
     assert project_codex_luna_catalog(raw) == projection
+
+
+def test_luna_catalog_projection_remains_the_shared_max_effort_projection() -> None:
+    assert project_codex_luna_catalog(_catalog()) == project_codex_catalog(
+        _catalog(),
+        expected_model=EXPLORER_MODEL,
+        expected_reasoning_effort=EXPLORER_REASONING_EFFORT,
+    )
 
 
 @pytest.mark.parametrize(

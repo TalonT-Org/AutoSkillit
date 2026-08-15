@@ -18,6 +18,10 @@ from autoskillit.core import (
     agent_definition_digest,
     atomic_write,
 )
+from autoskillit.execution.backends._codex_catalog import (
+    CodexCatalogProjection,
+    project_codex_catalog,
+)
 from autoskillit.execution.backends._probe_cache import (
     GENERATED_CODEX_CHILD_PROBE_CONTRACT,
     PROBE_POLICY_IDENTITY,
@@ -144,15 +148,6 @@ class ExplorerConformanceAttestation:
     observed_at: str
 
 
-@dataclass(frozen=True, slots=True)
-class CodexLunaCatalogProjection:
-    """Immutable identities and bytes for the authoritative Luna catalog projection."""
-
-    canonical_projected_bytes: bytes
-    bundled_sha256: str
-    projected_sha256: str
-
-
 def explorer_probe_agent_definition() -> AgentDef:
     """Return the generated read-only Luna definition used by the live probe."""
     return AgentDef(
@@ -195,15 +190,6 @@ def _reject_nonfinite_json_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON constant: {value}")
 
 
-def _canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    ).encode("ascii")
-
-
 def _sha256_identity(value: bytes) -> str:
     return f"sha256:{hashlib.sha256(value).hexdigest()}"
 
@@ -241,48 +227,12 @@ def _validate_observed_at(value: str) -> None:
         raise ValueError("explorer attestation is stale")
 
 
-def project_codex_luna_catalog(raw: bytes) -> CodexLunaCatalogProjection:
+def project_codex_luna_catalog(raw: bytes) -> CodexCatalogProjection:
     """Validate and canonically project the complete bundled catalog for Luna."""
-    try:
-        parsed = json.loads(
-            raw,
-            object_pairs_hook=_reject_duplicate_json_keys,
-            parse_constant=_reject_nonfinite_json_constant,
-        )
-        models = parsed["models"]
-    except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError, ValueError) as exc:
-        raise ValueError("Codex bundled model catalog is malformed") from exc
-    if not isinstance(models, list):
-        raise ValueError("Codex bundled model catalog has no model list")
-    if any(
-        not isinstance(model, dict) or not isinstance(model.get("slug"), str) for model in models
-    ):
-        raise ValueError("Codex bundled model catalog has a malformed model entry")
-    matching = [model for model in models if model["slug"] == EXPLORER_MODEL]
-    if len(matching) != 1:
-        raise ValueError(f"Codex bundled model catalog must contain exactly one {EXPLORER_MODEL}")
-    efforts = matching[0].get("supported_reasoning_levels")
-    if not isinstance(efforts, list) or EXPLORER_REASONING_EFFORT not in {
-        entry.get("effort") for entry in efforts if isinstance(entry, dict)
-    }:
-        raise ValueError(f"{EXPLORER_MODEL} does not advertise max reasoning")
-    luna = matching[0]
-    if luna.get("tool_mode") != _LUNA_BUNDLED_TOOL_MODE:
-        raise ValueError(f"{EXPLORER_MODEL} bundled tool_mode must be {_LUNA_BUNDLED_TOOL_MODE!r}")
-    if luna.get("apply_patch_tool_type") != _LUNA_BUNDLED_APPLY_PATCH_TOOL_TYPE:
-        raise ValueError(
-            f"{EXPLORER_MODEL} bundled apply_patch_tool_type must be "
-            f"{_LUNA_BUNDLED_APPLY_PATCH_TOOL_TYPE!r}"
-        )
-
-    canonical_bundled = _canonical_json_bytes(parsed)
-    luna["tool_mode"] = _LUNA_EFFECTIVE_TOOL_MODE
-    luna["apply_patch_tool_type"] = _LUNA_EFFECTIVE_APPLY_PATCH_TOOL_TYPE
-    canonical_projected = _canonical_json_bytes(parsed)
-    return CodexLunaCatalogProjection(
-        canonical_projected_bytes=canonical_projected,
-        bundled_sha256=_sha256_identity(canonical_bundled),
-        projected_sha256=_sha256_identity(canonical_projected),
+    return project_codex_catalog(
+        raw,
+        expected_model=EXPLORER_MODEL,
+        expected_reasoning_effort=EXPLORER_REASONING_EFFORT,
     )
 
 

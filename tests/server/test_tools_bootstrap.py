@@ -218,7 +218,11 @@ class TestClaimAndResolveIssue:
         assert result["issue_number"] == 42
         assert result["issue_title"] == "Fix bug"
         assert result["issue_slug"] == "fix-bug"
-        assert "recipe_segment" not in result
+        assert result["recipe_segment"] == {
+            "kind": "success",
+            "source_step": "claim",
+            "bodies": [{"step": "next", "body": "next:\n  action: stop\n"}],
+        }
 
     @pytest.mark.anyio
     async def test_claim_and_resolve_issue_already_claimed(

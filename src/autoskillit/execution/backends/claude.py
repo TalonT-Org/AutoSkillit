@@ -870,6 +870,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         return CmdSpec(
             cmd=tuple(cmd),
             env=spec.env,
+            cwd=cwd,
             is_resume=bool(resume_session_id),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
         )

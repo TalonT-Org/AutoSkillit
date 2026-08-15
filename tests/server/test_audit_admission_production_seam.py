@@ -8,11 +8,15 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+    AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     AuditCycleVerifier,
     RecipeExecutionId,
 )
 from autoskillit.core.io import resolve_temp_dir
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.fleet._capture import _extract_captures
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
@@ -58,10 +62,12 @@ async def _install_attested_recipe(
     return credential, step
 
 
+@pytest.mark.parametrize("backend_factory", (ClaudeCodeBackend, CodexBackend))
 async def test_attested_run_skill_materializes_publishes_captures_and_exact_replays(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tool_ctx_kitchen_open,
+    backend_factory: type[ClaudeCodeBackend] | type[CodexBackend],
 ) -> None:
     credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
     installed = get_recipe_execution(tool_ctx_kitchen_open)
@@ -87,9 +93,36 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     deviation_manifest_path.write_text("{}\n")
 
     dispatch_prompts: list[str] = []
+    hostile_authority_path = "/hostile/provider/ledger.sqlite3"
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.is_feature_enabled",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *args, **kwargs: (
+            "vertex",
+            {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: hostile_authority_path},
+        ),
+    )
 
-    async def _run_child(resolved_command: str, _cwd: str, **_kwargs):
+    async def _run_child(resolved_command: str, _cwd: str, **kwargs):
         dispatch_prompts.append(resolved_command)
+        provider_extras = kwargs["provider_extras"]
+        trusted_authority_path = str(
+            tool_ctx_kitchen_open.audit_admission_ledger.store_authority.database_path
+        )
+        assert provider_extras[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == trusted_authority_path
+        child_spec = backend_factory().build_skill_session_cmd(
+            "/autoskillit:audit-impl",
+            str(work_dir),
+            completion_marker="DONE",
+            provider_extras=provider_extras,
+        )
+        assert child_spec.cwd == str(work_dir)
+        assert child_spec.env["AUTOSKILLIT_CWD"] == str(work_dir)
+        assert child_spec.env[AUTOSKILLIT_STATE_ROOT_ENV_VAR] == str(work_dir)
+        assert child_spec.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == trusted_authority_path
         assert str(execution_id) not in resolved_command
         payload = json.loads(resolved_command.split(_BOUND_INVOCATION_MARKER, 1)[1])
         submission = payload["audit_semantic_submission"]

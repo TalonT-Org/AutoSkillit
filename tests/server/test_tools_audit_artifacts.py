@@ -260,6 +260,7 @@ async def test_admission_handlers_fail_closed_for_invalid_requests_without_raisi
 async def test_semantic_handler_reports_safe_wrong_authority_before_store_recovery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
     unrecoverable_serving_store: bool,
 ) -> None:
     issuing_ledger, handle, _prepare, _request = _issued_reservation(tmp_path / "authority-a")
@@ -298,9 +299,16 @@ async def test_semantic_handler_reports_safe_wrong_authority_before_store_recove
     assert result["error_code"] == "wrong_audit_authority"
     assert result["handle_authority_id"] == issuing_ledger.store_authority.authority_id
     assert result["serving_authority_id"] == serving_authority.authority_id
+    secret = handle.rsplit(".", 1)[-1]
+    logged = repr([record.__dict__ for record in caplog.records])
     assert handle not in encoded
+    assert secret not in encoded
     assert str(issuing_ledger.store_authority.database_path) not in encoded
     assert str(serving_authority.database_path) not in encoded
+    assert handle not in logged
+    assert secret not in logged
+    assert str(issuing_ledger.store_authority.database_path) not in logged
+    assert str(serving_authority.database_path) not in logged
 
 
 @pytest.mark.anyio
@@ -308,6 +316,7 @@ async def test_semantic_handler_reports_safe_wrong_authority_before_store_recove
 async def test_semantic_handler_classifies_same_authority_missing_handles_as_stale(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
     scenario: str,
 ) -> None:
     ledger, issued_handle, prepare, request = _issued_reservation(tmp_path / "authority")
@@ -332,17 +341,24 @@ async def test_semantic_handler_classifies_same_authority_missing_handles_as_sta
     semantic_root = tmp_path / "semantic-input"
     semantic_root.mkdir()
 
-    result = json.loads(
-        await write_audit_semantic_result(
-            reservation_handle=handle,
-            **_semantic_args(semantic_root),
-        )
+    encoded = await write_audit_semantic_result(
+        reservation_handle=handle,
+        **_semantic_args(semantic_root),
     )
+    result = json.loads(encoded)
 
     assert result["success"] is False
     assert result["error_code"] == "stale_or_invalid_reservation"
     assert "handle_authority_id" not in result
     assert "serving_authority_id" not in result
+    secret = handle.rsplit(".", 1)[-1]
+    logged = repr([record.__dict__ for record in caplog.records])
+    assert handle not in encoded
+    assert secret not in encoded
+    assert str(ledger.store_authority.database_path) not in encoded
+    assert handle not in logged
+    assert secret not in logged
+    assert str(ledger.store_authority.database_path) not in logged
 
 
 def _write_disposition_authority(tmp_path: Path) -> tuple[Path, Path, AuditCycleAuthority]:

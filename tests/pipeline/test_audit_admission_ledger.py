@@ -290,6 +290,7 @@ class TestReservation:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         authority_a = AuditAdmissionStoreAuthority(
             database_path=(tmp_path / "a" / "ledger.sqlite3").resolve(),
@@ -327,14 +328,22 @@ class TestReservation:
         diagnostic = str(error)
         assert authority_a.authority_id in diagnostic
         assert authority_b.authority_id in diagnostic
+        secret = outcome.reservation_handle.rsplit(".", 1)[-1]
+        logged = repr([record.__dict__ for record in caplog.records])
         assert outcome.reservation_handle not in diagnostic
+        assert secret not in diagnostic
         assert str(authority_a.database_path) not in diagnostic
         assert str(authority_b.database_path) not in diagnostic
+        assert outcome.reservation_handle not in logged
+        assert secret not in logged
+        assert str(authority_a.database_path) not in logged
+        assert str(authority_b.database_path) not in logged
 
     @pytest.mark.parametrize("scenario", ("malformed", "never-issued", "rotated", "closed"))
     def test_same_authority_stale_or_invalid_handles_do_not_resolve(
         self,
         tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
         scenario: str,
     ) -> None:
         authority = _authority(tmp_path)
@@ -367,6 +376,11 @@ class TestReservation:
             )
 
         assert ledger.resolve_reservation_handle(handle) is None
+        secret = handle.rsplit(".", 1)[-1]
+        logged = repr([record.__dict__ for record in caplog.records])
+        assert handle not in logged
+        assert secret not in logged
+        assert str(authority.database_path) not in logged
 
     def test_dispatch_new_then_redispatch_open_rotates_handle(self, tmp_path: Path) -> None:
         ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))

@@ -1082,7 +1082,7 @@ For structured child inputs, select `recipe_execution.skill_input_shapes[step_na
 initialize `skill_inputs` with exactly its ordered keys; replace available values in place;
 for unavailable context, copy a value only from that key's advertised
 `unresolved_defaults` entry. Test key presence rather than truthiness so `""`, `0`, and
-`False` are forwarded verbatim. Never delete or invent a key.
+`False` are forwarded verbatim; never delete or invent a key.
 
 Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
 to load skill instructions — it applies runtime transformations (namespace rewriting,

@@ -112,7 +112,7 @@ def test_required_optional_context_routes_are_gated_or_guaranteed() -> None:
         gate = merge_prs.steps[f"gate_{prefix}_conflict_plan"]
         routes = [condition.route for condition in gate.on_result.conditions]
         assert routes[-1] == "register_clone_failure"
-        assert gate.capture == {"conflict_plan_path": "${{ result.plan_path }}"}
+        assert gate.capture["conflict_plan_path"].from_ == "${{ result.plan_path }}"
         resolve = merge_prs.steps[f"resolve_{prefix}_conflicts"]
         assert resolve.with_args["skill_inputs"]["plan_path"] == (
             "${{ context.conflict_plan_path }}"

@@ -256,6 +256,21 @@ steps:
       Caps design revision loops at 3 iterations. On exhaustion, proceeds to
       vis_dial with the best available design.
 
+  gate_design_review_inputs:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
+      plan_parts: ${{ context.evaluation_dashboard }}
+      audit_cycle_path: ""
+    capture:
+      required_evaluation_dashboard: ${{ result.plan_path }}
+    on_result:
+    - when: "${{ result.verdict }} == salvaged"
+      route: resolve_design_review
+    - route: design_rejected
+    on_failure: design_rejected
+    optional_context_refs: [evaluation_dashboard]
+
   resolve_design_review:
     tool: run_skill
     model: ""
@@ -280,21 +295,6 @@ steps:
       Triages STOP-verdict findings from review_design. ADDRESSABLE/DISCUSS findings
       generate revision_guidance and loop back. Only all-STRUCTURAL findings halt at
       design_rejected.
-
-  gate_design_review_inputs:
-    tool: run_python
-    with:
-      callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
-      plan_parts: ${{ context.evaluation_dashboard }}
-      audit_cycle_path: ""
-    capture:
-      required_evaluation_dashboard: ${{ result.plan_path }}
-    on_result:
-    - when: "${{ result.verdict }} == salvaged"
-      route: resolve_design_review
-    - route: design_rejected
-    on_failure: design_rejected
-    optional_context_refs: [evaluation_dashboard]
 
   design_rejected:
     action: stop

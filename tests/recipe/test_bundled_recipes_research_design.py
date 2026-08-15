@@ -58,7 +58,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.ingredients["issue_url"].required is False
 
     def test_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 17
+        assert len(recipe.steps) == 18
 
     def test_step_names(self, recipe) -> None:
         expected = {
@@ -75,6 +75,7 @@ class TestResearchDesignRecipeStructure:
             "create_worktree",
             "revise_design",
             "check_design_review_loop",
+            "gate_design_review_inputs",
             "resolve_design_review",
             "design_rejected",
             "design_complete",
@@ -195,7 +196,7 @@ class TestResearchDesignRecipeStructure:
             (c for c in step.on_result.conditions if c.when and "STOP" in c.when), None
         )
         assert stop_cond is not None, "Missing STOP route"
-        assert stop_cond.route == "resolve_design_review"
+        assert stop_cond.route == "gate_design_review_inputs"
 
     def test_synthesize_on_result_fallback(self, recipe) -> None:
         step = recipe.steps["synthesize"]

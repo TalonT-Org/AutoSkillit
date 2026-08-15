@@ -142,7 +142,9 @@ done
 
 If `mode` is absent or unrecognized, default to `"github"`. The mode controls where
 findings are written — `mode=local` skips all GitHub API posting and writes to a local
-JSON file instead.
+JSON file instead. Note: `annotate_pr_diff` still calls `gh api` to cross-validate the
+provider head/base SHAs against the local checkout before trusting the local diff; this
+is a security cross-check, not a diff-fetch dependency.
 
 ### Step 1: Find the Open PR
 

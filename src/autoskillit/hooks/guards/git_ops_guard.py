@@ -738,8 +738,20 @@ def main() -> None:
     if kitchen_open:
         try:
             _preflight_checked_out_ref_mutation(data, cmd, parsed.execution_cwd)
-        except (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError):
-            sys.exit(0)
+        except (
+            OSError,
+            subprocess.SubprocessError,
+            TypeError,
+            UnicodeDecodeError,
+            ValueError,
+        ) as exc:
+            # Fail-closed: an unhandled exception in the checked-out-ref
+            # preflight must NOT silently allow the operation. Log the error
+            # and exit non-zero so the caller can decide. (SystemExit raised
+            # by _deny_checked_out_ref is BaseException, not Exception, so it
+            # is preserved as the explicit deny signal.)
+            sys.stderr.write(f"git_ops_guard: preflight failed: {exc}\n")
+            sys.exit(2)
 
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)

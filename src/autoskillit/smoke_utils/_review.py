@@ -53,7 +53,6 @@ def annotate_pr_diff(
         raise ValueError(f"invalid review mode: {mode!r}")
     if mode == "local" and not base_branch.strip():
         raise ValueError("explicit local review mode requires base_branch")
-
     out = Path(output_dir)
     if not out.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
@@ -102,7 +101,7 @@ def annotate_pr_diff(
             raise RuntimeError(f"annotation command returned an invalid ref ({' '.join(args)})")
         return value
 
-    def _read_pr_refs(*, required: bool) -> tuple[str, str] | None:
+    def _read_pr_refs() -> tuple[str, str]:
         result = subprocess.run(
             [
                 "gh",
@@ -118,9 +117,7 @@ def annotate_pr_diff(
             timeout=30,
         )
         if result.returncode != 0:
-            if required:
-                raise RuntimeError("unable to resolve live PR head/base refs")
-            return None
+            raise RuntimeError("unable to resolve live PR head/base refs")
         try:
             payload = json.loads(_stdout_bytes(result).decode("utf-8", errors="strict"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -220,7 +217,6 @@ def annotate_pr_diff(
                 missing.append(sha)
         if not missing:
             return
-
         remote_names = _stdout_bytes(_run(["git", "remote"], timeout=10)).decode(
             "utf-8", errors="strict"
         )
@@ -270,7 +266,6 @@ def annotate_pr_diff(
             ) = provider_authority
             if checkout_head_sha != head_sha:
                 raise RuntimeError("checkout head does not match provider head authority")
-
             local_base_observation = subprocess.run(
                 [
                     "git",
@@ -287,7 +282,6 @@ def annotate_pr_diff(
             )
             if local_base_observation.returncode not in (0, 1):
                 logger.warning("local_base_tip_observation_failed: %s", base_branch.strip())
-
             _ensure_provider_objects(
                 (base_sha, provider_merge_base_sha), provider_base_repo_full_name
             )
@@ -323,11 +317,10 @@ def annotate_pr_diff(
                 "profile_id": profile_id,
             }
         else:
-            refs_before = _read_pr_refs(required=True)
-            assert refs_before is not None
+            refs_before = _read_pr_refs()
             head_sha, base_sha = refs_before
             diff_bytes = _stdout_bytes(_run(["gh", "pr", "diff", str(pr_number)], timeout=60))
-            refs_after = _read_pr_refs(required=True)
+            refs_after = _read_pr_refs()
             if refs_after != refs_before:
                 raise RuntimeError("live PR head/base refs moved during diff acquisition")
             profile_id = "github_pr_diff_v1"
@@ -426,11 +419,8 @@ def annotate_pr_diff(
     }
 
 
-# Verdicts exempt from local_review_rounds re-review.
 # Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
-# of ``local_review_rounds``. ``approved_with_comments`` is exempt because its
-# resolve pass is one-shot. ``needs_human`` is exempt because it indicates review
-# was skipped (graceful degradation) and re-review would be pointless.
+# of local rounds: approved comments are one-shot, while needs_human skips review.
 LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
     {
         "approved_with_comments",

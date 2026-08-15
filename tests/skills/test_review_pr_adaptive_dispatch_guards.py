@@ -120,6 +120,7 @@ def _make_gate_case(tmp_path: Path, *, gate: bool = True) -> dict[str, Any]:
         "_head_sha": head_sha,
         "_base_sha": base_sha,
         "_merge_base_sha": merge_base_sha,
+        "_base_repo_full_name": "Acme/Base",
         "generation_id": "generation-1",
         "diff_sha256": "a" * 64,
         "diff_byte_length": 17,
@@ -143,8 +144,24 @@ def _make_gate_case(tmp_path: Path, *, gate: bool = True) -> dict[str, Any]:
     }
     metrics_path.write_text(json.dumps(metrics, sort_keys=True) + "\n")
 
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        f"  *\"/compare/\"*) printf '%s\\n' '{merge_base_sha}' ;;\n"
+        "  *) printf '%s\\n' "
+        f'\'{{"headRefOid":"{head_sha}","baseRefOid":"{base_sha}",'
+        '"baseRepoFullName":"Acme/Base"}\' ;;\n'
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+
     env = {
         **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "REVIEW_OUTPUT_DIR": f"{output_dir}/",
         "MODE": "local",
         "base_branch": "base",

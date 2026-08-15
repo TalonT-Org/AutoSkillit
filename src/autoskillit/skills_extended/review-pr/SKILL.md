@@ -74,8 +74,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Post review comments when `gh` is unavailable — output `verdict=needs_human` and exit 0
 - Let standard or deletion agents read outside the supplied PR diff content
 - Modify any source code
-- Mutating checked-out refs is prohibited during review. Review is observational: do
-  not rewrite refs, `HEAD`, the index, or worktree state to satisfy an authority check.
+- Mutating checked-out refs is prohibited during review. Review is observational; do not rewrite refs, `HEAD`, the index, or worktree state to satisfy an authority check.
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 - Specify `subagent_type` for standard or deletion audit agents. The only permitted
@@ -273,7 +272,7 @@ generation. The gate has three states: `valid_true`, `valid_false`, or `degraded
 Freshness and the complete artifact manifest MUST validate before consuming the
 gate boolean. The review LLM never counts lines or infers eligibility.
 
-```bash
+```text
 REVIEW_CHECKOUT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 
 # Standalone interactive local reviews use the same preparation authority as recipes.
@@ -318,13 +317,16 @@ Require `annotation_result.success=true` and a mapping-valued
 `annotation_result.result`. On failure, output `verdict=needs_human`, output
 `%%REVIEW_GATE::CLEAR%%`, and stop. On success, bind the helper result before the gate:
 
-```bash
+```text
     annotated_diff_path="$(printf '%s' "$annotation_result" | jq -r '.result.annotated_diff_path')"
     hunk_ranges_path="$(printf '%s' "$annotation_result" | jq -r '.result.hunk_ranges_path')"
     valid_lines_path="$(printf '%s' "$annotation_result" | jq -r '.result.valid_lines_path')"
     diff_metrics_path="$(printf '%s' "$annotation_result" | jq -r '.result.diff_metrics_path')"
 fi
+```
 
+```bash
+REVIEW_CHECKOUT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 METRICS_HEAD_SHA=""
 METRICS_BASE_SHA=""
 METRICS_MERGE_BASE_SHA=""

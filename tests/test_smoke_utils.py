@@ -3210,7 +3210,7 @@ def test_annotate_pr_diff_explicit_local_requires_base_branch(tmp_path: Path) ->
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) -> None:
     """T3.1: iteration < local_rounds → review_mode=local."""
-    mock_run.side_effect = _annotation_run_side_effect()
+    mock_run.side_effect = _provider_annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -3239,7 +3239,7 @@ def test_annotate_pr_diff_returns_review_mode_github(mock_run, tmp_path: Path) -
 @patch("subprocess.run")
 def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> None:
     """T3.3: local mode resolves refs before a pinned git diff."""
-    mock_run.side_effect = _annotation_run_side_effect()
+    mock_run.side_effect = _provider_annotation_run_side_effect()
     annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -3291,7 +3291,7 @@ def test_annotate_pr_diff_zero_local_rounds_always_github(mock_run, tmp_path: Pa
 @patch("subprocess.run")
 def test_annotate_pr_diff_missing_iteration_defaults_zero(mock_run, tmp_path: Path) -> None:
     """T3.6: empty current_iteration defaults to 0 → local mode when local_rounds > 0."""
-    mock_run.side_effect = _annotation_run_side_effect()
+    mock_run.side_effect = _provider_annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -3430,7 +3430,7 @@ def test_annotate_pr_diff_publishes_snapshot_manifest_last(
     import autoskillit.core as core
 
     diff = _churn_diff(additions=2, removals=1)
-    mock_run.side_effect = _annotation_run_side_effect(diff)
+    mock_run.side_effect = _provider_annotation_run_side_effect(diff_output=diff)
     original_atomic_write = core.atomic_write
     write_order: list[str] = []
 

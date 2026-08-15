@@ -425,11 +425,15 @@ def _acquire_call_lock(invocation_dir: Path) -> tuple[int, os.stat_result]:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     try:
         descriptor = os.open(path, flags, 0o600)
-        opened = os.fstat(descriptor)
     except FileExistsError as exc:
         raise EvidenceReaderError("call_in_flight") from exc
     except OSError as exc:
         raise EvidenceReaderError("call_lock_unavailable") from exc
+    try:
+        opened = os.fstat(descriptor)
+    except OSError:
+        os.close(descriptor)
+        raise
     return descriptor, opened
 
 

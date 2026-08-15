@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from autoskillit.core import (
+    DIRECT_PREFIX,
     EVIDENCE_READER_AUTHORITY_ENV_VAR,
     EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
     EVIDENCE_READER_CAPABILITY_ENV_VAR,
@@ -916,8 +917,8 @@ def _prompt(
 ) -> str:
     return (
         f"{definition.body}\n\n"
-        "Your first MCP call must be mcp__autoskillit__read_authorized_artifact. Use "
-        "mcp__autoskillit__get_authorized_artifact_page only when its continuation is non-null. "
+        f"Your first MCP call must be {DIRECT_PREFIX}read_authorized_artifact. Use "
+        f"{DIRECT_PREFIX}get_authorized_artifact_page only when its continuation is non-null. "
         "Do not list MCP "
         "resources, templates, or tools. Operate only through those authorized evidence broker "
         "tools. Never invoke commands, "

@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     MANAGED_ATTEMPT_ID_ENV_VAR,
     MANAGED_LAUNCH_ID_ENV_VAR,
@@ -53,8 +54,9 @@ class TestCodexEnvPolicy:
         base: dict[str, str] = {var: "sentinel" for var in AUTOSKILLIT_PRIVATE_ENV_VARS}
         base["PATH"] = "/usr/bin"
         result = policy.build_env(base)
-        for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+        for var in AUTOSKILLIT_PRIVATE_ENV_VARS - {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR}:
             assert var not in result
+        assert result[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == ""
         assert result["PATH"] == "/usr/bin"
 
     def test_interactive_cook_home_and_trace_state_are_scrubbed_from_base(self) -> None:

@@ -33,6 +33,18 @@ def test_codex_mcp_env_forward_vars_subset_of_private() -> None:
     )
 
 
+def test_audit_admission_authority_path_is_private_and_codex_forwarded() -> None:
+    from autoskillit.core import (
+        AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_MCP_ENV_FORWARD_VARS,
+    )
+
+    assert AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR == ("AUTOSKILLIT_AUDIT_ADMISSION_AUTHORITY_PATH")
+    assert AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR in CODEX_MCP_ENV_FORWARD_VARS
+
+
 def test_managed_native_shell_controls_are_scrubbed_and_never_mcp_forwarded() -> None:
     """Protected launch authority is local to managed child construction."""
     from autoskillit.core import (

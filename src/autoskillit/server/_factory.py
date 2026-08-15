@@ -192,6 +192,7 @@ def make_context(
     plugin_retirement_coordinator: PluginRetirementCoordinator | None = None,
     fleet_lock: FleetLock | None = None,
     project_dir: Path | None = None,
+    audit_admission_store_authority: AuditAdmissionStoreAuthority | None = None,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 25 service fields populated.
 
@@ -218,6 +219,8 @@ def make_context(
                      When None, resolve_project_dir() is called (git toplevel → cwd) —
                      the same helper `autoskillit cook` uses.
                      Pass tmp_path in tests to avoid subprocess calls and ensure isolation.
+        audit_admission_store_authority: Parent audit ledger authority projected into
+                    an attested child. When None, derive a clone-local authority.
 
     Returns:
         ToolContext with gate starting closed (enabled=False) in all contexts.
@@ -385,12 +388,13 @@ def make_context(
             expected_owner_id=os.getuid(),
         )
     )
-    audit_admission_ledger = DefaultAuditAdmissionLedger(
-        AuditAdmissionStoreAuthority(
+    resolved_audit_admission_store_authority = audit_admission_store_authority
+    if resolved_audit_admission_store_authority is None:
+        resolved_audit_admission_store_authority = AuditAdmissionStoreAuthority(
             database_path=(temp_dir / "audit-admission" / "ledger.sqlite3").resolve(),
             expected_owner_id=os.getuid(),
         )
-    )
+    audit_admission_ledger = DefaultAuditAdmissionLedger(resolved_audit_admission_store_authority)
     audit_authority_materializer = DefaultAuditAuthorityMaterializer(audit_admission_ledger)
     committed_disposition_resolver = DefaultCommittedDispositionResolver(audit_admission_ledger)
     github_review_ledger = GitHubReviewLedger(github_review_ledger_path())

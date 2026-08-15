@@ -10,6 +10,7 @@ authority.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -33,6 +34,7 @@ from ._type_audit_admission import (
 from ._type_audit_cycle import ArtifactRef, AuditCycleHead
 
 __all__ = [
+    "AuditAdmissionAuthorityMismatchError",
     "AuditAdmissionLedger",
     "AuditAdmissionRecoveryResult",
     "AuditAdmissionStorageError",
@@ -50,6 +52,11 @@ __all__ = [
     "AuditReservationOutcome",
     "AuditReservationRequest",
 ]
+
+
+_STORE_AUTHORITY_ID_DOMAIN = b"autoskillit.audit-admission.store-authority.v1\x00"
+_STORE_AUTHORITY_ID_PREFIX = "ada1-"
+_STORE_AUTHORITY_ID_HEX_LENGTH = hashlib.sha256().digest_size * 2
 
 
 class AuditAdmissionStorageHealthStatus(StrEnum):
@@ -83,6 +90,18 @@ class AuditAdmissionStorageError(RuntimeError):
         self.reason_code = reason_code
 
 
+class AuditAdmissionAuthorityMismatchError(RuntimeError):
+    """Raised when a reservation handle belongs to another ledger authority."""
+
+    def __init__(self, handle_authority_id: str, serving_authority_id: str) -> None:
+        super().__init__(
+            "audit admission reservation authority mismatch: "
+            f"handle={handle_authority_id}, serving={serving_authority_id}"
+        )
+        self.handle_authority_id = handle_authority_id
+        self.serving_authority_id = serving_authority_id
+
+
 @dataclass(frozen=True, slots=True)
 class AuditAdmissionStoreAuthority:
     """Process-local authority for opening one audit-admission store."""
@@ -103,6 +122,28 @@ class AuditAdmissionStoreAuthority:
             or self.expected_owner_id < 0
         ):
             raise ValueError("invalid_audit_admission_store_owner")
+
+    @property
+    def authority_id(self) -> str:
+        """Return the versioned identity of this exact path/owner authority."""
+        identity = (
+            _STORE_AUTHORITY_ID_DOMAIN
+            + str(self.database_path).encode("utf-8")
+            + b"\x00"
+            + str(self.expected_owner_id).encode("ascii")
+        )
+        return f"{_STORE_AUTHORITY_ID_PREFIX}{hashlib.sha256(identity).hexdigest()}"
+
+    @staticmethod
+    def is_valid_authority_id(value: str) -> bool:
+        """Return whether *value* has the versioned authority-id shape."""
+        return (
+            len(value) == len(_STORE_AUTHORITY_ID_PREFIX) + _STORE_AUTHORITY_ID_HEX_LENGTH
+            and value.startswith(_STORE_AUTHORITY_ID_PREFIX)
+            and all(
+                char in "0123456789abcdef" for char in value[len(_STORE_AUTHORITY_ID_PREFIX) :]
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,6 +451,9 @@ class AuditAdmissionLedger(Protocol):
     """
 
     retention_policy_id: ClassVar[Literal["audit-admission-retention:indefinite:v1"]]
+
+    @property
+    def store_authority(self) -> AuditAdmissionStoreAuthority: ...
 
     def store_health(self) -> AuditAdmissionStoreHealth: ...
 

@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from autoskillit.config import AgentBackendConfig, AutomationConfig
-from autoskillit.core import RepositoryIdentity, RepositorySnapshot
+from autoskillit.core import (
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+    AuditAdmissionStoreAuthority,
+    RepositoryIdentity,
+    RepositorySnapshot,
+)
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
 from autoskillit.execution.github import DefaultGitHubFetcher
@@ -206,6 +212,45 @@ def test_make_context_returns_toolcontext(tmp_path):
         == (tmp_path / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3").resolve()
     )
     assert not ctx.context_admission_ledger.database_path.exists()
+    assert (
+        ctx.audit_admission_ledger.store_authority.database_path
+        == (tmp_path / ".autoskillit" / "temp" / "audit-admission" / "ledger.sqlite3").resolve()
+    )
+
+
+def test_make_context_uses_explicit_parent_audit_admission_authority(tmp_path: Path) -> None:
+    clone = tmp_path / "clone"
+    clone.mkdir()
+    parent_authority = AuditAdmissionStoreAuthority(
+        database_path=(tmp_path / "parent" / "audit-admission.sqlite3").resolve(),
+        expected_owner_id=os.getuid(),
+    )
+
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_dir=".",
+        project_dir=clone,
+        audit_admission_store_authority=parent_authority,
+    )
+
+    assert ctx.audit_admission_ledger.store_authority is parent_authority
+
+
+def test_make_context_default_audit_authority_is_clone_local(tmp_path: Path) -> None:
+    clone_a = tmp_path / "clone-a"
+    clone_b = tmp_path / "clone-b"
+    clone_a.mkdir()
+    clone_b.mkdir()
+
+    ctx_a = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=clone_a)
+    ctx_b = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=clone_b)
+
+    authority_a = ctx_a.audit_admission_ledger.store_authority
+    authority_b = ctx_b.audit_admission_ledger.store_authority
+    assert authority_a.database_path.is_relative_to(clone_a.resolve())
+    assert authority_b.database_path.is_relative_to(clone_b.resolve())
+    assert authority_a.authority_id != authority_b.authority_id
 
 
 def test_make_context_gate_starts_closed(monkeypatch, tmp_path):
@@ -685,6 +730,28 @@ def test_serve_passes_project_dir_env_to_make_context(monkeypatch, tmp_path):
         serve()
 
     assert captured.get("project_dir") == tmp_path
+
+
+def test_serve_normalizes_empty_audit_authority_before_context_construction(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict = {}
+
+    def fake_make_context(cfg, **kwargs):
+        captured.update(kwargs)
+        raise SystemExit(0)
+
+    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")
+    monkeypatch.setattr("autoskillit.server.make_context", fake_make_context)
+
+    from autoskillit.cli.app import serve
+
+    with pytest.raises(SystemExit):
+        serve()
+
+    assert captured["audit_admission_store_authority"] is None
 
 
 def test_make_context_project_dir_git_root_fallback(monkeypatch, tmp_path):

@@ -8,11 +8,14 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+    AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     AuditCycleVerifier,
     RecipeExecutionId,
 )
 from autoskillit.core.io import resolve_temp_dir
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.fleet._capture import _extract_captures
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
@@ -96,9 +99,36 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     deviation_manifest_path.write_text("{}\n")
 
     dispatch_prompts: list[str] = []
+    hostile_authority_path = "/hostile/provider/ledger.sqlite3"
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.is_feature_enabled",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *args, **kwargs: (
+            "vertex",
+            {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: hostile_authority_path},
+        ),
+    )
 
-    async def _run_child(resolved_command: str, _cwd: str, **_kwargs):
+    async def _run_child(resolved_command: str, _cwd: str, **kwargs):
         dispatch_prompts.append(resolved_command)
+        provider_extras = kwargs["provider_extras"]
+        trusted_authority_path = str(
+            tool_ctx_kitchen_open.audit_admission_ledger.store_authority.database_path
+        )
+        assert provider_extras[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == trusted_authority_path
+        child_spec = ClaudeCodeBackend().build_skill_session_cmd(
+            "/autoskillit:audit-impl",
+            str(work_dir),
+            completion_marker="DONE",
+            provider_extras=provider_extras,
+        )
+        assert child_spec.cwd == str(work_dir)
+        assert child_spec.env["AUTOSKILLIT_CWD"] == str(work_dir)
+        assert child_spec.env[AUTOSKILLIT_STATE_ROOT_ENV_VAR] == str(work_dir)
+        assert child_spec.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == trusted_authority_path
         assert str(execution_id) not in resolved_command
         payload = json.loads(resolved_command.split(_BOUND_INVOCATION_MARKER, 1)[1])
         submission = payload["audit_semantic_submission"]
@@ -197,3 +227,57 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     assert replay["audit_cycle_path"] == published["audit_cycle_path"]
     assert replay["audit_attempt_id"] == published["audit_attempt_id"]
     assert replay["receipt_id"] != published["receipt_id"]
+
+
+async def test_substantive_go_without_semantic_publication_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tool_ctx_kitchen_open,
+) -> None:
+    credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
+    work_dir = tmp_path / "worktree"
+    audit_root = resolve_temp_dir(
+        work_dir,
+        tool_ctx_kitchen_open.config.workspace.temp_dir,
+    )
+    plan_path = audit_root / "rectify" / "plan.md"
+    deviation_manifest_path = audit_root / "implement" / "deviations.json"
+    plan_path.parent.mkdir(parents=True)
+    deviation_manifest_path.parent.mkdir(parents=True)
+    plan_path.write_text("# Plan\n\nSubstantive audit input.\n")
+    deviation_manifest_path.write_text("{}\n")
+
+    async def _run_child(_resolved_command: str, _cwd: str, **_kwargs):
+        child_result = _skill_ok("Substantive analysis completed with verdict GO.")
+        child_result.outcome_fields = {"audit_verdict": "GO"}
+        return child_result
+
+    monkeypatch.setattr(tool_ctx_kitchen_open.executor, "run", _run_child)
+
+    with_args = step["with"]
+    execution_id = credential["execution_id"]
+    invocation = {
+        "skill_command": with_args["skill_command"],
+        "cwd": str(work_dir),
+        "step_name": with_args["step_name"],
+        "output_dir": with_args["output_dir"],
+        "recipe_execution_id": execution_id,
+        "invocation_template_digest": credential["invocation_template_digests"][_STEP],
+        "skill_inputs": {
+            "all_plan_paths": str(plan_path),
+            "deviation_manifest_path": str(deviation_manifest_path),
+            "branch_name": "impl-missing-semantic-publication",
+            "base_branch": "develop",
+            "prior_audit_cycle_path": "",
+        },
+        "closure_plan_paths": str(plan_path),
+        "closure_base_sha": "impl-missing-semantic-publication",
+    }
+
+    rejected = json.loads(await run_skill(**invocation))
+
+    assert rejected["success"] is False
+    assert rejected["audit_status"] == "SEMANTIC_REJECTED"
+    assert rejected["audit_verdict"] is None
+    assert rejected["audit_cycle_path"] is None
+    assert "audit_semantic_result_path" not in rejected

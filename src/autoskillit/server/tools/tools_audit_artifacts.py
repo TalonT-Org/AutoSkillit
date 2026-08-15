@@ -16,6 +16,7 @@ from autoskillit.core import (
     STANDALONE_AUDIT_EVIDENCE_KIND,
     STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
     ArtifactRef,
+    AuditAdmissionAuthorityMismatchError,
     AuditAssessment,
     AuditAssessmentRow,
     AuditCycleVerifier,
@@ -595,11 +596,30 @@ async def write_audit_semantic_result(
         tool_ctx = _get_ctx()
         started = time.monotonic()
         try:
-            reservation = tool_ctx.audit_admission_ledger.resolve_reservation_handle(
-                reservation_handle
-            )
+            try:
+                reservation = tool_ctx.audit_admission_ledger.resolve_reservation_handle(
+                    reservation_handle
+                )
+            except AuditAdmissionAuthorityMismatchError as exc:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error_code": "wrong_audit_authority",
+                        "error": "reservation was issued by a different audit authority",
+                        "handle_authority_id": exc.handle_authority_id,
+                        "serving_authority_id": exc.serving_authority_id,
+                    },
+                    separators=(",", ":"),
+                )
             if reservation is None:
-                raise _SemanticInputError("reservation handle is stale or invalid")
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error_code": "stale_or_invalid_reservation",
+                        "error": "reservation handle is stale or invalid",
+                    },
+                    separators=(",", ":"),
+                )
             path, digest = _write_or_verify_semantic_result(
                 reservation.semantic_result_path,
                 reservation.allowed_root,

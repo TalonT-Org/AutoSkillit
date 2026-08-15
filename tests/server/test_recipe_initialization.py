@@ -185,6 +185,10 @@ def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
         execution_id="execution",
         snapshot_digest=_hash("snapshot"),
         invocation_template_digests={"initial": _hash("initial"), "future": _hash("future")},
+        skill_input_shapes={
+            "initial": {"keys": ["task"], "unresolved_defaults": {}},
+            "future": {"keys": ["review_path"], "unresolved_defaults": {"review_path": ""}},
+        },
     )
 
     public_credential = recipe_initialization._public_completion_credential(credential, projection)
@@ -192,6 +196,9 @@ def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
     assert public_credential.execution_id == credential.execution_id
     assert public_credential.snapshot_digest == credential.snapshot_digest
     assert public_credential.invocation_template_digests == {"initial": _hash("initial")}
+    assert public_credential.skill_input_shapes == {
+        "initial": {"keys": ["task"], "unresolved_defaults": {}}
+    }
 
 
 def test_install_rejects_initializing_recipe_without_completion_receipt(

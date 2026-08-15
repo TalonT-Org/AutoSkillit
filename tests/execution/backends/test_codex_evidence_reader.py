@@ -225,7 +225,6 @@ def test_conformance_probe_attests_help_auth_and_output_schema(
         "/usr/bin/codex",
         definition,
         auth,
-        cli_version="codex-cli 0.147.0",
         cwd=tmp_path,
         environment={"OPENAI_API_KEY": "key"},
         probe_schema_path=tmp_path / "probe.schema.json",

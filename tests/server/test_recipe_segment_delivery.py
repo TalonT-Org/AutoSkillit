@@ -168,6 +168,9 @@ async def test_checkpoint_delivery_reads_ready_exact_durable_artifact(
     assert prepared is not None
     assert prepared.success_carrier["source_step"] == "scope"
     assert [body["step"] for body in prepared.success_carrier["bodies"]] == ["select_directions"]
+    credential = prepared.success_carrier[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+    assert set(credential["invocation_template_digests"]) == {"select_directions"}
+    assert set(credential["skill_input_shapes"]) == {"select_directions"}
     assert prepared.success_carrier["recipe_pull"] == state.artifact_generation.pull_identity()
     assert (
         prepared.success_carrier["bodies"][0]["body"]

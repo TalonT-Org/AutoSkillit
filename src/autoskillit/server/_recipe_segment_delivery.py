@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
@@ -488,9 +487,7 @@ def prepare_recipe_segment_delivery(
         for segment in state.finalized_projection.delivery_segments
     ):
         return None
-    artifact_dir = getattr(tool_ctx, "temp_dir", None)
-    if not isinstance(artifact_dir, Path):
-        raise RecipeSegmentDeliveryError("recipe artifact directory is unavailable")
+    artifact_dir = tool_ctx.temp_dir
     persisted = load_recipe_artifact(
         artifact_dir,
         kitchen_id=tool_ctx.kitchen_id,

@@ -81,29 +81,9 @@ def annotate_pr_diff(
     def _stdout_bytes(result: subprocess.CompletedProcess[bytes]) -> bytes:
         return result.stdout
 
-    def _run(args: list[str], *, timeout: int) -> subprocess.CompletedProcess[bytes]:
-        result = subprocess.run(
-            args,
-            capture_output=True,
-            text=False,
-            check=False,
-            cwd=str(review_root),
-            timeout=timeout,
-        )
-        if result.returncode != 0:
-            detail = result.stderr.decode("utf-8", errors="backslashreplace").strip()
-            raise RuntimeError(f"annotation command failed ({' '.join(args)}): {detail}")
-        return result
-
-    def _run_tolerant(
+    def _run(
         args: list[str], *, timeout: int, ok_returncodes: frozenset[int] = frozenset({0})
     ) -> subprocess.CompletedProcess[bytes]:
-        """Like ``_run`` but treats ``ok_returncodes`` (default {0}) as success.
-
-        Used by probes whose meaning of "the ref does not exist" is rc=1
-        (e.g. ``git rev-parse --verify``), which is a benign observation
-        rather than a failure.
-        """
         result = subprocess.run(
             args,
             capture_output=True,
@@ -290,7 +270,7 @@ def annotate_pr_diff(
             ) = provider_authority
             if checkout_head_sha != head_sha:
                 raise RuntimeError("checkout head does not match provider head authority")
-            local_base_observation = _run_tolerant(
+            local_base_observation = _run(
                 [
                     "git",
                     "rev-parse",
@@ -440,10 +420,8 @@ def annotate_pr_diff(
     }
 
 
-# Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
-# of local rounds: ``approved_with_comments`` is one-shot and its resolve
-# pass does not re-trigger the review loop; ``needs_human`` skips review
-# entirely. All other verdicts respect the local-rounds budget.
+# Verdicts in this set yield ``had_blocking=false`` unconditionally
+# (approved_with_comments is one-shot; needs_human skips review).
 LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
     {
         "approved_with_comments",

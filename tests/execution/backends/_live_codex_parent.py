@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -76,6 +77,8 @@ def write_luna_direct_catalog(session_home: Path, env: dict[str, str]) -> None:
         + config_path.read_text(encoding="utf-8")
     )
     config_path.write_text(text, encoding="utf-8")
+    parsed = tomllib.loads(text)
+    assert parsed.get("model_catalog_json") == str(catalog_path.resolve())
 
 
 def prepare_live_codex_parent(

@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import time
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from types import SimpleNamespace
@@ -209,7 +210,7 @@ def _launch_kwargs(tmp_path: Path) -> dict[str, Any]:
     }
 
 
-def _assert_error(code: _ErrorCode, operation: Any) -> None:
+def _assert_error(code: _ErrorCode, operation: Callable[[], object]) -> None:
     with pytest.raises(EvidenceReaderLaunchError) as raised:
         operation()
     assert raised.value.code == code
@@ -282,11 +283,7 @@ def test_launch_uses_sterile_private_home_cwd_config_environment_and_command(
 
     monkeypatch.setattr(launcher, "_probe_catalog", probe_catalog)
     monkeypatch.setattr(launcher, "_probe_mcp", probe_mcp)
-    monkeypatch.setattr(
-        launcher,
-        "_probe_conformance",
-        lambda *args, **kwargs: "codex-cli 0.147.0",
-    )
+    monkeypatch.setattr(launcher, "_probe_conformance", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         launcher,
         "_probe_cli_version",
@@ -546,7 +543,9 @@ def test_stream_validation_rejects_unissued_receipt_even_with_one_observed_recei
         lambda payload: payload.update(stop_reason="concrete blocker"),
     ],
 )
-def test_stream_validation_rejects_inconsistent_semantic_states(mutate: Any) -> None:
+def test_stream_validation_rejects_inconsistent_semantic_states(
+    mutate: Callable[[dict[str, object]], object],
+) -> None:
     payload = _payload()
     mutate(payload)
     with pytest.raises(EvidenceReaderLaunchError) as raised:
@@ -700,11 +699,7 @@ def test_launch_failure_paths_remove_sterile_home_and_cwd(
     else:
         monkeypatch.setattr(launcher, "_probe_catalog", lambda *args, **kwargs: b"{}")
         monkeypatch.setattr(launcher, "_probe_mcp", lambda *args, **kwargs: None)
-        monkeypatch.setattr(
-            launcher,
-            "_probe_conformance",
-            lambda *args, **kwargs: "codex-cli 0.147.0",
-        )
+        monkeypatch.setattr(launcher, "_probe_conformance", lambda *args, **kwargs: None)
         monkeypatch.setattr(launcher, "_run_bounded", fail_launch)
 
     expected = Cancelled if failure == "cancel" else EvidenceReaderLaunchError
@@ -724,11 +719,7 @@ def test_launch_fails_closed_when_sterile_home_removal_is_incomplete(
     monkeypatch.setattr(launcher.shutil, "which", lambda _name: "/usr/bin/codex")
     monkeypatch.setattr(launcher, "_probe_catalog", lambda *args, **kwargs: b"{}")
     monkeypatch.setattr(launcher, "_probe_mcp", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        launcher,
-        "_probe_conformance",
-        lambda *args, **kwargs: "codex-cli 0.147.0",
-    )
+    monkeypatch.setattr(launcher, "_probe_conformance", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         launcher,
         "_run_bounded",
@@ -759,10 +750,9 @@ def test_bounded_process_timeout_and_cancellation_settle_owned_process(
     stderr_read, stderr_write = os.pipe()
     os.close(stdout_write)
     os.close(stderr_write)
-    process = SimpleNamespace(
-        stdout=os.fdopen(stdout_read, "rb", buffering=0),
-        stderr=os.fdopen(stderr_read, "rb", buffering=0),
-    )
+    stdout_file = os.fdopen(stdout_read, "rb", buffering=0)
+    stderr_file = os.fdopen(stderr_read, "rb", buffering=0)
+    process = SimpleNamespace(stdout=stdout_file, stderr=stderr_file)
 
     class Cancelled(BaseException):
         pass
@@ -795,6 +785,8 @@ def test_bounded_process_timeout_and_cancellation_settle_owned_process(
             stdout_limit=100,
         )
     assert owner.preserved is failure_exception
+    stdout_file.close()
+    stderr_file.close()
 
 
 def test_bounded_process_fails_when_owned_process_cleanup_is_incomplete(
@@ -804,26 +796,29 @@ def test_bounded_process_fails_when_owned_process_cleanup_is_incomplete(
     stderr_read, stderr_write = os.pipe()
     os.close(stdout_write)
     os.close(stderr_write)
-    process = SimpleNamespace(
-        stdout=os.fdopen(stdout_read, "rb", buffering=0),
-        stderr=os.fdopen(stderr_read, "rb", buffering=0),
-    )
-    owner = SimpleNamespace(process=process, observe_exit=lambda: None)
-    owner.settle_preserving = lambda exc, timeout: SimpleNamespace(complete=False)
-    monkeypatch.setattr(launcher, "spawn_owned_process", lambda *args, **kwargs: owner)
+    stdout_file = os.fdopen(stdout_read, "rb", buffering=0)
+    stderr_file = os.fdopen(stderr_read, "rb", buffering=0)
+    try:
+        process = SimpleNamespace(stdout=stdout_file, stderr=stderr_file)
+        owner = SimpleNamespace(process=process, observe_exit=lambda: None)
+        owner.settle_preserving = lambda exc, *, timeout: SimpleNamespace(complete=False)
+        monkeypatch.setattr(launcher, "spawn_owned_process", lambda *args, **kwargs: owner)
 
-    def expire(_deadline: float) -> float:
-        raise EvidenceReaderLaunchError("deadline_exceeded")
+        def expire(_deadline: float) -> float:
+            raise EvidenceReaderLaunchError("deadline_exceeded")
 
-    monkeypatch.setattr(launcher, "_deadline_remaining", expire)
+        monkeypatch.setattr(launcher, "_deadline_remaining", expire)
 
-    _assert_error(
-        _ErrorCode.PROCESS_CLEANUP_INCOMPLETE,
-        lambda: launcher._run_bounded(
-            ("/usr/bin/codex", "exec"),
-            cwd=Path.cwd(),
-            environment={},
-            deadline=time.monotonic() + 5,
-            stdout_limit=100,
-        ),
-    )
+        _assert_error(
+            _ErrorCode.PROCESS_CLEANUP_INCOMPLETE,
+            lambda: launcher._run_bounded(
+                ("/usr/bin/codex", "exec"),
+                cwd=Path.cwd(),
+                environment={},
+                deadline=time.monotonic() + 5,
+                stdout_limit=100,
+            ),
+        )
+    finally:
+        stdout_file.close()
+        stderr_file.close()

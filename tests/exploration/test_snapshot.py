@@ -18,6 +18,7 @@ from autoskillit.exploration.snapshot import (
     ArtifactCaptureStatus,
     SnapshotCaptureLimits,
     SnapshotCaptureStatus,
+    StableArtifactCapture,
     capture_repository_snapshot,
     capture_stable_artifact,
     stable_artifact_matches,
@@ -66,7 +67,7 @@ def _capture_artifact(
     *,
     max_attempts: int = 3,
     max_bytes: int = 1_000_000,
-):
+) -> StableArtifactCapture:
     return capture_stable_artifact(
         root,
         artifact_path,

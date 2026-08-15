@@ -367,7 +367,16 @@ def test_delegate_failures_revoke_authority_and_remove_invocation(
 
     monkeypatch.setattr(delegate_module, "launch_evidence_reader", fail_or_return)
 
-    expected_exception = Cancelled if failure == "cancel" else Exception
+    if failure == "cancel":
+        expected_exception: type[BaseException] = Cancelled
+    elif failure == "preflight":
+        expected_exception = delegate_module._DelegateError
+    elif failure == "recapture":
+        expected_exception = RuntimeError
+    elif failure in {"malformed-result", "incomplete-result", "receipt-mismatch"}:
+        expected_exception = delegate_module._DelegateError
+    else:
+        expected_exception = EvidenceReaderLaunchError
     with pytest.raises(expected_exception):
         delegate_module._delegate_sync(
             context,

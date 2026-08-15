@@ -203,9 +203,16 @@ def test_pr_source_reader_separates_claude_and_restricted_codex_tool_surfaces() 
     )
 
 
-@pytest.mark.parametrize("reader_tools", [None, "Read", [], ["valid", 1]])
+@pytest.mark.parametrize(
+    "reader_tools_yaml",
+    [
+        'reader_tools: "Read"\n',
+        "reader_tools: []\n",
+        "reader_tools:\n  - valid\n  - 1\n",
+    ],
+)
 def test_reader_tools_frontmatter_requires_a_non_empty_string_list(
-    tmp_path: Path, reader_tools: object
+    tmp_path: Path, reader_tools_yaml: str
 ) -> None:
     path = tmp_path / "reader.md"
     path.write_text(
@@ -213,7 +220,7 @@ def test_reader_tools_frontmatter_requires_a_non_empty_string_list(
         "name: reader\n"
         "description: Bounded reader\n"
         "tools: [Read]\n"
-        f"reader_tools: {reader_tools!r}\n"
+        f"{reader_tools_yaml}"
         "model: sonnet\n"
         "---\n\n"
         "Return bounded evidence.\n",

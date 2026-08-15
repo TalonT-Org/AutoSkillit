@@ -125,7 +125,7 @@ def _read(
     continuation: str | None = None,
     environment: dict[str, str] | None = None,
     binding_overrides: dict[str, str] | None = None,
-):
+) -> EvidenceReaderPage:
     binding = {**_CALL_BINDING, **(binding_overrides or {})}
     return read_evidence_reader_page(
         context,

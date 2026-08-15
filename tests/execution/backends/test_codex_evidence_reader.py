@@ -9,13 +9,13 @@ from pathlib import Path
 import pytest
 
 import autoskillit.execution.evidence_reader as launcher
-from autoskillit.core import load_bundled_agent_definitions
+from autoskillit.core import AgentDef, load_bundled_agent_definitions
 from autoskillit.execution.evidence_reader import EvidenceReaderLaunchError
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
-def _definition():
+def _definition() -> AgentDef:
     return next(
         definition
         for definition in load_bundled_agent_definitions()
@@ -187,7 +187,7 @@ def test_config_command_and_schema_are_exact_sterile_projection(tmp_path: Path) 
     assert set(schema["required"]) == launcher._RESULT_KEYS
 
 
-def test_conformance_probe_attests_version_help_auth_and_output_schema(
+def test_conformance_probe_attests_help_auth_and_output_schema(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     definition = _definition()
@@ -197,8 +197,6 @@ def test_conformance_probe_attests_version_help_auth_and_output_schema(
     def run(command, **_kwargs):
         command = tuple(command)
         seen.append(command)
-        if command[-1] == "--version":
-            return launcher._ProcessOutput(0, b"codex-cli 0.147.0\n", b"")
         if command[-2:] == ("exec", "--help"):
             flags = " ".join(
                 (
@@ -223,17 +221,19 @@ def test_conformance_probe_attests_version_help_auth_and_output_schema(
         return launcher._ProcessOutput(0, stream, b"")
 
     monkeypatch.setattr(launcher, "_run_bounded", run)
-    version = launcher._probe_conformance(
+    result = launcher._probe_conformance(
         "/usr/bin/codex",
         definition,
         auth,
+        cli_version="codex-cli 0.147.0",
         cwd=tmp_path,
         environment={"OPENAI_API_KEY": "key"},
         probe_schema_path=tmp_path / "probe.schema.json",
         deadline=launcher.time.monotonic() + 30,
     )
-    assert version == "codex-cli 0.147.0"
-    assert len(seen) == 4
+    assert result is None
+    assert len(seen) == 3
     assert seen[-1][1] == "exec"
     assert "--output-schema" in seen[-1]
     assert os.fspath(tmp_path) in seen[-1]
+    assert not any(command[-1] == "--version" for command in seen)

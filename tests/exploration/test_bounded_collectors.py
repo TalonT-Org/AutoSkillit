@@ -150,7 +150,7 @@ def test_stable_contained_read_rejects_post_open_inode_replacement(
     artifact.write_text("approved")
     replacement = root / "replacement.txt"
     replacement.write_text("replacement")
-    original_open = _bounded.os.open
+    original_open = _bounded._open
 
     def replace_after_open(
         path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
@@ -164,7 +164,7 @@ def test_stable_contained_read_rejects_post_open_inode_replacement(
             os.replace(replacement, artifact)
         return descriptor
 
-    monkeypatch.setattr(_bounded.os, "open", replace_after_open)
+    monkeypatch.setattr(_bounded, "_open", replace_after_open)
 
     with pytest.raises(_bounded.CollectorMutationError, match="changed while opening"):
         _bounded.read_stable_contained_file(root, artifact.name, max_bytes=100)
@@ -177,7 +177,7 @@ def test_stable_contained_read_rejects_mid_read_mutation(
     root.mkdir()
     artifact = root / "artifact.txt"
     artifact.write_bytes(b"a" * (_bounded._READ_CHUNK_BYTES + 1))
-    original_read = _bounded.os.read
+    original_read = _bounded._read
     mutated = False
 
     def mutate_after_first_read(file_descriptor: int, size: int) -> bytes:
@@ -188,7 +188,7 @@ def test_stable_contained_read_rejects_mid_read_mutation(
             mutated = True
         return chunk
 
-    monkeypatch.setattr(_bounded.os, "read", mutate_after_first_read)
+    monkeypatch.setattr(_bounded, "_read", mutate_after_first_read)
 
     with pytest.raises(_bounded.CollectorMutationError, match="changed while reading"):
         _bounded.read_stable_contained_file(

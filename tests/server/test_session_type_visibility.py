@@ -785,19 +785,6 @@ class TestExplorerBindingVisibility:
 class TestEvidenceReaderBindingVisibility:
     """Evidence-reader startup identity grants only its two broker tools."""
 
-    @pytest.fixture(autouse=True)
-    def _reset_mcp_visibility(self):
-        from autoskillit.core import ALL_VISIBILITY_TAGS
-        from autoskillit.server import mcp
-
-        mcp._transforms.clear()
-        for tag in sorted(ALL_VISIBILITY_TAGS):
-            mcp.disable(tags={tag})
-        yield
-        mcp._transforms.clear()
-        for tag in sorted(ALL_VISIBILITY_TAGS):
-            mcp.disable(tags={tag})
-
     @staticmethod
     def _set_complete_identity(monkeypatch: pytest.MonkeyPatch) -> None:
         from autoskillit.core import (

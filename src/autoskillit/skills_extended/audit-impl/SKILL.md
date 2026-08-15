@@ -84,6 +84,11 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
   that its execution generation, plan set, scope, part, round, parent, and audited-plan
   lineage authorize this descendant. A sibling or unrelated plan starts a new scope instead.
 
+For structured recipe invocations, `""` is the explicit vacancy value for
+`all_conflict_report_paths`, `deviation_manifest_path`, and
+`prior_audit_cycle_path`; it means there are no conflict reports, no deviation
+manifest, or no remediation ancestor respectively.
+
 ## Critical Constraints
 
 **NEVER:**

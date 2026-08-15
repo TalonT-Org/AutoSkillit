@@ -109,6 +109,19 @@
         "selected_lenses": "${{ result.selected_lenses }}",
         "lens_context_paths": "${{ result.lens_context_paths }}"
       },
+      "on_success": "initialize_diagram_paths",
+      "on_failure": "escalate_stop"
+    },
+    "initialize_diagram_paths": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": ":",
+        "cwd": "${{ inputs.worktree_path }}",
+        "step_name": "initialize_diagram_paths"
+      },
+      "capture": {
+        "all_diagram_paths": "${{ result.stdout | trim }}"
+      },
       "on_success": "run_experiment_lenses",
       "on_failure": "escalate_stop"
     },

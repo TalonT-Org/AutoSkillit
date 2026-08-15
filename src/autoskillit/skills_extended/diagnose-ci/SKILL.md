@@ -31,6 +31,9 @@ before routing to `resolve-failures`.
 - `workflow` (optional) — workflow filename (e.g. `tests.yml`); if provided, scopes `gh run list` to that workflow only; use `-` to skip
 - `event` (optional) — GitHub Actions trigger event (e.g. `push`, `pull_request`); if provided, scopes `gh run list` to that event only; use `-` to skip
 
+For structured recipe invocations, `-` is the explicit vacancy value for both
+`ci_failed_jobs` and `event`; treat it exactly as that optional filter being absent.
+
 ## Critical Constraints
 
 **NEVER:**

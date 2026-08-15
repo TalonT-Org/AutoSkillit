@@ -1429,11 +1429,11 @@
       "on_result": [
         {
           "when": "${{ result.prep_path }} and ${{ inputs.arch_lenses }} == 'true'",
-          "route": "run_arch_lenses"
+          "route": "initialize_arch_diagram_paths"
         },
         {
           "when": "${{ result.prep_path }}",
-          "route": "compose_pr"
+          "route": "initialize_arch_diagram_paths"
         },
         {
           "route": "release_issue_failure"
@@ -1446,7 +1446,31 @@
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
+      "optional_context_refs": [
+        "issue_number"
+      ],
       "note": "Reads plan(s), runs git diff, classifies changed files, selects 1–3 arch-lens slugs, writes one PR context file per lens, and writes a PR prep file. Does NOT invoke arch-lens skills.\n"
+    },
+    "initialize_arch_diagram_paths": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": ":",
+        "cwd": "${{ context.work_dir }}",
+        "step_name": "initialize_arch_diagram_paths"
+      },
+      "capture": {
+        "all_diagram_paths": "${{ result.stdout | trim }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ inputs.arch_lenses }} == 'true'",
+          "route": "run_arch_lenses"
+        },
+        {
+          "route": "compose_pr"
+        }
+      ],
+      "on_failure": "release_issue_failure"
     },
     "run_arch_lenses": {
       "tool": "run_skill",
@@ -1509,6 +1533,9 @@
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
+      "optional_context_refs": [
+        "issue_number"
+      ],
       "note": "Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●), composes the PR body, and runs gh pr create. Degrades gracefully if gh is unavailable (emits pr_url=).\nsynthesis_algorithm: null — arch-lens readings forwarded to compose_pr without aggregation. Dial (prepare_pr) -> Apply (run_arch_lenses) -> Output (compose_pr).\n"
     },
     "guard_pr_url": {
@@ -3016,6 +3043,8 @@
       "on_rate_limit": "resolve_ci",
       "optional": true,
       "optional_context_refs": [
+        "ci_event",
+        "ci_failed_jobs",
         "ci_rebase_count",
         "ci_flake_count"
       ],
@@ -3073,6 +3102,11 @@
         }
       ],
       "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "ci_conclusion",
+        "ci_failed_jobs",
+        "diagnosis_path"
+      ],
       "note": "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci structured output to avoid redundant CI failure re-investigation. Routes via on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses (sibling fix may have landed), flake_suspected routes to check_flake_loop (bounded by ci_flake_count <= 3, shared across all diagnose_ci callers; escalates to release_issue_failure when exceeded), ci_only_failure routes to check_flake_loop (bounded retry, then escalates via max_exceeded). Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.\n"
     },
     "pre_resolve_rebase": {

@@ -79,12 +79,13 @@ class TestResearchReviewRecipe:
 
     # --- Steps ---
     def test_step_count(self, recipe) -> None:
-        # 27 active steps + 3 terminal stops = 30
-        assert len(recipe.steps) == 30
+        # 28 active steps + 3 terminal stops = 31
+        assert len(recipe.steps) == 31
 
     def test_active_step_names(self, recipe) -> None:
         expected = {
             "prepare_research_pr",
+            "initialize_diagram_paths",
             "run_experiment_lenses",
             "stage_bundle",
             "route_pr_or_local",

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:e24d55b5f3f459ec1bdcff9aa3d8da9b07e65cb35231d1cf4e8b98f7e370941b -->
+<!-- autoskillit-recipe-hash: sha256:d0245a411a6ca7658ba189f63d923515a794dd73c93e582b7161fe651a47e18f -->
 <!-- autoskillit-diagram-format: v7 -->
 
 ## research
@@ -94,6 +94,11 @@ route_pr_or_local
 |    |    |    re_test <-> [x fail -> re_push_research]
 |    |    |    |
 |    |    re_push_research
+|    |    |    x fail [-> begin_archival]
+|    |    |
+|    |    finalize_bundle
+|    |    |
+|    |    push_finalized_bundle
 |    |    |    x fail [-> begin_archival]
 |    |    |
 |    |    finalize_bundle_render

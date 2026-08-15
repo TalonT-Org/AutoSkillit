@@ -153,14 +153,14 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         producer_symbol="write_audit_semantic_result",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_semantic_result",
-        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 98, 108),),
+        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 103, 117),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 276),
         producer_symbol="write_standalone_audit_evidence",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_standalone_evidence",
-        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 109, 118),),
+        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 118, 127),),
     ),
 }
 

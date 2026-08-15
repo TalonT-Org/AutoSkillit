@@ -271,6 +271,7 @@
       "steps": [
         "push",
         "prepare_pr",
+        "initialize_arch_diagram_paths",
         "run_arch_lenses"
       ]
     },

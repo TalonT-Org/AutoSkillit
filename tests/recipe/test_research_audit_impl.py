@@ -93,15 +93,15 @@ class TestResearchRecipesAuditImpl:
         assert go_cond is not None, "audit_impl must have a GO verdict condition"
         assert go_cond.route == "run_experiment"
 
-    def test_implement_phase_on_context_limit_routes_to_audit_impl(self, recipe) -> None:
-        """implement_phase on_context_limit must route to audit_impl."""
+    def test_implement_phase_on_context_limit_escalates(self, recipe) -> None:
+        """A context-limited implementation has no authoritative worktree to audit."""
         step = recipe.steps["implement_phase"]
-        assert step.on_context_limit == "audit_impl"
+        assert step.on_context_limit == "escalate_stop"
 
-    def test_implement_phase_on_exhausted_routes_to_audit_impl(self, recipe) -> None:
-        """implement_phase on_exhausted must route to audit_impl."""
+    def test_implement_phase_on_exhausted_escalates(self, recipe) -> None:
+        """An exhausted implementation has no authoritative worktree to audit."""
         step = recipe.steps["implement_phase"]
-        assert step.on_exhausted == "audit_impl"
+        assert step.on_exhausted == "escalate_stop"
 
     def test_next_phase_or_experiment_fallback_routes_to_audit_impl(self, recipe) -> None:
         """next_phase_or_experiment default route must be audit_impl."""
@@ -111,8 +111,8 @@ class TestResearchRecipesAuditImpl:
         assert default_cond is not None, "next_phase_or_experiment must have a default route"
         assert default_cond.route == "audit_impl"
 
-    def test_check_implement_fix_loop_max_exceeded_routes_to_audit_impl(self, recipe) -> None:
-        """check_implement_fix_loop max_exceeded condition must route to audit_impl."""
+    def test_check_implement_fix_loop_max_exceeded_escalates(self, recipe) -> None:
+        """An exhausted fix loop cannot invent a completed worktree authority."""
         step = recipe.steps["check_implement_fix_loop"]
         conditions = step.on_result.conditions
         max_exceeded_cond = next(
@@ -122,12 +122,12 @@ class TestResearchRecipesAuditImpl:
         assert max_exceeded_cond is not None, (
             "check_implement_fix_loop must have a max_exceeded condition"
         )
-        assert max_exceeded_cond.route == "audit_impl"
+        assert max_exceeded_cond.route == "escalate_stop"
 
-    def test_check_implement_fix_loop_on_failure_routes_to_audit_impl(self, recipe) -> None:
-        """check_implement_fix_loop on_failure must route to audit_impl."""
+    def test_check_implement_fix_loop_on_failure_escalates(self, recipe) -> None:
+        """A failed loop guard escalates without an authoritative audit target."""
         step = recipe.steps["check_implement_fix_loop"]
-        assert step.on_failure == "audit_impl"
+        assert step.on_failure == "escalate_stop"
 
     def test_research_has_capture_impl_base_step(self, research_recipe) -> None:
         """research.yaml must retain capture_impl_base."""

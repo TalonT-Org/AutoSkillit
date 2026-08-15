@@ -239,6 +239,7 @@ delivery_segments:
   steps:
   - push
   - prepare_pr
+  - initialize_arch_diagram_paths
   - run_arch_lenses
 - name: R13
   steps:

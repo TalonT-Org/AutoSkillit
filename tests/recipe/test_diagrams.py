@@ -151,7 +151,10 @@ def test_extract_routing_edges_covers_all_routing_fields() -> None:
     assert "step_result_cond" in targets, "on_result.conditions[].route must be covered"
     assert "configuration_only_skip" not in targets
 
-    fallback = RecipeStep(on_result=StepResultRoute(routes={"ok": "step_result_route"}))
+    fallback = RecipeStep(
+        on_failure=None,
+        on_result=StepResultRoute(routes={"ok": "step_result_route"}),
+    )
     fallback_edges = _extract_routing_edges(fallback)
     assert {(edge.target, edge.capture_available) for edge in fallback_edges} == {
         ("step_result_route", True)

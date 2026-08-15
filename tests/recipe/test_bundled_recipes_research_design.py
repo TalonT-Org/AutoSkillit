@@ -68,6 +68,7 @@ class TestResearchDesignRecipeStructure:
             "dial",
             "select_review_dimensions",
             "apply",
+            "synthesize_without_dashboard",
             "synthesize",
             "vis_dial",
             "vis_apply",
@@ -114,7 +115,7 @@ class TestResearchDesignRecipeStructure:
 
     def test_dial_skip_behavior(self, recipe) -> None:
         assert recipe.steps["dial"].skip_when_false == "inputs.review_design"
-        assert recipe.steps["dial"].on_skip == "synthesize"
+        assert recipe.steps["dial"].on_skip == "synthesize_without_dashboard"
 
     def test_dial_on_success(self, recipe) -> None:
         assert recipe.steps["dial"].on_success == "select_review_dimensions"
@@ -149,13 +150,13 @@ class TestResearchDesignRecipeStructure:
         assert recipe.steps["apply"].retries == 2
 
     def test_apply_on_exhausted(self, recipe) -> None:
-        assert recipe.steps["apply"].on_exhausted == "synthesize"
+        assert recipe.steps["apply"].on_exhausted == "synthesize_without_dashboard"
 
     def test_apply_on_context_limit(self, recipe) -> None:
-        assert recipe.steps["apply"].on_context_limit == "synthesize"
+        assert recipe.steps["apply"].on_context_limit == "synthesize_without_dashboard"
 
     def test_apply_on_failure(self, recipe) -> None:
-        assert recipe.steps["apply"].on_failure == "synthesize"
+        assert recipe.steps["apply"].on_failure == "synthesize_without_dashboard"
 
     def test_apply_receives_scope_report(self, recipe) -> None:
         """apply step must pass scope_report as a second argument."""
@@ -275,12 +276,12 @@ class TestResearchDesignRecipeStructure:
     def test_revise_design_is_route_action(self, recipe) -> None:
         assert recipe.steps["revise_design"].action == "route"
 
-    def test_revise_design_routes_to_check_design_review_loop(self, recipe) -> None:
+    def test_revise_design_routes_to_dial(self, recipe) -> None:
         step = recipe.steps["revise_design"]
         assert step.on_result is not None
         default = next((c for c in step.on_result.conditions if c.when is None), None)
         assert default is not None
-        assert default.route == "check_design_review_loop"
+        assert default.route == "dial"
 
     # ----- check_design_review_loop (T38) -----
 

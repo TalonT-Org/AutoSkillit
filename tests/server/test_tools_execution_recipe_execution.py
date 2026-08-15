@@ -13,7 +13,6 @@ from autoskillit.core import (
     RECIPE_EXECUTION_INACTIVE_MESSAGE,
     RUN_SKILL_ATTESTATION_PARAMS,
 )
-from tests._helpers import ATTESTED_SKILL_INPUT_SHAPE_ATOMS
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -31,8 +30,13 @@ class TestAttestationErrorMessages:
         assert "complete_recipe_initialization" in RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE
 
     def test_attestation_missing_message_preserves_delivered_skill_input_shape(self) -> None:
-        for required in ATTESTED_SKILL_INPUT_SHAPE_ATOMS:
-            assert required in RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE
+        assert (
+            "structured calls must initialize skill_inputs from "
+            "skill_input_shapes[step_name] ordered keys, replace available values in place, "
+            "copy only advertised unresolved_defaults by key presence "
+            'so "", 0, and False remain verbatim, and never delete or invent a key'
+            in RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE
+        )
 
     def test_inactive_message_does_not_say_standalone_mode(self) -> None:
         assert "standalone mode" not in RECIPE_EXECUTION_INACTIVE_MESSAGE.lower()

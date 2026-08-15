@@ -10,17 +10,6 @@ from autoskillit.core import (
     strip_markdown_code_regions as strip_markdown_code_regions,
 )
 
-ATTESTED_SKILL_INPUT_SHAPE_ATOMS = (
-    "skill_input_shapes[step_name]",
-    "ordered keys",
-    "unresolved_defaults",
-    "replace available values in place",
-    "never delete or invent a key",
-    '""',
-    "0",
-    "False",
-)
-
 
 def seed_registry_owner(project_dir: Path, launch_id: str) -> None:
     """Seed stable owner identity fields into a test session registry row."""

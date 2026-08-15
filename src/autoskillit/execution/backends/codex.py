@@ -985,7 +985,7 @@ def _eligible_agent_definitions(
     *,
     exact: bool,
 ) -> tuple[AgentDef, ...]:
-    definitions = tuple(definition for definition in definitions if not definition.reader_tools)
+    definitions = tuple(d for d in definitions if not d.reader_tools)
     if exact:
         return definitions
     return tuple(

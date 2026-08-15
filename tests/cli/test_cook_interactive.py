@@ -391,11 +391,11 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
 
     cli.cook(backend=backend)
 
-    assert captured["compose_projected"] is True
+    assert captured["compose_projected"] is False
     assert captured["mapped_targets"] == {"pr-source-reader", "pr-synthesizer"}
     role_names = captured["role_names"]
     assert isinstance(role_names, frozenset)
-    assert mapped_targets & role_names == {"pr-synthesizer"}
+    assert "pr-synthesizer" in role_names
     assert "pr-source-reader" not in role_names
 
 

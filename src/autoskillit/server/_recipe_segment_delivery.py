@@ -81,8 +81,14 @@ def _serialized_bytes(value: object) -> bytes:
 
 
 def _admit_carrier(carrier: dict[str, Any]) -> dict[str, Any]:
-    if len(_serialized_bytes(carrier)) >= RECIPE_SEGMENT_MAX_BYTES:
-        raise RecipeSegmentDeliveryError("recipe segment carrier exceeds 10,000 UTF-8 bytes")
+    serialized_size = len(_serialized_bytes(carrier))
+    if serialized_size >= RECIPE_SEGMENT_MAX_BYTES:
+        raise RecipeSegmentDeliveryError(
+            "recipe segment carrier "
+            f"{carrier.get('kind', 'unknown')!r} from step "
+            f"{carrier.get('source_step', 'unknown')!r} is {serialized_size:,} UTF-8 bytes; "
+            f"must be below {RECIPE_SEGMENT_MAX_BYTES:,}"
+        )
     return carrier
 
 

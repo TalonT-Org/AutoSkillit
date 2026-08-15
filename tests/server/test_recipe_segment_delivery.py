@@ -87,6 +87,19 @@ def test_segmented_startup_preserves_domain_failure(monkeypatch: pytest.MonkeyPa
         )
 
 
+def test_carrier_admission_error_identifies_oversized_carrier() -> None:
+    carrier = {"kind": "success", "source_step": "scope", "body": "x" * 10_000}
+    serialized_size = len(segment_delivery_module._serialized_bytes(carrier))
+
+    with pytest.raises(RecipeSegmentDeliveryError) as exc_info:
+        segment_delivery_module._admit_carrier(carrier)
+
+    assert str(exc_info.value) == (
+        "recipe segment carrier 'success' from step 'scope' is "
+        f"{serialized_size:,} UTF-8 bytes; must be below 10,000"
+    )
+
+
 def _install_segmented_ready(ready_context):
     tool_ctx = ready_context.tool_ctx
     state = tool_ctx.recipe_initialization_state

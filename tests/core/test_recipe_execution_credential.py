@@ -102,11 +102,18 @@ def test_recipe_execution_credential_projects_ordered_keys_and_falsey_defaults()
         ),
     )
 
-    wire = build_recipe_execution_credential(snapshot).as_wire_block()
+    credential = build_recipe_execution_credential(snapshot)
+    wire = credential.as_wire_block()
 
-    assert wire["skill_input_shapes"] == {
+    expected_shapes = {
         "invoke": {
             "keys": ["empty", "zero", "disabled", "resolved"],
             "unresolved_defaults": {"empty": "", "zero": 0, "disabled": False},
         }
     }
+    assert wire["skill_input_shapes"] == expected_shapes
+
+    wire["skill_input_shapes"]["invoke"]["keys"].append("mutated")
+    wire["skill_input_shapes"]["invoke"]["unresolved_defaults"]["empty"] = "mutated"
+
+    assert credential.as_wire_block()["skill_input_shapes"] == expected_shapes

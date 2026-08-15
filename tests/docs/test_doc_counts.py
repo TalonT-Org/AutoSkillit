@@ -170,7 +170,9 @@ def _count_hooks_by_event() -> dict[str, int]:
     by_event: dict[str, set[str]] = {
         "PreToolUse": set(),
         "PostToolUse": set(),
+        "PostToolUseFailure": set(),
         "SessionStart": set(),
+        "Stop": set(),
     }
     for hook_def in HOOK_REGISTRY:
         for script in hook_def.scripts:

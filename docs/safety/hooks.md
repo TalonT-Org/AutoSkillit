@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 46 Claude Code hook scripts: 35 PreToolUse, 9 PostToolUse,
-and 2 SessionStart. Every script is stdlib-only Python so it can run before the
+AutoSkillit registers 49 Claude Code hook scripts: 36 PreToolUse, 10 PostToolUse,
+2 SessionStart, and 1 Stop. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (35)
+## PreToolUse hooks (36)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -413,7 +413,7 @@ closed when their identity is malformed or the record cannot be written, while
 malformed JSON and unrelated tools remain fail-open. Codex and headless terminal
 authority do not use this bridge.
 
-## PostToolUse hooks (9)
+## PostToolUse hooks (10)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools

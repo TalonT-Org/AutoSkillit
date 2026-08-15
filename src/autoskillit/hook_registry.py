@@ -17,6 +17,10 @@ from typing import Literal, NamedTuple
 
 from autoskillit.core import installed_plugin_cache_dir, pkg_root
 
+# Events that do not require a tool-name matcher pattern (Stop fires once
+# per turn; SessionStart fires before any tool call).
+_MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset({"SessionStart", "Stop"})
+
 
 @dataclass(frozen=True, slots=True)
 class HookDef:
@@ -51,7 +55,7 @@ class HookDef:
     self_reclaims_resources: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
-        if self.event_type != "SessionStart" and not self.matcher:
+        if self.event_type not in _MATCHERLESS_EVENT_TYPES and not self.matcher:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )

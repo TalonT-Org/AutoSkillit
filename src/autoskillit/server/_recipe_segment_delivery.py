@@ -149,6 +149,11 @@ def _segment_execution_credential(
     credential["invocation_template_digests"] = {
         step_name: digests[step_name] for step_name in ordered_step_names if step_name in digests
     }
+    shapes = credential["skill_input_shapes"]
+    assert isinstance(shapes, dict)
+    credential["skill_input_shapes"] = {
+        step_name: shapes[step_name] for step_name in ordered_step_names if step_name in shapes
+    }
     return credential
 
 

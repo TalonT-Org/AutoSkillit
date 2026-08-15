@@ -117,10 +117,10 @@ class TestResearchReviewRecipe:
         assert recipe.steps["escalate_stop"].action == "stop"
 
     # --- Key routing adaptations ---
-    def test_prepare_research_pr_uses_context_worktree_path(self, recipe) -> None:
+    def test_prepare_research_pr_uses_required_worktree_ingredient(self, recipe) -> None:
         step = recipe.steps["prepare_research_pr"]
-        assert "context.worktree_path" in step.with_args.get("skill_command", "")
-        assert step.with_args.get("cwd") == "${{ context.worktree_path }}"
+        assert "inputs.worktree_path" in step.with_args.get("skill_command", "")
+        assert step.with_args.get("cwd") == "${{ inputs.worktree_path }}"
 
     def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
         step = recipe.steps["finalize_bundle"]

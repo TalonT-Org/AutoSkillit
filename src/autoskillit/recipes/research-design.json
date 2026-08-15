@@ -115,7 +115,7 @@
         "classification_timestamp"
       ],
       "skip_when_false": "inputs.review_design",
-      "on_skip": "select_review_dimensions",
+      "on_skip": "vis_dial",
       "on_context_limit": "synthesize",
       "on_success": "select_review_dimensions",
       "on_failure": "escalate_stop"
@@ -159,7 +159,6 @@
       },
       "optional_context_refs": [
         "is_silent_type",
-        "classification_timestamp",
         "design_review_count"
       ],
       "skip_when_true": "context.is_silent_type",
@@ -200,7 +199,7 @@
         },
         {
           "when": "${{ result.verdict }} == STOP",
-          "route": "resolve_design_review"
+          "route": "gate_design_review_inputs"
         },
         {
           "route": "vis_dial"
@@ -299,18 +298,40 @@
       ],
       "note": "Iteration guard for the apply → synthesize REVISE → revise_design → check_design_review_loop → apply cycle. Re-entry skips re-dialing since experiment_type is stable across revision cycles. Caps design revision loops at 3 iterations. On exhaustion, proceeds to vis_dial with the best available design.\n"
     },
+    "gate_design_review_inputs": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
+        "plan_parts": "${{ context.evaluation_dashboard }}",
+        "audit_cycle_path": ""
+      },
+      "capture": {
+        "required_evaluation_dashboard": "${{ result.plan_path }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == salvaged",
+          "route": "resolve_design_review"
+        },
+        {
+          "route": "design_rejected"
+        }
+      ],
+      "on_failure": "design_rejected",
+      "optional_context_refs": [
+        "evaluation_dashboard"
+      ]
+    },
     "resolve_design_review": {
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
+        "skill_command": "/autoskillit:resolve-design-review ${{ context.required_evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "resolve_design_review",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/resolve-design-review/iter_${{ context.design_review_count }}"
       },
       "optional_context_refs": [
-        "evaluation_dashboard",
-        "experiment_plan",
         "revision_guidance",
         "findings_manifest_path"
       ],

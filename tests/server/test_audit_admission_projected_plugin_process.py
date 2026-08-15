@@ -71,13 +71,14 @@ async def _install_attested_recipe(
     envelope = await _open_kitchen_patched(_RECIPE, _OVERRIDES, monkeypatch)
     assert envelope["success"] is True
     await _credit_initialization_sections(envelope)
-    step = await _pull_step_section(envelope, _STEP)
     receipt = json.loads(await complete_recipe_initialization(envelope["initialization_id"]))
     assert receipt["success"] is True
     credential = receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
     assert isinstance(credential, dict)
     if "recipe_segment" in envelope:
         step, credential = _ready_recipe_segment_step(tool_ctx, _STEP)
+    else:
+        step = await _pull_step_section(envelope, _STEP)
     return credential, step
 
 

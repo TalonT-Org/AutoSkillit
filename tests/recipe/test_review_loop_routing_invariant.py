@@ -21,6 +21,16 @@ REVIEW_LOOP_RECIPES = ["implementation", "remediation", "implementation-groups"]
 
 
 @pytest.mark.parametrize("recipe_name", REVIEW_LOOP_RECIPES)
+def test_review_counter_initialization_failure_cannot_reach_review_pr(
+    recipe_name: str,
+) -> None:
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    assert recipe.steps["init_review_loop_count"].on_failure == "release_issue_failure"
+    assert "review_loop_count" not in recipe.steps["review_pr"].optional_context_refs
+
+
+@pytest.mark.parametrize("recipe_name", REVIEW_LOOP_RECIPES)
 def test_approved_verdict_must_not_route_directly_to_ci(recipe_name: str) -> None:
     """The catch-all on_result may not route directly to check_repo_ci_event.
 

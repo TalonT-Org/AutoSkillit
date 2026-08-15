@@ -49,3 +49,16 @@ def test_every_clause_is_rendered_once_in_its_declared_phase() -> None:
 
 def test_canonical_instruction_is_rendered_from_the_policy() -> None:
     assert _prompts._MCP_RETRY_INSTRUCTION == _prompts._MCP_STARTUP_RECOVERY_SPEC.render()
+
+
+def test_startup_policy_preserves_attested_skill_input_shape() -> None:
+    rendered = _prompts._MCP_STARTUP_RECOVERY_SPEC.render()
+
+    assert (
+        "For structured child inputs, select "
+        "recipe_execution.skill_input_shapes[step_name], initialize skill_inputs "
+        "with exactly its ordered keys, and replace available values in place. "
+        "For unavailable context, copy only that key's advertised "
+        'unresolved_defaults entry by key presence, so "", 0, and False remain '
+        "verbatim; never delete or invent a key."
+    ) in rendered

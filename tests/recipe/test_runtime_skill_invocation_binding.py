@@ -10,6 +10,8 @@ in as an untested proxy for a runtime contract nobody actually exercised.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 from autoskillit.core import (
@@ -34,6 +36,12 @@ _MANIFEST = {
         "dry-walkthrough": {
             "inputs": [
                 {"name": "plan_path", "type": "file_path", "required": True},
+                {
+                    "name": "audit_cycle_path",
+                    "type": "file_path",
+                    "required": False,
+                    "unresolved_default": "",
+                },
             ]
         }
     }
@@ -42,7 +50,11 @@ _EXECUTION_ID = "exec-1"
 _STEP_NAME = "verify"
 
 
-def _template(**extra_with_args: object) -> InvocationTemplate:
+def _template(
+    *,
+    optional_context_refs: list[str] | None = None,
+    **extra_with_args: object,
+) -> InvocationTemplate:
     """Build a compiled InvocationTemplate the way the production initialization
     envelope does (see server/_recipe_execution.py:build_recipe_execution_snapshot),
     without driving the full server stack."""
@@ -56,6 +68,7 @@ def _template(**extra_with_args: object) -> InvocationTemplate:
             "step_name": _STEP_NAME,
             **extra_with_args,
         },
+        optional_context_refs=optional_context_refs or [],
     )
     invocation = bind_step_invocation(_STEP_NAME, step, manifest=_MANIFEST)
     assert invocation.is_valid, invocation.failures
@@ -81,7 +94,12 @@ def _template(**extra_with_args: object) -> InvocationTemplate:
     )
 
 
-def _bind(template: InvocationTemplate, **overrides: BoundScalar):
+def _bind(
+    template: InvocationTemplate,
+    *,
+    skill_inputs: Mapping[str, BoundScalar] | None = None,
+    **overrides: BoundScalar,
+):
     """Bind against ``template``, matching production's shape: the caller
     always supplies actual values for every compiled (with:-declared)
     param — see ``_build_actual_mcp_kwargs`` in tools_execution.py, which
@@ -100,9 +118,54 @@ def _bind(template: InvocationTemplate, **overrides: BoundScalar):
         execution_id=_EXECUTION_ID,
         step_name=_STEP_NAME,
         skill_command="/autoskillit:dry-walkthrough",
-        skill_inputs={"plan_path": "/tmp/plan.md"},
+        skill_inputs=skill_inputs or {"plan_path": "/tmp/plan.md"},
         actual_mcp_kwargs=actual_mcp_kwargs,
     )
+
+
+def _template_with_unresolved_default() -> InvocationTemplate:
+    return _template(
+        optional_context_refs=["audit_cycle_path"],
+        skill_inputs={
+            "plan_path": "/tmp/plan.md",
+            "audit_cycle_path": "${{ context.audit_cycle_path }}",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "skill_inputs",
+    [
+        {"plan_path": "/tmp/plan.md"},
+        {
+            "plan_path": "/tmp/plan.md",
+            "audit_cycle_path": "",
+            "fabricated": "value",
+        },
+    ],
+)
+def test_runtime_binding_rejects_missing_or_fabricated_skill_input_keys(
+    skill_inputs: Mapping[str, BoundScalar],
+) -> None:
+    template = _template_with_unresolved_default()
+
+    with pytest.raises(RuntimeBindingError) as excinfo:
+        _bind(template, skill_inputs=skill_inputs)
+
+    assert excinfo.value.code == "recipe_execution_input_shape"
+
+
+def test_runtime_binding_admits_explicit_advertised_default_without_auto_fill() -> None:
+    template = _template_with_unresolved_default()
+    default = template.invocation.skill_input("audit_cycle_path")
+    assert default is not None and default.unresolved_default == ""
+
+    bound = _bind(
+        template,
+        skill_inputs={"plan_path": "/tmp/plan.md", "audit_cycle_path": ""},
+    )
+
+    assert bound == (("plan_path", "/tmp/plan.md"), ("audit_cycle_path", ""))
 
 
 def test_undeclared_non_empty_value_is_denied() -> None:

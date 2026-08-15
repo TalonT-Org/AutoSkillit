@@ -164,6 +164,36 @@ def test_persisted_audit_contract_preserves_selected_output_mode() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("input_type", "value"),
+    [("str", ""), ("integer", 0), ("boolean", False)],
+)
+def test_persisted_skill_contract_preserves_falsey_unresolved_default(
+    input_type: str,
+    value: str | int | bool,
+) -> None:
+    from autoskillit.server.tools import _execution_helpers as helpers
+
+    selected = helpers.SkillContract(
+        inputs=(
+            helpers.SkillInput(
+                name="value",
+                type=input_type,
+                required=False,
+                unresolved_default=value,
+            ),
+        ),
+        outputs=[],
+    )
+
+    restored = helpers.deserialize_skill_contract(helpers.serialize_skill_contract(selected))
+
+    assert restored is not None
+    restored_default = restored.inputs[0].unresolved_default
+    assert restored_default == value
+    assert type(restored_default) is type(value)
+
+
 class TestGateErrorSchemaNormalization:
     """Gate errors use the standard 9-field response schema."""
 

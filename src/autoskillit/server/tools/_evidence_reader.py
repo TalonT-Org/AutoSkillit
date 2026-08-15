@@ -439,9 +439,14 @@ def _release_call_lock(invocation_dir: Path, descriptor: int, opened: os.stat_re
         current = path.lstat()
         if current.st_dev != opened.st_dev or current.st_ino != opened.st_ino:
             raise EvidenceReaderError("call_lock_tampered")
-        path.unlink()
     finally:
         os.close(descriptor)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
 
 
 def create_evidence_reader_invocation(

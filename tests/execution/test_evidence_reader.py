@@ -21,6 +21,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.evidence_reader import (
     EvidenceReaderLaunchError,
+    EvidenceReaderResultStatus,
     evidence_reader_mcp_transport,
     launch_evidence_reader,
 )
@@ -575,6 +576,47 @@ def test_stream_validation_requires_initial_read_before_continuation() -> None:
             max_result_bytes=256_000,
         )
     assert raised.value.code == "mcp_call_sequence_invalid"
+
+
+def test_stream_validation_allows_recovery_after_failed_continuation() -> None:
+    citation = {
+        "citation_id": _CITATION,
+        "location": {"start_byte": 0, "end_byte": 5, "start_line": 1, "end_line": 1},
+    }
+
+    def call(tool: str, result: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "type": "item.completed",
+            "item": {"type": "mcp_tool_call", "tool_name": tool, "result": result},
+        }
+
+    events = [
+        {"type": "thread.started", "thread_id": _THREAD},
+        call("read_authorized_artifact", citation),
+        call(
+            "get_authorized_artifact_page",
+            {"status": "error", "code": "continuation_invalid"},
+        ),
+        call("read_authorized_artifact", citation),
+        {
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": json.dumps(_payload())},
+        },
+        {"type": "turn.completed", "usage": {}},
+    ]
+
+    result = launcher._validate_stream(
+        ("\n".join(json.dumps(event) for event in events) + "\n").encode(),
+        definition=_definition(),
+        allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+        canary=_CANARY,
+        scope=_SCOPE,
+        snapshot=_SNAPSHOT,
+        requested_fields=("field",),
+        max_result_bytes=256_000,
+    )
+
+    assert result.status is EvidenceReaderResultStatus.ANSWERED
 
 
 def test_stream_validation_rejects_conflicting_citation_observations() -> None:

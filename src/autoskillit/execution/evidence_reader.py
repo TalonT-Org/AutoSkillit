@@ -998,6 +998,7 @@ def _validate_stream(
     started_mcp_calls: dict[str, str] = {}
     completed_mcp_call_ids: set[str] = set()
     completed_mcp_tools: list[str] = []
+    successful_mcp_tools: list[str] = []
     definition_bare_tools = canonical_reader_tools_to_bare(definition.reader_tools)
     tool_aliases = {
         **dict(zip(definition.reader_tools, definition_bare_tools, strict=True)),
@@ -1061,7 +1062,10 @@ def _validate_stream(
                     if isinstance(call_id, str):
                         completed_mcp_call_ids.add(call_id)
                     completed_mcp_tools.append(normalized_tool)
-                    for citation_id, location in _observed_citations(item).items():
+                    call_citations = _observed_citations(item)
+                    if call_citations:
+                        successful_mcp_tools.append(normalized_tool)
+                    for citation_id, location in call_citations.items():
                         if citation_id in observed and observed[citation_id] != location:
                             raise EvidenceReaderLaunchError("citation_invalid")
                         observed[citation_id] = location
@@ -1083,12 +1087,17 @@ def _validate_stream(
         raise EvidenceReaderLaunchError("stream_shape_forbidden")
     if len(thread_ids) != 1 or terminal != 1 or len(result_messages) != 1:
         raise EvidenceReaderLaunchError("terminal_result_invalid")
-    if (
-        set(started_mcp_calls) - completed_mcp_call_ids
-        or not completed_mcp_tools
-        or completed_mcp_tools[0] != "read_authorized_artifact"
-        or any(tool != "get_authorized_artifact_page" for tool in completed_mcp_tools[1:])
-    ):
+    initial_seen = False
+    page_started = False
+    sequence_invalid = not completed_mcp_tools
+    for tool in successful_mcp_tools:
+        if tool == "read_authorized_artifact":
+            sequence_invalid = sequence_invalid or page_started
+            initial_seen = True
+        elif tool == "get_authorized_artifact_page":
+            sequence_invalid = sequence_invalid or not initial_seen
+            page_started = True
+    if set(started_mcp_calls) - completed_mcp_call_ids or sequence_invalid:
         raise EvidenceReaderLaunchError("mcp_call_sequence_invalid")
     result_bytes = result_messages[0].encode("utf-8")
     if len(result_bytes) > max_result_bytes:

@@ -2361,10 +2361,12 @@ class _ClaudeStartupProbeResult(NamedTuple):
     ready: bool
     tool_list_observed: bool
     open_kitchen_result_observed: bool
+    run_skill_result_observed: bool
     question_detected: bool
     output_bytes: int
     output_sha256: str
     trace_path: Path
+    measurement_path: Path | None
     plugin_identity: dict[str, object]
     attempt_classifications: tuple[str, ...]
 
@@ -2489,6 +2491,7 @@ def _run_claude_startup_probe(
     *,
     delay_ms: int,
     connect_timeout_ms: int,
+    run_skill_probe: bool = False,
 ) -> _ClaudeStartupProbeResult:
     from autoskillit.cli._plugin_artifact import interactive_plugin_authority
     from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
@@ -2570,6 +2573,19 @@ def _run_claude_startup_probe(
                 "PATH": os.pathsep.join((str(shim_dir), environment.get("PATH", ""))),
             }
         )
+        prompt = (
+            "Call open_kitchen exactly once with no arguments. During startup follow the "
+            "bounded silent retry contract. After a successful result output "
+            "AUTOSKILLIT_STARTUP_READY and no question."
+        )
+        if run_skill_probe:
+            prompt = (
+                "Call open_kitchen exactly once with no arguments. After it succeeds, call "
+                "run_skill exactly once with skill_command='/autoskillit:smoke-task Output "
+                "exactly installed_delivery_probe=READY', cwd='"
+                f"{project_dir}', and step_name='installed_delivery_probe'. After that call "
+                "finishes, output AUTOSKILLIT_INSTALLED_DELIVERY_READY and no question."
+            )
         command = [
             str(executable),
             "--dangerously-skip-permissions",
@@ -2577,11 +2593,7 @@ def _run_claude_startup_probe(
             str(binding.plugin_dir),
             "--append-system-prompt",
             _MCP_RETRY_INSTRUCTION,
-            (
-                "Call open_kitchen now. During startup follow the bounded silent retry "
-                "contract. After a successful result output AUTOSKILLIT_STARTUP_READY "
-                "and no question."
-            ),
+            prompt,
             "--tools",
             "AskUserQuestion",
         ]
@@ -2600,7 +2612,8 @@ def _run_claude_startup_probe(
         )
         os.close(slave_fd)
         retained = bytearray()
-        deadline = time.monotonic() + 90
+        deadline = time.monotonic() + (180 if run_skill_probe else 90)
+        terminal_event = "run_skill_result" if run_skill_probe else "open_kitchen_result"
         try:
             while time.monotonic() < deadline:
                 readable, _, _ = select.select([master_fd], [], [], 0.1)
@@ -2614,7 +2627,7 @@ def _run_claude_startup_probe(
                     retained.extend(chunk)
                     del retained[: -256 * 1024]
                 if any(
-                    event.get("event") == "open_kitchen_result"
+                    event.get("event") == terminal_event
                     for event in _read_startup_trace(trace_path)
                 ):
                     break
@@ -2638,15 +2651,28 @@ def _run_claude_startup_probe(
         event.get("event") == "open_kitchen_result" and event.get("outcome") == "success"
         for event in trace_events
     )
+    run_skill_result_observed = any(
+        event.get("event") == "run_skill_result" and event.get("outcome") == "success"
+        for event in trace_events
+    )
     attempt_pids = [
         int(event["server_pid"])
         for event in trace_events
         if event.get("event") == "server_delay_started"
     ]
+    measurement_path = (
+        trace_dir / f"installed-claude-delivery-{time.time_ns()}.json" if run_skill_probe else None
+    )
+    elapsed_ns = time.monotonic_ns() - started_ns
     result = _ClaudeStartupProbeResult(
-        ready=tool_list_observed and open_kitchen_result_observed,
+        ready=(
+            tool_list_observed
+            and open_kitchen_result_observed
+            and (run_skill_result_observed if run_skill_probe else True)
+        ),
         tool_list_observed=tool_list_observed,
         open_kitchen_result_observed=open_kitchen_result_observed,
+        run_skill_result_observed=run_skill_result_observed,
         question_detected=(
             b"askuserquestion" in lowered
             or b"what would you like" in lowered
@@ -2655,6 +2681,7 @@ def _run_claude_startup_probe(
         output_bytes=len(output),
         output_sha256=hashlib.sha256(output).hexdigest(),
         trace_path=trace_path,
+        measurement_path=measurement_path,
         plugin_identity=plugin_identity,
         attempt_classifications=tuple(
             classify_attempt(
@@ -2672,10 +2699,11 @@ def _run_claude_startup_probe(
                     "event": "probe_terminal",
                     "delay_ms": delay_ms,
                     "connect_timeout_ms": connect_timeout_ms,
-                    "elapsed_ms": (time.monotonic_ns() - started_ns) // 1_000_000,
+                    "elapsed_ms": elapsed_ns // 1_000_000,
                     "ready": result.ready,
                     "tool_list_observed": result.tool_list_observed,
                     "open_kitchen_result_observed": (result.open_kitchen_result_observed),
+                    "run_skill_result_observed": result.run_skill_result_observed,
                     "question_detected": result.question_detected,
                     "output_bytes": result.output_bytes,
                     "output_sha256": result.output_sha256,
@@ -2684,6 +2712,34 @@ def _run_claude_startup_probe(
                 sort_keys=True,
             )
             + "\n"
+        )
+    if measurement_path is not None:
+        call_measurements = [
+            event
+            for event in trace_events
+            if event.get("event") in {"open_kitchen_result", "run_skill_result"}
+        ]
+        run_result = next(
+            (event for event in call_measurements if event.get("event") == "run_skill_result"),
+            None,
+        )
+        measurement_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "plugin_identity": plugin_identity,
+                    "calls": call_measurements,
+                    "retained_occupancy_bytes": result.output_bytes,
+                    "completed": result.ready,
+                    "elapsed_seconds": elapsed_ns / 1_000_000_000,
+                    "cost_usd": run_result.get("cost_usd") if run_result is not None else None,
+                    "trace_path": str(trace_path),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
         )
     return result
 
@@ -2760,6 +2816,59 @@ def test_claude_startup_readiness_addressability_trace(
             < int(successful_attempt["monotonic_ns"])
             < int(success["monotonic_ns"])
         )
+
+
+@_skip_unless_claude_startup_smoke
+@pytest.mark.timeout(240)
+def test_installed_claude_delivery_measurement(tmp_path: Path) -> None:
+    result = _run_claude_startup_probe(
+        tmp_path,
+        delay_ms=0,
+        connect_timeout_ms=5_000,
+        run_skill_probe=True,
+    )
+
+    assert result.ready, f"installed delivery did not complete; trace: {result.trace_path}"
+    assert result.open_kitchen_result_observed
+    assert result.run_skill_result_observed
+    assert result.measurement_path is not None
+    measurement = json.loads(result.measurement_path.read_text(encoding="utf-8"))
+    assert measurement["plugin_identity"] == result.plugin_identity
+    assert measurement["completed"] is True
+    assert measurement["retained_occupancy_bytes"] == result.output_bytes
+    assert measurement["elapsed_seconds"] > 0
+    assert "cost_usd" in measurement
+
+    trace_events = _read_startup_trace(result.trace_path)
+    calls = [
+        event
+        for event in trace_events
+        if event.get("event") == "client_message" and event.get("method") == "tools/call"
+    ]
+    results = [
+        event
+        for event in trace_events
+        if event.get("event") in {"open_kitchen_result", "run_skill_result"}
+    ]
+    assert (
+        len([event for event in calls if str(event.get("tool_name", "")).endswith("open_kitchen")])
+        == 1
+    )
+    assert (
+        len([event for event in calls if str(event.get("tool_name", "")).endswith("run_skill")])
+        == 1
+    )
+    assert [event["event"] for event in results] == [
+        "open_kitchen_result",
+        "run_skill_result",
+    ]
+    assert all(event["outcome"] == "success" for event in results)
+    assert all(event["plugin_identity"] == result.plugin_identity for event in results)
+    assert all(event["raw_chars"] >= 0 for event in results)
+    assert all(event["utf8_bytes"] >= event["raw_chars"] for event in results)
+    assert all(event["client_serialized_chars"] >= event["raw_chars"] for event in results)
+    assert all(event["estimated_tokens"] == event["utf8_bytes"] // 4 for event in results)
+    assert all(event["elapsed_ns"] > 0 for event in results)
 
 
 @_skip_unless_claude_startup_smoke

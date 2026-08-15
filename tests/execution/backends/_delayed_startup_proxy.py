@@ -42,6 +42,35 @@ def _argument_shape(params: object) -> dict[str, str]:
     return {str(key): type(value).__name__ for key, value in list(arguments.items())[:32]}
 
 
+def response_measurements(texts: list[str]) -> dict[str, object]:
+    """Measure one tool result without conflating content, serialization, or cost."""
+    raw_content = "".join(texts)
+    cost_usd: float | None = None
+    for text in texts:
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        for key in ("cost_usd", "total_cost_usd"):
+            value = payload.get(key)
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                cost_usd = float(value)
+                break
+        if cost_usd is not None:
+            break
+    utf8_bytes = len(raw_content.encode("utf-8"))
+    return {
+        "raw_chars": len(raw_content),
+        "utf8_bytes": utf8_bytes,
+        "client_serialized_chars": len(json.dumps(raw_content)),
+        "estimated_tokens": utf8_bytes // 4,
+        "raw_content_sha256": hashlib.sha256(raw_content.encode("utf-8")).hexdigest(),
+        "cost_usd": cost_usd,
+    }
+
+
 def classify_attempt(
     events: list[dict[str, object]],
     *,
@@ -190,12 +219,7 @@ def _proxy_child_stdout(
                 event_count=event_count,
                 plugin_identity=plugin_identity,
             )
-        elif (
-            request is not None
-            and request.method == "tools/call"
-            and isinstance(request.tool_name, str)
-            and request.tool_name.endswith("open_kitchen")
-        ):
+        elif request is not None and request.method == "tools/call":
             result = payload.get("result")
             content = result.get("content", []) if isinstance(result, dict) else []
             texts = [
@@ -225,11 +249,19 @@ def _proxy_child_stdout(
                 outcome = "tool_error"
             else:
                 outcome = "success"
+            response_monotonic_ns = time.monotonic_ns()
+            if isinstance(request.tool_name, str) and request.tool_name.endswith("open_kitchen"):
+                event_name = "open_kitchen_result"
+            elif isinstance(request.tool_name, str) and request.tool_name.endswith("run_skill"):
+                event_name = "run_skill_result"
+            else:
+                event_name = "tool_call_result"
             _record(
                 trace_path,
                 write_lock,
                 {
-                    "event": "open_kitchen_result",
+                    "event": event_name,
+                    "tool_name": request.tool_name,
                     "outcome": outcome,
                     "is_error": outcome != "success",
                     "has_jsonrpc_error": outcome == "protocol_error",
@@ -241,6 +273,10 @@ def _proxy_child_stdout(
                         "".join(texts).encode("utf-8")
                     ).hexdigest(),
                     "recipe_segment_sha256": recipe_segment_sha256,
+                    "request_monotonic_ns": request.monotonic_ns,
+                    "response_monotonic_ns": response_monotonic_ns,
+                    "elapsed_ns": response_monotonic_ns - request.monotonic_ns,
+                    **response_measurements(texts),
                 },
                 event_count=event_count,
                 plugin_identity=plugin_identity,

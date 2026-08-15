@@ -7,9 +7,14 @@ from typing import Any
 
 import pytest
 
-from autoskillit.core import CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
+from autoskillit.core import (
+    CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
+    RECIPE_RESPONSE_MAX_UTF8_BYTES,
+)
+from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline import ReadyRecipe, ToolContext
 from autoskillit.server._recipe_delivery import initialize_host_client_attestation
+from autoskillit.server._recipe_segment_delivery import RECIPE_SEGMENT_MAX_BYTES
 from tests.server._helpers import McpCallCounter, simulate_session_start
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.anyio]
@@ -98,96 +103,106 @@ async def _record_implementation_bounded_path(
     return counter
 
 
-async def test_claude_attested_implementation_delivers_successfully(
+@pytest.mark.parametrize("attested", [False, True], ids=["unattested", "attested"])
+@pytest.mark.parametrize(
+    ("backend_name", "recipe_name", "expected_shape"),
+    [
+        ("claude-code", "implementation", "SEGMENTED_INLINE"),
+        ("claude-code", "consolidate-health-reports", "NON_SEGMENTED_INLINE"),
+        ("claude-code", "research", "NON_SEGMENTED_ENVELOPE"),
+        ("codex", "implementation", "SEGMENTED_INLINE"),
+        ("codex", "consolidate-health-reports", "NON_SEGMENTED_ENVELOPE"),
+        ("codex", "research", "NON_SEGMENTED_ENVELOPE"),
+    ],
+    ids=[
+        "claude-implementation",
+        "claude-small",
+        "claude-research",
+        "codex-implementation",
+        "codex-small",
+        "codex-research",
+    ],
+)
+async def test_delivery_surface_matrix_reaches_ready_with_complete_credit(
+    backend_name: str,
+    attested: bool,
+    recipe_name: str,
+    expected_shape: str,
     tool_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Claude backend with attestation delivers the implementation recipe.
+    """Exercise every valid backend/attestation/recipe-shape combination."""
+    if attested:
+        monkeypatch.setenv(
+            "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+            str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
+        )
+        monkeypatch.setenv("AUTOSKILLIT_ATTESTED_META_SUPPORT", "1")
+        host_attestation = initialize_host_client_attestation()
+        assert host_attestation is not None
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_ATTESTED_META_SUPPORT", raising=False)
+        host_attestation = None
+    monkeypatch.setattr(tool_ctx, "host_client_attestation", host_attestation)
 
-    The complete canonical artifact remains durable, while public startup is
-    the compact initial segment on both ordinary backends.
-    """
-    monkeypatch.setenv(
-        "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
-        str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
-    )
-    monkeypatch.setenv("AUTOSKILLIT_ATTESTED_META_SUPPORT", "1")
-    tool_ctx.host_client_attestation = initialize_host_client_attestation()
     counter = await simulate_session_start(
-        "implementation",
-        "claude-code",
+        recipe_name,
+        backend_name,
         tool_ctx=tool_ctx,
         monkeypatch=monkeypatch,
     )
-    assert counter.delivery_mode == "ordinary_inline"
-    assert len(counter) == 1
 
-    # Verify the open_kitchen response has usable content
-    response = counter.responses[0]
-    envelope = json.loads(response.raw)
-    assert envelope.get("success") is True
-    assert response.delivery_shape == "SEGMENTED_INLINE"
-    assert response.segment_or_section == "startup"
-    assert response.utf8_bytes < 10_000
-    assert counter.totals() == {
-        "raw_chars": response.raw_chars,
-        "utf8_bytes": response.utf8_bytes,
-        "client_serialized_chars": response.client_serialized_chars,
-        "estimated_tokens": response.estimated_tokens,
-        "responses": 1,
-    }
-    assert envelope["recipe_segment"]["kind"] == "startup"
-    assert envelope["recipe_segment"]["bodies"]
-    assert "content" not in envelope
-    assert "flow_records" not in envelope
-    assert "required_sections" not in envelope
-    assert isinstance(tool_ctx.recipe_initialization_state, ReadyRecipe)
+    startup = counter.responses[0]
+    payload = json.loads(startup.raw)
+    capabilities = BACKEND_REGISTRY[backend_name]().capabilities
+    assert startup.delivery_shape == expected_shape
+    assert payload["success"] is True
+    assert startup.initialization_id
 
+    if expected_shape == "SEGMENTED_INLINE":
+        assert len(counter.responses) == 1
+        assert startup.utf8_bytes < RECIPE_SEGMENT_MAX_BYTES
+        assert payload["recipe_segment"]["kind"] == "startup"
+        assert payload["recipe_segment"]["bodies"]
+        assert "content" not in payload
+        assert "flow_records" not in payload
+        assert "required_sections" not in payload
+    elif expected_shape == "NON_SEGMENTED_INLINE":
+        assert len(counter.responses) == 1
+        assert startup.segment_or_section == "content"
+        assert startup.client_serialized_chars <= (
+            capabilities.unnegotiated_tool_result_token_limit * 4
+        )
+        assert "content" in payload
+    else:
+        page_records = [
+            record for record in counter.responses if record.tool_name == "get_recipe_section"
+        ]
+        completion_records = [
+            record
+            for record in counter.responses
+            if record.tool_name == "complete_recipe_initialization"
+        ]
+        expected_pages = sum(
+            requirement["total_parts"] for requirement in payload["required_sections"]
+        )
+        assert startup.utf8_bytes <= capabilities.unnegotiated_tool_result_token_limit
+        assert len(page_records) == expected_pages
+        assert len({(record.segment_or_section, record.part) for record in page_records}) == (
+            expected_pages
+        )
+        assert all(record.utf8_bytes <= RECIPE_RESPONSE_MAX_UTF8_BYTES for record in page_records)
+        assert len(completion_records) == 1
+        receipt = json.loads(completion_records[0].raw)
+        assert receipt["success"] is True
+        assert receipt["initialization_id"] == startup.initialization_id
 
-async def test_claude_small_recipe_delivers_inline(
-    tool_ctx: ToolContext,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A small recipe with attestation resolves to one-call inline."""
-    monkeypatch.setenv(
-        "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
-        str(CLAUDE_INJECTED_CLIENT_RESULT_TOKENS),
+    assert counter.totals()["responses"] == len(counter.responses)
+    assert all(
+        record.initialization_id == startup.initialization_id for record in counter.responses
     )
-    monkeypatch.setenv("AUTOSKILLIT_ATTESTED_META_SUPPORT", "1")
-    tool_ctx.host_client_attestation = initialize_host_client_attestation()
-    counter = await simulate_session_start(
-        "consolidate-health-reports",
-        "claude-code",
-        tool_ctx=tool_ctx,
-        monkeypatch=monkeypatch,
-    )
-    assert counter.delivery_mode == "ordinary_inline", (
-        f"Expected ordinary_inline for small recipe, got {counter.delivery_mode}"
-    )
-    assert len(counter) == 1, f"Expected 1 call, got {len(counter)}"
-    assert counter.responses[0].delivery_shape == "NON_SEGMENTED_INLINE"
-    assert counter.responses[0].segment_or_section == "content"
-    assert isinstance(tool_ctx.recipe_initialization_state, ReadyRecipe)
-
-
-async def test_codex_segmented_delivery_completes(
-    tool_ctx: ToolContext,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Codex backend delivers implementation startup in one compact response."""
-    counter = await simulate_session_start(
-        "implementation",
-        "codex",
-        tool_ctx=tool_ctx,
-        monkeypatch=monkeypatch,
-    )
-    assert counter.delivery_mode == "ordinary_inline"
-    assert len(counter) == 1
-    response = counter.responses[0]
-    envelope = json.loads(response.raw)
-    assert response.delivery_shape == "SEGMENTED_INLINE"
-    assert envelope["recipe_segment"]["kind"] == "startup"
-    assert response.utf8_bytes < 10_000
+    assert counter.totals(bucket="overhead")["responses"] == 0
     assert isinstance(tool_ctx.recipe_initialization_state, ReadyRecipe)
 
 
@@ -211,6 +226,14 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
     ]
     assert len(counter.responses) == 1 + len(automatic) + len(manual)
     totals = counter.totals()
+    # Drift baseline, not a production-safe threshold.
+    assert totals == {
+        "raw_chars": 21_879,
+        "utf8_bytes": 21_893,
+        "client_serialized_chars": 24_480,
+        "estimated_tokens": 5_471,
+        "responses": 5,
+    }
     assert totals["responses"] == len(counter.responses)
     assert totals["raw_chars"] == sum(record.raw_chars for record in counter.responses)
     assert totals["utf8_bytes"] == sum(record.utf8_bytes for record in counter.responses)
@@ -221,39 +244,3 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
         record.estimated_tokens for record in counter.responses
     )
     assert counter.totals(bucket="overhead")["responses"] == 0
-
-
-@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
-async def test_non_segmented_envelope_records_every_page_and_completion(
-    backend_name: str,
-    tool_ctx: ToolContext,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    counter = await simulate_session_start(
-        "research",
-        backend_name,
-        tool_ctx=tool_ctx,
-        monkeypatch=monkeypatch,
-    )
-
-    assert counter.delivery_mode in {"claude_code_bounded", "codex_bounded"}
-    assert counter.responses[0].delivery_shape == "NON_SEGMENTED_ENVELOPE"
-    page_records = [
-        record for record in counter.responses if record.tool_name == "get_recipe_section"
-    ]
-    completion_records = [
-        record
-        for record in counter.responses
-        if record.tool_name == "complete_recipe_initialization"
-    ]
-    assert page_records
-    assert len(completion_records) == 1
-    assert all(record.initialization_id for record in counter.responses)
-    assert all(record.segment_or_section for record in page_records)
-    assert all(record.part is not None for record in page_records)
-    assert counter.totals()["responses"] == len(counter.responses)
-    assert counter.totals(bucket="overhead")["responses"] == 0
-    assert isinstance(tool_ctx.recipe_initialization_state, ReadyRecipe)
-    receipt = json.loads(completion_records[0].raw)
-    assert receipt["success"] is True
-    assert receipt["initialization_id"] == completion_records[0].initialization_id

@@ -816,13 +816,16 @@ class TestEvidenceReaderBindingVisibility:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from types import SimpleNamespace
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, Mock
 
         from autoskillit.core import EVIDENCE_READER_TOOLS, SessionType
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server import _lifespan, mcp
+        from autoskillit.server.tools import _evidence_reader
 
         self._set_complete_identity(monkeypatch)
+        validate = Mock()
+        monkeypatch.setattr(_evidence_reader, "validate_evidence_reader_startup", validate)
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
         ordinary_boot = AsyncMock()
         monkeypatch.setitem(_lifespan._LIFESPAN_BOOT_REGISTRY, SessionType.SKILL, ordinary_boot)
@@ -855,6 +858,32 @@ class TestEvidenceReaderBindingVisibility:
         assert list(await mcp.list_resource_templates()) == []
         assert gate.enabled is True
         ordinary_boot.assert_not_awaited()
+        validate.assert_called_once()
+
+    @pytest.mark.anyio
+    async def test_complete_but_unauthenticated_identity_aborts_startup(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan
+        from autoskillit.server.tools import _evidence_reader
+
+        self._set_complete_identity(monkeypatch)
+        monkeypatch.setattr(
+            _evidence_reader,
+            "validate_evidence_reader_startup",
+            Mock(side_effect=_evidence_reader.EvidenceReaderError("authority_tampered")),
+        )
+        gate = DefaultGateState()
+
+        with pytest.raises(_evidence_reader.EvidenceReaderError, match="authority_tampered"):
+            await _lifespan._run_lifespan_session_boot(SimpleNamespace(gate=gate))
+
+        assert gate.enabled is False
 
     @pytest.mark.anyio
     async def test_complete_ambient_identity_does_not_reveal_brokers_before_boot(

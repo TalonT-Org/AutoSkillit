@@ -33,6 +33,7 @@ from autoskillit.server.tools._evidence_reader import (
     load_evidence_reader_receipts,
     read_evidence_reader_page,
     revoke_evidence_reader_invocation,
+    validate_evidence_reader_startup,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -157,6 +158,22 @@ def test_invocations_use_unique_private_directories_and_files(tmp_path: Path) ->
             stat.S_IMODE(path.stat().st_mode) == 0o600
             for path in invocation.invocation_dir.iterdir()
         )
+
+
+def test_startup_validation_reopens_complete_unexpired_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, invocation = _create(tmp_path)
+
+    validate_evidence_reader_startup(context, dict(invocation.environment))
+
+    expired_context, expired = _create(tmp_path, expires_at=time.time() + 60)
+    expires_at = expired.expires_at
+    monkeypatch.setattr(reader_module.time, "time", lambda: expires_at + 1)
+    _assert_error(
+        _ErrorCode.AUTHORITY_EXPIRED,
+        lambda: validate_evidence_reader_startup(expired_context, dict(expired.environment)),
+    )
 
 
 @pytest.mark.parametrize(
@@ -553,7 +570,7 @@ async def test_broker_boundary_never_raises_and_shields_cancellation(
     payload = json.loads(await handler_module.read_authorized_artifact())
 
     if failure == "cancelled":
-        assert payload == {"success": False, "error": "cancelled", "subtype": "cancelled"}
+        assert payload == {"status": "error", "code": "cancelled"}
     else:
         assert payload == {"status": "error", "code": _ErrorCode.BROKER_UNAVAILABLE}
     assert "private failure detail" not in json.dumps(payload)

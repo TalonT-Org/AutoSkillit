@@ -79,6 +79,7 @@ from autoskillit.execution.diff_annotator import (
     select_review_agents,
 )
 from autoskillit.execution.evidence_reader import (
+    EvidenceReaderConformanceEvidence,
     EvidenceReaderLaunchError,
     EvidenceReaderLaunchResult,
     EvidenceReaderResultStatus,
@@ -288,6 +289,7 @@ __all__ = [
     "parse_hunk_ranges",
     "select_review_agents",
     # evidence_reader
+    "EvidenceReaderConformanceEvidence",
     "EvidenceReaderLaunchError",
     "EvidenceReaderLaunchResult",
     "EvidenceReaderResultStatus",

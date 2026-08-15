@@ -122,7 +122,7 @@ def _payload(*, canary: str = _CANARY, scope: str = _SCOPE) -> dict[str, Any]:
 def _stream(
     *,
     payload: dict[str, Any] | None = None,
-    tool_name: str = "get_authorized_artifact_page",
+    tool_name: str = "read_authorized_artifact",
 ) -> bytes:
     citation = {
         "citation_id": _CITATION,
@@ -174,6 +174,8 @@ def _launch_kwargs(tmp_path: Path) -> dict[str, Any]:
         "prompt": "Extract the requested field",
         "mcp_transport": _transport(),
         "provider_env": {"OPENAI_API_KEY": "provider-secret"},
+        "credential_file": None,
+        "requested_fields": ("field",),
         "repository_root": repository,
         "worktree_root": worktree,
         "common_git_dir": common_git,
@@ -256,6 +258,16 @@ def test_launch_uses_sterile_private_home_cwd_config_environment_and_command(
 
     monkeypatch.setattr(launcher, "_probe_catalog", probe_catalog)
     monkeypatch.setattr(launcher, "_probe_mcp", probe_mcp)
+    monkeypatch.setattr(
+        launcher,
+        "_probe_conformance",
+        lambda *args, **kwargs: "codex-cli 0.147.0",
+    )
+    monkeypatch.setattr(
+        launcher,
+        "_probe_cli_version",
+        lambda *args, **kwargs: "codex-cli 0.147.0",
+    )
     monkeypatch.setattr(launcher, "_run_bounded", run_final)
 
     result = launch_evidence_reader(definition, invocation, **kwargs)
@@ -273,19 +285,39 @@ def test_launch_uses_sterile_private_home_cwd_config_environment_and_command(
     assert set(environment) == expected_environment
     assert environment["HOME"] == environment["CODEX_HOME"] == environment["CODEX_SQLITE_HOME"]
     assert observed["cwd_mode"] == 0o700
-    assert observed["home_files"] == {"config.toml": 0o600, "models.json": 0o600}
+    assert observed["home_files"] == {
+        "config.toml": 0o600,
+        "evidence-reader-probe.schema.json": 0o600,
+        "evidence-reader-result.schema.json": 0o600,
+        "models.json": 0o600,
+    }
     assert observed["cwd_files"] == ()
     config = observed["config"]
     assert 'approval_policy = "never"' in config
     assert 'sandbox_mode = "read-only"' in config
+    assert 'forced_login_method = "api"' in config
+    assert 'inherit = "none"' in config
+    assert "project_root_markers = []" in config
     assert "[agents]\nenabled = false" in config
     assert all(
         tool in config for tool in ("get_authorized_artifact_page", "read_authorized_artifact")
     )
-    assert not any(name in config for name in ("run_cmd", "read_file", "shell_tool"))
+    assert "shell_tool = false" in config
+    assert not any(name in config for name in ("run_cmd", "read_file"))
     command = observed["command"]
     assert command[0] == "/usr/bin/codex"
     assert "exec" in command and "--json" in command
+    for flag in (
+        "--strict-config",
+        "--ignore-rules",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--output-schema",
+        "-C",
+    ):
+        assert flag in command
+    assert "--add-dir" not in command
+    assert "--dangerously-bypass-hook-trust" not in command
     assert _CANARY in command[-1] and _SCOPE in command[-1] and _SNAPSHOT in command[-1]
     assert result.thread_id == _THREAD
     assert result.citations[0].citation_id == _CITATION
@@ -361,6 +393,7 @@ def test_stream_validation_rejects_malformed_unknown_unauthorized_oversized_inco
             canary=_CANARY,
             scope=_SCOPE,
             snapshot=_SNAPSHOT,
+            requested_fields=("field",),
             max_result_bytes=max_result_bytes,
         ),
     )
@@ -384,9 +417,162 @@ def test_stream_validation_rejects_commands_and_file_changes(item_type: str) -> 
             canary=_CANARY,
             scope=_SCOPE,
             snapshot=_SNAPSHOT,
+            requested_fields=("field",),
             max_result_bytes=256_000,
         ),
     )
+
+
+@pytest.mark.parametrize(
+    ("status", "evidence", "gaps", "complete", "truncated", "stop_reason", "fields"),
+    [
+        (
+            "partial",
+            _payload()["evidence"],
+            [{"field": "missing", "reason": "artifact exhausted"}],
+            True,
+            False,
+            "artifact exhausted",
+            ("field", "missing"),
+        ),
+        (
+            "blocked",
+            [],
+            [{"field": "field", "reason": "broker unavailable"}],
+            True,
+            False,
+            "concrete blocker",
+            ("field",),
+        ),
+    ],
+)
+def test_stream_validation_accepts_exact_partial_and_blocked_partitions(
+    status: str,
+    evidence: list[dict[str, Any]],
+    gaps: list[dict[str, str]],
+    complete: bool,
+    truncated: bool,
+    stop_reason: str,
+    fields: tuple[str, ...],
+) -> None:
+    payload = _payload()
+    payload.update(
+        status=status,
+        evidence=evidence,
+        coverage_gaps=gaps,
+        complete=complete,
+        truncated=truncated,
+        stop_reason=stop_reason,
+    )
+    result = launcher._validate_stream(
+        _stream(payload=payload),
+        definition=_definition(),
+        allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+        canary=_CANARY,
+        scope=_SCOPE,
+        snapshot=_SNAPSHOT,
+        requested_fields=fields,
+        max_result_bytes=256_000,
+    )
+    assert result.status.value == status
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda payload: payload["coverage_gaps"].append(
+            {"field": "field", "reason": "duplicate partition"}
+        ),
+        lambda payload: payload.update(status="partial"),
+        lambda payload: payload.update(truncated=True),
+        lambda payload: payload.update(stop_reason="concrete blocker"),
+    ],
+)
+def test_stream_validation_rejects_inconsistent_semantic_states(mutate: Any) -> None:
+    payload = _payload()
+    mutate(payload)
+    with pytest.raises(EvidenceReaderLaunchError) as raised:
+        launcher._validate_stream(
+            _stream(payload=payload),
+            definition=_definition(),
+            allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+            canary=_CANARY,
+            scope=_SCOPE,
+            snapshot=_SNAPSHOT,
+            requested_fields=("field",),
+            max_result_bytes=256_000,
+        )
+    assert raised.value.code in {"result_partition_invalid", "result_state_invalid"}
+
+
+def test_stream_validation_requires_initial_read_before_continuation() -> None:
+    with pytest.raises(EvidenceReaderLaunchError) as raised:
+        launcher._validate_stream(
+            _stream(tool_name="get_authorized_artifact_page"),
+            definition=_definition(),
+            allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+            canary=_CANARY,
+            scope=_SCOPE,
+            snapshot=_SNAPSHOT,
+            requested_fields=("field",),
+            max_result_bytes=256_000,
+        )
+    assert raised.value.code == "mcp_call_sequence_invalid"
+
+
+def test_stream_validation_rejects_conflicting_citation_observations() -> None:
+    events = [
+        {"type": "thread.started", "thread_id": _THREAD},
+        {
+            "type": "item.completed",
+            "item": {
+                "type": "mcp_tool_call",
+                "tool_name": "read_authorized_artifact",
+                "result": {
+                    "citation_id": _CITATION,
+                    "location": {
+                        "start_byte": 0,
+                        "end_byte": 5,
+                        "start_line": 1,
+                        "end_line": 1,
+                    },
+                },
+            },
+        },
+        {
+            "type": "item.completed",
+            "item": {
+                "type": "mcp_tool_call",
+                "tool_name": "get_authorized_artifact_page",
+                "result": {
+                    "citation_id": _CITATION,
+                    "location": {
+                        "start_byte": 1,
+                        "end_byte": 5,
+                        "start_line": 1,
+                        "end_line": 1,
+                    },
+                },
+            },
+        },
+        {
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": json.dumps(_payload())},
+        },
+        {"type": "turn.completed", "usage": {}},
+    ]
+    with pytest.raises(EvidenceReaderLaunchError) as raised:
+        launcher._validate_stream(
+            ("\n".join(json.dumps(event) for event in events) + "\n").encode(),
+            definition=_definition(),
+            allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+            canary=_CANARY,
+            scope=_SCOPE,
+            snapshot=_SNAPSHOT,
+            requested_fields=("field",),
+            max_result_bytes=256_000,
+        )
+    assert raised.value.code == "citation_invalid"
 
 
 @pytest.mark.parametrize("failure", ["preflight", "spawn", "timeout", "cancel"])
@@ -415,6 +601,11 @@ def test_launch_failure_paths_remove_sterile_home_and_cwd(
     else:
         monkeypatch.setattr(launcher, "_probe_catalog", lambda *args, **kwargs: b"{}")
         monkeypatch.setattr(launcher, "_probe_mcp", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            launcher,
+            "_probe_conformance",
+            lambda *args, **kwargs: "codex-cli 0.147.0",
+        )
         monkeypatch.setattr(launcher, "_run_bounded", fail_launch)
 
     expected = Cancelled if failure == "cancel" else EvidenceReaderLaunchError
@@ -434,6 +625,11 @@ def test_launch_fails_closed_when_sterile_home_removal_is_incomplete(
     monkeypatch.setattr(launcher.shutil, "which", lambda _name: "/usr/bin/codex")
     monkeypatch.setattr(launcher, "_probe_catalog", lambda *args, **kwargs: b"{}")
     monkeypatch.setattr(launcher, "_probe_mcp", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        launcher,
+        "_probe_conformance",
+        lambda *args, **kwargs: "codex-cli 0.147.0",
+    )
     monkeypatch.setattr(
         launcher,
         "_run_bounded",

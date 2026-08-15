@@ -21,6 +21,7 @@ from autoskillit.core import (
     EVIDENCE_READER_AUTHORITY_ENV_VAR,
     EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
     EVIDENCE_READER_CAPABILITY_ENV_VAR,
+    EVIDENCE_READER_TOOLS,
     atomic_write,
     canonical_reader_tools_to_bare,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "capture_stable_artifact",
     "resolve_repository_identity",
     "stable_artifact_matches",
+    "validate_evidence_reader_startup",
 ]
 
 _AUTHORITY_SCHEMA: Final = 1
@@ -788,6 +790,35 @@ def read_bound_evidence_reader_page(
         continuation=continuation,
         deadline=deadline,
     )
+
+
+def validate_evidence_reader_startup(
+    tool_ctx: ToolContext,
+    environment: Mapping[str, str],
+) -> None:
+    """Reopen and authenticate one complete reader authority before visibility."""
+
+    opened = _open_authority(tool_ctx, environment)
+    authority = opened.authority
+    if time.time() >= authority["expires_at"]:
+        raise EvidenceReaderError("authority_expired")
+    canonical_tools = authority.get("canonical_tools")
+    bare_tools = authority.get("bare_tools")
+    if (
+        not isinstance(canonical_tools, list)
+        or not canonical_tools
+        or not isinstance(bare_tools, list)
+        or frozenset(bare_tools) != EVIDENCE_READER_TOOLS
+        or len(bare_tools) != len(EVIDENCE_READER_TOOLS)
+    ):
+        raise EvidenceReaderError("tool_not_authorized")
+    try:
+        expected_bare = canonical_reader_tools_to_bare(tuple(canonical_tools))
+    except (TypeError, ValueError) as exc:
+        raise EvidenceReaderError("tool_not_authorized") from exc
+    if tuple(bare_tools) != expected_bare:
+        raise EvidenceReaderError("tool_not_authorized")
+    _receipt_state(opened)
 
 
 def load_evidence_reader_receipts(

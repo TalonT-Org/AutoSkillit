@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import anyio
@@ -16,11 +19,14 @@ from autoskillit.core import (
     DIRECT_PREFIX,
     EVIDENCE_READER_ENV_FORWARD_VARS,
     EVIDENCE_READER_TOOLS,
+    HEADLESS_ENV_VAR,
+    SessionType,
     SkillExecutionRole,
     agent_definition_digest,
     canonical_reader_tools_to_bare,
     get_logger,
     load_bundled_agent_definitions,
+    session_type,
 )
 from autoskillit.execution import (
     CodexBackend,
@@ -31,11 +37,10 @@ from autoskillit.execution import (
     evidence_reader_provider_environment,
     launch_evidence_reader,
 )
-from autoskillit.pipeline import ToolContext
+from autoskillit.pipeline import ToolContext, create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._explorer_projection import _explorer_launch_identity
 from autoskillit.server._guards import _require_enabled
-from autoskillit.server._run_skill_completion import current_request_session_id
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._evidence_reader import (
     ArtifactCaptureError,
@@ -64,13 +69,39 @@ _READER_POLICY = "read-only"
 _ELIGIBLE_ROLES = frozenset({"pr-source-reader"})
 _ROLE_DATA_KEYS = frozenset({"artifact_path", "requested_fields"})
 _FIELD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,127}\Z")
-_PROVIDER_AUTH_KEYS = frozenset({"CODEX_API_KEY", "OPENAI_API_KEY"})
 
 
 class _DelegateError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+@dataclass(slots=True)
+class _EvidenceReaderCancellationState:
+    operation: str
+
+
+_delegate_cancellation_state: ContextVar[_EvidenceReaderCancellationState] = ContextVar(
+    "evidence_reader_delegate_cancellation_state"
+)
+_broker_cancellation_state: ContextVar[_EvidenceReaderCancellationState] = ContextVar(
+    "evidence_reader_broker_cancellation_state"
+)
+
+
+def _delegate_cancelled(
+    _state: _EvidenceReaderCancellationState,
+    _exc: asyncio.CancelledError,
+) -> str:
+    return _delegate_outcome("cancelled", "reader_cancelled")
+
+
+def _broker_cancelled(
+    _state: _EvidenceReaderCancellationState,
+    _exc: asyncio.CancelledError,
+) -> str:
+    return _failure("cancelled")
 
 
 def _get_tool_context() -> ToolContext:
@@ -81,6 +112,33 @@ def _get_tool_context() -> ToolContext:
 
 def _failure(code: str) -> str:
     return json.dumps({"status": "error", "code": code}, separators=(",", ":"))
+
+
+def _delegate_outcome(status: str, code: str) -> str:
+    return json.dumps({"status": status, "code": code}, separators=(",", ":"))
+
+
+def _delegate_error_outcome(code: str) -> str:
+    unsupported = {
+        "artifact_unsupported",
+        "catalog_invalid",
+        "catalog_probe_failed",
+        "cli_probe_failed",
+        "codex_unavailable",
+        "output_schema_probe_failed",
+        "provider_auth_invalid",
+    }
+    if code in unsupported or "unsupported" in code:
+        return _delegate_outcome("unsupported", code)
+    if "deadline" in code or "timeout" in code:
+        return _delegate_outcome("timeout", code)
+    if "cancel" in code:
+        return _delegate_outcome("cancelled", code)
+    if code == "codex_execution_failed" or any(
+        part in code for part in ("cleanup", "process", "survivor", "revoke", "removal")
+    ):
+        return _delegate_outcome("failed", code)
+    return _delegate_outcome("rejected", code)
 
 
 def _page_payload(page: EvidenceReaderPage) -> str:
@@ -225,6 +283,22 @@ def _reader_transport(tool_ctx) -> dict[str, object]:
         raise _DelegateError("reader_transport_invalid") from exc
 
 
+def _delegate_caller_session(ctx: Context, tool_ctx: ToolContext) -> str:
+    if (
+        session_type() is not SessionType.SKILL
+        or os.environ.get(HEADLESS_ENV_VAR) != "1"
+        or not isinstance(tool_ctx.backend, CodexBackend)
+    ):
+        raise _DelegateError("reader_admission_denied")
+    try:
+        caller_session_id = str(ctx.session_id or "")
+    except (AttributeError, RuntimeError) as exc:
+        raise _DelegateError("caller_session_unavailable") from exc
+    if not caller_session_id or caller_session_id.startswith("direct:"):
+        raise _DelegateError("caller_session_unavailable")
+    return caller_session_id
+
+
 def _validate_child(
     result: EvidenceReaderLaunchResult,
     capture: StableArtifactCapture,
@@ -235,13 +309,11 @@ def _validate_child(
         payload = json.loads(result.payload_json)
     except json.JSONDecodeError as exc:
         raise _DelegateError("reader_result_invalid") from exc
-    if (
-        not isinstance(payload, dict)
-        or result.status is not EvidenceReaderResultStatus.ANSWERED
-        or payload.get("complete") is not True
-        or payload.get("truncated") is not False
-        or not result.citations
-    ):
+    if not isinstance(payload, dict) or result.status not in {
+        EvidenceReaderResultStatus.ANSWERED,
+        EvidenceReaderResultStatus.PARTIAL,
+        EvidenceReaderResultStatus.BLOCKED,
+    }:
         raise _DelegateError("reader_result_incomplete")
     receipts = load_evidence_reader_receipts(tool_ctx, dict(invocation.environment))
     issued = {receipt.citation_id: receipt for receipt in receipts}
@@ -300,8 +372,12 @@ def _delegate_sync(
         environment = dict(invocation.environment)
         scope_digest = evidence_reader_scope_digest(tool_ctx, environment)
         provider_environment = evidence_reader_provider_environment()
-        if not (_PROVIDER_AUTH_KEYS & set(provider_environment)):
-            raise _DelegateError("provider_auth_missing")
+        backend = getattr(tool_ctx, "backend", None)
+        credential_file = (
+            backend.source_codex_home / "auth.json"
+            if isinstance(backend, CodexBackend) and backend.source_codex_home is not None
+            else None
+        )
         prompt = json.dumps(
             {
                 "artifact_path": capture.artifact_path,
@@ -316,21 +392,26 @@ def _delegate_sync(
             prompt=prompt,
             mcp_transport=_reader_transport(tool_ctx),
             provider_env=provider_environment,
+            credential_file=credential_file,
             repository_root=repository_root,
             worktree_root=worktree_root,
             common_git_dir=common_git_dir,
             expected_scope_digest=scope_digest,
             expected_snapshot_digest=capture.snapshot_digest,
+            requested_fields=requested_fields,
             deadline=deadline,
         )
         payload = _validate_child(result, capture, invocation, tool_ctx)
         return json.dumps(
             {
-                "status": "complete",
+                "status": result.status.value,
                 "role": role,
                 "artifact_path": capture.artifact_path,
                 "snapshot_digest": capture.snapshot_digest,
                 "result": payload,
+                "conformance": (
+                    asdict(result.conformance) if result.conformance is not None else None
+                ),
             },
             separators=(",", ":"),
         )
@@ -365,11 +446,49 @@ def _delegate_sync(
             raise terminal_error
 
 
+async def _delegate_async(
+    tool_ctx: ToolContext,
+    *,
+    caller_session_id: str,
+    role: str,
+    artifact_path: str,
+    requested_fields: tuple[str, ...],
+) -> str:
+    """Await one exact owned delegation task through caller cancellation."""
+
+    task = create_background_task(
+        anyio.to_thread.run_sync(
+            lambda: _delegate_sync(
+                tool_ctx,
+                caller_session_id=caller_session_id,
+                role=role,
+                artifact_path=artifact_path,
+                requested_fields=requested_fields,
+            ),
+            abandon_on_cancel=False,
+        ),
+        label="evidence-reader-delegation",
+    )
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        with anyio.CancelScope(shield=True):
+            try:
+                await task
+            except BaseException:
+                logger.warning("cancelled evidence reader cleanup failed", exc_info=True)
+        raise
+
+
 @mcp.tool(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
     annotations={"readOnlyHint": True},
 )
-@_cancellation_shield()
+@_cancellation_shield(
+    state_factory=lambda: _EvidenceReaderCancellationState("delegate"),
+    state_context_var=_delegate_cancellation_state,
+    response_factory=_delegate_cancelled,
+)
 async def delegate_evidence_reader(
     role: str,
     role_data: dict[str, object],
@@ -380,48 +499,41 @@ async def delegate_evidence_reader(
     Never raises.
     """
     try:
-        if (gate := _require_enabled()) is not None:
-            return gate
-        caller_session_id = current_request_session_id()
-        if not caller_session_id:
-            try:
-                caller_session_id = str(ctx.session_id or "")
-            except (AttributeError, RuntimeError):
-                caller_session_id = ""
-        if not caller_session_id or caller_session_id.startswith("direct:"):
-            return _failure("caller_session_unavailable")
+        tool_ctx = _get_tool_context()
+        caller_session_id = _delegate_caller_session(ctx, tool_ctx)
         artifact_path, requested_fields = _role_request(role, role_data)
-        return await anyio.to_thread.run_sync(
-            lambda: _delegate_sync(
-                _get_tool_context(),
-                caller_session_id=caller_session_id,
-                role=role,
-                artifact_path=artifact_path,
-                requested_fields=requested_fields,
-            ),
-            abandon_on_cancel=False,
+        return await _delegate_async(
+            tool_ctx,
+            caller_session_id=caller_session_id,
+            role=role,
+            artifact_path=artifact_path,
+            requested_fields=requested_fields,
         )
     except _DelegateError as exc:
-        return _failure(exc.code)
+        return _delegate_error_outcome(exc.code)
     except ArtifactCaptureError as exc:
         code = (
             "artifact_stale"
             if exc.status is ArtifactCaptureStatus.STALE
             else "artifact_unsupported"
         )
-        return _failure(code)
+        return _delegate_error_outcome(code)
     except (EvidenceReaderError, EvidenceReaderLaunchError) as exc:
-        return _failure(exc.code)
+        return _delegate_error_outcome(exc.code)
     except Exception:
         logger.warning("evidence reader delegation failed closed", exc_info=True)
-        return _failure("evidence_reader_delegation_failed")
+        return _delegate_outcome("failed", "evidence_reader_delegation_failed")
 
 
 @mcp.tool(
     tags={"autoskillit", "evidence-reader"},
     annotations={"readOnlyHint": True},
 )
-@_cancellation_shield()
+@_cancellation_shield(
+    state_factory=lambda: _EvidenceReaderCancellationState("read"),
+    state_context_var=_broker_cancellation_state,
+    response_factory=_broker_cancelled,
+)
 async def read_authorized_artifact(page_size: int | None = None) -> str:
     """Read the initial immutable page for the launch-bound artifact.
 
@@ -444,7 +556,11 @@ async def read_authorized_artifact(page_size: int | None = None) -> str:
     tags={"autoskillit", "evidence-reader"},
     annotations={"readOnlyHint": True},
 )
-@_cancellation_shield()
+@_cancellation_shield(
+    state_factory=lambda: _EvidenceReaderCancellationState("page"),
+    state_context_var=_broker_cancellation_state,
+    response_factory=_broker_cancelled,
+)
 async def get_authorized_artifact_page(
     continuation: str,
     page_size: int | None = None,

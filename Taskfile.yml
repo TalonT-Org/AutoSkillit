@@ -393,8 +393,8 @@ tasks:
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
-      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY"
-        msg: "Sterile evidence-reader authentication requires OPENAI_API_KEY or CODEX_API_KEY"
+      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
+        msg: "Sterile evidence-reader authentication requires one API key or $HOME/.codex/auth.json"
     cmds:
       - |
         if [[ -d ".venv" ]]; then
@@ -412,7 +412,7 @@ tasks:
         export AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE_ARTIFACT_DIR="$ARTIFACT_DIR"
         export AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE_RUN_ID="$RUN_ID"
         set +e
-        $PYTHON_CMD -m pytest tests/execution/backends/test_evidence_reader_live_gate.py \
+        $PYTHON_CMD -m pytest tests/execution/backends/test_codex_evidence_reader_live_gate.py \
           -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
           --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" \
           --junitxml="$JUNIT_REPORT" >"$TEST_OUTPUT" 2>&1
@@ -428,7 +428,7 @@ tasks:
           echo "Live evidence-reader gate did not publish fresh evidence: $EVIDENCE"
           exit 1
         fi
-        $PYTHON_CMD -c 'import json, pathlib, re, sys; path=pathlib.Path(sys.argv[1]); path.stat().st_size <= 4096 or sys.exit("live evidence-reader evidence exceeds 4096 bytes"); data=json.loads(path.read_text(encoding="utf-8")); keys={"contract","run_id","role","status","artifact_path","snapshot_digest","citation_receipts","command_surface_observed","repository_changed","invocation_cleaned","isolated_home_cleaned","isolated_cwd_cleaned"}; expected={"contract":"live-codex-evidence-reader-v1","run_id":sys.argv[2],"role":"pr-source-reader","status":"answered","artifact_path":"evidence.txt","command_surface_observed":False,"repository_changed":False,"invocation_cleaned":True,"isolated_home_cleaned":True,"isolated_cwd_cleaned":True}; bad=set(data) != keys or any(data.get(key) != value for key, value in expected.items()) or type(data.get("citation_receipts")) is not int or data["citation_receipts"] < 1 or not isinstance(data.get("snapshot_digest"), str) or re.fullmatch(r"sha256:[0-9a-f]{64}", data["snapshot_digest"]) is None; sys.exit("invalid or stale live evidence-reader evidence" if bad else 0)' "$EVIDENCE" "$RUN_ID"
+        $PYTHON_CMD -c 'import json, pathlib, sys; path=pathlib.Path(sys.argv[1]); path.stat().st_size <= 4096 or sys.exit("live evidence-reader evidence exceeds 4096 bytes"); data=json.loads(path.read_text(encoding="utf-8")); keys={"contract","run_id","role","artifacts","statuses","parent_thread_id","distinct_reader_identities","repository_reader_interval_unchanged","parent_sentinel_written","attestation_scope","cleanup_verified"}; expected={"contract":"live-writable-parent-evidence-reader-v2","run_id":sys.argv[2],"role":"pr-source-reader","artifacts":["tracked.txt","dirty.txt","untracked.txt"],"statuses":["answered","answered","answered"],"distinct_reader_identities":3,"repository_reader_interval_unchanged":True,"parent_sentinel_written":True,"attestation_scope":"bounded_non_exhaustive","cleanup_verified":True}; bad=set(data) != keys or any(data.get(key) != value for key, value in expected.items()) or not isinstance(data.get("parent_thread_id"), str) or not data["parent_thread_id"]; sys.exit("invalid or stale live evidence-reader evidence" if bad else 0)' "$EVIDENCE" "$RUN_ID"
         echo "Live evidence-reader evidence: $EVIDENCE"
         echo "Live evidence-reader JUnit: $JUNIT_REPORT"
 

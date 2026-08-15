@@ -78,6 +78,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         "_probe_cache",  # execution/backends/_probe_cache.py: PROBE_CACHE_TTL = timedelta(...)
+        # Typed cancellation state is required for the authenticated broker boundary (#4585).
+        "tools_evidence_reader",
         # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
         "_generation_publication",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
@@ -1086,6 +1088,11 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    "execution/evidence_reader.py": (
+        1500,
+        "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
+        "lifecycle, and strict result validation behind one evidence-reader launch interface",
+    ),
     # REQ-CNST-010-E1: core/types.py is the canonical type registry for the entire
     # package. It defines all StrEnums, protocols, constants, and shared type aliases
     # in one place to prevent circular imports across sub-packages. Exempt at 1200 lines.

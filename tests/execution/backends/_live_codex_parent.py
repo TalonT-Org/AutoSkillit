@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -65,6 +66,8 @@ def prepare_live_codex_parent(
     ) = None,
     profile_home_name: str = "profile-home",
     session_home_name: str = "session-home",
+    parent_sandbox_mode: str = "read-only",
+    copy_source_auth: bool = False,
 ) -> LiveCodexParentSession:
     """Build the exact isolated Codex home/session used by credentialed probes."""
     if explorer_binding_env is not None and explorer_binding_env_factory is not None:
@@ -75,7 +78,12 @@ def prepare_live_codex_parent(
     for directory in (profile_codex_home, session_home):
         directory.mkdir(parents=True)
     if source_auth.is_file():
-        (profile_codex_home / "auth.json").symlink_to(source_auth.resolve())
+        auth_destination = profile_codex_home / "auth.json"
+        if copy_source_auth:
+            shutil.copyfile(source_auth, auth_destination)
+            auth_destination.chmod(0o600)
+        else:
+            auth_destination.symlink_to(source_auth.resolve())
 
     monkeypatch.setenv("HOME", str(profile_home))
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: profile_home))
@@ -98,7 +106,7 @@ def prepare_live_codex_parent(
     )
     backend.setup_session_dir(
         session_home,
-        parent_sandbox_mode="read-only",
+        parent_sandbox_mode=parent_sandbox_mode,
         agent_defs=agent_defs,
         explorer_binding_env=copied_binding_env,
     )
@@ -134,6 +142,7 @@ def run_live_codex_parent(
     text: bool,
     resume_thread_id: str | None = None,
     extra_overrides: tuple[str, ...] = (),
+    sandbox: str = "read-only",
 ) -> subprocess.CompletedProcess[Any]:
     """Execute or resume the common real-Codex parent used by both live gates."""
     invocation = [
@@ -141,7 +150,7 @@ def run_live_codex_parent(
         "exec",
         "--json",
         "--sandbox",
-        "read-only",
+        sandbox,
         "--model",
         model,
     ]

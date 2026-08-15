@@ -14,7 +14,8 @@ from typing import Any
 import pytest
 
 import autoskillit.server.tools.tools_evidence_reader as delegate_module
-from autoskillit.core import agent_definition_digest
+from autoskillit.core import SessionType, agent_definition_digest
+from autoskillit.execution import CodexBackend
 from autoskillit.execution.evidence_reader import (
     EvidenceCitation,
     EvidenceReaderLaunchError,
@@ -133,6 +134,56 @@ def test_delegate_request_schema_rejects_malformed_and_override_inputs(
     assert raised.value.code == _ErrorCode.READER_REQUEST_INVALID
 
 
+def test_delegate_admission_requires_exact_headless_codex_skill_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = CodexBackend()
+    tool_ctx = SimpleNamespace(
+        config=SimpleNamespace(agent_backend=SimpleNamespace(backend="codex")),
+        backend=backend,
+    )
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setattr(delegate_module, "session_type", lambda: SessionType.SKILL)
+
+    assert (
+        delegate_module._delegate_caller_session(
+            SimpleNamespace(session_id="trusted-parent"), tool_ctx
+        )
+        == "trusted-parent"
+    )
+
+    for denied in (
+        SimpleNamespace(session_id=""),
+        SimpleNamespace(session_id="direct:untrusted"),
+    ):
+        with pytest.raises(delegate_module._DelegateError, match="caller_session_unavailable"):
+            delegate_module._delegate_caller_session(denied, tool_ctx)
+
+    monkeypatch.setattr(delegate_module, "session_type", lambda: SessionType.ORCHESTRATOR)
+    with pytest.raises(delegate_module._DelegateError, match="reader_admission_denied"):
+        delegate_module._delegate_caller_session(
+            SimpleNamespace(session_id="trusted-parent"), tool_ctx
+        )
+
+
+@pytest.mark.parametrize(
+    ("code", "status"),
+    [
+        ("cli_probe_failed", "unsupported"),
+        ("result_schema_invalid", "rejected"),
+        ("artifact_stale", "rejected"),
+        ("process_cleanup_incomplete", "failed"),
+        ("deadline_exceeded", "timeout"),
+        ("reader_cancelled", "cancelled"),
+    ],
+)
+def test_delegate_errors_use_terminal_domain_outcomes(code: str, status: str) -> None:
+    assert json.loads(delegate_module._delegate_error_outcome(code)) == {
+        "status": status,
+        "code": code,
+    }
+
+
 @pytest.mark.parametrize("state", ["dirty", "staged", "untracked"])
 def test_delegate_real_capture_authority_receipt_and_terminal_recapture(
     tmp_path: Path,
@@ -215,7 +266,7 @@ def test_delegate_real_capture_authority_receipt_and_terminal_recapture(
     )
 
     response = json.loads(raw)
-    assert response["status"] == "complete"
+    assert response["status"] == "answered"
     assert response["artifact_path"] == artifact_path
     assert response["result"]["observed"].encode() == expected
     assert "canary" not in response["result"]
@@ -384,8 +435,11 @@ def test_cleanup_failure_overrides_otherwise_successful_delegate(
 async def test_concurrent_same_session_delegates_remain_independent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(delegate_module, "_require_enabled", lambda: None)
-    monkeypatch.setattr(delegate_module, "current_request_session_id", lambda: "shared-session")
+    monkeypatch.setattr(
+        delegate_module,
+        "_delegate_caller_session",
+        lambda _ctx, _tool_ctx: "shared-session",
+    )
     monkeypatch.setattr(delegate_module, "_get_tool_context", lambda: object())
     barrier = threading.Barrier(2)
     observed: list[tuple[str, str]] = []
@@ -399,7 +453,7 @@ async def test_concurrent_same_session_delegates_remain_independent(
     ) -> str:
         observed.append((caller_session_id, artifact_path))
         barrier.wait(timeout=5)
-        return json.dumps({"status": "complete", "artifact_path": artifact_path})
+        return json.dumps({"status": "answered", "artifact_path": artifact_path})
 
     monkeypatch.setattr(delegate_module, "_delegate_sync", delegate_independently)
 

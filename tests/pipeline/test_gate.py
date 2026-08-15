@@ -67,7 +67,6 @@ def test_gated_tools_contains_expected_names():
         "get_exploration_page",
         "resume_exploration_context",
         "inspect_session_logs",
-        "delegate_evidence_reader",
         "read_authorized_artifact",
         "get_authorized_artifact_page",
     }
@@ -193,12 +192,12 @@ def test_gate_imports_only_from_core():
                     )
 
 
-def test_tool_sets_have_only_the_declared_gated_headless_overlap():
+def test_tool_sets_keep_headless_tools_outside_the_application_gate():
     from autoskillit.core.types import HEADLESS_TOOLS
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
-    assert GATED_TOOLS & HEADLESS_TOOLS == {"delegate_evidence_reader"}
+    assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert "post_pr_review" in HEADLESS_TOOLS
 

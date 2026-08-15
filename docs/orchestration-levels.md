@@ -30,6 +30,13 @@ joins a separate sterile top-level process. The reader sees only its authenticat
 brokers, not the repository or ordinary kitchen/headless surfaces. This preserves the writable
 parent while keeping the reader's evidence contract read-only and non-delegating.
 
+This is the single narrow exception to ordinary backend-native L1-to-L0 routing: it exists because
+Codex cannot narrow a writable parent's sandbox for a native child. The implementation is one
+concrete delegation boundary, not a second general routing framework; another abstraction is not
+warranted until a second production caller needs it. Issue #4563 separately owns the audit-reader
+role, Git-handler and ref-validation surfaces, and ready-wave scheduling. Those concerns are not
+part of this evidence-reader pilot.
+
 ### L1 — Session
 
 A Claude Code session (interactive or headless) that can spawn L0 leaf

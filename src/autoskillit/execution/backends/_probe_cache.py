@@ -1,8 +1,9 @@
 """Versioned probe result cache with 24-hour TTL.
 
 IL-1 module: imports only stdlib and `autoskillit.core`. Stores a per-cli-version
-`ProbeResult` keyed by `cli_version` and validated against the current output
-discipline policy, surviving across runs while staying under `PROBE_CACHE_TTL`.
+`ProbeResult` keyed by CLI version plus an optional conformance tuple and
+validated against the current output discipline policy, surviving across runs
+while staying under `PROBE_CACHE_TTL`.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ PROBE_POLICY_IDENTITY: str = (
     f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}-{PROBE_SUITE_CONTRACT_DIGEST}-"
     f"{CODEX_RECIPE_PROBE_POLICY_DIGEST}"
 )
-_SCHEMA_VERSION: int = 5
+_SCHEMA_VERSION: int = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,18 +91,25 @@ class ProbeResult:
     passed: bool
     failure_detail: str | None
     probe_timestamp: str
+    cache_key: str = ""
+
+
+def _entry_key(cli_version: str, cache_key: str) -> str:
+    return cli_version if not cache_key else f"{cli_version}:{cache_key}"
 
 
 def read_probe_cache(
     cache_path: Path,
     cli_version: str,
     policy_identity: str,
+    *,
+    cache_key: str = "",
 ) -> ProbeResult | None:
     raw = read_versioned_json(cache_path, _SCHEMA_VERSION, logger=logger)
     if raw is None:
         return None
     entries: dict[str, dict] = raw.get("entries", {})
-    entry = entries.get(cli_version)
+    entry = entries.get(_entry_key(cli_version, cache_key))
     if entry is None:
         return None
     if entry.get("policy_identity") != policy_identity:
@@ -118,6 +126,7 @@ def read_probe_cache(
         passed=entry.get("passed", False),
         failure_detail=entry.get("failure_detail"),
         probe_timestamp=entry["probe_timestamp"],
+        cache_key=cache_key,
     )
 
 
@@ -125,7 +134,7 @@ def write_probe_cache(cache_path: Path, result: ProbeResult) -> None:
     try:
         existing = read_versioned_json(cache_path, _SCHEMA_VERSION, logger=logger)
         entries: dict[str, dict] = (existing or {}).get("entries", {})
-        entries[result.cli_version] = {
+        entries[_entry_key(result.cli_version, result.cache_key)] = {
             "policy_identity": result.policy_identity,
             "passed": result.passed,
             "failure_detail": result.failure_detail,

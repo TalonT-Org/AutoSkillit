@@ -28,6 +28,7 @@ import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
+    EVIDENCE_READER_ENV_FORWARD_VARS,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
@@ -738,6 +739,12 @@ async def _evidence_reader_auto_gate_boot(ctx: Any) -> bool:
         return False
     if binding_state == "malformed" or ctx.gate is None:
         raise RuntimeError("evidence reader startup identity is malformed")
+    from autoskillit.server.tools._evidence_reader import (  # circular-break
+        validate_evidence_reader_startup,
+    )
+
+    environment = {name: os.environ[name] for name in EVIDENCE_READER_ENV_FORWARD_VARS}
+    validate_evidence_reader_startup(ctx, environment)
     ctx.gate.enable()
     mcp.enable(tags={"evidence-reader"}, components={"tool"}, only=True)
     return True

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -14,7 +15,8 @@ import tempfile
 import time
 import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -36,10 +38,12 @@ from autoskillit.execution.backends._codex.explorer_projection import (
 from autoskillit.execution.backends._codex_catalog import project_codex_catalog
 from autoskillit.execution.backends._codex_config import _format_toml_value
 from autoskillit.execution.backends._codex_parse import CodexStreamParser
-from autoskillit.execution.backends.codex import (
-    _codex_exec_base,
-    _validate_codex_mcp_inventory,
+from autoskillit.execution.backends._probe_cache import (
+    ProbeResult,
+    read_probe_cache,
+    write_probe_cache,
 )
+from autoskillit.execution.backends.codex import _validate_codex_mcp_inventory
 from autoskillit.execution.process._process_kill import spawn_owned_process
 
 _EVIDENCE_ENV = frozenset(
@@ -72,6 +76,8 @@ _PROVIDER_ENV = frozenset(
     }
 )
 _AUTH_KEYS = frozenset({"CODEX_API_KEY", "OPENAI_API_KEY"})
+_SUPPORTED_CODEX_CLI_VERSION = "codex-cli 0.147.0"
+_AUTH_FILE_LIMIT = 64 * 1024
 _TRANSPORT_KEYS = frozenset(
     {"command", "args", "env_vars", "startup_timeout_sec", "tool_timeout_sec"}
 )
@@ -96,12 +102,128 @@ _RESULT_KEYS = frozenset(
         "child_identity",
     }
 )
+_OUTPUT_SCHEMA_NAME = "evidence-reader-result.schema.json"
+_PROBE_SCHEMA_NAME = "evidence-reader-probe.schema.json"
+_PROBE_CACHE_NAME = "codex-evidence-reader-probe-cache.json"
+_PROBE_POLICY = "codex-evidence-reader-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceReaderAuthSelection:
+    forced_login_method: str
+    environment: tuple[tuple[str, str], ...]
+    credential_text: str | None
+    source_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceReaderConformanceEvidence:
+    cli_version: str
+    auth_method: str
+    auth_source_digest: str
+    role_definition_digest: str
+    authority_digest: str
+    config_digest: str
+    catalog_digest: str
+    output_schema_digest: str
+    transport_digest: str
+    command_digest: str
+    observation_scope: tuple[str, ...]
 
 
 def evidence_reader_provider_environment() -> dict[str, str]:
     """Return only positive provider authentication and transport variables."""
 
     return {name: os.environ[name] for name in _PROVIDER_ENV if os.environ.get(name)}
+
+
+def _read_chatgpt_credential(path: Path) -> str:
+    descriptor = -1
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) & 0o077
+            or not 1 <= metadata.st_size <= _AUTH_FILE_LIMIT
+        ):
+            raise EvidenceReaderLaunchError("provider_auth_invalid")
+        chunks: list[bytes] = []
+        remaining = _AUTH_FILE_LIMIT + 1
+        while remaining:
+            chunk = os.read(descriptor, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(descriptor)
+    except OSError as exc:
+        raise EvidenceReaderLaunchError("provider_auth_invalid") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(raw) != metadata.st_size or (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mtime_ns,
+        metadata.st_size,
+    ) != (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_size):
+        raise EvidenceReaderLaunchError("provider_auth_invalid")
+    try:
+        text = raw.decode("utf-8", errors="strict")
+        payload = json.loads(text)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise EvidenceReaderLaunchError("provider_auth_invalid") from exc
+    tokens = payload.get("tokens") if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or payload.get("auth_mode") != "chatgpt"
+        or not isinstance(tokens, dict)
+        or not isinstance(tokens.get("access_token"), str)
+        or not tokens["access_token"]
+        or not isinstance(tokens.get("account_id"), str)
+        or not tokens["account_id"]
+    ):
+        raise EvidenceReaderLaunchError("provider_auth_invalid")
+    return text
+
+
+def _select_authentication(
+    provider: Mapping[str, str], credential_file: Path | None
+) -> EvidenceReaderAuthSelection:
+    auth_keys = tuple(sorted(_AUTH_KEYS & set(provider)))
+    credential_present = False
+    if credential_file is not None:
+        try:
+            credential_present = credential_file.exists() or credential_file.is_symlink()
+        except OSError as exc:
+            raise EvidenceReaderLaunchError("provider_auth_invalid") from exc
+    if len(auth_keys) + int(credential_present) != 1:
+        code = (
+            "provider_auth_missing"
+            if not auth_keys and not credential_present
+            else "provider_auth_ambiguous"
+        )
+        raise EvidenceReaderLaunchError(code)
+    if auth_keys:
+        selected = auth_keys[0]
+        return EvidenceReaderAuthSelection(
+            forced_login_method="api",
+            environment=tuple(sorted(provider.items())),
+            credential_text=None,
+            source_digest="sha256:"
+            + hashlib.sha256(f"api:{selected}".encode("ascii")).hexdigest(),
+        )
+    assert credential_file is not None
+    text = _read_chatgpt_credential(credential_file)
+    return EvidenceReaderAuthSelection(
+        forced_login_method="chatgpt",
+        environment=tuple(sorted(provider.items())),
+        credential_text=text,
+        source_digest="sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    )
 
 
 def evidence_reader_mcp_transport(config_path: Path) -> dict[str, object]:
@@ -156,6 +278,7 @@ class EvidenceReaderLaunchResult:
     thread_id: str
     citations: tuple[EvidenceCitation, ...]
     payload_json: str
+    conformance: EvidenceReaderConformanceEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,11 +423,97 @@ def _write_private(path: Path, content: str | bytes) -> None:
     path.chmod(0o600)
 
 
+def _result_output_schema() -> bytes:
+    location = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["start_byte", "end_byte", "start_line", "end_line"],
+        "properties": {
+            name: {"type": "integer", "minimum": minimum}
+            for name, minimum in (
+                ("start_byte", 0),
+                ("end_byte", 0),
+                ("start_line", 1),
+                ("end_line", 1),
+            )
+        },
+    }
+    schema = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "additionalProperties": False,
+        "required": sorted(_RESULT_KEYS),
+        "properties": {
+            "canary": {"type": "string", "minLength": 1},
+            "status": {"enum": [status.value for status in EvidenceReaderResultStatus]},
+            "role": {"type": "string", "minLength": 1},
+            "authorized_scope": {"type": "string", "minLength": 1},
+            "snapshot": {"type": "string", "minLength": 1},
+            "evidence": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "field",
+                        "value",
+                        "representation",
+                        "citation_id",
+                        "location",
+                    ],
+                    "properties": {
+                        "field": {"type": "string", "minLength": 1},
+                        "value": {"type": "string"},
+                        "representation": {"enum": ["literal", "summary"]},
+                        "citation_id": {"type": "string", "minLength": 1},
+                        "location": location,
+                    },
+                },
+            },
+            "coverage_gaps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["field", "reason"],
+                    "properties": {
+                        "field": {"type": "string", "minLength": 1},
+                        "reason": {"type": "string", "minLength": 1},
+                    },
+                },
+            },
+            "complete": {"type": "boolean"},
+            "truncated": {"type": "boolean"},
+            "stop_reason": {"type": "string", "minLength": 1},
+            "child_identity": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["thread_id"],
+                "properties": {"thread_id": {"type": "string", "minLength": 1}},
+            },
+        },
+    }
+    return json.dumps(schema, sort_keys=True, separators=(",", ":")).encode("ascii")
+
+
+def _probe_output_schema() -> bytes:
+    schema = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["probe"],
+        "properties": {"probe": {"const": "ok", "type": "string"}},
+    }
+    return json.dumps(schema, sort_keys=True, separators=(",", ":")).encode("ascii")
+
+
 def _render_config(
     definition: AgentDef,
     transport: Mapping[str, object],
     tools: tuple[str, ...],
     catalog_path: Path,
+    auth: EvidenceReaderAuthSelection,
+    shell_environment_names: tuple[str, ...],
 ) -> str:
     digest = agent_definition_digest(definition)
     instructions = (
@@ -317,15 +526,18 @@ def _render_config(
         'approval_policy = "never"',
         'sandbox_mode = "read-only"',
         'web_search = "disabled"',
+        f"forced_login_method = {_format_toml_value(auth.forced_login_method)}",
+        "project_root_markers = []",
         f"model_catalog_json = {_format_toml_value(str(catalog_path))}",
         f"instructions = {_format_toml_value(instructions)}",
         f"developer_instructions = {_format_toml_value(instructions)}",
+        "[shell_environment_policy]",
+        'inherit = "none"',
+        f"include_only = {_format_toml_value(list(shell_environment_names))}",
+        "[sandbox_workspace_write]",
+        "network_access = false",
         "[features]",
-        *(
-            f"{feature} = false"
-            for feature in definition.codex.disabled_features
-            if feature != "shell_tool"
-        ),
+        *(f"{feature} = false" for feature in definition.codex.disabled_features),
         "[agents]",
         "enabled = false",
         *_render_direct_role_mcp_lines(transport, tools),
@@ -446,14 +658,229 @@ def _probe_mcp(
     deadline: float,
 ) -> None:
     result = _run_bounded(
-        (codex, "mcp", "list", "--json"),
+        (codex, "--strict-config", "mcp", "list", "--json"),
         cwd=cwd,
         environment=environment,
         deadline=deadline,
         stdout_limit=256_000,
     )
-    if result.returncode != 0 or _validate_codex_mcp_inventory(result.stdout, config):
+    if (
+        result.returncode != 0
+        or result.stderr
+        or _validate_codex_mcp_inventory(result.stdout, config)
+    ):
         raise EvidenceReaderLaunchError("mcp_probe_failed")
+
+
+def _codex_command(
+    codex: str,
+    definition: AgentDef,
+    *,
+    cwd: Path,
+    output_schema_path: Path,
+    prompt: str,
+) -> list[str]:
+    command = [
+        codex,
+        "exec",
+        "--strict-config",
+        "--ignore-rules",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "--output-schema",
+        str(output_schema_path),
+        "--json",
+        "-C",
+        str(cwd),
+        "-c",
+        "project_root_markers=[]",
+        "-c",
+        "sandbox_workspace_write.network_access=false",
+        "-c",
+        "features.image_generation=false",
+    ]
+    if definition.codex.model is not None:
+        command.extend(("--model", definition.codex.model))
+    command.append(prompt)
+    return command
+
+
+def _probe_agent_message(output: bytes) -> dict[str, Any]:
+    messages: list[dict[str, Any]] = []
+    try:
+        lines = output.decode("utf-8", errors="strict").splitlines()
+        for line in lines:
+            event = json.loads(line)
+            if not isinstance(event, dict) or event.get("type") not in {
+                "thread.started",
+                "turn.started",
+                "item.started",
+                "item.updated",
+                "item.completed",
+                "turn.completed",
+            }:
+                raise ValueError
+            item = event.get("item")
+            if (
+                event.get("type") == "item.completed"
+                and isinstance(item, dict)
+                and item.get("type") == "agent_message"
+                and isinstance(item.get("text"), str)
+            ):
+                decoded = json.loads(item["text"])
+                if isinstance(decoded, dict):
+                    messages.append(decoded)
+            elif (
+                event.get("type") == "item.completed"
+                and isinstance(item, dict)
+                and item.get("type") == "message"
+                and isinstance(item.get("content"), list)
+            ):
+                for block in item["content"]:
+                    if (
+                        isinstance(block, dict)
+                        and block.get("type") == "text"
+                        and isinstance(block.get("text"), str)
+                    ):
+                        decoded = json.loads(block["text"])
+                        if isinstance(decoded, dict):
+                            messages.append(decoded)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise EvidenceReaderLaunchError("output_schema_probe_failed") from exc
+    if messages != [{"probe": "ok"}]:
+        raise EvidenceReaderLaunchError("output_schema_probe_failed")
+    return messages[0]
+
+
+def _probe_conformance(
+    codex: str,
+    definition: AgentDef,
+    auth: EvidenceReaderAuthSelection,
+    *,
+    cwd: Path,
+    environment: Mapping[str, str],
+    probe_schema_path: Path,
+    deadline: float,
+) -> str:
+    version = _run_bounded(
+        (codex, "--version"),
+        cwd=cwd,
+        environment=environment,
+        deadline=deadline,
+        stdout_limit=4_096,
+    )
+    try:
+        cli_version = version.stdout.decode("utf-8", errors="strict").strip()
+    except UnicodeDecodeError as exc:
+        raise EvidenceReaderLaunchError("cli_probe_failed") from exc
+    if version.returncode != 0 or version.stderr or cli_version != _SUPPORTED_CODEX_CLI_VERSION:
+        raise EvidenceReaderLaunchError("cli_probe_failed")
+    help_result = _run_bounded(
+        (codex, "exec", "--help"),
+        cwd=cwd,
+        environment=environment,
+        deadline=deadline,
+        stdout_limit=64_000,
+    )
+    required_flags = (
+        b"--strict-config",
+        b"--ignore-rules",
+        b"--ephemeral",
+        b"--skip-git-repo-check",
+        b"--output-schema",
+        b"--json",
+        b"--cd",
+    )
+    if (
+        help_result.returncode != 0
+        or help_result.stderr
+        or any(flag not in help_result.stdout for flag in required_flags)
+    ):
+        raise EvidenceReaderLaunchError("cli_probe_failed")
+    auth_result = _run_bounded(
+        (codex, "--strict-config", "login", "status"),
+        cwd=cwd,
+        environment=environment,
+        deadline=deadline,
+        stdout_limit=4_096,
+    )
+    auth_output = auth_result.stdout.strip()
+    auth_matches = (
+        auth_output == b"Logged in using ChatGPT"
+        if auth.forced_login_method == "chatgpt"
+        else auth_output.startswith(b"Logged in using an API key - ")
+        and len(auth_output) > len(b"Logged in using an API key - ")
+    )
+    if auth_result.returncode != 0 or auth_result.stderr or not auth_matches:
+        raise EvidenceReaderLaunchError("auth_probe_failed")
+    probe = _run_bounded(
+        _codex_command(
+            codex,
+            definition,
+            cwd=cwd,
+            output_schema_path=probe_schema_path,
+            prompt='Return exactly {"probe":"ok"}. Do not call any tool.',
+        ),
+        cwd=cwd,
+        environment=environment,
+        deadline=deadline,
+        stdout_limit=256_000,
+    )
+    if probe.returncode != 0 or probe.stderr:
+        raise EvidenceReaderLaunchError("output_schema_probe_failed")
+    _probe_agent_message(probe.stdout)
+    return cli_version
+
+
+def _probe_cli_version(
+    codex: str,
+    *,
+    cwd: Path,
+    environment: Mapping[str, str],
+    deadline: float,
+) -> str:
+    result = _run_bounded(
+        (codex, "--version"),
+        cwd=cwd,
+        environment=environment,
+        deadline=deadline,
+        stdout_limit=4_096,
+    )
+    try:
+        version = result.stdout.decode("utf-8", errors="strict").strip()
+    except UnicodeDecodeError as exc:
+        raise EvidenceReaderLaunchError("cli_probe_failed") from exc
+    if result.returncode != 0 or result.stderr or version != _SUPPORTED_CODEX_CLI_VERSION:
+        raise EvidenceReaderLaunchError("cli_probe_failed")
+    return version
+
+
+def _reader_probe_cache_key(
+    definition: AgentDef,
+    auth: EvidenceReaderAuthSelection,
+    *,
+    config: bytes,
+    catalog: bytes,
+    output_schema: bytes,
+    transport: Mapping[str, object],
+) -> str:
+    payload = {
+        "auth_method": auth.forced_login_method,
+        "auth_source_digest": auth.source_digest,
+        "catalog_digest": hashlib.sha256(catalog).hexdigest(),
+        "config_digest": hashlib.sha256(config).hexdigest(),
+        "definition_digest": agent_definition_digest(definition),
+        "model": definition.codex.model,
+        "policy": "read-only",
+        "reasoning_effort": definition.codex.reasoning_effort,
+        "schema_digest": hashlib.sha256(output_schema).hexdigest(),
+        "transport": transport,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _prompt(
@@ -530,6 +957,7 @@ def _validate_stream(
     canary: str,
     scope: str,
     snapshot: str,
+    requested_fields: tuple[str, ...],
     max_result_bytes: int,
 ) -> EvidenceReaderLaunchResult:
     try:
@@ -541,7 +969,15 @@ def _validate_stream(
     terminal = 0
     result_messages: list[str] = []
     observed: dict[str, tuple[int, int, int, int]] = {}
-    allowed_tool_names = frozenset((*allowed_tools, *definition.reader_tools))
+    started_mcp_calls: dict[str, str] = {}
+    completed_mcp_call_ids: set[str] = set()
+    completed_mcp_tools: list[str] = []
+    definition_bare_tools = canonical_reader_tools_to_bare(definition.reader_tools)
+    tool_aliases = {
+        **dict(zip(definition.reader_tools, definition_bare_tools, strict=True)),
+        **{tool: tool for tool in allowed_tools},
+    }
+    allowed_tool_names = frozenset(tool_aliases)
     allowed_events = {
         "thread.started",
         "turn.started",
@@ -576,8 +1012,33 @@ def _validate_stream(
                 tool = item.get("tool_name", item.get("name", item.get("tool")))
                 if tool not in allowed_tool_names:
                     raise EvidenceReaderLaunchError("tool_not_authorized")
+                normalized_tool = tool_aliases[cast(str, tool)]
+                call_id = item.get("id")
+                if call_id is not None and (not isinstance(call_id, str) or not call_id):
+                    raise EvidenceReaderLaunchError("stream_shape_forbidden")
+                if raw["type"] == "item.started" and isinstance(call_id, str):
+                    if call_id in started_mcp_calls:
+                        raise EvidenceReaderLaunchError("stream_shape_forbidden")
+                    started_mcp_calls[call_id] = normalized_tool
                 if raw["type"] == "item.completed":
-                    observed.update(_observed_citations(item))
+                    if isinstance(call_id, str) and call_id in completed_mcp_call_ids:
+                        raise EvidenceReaderLaunchError("stream_shape_forbidden")
+                    if (
+                        item.get("status") not in {None, "completed", "success"}
+                        or item.get("error") not in {None, ""}
+                        or (
+                            isinstance(call_id, str)
+                            and started_mcp_calls.get(call_id, normalized_tool) != normalized_tool
+                        )
+                    ):
+                        raise EvidenceReaderLaunchError("mcp_call_failed")
+                    if isinstance(call_id, str):
+                        completed_mcp_call_ids.add(call_id)
+                    completed_mcp_tools.append(normalized_tool)
+                    for citation_id, location in _observed_citations(item).items():
+                        if citation_id in observed and observed[citation_id] != location:
+                            raise EvidenceReaderLaunchError("citation_invalid")
+                        observed[citation_id] = location
             elif item["type"] == "agent_message" and raw["type"] == "item.completed":
                 if isinstance(item.get("text"), str):
                     result_messages.append(item["text"])
@@ -596,6 +1057,13 @@ def _validate_stream(
         raise EvidenceReaderLaunchError("stream_shape_forbidden")
     if len(thread_ids) != 1 or terminal != 1 or len(result_messages) != 1:
         raise EvidenceReaderLaunchError("terminal_result_invalid")
+    if (
+        set(started_mcp_calls) - completed_mcp_call_ids
+        or not completed_mcp_tools
+        or completed_mcp_tools[0] != "read_authorized_artifact"
+        or any(tool != "get_authorized_artifact_page" for tool in completed_mcp_tools[1:])
+    ):
+        raise EvidenceReaderLaunchError("mcp_call_sequence_invalid")
     result_bytes = result_messages[0].encode("utf-8")
     if len(result_bytes) > max_result_bytes:
         raise EvidenceReaderLaunchError("result_limit_exceeded")
@@ -638,41 +1106,85 @@ def _validate_stream(
             "location",
         }:
             raise EvidenceReaderLaunchError("result_schema_invalid")
-        citation_id = evidence.get("citation_id")
-        location = evidence.get("location")
-        if not isinstance(citation_id, str) or not isinstance(location, dict):
+        raw_citation_id = evidence.get("citation_id")
+        raw_location = evidence.get("location")
+        if (
+            not isinstance(raw_citation_id, str)
+            or not raw_citation_id
+            or not isinstance(raw_location, dict)
+        ):
             raise EvidenceReaderLaunchError("citation_invalid")
         fields = tuple(
-            location.get(name) for name in ("start_byte", "end_byte", "start_line", "end_line")
+            raw_location.get(name) for name in ("start_byte", "end_byte", "start_line", "end_line")
         )
         if (
             evidence.get("representation") not in {"literal", "summary"}
             or not isinstance(evidence.get("field"), str)
+            or not evidence["field"]
             or not isinstance(evidence.get("value"), str)
             or not all(isinstance(field, int) and not isinstance(field, bool) for field in fields)
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
         location_fields = cast(tuple[int, int, int, int], fields)
         if (
-            citation_id not in observed
-            or observed[citation_id] != location_fields
+            raw_citation_id not in observed
+            or observed[raw_citation_id] != location_fields
             or location_fields[0] < 0
             or location_fields[1] < location_fields[0]
             or location_fields[2] < 1
             or location_fields[3] < location_fields[2]
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
-        citations.append(EvidenceCitation(citation_id, *location_fields))
+        citations.append(EvidenceCitation(raw_citation_id, *location_fields))
     if len({citation.citation_id for citation in citations}) != len(citations):
         raise EvidenceReaderLaunchError("citation_invalid")
     if any(
         not isinstance(gap, dict)
         or set(gap) != {"field", "reason"}
         or not isinstance(gap.get("field"), str)
+        or not gap["field"]
         or not isinstance(gap.get("reason"), str)
+        or not gap["reason"]
         for gap in payload["coverage_gaps"]
     ):
         raise EvidenceReaderLaunchError("result_schema_invalid")
+    evidence_fields = tuple(item["field"] for item in payload["evidence"])
+    gap_fields = tuple(item["field"] for item in payload["coverage_gaps"])
+    if (
+        len(requested_fields) != len(set(requested_fields))
+        or len(evidence_fields) != len(set(evidence_fields))
+        or len(gap_fields) != len(set(gap_fields))
+        or set(evidence_fields) & set(gap_fields)
+        or set(evidence_fields) | set(gap_fields) != set(requested_fields)
+    ):
+        raise EvidenceReaderLaunchError("result_partition_invalid")
+    complete = payload["complete"]
+    truncated = payload["truncated"]
+    stop_reason = payload["stop_reason"]
+    state_valid = {
+        EvidenceReaderResultStatus.ANSWERED: (
+            bool(evidence_fields)
+            and not gap_fields
+            and complete
+            and not truncated
+            and stop_reason == "requested fields covered"
+        ),
+        EvidenceReaderResultStatus.PARTIAL: (
+            bool(evidence_fields)
+            and bool(gap_fields)
+            and complete is not truncated
+            and stop_reason in {"artifact exhausted", "concrete blocker"}
+        ),
+        EvidenceReaderResultStatus.BLOCKED: (
+            not evidence_fields
+            and bool(gap_fields)
+            and complete
+            and not truncated
+            and stop_reason == "concrete blocker"
+        ),
+    }
+    if not state_valid[status]:
+        raise EvidenceReaderLaunchError("result_state_invalid")
     payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return EvidenceReaderLaunchResult(
         status=status,
@@ -692,6 +1204,8 @@ def launch_evidence_reader(
     prompt: str,
     mcp_transport: Mapping[str, object],
     provider_env: Mapping[str, str],
+    credential_file: Path | None,
+    requested_fields: tuple[str, ...],
     repository_root: Path,
     worktree_root: Path,
     common_git_dir: Path,
@@ -709,8 +1223,10 @@ def launch_evidence_reader(
         tools = canonical_reader_tools_to_bare(definition.reader_tools)
     except ValueError as exc:
         raise EvidenceReaderLaunchError("reader_role_invalid") from exc
-    strings = (prompt, expected_scope_digest, expected_snapshot_digest)
+    strings = (prompt, expected_scope_digest, expected_snapshot_digest, *requested_fields)
     if any(type(value) is not str or not value for value in strings):
+        raise EvidenceReaderLaunchError("launch_scope_invalid")
+    if not requested_fields or len(requested_fields) != len(set(requested_fields)):
         raise EvidenceReaderLaunchError("launch_scope_invalid")
     if len(prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
         raise EvidenceReaderLaunchError("launch_scope_invalid")
@@ -726,8 +1242,6 @@ def launch_evidence_reader(
     _deadline_remaining(deadline)
     evidence_env = _invocation_environment(invocation)
     provider = _positive_mapping(provider_env, _PROVIDER_ENV, "provider_env_invalid")
-    if not (_AUTH_KEYS & set(provider)):
-        raise EvidenceReaderLaunchError("provider_auth_missing")
     transport = _transport(mcp_transport)
     excluded = tuple(
         dict.fromkeys(
@@ -741,12 +1255,22 @@ def launch_evidence_reader(
     codex = shutil.which("codex")
     if codex is None:
         raise EvidenceReaderLaunchError("codex_unavailable")
+    if credential_file is not None:
+        try:
+            credential_parent = credential_file.parent.resolve(strict=True)
+        except OSError as exc:
+            if credential_file.exists() or credential_file.is_symlink():
+                raise EvidenceReaderLaunchError("provider_auth_invalid") from exc
+        else:
+            if any(_overlaps(credential_parent, root) for root in excluded):
+                raise EvidenceReaderLaunchError("provider_auth_invalid")
+    auth = _select_authentication(provider, credential_file)
     home = _isolated_directory(excluded, "home")
     cwd: Path | None = None
     try:
         cwd = _isolated_directory((*excluded, home), "cwd")
         environment = {
-            **provider,
+            **dict(auth.environment),
             **evidence_env,
             "HOME": str(home),
             "CODEX_HOME": str(home),
@@ -754,6 +1278,8 @@ def launch_evidence_reader(
             "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8",
         }
+        if auth.credential_text is not None:
+            _write_private(home / "auth.json", auth.credential_text)
         catalog = _probe_catalog(
             codex,
             definition,
@@ -763,7 +1289,14 @@ def launch_evidence_reader(
         )
         catalog_path = home / "models.json"
         _write_private(catalog_path, catalog)
-        config = _render_config(definition, transport, tools, catalog_path)
+        config = _render_config(
+            definition,
+            transport,
+            tools,
+            catalog_path,
+            auth,
+            tuple(sorted(environment)),
+        )
         try:
             tomllib.loads(config)
         except tomllib.TOMLDecodeError as exc:
@@ -771,29 +1304,84 @@ def launch_evidence_reader(
         config_path = home / "config.toml"
         _write_private(config_path, config)
         config_bytes = config.encode("utf-8")
-        _probe_mcp(
-            codex,
-            config_bytes,
-            cwd=cwd,
-            environment=environment,
-            deadline=deadline,
+        output_schema = _result_output_schema()
+        output_schema_path = home / _OUTPUT_SCHEMA_NAME
+        _write_private(output_schema_path, output_schema)
+        probe_schema_path = home / _PROBE_SCHEMA_NAME
+        _write_private(probe_schema_path, _probe_output_schema())
+        cli_version = _probe_cli_version(
+            codex, cwd=cwd, environment=environment, deadline=deadline
         )
+        probe_cache_key = _reader_probe_cache_key(
+            definition,
+            auth,
+            config=config_bytes,
+            catalog=catalog,
+            output_schema=output_schema,
+            transport=transport,
+        )
+        probe_cache_path = invocation.invocation_dir.parent / _PROBE_CACHE_NAME
+        cached_probe = read_probe_cache(
+            probe_cache_path,
+            cli_version,
+            _PROBE_POLICY,
+            cache_key=probe_cache_key,
+        )
+        if cached_probe is None or not cached_probe.passed:
+            try:
+                _probe_mcp(
+                    codex,
+                    config_bytes,
+                    cwd=cwd,
+                    environment=environment,
+                    deadline=deadline,
+                )
+                _probe_conformance(
+                    codex,
+                    definition,
+                    auth,
+                    cwd=cwd,
+                    environment=environment,
+                    probe_schema_path=probe_schema_path,
+                    deadline=deadline,
+                )
+            except EvidenceReaderLaunchError as exc:
+                write_probe_cache(
+                    probe_cache_path,
+                    ProbeResult(
+                        cli_version=cli_version,
+                        policy_identity=_PROBE_POLICY,
+                        passed=False,
+                        failure_detail=exc.code,
+                        probe_timestamp=datetime.now(UTC).isoformat(),
+                        cache_key=probe_cache_key,
+                    ),
+                )
+                raise
+            write_probe_cache(
+                probe_cache_path,
+                ProbeResult(
+                    cli_version=cli_version,
+                    policy_identity=_PROBE_POLICY,
+                    passed=True,
+                    failure_detail=None,
+                    probe_timestamp=datetime.now(UTC).isoformat(),
+                    cache_key=probe_cache_key,
+                ),
+            )
         canary = secrets.token_urlsafe(24)
-        command = _codex_exec_base(
-            sandbox="read-only",
-            extra_overrides=("sandbox_workspace_write.network_access=false",),
-        )
-        command[0] = codex
-        if definition.codex.model is not None:
-            command.extend(("--model", definition.codex.model))
-        command.append(
-            _prompt(
+        command = _codex_command(
+            codex,
+            definition,
+            cwd=cwd,
+            output_schema_path=output_schema_path,
+            prompt=_prompt(
                 definition,
                 prompt,
                 canary=canary,
                 scope=expected_scope_digest,
                 snapshot=expected_snapshot_digest,
-            )
+            ),
         )
         output = _run_bounded(
             command,
@@ -811,10 +1399,37 @@ def launch_evidence_reader(
             canary=canary,
             scope=expected_scope_digest,
             snapshot=expected_snapshot_digest,
+            requested_fields=requested_fields,
             max_result_bytes=max_result_bytes,
         )
         _require_empty_cwd(cwd)
-        return result
+        conformance = EvidenceReaderConformanceEvidence(
+            cli_version=cli_version,
+            auth_method=auth.forced_login_method,
+            auth_source_digest=auth.source_digest,
+            role_definition_digest=agent_definition_digest(definition),
+            authority_digest=evidence_env[EVIDENCE_READER_AUTHORITY_ENV_VAR],
+            config_digest="sha256:" + hashlib.sha256(config_bytes).hexdigest(),
+            catalog_digest="sha256:" + hashlib.sha256(catalog).hexdigest(),
+            output_schema_digest="sha256:" + hashlib.sha256(output_schema).hexdigest(),
+            transport_digest="sha256:"
+            + hashlib.sha256(
+                json.dumps(transport, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
+            command_digest="sha256:"
+            + hashlib.sha256(
+                json.dumps(command, separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
+            observation_scope=(
+                "generated_config",
+                "configured_mcp_transport",
+                "supported_cli_and_catalog_shape",
+                "output_schema_behavioral_canary",
+                "observed_runtime_calls",
+                "not_exhaustive_native_tool_inventory",
+            ),
+        )
+        return replace(result, conformance=conformance)
     finally:
         cleanup_error: EvidenceReaderLaunchError | None = None
         if cwd is not None:

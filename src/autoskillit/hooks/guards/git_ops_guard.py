@@ -483,6 +483,11 @@ def _classify_fetch(
             mappings.extend(
                 line for line in configured.stdout.decode("utf-8", errors="strict").splitlines()
             )
+        elif configured.returncode >= 2:
+            # Fail-closed: refmap unreadable (filesystem/permission) — return
+            # ambiguous so the caller routes through _all_threatened against
+            # every owned ref instead of silently allowing the fetch through.
+            return [("", "<unresolved>", True)]
     result: list[tuple[str, str, bool]] = []
     for mapping in mappings:
         source = mapping.removeprefix("+").split(":", 1)[0]

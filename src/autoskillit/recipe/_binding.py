@@ -453,7 +453,6 @@ def _structured_skill_inputs(
     contract: SkillContract,
     hidden_inputs: frozenset[str],
     ingredient_values: Mapping[str, BoundScalar],
-    optional_context_refs: frozenset[str],
 ) -> tuple[tuple[BoundValue, ...], tuple[BindingFailure, ...]]:
     input_by_name = {input_def.name: input_def for input_def in contract.inputs}
     failures: list[BindingFailure] = []
@@ -501,18 +500,6 @@ def _structured_skill_inputs(
             hidden_inputs=hidden_inputs,
             ingredient_values=ingredient_values,
         )
-        exact_context = (
-            _EXACT_CONTEXT_REF_RE.fullmatch(declared) if isinstance(declared, str) else None
-        )
-        if (
-            exact_context is not None
-            and exact_context.group(1) in optional_context_refs
-            and effective == declared
-            and input_def.has_absence_value
-        ):
-            absence_value = input_def.absence_value
-            assert isinstance(absence_value, (str, int, bool))
-            resolved = absence_value
         value = _bound_value(input_def.name, declared, resolved)
         bound.append(value)
         unresolved = bool(value.context_dependencies or value.input_dependencies)
@@ -796,7 +783,6 @@ def bind_step_invocation(
                 contract=contract,
                 hidden_inputs=hidden_inputs,
                 ingredient_values=ingredients,
-                optional_context_refs=frozenset(step.optional_context_refs),
             )
             failures.extend(skill_failures)
     else:

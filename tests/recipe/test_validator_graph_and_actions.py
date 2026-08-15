@@ -112,18 +112,18 @@ class TestPredicateBuildStepGraph:
 # ---------------------------------------------------------------------------
 
 
-def test_run_semantic_rules_builds_raw_step_edges_exactly_once(monkeypatch):
-    """Raw routing edges are built once regardless of how many rules need the graph."""
+def test_run_semantic_rules_builds_step_graph_exactly_once(monkeypatch):
+    """_build_step_graph is called only once regardless of how many rules need it."""
     from autoskillit.recipe import _analysis
 
     call_count = []
-    real_fn = _analysis._build_raw_step_edges
+    real_fn = _analysis._build_step_graph
 
     def counting_fn(recipe):
         call_count.append(1)
         return real_fn(recipe)
 
-    monkeypatch.setattr(_analysis, "_build_raw_step_edges", counting_fn)
+    monkeypatch.setattr(_analysis, "_build_step_graph", counting_fn)
 
     recipe = _parse_recipe(
         {

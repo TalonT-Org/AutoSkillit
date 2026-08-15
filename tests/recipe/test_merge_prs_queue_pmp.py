@@ -160,38 +160,16 @@ def test_merge_prs_attempt_cheap_rebase_exists(pmp_recipe) -> None:
 
 
 def test_merge_prs_attempt_cheap_rebase_routing(pmp_recipe) -> None:
-    """Only a reported conflict enters the branch-specific planning route."""
+    """attempt_cheap_rebase clean routes to push_ejected_fix, conflicts to resolve."""
     step = pmp_recipe.steps["attempt_cheap_rebase"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     clean_routes = [c for c in conditions if c.when and "clean" in c.when]
     assert clean_routes, "must have a 'clean' condition"
     assert clean_routes[0].route == "push_ejected_fix"
-    conflict = [c for c in conditions if c.when and "conflicts" in c.when]
-    assert conflict[0].route == "plan_ejected_rebase_conflicts"
     fallback = [c for c in conditions if c.when is None]
-    assert fallback[0].route == "register_clone_failure"
-    assert step.on_failure == "register_clone_failure"
-
-
-def test_merge_prs_ejected_conflict_uses_exact_report_plan_and_worktree(pmp_recipe) -> None:
-    rebase = pmp_recipe.steps["attempt_cheap_rebase"]
-    report = rebase.with_args["conflict_report_path"]
-    assert "/.autoskillit/temp/merge-prs/" in report
-    assert "context.current_pr_number" in report
-
-    plan = pmp_recipe.steps["plan_ejected_rebase_conflicts"]
-    assert plan.with_args["skill_inputs"]["task"] == (
-        "${{ context.ejected_rebase_conflict_report_path }}"
-    )
-    assert plan.capture["ejected_rebase_plan_path"].from_ == "${{ result.plan_path }}"
-
-    resolve = pmp_recipe.steps["resolve_ejected_conflicts"]
-    assert resolve.with_args["skill_inputs"]["plan_path"] == (
-        "${{ context.ejected_rebase_plan_path }}"
-    )
-    assert resolve.with_args["skill_inputs"]["worktree_path"] == "${{ context.work_dir }}"
-    assert resolve.with_args["cwd"] == "${{ context.work_dir }}"
+    assert fallback, "must have a fallback condition"
+    assert fallback[0].route == "resolve_ejected_conflicts"
 
 
 def test_merge_prs_get_ejected_routes_to_cheap_rebase(pmp_recipe) -> None:
@@ -264,36 +242,11 @@ def test_merge_prs_proactive_rebase_next_pr_routing(pmp_recipe) -> None:
         None,
     )
     assert clean_route == "push_rebased_next_pr"
-    conflict_route = next(
-        (c.route for c in step.on_result.conditions if c.when and "conflicts" in c.when),
-        None,
-    )
-    assert conflict_route == "plan_proactive_rebase_conflicts"
     fallback_route = next(
         (c.route for c in step.on_result.conditions if c.when is None),
         None,
     )
-    assert fallback_route == "get_current_pr_branch"
-
-
-def test_merge_prs_proactive_conflict_uses_exact_report_plan_and_worktree(pmp_recipe) -> None:
-    rebase = pmp_recipe.steps["proactive_rebase_next_pr"]
-    report = rebase.with_args["conflict_report_path"]
-    assert "/.autoskillit/temp/merge-prs/" in report
-    assert "context.current_pr_number" in report
-
-    plan = pmp_recipe.steps["plan_proactive_rebase_conflicts"]
-    assert plan.with_args["skill_inputs"]["task"] == (
-        "${{ context.proactive_rebase_conflict_report_path }}"
-    )
-    assert plan.capture["proactive_rebase_plan_path"].from_ == "${{ result.plan_path }}"
-
-    resolve = pmp_recipe.steps["resolve_proactive_rebase_conflicts"]
-    assert resolve.with_args["skill_inputs"]["plan_path"] == (
-        "${{ context.proactive_rebase_plan_path }}"
-    )
-    assert resolve.with_args["skill_inputs"]["worktree_path"] == "${{ context.work_dir }}"
-    assert resolve.with_args["cwd"] == "${{ context.work_dir }}"
+    assert fallback_route == "resolve_proactive_rebase_conflicts"
 
 
 def test_merge_prs_proactive_rebase_next_pr_on_failure_routes_through_ci_gate(pmp_recipe) -> None:

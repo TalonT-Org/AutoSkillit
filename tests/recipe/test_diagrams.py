@@ -131,10 +131,7 @@ def test_extract_routing_edges_covers_all_routing_fields() -> None:
         on_success="step_success",
         on_failure="step_failure",
         on_context_limit="step_context_limit",
-        on_rate_limit="step_rate_limit",
         on_exhausted="step_exhausted",
-        skip_when_false="inputs.enabled",
-        on_skip="configuration_only_skip",
         on_result=StepResultRoute(
             conditions=[
                 StepResultCondition(route="step_result_cond", when="result.x == 1"),
@@ -146,55 +143,8 @@ def test_extract_routing_edges_covers_all_routing_fields() -> None:
     assert "step_success" in targets, "on_success must be covered"
     assert "step_failure" in targets, "on_failure must be covered"
     assert "step_context_limit" in targets, "on_context_limit must be covered"
-    assert "step_rate_limit" in targets, "on_rate_limit must be covered"
     assert "step_exhausted" in targets, "on_exhausted must be covered"
     assert "step_result_cond" in targets, "on_result.conditions[].route must be covered"
-    assert "configuration_only_skip" not in targets
-
-    fallback = RecipeStep(
-        on_failure=None,
-        on_exhausted="",
-        on_result=StepResultRoute(routes={"ok": "step_result_route"}),
-    )
-    fallback_edges = _extract_routing_edges(fallback)
-    assert {(edge.target, edge.capture_available) for edge in fallback_edges} == {
-        ("step_result_route", True)
-    }
-
-
-def test_raw_step_graph_preserves_capturing_and_bypass_edges() -> None:
-    from autoskillit.recipe._analysis import _build_raw_step_edges, _build_step_graph
-    from autoskillit.recipe.schema import Recipe, RecipeStep
-
-    recipe = Recipe(
-        name="optional-route",
-        description="test",
-        steps={
-            "start": RecipeStep(on_success="optional"),
-            "optional": RecipeStep(
-                tool="run_skill",
-                capture={"report": "${{ result.report }}"},
-                skip_when_false="inputs.enabled",
-                on_skip="consumer",
-                on_success="consumer",
-            ),
-            "consumer": RecipeStep(action="stop"),
-        },
-    )
-
-    raw_edges = _build_raw_step_edges(recipe)
-    optional_edges = raw_edges["optional"]
-    assert {(edge.edge_type, edge.target, edge.capture_available) for edge in optional_edges} == {
-        ("success", "consumer", True),
-        ("configuration_skip", "consumer", False),
-    }
-    assert any(
-        edge.edge_type == "configuration_skip_bypass"
-        and edge.target == "consumer"
-        and edge.capture_available
-        for edge in raw_edges["start"]
-    )
-    assert _build_step_graph(recipe)["start"] == {"optional", "consumer"}
 
 
 # ---------------------------------------------------------------------------

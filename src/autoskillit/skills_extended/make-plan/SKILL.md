@@ -60,9 +60,7 @@ Create focused, actionable implementation plans that recommend the technically b
 - `task` — Task or source document for an ordinary plan.
 - `issue_url` (optional) — GitHub issue context consumed as described below.
 - `adversarial_review_level` (optional) — `auto`, `full`, or `none`.
-- `audit_cycle_path` (optional) — The explicit current audit-cycle authority. The exact empty
-  string `""` means there is no audit authority for an initial plan; callers with a structured
-  input surface must still supply the key and must not omit it or send null. A non-empty value,
+- `audit_cycle_path` (optional) — The explicit current audit-cycle authority. Its presence,
   not prose flags or ambient files, activates remediation mode. Before reading any referenced
   artifact, verify that this authority is the server-published current `NO GO` head and that
   its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
@@ -350,8 +348,8 @@ orchestrators can capture the plan and, in remediation mode, its verified dispos
 
 **Remediation-mode authority and disposition production:**
 
-1. Activate remediation mode only when `audit_cycle_path` is non-empty. The exact empty string
-   means no audit authority on an initial plan and is not an authoritative empty inventory.
+1. Activate remediation mode only when `audit_cycle_path` is present. Missing authority is
+   not equivalent to an authoritative empty inventory.
 2. Verify the canonical `AuditCycleAuthority`, trusted current-head identity, and `NO GO`
    verdict before opening its inventory or remediation `ArtifactRef`. Reject a stale,
    superseded, cross-generation, cross-scope, cross-part, tampered, or `GO` authority.

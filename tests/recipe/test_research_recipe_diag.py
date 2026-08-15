@@ -68,11 +68,10 @@ def test_push_branch_routes_to_prepare_research_pr(recipe):
     assert step.on_success == "prepare_research_pr"
 
 
-def test_prepare_research_pr_routes_to_initialize_diagram_paths(recipe):
-    """prepare_research_pr initializes the all-path diagram-list authority."""
+def test_prepare_research_pr_routes_to_run_experiment_lenses(recipe):
+    """prepare_research_pr.on_success must route to run_experiment_lenses."""
     step = recipe.steps["prepare_research_pr"]
-    assert step.on_success == "initialize_diagram_paths"
-    assert recipe.steps["initialize_diagram_paths"].on_success == "run_experiment_lenses"
+    assert step.on_success == "run_experiment_lenses"
 
 
 def test_run_experiment_lenses_routes_to_stage_bundle_on_success(recipe):

@@ -59,7 +59,7 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
-- Modify files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}`
+- Modify files outside `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/`
 - Emit verdict (verdict is not an output of this skill)
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
@@ -68,7 +68,7 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
 - Use `child delegation under the declared `sonnet` model-class policy` for the triage subagent
 - Emit `is_silent_type=true|false`
 - Emit `dimensions_manifest_path` as an absolute path
-- Write output to `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}`
+- Write output to `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/`
 - Issue all subagent calls in a single message to maximize parallel execution
 
 ## Workflow
@@ -155,7 +155,7 @@ Reference: `docs/research/silent-type-convention.md`.
 **When `is_silent_type=true`:**
 
 1. Write `dimensions_manifest` JSON to
-   `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+   `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
    with all-S weights from the base spec plus `secondary_modifiers: []`. This file MUST
    exist at a valid path — `dimensions_manifest_path` always points to a real file, even
    on the silent path.
@@ -172,7 +172,7 @@ Reference: `docs/research/silent-type-convention.md`.
 1. Build `{dimension: weight}` dict from the dimension_weights matrix (applying
    secondary modifier adjustments).
 2. Write JSON to
-   `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+   `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
    with schema:
 
    ```json
@@ -183,7 +183,7 @@ Reference: `docs/research/silent-type-convention.md`.
    ```
 
 3. For each non-SILENT dimension (weight != S), write a lens context file at
-   `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/lens_ctx_{dimension}_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+   `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/lens_ctx_{dimension}_{slug}_{YYYY-MM-DD_HHMMSS}.md`
    containing: experiment_type, weight, and relevant plan excerpts for that dimension.
 4. `selected_lenses` = comma-separated non-SILENT dimension names.
 5. `lens_context_paths` = comma-separated absolute paths to per-dimension context files.
@@ -212,7 +212,7 @@ Do NOT emit `verdict`. When `is_silent_type=true`, prepend advisory:
 ## Output
 
 ```
-${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/
+{{AUTOSKILLIT_TEMP}}/classify-experiment-type/
 ├── dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json
 ├── lens_ctx_{dimension1}_{slug}_{YYYY-MM-DD_HHMMSS}.md
 ├── lens_ctx_{dimension2}_{slug}_{YYYY-MM-DD_HHMMSS}.md
@@ -229,7 +229,7 @@ ${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-typ
 ## Context Limit Behavior
 
 When context is exhausted mid-execution, the `dimensions_manifest_path` and
-lens context files in `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}` may
+lens context files in `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/` may
 be partially written but the experiment_type classification may be incomplete.
 The recipe's `on_context_limit` route triggers `create_worktree`, preserving
 whatever was written so the next pipeline stage can attempt recovery or

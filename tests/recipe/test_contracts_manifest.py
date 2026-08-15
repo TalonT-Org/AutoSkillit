@@ -10,7 +10,6 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe._contracts_manifest import (
-    compute_skill_contract_identity,
     get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
@@ -30,43 +29,6 @@ def test_get_skill_contract_rejects_non_boolean_scope_discipline(value: object) 
         match="scope_discipline for skill 'demo-skill' must be a boolean",
     ):
         get_skill_contract("demo-skill", manifest)
-
-
-def test_get_skill_contract_loads_absence_value_and_rejects_null() -> None:
-    manifest = {
-        "skills": {
-            "demo-skill": {
-                "inputs": [
-                    {"name": "note", "type": "string", "required": False, "absence_value": ""}
-                ]
-            }
-        }
-    }
-    contract = get_skill_contract("demo-skill", manifest)
-    assert contract is not None
-    assert contract.inputs[0].absence_value == ""
-
-    manifest["skills"]["demo-skill"]["inputs"][0]["absence_value"] = None
-    with pytest.raises(TypeError, match="strict scalar"):
-        get_skill_contract("demo-skill", manifest)
-
-
-def test_absence_value_changes_only_the_configured_contract_identity() -> None:
-    base_input = {"name": "note", "type": "string", "required": False}
-    base = {"skills": {"demo": {"inputs": [base_input]}, "other": {"inputs": []}}}
-    configured = {
-        "skills": {
-            "demo": {"inputs": [{**base_input, "absence_value": ""}]},
-            "other": {"inputs": []},
-        }
-    }
-
-    assert compute_skill_contract_identity("demo", manifest=base) != (
-        compute_skill_contract_identity("demo", manifest=configured)
-    )
-    assert compute_skill_contract_identity("other", manifest=base) == (
-        compute_skill_contract_identity("other", manifest=configured)
-    )
 
 
 def test_get_callable_contract_promotes_allowed_values_for_commit_guard() -> None:

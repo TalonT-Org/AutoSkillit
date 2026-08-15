@@ -492,6 +492,7 @@ steps:
       step_name: rectify
     capture:
       plan_path: ${{ result.plan_path }}
+      all_plan_paths: ${{ result.plan_path }}
     capture_list:
       plan_parts: ${{ result.plan_parts }}
     retries: 0
@@ -501,6 +502,11 @@ steps:
     on_context_limit: salvage_rectify_plan
     note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
       into plan_parts[].
+
+      ACCUMULATION: all_plan_paths accumulates across any re-entries to the rectify
+      step. On re-entry, the agent MUST append the captured plan_path to context.all_plan_paths
+      using a comma separator instead of letting the capture block overwrite the accumulated
+      value.
 
       '
   salvage_rectify_plan:
@@ -606,7 +612,6 @@ steps:
       step_name: create_impl_worktree
     capture:
       worktree_path: ${{ result.worktree_path }}
-      branch_name: ${{ result.branch_name }}
     on_success: implement
     on_failure: release_issue_failure
     note: Creates worktree at orchestrator level (unsandboxed) so .git/ metadata writes
@@ -1180,7 +1185,7 @@ steps:
     with:
       skill_command: /autoskillit:audit-impl
       skill_inputs:
-        all_plan_paths: ${{ context.plan_parts }}
+        all_plan_paths: ${{ context.all_plan_paths }}
         deviation_manifest_path: ${{ context.deviation_manifest_path }}
         branch_name: ${{ context.branch_name }}
         base_branch: ${{ inputs.base_branch }}
@@ -1191,7 +1196,7 @@ steps:
       retry_after_audit_attempt_id: ${{ context.audit_attempt_id }}
       closure_authority_path: ${{ inputs.closure_authority_path }}
       closure_authority_hash: ${{ inputs.closure_authority_hash }}
-      closure_plan_paths: ${{ context.plan_parts }}
+      closure_plan_paths: ${{ context.all_plan_paths }}
       closure_base_sha: ${{ context.branch_name }}
       closure_diff_sha: ''
       closure_target_sha: ''
@@ -1259,6 +1264,7 @@ steps:
       output_dir: .
     capture:
       plan_path: ${{ result.plan_path }}
+      all_plan_paths: ${{ result.plan_path }}
       verdict: ${{ result.verdict }}
       plan_disposition_path: ${{ result.plan_disposition_path }}
     capture_list:
@@ -1271,9 +1277,8 @@ steps:
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_plan
     note: Consumes the exact current NO GO audit_cycle_path and emits verdict=plan,
-      plan_path, and plan_disposition_path. make-plan cannot close the audit lineage.
-    optional_context_refs:
-    - audit_cycle_path
+      plan_path, and plan_disposition_path. all_plan_paths appends the recovered plan;
+      make-plan cannot close the audit lineage.
   salvage_plan:
     tool: run_python
     with:
@@ -1284,6 +1289,7 @@ steps:
     capture:
       plan_path: ${{ result.plan_path }}
       plan_disposition_path: ${{ result.plan_disposition_path }}
+      all_plan_paths: ${{ result.plan_path }}
     capture_list:
       plan_parts: ${{ result.plan_parts }}
     optional_context_refs:
@@ -1452,7 +1458,7 @@ steps:
       skill_command: /autoskillit:prepare-pr
       skill_inputs:
         arch_lenses: ${{ inputs.arch_lenses }}
-        plan_paths: ${{ context.plan_parts }}
+        plan_paths: ${{ context.all_plan_paths }}
         closing_issue: ${{ context.issue_number }}
         base_branch: ${{ inputs.base_branch }}
         run_name: ${{ inputs.run_name }}
@@ -1470,14 +1476,12 @@ steps:
       route: compose_pr
     - route: release_issue_failure
     on_failure: release_issue_failure
-    on_context_limit: release_issue_failure
-    on_rate_limit: release_issue_failure
+    on_context_limit: prepare_pr
+    on_rate_limit: prepare_pr
     on_exhausted: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    optional_context_refs:
-    - issue_number
     note: "Reads plan, runs git diff, classifies changed files, selects 1\u20133 arch-lens\
       \ slugs, writes one PR context file per lens, and writes a PR prep file. Does\
       \ NOT invoke arch-lens skills.\n"
@@ -1536,9 +1540,6 @@ steps:
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    optional_context_refs:
-    - all_diagram_paths
-    - issue_number
     note: "Reads the PR prep file, validates arch-lens diagrams (must contain \u2605\
       \ or \u25CF), composes the PR body, and runs gh pr create. Degrades gracefully\
       \ if gh is unavailable (emits pr_url=).\n"
@@ -1580,13 +1581,12 @@ steps:
   init_review_loop_count:
     tool: run_python
     with:
-      step_name: init_review_loop_count
       callable: autoskillit.smoke_utils.init_counter
       counter_value: ${{ context.review_loop_count }}
     capture:
       review_loop_count: ${{ result.value }}
     on_success: clear_review_annotation_context
-    on_failure: release_issue_failure
+    on_failure: clear_review_annotation_context
     optional_context_refs:
     - review_loop_count
   clear_review_annotation_context:
@@ -2811,8 +2811,6 @@ steps:
     on_rate_limit: resolve_ci
     optional: true
     optional_context_refs:
-    - ci_event
-    - ci_failed_jobs
     - ci_rebase_count
     - ci_flake_count
     skip_when_false: inputs.open_pr
@@ -2858,10 +2856,6 @@ steps:
       route: release_issue_failure
     - route: release_issue_failure
     on_failure: release_issue_failure
-    optional_context_refs:
-    - ci_conclusion
-    - ci_failed_jobs
-    - diagnosis_path
     note: "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci\
       \ structured output to avoid redundant CI failure re-investigation. Routes via\
       \ on_result: verdict dispatch \u2014 real_fix pushes, already_green rebases\

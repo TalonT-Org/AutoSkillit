@@ -63,11 +63,9 @@ prose report. When absent or the file does not exist, fall back to extracting di
 from the Proposed Investigation Directions section of the scope report.
 
 `{revision_guidance}` — Optional. Absolute path to revision guidance produced by
-`/autoskillit:review-design` when verdict=REVISE. The exact empty string `""` means there is
-no revision guidance on the first pass; callers with a structured input surface must still
-supply the key and must not omit it or send null. Scan for the third path-like token. When
-empty, proceed normally. When non-empty, read it and incorporate the feedback before writing
-the plan.
+`/autoskillit:review-design` when verdict=REVISE. Scan for the third path-like token.
+When absent or empty (first pass), proceed normally. When present, read it and
+incorporate the feedback before writing the plan.
 
 ## Critical Constraints
 
@@ -126,7 +124,7 @@ Detect and read inputs:
 3. If a third path-like token is present and resolves to an existing file, read
    `{revision_guidance}`. Extract all revision instructions — these take priority over
    your initial analysis in Step 2. Note which sections of the plan need rework.
-   When empty, omit this sub-step and proceed normally (first pass).
+   When absent or empty, omit this sub-step and proceed normally (first pass).
 
 ### Step 2 — Explore Feasibility (SINGLE MESSAGE)
 

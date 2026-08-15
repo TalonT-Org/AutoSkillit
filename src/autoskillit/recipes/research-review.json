@@ -92,9 +92,19 @@
     "prepare_research_pr": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path",
+        "research_dir",
+        "report_path",
+        "experiment_plan",
+        "experiment_results",
+        "experiment_type",
+        "scope_report",
+        "visualization_plan_path"
+      ],
       "with": {
-        "skill_command": "/autoskillit:prepare-research-pr ${{ inputs.report_path }} ${{ inputs.experiment_plan }} ${{ inputs.worktree_path }} ${{ inputs.base_branch }}",
-        "cwd": "${{ inputs.worktree_path }}",
+        "skill_command": "/autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path }} ${{ inputs.base_branch }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "prepare_research_pr",
         "output_dir": "."
       },
@@ -103,28 +113,19 @@
         "selected_lenses": "${{ result.selected_lenses }}",
         "lens_context_paths": "${{ result.lens_context_paths }}"
       },
-      "on_success": "initialize_diagram_paths",
-      "on_failure": "escalate_stop"
-    },
-    "initialize_diagram_paths": {
-      "tool": "run_cmd",
-      "with": {
-        "cmd": ":",
-        "cwd": "${{ inputs.worktree_path }}",
-        "step_name": "initialize_diagram_paths"
-      },
-      "capture": {
-        "all_diagram_paths": "${{ result.stdout | trim }}"
-      },
       "on_success": "run_experiment_lenses",
       "on_failure": "escalate_stop"
     },
     "run_experiment_lenses": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path",
+        "experiment_plan"
+      ],
       "with": {
-        "skill_command": "/autoskillit:exp-lens-{slug} {context_path} ${{ inputs.experiment_plan }}",
-        "cwd": "${{ inputs.worktree_path }}",
+        "skill_command": "/autoskillit:exp-lens-{slug} {context_path} ${{ context.experiment_plan }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "run_experiment_lenses"
       },
       "capture_list": {
@@ -136,9 +137,13 @@
     },
     "stage_bundle": {
       "tool": "run_cmd",
+      "optional_context_refs": [
+        "research_dir",
+        "worktree_path"
+      ],
       "with": {
-        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ inputs.research_dir }}' '${{ inputs.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
-        "cwd": "${{ inputs.worktree_path }}",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "stage_bundle"
       },
       "on_success": "route_pr_or_local",
@@ -161,9 +166,12 @@
     "compose_research_pr": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
-        "skill_command": "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ inputs.worktree_path }} ${{ inputs.base_branch }}",
-        "cwd": "${{ inputs.worktree_path }}",
+        "skill_command": "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.worktree_path }} ${{ inputs.base_branch }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "compose_research_pr",
         "output_dir": "."
       },
@@ -191,9 +199,12 @@
     },
     "extract_pr_number": {
       "tool": "run_cmd",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "cmd": "gh pr view '${{ context.pr_url }}' --json number -q .number",
-        "cwd": "${{ inputs.worktree_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "extract_pr_number"
       },
       "capture": {
@@ -205,6 +216,9 @@
     },
     "capture_review_repository": {
       "tool": "run_cmd",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "cmd": "gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'",
         "cwd": "${{ inputs.worktree_path }}",
@@ -218,6 +232,9 @@
     },
     "annotate_pr_diff": {
       "tool": "run_python",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "callable": "autoskillit.smoke_utils.annotate_pr_diff",
         "pr_number": "${{ context.pr_number }}",
@@ -241,10 +258,13 @@
     "review_research_pr": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "skill_command": "/autoskillit:review-research-pr",
         "skill_inputs": {
-          "worktree_path": "${{ inputs.worktree_path }}",
+          "worktree_path": "${{ context.worktree_path }}",
           "base_branch": "${{ inputs.base_branch }}",
           "pr_url": "${{ context.pr_url }}",
           "repository": "${{ context.review_repository }}",
@@ -257,7 +277,7 @@
           "hunk_ranges_path": "${{ context.hunk_ranges_path }}",
           "valid_lines_path": "${{ context.valid_lines_path }}"
         },
-        "cwd": "${{ inputs.worktree_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "review_research_pr",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-research-pr/research-review"
       },
@@ -320,10 +340,13 @@
     "audit_claims": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "skill_command": "/autoskillit:audit-claims",
         "skill_inputs": {
-          "worktree_path": "${{ inputs.worktree_path }}",
+          "worktree_path": "${{ context.worktree_path }}",
           "base_branch": "${{ inputs.base_branch }}",
           "pr_url": "${{ context.pr_url }}",
           "repository": "${{ context.review_repository }}",
@@ -332,7 +355,7 @@
           "logical_iteration": "audit-claims:research-review",
           "receipt_path": "{{AUTOSKILLIT_TEMP}}/audit-claims/batch_review_response_${{ context.pr_number }}.json"
         },
-        "cwd": "${{ inputs.worktree_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "audit_claims",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-claims"
       },
@@ -410,9 +433,12 @@
     "resolve_research_review": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
-        "skill_command": "/autoskillit:resolve-research-review ${{ inputs.worktree_path }} ${{ inputs.base_branch }}",
-        "cwd": "${{ inputs.worktree_path }}",
+        "skill_command": "/autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "resolve_research_review",
         "output_dir": "."
       },
@@ -441,9 +467,12 @@
     "resolve_claims_review": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
-        "skill_command": "/autoskillit:resolve-claims-review ${{ inputs.worktree_path }} ${{ inputs.base_branch }}",
-        "cwd": "${{ inputs.worktree_path }}",
+        "skill_command": "/autoskillit:resolve-claims-review ${{ context.worktree_path }} ${{ inputs.base_branch }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "resolve_claims_review",
         "output_dir": "."
       },
@@ -478,13 +507,16 @@
       "model": "",
       "stale_threshold": 2400,
       "idle_output_timeout": 0,
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "skill_command": "/autoskillit:run-experiment",
         "skill_inputs": {
-          "worktree_path": "${{ inputs.worktree_path }}",
+          "worktree_path": "${{ context.worktree_path }}",
           "adjust": true
         },
-        "cwd": "${{ inputs.worktree_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "re_run_experiment",
         "output_dir": "."
       },
@@ -509,20 +541,24 @@
       ],
       "on_failure": "re_push_research",
       "on_context_limit": "escalate_stop",
-      "note": "Targeted re-run of affected benchmarks after review resolution applied code fixes. Uses --adjust to read previous results and re-run only what changed. On failure, falls through to push as best-effort — the code fixes from resolve are already committed and should still be pushed.\n"
+      "note": "Targeted re-run of affected benchmarks after review resolution applied code fixes. Uses --adjust to read previous results and re-run only what changed. Intentionally shadows the experiment_results ingredient (L58): after this step, context.experiment_results holds the re-run results_path so re_generate_report uses fresh data. on_failure falls through to push as best-effort — the code fixes from resolve are already committed and should still be pushed.\n"
     },
     "re_generate_report": {
       "tool": "run_skill",
       "model": "",
+      "optional_context_refs": [
+        "worktree_path",
+        "experiment_results"
+      ],
       "with": {
         "skill_command": "/autoskillit:generate-report",
         "skill_inputs": {
-          "worktree_path": "${{ inputs.worktree_path }}",
-          "results_path": "${{ inputs.experiment_results }}",
+          "worktree_path": "${{ context.worktree_path }}",
+          "results_path": "${{ context.experiment_results }}",
           "output_mode": "${{ inputs.output_mode }}",
           "issue_url": "${{ inputs.issue_url }}"
         },
-        "cwd": "${{ inputs.worktree_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "re_generate_report",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
       },
@@ -532,13 +568,17 @@
       "on_success": "re_stage_bundle",
       "on_failure": "re_push_research",
       "on_context_limit": "re_push_research",
-      "note": "Re-generate the research report using the required experiment-results authority supplied to the recipe. The generated report path is captured for the remainder of the revalidation branch. Falls through to push on failure.\n"
+      "note": "Re-generate the research report with updated benchmark results from the re-validation run. Passes context.experiment_results which was updated by re_run_experiment to point to the new results file. Intentionally shadows the report_path ingredient (L52): after this step, context.report_path holds the regenerated path so downstream steps receive the updated report. Falls through to push on failure.\n"
     },
     "re_stage_bundle": {
       "tool": "run_cmd",
+      "optional_context_refs": [
+        "research_dir",
+        "worktree_path"
+      ],
       "with": {
-        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ inputs.research_dir }}' '${{ inputs.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
-        "cwd": "${{ inputs.worktree_path }}",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "re_stage_bundle"
       },
       "on_success": "re_test",
@@ -547,8 +587,11 @@
     },
     "re_test": {
       "tool": "test_check",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
-        "worktree_path": "${{ inputs.worktree_path }}"
+        "worktree_path": "${{ context.worktree_path }}"
       },
       "on_success": "re_push_research",
       "on_failure": "re_push_research",
@@ -556,9 +599,12 @@
     },
     "re_push_research": {
       "tool": "run_cmd",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "cmd": "git push",
-        "cwd": "${{ inputs.worktree_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "re_push_research"
       },
       "on_success": "finalize_bundle",
@@ -566,9 +612,13 @@
     },
     "finalize_bundle": {
       "tool": "run_cmd",
+      "optional_context_refs": [
+        "research_dir",
+        "worktree_path"
+      ],
       "with": {
-        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ inputs.research_dir }}' '${{ inputs.worktree_path }}'",
-        "cwd": "${{ inputs.worktree_path }}",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{ context.worktree_path }}'",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "finalize_bundle"
       },
       "capture": {
@@ -582,11 +632,14 @@
       "tool": "run_skill",
       "model": "",
       "optional_context_refs": [
-        "all_diagram_paths"
+        "research_dir",
+        "worktree_path",
+        "all_diagram_paths",
+        "visualization_plan_path"
       ],
       "with": {
-        "skill_command": "/autoskillit:bundle-local-report ${{ inputs.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ inputs.visualization_plan_path }}",
-        "cwd": "${{ inputs.worktree_path }}",
+        "skill_command": "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "finalize_bundle_render",
         "output_dir": "."
       },
@@ -612,10 +665,13 @@
     },
     "export_local_bundle": {
       "tool": "run_python",
+      "optional_context_refs": [
+        "research_dir"
+      ],
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.export_local_bundle",
         "source_dir": "${{ inputs.source_dir }}",
-        "research_dir": "${{ inputs.research_dir }}"
+        "research_dir": "${{ context.research_dir }}"
       },
       "capture": {
         "local_bundle_path": "${{ result.local_bundle_path }}"
@@ -626,7 +682,7 @@
     },
     "review_pr_complete": {
       "action": "stop",
-      "message": "Review phase complete (PR mode). Emit the L3 result sentinel JSON block now. The sentinel must include the following fields: success=true, pr_url=${{ context.pr_url }}, report_path_after_finalize=${{ context.report_path_after_finalize }}, worktree_path=${{ inputs.worktree_path }}, research_dir=${{ inputs.research_dir }}. Note: report_path_after_finalize is empty string when reached via the guard_pr_url fallback (pr_url absent) — finalize_bundle is bypassed in that path. Emit empty string for this field in that case. Example sentinel: {\"success\": true, \"pr_url\": \"<url>\", \"report_path_after_finalize\": \"<path>\", \"worktree_path\": \"<path>\", \"research_dir\": \"<path>\"}"
+      "message": "Review phase complete (PR mode). Emit the L3 result sentinel JSON block now. The sentinel must include the following fields: success=true, pr_url=${{ context.pr_url }}, report_path_after_finalize=${{ context.report_path_after_finalize }}, worktree_path=${{ context.worktree_path }}, research_dir=${{ context.research_dir }}. Note: report_path_after_finalize is empty string when reached via the guard_pr_url fallback (pr_url absent) — finalize_bundle is bypassed in that path. Emit empty string for this field in that case. Example sentinel: {\"success\": true, \"pr_url\": \"<url>\", \"report_path_after_finalize\": \"<path>\", \"worktree_path\": \"<path>\", \"research_dir\": \"<path>\"}"
     },
     "review_local_complete": {
       "action": "stop",

@@ -84,11 +84,6 @@ results are valid findings, not failures.
   When provided, the report enumerates all groups and their status before presenting
   detailed findings.
 
-For structured recipe invocations, the literal string `null` is the vacancy value
-for experiment type, methodology traditions, disambiguation rule, Tier-C lens, and
-classification timestamp. An empty `group_manifest` means no group manifest was
-produced. Treat those values exactly like the corresponding optional flag being absent.
-
 ## Inputs
 
 In addition to the arguments above, this skill reads from the worktree:

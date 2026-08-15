@@ -228,9 +228,7 @@ class TestResearchRecipeStructure:
         for step_name in ("re_run_experiment", "re_generate_report", "re_test"):
             step = recipe.steps[step_name]
             assert step.on_failure in ("begin_archival", "re_push_research")
-        assert recipe.steps["re_push_research"].on_success == "finalize_bundle"
-        assert recipe.steps["finalize_bundle"].on_success == "push_finalized_bundle"
-        assert recipe.steps["push_finalized_bundle"].on_success == "finalize_bundle_render"
+        assert recipe.steps["re_push_research"].on_success == "finalize_bundle_render"
 
     def test_audit_claims_ingredient_default_false(self, recipe) -> None:
         assert "audit_claims" in recipe.ingredients
@@ -436,16 +434,16 @@ class TestResearchRecipeStructure:
                 f"{name}.on_failure must be patch_token_summary for graceful degradation"
             )
 
-    def test_re_push_research_routes_to_finalize_bundle(self, recipe) -> None:
-        """re_push_research advances to the single bundle compression point."""
+    def test_re_push_research_routes_to_finalize_bundle_render(self, recipe) -> None:
+        """re_push_research routes to finalize_bundle_render on success."""
         step = recipe.steps["re_push_research"]
-        assert step.on_success == "finalize_bundle"
+        assert step.on_success == "finalize_bundle_render"
         assert step.on_failure == "begin_archival"
 
-    def test_finalize_bundle_routes_to_push_finalized_bundle(self, recipe) -> None:
-        """finalize_bundle pushes its compression commit before HTML rendering."""
+    def test_finalize_bundle_routes_to_re_push_research(self, recipe) -> None:
+        """finalize_bundle on_success routes to re_push_research (push includes the commit)."""
         step = recipe.steps["finalize_bundle"]
-        assert step.on_success == "push_finalized_bundle"
+        assert step.on_success == "re_push_research"
         assert step.on_failure == "begin_archival"
 
     def test_finalize_bundle_render_step_exists_and_routes(self, recipe) -> None:

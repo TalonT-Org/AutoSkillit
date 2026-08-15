@@ -54,11 +54,7 @@ def test_loaded_audit_remediation_chain_delivers_one_bound_authority(
         authority = invocation.skill_input("audit_cycle_path")
         assert authority is not None and authority.is_present
         assert authority.context_dependencies == ("audit_cycle_path",)
-        if step_name not in {
-            "plan_ejected_rebase_conflicts",
-            "plan_proactive_rebase_conflicts",
-        }:
-            assert "plan_disposition_path" in recipe.steps[step_name].capture
+        assert "plan_disposition_path" in recipe.steps[step_name].capture
 
     assert not any(
         "false_positive" in str(condition.when)

@@ -248,11 +248,11 @@ steps:
     retries: 0
     on_success: next_phase_or_experiment
     on_failure: check_implement_fix_loop
-    on_exhausted: escalate_stop
-    on_context_limit: escalate_stop
-    note: 'Implements the current phase plan in an isolated worktree via implement-experiment. Context exhaustion escalates
-      because no authoritative worktree path is available. Failures route to troubleshoot for classification before re-planning
-      or escalation.
+    on_exhausted: audit_impl
+    on_context_limit: audit_impl
+    note: 'Implements the current phase plan in an isolated worktree via implement-experiment. Context exhaustion routes to
+      audit_impl for implementation completeness verification before proceeding to run_experiment. Failures route to troubleshoot
+      for classification before re-planning or escalation.
 
       '
   troubleshoot_implement_failure:
@@ -263,7 +263,7 @@ steps:
     with:
       skill_command: /autoskillit:troubleshoot-experiment
       skill_inputs:
-        worktree_path: ${{ inputs.worktree_path }}
+        worktree_path: ${{ context.worktree_path }}
         step_name: implement_phase
       cwd: ${{ inputs.source_dir }}
       step_name: troubleshoot_implement_failure
@@ -291,14 +291,14 @@ steps:
       implement_fix_count: ${{ result.next_iteration }}
     on_result:
     - when: ${{ result.max_exceeded }} == true
-      route: escalate_stop
+      route: audit_impl
     - route: troubleshoot_implement_failure
-    on_failure: escalate_stop
+    on_failure: audit_impl
     optional_context_refs:
     - implement_fix_count
     - retry_delay
     note: 'Iteration guard for implement_phase → troubleshoot → plan_phase cycle. Caps fix-and-retry loops at 3 iterations.
-      On exhaustion, escalates because there is no authoritative completed worktree to audit.
+      On exhaustion, routes to audit_impl to verify implementation completeness before run_experiment.
 
       '
   route_implement_retry_delay:

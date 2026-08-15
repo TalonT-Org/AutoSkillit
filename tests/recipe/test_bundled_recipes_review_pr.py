@@ -231,20 +231,26 @@ def test_merge_prs_pre_review_rebase_integration_uses_run_python() -> None:
     )
 
 
-def test_merge_prs_pre_review_rebase_integration_rejects_unplanned_conflicts() -> None:
-    """A pre-review conflict without its own report and plan must escalate."""
+def test_merge_prs_pre_review_rebase_integration_routes_to_conflict_resolution() -> None:
+    """merge-prs pre_review_rebase_integration on_result must route to conflict resolution."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     step = recipe.steps["pre_review_rebase_integration"]
     assert step.on_result is not None
     routes = [c.route for c in step.on_result.conditions]
-    assert routes == ["re_push_review_integration", "register_clone_failure"]
-    assert step.on_failure == "register_clone_failure"
+    assert "resolve_pre_review_integration_conflicts" in routes, (
+        f"pre_review_rebase_integration on_result must include "
+        f"resolve_pre_review_integration_conflicts, got {routes}"
+    )
 
 
-def test_merge_prs_has_no_unplanned_pre_review_conflict_resolver() -> None:
-    """Do not reuse a prior plan for a newly discovered pre-review conflict."""
+def test_merge_prs_resolve_pre_review_integration_conflicts_uses_merge_skill() -> None:
+    """merge-prs resolve_pre_review_integration_conflicts must invoke resolve-merge-conflicts."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
-    assert "resolve_pre_review_integration_conflicts" not in recipe.steps
+    assert "resolve_pre_review_integration_conflicts" in recipe.steps
+    step = recipe.steps["resolve_pre_review_integration_conflicts"]
+    assert step.tool == "run_skill"
+    cmd = step.with_args.get("skill_command", "")
+    assert "resolve-merge-conflicts" in cmd
 
 
 # ---------------------------------------------------------------------------

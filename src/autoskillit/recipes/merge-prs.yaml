@@ -219,8 +219,6 @@ steps:
     on_success: route_by_queue_mode
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
-    optional_context_refs:
-    - merge_queue_data_path
     note: 'Captures pr_order_file (path to JSON with ordered PRs + complexity tags), batch_branch (e.g. integration/pr-merge-20250228-143052),
       and queue_mode ("true" when a GitHub merge queue with MERGEABLE entries is active on base_branch; "false" otherwise).
       If the skill reports pr_count=0 (no open PRs), skip directly to cleanup_success — no integration branch is needed. merge_queue_data_path
@@ -417,56 +415,24 @@ steps:
         work_dir: ${{ context.work_dir }}
         ejected_pr_branch: ${{ context.ejected_pr_branch }}
         base_branch: ${{ inputs.base_branch }}
-        conflict_report_path: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/merge-prs/ejected_rebase_conflict_${{ context.current_pr_number
-          }}.md
-    capture:
-      ejected_rebase_conflict_report_path: ${{ result.conflict_report_path }}
     on_result:
     - when: ${{ result.status }} == clean
       route: push_ejected_fix
-    - when: ${{ result.status }} == conflicts
-      route: plan_ejected_rebase_conflicts
-    - route: register_clone_failure
-    on_failure: register_clone_failure
+    - route: resolve_ejected_conflicts
+    on_failure: resolve_ejected_conflicts
     note: 'Attempts a trivial rebase before invoking the full resolve-merge-conflicts skill. Uses ejected_pr_branch captured
-      by get_ejected_pr_branch. On clean rebase, skips the skill and proceeds directly to push_ejected_fix. On conflict, publishes
-      a bounded conflict report before aborting the rebase, and routes only the conflicts result to branch-specific planning.
+      by get_ejected_pr_branch. On clean rebase, skips the skill and proceeds directly to push_ejected_fix. On conflict, aborts
+      the rebase and routes to resolve_ejected_conflicts for goal-aware resolution.
 
       '
-  plan_ejected_rebase_conflicts:
-    tool: run_skill
-    model: ''
-    with:
-      skill_command: /autoskillit:make-plan
-      skill_inputs:
-        task: ${{ context.ejected_rebase_conflict_report_path }}
-        audit_cycle_path: ${{ context.audit_cycle_path }}
-      cwd: ${{ context.work_dir }}
-      output_dir: .
-      step_name: plan_ejected_rebase_conflicts
-    capture:
-      ejected_rebase_plan_path: ${{ result.plan_path }}
-    capture_list:
-      plan_parts: ${{ result.plan_parts }}
-    optional_context_refs:
-    - audit_cycle_path
-    on_result:
-    - when: ${{ result.verdict }} == plan
-      route: resolve_ejected_conflicts
-    - route: register_clone_failure
-    on_failure: register_clone_failure
-    on_exhausted: register_clone_failure
-    on_context_limit: register_clone_failure
-    on_rate_limit: register_clone_failure
-    retries: 0
   resolve_ejected_conflicts:
     tool: run_skill
     model: ''
     with:
       skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        worktree_path: ${{ context.work_dir }}
-        plan_path: ${{ context.ejected_rebase_plan_path }}
+        worktree_path: ${{ context.ejected_pr_branch }}
+        plan_path: ${{ context.pr_plan_path }}
         base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       output_dir: .
@@ -475,6 +441,8 @@ steps:
       conflict_escalation_required: ${{ result.escalation_required }}
     capture_list:
       all_conflict_report_paths: ${{ result.conflict_report_path }}
+    optional_context_refs:
+    - pr_plan_path
     on_result:
     - when: ${{ result.escalation_required }} == true
       route: register_clone_failure
@@ -687,57 +655,24 @@ steps:
         work_dir: ${{ context.work_dir }}
         next_pr_branch: ${{ context.next_pr_branch }}
         base_branch: ${{ inputs.base_branch }}
-        conflict_report_path: ${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/merge-prs/proactive_rebase_conflict_${{ context.current_pr_number
-          }}.md
-    capture:
-      proactive_rebase_conflict_report_path: ${{ result.conflict_report_path }}
     on_result:
     - when: ${{ result.status }} == clean
       route: push_rebased_next_pr
-    - when: ${{ result.status }} == conflicts
-      route: plan_proactive_rebase_conflicts
-    - route: get_current_pr_branch
+    - route: resolve_proactive_rebase_conflicts
     on_failure: get_current_pr_branch
     note: 'Attempts a proactive rebase of the next PR branch onto the current base_branch HEAD before submitting to the merge
-      queue. On clean rebase, skips conflict resolution entirely and proceeds to push. On conflict, publishes a bounded
-      report and routes to branch-specific planning. On git command failure, falls through to get_current_pr_branch to
-      enforce the CI gate.
+      queue. On clean rebase, skips conflict resolution entirely and proceeds to push. On conflict, routes to resolve_proactive_rebase_conflicts.
+      On git command failure, falls through to get_current_pr_branch to enforce the CI gate.
 
       '
-  plan_proactive_rebase_conflicts:
-    tool: run_skill
-    model: ''
-    with:
-      skill_command: /autoskillit:make-plan
-      skill_inputs:
-        task: ${{ context.proactive_rebase_conflict_report_path }}
-        audit_cycle_path: ${{ context.audit_cycle_path }}
-      cwd: ${{ context.work_dir }}
-      output_dir: .
-      step_name: plan_proactive_rebase_conflicts
-    capture:
-      proactive_rebase_plan_path: ${{ result.plan_path }}
-    capture_list:
-      plan_parts: ${{ result.plan_parts }}
-    optional_context_refs:
-    - audit_cycle_path
-    on_result:
-    - when: ${{ result.verdict }} == plan
-      route: resolve_proactive_rebase_conflicts
-    - route: get_current_pr_branch
-    on_failure: get_current_pr_branch
-    on_exhausted: get_current_pr_branch
-    on_context_limit: get_current_pr_branch
-    on_rate_limit: get_current_pr_branch
-    retries: 0
   resolve_proactive_rebase_conflicts:
     tool: run_skill
     model: ''
     with:
       skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        worktree_path: ${{ context.work_dir }}
-        plan_path: ${{ context.proactive_rebase_plan_path }}
+        worktree_path: ${{ context.next_pr_branch }}
+        plan_path: ${{ context.pr_plan_path }}
         base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       output_dir: .
@@ -747,6 +682,8 @@ steps:
       conflict_escalation_reason: ${{ result.escalation_reason }}
     capture_list:
       all_conflict_report_paths: ${{ result.conflict_report_path }}
+    optional_context_refs:
+    - pr_plan_path
     on_result:
     - when: ${{ result.escalation_required }} == true
       route: register_clone_failure
@@ -786,8 +723,6 @@ steps:
       cwd: ${{ context.work_dir }}
       step_name: diagnose_queue_ci
       output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci'
-    optional_context_refs:
-    - ci_event
     capture:
       diagnosis_path: ${{ result.diagnosis_path }}
     on_success: register_clone_failure
@@ -993,6 +928,27 @@ steps:
     on_success: test
     on_failure: register_clone_failure
     retries: 0
+    on_exhausted: retry_worktree
+    on_context_limit: retry_worktree
+    on_rate_limit: retry_worktree
+  retry_worktree:
+    tool: run_skill
+    model: ''
+    stale_threshold: 2400
+    with:
+      skill_command: /autoskillit:retry-worktree
+      skill_inputs:
+        plan_path: ${{ context.pr_plan_path }}
+        worktree_path: ${{ context.worktree_path }}
+      cwd: ${{ context.worktree_path }}
+      step_name: retry_worktree
+      output_dir: .
+    capture:
+      worktree_path: ${{ result.worktree_path }}
+      worktree_branch_name: ${{ result.branch_name }}
+    on_success: test
+    on_failure: register_clone_failure
+    retries: 3
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
@@ -1229,7 +1185,7 @@ steps:
     on_result:
       field: next
       routes:
-        more_parts: select_next_plan_part
+        more_parts: verify
         more_prs: check_pr_merge_loop
         all_done: push_batch_branch
     note: 'Routing step — no tool call. The agent evaluates what comes next: 1. If more plan_parts remain for the current
@@ -1237,20 +1193,6 @@ steps:
       3. If all PRs processed → push_batch_branch.
 
       '
-  select_next_plan_part:
-    tool: run_cmd
-    with:
-      cmd: >-
-        NEXT=$(printf '%s\n' '${{ context.plan_parts }}' | tr ',' '\n' |
-        sed -e 's/^[[:space:]\["]*//' -e 's/["\]][[:space:]]*$//' |
-        awk -v current='${{ context.pr_plan_path }}' 'seen && NF {print; exit}
-        $0 == current {seen=1}'); test -n "$NEXT"; printf '%s\n' "$NEXT"
-      cwd: ${{ context.work_dir }}
-      step_name: select_next_plan_part
-    capture:
-      pr_plan_path: ${{ result.stdout | trim }}
-    on_success: verify
-    on_failure: register_clone_failure
   check_pr_merge_loop:
     tool: run_python
     with:
@@ -1299,8 +1241,8 @@ steps:
     on_result:
     - when: ${{ result.stdout | trim }} == 0
       route: compute_domain_partitions
-    - route: collect_impl_plan_paths
-    on_failure: register_clone_failure
+    - route: audit_impl
+    on_failure: audit_impl
     note: 'Copies plan files from {{AUTOSKILLIT_TEMP}}/make-plan/ into plans_dir, then counts implementation plan files (excluding
       pr_analysis_plan_*.md). The copy uses || true so the count always runs even if no source files exist. The final stdout
       line is the count, used for on_result routing: 0 → compute_domain_partitions (no plans generated, all PRs merged cleanly),
@@ -1308,18 +1250,6 @@ steps:
       two-step pair.
 
       '
-  collect_impl_plan_paths:
-    tool: run_cmd
-    with:
-      cmd: >-
-        find ${{ inputs.plans_dir }} -maxdepth 1 -name '*_plan_*.md'
-        ! -name 'pr_analysis_plan_*.md' -print | sort | paste -sd, -
-      cwd: ${{ context.work_dir }}
-      step_name: collect_impl_plan_paths
-    capture:
-      all_plan_paths: ${{ result.stdout | trim }}
-    on_success: audit_impl
-    on_failure: register_clone_failure
   audit_impl:
     tool: run_skill
     model: ''
@@ -1376,7 +1306,6 @@ steps:
     skip_when_false: inputs.audit_impl
     on_skip: open_integration_pr
     optional_context_refs:
-    - all_conflict_report_paths
     - audit_cycle_path
     - audit_attempt_id
     note: 'DEPENDENCY: context.all_plan_paths is only populated if the plan step executed at least once. The check_impl_plans
@@ -1393,33 +1322,7 @@ steps:
     action: route
     with:
       audit_cycle_path: ${{ context.audit_cycle_path }}
-    on_success: plan_remediation
-  plan_remediation:
-    tool: run_skill
-    model: ''
-    with:
-      skill_command: /autoskillit:make-plan
-      skill_inputs:
-        task: ${{ context.remediation_path }}
-        audit_cycle_path: ${{ context.audit_cycle_path }}
-      cwd: ${{ context.work_dir }}
-      step_name: plan_remediation
-      output_dir: .
-    capture:
-      pr_plan_path: ${{ result.plan_path }}
-      verdict: ${{ result.verdict }}
-      plan_disposition_path: ${{ result.plan_disposition_path }}
-    capture_list:
-      plan_parts: ${{ result.plan_parts }}
-      all_plan_paths: ${{ result.plan_path }}
-    on_result:
-    - when: ${{ result.verdict }} == plan
-      route: verify
-    on_failure: register_clone_failure
-    on_exhausted: register_clone_failure
-    on_context_limit: register_clone_failure
-    on_rate_limit: register_clone_failure
-    retries: 0
+    on_success: plan
   compute_domain_partitions:
     tool: run_python
     with:
@@ -1458,10 +1361,6 @@ steps:
     on_success: wait_for_review_pr_mergeability
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
-    optional_context_refs:
-    - all_conflict_report_paths
-    - domain_partitions_path
-    - verdict
   wait_for_review_pr_mergeability:
     tool: run_python
     with:
@@ -1497,11 +1396,76 @@ steps:
     - when: ${{ result.mergeable_status }} == MERGEABLE
       route: clear_review_annotation_context
     - when: ${{ result.mergeable_status }} == CONFLICTING
-      route: register_clone_failure
+      route: resolve_integration_conflicts
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Authoritative mergeability check via check_pr_mergeable MCP tool (REQ-MERGE-001). MERGEABLE proceeds to review.
-      CONFLICTING or indeterminate states escalate because this route has no branch-specific conflict report and plan authority.
+    note: 'Authoritative mergeability check via check_pr_mergeable MCP tool (REQ-MERGE-001). Routes MERGEABLE directly to
+      review cycle. Routes CONFLICTING to automated conflict resolution. Any other state (UNKNOWN after timeout, tool error)
+      escalates to register_clone_failure (REQ-MERGE-005).
+
+      '
+  resolve_integration_conflicts:
+    tool: run_skill
+    model: ''
+    with:
+      skill_command: /autoskillit:resolve-merge-conflicts
+      skill_inputs:
+        worktree_path: ${{ context.batch_branch }}
+        plan_path: ${{ context.pr_plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+      cwd: ${{ context.work_dir }}
+      step_name: resolve_integration_conflicts
+      output_dir: .
+    capture:
+      conflict_escalation_required: ${{ result.escalation_required }}
+      conflict_escalation_reason: ${{ result.escalation_reason }}
+    capture_list:
+      all_conflict_report_paths: ${{ result.conflict_report_path }}
+    on_result:
+    - when: ${{ result.escalation_required }} == true
+      route: register_clone_failure
+    - route: force_push_and_wait_mergeability
+    retries: 0
+    on_failure: register_clone_failure
+    on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
+    note: 'Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003). Rebases context.batch_branch
+      onto inputs.base_branch and resolves merge conflicts. Single attempt only — no retries — to prevent looping on unresolvable
+      conflicts. On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).
+
+      '
+  force_push_and_wait_mergeability:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability
+      args:
+        work_dir: ${{ context.work_dir }}
+        batch_branch: ${{ context.batch_branch }}
+        review_pr_number: ${{ context.review_pr_number }}
+        max_polls: '12'
+        poll_interval: '15'
+    on_success: check_mergeability_post_rebase
+    on_failure: register_clone_failure
+    note: 'Force-pushes the rebased integration branch (--force-with-lease rejects if remote diverged), then polls GitHub
+      until the PR''s mergeable field is no longer UNKNOWN. Polls up to 12 times with 15-second intervals (3 minutes maximum).
+      The && chaining preserves causal ordering: the poll loop only runs after a successful push. Any failure (push rejected
+      or mergeability timeout) routes to register_clone_failure. Replaces the former force_push_after_rebase + wait_for_post_rebase_mergeability
+      two-step pair. Satisfies REQ-MERGE-002.
+
+      '
+  check_mergeability_post_rebase:
+    tool: check_pr_mergeable
+    with:
+      pr_number: ${{ context.review_pr_number }}
+      cwd: ${{ context.work_dir }}
+    on_result:
+    - when: ${{ result.mergeable_status }} == MERGEABLE
+      route: clear_review_annotation_context
+    - route: register_clone_failure
+    on_failure: register_clone_failure
+    note: 'Re-checks mergeability after the rebase and force-push. MERGEABLE proceeds to the review cycle. Any other state
+      means automated resolution did not succeed — escalates to register_clone_failure for human intervention (REQ-MERGE-004).
+      No second conflict resolution attempt — one cycle only.
 
       '
   clear_review_annotation_context:
@@ -1701,8 +1665,31 @@ steps:
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_review_integration
-    - route: register_clone_failure
+    - route: resolve_pre_review_integration_conflicts
+    on_failure: resolve_pre_review_integration_conflicts
+  resolve_pre_review_integration_conflicts:
+    tool: run_skill
+    model: ''
+    with:
+      skill_command: /autoskillit:resolve-merge-conflicts
+      skill_inputs:
+        worktree_path: ${{ context.work_dir }}
+        plan_path: ${{ context.pr_plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+      cwd: ${{ context.work_dir }}
+      output_dir: .
+      step_name: resolve_pre_review_integration_conflicts
+    capture:
+      conflict_escalation_required: ${{ result.escalation_required }}
+    on_result:
+    - when: ${{ result.escalation_required }} == true
+      route: register_clone_failure
+    - route: re_push_review_integration
     on_failure: register_clone_failure
+    retries: 0
+    on_exhausted: register_clone_failure
+    on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
   re_push_review_integration:
     tool: push_to_remote
     with:
@@ -1788,8 +1775,6 @@ steps:
     on_success: register_clone_failure
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
-    optional_context_refs:
-    - ci_event
     note: 'Runs when ci_watch_pr reports CI failure on the integration branch. Fetches logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/
       for human inspection. diagnosis_path is captured for observability — no automated remediation for integration CI, so
       always routes to register_clone_failure.

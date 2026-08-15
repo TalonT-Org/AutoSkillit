@@ -7,7 +7,7 @@ from enum import StrEnum
 
 import regex as re
 
-from autoskillit.core import BoundScalar, PreflightKind
+from autoskillit.core import PreflightKind
 
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
@@ -22,22 +22,6 @@ class SkillInput:
     required: bool
     recommended: bool = False
     nullable: bool = True
-    absence_value: BoundScalar | None = None
-
-    def __post_init__(self) -> None:
-        if not self.has_absence_value:
-            return
-        value = self.absence_value
-        if self.required:
-            raise ValueError(f"required input {self.name!r} cannot declare absence_value")
-        if not isinstance(value, (str, int, bool)):
-            raise TypeError(f"absence_value for {self.name!r} must be a strict scalar")
-        if not self.accepts(value):
-            raise ValueError(f"skill input {self.name!r} does not accept absence_value {value!r}")
-
-    @property
-    def has_absence_value(self) -> bool:
-        return self.absence_value is not None
 
     def accepts(self, value: object) -> bool:
         normalized = self.type

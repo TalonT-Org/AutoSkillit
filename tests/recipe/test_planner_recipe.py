@@ -111,19 +111,6 @@ def test_planner_recipe_validation_has_no_errors(planner_recipe):
     assert_no_rule_errors(findings, context="planner recipe")
 
 
-@pytest.mark.parametrize(
-    "step_name",
-    ("refine_phases", "refine_assignments", "refine_wps"),
-)
-def test_planner_refinement_failures_do_not_consume_missing_outputs(
-    planner_recipe, step_name: str
-) -> None:
-    step = planner_recipe.steps[step_name]
-    assert step.on_failure == "escalate_stop"
-    assert step.on_context_limit == "escalate_stop"
-    assert step.on_rate_limit == "escalate_stop"
-
-
 def test_planner_recipe_extract_domain_uses_structured_inputs(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
     skill_inputs = step.with_args.get("skill_inputs", {})

@@ -3761,10 +3761,8 @@ class _AnnotationSentinel(BaseException):
     pass
 
 
-# ``RuntimeError`` is an ``Exception`` subclass while ``_AnnotationSentinel``
-# inherits ``BaseException`` directly (the same path ``KeyboardInterrupt``
-# takes). Keeping both covers the standard and non-standard cleanup branches
-# without redundantly listing ``KeyboardInterrupt`` separately.
+# RuntimeError covers the standard cleanup branch; _AnnotationSentinel covers
+# the BaseException branch without redundantly listing KeyboardInterrupt.
 @pytest.mark.parametrize("exception_type", [RuntimeError, _AnnotationSentinel])
 @patch("subprocess.run")
 def test_annotate_pr_diff_cleans_commit_marker_on_baseexception_and_retry(

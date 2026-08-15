@@ -553,6 +553,11 @@ def _public_completion_credential(
             for step_name, digest in credential.invocation_template_digests.items()
             if step_name in initial_steps
         },
+        skill_input_shapes={
+            step_name: shape
+            for step_name, shape in credential.skill_input_shapes.items()
+            if step_name in initial_steps
+        },
     )
 
 

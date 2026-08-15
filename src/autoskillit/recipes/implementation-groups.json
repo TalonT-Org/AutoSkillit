@@ -1231,7 +1231,7 @@
         "review_loop_count": "${{ result.value }}"
       },
       "on_success": "clear_review_annotation_context",
-      "on_failure": "clear_review_annotation_context",
+      "on_failure": "release_issue_failure",
       "optional_context_refs": [
         "review_loop_count"
       ]
@@ -1348,7 +1348,6 @@
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
       "optional_context_refs": [
-        "review_loop_count",
         "review_mode"
       ],
       "note": "Runs after compose_pr creates the PR. Invokes the review-pr skill as a headless session to leave inline review comments on the PR. The skill finds the open PR by feature branch name (context.merge_target). Captures verdict as review_verdict and routes via on_result: changes_requested/approved_with_comments → resolve_review; all other verdicts (including approved, needs_human) → check_review_posted (effect verification gate) → check_review_loop (mandatory waypoint to increment review_loop_count). On tool-level failure (MCP error, gh unavailable) or context exhaustion, routes to release_issue_failure because no authoritative review receipt exists. Skipped when open_pr=false.\n"

@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from collections.abc import Mapping
 
 import regex as re
 
-from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, SKILL_TOOLS, Severity, get_logger
+from autoskillit.core import (
+    RUN_PYTHON_SENTINEL_KEYS,
+    SKILL_TOOLS,
+    Severity,
+    get_logger,
+    resolve_skill_name,
+)
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
     get_callable_contract,
+    get_skill_contract,
     load_bundled_manifest,
 )
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
@@ -186,8 +194,8 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
 @semantic_rule(
     name="nullable-optional-context-ref",
     description=(
-        "run_python steps must not pass optional_context_refs values to non-nullable "
-        "callable inputs without null coercion in the callable"
+        "run_python nullable inputs and run_skill unresolved defaults must safely cover "
+        "values declared in optional_context_refs"
     ),
     severity=Severity.ERROR,
 )
@@ -195,6 +203,51 @@ def _check_nullable_optional_context_ref(ctx: ValidationContext) -> list[RuleFin
     findings = []
     manifest = load_bundled_manifest()
     for step_name, step in ctx.recipe.steps.items():
+        optional_refs = set(step.optional_context_refs)
+        if not optional_refs:
+            continue
+        if step.tool == "run_skill":
+            skill_inputs = step.with_args.get("skill_inputs")
+            skill_command = step.with_args.get("skill_command", "")
+            if not isinstance(skill_inputs, Mapping) or not isinstance(skill_command, str):
+                continue
+            skill_name = resolve_skill_name(skill_command)
+            if not skill_name:
+                continue
+            contract = get_skill_contract(skill_name, manifest)
+            if contract is None:
+                continue
+            input_by_name = {item.name: item for item in contract.inputs}
+            for input_name, value in skill_inputs.items():
+                input_def = input_by_name.get(input_name)
+                if input_def is None or not isinstance(value, str):
+                    continue
+                dependencies = optional_refs.intersection(_CONTEXT_REF_RE.findall(value))
+                if not dependencies:
+                    continue
+                dependency = sorted(dependencies)[0]
+                if input_def.required:
+                    message = (
+                        f"Step '{step_name}' required input '{input_name}' for skill "
+                        f"'{skill_name}' depends on optional context ref '{dependency}'. "
+                        "Capture or gate the value before dispatch."
+                    )
+                elif input_def.unresolved_default is None:
+                    message = (
+                        f"Step '{step_name}' optional input '{input_name}' for skill "
+                        f"'{skill_name}' depends on optional context ref '{dependency}' "
+                        "without a contract unresolved_default."
+                    )
+                else:
+                    continue
+                findings.append(
+                    make_finding(
+                        rule_name="nullable-optional-context-ref",
+                        step_name=step_name,
+                        message=message,
+                    )
+                )
+            continue
         if step.tool != "run_python":
             continue
         callable_path = step.with_args.get("callable", "")
@@ -205,9 +258,6 @@ def _check_nullable_optional_context_ref(ctx: ValidationContext) -> list[RuleFin
             continue
         non_nullable = {inp.name for inp in contract.inputs if not inp.nullable}
         if not non_nullable:
-            continue
-        optional_refs = set(step.optional_context_refs)
-        if not optional_refs:
             continue
         args_values = _get_args_values(step.with_args)
         for inp_name in sorted(non_nullable):

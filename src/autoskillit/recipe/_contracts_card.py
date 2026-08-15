@@ -157,12 +157,17 @@ def generate_recipe_card(
                     skill_entry: dict[str, Any] = {
                         "inputs": [
                             {
-                                "name": i.name,
-                                "type": i.type,
-                                "required": i.required,
-                                "recommended": i.recommended,
+                                "name": item.name,
+                                "type": item.type,
+                                "required": item.required,
+                                "recommended": item.recommended,
+                                **(
+                                    {"unresolved_default": item.unresolved_default}
+                                    if item.unresolved_default is not None
+                                    else {}
+                                ),
                             }
-                            for i in contract.inputs
+                            for item in contract.inputs
                         ],
                         "outputs": [{"name": o.name, "type": o.type} for o in contract.outputs],
                         "expected_output_patterns": contract.expected_output_patterns,

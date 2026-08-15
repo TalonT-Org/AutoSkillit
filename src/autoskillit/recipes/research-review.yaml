@@ -96,18 +96,14 @@ steps:
     tool: run_skill
     model: ''
     optional_context_refs:
-    - worktree_path
-    - research_dir
-    - report_path
-    - experiment_plan
     - experiment_results
     - experiment_type
     - scope_report
     - visualization_plan_path
     with:
-      skill_command: /autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path
+      skill_command: /autoskillit:prepare-research-pr ${{ inputs.report_path }} ${{ inputs.experiment_plan }} ${{ inputs.worktree_path
         }} ${{ inputs.base_branch }}
-      cwd: ${{ context.worktree_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: prepare_research_pr
       output_dir: .
     capture:
@@ -119,12 +115,9 @@ steps:
   run_experiment_lenses:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - worktree_path
-    - experiment_plan
     with:
-      skill_command: /autoskillit:exp-lens-{slug} {context_path} ${{ context.experiment_plan }}
-      cwd: ${{ context.worktree_path }}
+      skill_command: /autoskillit:exp-lens-{slug} {context_path} ${{ inputs.experiment_plan }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: run_experiment_lenses
     capture_list:
       all_diagram_paths: ${{ result.diagram_path }}
@@ -133,12 +126,9 @@ steps:
     on_failure: stage_bundle
   stage_bundle:
     tool: run_cmd
-    optional_context_refs:
-    - research_dir
-    - worktree_path
     with:
-      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'
-      cwd: ${{ context.worktree_path }}
+      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ inputs.research_dir }}' '${{ inputs.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'
+      cwd: ${{ inputs.worktree_path }}
       step_name: stage_bundle
     on_success: route_pr_or_local
     on_failure: route_pr_or_local
@@ -165,12 +155,10 @@ steps:
   compose_research_pr:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - worktree_path
     with:
-      skill_command: /autoskillit:compose-research-pr ${{ context.prep_path }} "${{ context.all_diagram_paths }}" ${{ context.worktree_path
+      skill_command: /autoskillit:compose-research-pr ${{ context.prep_path }} "${{ context.all_diagram_paths }}" ${{ inputs.worktree_path
         }} ${{ inputs.base_branch }}
-      cwd: ${{ context.worktree_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: compose_research_pr
       output_dir: .
     capture:
@@ -243,12 +231,10 @@ steps:
   review_research_pr:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - worktree_path
     with:
       skill_command: /autoskillit:review-research-pr
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
+        worktree_path: "${{ inputs.worktree_path }}"
         base_branch: "${{ inputs.base_branch }}"
         pr_url: "${{ context.pr_url }}"
         repository: "${{ context.review_repository }}"
@@ -260,7 +246,7 @@ steps:
         annotated_diff_path: "${{ context.annotated_diff_path }}"
         hunk_ranges_path: "${{ context.hunk_ranges_path }}"
         valid_lines_path: "${{ context.valid_lines_path }}"
-      cwd: "${{ context.worktree_path }}"
+      cwd: "${{ inputs.worktree_path }}"
       step_name: review_research_pr
       output_dir: "{{AUTOSKILLIT_TEMP}}/review-research-pr/research-review"
     capture:
@@ -314,12 +300,10 @@ steps:
   audit_claims:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - worktree_path
     with:
       skill_command: "/autoskillit:audit-claims"
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
+        worktree_path: "${{ inputs.worktree_path }}"
         base_branch: "${{ inputs.base_branch }}"
         pr_url: "${{ context.pr_url }}"
         repository: "${{ context.review_repository }}"
@@ -327,7 +311,7 @@ steps:
         pr_head_sha: "${{ context.pr_head_sha }}"
         logical_iteration: "audit-claims:research-review"
         receipt_path: "{{AUTOSKILLIT_TEMP}}/audit-claims/batch_review_response_${{ context.pr_number }}.json"
-      cwd: "${{ context.worktree_path }}"
+      cwd: "${{ inputs.worktree_path }}"
       step_name: audit_claims
       output_dir: '{{AUTOSKILLIT_TEMP}}/audit-claims'
     capture:
@@ -390,11 +374,9 @@ steps:
   resolve_research_review:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - worktree_path
     with:
-      skill_command: /autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}
-      cwd: ${{ context.worktree_path }}
+      skill_command: /autoskillit:resolve-research-review ${{ inputs.worktree_path }} ${{ inputs.base_branch }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: resolve_research_review
       output_dir: .
     capture:
@@ -419,11 +401,9 @@ steps:
   resolve_claims_review:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - worktree_path
     with:
-      skill_command: /autoskillit:resolve-claims-review ${{ context.worktree_path }} ${{ inputs.base_branch }}
-      cwd: ${{ context.worktree_path }}
+      skill_command: /autoskillit:resolve-claims-review ${{ inputs.worktree_path }} ${{ inputs.base_branch }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: resolve_claims_review
       output_dir: .
     capture:
@@ -454,14 +434,12 @@ steps:
     model: ''
     stale_threshold: 2400
     idle_output_timeout: 0
-    optional_context_refs:
-    - worktree_path
     with:
       skill_command: /autoskillit:run-experiment
       skill_inputs:
-        worktree_path: ${{ context.worktree_path }}
+        worktree_path: ${{ inputs.worktree_path }}
         adjust: true
-      cwd: ${{ context.worktree_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: re_run_experiment
       output_dir: .
     capture:
@@ -486,17 +464,14 @@ steps:
   re_generate_report:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - worktree_path
-    - experiment_results
     with:
       skill_command: /autoskillit:generate-report
       skill_inputs:
-        worktree_path: ${{ context.worktree_path }}
+        worktree_path: ${{ inputs.worktree_path }}
         results_path: ${{ context.experiment_results }}
         output_mode: ${{ inputs.output_mode }}
         issue_url: ${{ inputs.issue_url }}
-      cwd: ${{ context.worktree_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: re_generate_report
       output_dir: '{{AUTOSKILLIT_TEMP}}/generate-report'
     capture:
@@ -571,14 +546,12 @@ steps:
     tool: run_skill
     model: ''
     optional_context_refs:
-    - research_dir
-    - worktree_path
     - all_diagram_paths
     - visualization_plan_path
     with:
-      skill_command: /autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }}
+      skill_command: /autoskillit:bundle-local-report ${{ inputs.research_dir }} ${{ context.report_path_after_finalize }}
         ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}
-      cwd: ${{ context.worktree_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: finalize_bundle_render
       output_dir: .
     capture:

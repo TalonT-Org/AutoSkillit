@@ -33,6 +33,115 @@ def _resolve_recipe_path(name: str) -> Path:
     return builtin_recipes_dir() / f"{name}.yaml"
 
 
+def test_optional_context_structured_skill_input_inventory_is_explicit() -> None:
+    from autoskillit.recipe._binding import bind_recipe
+    from autoskillit.recipe.contracts import get_skill_contract
+
+    recipe_names = (
+        "implementation",
+        "implementation-groups",
+        "merge-prs",
+        "remediation",
+        "research",
+        "research-design",
+        "research-implement",
+        "research-review",
+    )
+    expected_pairs = {
+        ("audit-impl", "deviation_manifest_path"),
+        ("audit-impl", "prior_audit_cycle_path"),
+        ("bundle-local-report", "all_diagram_paths"),
+        ("bundle-local-report", "visualization_plan_path"),
+        ("diagnose-ci", "event"),
+        ("dry-walkthrough", "audit_cycle_path"),
+        ("dry-walkthrough", "plan_disposition_path"),
+        ("dry-walkthrough", "review_path"),
+        ("make-plan", "audit_cycle_path"),
+        ("plan-experiment", "revision_guidance"),
+        ("plan-experiment", "scope_directions_path"),
+        ("resolve-design-review", "revision_guidance"),
+        ("resolve-failures", "ci_conclusion"),
+        ("resolve-failures", "diagnosis_path"),
+        ("resolve-review", "mode"),
+        ("review-pr", "mode"),
+    }
+    manifest = load_bundled_manifest()
+    occurrences: list[tuple[str, str, str, str]] = []
+    required_occurrences: list[tuple[str, str, str, str]] = []
+    for recipe_name in recipe_names:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        projection = bind_recipe(recipe, manifest=manifest)
+        for step_name, step in recipe.steps.items():
+            invocation = projection.for_step(step_name)
+            if invocation is None or invocation.skill_name is None:
+                continue
+            optional_refs = frozenset(step.optional_context_refs)
+            contract = get_skill_contract(invocation.skill_name, manifest)
+            assert contract is not None
+            input_by_name = {item.name: item for item in contract.inputs}
+            for value in invocation.skill_inputs:
+                if not value.is_present or not (
+                    optional_refs & frozenset(value.context_dependencies)
+                ):
+                    continue
+                occurrence = (
+                    recipe_name,
+                    step_name,
+                    invocation.skill_name,
+                    value.name,
+                )
+                if input_by_name[value.name].required:
+                    required_occurrences.append(occurrence)
+                else:
+                    occurrences.append(occurrence)
+
+    actual_pairs = {(skill, input_name) for _, _, skill, input_name in occurrences}
+    assert len(occurrences) == 54
+    assert actual_pairs == expected_pairs
+    assert not required_occurrences
+    for skill_name, input_name in expected_pairs:
+        contract = get_skill_contract(skill_name, manifest)
+        assert contract is not None
+        input_def = next(item for item in contract.inputs if item.name == input_name)
+        assert input_def.unresolved_default == ""
+
+
+def test_required_optional_context_routes_are_gated_or_guaranteed() -> None:
+    merge_prs = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    for prefix in ("ejected", "proactive_rebase"):
+        gate = merge_prs.steps[f"gate_{prefix}_conflict_plan"]
+        routes = [condition.route for condition in gate.on_result.conditions]
+        assert routes[-1] == "register_clone_failure"
+        assert gate.capture["conflict_plan_path"].from_ == "${{ result.plan_path }}"
+        resolve = merge_prs.steps[f"resolve_{prefix}_conflicts"]
+        assert resolve.with_args["skill_inputs"]["plan_path"] == (
+            "${{ context.conflict_plan_path }}"
+        )
+        assert "pr_plan_path" not in resolve.optional_context_refs
+
+    research = load_recipe(builtin_recipes_dir() / "research.yaml")
+    assert research.steps["resolve_design_review"].optional_context_refs == ["revision_guidance"]
+
+    research_design = load_recipe(builtin_recipes_dir() / "research-design.yaml")
+    assert research_design.steps["dial"].on_skip == "vis_dial"
+    assert "classification_timestamp" not in research_design.steps["apply"].optional_context_refs
+
+    research_review = load_recipe(builtin_recipes_dir() / "research-review.yaml")
+    for step_name in (
+        "review_research_pr",
+        "audit_claims",
+        "re_run_experiment",
+        "re_generate_report",
+    ):
+        step = research_review.steps[step_name]
+        assert step.with_args["skill_inputs"]["worktree_path"] == "${{ inputs.worktree_path }}"
+        assert "worktree_path" not in step.optional_context_refs
+    assert (
+        "experiment_results"
+        not in research_review.steps["re_generate_report"].optional_context_refs
+    )
+
+
 _ALL_CLONE_RECIPE_PATHS: list[Path] = []
 for _p in _ALL_RECIPE_PATHS:
     _wf = load_recipe(_p)

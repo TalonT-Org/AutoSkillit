@@ -44,6 +44,7 @@ skills:
     - name: event
       type: string
       required: false
+      unresolved_default: ""
     outputs:
     - name: diagnosis_path
       type: file_path
@@ -83,6 +84,7 @@ skills:
     - name: revision_guidance
       type: file_path
       required: false
+      unresolved_default: ""
     outputs:
     - name: resolution
       type: string
@@ -110,12 +112,14 @@ skills:
     - name: ci_conclusion
       type: string
       required: false
+      unresolved_default: ""
     - name: ci_failed_jobs
       type: string
       required: false
     - name: diagnosis_path
       type: file_path
       required: false
+      unresolved_default: ""
     outputs:
     - name: verdict
       type: string
@@ -176,6 +180,7 @@ skills:
     - name: mode
       type: string
       required: false
+      unresolved_default: ""
     - name: repository
       type: string
       required: false
@@ -252,12 +257,15 @@ skills:
     - name: review_path
       type: file_path
       required: false
+      unresolved_default: ""
     - name: audit_cycle_path
       type: file_path
       required: false
+      unresolved_default: ""
     - name: plan_disposition_path
       type: file_path
       required: false
+      unresolved_default: ""
     outputs: []
     write_behavior: always
     input_preflight: audit_cycle_inventory
@@ -343,6 +351,7 @@ skills:
     - name: audit_cycle_path
       type: file_path
       required: false
+      unresolved_default: ""
     outputs:
     - name: verdict
       type: string
@@ -513,9 +522,11 @@ skills:
     - name: deviation_manifest_path
       type: file_path
       required: false
+      unresolved_default: ""
     - name: prior_audit_cycle_path
       type: file_path
       required: false
+      unresolved_default: ""
     outputs:
     - name: verdict
       type: string
@@ -805,6 +816,7 @@ skills:
     - name: mode
       type: string
       required: false
+      unresolved_default: ""
     - name: repository
       type: string
       required: true
@@ -1559,9 +1571,11 @@ skills:
     - name: scope_directions_path
       type: file_path
       required: false
+      unresolved_default: ""
     - name: revision_guidance
       type: file_path
       required: false
+      unresolved_default: ""
     outputs:
     - name: experiment_plan
       type: file_path
@@ -2512,9 +2526,11 @@ skills:
     - name: all_diagram_paths
       type: string
       required: false
+      unresolved_default: ""
     - name: visualization_plan_path
       type: file_path
       required: false
+      unresolved_default: ""
     outputs:
     - name: html_path
       type: file_path
@@ -3349,7 +3365,7 @@ callable_contracts:
     inputs:
     - name: plan_parts
       type: str
-      required: true
+      required: false
     - name: audit_cycle_path
       type: str
       required: false

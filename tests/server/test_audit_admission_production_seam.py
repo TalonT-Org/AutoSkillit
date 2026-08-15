@@ -234,7 +234,11 @@ async def test_substantive_go_without_semantic_publication_is_rejected(
     tmp_path: Path,
     tool_ctx_kitchen_open,
 ) -> None:
-    credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
+    credential, step = await _install_attested_recipe(
+        monkeypatch,
+        tmp_path,
+        tool_ctx_kitchen_open,
+    )
     work_dir = tmp_path / "worktree"
     audit_root = resolve_temp_dir(
         work_dir,

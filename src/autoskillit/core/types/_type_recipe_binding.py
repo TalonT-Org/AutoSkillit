@@ -197,15 +197,24 @@ class BoundValue:
     context_dependencies: tuple[str, ...] = ()
     input_dependencies: tuple[str, ...] = ()
     template_dependencies: tuple[str, ...] = ()
+    unresolved_default: BoundScalar | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, BoundValueState):
             raise ValueError("BoundValue.state must be a BoundValueState")
         if not isinstance(self.origin, BoundValueOrigin):
             raise ValueError("BoundValue.origin must be a BoundValueOrigin")
+        if self.unresolved_default is not None and type(self.unresolved_default) not in (
+            str,
+            int,
+            bool,
+        ):
+            raise ValueError("BoundValue.unresolved_default must be a strict scalar or None")
         declared_absent = isinstance(self.declared_value, AbsentBoundValue)
         effective_absent = isinstance(self.effective_value, AbsentBoundValue)
         if self.state is BoundValueState.ABSENT:
+            if self.unresolved_default is not None:
+                raise ValueError("absent bound values cannot declare unresolved_default")
             if (
                 not declared_absent
                 or not effective_absent

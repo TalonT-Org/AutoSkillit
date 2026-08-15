@@ -351,8 +351,6 @@ steps:
       step_name: resolve_design_review
       output_dir: '{{AUTOSKILLIT_TEMP}}/resolve-design-review/iter_${{ context.design_review_count }}'
     optional_context_refs:
-    - evaluation_dashboard
-    - experiment_plan
     - revision_guidance
     capture:
       revision_guidance: ${{ result.revision_guidance }}

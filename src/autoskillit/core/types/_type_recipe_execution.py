@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypedDict, runtime_checkable
 
 from ..closure_hashing import HASH_RE, compute_canonical_hash
 from ._type_audit_admission import InstallationVersion
@@ -80,6 +80,7 @@ def _bound_value_payload(value: BoundValue) -> dict[str, object]:
         "origin": value.origin.value,
         "state": value.state.value,
         "template_dependencies": list(value.template_dependencies),
+        "unresolved_default": value.unresolved_default,
     }
 
 
@@ -209,6 +210,11 @@ RUN_SKILL_ATTESTATION_PARAMS: frozenset[str] = frozenset(
 )
 
 
+class _SkillInputShape(TypedDict):
+    keys: list[str]
+    unresolved_defaults: dict[str, BoundScalar]
+
+
 @dataclass(frozen=True, slots=True)
 class RecipeExecutionCredential:
     """The caller-visible identity of one installed recipe execution."""
@@ -216,11 +222,19 @@ class RecipeExecutionCredential:
     execution_id: str
     snapshot_digest: str
     invocation_template_digests: Mapping[str, str]
+    skill_input_shapes: Mapping[str, _SkillInputShape]
 
     def as_wire_block(self) -> dict[str, Any]:
         return {
             "execution_id": self.execution_id,
             "invocation_template_digests": dict(self.invocation_template_digests),
+            "skill_input_shapes": {
+                step_name: {
+                    "keys": list(shape["keys"]),
+                    "unresolved_defaults": dict(shape["unresolved_defaults"]),
+                }
+                for step_name, shape in self.skill_input_shapes.items()
+            },
             "snapshot_digest": self.snapshot_digest,
         }
 
@@ -234,10 +248,22 @@ def build_recipe_execution_credential(
     snapshot: RecipeExecutionSnapshot,
 ) -> RecipeExecutionCredential:
     """Project the sole caller-visible credential for an execution snapshot."""
+    skill_input_shapes: dict[str, _SkillInputShape] = {}
+    for step_name, template in snapshot.templates.items():
+        present = tuple(value for value in template.invocation.skill_inputs if value.is_present)
+        skill_input_shapes[step_name] = {
+            "keys": [value.name for value in present],
+            "unresolved_defaults": {
+                value.name: value.unresolved_default
+                for value in present
+                if value.unresolved_default is not None
+            },
+        }
     return RecipeExecutionCredential(
         execution_id=snapshot.execution_id,
         snapshot_digest=snapshot.snapshot_digest,
         invocation_template_digests=dict(snapshot.template_digests),
+        skill_input_shapes=skill_input_shapes,
     )
 
 

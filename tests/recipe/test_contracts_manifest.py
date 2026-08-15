@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe._contracts_manifest import (
+    compute_skill_contract_identity,
     get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
@@ -29,6 +30,114 @@ def test_get_skill_contract_rejects_non_boolean_scope_discipline(value: object) 
         match="scope_discipline for skill 'demo-skill' must be a boolean",
     ):
         get_skill_contract("demo-skill", manifest)
+
+
+@pytest.mark.parametrize(
+    ("input_type", "value"),
+    [
+        ("str", None),
+        ("str", 1.5),
+        ("str", []),
+        ("str", {}),
+        ("str", 0),
+        ("integer", False),
+        ("boolean", 0),
+    ],
+)
+def test_get_skill_contract_rejects_invalid_unresolved_default(
+    input_type: str,
+    value: object,
+) -> None:
+    manifest = {
+        "skills": {
+            "demo-skill": {
+                "inputs": [
+                    {
+                        "name": "value",
+                        "type": input_type,
+                        "required": False,
+                        "unresolved_default": value,
+                    }
+                ]
+            }
+        }
+    }
+
+    with pytest.raises(ValueError, match="unresolved_default"):
+        get_skill_contract("demo-skill", manifest)
+
+
+@pytest.mark.parametrize(
+    ("input_type", "value"),
+    [("str", ""), ("integer", 0), ("boolean", False)],
+)
+def test_get_skill_contract_preserves_falsey_unresolved_default(
+    input_type: str,
+    value: str | int | bool,
+) -> None:
+    manifest = {
+        "skills": {
+            "demo-skill": {
+                "inputs": [
+                    {
+                        "name": "value",
+                        "type": input_type,
+                        "required": False,
+                        "unresolved_default": value,
+                    }
+                ]
+            }
+        }
+    }
+
+    contract = get_skill_contract("demo-skill", manifest)
+
+    assert contract is not None
+    restored = contract.inputs[0].unresolved_default
+    assert restored == value
+    assert type(restored) is type(value)
+
+
+def test_get_skill_contract_rejects_required_unresolved_default() -> None:
+    manifest = {
+        "skills": {
+            "demo-skill": {
+                "inputs": [
+                    {
+                        "name": "value",
+                        "type": "str",
+                        "required": True,
+                        "unresolved_default": "",
+                    }
+                ]
+            }
+        }
+    }
+
+    with pytest.raises(ValueError, match="required input"):
+        get_skill_contract("demo-skill", manifest)
+
+
+def test_unresolved_default_changes_skill_contract_identity() -> None:
+    def manifest(default: str) -> dict[str, object]:
+        return {
+            "skills": {
+                "demo-skill": {
+                    "inputs": [
+                        {
+                            "name": "value",
+                            "type": "str",
+                            "required": False,
+                            "unresolved_default": default,
+                        }
+                    ]
+                }
+            }
+        }
+
+    assert compute_skill_contract_identity(
+        "demo-skill", manifest=manifest("")
+    ) != compute_skill_contract_identity("demo-skill", manifest=manifest("unavailable"))
 
 
 def test_get_callable_contract_promotes_allowed_values_for_commit_guard() -> None:

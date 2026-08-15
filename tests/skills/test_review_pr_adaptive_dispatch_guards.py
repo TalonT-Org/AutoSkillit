@@ -120,6 +120,7 @@ def _make_gate_case(tmp_path: Path, *, gate: bool = True) -> dict[str, Any]:
         "_head_sha": head_sha,
         "_base_sha": base_sha,
         "_merge_base_sha": merge_base_sha,
+        "_base_repo_full_name": "Acme/Base",
         "generation_id": "generation-1",
         "diff_sha256": "a" * 64,
         "diff_byte_length": 17,
@@ -143,8 +144,25 @@ def _make_gate_case(tmp_path: Path, *, gate: bool = True) -> dict[str, Any]:
     }
     metrics_path.write_text(json.dumps(metrics, sort_keys=True) + "\n")
 
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/bin/sh\n"
+        "if [ \"${FAKE_GH_MISSING_AUTHORITY:-}\" = 1 ]; then printf '{}\\n'; exit 0; fi\n"
+        'case "$*" in\n'
+        f"  *\"/compare/\"*) printf '%s\\n' '{merge_base_sha}' ;;\n"
+        "  *) printf '%s\\n' "
+        f'\'{{"headRefOid":"{head_sha}","baseRefOid":"{base_sha}",'
+        '"baseRepoFullName":"Acme/Base"}\' ;;\n'
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+
     env = {
         **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "REVIEW_OUTPUT_DIR": f"{output_dir}/",
         "MODE": "local",
         "base_branch": "base",
@@ -253,7 +271,7 @@ def test_gate_validation_precedes_boolean_consumption() -> None:
 
 def test_live_pr_refs_use_supported_pull_request_api_fields() -> None:
     section = _section("### Step 2.7", "### Step 2.5")
-    assert section.count('gh api "repos/{owner}/{repo}/pulls/${pr_number}"') == 2
+    assert section.count('gh api "repos/{owner}/{repo}/pulls/${pr_number}"') == 4
     assert "gh pr view" not in section
     assert "--json headRefOid,baseRefOid" not in section
 
@@ -333,7 +351,7 @@ def test_closed_gate_degradation_reasons_execute(tmp_path: Path, reason: str) ->
         metrics["diff_source"]["profile_id"] = "wrong"
         _write_metrics(case)
     elif reason == "ref_missing":
-        case["env"]["base_branch"] = "missing-base"
+        case["env"]["FAKE_GH_MISSING_AUTHORITY"] = "1"
     elif reason == "snapshot_mismatch":
         metrics["_head_sha"] = "b" * 40
         _write_metrics(case)

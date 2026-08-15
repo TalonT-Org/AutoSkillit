@@ -74,6 +74,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Post review comments when `gh` is unavailable — output `verdict=needs_human` and exit 0
 - Let standard or deletion agents read outside the supplied PR diff content
 - Modify any source code
+- Mutating checked-out refs is prohibited during review. Review is observational; do not rewrite refs, `HEAD`, the index, or worktree state to satisfy an authority check.
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 - Specify `subagent_type` for standard or deletion audit agents. The only permitted
@@ -141,13 +142,18 @@ done
 
 If `mode` is absent or unrecognized, default to `"github"`. The mode controls where
 findings are written — `mode=local` skips all GitHub API posting and writes to a local
-JSON file instead.
+JSON file instead. Note: `annotate_pr_diff` still calls `gh api` to cross-validate the
+provider head/base SHAs against the local checkout before trusting the local diff; this
+is a security cross-check, not a diff-fetch dependency.
 
 ### Step 1: Find the Open PR
 
 ```bash
-gh pr list --head "$feature_branch" --base "$base_branch" \
-  --json number,url -q '.[0] | "\(.number) \(.url)"'
+pr_lookup="$(gh pr list --head "$feature_branch" --base "$base_branch" \
+  --json number,url -q '.[0] | "\(.number) \(.url)"')"
+read -r pr_number pr_url <<EOF
+$pr_lookup
+EOF
 ```
 
 If `gh` is unavailable or not authenticated, or no PR is found:
@@ -268,17 +274,73 @@ generation. The gate has three states: `valid_true`, `valid_false`, or `degraded
 Freshness and the complete artifact manifest MUST validate before consuming the
 gate boolean. The review LLM never counts lines or infers eligibility.
 
+```text
+REVIEW_CHECKOUT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+
+# Standalone interactive local reviews use the same preparation authority as recipes.
+# Recipe-provided artifacts bypass this block. A headless L1 session cannot call
+# run_python, so missing local artifacts there stop with needs_human and clear.
+if [ "$MODE" = local ] && {
+   [ -z "${annotated_diff_path:-}" ] || [ ! -f "$annotated_diff_path" ] ||
+   [ -z "${hunk_ranges_path:-}" ] || [ ! -f "$hunk_ranges_path" ] ||
+   [ -z "${valid_lines_path:-}" ] || [ ! -f "$valid_lines_path" ] ||
+   [ -z "${diff_metrics_path:-}" ] || [ ! -f "$diff_metrics_path" ];
+}; then
+    if [ "${AUTOSKILLIT_HEADLESS:-}" = 1 ]; then
+        echo "verdict=needs_human"
+        echo "%%REVIEW_GATE::CLEAR%%"
+        exit 0
+    fi
+    ANNOTATION_OUTPUT_DIR="$(mktemp -d "${REVIEW_OUTPUT_DIR%/}/annotation.XXXXXX")" || {
+        echo "verdict=needs_human"
+        echo "%%REVIEW_GATE::CLEAR%%"
+        exit 0
+    }
+```
+
+Invoke the MCP helper exactly once:
+
+```text
+annotation_result = run_python(
+    callable="autoskillit.smoke_utils.annotate_pr_diff",
+    args={
+        "pr_number": pr_number,
+        "cwd": REVIEW_CHECKOUT_ROOT,
+        "output_dir": ANNOTATION_OUTPUT_DIR,
+        "base_branch": base_branch,
+        "mode": "local",
+    },
+    timeout=120,
+    work_dir=REVIEW_CHECKOUT_ROOT,
+)
+```
+
+Require `annotation_result.success=true` and a mapping-valued
+`annotation_result.result`. On failure, output `verdict=needs_human`, output
+`%%REVIEW_GATE::CLEAR%%`, and stop. On success, bind the helper result before the gate:
+
+```text
+    annotated_diff_path="$(printf '%s' "$annotation_result" | jq -r '.result.annotated_diff_path')"
+    hunk_ranges_path="$(printf '%s' "$annotation_result" | jq -r '.result.hunk_ranges_path')"
+    valid_lines_path="$(printf '%s' "$annotation_result" | jq -r '.result.valid_lines_path')"
+    diff_metrics_path="$(printf '%s' "$annotation_result" | jq -r '.result.diff_metrics_path')"
+fi
+```
+
 ```bash
 REVIEW_CHECKOUT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 METRICS_HEAD_SHA=""
 METRICS_BASE_SHA=""
 METRICS_MERGE_BASE_SHA=""
+METRICS_BASE_REPO_FULL_NAME=""
 CHECKOUT_HEAD_SHA=""
 CHECKOUT_BASE_SHA=""
 CHECKOUT_MERGE_BASE_SHA=""
 LIVE_REFS=""
 LIVE_HEAD_SHA=""
 LIVE_BASE_SHA=""
+LIVE_BASE_REPO_FULL_NAME=""
+LIVE_MERGE_BASE_SHA=""
 DIFF_SHA256=""
 PROFILE_ID=""
 ANNOTATION_GENERATION_ID=""
@@ -347,6 +409,7 @@ else
          ! jq -e '
         has("_head_sha") and
         has("_base_sha") and
+        has("_base_repo_full_name") and
         has("generation_id") and
         has("diff_sha256") and
         has("diff_byte_length") and
@@ -359,6 +422,7 @@ else
          ! jq -e '
         (._head_sha | type == "string" and length > 0) and
         (._base_sha | type == "string" and length > 0) and
+        (._base_repo_full_name | type == "string") and
         (.generation_id | type == "string" and length > 0) and
         (.diff_sha256 | type == "string" and length == 64) and
         (.diff_byte_length | type == "number" and . >= 0 and floor == .) and
@@ -375,6 +439,7 @@ else
         METRICS_HEAD_SHA="$(jq -r '._head_sha' < "$METRICS_MARKER_BEFORE")"
         METRICS_BASE_SHA="$(jq -r '._base_sha' < "$METRICS_MARKER_BEFORE")"
         METRICS_MERGE_BASE_SHA="$(jq -r '._merge_base_sha // ""' < "$METRICS_MARKER_BEFORE")"
+        METRICS_BASE_REPO_FULL_NAME="$(jq -r '._base_repo_full_name // ""' < "$METRICS_MARKER_BEFORE")"
         ANNOTATION_GENERATION_ID="$(jq -r '.generation_id' < "$METRICS_MARKER_BEFORE")"
         DIFF_SHA256="$(jq -r '.diff_sha256' < "$METRICS_MARKER_BEFORE")"
         PROFILE_ID="$(jq -r '.diff_source.profile_id // ""' < "$METRICS_MARKER_BEFORE")"
@@ -402,11 +467,25 @@ else
         if [ -z "$CHECKOUT_HEAD_SHA" ] || [ "$CHECKOUT_HEAD_SHA" != "$METRICS_HEAD_SHA" ]; then
             degrade_gate snapshot_mismatch
         elif [ "$MODE" = "local" ]; then
-            CHECKOUT_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "${base_branch}" 2>/dev/null || true)"
-            CHECKOUT_MERGE_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$CHECKOUT_BASE_SHA" "$CHECKOUT_HEAD_SHA" 2>/dev/null || true)"
-            if [ -z "$CHECKOUT_BASE_SHA" ] || [ -z "$CHECKOUT_MERGE_BASE_SHA" ]; then
+            LIVE_REFS="$(
+              gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+                --jq '{headRefOid:.head.sha,baseRefOid:.base.sha,baseRepoFullName:.base.repo.full_name}' 2>/dev/null || true
+            )"
+            LIVE_HEAD_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.headRefOid // ""' 2>/dev/null)"
+            LIVE_BASE_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+            LIVE_BASE_REPO_FULL_NAME="$(printf '%s' "$LIVE_REFS" | jq -r '.baseRepoFullName // ""' 2>/dev/null)"
+            LIVE_MERGE_BASE_SHA="$(gh api \
+              "repos/${LIVE_BASE_REPO_FULL_NAME}/compare/${LIVE_BASE_SHA}...${LIVE_HEAD_SHA}" \
+              --jq '.merge_base_commit.sha' 2>/dev/null || true)"
+            CHECKOUT_MERGE_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$METRICS_BASE_SHA" "$CHECKOUT_HEAD_SHA" 2>/dev/null || true)"
+            if [ -z "$LIVE_HEAD_SHA" ] || [ -z "$LIVE_BASE_SHA" ] ||
+               [ -z "$LIVE_BASE_REPO_FULL_NAME" ] || [ -z "$LIVE_MERGE_BASE_SHA" ] ||
+               [ -z "$CHECKOUT_MERGE_BASE_SHA" ]; then
                 degrade_gate ref_missing
-            elif [ "$CHECKOUT_BASE_SHA" != "$METRICS_BASE_SHA" ] ||
+            elif [ "$LIVE_HEAD_SHA" != "$METRICS_HEAD_SHA" ] ||
+                 [ "$LIVE_BASE_SHA" != "$METRICS_BASE_SHA" ] ||
+                 [ "$LIVE_BASE_REPO_FULL_NAME" != "$METRICS_BASE_REPO_FULL_NAME" ] ||
+                 [ "$LIVE_MERGE_BASE_SHA" != "$METRICS_MERGE_BASE_SHA" ] ||
                  [ "$CHECKOUT_MERGE_BASE_SHA" != "$METRICS_MERGE_BASE_SHA" ]; then
                 degrade_gate snapshot_mismatch
             fi
@@ -495,17 +574,20 @@ GATE_AUTHORITY="$(jq -cn \
   --arg head_sha "$METRICS_HEAD_SHA" \
   --arg base_sha "$METRICS_BASE_SHA" \
   --arg merge_base_sha "$METRICS_MERGE_BASE_SHA" \
+  --arg base_repo_full_name "$METRICS_BASE_REPO_FULL_NAME" \
   --arg diff_sha256 "${DIFF_SHA256:-}" \
   --arg profile_id "${PROFILE_ID:-}" \
   --arg annotation_generation_id "${ANNOTATION_GENERATION_ID:-}" \
   '{state:$state,reason_code:$reason_code,snapshot:{
     head_sha:$head_sha,base_sha:$base_sha,merge_base_sha:$merge_base_sha,
+    base_repo_full_name:$base_repo_full_name,
     diff_sha256:$diff_sha256,profile_id:$profile_id
   },annotation_generation_id:$annotation_generation_id}')"
 
 revalidate_retained_snapshot() {
-    local current_marker="" current_head="" current_base="" current_merge_base=""
+    local current_marker="" current_head="" current_merge_base=""
     local current_live_refs="" current_live_head="" current_live_base=""
+    local current_live_repo="" current_live_merge_base=""
     [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ] || return 1
     current_marker="$(mktemp "${REVIEW_OUTPUT_DIR%/}/metrics_recheck.XXXXXX")" || return 1
     if ! cp -- "$diff_metrics_path" "$current_marker" ||
@@ -521,9 +603,21 @@ revalidate_retained_snapshot() {
     current_head="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
     [ "$current_head" = "$METRICS_HEAD_SHA" ] || return 1
     if [ "$MODE" = "local" ]; then
-        current_base="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "$base_branch" 2>/dev/null || true)"
-        current_merge_base="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$current_base" "$current_head" 2>/dev/null || true)"
-        [ "$current_base" = "$METRICS_BASE_SHA" ] &&
+        current_live_refs="$(
+          gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+            --jq '{headRefOid:.head.sha,baseRefOid:.base.sha,baseRepoFullName:.base.repo.full_name}' 2>/dev/null || true
+        )"
+        current_live_head="$(printf '%s' "$current_live_refs" | jq -r '.headRefOid // ""' 2>/dev/null)"
+        current_live_base="$(printf '%s' "$current_live_refs" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+        current_live_repo="$(printf '%s' "$current_live_refs" | jq -r '.baseRepoFullName // ""' 2>/dev/null)"
+        current_live_merge_base="$(gh api \
+          "repos/${current_live_repo}/compare/${current_live_base}...${current_live_head}" \
+          --jq '.merge_base_commit.sha' 2>/dev/null || true)"
+        current_merge_base="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$METRICS_BASE_SHA" "$current_head" 2>/dev/null || true)"
+        [ "$current_live_head" = "$METRICS_HEAD_SHA" ] &&
+            [ "$current_live_base" = "$METRICS_BASE_SHA" ] &&
+            [ "$current_live_repo" = "$METRICS_BASE_REPO_FULL_NAME" ] &&
+            [ "$current_live_merge_base" = "$METRICS_MERGE_BASE_SHA" ] &&
             [ "$current_merge_base" = "$METRICS_MERGE_BASE_SHA" ]
     else
         current_live_refs="$(

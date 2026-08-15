@@ -77,6 +77,14 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
         enforcement_layer="hook-deny",
         backends=_BOTH,
     ),
+    "git-checked-out-ref-mutation": InvariantDef(
+        id="git-checked-out-ref-mutation",
+        prohibition="Mutating checked-out refs is prohibited during review",
+        source_doc="skills_extended/review-pr/SKILL.md",
+        gate_target="guards/git_ops_guard.py",
+        enforcement_layer="hook-deny",
+        backends=_BOTH,
+    ),
     "recipe-read-headless": InvariantDef(
         id="recipe-read-headless",
         prohibition="Must not read recipe/skill/agent files directly in headless sessions",

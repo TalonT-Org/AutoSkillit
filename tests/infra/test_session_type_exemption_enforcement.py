@@ -173,12 +173,8 @@ def test_pr_create_guard_exempt_session_types_matches_hookdef() -> None:
     )
 
 
-def test_git_ops_guard_exempt_session_types_matches_hookdef() -> None:
-    """_EXEMPT_SESSION_TYPES in git_ops_guard.py must equal exempt_session_types on HookDef.
-
-    Catches drift between the two parallel frozensets that the stdlib-only boundary
-    prevents from sharing a common import.
-    """
+def test_git_ops_guard_orchestrator_exemption_is_phase_local() -> None:
+    """The orchestrator exemption applies after the all-session ref preflight only."""
     script_path = HOOKS_DIR / "guards/git_ops_guard.py"
     spec = importlib.util.spec_from_file_location("git_ops_guard", script_path)
     assert spec is not None and spec.loader is not None
@@ -194,10 +190,10 @@ def test_git_ops_guard_exempt_session_types_matches_hookdef() -> None:
             break
     assert hookdef_exempt is not None, "No HookDef found for guards/git_ops_guard.py"
 
-    assert script_exempt == hookdef_exempt, (
-        f"_EXEMPT_SESSION_TYPES in git_ops_guard.py {script_exempt!r} does not match "
-        f"exempt_session_types on the HookDef {hookdef_exempt!r}. "
-        "Update both frozensets together."
+    assert script_exempt == frozenset({"orchestrator"})
+    assert hookdef_exempt == frozenset(), (
+        "git_ops_guard is reachable before exemptions in every session; its HookDef "
+        "must not exempt the orchestrator from the hook as a whole"
     )
 
 

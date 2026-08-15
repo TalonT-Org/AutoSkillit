@@ -487,7 +487,7 @@ All guard scripts fail-**open** for malformed or unparseable input: a JSON decod
 failure produces exit 0 (approve). This prevents a broken hook from blocking the
 entire tool chain.
 
-Six guards additionally fail-**closed** for valid input with unrecognized values,
+Seven guards additionally fail-**closed** for valid input with unrecognized values,
 as a defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -498,6 +498,7 @@ as a defense-in-depth measure against privilege escalation:
 | `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command, or unexpected classifier error | Unknown mutation scope must not bypass the structured review publisher |
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
+| `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError) | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
 (valid input, unrecognized value) = fail-closed.

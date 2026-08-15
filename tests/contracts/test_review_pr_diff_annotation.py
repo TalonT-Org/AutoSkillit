@@ -93,6 +93,21 @@ def test_review_pr_contract_has_diff_metrics_path() -> None:
     )
 
 
+def test_annotate_pr_diff_callable_contract_has_optional_string_mode() -> None:
+    """Standalone callers can select local preparation without recipe counters."""
+    raw = load_yaml(_CONTRACTS_YAML)
+    inputs = (
+        raw.get("callable_contracts", {})
+        .get("autoskillit.smoke_utils.annotate_pr_diff", {})
+        .get("inputs", [])
+    )
+    mode = next((item for item in inputs if item.get("name") == "mode"), None)
+
+    assert mode is not None, "annotate_pr_diff must declare the standalone mode input"
+    assert mode.get("type") == "str"
+    assert mode.get("required") is False
+
+
 def test_review_pr_skill_reads_diff_metrics_from_file() -> None:
     """review-pr SKILL.md must reference diff_metrics_path."""
     skill_text = _SKILL_MD.read_text()

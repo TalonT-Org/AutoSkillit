@@ -12,7 +12,12 @@ The package initializer remains import-free.
   Skill commands must use the canonical slash-command path form.
 - **Git and pull requests:** operations against protected branches are denied. With the
   kitchen open, `gh pr create` through `run_cmd` is blocked, and PR bodies must carry the
-  required `Closes #N` reference. In headless skill sessions, git operations block
+  required `Closes #N` reference. While the kitchen is open, an all-session preflight
+  denies bounded out-of-band writes to any branch ref owned by the requesting or another
+  worktree in the same Git common directory. It derives repository identity and command
+  cwd from the parsed tool payload plus read-only Git resolution; vendor `session_id` and
+  `transcript_path` values are diagnostic only. Detached worktrees own no branch ref.
+  In headless skill sessions, the later legacy Git phase blocks
   `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`.
   Raw GitHub review publication is fail-closed across Bash and `run_cmd`: the guard denies
   review/comment writes, multiple or dynamically unresolved mutations, and relative
@@ -53,7 +58,7 @@ Each guard is a standalone Python script executed as a subprocess (not imported 
 All guards fail-**open** for malformed/unparseable input (JSON decode failure = exit 0 = approve).
 This prevents a broken hook from blocking the entire tool chain.
 
-Six guards additionally fail-**closed** for valid input with unrecognized values, as a
+Seven guards additionally fail-**closed** for valid input with unrecognized values, as a
 defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -64,8 +69,13 @@ defense-in-depth measure against privilege escalation:
 | `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
+| `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError) | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier (valid input, unrecognized value) = fail-closed.
+
+The checked-out-ref check is a preflight, not a repository lock. A concurrent branch
+switch after worktree enumeration leaves a residual race; do not infer stronger
+coordination from the denial boundary.
 
 ## Hook Payload Fields for Guard Development
 

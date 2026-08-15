@@ -3031,6 +3031,9 @@ callable_contracts:
     - name: current_iteration
       type: str
       required: false
+    - name: mode
+      type: str
+      required: false
     outputs:
     - name: annotated_diff_path
       type: file_path

@@ -39,18 +39,9 @@ from autoskillit.smoke_utils._helpers import try_load_json
 from autoskillit.smoke_utils._investigation import extract_investigation
 from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
-    LOCAL_ROUND_EXEMPT_VERDICTS,
-    aggregate_review_verdict,
     annotate_pr_diff,
     check_loop_iteration,
     check_loop_with_progress,
-    check_review_loop,
-    check_review_posted,
-    clear_review_annotation_context,
-    enrich_diff_context,
-    init_counter,
-    pre_iteration_cleanup,
-    select_review_dimensions,
 )
 from autoskillit.smoke_utils._review_contracts import (
     EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
@@ -58,6 +49,17 @@ from autoskillit.smoke_utils._review_contracts import (
     REVIEW_HANDOFF_IDENTITY_FIELDS,
     review_handoff_pair_error,
     select_experimental_review_dispatch,
+)
+from autoskillit.smoke_utils._review_design import (
+    LOCAL_ROUND_EXEMPT_VERDICTS,
+    aggregate_review_verdict,
+    check_review_loop,
+    check_review_posted,
+    clear_review_annotation_context,
+    enrich_diff_context,
+    init_counter,
+    pre_iteration_cleanup,
+    select_review_dimensions,
 )
 from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
 

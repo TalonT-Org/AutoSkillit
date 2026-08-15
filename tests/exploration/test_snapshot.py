@@ -15,6 +15,7 @@ from autoskillit.exploration.collectors import _bounded
 from autoskillit.exploration.pagination import pagination_identity
 from autoskillit.exploration.snapshot import (
     ArtifactCaptureError,
+    ArtifactCaptureStatus,
     SnapshotCaptureLimits,
     SnapshotCaptureStatus,
     capture_repository_snapshot,
@@ -91,16 +92,17 @@ def _set_unmerged_index(root: Path, path: str) -> tuple[str, ...]:
         for content in (b"base\n", b"ours\n", b"theirs\n")
     )
     _git(root, "rm", "--cached", "-q", "-f", "--", path)
-    records = "".join(
+    records = tuple(
         f"100644 {object_id} {stage}\t{path}\n"
         for stage, object_id in enumerate(object_ids, start=1)
     )
-    _git_stdout(root, "update-index", "--index-info", input_bytes=records.encode())
-    return tuple(
-        record.decode()
-        for record in _git_stdout(root, "ls-files", "--stage", "-z", "--", path).split(b"\0")
-        if record
+    _git_stdout(
+        root,
+        "update-index",
+        "--index-info",
+        input_bytes="".join(records).encode(),
     )
+    return tuple(record.rstrip("\n") for record in records)
 
 
 def test_pagination_digest_preserves_golden_canonical_bytes() -> None:
@@ -296,7 +298,7 @@ def test_stable_artifact_capture_rejects_unauthorized_path_forms(
     with pytest.raises(ArtifactCaptureError) as raised:
         _capture_artifact(root, artifact_path)
 
-    assert raised.value.status == "unsupported"
+    assert raised.value.status is ArtifactCaptureStatus.UNSUPPORTED
     assert raised.value.stop_reason == "invalid_artifact_path"
 
 
@@ -319,7 +321,7 @@ def test_stable_artifact_capture_rejects_unsafe_artifacts(
     with pytest.raises(ArtifactCaptureError) as raised:
         _capture_artifact(root, artifact_path)
 
-    assert raised.value.status == "unsupported"
+    assert raised.value.status is ArtifactCaptureStatus.UNSUPPORTED
 
 
 def test_stable_artifact_capture_stops_after_bounded_instability(
@@ -342,7 +344,7 @@ def test_stable_artifact_capture_stops_after_bounded_instability(
     with pytest.raises(ArtifactCaptureError) as raised:
         _capture_artifact(root, "tracked.txt", max_attempts=2)
 
-    assert raised.value.status == SnapshotCaptureStatus.STALE
+    assert raised.value.status is ArtifactCaptureStatus.STALE
     assert raised.value.stop_reason
     assert calls == 2
 
@@ -358,7 +360,7 @@ def test_stable_artifact_capture_honors_absolute_deadline(tmp_path: Path) -> Non
             max_attempts=1,
         )
 
-    assert raised.value.status == "unsupported"
+    assert raised.value.status is ArtifactCaptureStatus.UNSUPPORTED
     assert raised.value.stop_reason == "deadline_exceeded"
 
 

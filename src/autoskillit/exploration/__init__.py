@@ -26,6 +26,7 @@ from .profile import (
 from .router import readiness_waves, reclassify_cross_leaf, route_frontier
 from .snapshot import (
     ArtifactCaptureError,
+    ArtifactCaptureStatus,
     SnapshotCaptureLimits,
     SnapshotCaptureResult,
     StableArtifactCapture,
@@ -38,6 +39,7 @@ from .snapshot import (
 __all__ = [
     "AUTOSKILLIT_REPOSITORY_IDENTITY",
     "ArtifactCaptureError",
+    "ArtifactCaptureStatus",
     "COLLECTOR_PROFILES",
     "OFFLINE_DECLARATION_PATH",
     "IdentityEvidence",

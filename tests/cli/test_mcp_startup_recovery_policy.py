@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.cli import _prompts
-from tests._helpers import ATTESTED_SKILL_INPUT_SHAPE_ATOMS
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -55,5 +54,11 @@ def test_canonical_instruction_is_rendered_from_the_policy() -> None:
 def test_startup_policy_preserves_attested_skill_input_shape() -> None:
     rendered = _prompts._MCP_STARTUP_RECOVERY_SPEC.render()
 
-    for required in ATTESTED_SKILL_INPUT_SHAPE_ATOMS:
-        assert required in rendered
+    assert (
+        "For structured child inputs, select "
+        "recipe_execution.skill_input_shapes[step_name], initialize skill_inputs "
+        "with exactly its ordered keys, and replace available values in place. "
+        "For unavailable context, copy only that key's advertised "
+        'unresolved_defaults entry by key presence, so "", 0, and False remain '
+        "verbatim; never delete or invent a key."
+    ) in rendered

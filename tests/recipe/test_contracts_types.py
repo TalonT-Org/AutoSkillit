@@ -22,6 +22,19 @@ def test_skill_input_rejects_noncanonical_float(input_type: str) -> None:
     assert not skill_input.accepts(1.5)
 
 
+@pytest.mark.parametrize("unresolved_default", [1.5, {}, []])
+def test_skill_input_rejects_non_scalar_unresolved_default(
+    unresolved_default: object,
+) -> None:
+    with pytest.raises(ValueError, match="unresolved_default must be a strict scalar"):
+        SkillInput(
+            name="value",
+            type="string",
+            required=False,
+            unresolved_default=unresolved_default,  # type: ignore[arg-type]
+        )
+
+
 def test_skill_contract_rejects_unknown_input_preflight() -> None:
     with pytest.raises(ValueError, match="unsupported input preflight"):
         SkillContract(inputs=(), outputs=[], input_preflight="unknown")

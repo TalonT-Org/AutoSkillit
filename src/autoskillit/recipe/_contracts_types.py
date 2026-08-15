@@ -24,6 +24,14 @@ class SkillInput:
     nullable: bool = True
     unresolved_default: BoundScalar | None = None
 
+    def __post_init__(self) -> None:
+        if self.unresolved_default is not None and type(self.unresolved_default) not in (
+            str,
+            int,
+            bool,
+        ):
+            raise ValueError("SkillInput.unresolved_default must be a strict scalar or None")
+
     def accepts(self, value: object) -> bool:
         normalized = self.type
         if normalized in {

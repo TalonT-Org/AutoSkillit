@@ -434,7 +434,7 @@ def _refspec_targets(refspec: str, owned_refs: list[str]) -> list[str]:
     refspec = refspec.removeprefix("+")
     if refspec.startswith("^") or ":" not in refspec:
         return []
-    _source, destination = refspec.split(":", 1)
+    destination = refspec.split(":", 1)[1]
     if not destination:
         return []
     if _DYNAMIC_TOKEN_RE.search(destination.replace("*", "")):

@@ -188,6 +188,8 @@ def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
 
     public_credential = recipe_initialization._public_completion_credential(credential, projection)
 
+    assert public_credential.execution_id == credential.execution_id
+    assert public_credential.snapshot_digest == credential.snapshot_digest
     assert public_credential.invocation_template_digests == {"initial": _hash("initial")}
 
 

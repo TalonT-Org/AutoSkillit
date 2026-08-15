@@ -62,6 +62,7 @@ from autoskillit.core import (
     SessionSummary,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
@@ -1029,6 +1030,20 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Claude Code instructions."""
+        if (
+            plan.join is not None
+            and plan.join.required
+            and not self.capabilities.fixed_set_join_capable
+        ):
+            return SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic=(
+                    "Claude Code cannot support join.required=true: the runtime "
+                    "does not have the declared-batch, claim guard, success/failure "
+                    "settlers, unresolved-follow-up gate, and Stop completion gate "
+                    "all capability-attested. Refuse the skill at admission."
+                ),
+            )
         role_mapping = {role.name: role.name for role in plan.logical_roles}
         sibling_targets = {
             sibling.name: f"/autoskillit:{sibling.name}" for sibling in plan.sibling_skills
@@ -1071,7 +1086,13 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Issue all independent child calls in one message so they overlap.")
         if plan.join is not None and plan.join.required:
-            fragments.append("Join every spawned child before parent synthesis.")
+            fragments.append(
+                "Before this wave, call declare_join_batch with the loaded skill "
+                "name and one assignment label per direct child. Then issue every "
+                "member as one ordinary unnamed foreground Agent(subagent_type=...) "
+                "call in a single message. Retain every direct result. Only after "
+                "the ledger reports complete do you synthesize or allow Stop."
+            )
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""
             fragments.append(f"Require {boundary}evidence from each child result.")

@@ -81,6 +81,7 @@ from autoskillit.core import (
     SessionSummary,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
@@ -1509,6 +1510,7 @@ class CodexBackend(BackendCmdBuilderBase):
             protected_recipe_delivery_capable=False,
             recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
+            fixed_set_join_capable=False,
         )
 
     @property
@@ -2305,6 +2307,15 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Codex collaboration instructions."""
+        if plan.join is not None and plan.join.required:
+            return SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic=(
+                    "Codex exposes wait-any/mailbox-activity semantics rather than "
+                    "fixed-set fan-in. Skills declaring join.required=true cannot be "
+                    "honestly realized on this backend and must be refused at admission."
+                ),
+            )
         role_mapping = {
             role.name: (
                 role.name.removeprefix("autoskillit:")
@@ -2351,11 +2362,8 @@ class CodexBackend(BackendCmdBuilderBase):
                 )
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Spawn all independent children before awaiting any result.")
-        if plan.join is not None and plan.join.required:
-            fragments.append(
-                "Use wait_agent with the exact returned child IDs; deliver every independent "
-                "successful child terminal result before parent synthesis."
-            )
+        # NOTE: plan.join.required is refused at admission above via the
+        # unsupported_operation path; this fragment is unreachable by design.
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""
             fragments.append(f"Require {boundary}evidence from each child result.")

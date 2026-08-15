@@ -1136,8 +1136,6 @@ class DefaultAuditAdmissionLedger:
         self,
         reservation_handle: str,
     ) -> AuditIdentityReservation | None:
-        if not isinstance(reservation_handle, str):
-            return None
         parts = reservation_handle.split(".")
         if len(parts) != 3 or parts[0] != _HANDLE_PREFIX:
             return None

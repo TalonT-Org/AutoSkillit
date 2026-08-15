@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
@@ -117,10 +119,28 @@ class TestResearchReviewRecipe:
         assert recipe.steps["escalate_stop"].action == "stop"
 
     # --- Key routing adaptations ---
-    def test_prepare_research_pr_uses_context_worktree_path(self, recipe) -> None:
+    def test_prepare_research_pr_uses_required_worktree_input(self, recipe) -> None:
         step = recipe.steps["prepare_research_pr"]
-        assert "context.worktree_path" in step.with_args.get("skill_command", "")
-        assert step.with_args.get("cwd") == "${{ context.worktree_path }}"
+        assert "inputs.worktree_path" in step.with_args.get("skill_command", "")
+        assert step.with_args.get("cwd") == "${{ inputs.worktree_path }}"
+
+    def test_required_authorities_are_never_optional_context(self, recipe) -> None:
+        authorities = {
+            "worktree_path",
+            "research_dir",
+            "report_path",
+            "experiment_plan",
+            "experiment_results",
+            "experiment_type",
+            "scope_report",
+            "visualization_plan_path",
+        }
+        for step in recipe.steps.values():
+            assert authorities.isdisjoint(step.optional_context_refs or [])
+
+        source = (builtin_recipes_dir() / "research-review.yaml").read_text()
+        for authority in authorities:
+            assert re.search(rf"context\.{authority}(?![A-Za-z0-9_])", source) is None
 
     def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
         step = recipe.steps["finalize_bundle"]

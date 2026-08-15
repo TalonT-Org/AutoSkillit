@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import regex as re
 
-from autoskillit.core import SKILL_TOOLS, Severity, get_logger, pkg_root
+from autoskillit.core import (
+    SKILL_TOOLS,
+    BoundValueOrigin,
+    Severity,
+    get_logger,
+    pkg_root,
+)
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import bound_skill_name
 from autoskillit.recipe.contracts import (
@@ -42,6 +48,82 @@ def _normalize_for_pattern_match(text: str) -> str:
     text = _DELIM_BOLD_RE.sub(r"\1", text)
     text = _DELIM_BACKTICK_RE.sub(r"\1", text)
     return text
+
+
+@semantic_rule(
+    name="mapped-skill-context-definition",
+    description=(
+        "Mapped run_skill context inputs must be defined on every path or declare an "
+        "explicit contract vacancy value"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_mapped_skill_context_definitions(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill" or step_name not in ctx.must_defined_context:
+            continue
+        invocation = ctx.binding_projection.for_step(step_name)
+        skill_name = bound_skill_name(ctx, step_name)
+        if invocation is None or not skill_name:
+            continue
+        contract = get_skill_contract(skill_name, manifest)
+        if contract is None:
+            continue
+        inputs = {item.name: item for item in contract.inputs}
+        guaranteed = ctx.must_defined_context[step_name]
+        optional_refs = frozenset(step.optional_context_refs)
+
+        for bound in invocation.skill_inputs:
+            input_def = inputs.get(bound.name)
+            if input_def is None:
+                continue
+            for context_name in bound.context_dependencies:
+                if context_name in guaranteed:
+                    continue
+                vacancy_is_authorized = (
+                    context_name in optional_refs
+                    and not input_def.required
+                    and input_def.has_absence_value
+                    and bound.origin is BoundValueOrigin.CONTEXT
+                )
+                if vacancy_is_authorized:
+                    continue
+
+                bypassing: list[str] = []
+                carrying: list[str] = []
+                for source, edge in ctx.predecessor_edges.get(step_name, ()):
+                    source_facts = ctx.must_defined_context.get(source, frozenset())
+                    source_captures = frozenset(ctx.recipe.steps[source].capture) | frozenset(
+                        ctx.recipe.steps[source].capture_list
+                    )
+                    edge_facts = (
+                        source_facts | source_captures if edge.capture_available else source_facts
+                    )
+                    rendered = f"{source} -[{edge.edge_type}]-> {step_name}"
+                    (carrying if context_name in edge_facts else bypassing).append(rendered)
+
+                findings.append(
+                    make_finding(
+                        rule_name="mapped-skill-context-definition",
+                        step_name=step_name,
+                        message=(
+                            f"Recipe {ctx.recipe.name!r} step {step_name!r} skill input "
+                            f"{bound.name!r} references context {context_name!r} without an "
+                            "all-path definition. Bypassing predecessor edges: "
+                            f"{', '.join(sorted(bypassing)) or '(entry)'}. "
+                            "Capture-carrying predecessor edges: "
+                            f"{', '.join(sorted(carrying)) or '(none)'}. Add an all-path "
+                            "producer or declare optional_context_refs with a non-required "
+                            "SkillInput absence_value."
+                        ),
+                    )
+                )
+    return findings
 
 
 @semantic_rule(

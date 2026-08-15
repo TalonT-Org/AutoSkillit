@@ -54,6 +54,11 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     skill_data = skills.get(skill_name)
     if skill_data is None:
         return None
+    for inp in skill_data.get("inputs", []):
+        if "absence_value" in inp and inp["absence_value"] is None:
+            raise TypeError(
+                f"absence_value for skill input {inp.get('name')!r} must be a strict scalar"
+            )
     inputs = tuple(
         SkillInput(
             name=inp["name"],
@@ -61,6 +66,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             # Skill inputs default to optional — skills are permissive by design.
             required=inp.get("required", False),
             recommended=inp.get("recommended", False),
+            **({"absence_value": inp["absence_value"]} if "absence_value" in inp else {}),
         )
         for inp in skill_data.get("inputs", [])
     )
@@ -294,6 +300,7 @@ def compute_skill_contract_identity(
                     "nullable": item.nullable,
                     "required": item.required,
                     "type": item.type,
+                    **({"absence_value": item.absence_value} if item.has_absence_value else {}),
                 }
                 for item in contract.inputs
             ],

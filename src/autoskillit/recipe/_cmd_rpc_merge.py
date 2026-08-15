@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 
-from autoskillit.core import get_logger, run_gh, run_git
+from autoskillit.core import atomic_write, get_logger, run_gh, run_git, truncate_text
 
 logger = get_logger(__name__)
 
@@ -16,6 +17,21 @@ def _detect_remote(cwd: str) -> str:
     if result.returncode == 0 and not result.stdout.strip().startswith("file://"):
         return "upstream"
     return "origin"
+
+
+def _write_rebase_conflict_report(
+    *, work_dir: str, conflict_report_path: str, rebase_stderr: str
+) -> None:
+    """Publish bounded rebase evidence before the rebase is aborted."""
+    unmerged = run_git(["diff", "--name-only", "--diff-filter=U"], cwd=work_dir)
+    report = (
+        "# Rebase Conflict\n\n"
+        "## Unmerged files\n\n"
+        f"{truncate_text(unmerged.stdout)}\n\n"
+        "## Rebase stderr\n\n"
+        f"{truncate_text(rebase_stderr)}\n"
+    )
+    atomic_write(Path(conflict_report_path), report)
 
 
 def queue_ejected_fix(
@@ -88,6 +104,7 @@ def attempt_cheap_rebase(
     work_dir: str,
     ejected_pr_branch: str,
     base_branch: str,
+    conflict_report_path: str,
 ) -> dict[str, str]:
     """Checkout ejected branch and attempt rebase."""
     remote = _detect_remote(work_dir)
@@ -99,8 +116,18 @@ def attempt_cheap_rebase(
     rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
         return {"status": "clean"}
-    run_git(["rebase", "--abort"], cwd=work_dir)
-    return {"status": "conflicts", "stderr": rebase.stderr}
+    try:
+        _write_rebase_conflict_report(
+            work_dir=work_dir,
+            conflict_report_path=conflict_report_path,
+            rebase_stderr=rebase.stderr,
+        )
+    finally:
+        run_git(["rebase", "--abort"], cwd=work_dir)
+    return {
+        "status": "conflicts",
+        "conflict_report_path": conflict_report_path,
+    }
 
 
 def wait_for_review_pr_mergeability(
@@ -220,6 +247,7 @@ def proactive_rebase_next_pr(
     work_dir: str,
     next_pr_branch: str,
     base_branch: str,
+    conflict_report_path: str,
 ) -> dict[str, str]:
     """Fetch, checkout, and rebase next PR branch."""
     remote = _detect_remote(work_dir)
@@ -233,5 +261,15 @@ def proactive_rebase_next_pr(
     rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
         return {"status": "clean"}
-    run_git(["rebase", "--abort"], cwd=work_dir)
-    return {"status": "conflicts", "stderr": rebase.stderr}
+    try:
+        _write_rebase_conflict_report(
+            work_dir=work_dir,
+            conflict_report_path=conflict_report_path,
+            rebase_stderr=rebase.stderr,
+        )
+    finally:
+        run_git(["rebase", "--abort"], cwd=work_dir)
+    return {
+        "status": "conflicts",
+        "conflict_report_path": conflict_report_path,
+    }

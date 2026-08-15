@@ -161,6 +161,11 @@ def generate_recipe_card(
                                 "type": i.type,
                                 "required": i.required,
                                 "recommended": i.recommended,
+                                **(
+                                    {"absence_value": i.absence_value}
+                                    if i.has_absence_value
+                                    else {}
+                                ),
                             }
                             for i in contract.inputs
                         ],

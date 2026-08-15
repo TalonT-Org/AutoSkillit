@@ -18,6 +18,90 @@ from autoskillit.recipe.schema import Recipe, RecipeStep
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
+def test_mapped_skill_context_requires_all_path_definition(monkeypatch) -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe._binding import bind_recipe
+    from autoskillit.recipe.rules.rules_contracts import (
+        _check_mapped_skill_context_definitions,
+    )
+
+    manifest = {
+        "skills": {"demo": {"inputs": [{"name": "report", "type": "string", "required": True}]}}
+    }
+    recipe = Recipe(
+        name="joined",
+        description="test",
+        steps={
+            "producer": RecipeStep(
+                tool="run_skill",
+                on_success="consumer",
+                on_failure="consumer",
+                capture={"report": "${{ result.report }}"},
+            ),
+            "consumer": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:demo",
+                    "skill_inputs": {"report": "${{ context.report }}"},
+                },
+            ),
+        },
+    )
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    ctx = make_validation_context(
+        recipe,
+        binding_projection=bind_recipe(recipe, manifest=manifest),
+    )
+
+    findings = _check_mapped_skill_context_definitions(ctx)
+    assert len(findings) == 1
+    assert "producer -[failure]-> consumer" in findings[0].message
+    assert "producer -[success]-> consumer" in findings[0].message
+
+
+def test_mapped_skill_context_accepts_explicit_vacancy(monkeypatch) -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe._binding import bind_recipe
+    from autoskillit.recipe.rules.rules_contracts import (
+        _check_mapped_skill_context_definitions,
+    )
+
+    manifest = {
+        "skills": {
+            "demo": {
+                "inputs": [
+                    {
+                        "name": "report",
+                        "type": "string",
+                        "required": False,
+                        "absence_value": "",
+                    }
+                ]
+            }
+        }
+    }
+    recipe = Recipe(
+        name="optional",
+        description="test",
+        steps={
+            "consumer": RecipeStep(
+                tool="run_skill",
+                optional_context_refs=["report"],
+                with_args={
+                    "skill_command": "/autoskillit:demo",
+                    "skill_inputs": {"report": "${{ context.report }}"},
+                },
+            )
+        },
+    )
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    ctx = make_validation_context(
+        recipe,
+        binding_projection=bind_recipe(recipe, manifest=manifest),
+    )
+    assert not _check_mapped_skill_context_definitions(ctx)
+
+
 def test_rule_flags_skills_with_empty_output_patterns() -> None:
     """The missing-output-patterns rule exists and emits no warnings on bundled recipes."""
     recipe_path = pkg_root() / "recipes" / "implementation.yaml"
@@ -640,6 +724,7 @@ def test_bundled_recipes_pass_all_new_contract_rules() -> None:
         "example-covers-all-allowed-values",
         "all-examples-match-all-patterns",
         "on-result-values-in-allowed-values",
+        "mapped-skill-context-definition",
     }
     recipes_dir = pkg_root() / "recipes"
     recipe_files = sorted(recipes_dir.glob("*.yaml"))

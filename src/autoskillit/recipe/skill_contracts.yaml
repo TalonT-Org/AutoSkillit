@@ -3,6 +3,8 @@ version: 0.1.0
 #   skills section          → required=false (skills are permissive)
 #   callable_contracts section → required=true  (callables are strict)
 # Best practice: always declare 'required' explicitly on every input.
+# absence_value is AutoSkillit's loader/runtime sentinel convention for a mapped
+# optional input; JSON Schema does not enforce this distinction.
 skills:
   troubleshoot-experiment:
     inputs:
@@ -343,6 +345,7 @@ skills:
     - name: audit_cycle_path
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: verdict
       type: string
@@ -1562,6 +1565,7 @@ skills:
     - name: revision_guidance
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: experiment_plan
       type: file_path
@@ -3446,8 +3450,13 @@ callable_contracts:
     - name: base_branch
       type: str
       required: true
+    - name: conflict_report_path
+      type: str
+      required: true
     outputs:
     - name: status
+      type: str
+    - name: conflict_report_path
       type: str
   autoskillit.recipe._cmd_rpc.wait_for_review_pr_mergeability:
     inputs:
@@ -3517,8 +3526,13 @@ callable_contracts:
     - name: base_branch
       type: str
       required: true
+    - name: conflict_report_path
+      type: str
+      required: true
     outputs:
     - name: status
+      type: str
+    - name: conflict_report_path
       type: str
   autoskillit.recipe._cmd_rpc.refetch_issues:
     inputs:

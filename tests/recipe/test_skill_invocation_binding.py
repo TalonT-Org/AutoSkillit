@@ -283,6 +283,41 @@ def test_falsey_values_remain_present() -> None:
     assert invocation.skill_input("round").effective_value == 0  # type: ignore[union-attr]
 
 
+def test_optional_context_vacancy_is_materialized_without_losing_origin() -> None:
+    manifest: dict[str, object] = {
+        "skills": {
+            "demo": {
+                "inputs": [
+                    {
+                        "name": "note",
+                        "type": "string",
+                        "required": False,
+                        "absence_value": "",
+                    }
+                ]
+            }
+        }
+    }
+    invocation = bind_step_invocation(
+        "demo",
+        RecipeStep(
+            tool="run_skill",
+            optional_context_refs=["note"],
+            with_args={
+                "skill_command": "/autoskillit:demo",
+                "skill_inputs": {"note": "${{ context.note }}"},
+            },
+        ),
+        manifest=manifest,
+    )
+    note = invocation.skill_input("note")
+    assert note is not None
+    assert note.declared_value == "${{ context.note }}"
+    assert note.effective_value == ""
+    assert note.state is BoundValueState.PRESENT
+    assert note.origin is BoundValueOrigin.CONTEXT
+
+
 def test_recipe_step_rejects_float_skill_inputs() -> None:
     with pytest.raises(TypeError, match="strict scalar"):
         _step({"round": 1.5})  # type: ignore[dict-item]

@@ -5,7 +5,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py formatters/pretty_output_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py formatters/pretty_output_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -15,17 +15,17 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py token_summary_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py token_summary_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py quota_post_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py quota_post_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py recipe_confirmed_post_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py recipe_confirmed_post_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -35,7 +35,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py quota_guard_state_post_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py quota_guard_state_post_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -45,7 +45,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py review_gate_post_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py review_gate_post_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -55,7 +55,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py resume_gate_post_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py resume_gate_post_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -65,7 +65,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py lint_after_edit_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py lint_after_edit_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -77,7 +77,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/fabricated_completion_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/fabricated_completion_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -87,27 +87,27 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/skill_cmd_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_cmd_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/quota_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/quota_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/skill_command_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_command_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/ingredient_lock_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/ingredient_lock_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/pipeline_step_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/pipeline_step_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -117,7 +117,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/remove_clone_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/remove_clone_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -127,7 +127,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/open_kitchen_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/open_kitchen_guard",
             "timeout": 5,
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
@@ -138,7 +138,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/branch_protection_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/branch_protection_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -148,7 +148,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/branch_protection_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/branch_protection_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -158,42 +158,42 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/unsafe_install_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/unsafe_install_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/github_mutation_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/github_mutation_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/pr_create_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/pr_create_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/compose_pr_body_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/compose_pr_body_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/planner_gh_discovery_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/planner_gh_discovery_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/artifact_download_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/artifact_download_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/git_ops_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/git_ops_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/test_runner_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/test_runner_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -203,7 +203,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py shell_capture_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py shell_capture_hook",
             "timeout": 5,
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
@@ -214,12 +214,12 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/generated_file_write_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/generated_file_write_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/planner_result_naming_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/planner_result_naming_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -229,7 +229,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/write_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/write_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -239,7 +239,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/skill_orchestration_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_orchestration_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -249,7 +249,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/recipe_read_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/recipe_read_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -259,7 +259,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/background_exec_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/background_exec_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -269,22 +269,22 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/fleet_dispatch_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/fleet_dispatch_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/resume_ownership_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/resume_ownership_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/ingredient_lock_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/ingredient_lock_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/fleet_claim_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/fleet_claim_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -294,7 +294,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/skill_load_guard",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_load_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -304,7 +304,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/review_loop_gate",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/review_loop_gate",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -314,7 +314,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py guards/reset_resume_gate",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/reset_resume_gate",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
@@ -326,7 +326,7 @@
       {
         "hooks": [
           {
-            "command": "python3 -B /home/talon/.autoskillit/plugin-generations/autoskillit/0.10.974/f982e58fe8ac4dcdab629929325ac3a1/hooks/_dispatch.py capture_lifecycle_hook",
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py capture_lifecycle_hook",
             "timeout": 2,
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"

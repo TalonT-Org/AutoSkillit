@@ -60,6 +60,11 @@ def _sanitize_hooks(hooks: dict[str, list[dict]]) -> dict[str, list[dict]]:
     raw = json.dumps(hooks, sort_keys=True)
     raw = raw.replace(str(HOOKS_DIR), "SANITIZED_HOOKS_DIR")
     raw = re.sub(
+        r"python3 -B [^\"]+/_dispatch\.py",
+        "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py",
+        raw,
+    )
+    raw = re.sub(
         r'"trusted_hash":\s*"[a-f0-9]{64}"', '"trusted_hash": "SANITIZED_FOR_DETERMINISM"', raw
     )
     return json.loads(raw)

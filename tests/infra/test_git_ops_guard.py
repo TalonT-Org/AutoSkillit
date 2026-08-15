@@ -517,7 +517,16 @@ class TestCheckedOutRefMutations:
 
     @pytest.mark.parametrize(
         "command",
-        ["git update-ref -d refs/heads/develop", "git push . :develop"],
+        [
+            "git update-ref -d refs/heads/develop",
+            "git push . :develop",
+            # --create-reflog is a BOOLEAN flag; bundling it with the
+            # value-taking -m previously caused the parser to consume the
+            # next token as --create-reflog's value, silently dropping any
+            # adjacent -d or <newvalue>. See _classify_update_ref.
+            "git update-ref --create-reflog -d refs/heads/develop",
+            "git update-ref -d --create-reflog refs/heads/develop",
+        ],
     )
     def test_deletion_forms_protect_checked_out_destinations(
         self, linked_repo: dict[str, Path | str], command: str

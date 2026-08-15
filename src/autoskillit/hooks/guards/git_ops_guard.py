@@ -410,19 +410,13 @@ def _classify_reset(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
     attempted = next((token for token in args if not token.startswith("-")), "HEAD")
     target = _symbolic_head(cwd)
     if not target:
-        # Fail-closed: if git cannot resolve the current HEAD's symbolic ref
-        # (git unreachable, ref removed, transient fs error), treat the
-        # classification as ambiguous and let the caller route the request
-        # through _all_threatened against every owned ref instead of
-        # silently allowing the reset through.
+        # Fail-closed: ambiguous on rev-parse failure — route to _all_threatened.
         return ("", "<unresolved>", True)
     if _DYNAMIC_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
     old_sha = _git_text(cwd, "rev-parse", target)
     attempted_sha = _resolve_attempted_sha(cwd, attempted)
-    # Fail-closed: if BOTH rev-parse lookups returned empty (git failure or
-    # sentinel), treat as ambiguous rather than letting the empty == empty
-    # comparison silently allow the operation through.
+    # Fail-closed: empty == empty would silently allow; treat as ambiguous.
     if not old_sha or not attempted_sha:
         return ("", "<unresolved>", True)
     if attempted_sha == old_sha:

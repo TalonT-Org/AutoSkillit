@@ -380,6 +380,7 @@ def _bind_handler_authority(
 ) -> dict[str, str]:
     environment = dict(invocation.environment)
     monkeypatch.setattr(server_module, "_get_ctx", lambda: context)
+    monkeypatch.setattr(handler_module, "_require_enabled", lambda: None)
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
     return environment
@@ -540,6 +541,8 @@ async def test_broker_boundary_never_raises_and_shields_cancellation(
     monkeypatch: pytest.MonkeyPatch,
     failure: str,
 ) -> None:
+    monkeypatch.setattr(handler_module, "_require_enabled", lambda: None)
+
     def fail_closed(**_kwargs: object) -> str:
         if failure == "cancelled":
             raise asyncio.CancelledError

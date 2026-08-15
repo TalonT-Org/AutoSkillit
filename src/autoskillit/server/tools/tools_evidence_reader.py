@@ -8,6 +8,7 @@ import time
 
 from autoskillit.core import DIRECT_PREFIX, EVIDENCE_READER_ENV_FORWARD_VARS, get_logger
 from autoskillit.server import mcp
+from autoskillit.server._guards import _require_enabled
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._evidence_reader import (
     EvidenceReaderError,
@@ -123,6 +124,8 @@ async def read_authorized_artifact(page_size: int | None = None) -> str:
     Never raises.
     """
     try:
+        if (gate := _require_enabled()) is not None:
+            return gate
         return _serve_page(
             bare_tool="read_authorized_artifact",
             page_size=page_size,
@@ -147,6 +150,8 @@ async def get_authorized_artifact_page(
     Never raises.
     """
     try:
+        if (gate := _require_enabled()) is not None:
+            return gate
         return _serve_page(
             bare_tool="get_authorized_artifact_page",
             page_size=page_size,

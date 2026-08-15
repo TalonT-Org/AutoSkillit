@@ -46,6 +46,11 @@ _BOUND_INVOCATION_MARKER = "AUTOSKILLIT_BOUND_INVOCATION_V1\n"
 def _initialize_git_root(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     (path / ".gitignore").write_text(".autoskillit/\n")
+    git_env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
     for command in (
         ("git", "init", "-q"),
         ("git", "config", "user.email", "audit-probe@example.invalid"),
@@ -53,7 +58,7 @@ def _initialize_git_root(path: Path) -> None:
         ("git", "add", "."),
         ("git", "commit", "-qm", "probe"),
     ):
-        subprocess.run(command, cwd=path, check=True, timeout=10)
+        subprocess.run(command, cwd=path, check=True, env=git_env, timeout=10)
 
 
 async def _install_attested_recipe(

@@ -241,7 +241,7 @@ def test_read_contained_file_rejects_post_open_inode_swap(
     artifact.write_text("approved")
     replacement = root / "replacement.txt"
     replacement.write_text("replacement")
-    original_open = _bounded.os.open
+    original_open = _bounded._open
 
     def swap_after_open(
         path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
@@ -255,7 +255,7 @@ def test_read_contained_file_rejects_post_open_inode_swap(
             os.replace(replacement, artifact)
         return descriptor
 
-    monkeypatch.setattr(_bounded.os, "open", swap_after_open)
+    monkeypatch.setattr(_bounded, "_open", swap_after_open)
 
     with pytest.raises(CollectorSafetyError, match="changed while opening"):
         read_contained_file(root, "artifact.txt", CollectorLimits())

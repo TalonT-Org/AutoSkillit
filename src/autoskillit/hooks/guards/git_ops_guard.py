@@ -415,7 +415,13 @@ def _classify_reset(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
     if _DYNAMIC_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
     old_sha = _git_text(cwd, "rev-parse", target)
-    if _resolve_attempted_sha(cwd, attempted) == old_sha:
+    attempted_sha = _resolve_attempted_sha(cwd, attempted)
+    # Fail-closed: if BOTH rev-parse lookups returned empty (git failure or
+    # sentinel), treat as ambiguous rather than letting the empty == empty
+    # comparison silently allow the operation through.
+    if not old_sha or not attempted_sha:
+        return ("", "<unresolved>", True)
+    if attempted_sha == old_sha:
         return None
     return (target, attempted, False)
 

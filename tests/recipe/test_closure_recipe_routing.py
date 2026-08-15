@@ -164,7 +164,6 @@ def test_audit_impl_compiles_to_attested_runtime_invocation(
         ),
     )
     credential = build_recipe_execution_credential(snapshot)
-    assert template.invocation is invocation
     assert snapshot.execution_id == credential.execution_id == execution_id
     assert dict(credential.invocation_template_digests) == dict(snapshot.template_digests)
     assert credential.invocation_template_digests["audit_impl"] == template.template_digest

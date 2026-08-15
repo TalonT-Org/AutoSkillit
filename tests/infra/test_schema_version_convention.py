@@ -147,8 +147,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 55),
     # smoke_utils/_review.py — enriched handoff and manifest
-    ("src/autoskillit/smoke_utils/_review.py", 592),
-    ("src/autoskillit/smoke_utils/_review.py", 696),
+    ("src/autoskillit/smoke_utils/_review.py", 734),
+    ("src/autoskillit/smoke_utils/_review.py", 838),
     # tools_pr_ops.py — GitHubReviewReceipt.to_dict() already carries schema_version
     ("src/autoskillit/server/tools/tools_pr_ops.py", 308),
     # smoke_utils/_git.py — partitions, merge queue data

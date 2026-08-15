@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -21,13 +22,28 @@ from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RecipeDeliveryMode,
+    build_recipe_execution_credential,
 )
+from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.pipeline import ReadyRecipe
+from autoskillit.server._recipe_delivery import (
+    load_recipe_artifact,
+    persist_recipe_artifact,
+    prepare_recipe_delivery_generation,
+)
+from autoskillit.server._recipe_delivery_helpers import _attested_render
 from autoskillit.server._recipe_execution import (
     RecipeExecutionAdmissionError,
     install_recipe_execution,
 )
+from autoskillit.server._recipe_generation import RecipeGenerationStore
+from autoskillit.server._recipe_initialization import (
+    _render_completion_receipt,
+    build_embedded_completion_response,
+    recipe_initialization_receipt,
+)
 from tests.conftest import _make_result
+from tests.contracts.test_delivery_bound_fitness import _full_open_kitchen_generation
 from tests.server._pipeline_test_helpers import _write_tracker
 from tests.server.test_tools_recipe_pull import (
     _NOW,
@@ -404,3 +420,87 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
             pytest.fail(f"unhandled delivery mode: {unreachable!r}")
 
     assert set(block) == RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS
+
+
+async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server import _recipe_generation
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
+    payload, projection = _full_open_kitchen_generation("implementation")
+    tool_ctx = SimpleNamespace(
+        backend=None,
+        kitchen_id="same-snapshot-delivery",
+        temp_dir=tmp_path,
+    )
+    prepared = prepare_recipe_delivery_generation(
+        payload,
+        recipe_name="implementation",
+        tool_ctx=tool_ctx,
+        finalized_projection=projection,
+    )
+    generation = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id=tool_ctx.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="implementation",
+        payload=prepared.canonical_artifact_payload,
+        flow_generation=prepared.flow_generation,
+    )
+    credential = build_recipe_execution_credential(prepared.execution_snapshot)
+
+    ordinary = prepared.canonical_artifact_payload[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+    attested_text = _attested_render(
+        prepared.canonical_artifact_payload,
+        generation,
+        budget=CODEX_RECIPE_DELIVERY_BUDGET,
+        evidence_identity="sha256:" + "a" * 64,
+    )
+    attested_control = json.loads(attested_text.split(RECIPE_BODY_START, 1)[0])
+    attested = attested_control["recipe_delivery"]["payload_metadata"][
+        RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY
+    ]
+    spilled = load_recipe_artifact(
+        tmp_path,
+        kitchen_id=tool_ctx.kitchen_id,
+        identity=generation,
+    )[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+    embedded_completion = build_embedded_completion_response(
+        initialization_id="same-snapshot",
+        recipe_name="implementation",
+        artifact_generation=generation,
+        flow_generation=prepared.flow_generation,
+        snapshot=prepared.execution_snapshot,
+    )[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+    completion = json.loads(
+        _render_completion_receipt(
+            initialization_id="same-snapshot",
+            completion_receipt=recipe_initialization_receipt("same-snapshot", generation),
+            recipe_name="implementation",
+            artifact_generation=generation,
+            flow_generation=prepared.flow_generation,
+            credential=credential,
+        )
+    )[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+
+    serialized_shapes = {
+        mode: json.dumps(
+            block["skill_input_shapes"],
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+        for mode, block in {
+            "ordinary_inline": ordinary,
+            "attested_inline": attested,
+            "spill_artifact": spilled,
+            "spill_embedded_completion": embedded_completion,
+            "completion": completion,
+        }.items()
+    }
+    assert len(set(serialized_shapes.values())) == 1, serialized_shapes

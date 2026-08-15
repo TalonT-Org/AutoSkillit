@@ -249,8 +249,8 @@ def _environment(values: Mapping[str, str]) -> dict[str, str]:
 
 
 def _open_authority(tool_ctx: ToolContext, environment: Mapping[str, str]) -> _OpenedAuthority:
-    del tool_ctx
     env = _environment(environment)
+    expected_root = _readers_root(tool_ctx, create=False)
     raw_path = Path(env[EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR])
     if not raw_path.is_absolute():
         raise EvidenceReaderError("authority_path_invalid")
@@ -264,7 +264,7 @@ def _open_authority(tool_ctx: ToolContext, environment: Mapping[str, str]) -> _O
     if (
         resolved_path != raw_path
         or resolved_path.name != _AUTHORITY_FILE
-        or root.name != "evidence-readers"
+        or root != expected_root
         or invocation_dir.parent != root
         or not stat.S_ISDIR(directory_metadata.st_mode)
         or stat.S_ISLNK(directory_metadata.st_mode)

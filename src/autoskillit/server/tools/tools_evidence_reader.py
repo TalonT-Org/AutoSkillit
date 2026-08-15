@@ -66,7 +66,7 @@ _BROKER_TIMEOUT_SECONDS = 5.0
 _BROKER_UNAVAILABLE = "evidence_reader_broker_unavailable"
 _DELEGATE_TIMEOUT_SECONDS = 300.0
 _READER_POLICY = "read-only"
-_ELIGIBLE_ROLES = frozenset({"pr-source-reader"})
+_PILOT_ROLE = "pr-source-reader"
 _ROLE_DATA_KEYS = frozenset({"artifact_path", "requested_fields"})
 _FIELD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,127}\Z")
 
@@ -196,7 +196,7 @@ def _serve_page(
 
 
 def _role_request(role: str, role_data: dict[str, object]) -> tuple[str, tuple[str, ...]]:
-    if role not in _ELIGIBLE_ROLES or not isinstance(role_data, dict):
+    if role != _PILOT_ROLE or not isinstance(role_data, dict):
         raise _DelegateError("reader_request_invalid")
     if set(role_data) != _ROLE_DATA_KEYS:
         raise _DelegateError("reader_request_invalid")

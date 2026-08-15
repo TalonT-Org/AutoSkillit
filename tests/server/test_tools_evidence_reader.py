@@ -55,6 +55,7 @@ _CALL_BINDING = {
 
 class _ErrorCode(StrEnum):
     AUTHORITY_EXPIRED = "authority_expired"
+    AUTHORITY_PATH_INVALID = "authority_path_invalid"
     AUTHORITY_TAMPERED = "authority_tampered"
     AUTHORITY_UNAVAILABLE = "authority_unavailable"
     BROKER_UNAVAILABLE = "evidence_reader_broker_unavailable"
@@ -174,6 +175,18 @@ def test_startup_validation_reopens_complete_unexpired_authority(
     _assert_error(
         _ErrorCode.AUTHORITY_EXPIRED,
         lambda: validate_evidence_reader_startup(expired_context, dict(expired.environment)),
+    )
+
+
+def test_authority_cannot_be_reopened_from_another_tool_context(tmp_path: Path) -> None:
+    _context, invocation = _create(tmp_path)
+    other_root = tmp_path / "other-context"
+    other_root.mkdir()
+    other_context, _other_invocation = _create(other_root)
+
+    _assert_error(
+        _ErrorCode.AUTHORITY_PATH_INVALID,
+        lambda: _read(other_context, invocation),
     )
 
 

@@ -162,16 +162,20 @@ def annotate_pr_diff(
         if not isinstance(provider_head_sha, str) or not is_valid_github_review_head_sha(
             provider_head_sha.strip()
         ):
-            raise RuntimeError("provider PR head authority was missing")
+            raise RuntimeError(f"provider PR head authority was missing: {provider_head_sha!r}")
         if not isinstance(provider_base_snapshot_sha, str) or not is_valid_github_review_head_sha(
             provider_base_snapshot_sha.strip()
         ):
-            raise RuntimeError("provider PR base authority was missing")
+            raise RuntimeError(
+                f"provider PR base authority was missing: {provider_base_snapshot_sha!r}"
+            )
         if (
             not isinstance(provider_base_repo_full_name, str)
             or len(provider_base_repo_full_name.strip().split("/")) != 2
         ):
-            raise RuntimeError("provider PR base repository authority was missing")
+            raise RuntimeError(
+                f"provider PR base repo authority was missing: {provider_base_repo_full_name!r}"
+            )
         provider_head_sha = provider_head_sha.strip()
         provider_base_snapshot_sha = provider_base_snapshot_sha.strip()
         provider_base_repo_full_name = provider_base_repo_full_name.strip()
@@ -198,7 +202,9 @@ def annotate_pr_diff(
         if not isinstance(provider_merge_base_sha, str) or not is_valid_github_review_head_sha(
             provider_merge_base_sha.strip()
         ):
-            raise RuntimeError("provider merge base authority was missing")
+            raise RuntimeError(
+                f"provider merge base authority was missing: {provider_merge_base_sha!r}"
+            )
         return (
             provider_head_sha,
             provider_base_snapshot_sha,

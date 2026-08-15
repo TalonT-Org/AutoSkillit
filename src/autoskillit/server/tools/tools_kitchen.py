@@ -2227,8 +2227,49 @@ def _declare_join_batch_handler(
             assignments=assignments,
         )
     except JoinLedgerError as exc:
+        _emit_join_diagnostic(
+            {
+                "gate": "declare_join_batch",
+                "session_id": session_id,
+                "top_level_parent": parent,
+                "skill_name": skill_name,
+                "status": "declare_refused",
+            }
+        )
         return {"success": False, "error": str(exc)}
+    _emit_join_diagnostic(
+        {
+            "gate": "declare_join_batch",
+            "session_id": session_id,
+            "top_level_parent": parent,
+            "join_batch_id": batch.get("join_batch_id", ""),
+            "skill_name": skill_name,
+            "status": "declared",
+        }
+    )
     return {"success": True, "join_batch_id": batch.get("join_batch_id"), "wave": batch}
+
+
+def _emit_join_diagnostic(record: dict[str, object]) -> None:
+    """Bounded MCP-side diagnostic emission. Falls back to stderr on failure."""
+    allowed_keys = {
+        "ts",
+        "session_id",
+        "top_level_parent",
+        "join_batch_id",
+        "skill_name",
+        "status",
+        "selector_presence",
+    }
+    bounded = {k: v for k, v in record.items() if k in allowed_keys}
+    try:
+        from autoskillit.hooks._join_ledger import write_diagnostic
+
+        write_diagnostic(bounded, caller="declare_join_batch")
+    except Exception as exc:
+        print(
+            f"declare_join_batch: diagnostic emission failed: {exc}", file=__import__("sys").stderr
+        )
 
 
 def _derive_artifact_digest(binding: dict[str, object]) -> str:

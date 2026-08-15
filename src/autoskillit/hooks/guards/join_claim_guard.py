@@ -37,6 +37,7 @@ from _hook_utils import find_project_root  # type: ignore[import-not-found]  # n
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     JoinLedgerError,
     claim_assignment,
+    write_diagnostic,
 )
 
 DENY_TRIGGER: str = "required-join session requires a declared batch with an unclaimed assignment"
@@ -121,6 +122,17 @@ def main() -> None:
             tool_use_id=tool_use_id,
         )
     except JoinLedgerError as exc:
+        write_diagnostic(
+            {
+                "gate": "join_claim_guard",
+                "session_id": session_id,
+                "top_level_parent": top_level_parent,
+                "tool_use_id": tool_use_id,
+                "status": "deny",
+                "selector_presence": ["missing_or_invalid_tool_use_id"],
+            },
+            caller="join_claim_guard",
+        )
         denial_reason = f"{DENY_TRIGGER}: {exc}"
         payload = json.dumps(
             {
@@ -135,6 +147,16 @@ def main() -> None:
         sys.exit(0)
 
     if claimed is None:
+        write_diagnostic(
+            {
+                "gate": "join_claim_guard",
+                "session_id": session_id,
+                "top_level_parent": top_level_parent,
+                "tool_use_id": tool_use_id,
+                "status": "deny_no_open_wave",
+            },
+            caller="join_claim_guard",
+        )
         denial_reason = (
             f"{DENY_TRIGGER}: no declared batch is open for this turn. "
             "Call declare_join_batch with one assignment label per direct child first."
@@ -151,6 +173,18 @@ def main() -> None:
         sys.stdout.write(payload + "\n")
         sys.exit(0)
 
+    write_diagnostic(
+        {
+            "gate": "join_claim_guard",
+            "session_id": session_id,
+            "top_level_parent": top_level_parent,
+            "tool_use_id": tool_use_id,
+            "join_batch_id": claimed.get("join_batch_id", ""),
+            "assignment": claimed.get("label", ""),
+            "status": "claim",
+        },
+        caller="join_claim_guard",
+    )
     sys.exit(0)
 
 

@@ -25,6 +25,7 @@ import json
 import os
 import secrets
 import string
+import sys
 import tempfile
 import time
 from collections.abc import Generator, Iterable
@@ -467,3 +468,72 @@ __all__ = [
 
 # Surface the errno re-export so callers can distinguish lock contention.
 __all__ += ["errno"]
+
+
+#: Bounded set of allowed diagnostic record keys. Anything else is stripped
+#: before write so child bodies, prompts, secrets, and private task IDs never
+#: land in the diagnostic sink.
+DIAGNOSTIC_KEYS: frozenset[str] = frozenset(
+    {
+        "ts",
+        "session_id",
+        "top_level_parent",
+        "join_batch_id",
+        "assignment",
+        "tool_use_id",
+        "skill_name",
+        "semantic_digest",
+        "adaptation_digest",
+        "artifact_digest",
+        "artifact_incarnation",
+        "selector_presence",
+        "activation_source",
+        "launch_policy_state",
+        "status",
+        "public_child_id",
+        "team_name",
+        "execution_mode",
+        "wave_outcome",
+        "gate",
+        "binding_valid",
+    }
+)
+
+
+def write_diagnostic(record: dict[str, object], *, caller: str = "") -> None:
+    """Append one bounded join-gate diagnostic to ``join_diagnostics.jsonl``.
+
+    Stdlib-only — uses the same log-dir resolution as ``_hook_settings`` but
+    no-ops when the directory cannot be resolved. The record is redacted to
+    ``DIAGNOSTIC_KEYS`` before write. No child bodies, prompts, secrets, or
+    private task IDs are ever persisted.
+    """
+    from datetime import UTC, datetime
+
+    bounded = {key: value for key, value in record.items() if key in DIAGNOSTIC_KEYS}
+    bounded.setdefault("ts", datetime.now(UTC).isoformat())
+    log_dir = _resolve_log_dir(caller=caller or "join_diagnostic")
+    if log_dir is None:
+        return
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(bounded, sort_keys=True) + "\n"
+        with open(log_dir / "join_diagnostics.jsonl", "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as exc:
+        if caller:
+            print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)
+
+
+def _resolve_log_dir(*, caller: str) -> Path | None:
+    """Resolve the project-relative log directory without importing autoskillit."""
+    try:
+        candidate = Path.cwd() / ".autoskillit" / "logs"
+        return candidate
+    except Exception as exc:
+        if caller:
+            print(f"{caller}: failed to resolve log directory: {exc}", file=sys.stderr)
+        return None
+
+
+__all__ += ["DIAGNOSTIC_KEYS", "write_diagnostic"]

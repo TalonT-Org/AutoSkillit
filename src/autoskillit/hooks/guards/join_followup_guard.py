@@ -30,6 +30,7 @@ from _hook_utils import find_project_root  # type: ignore[import-not-found]  # n
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     JoinLedgerError,
     active_batch,
+    write_diagnostic,
 )
 
 
@@ -105,6 +106,18 @@ def main() -> None:
     if batch is None or not _is_unresolved(batch):
         sys.exit(0)
 
+    write_diagnostic(
+        {
+            "gate": "join_followup_guard",
+            "session_id": session_id,
+            "top_level_parent": top_level_parent,
+            "tool_use_id": data.get("tool_use_id", "") if isinstance(data, dict) else "",
+            "wave_outcome": batch.get("wave_outcome", ""),
+            "status": "block",
+            "selector_presence": [tool_name],
+        },
+        caller="join_followup_guard",
+    )
     sys.stdout.write(json.dumps({"decision": "block", "reason": _denial_reason(tool_name)}) + "\n")
     sys.exit(2)
 

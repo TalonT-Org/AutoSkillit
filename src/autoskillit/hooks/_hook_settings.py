@@ -425,3 +425,48 @@ def write_quota_log_event(event: dict, log_dir: Path | None, *, caller: str = ""
     except Exception as exc:
         if caller:
             print(f"{caller}: failed to write quota log event: {exc}", file=sys.stderr)
+
+
+def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
+    """Append one bounded join-gate diagnostic record to ``join_diagnostics.jsonl``.
+
+    The record is redacted to a fixed set of known-safe keys before write.
+    Child bodies, prompts, secrets, and private task IDs are never persisted.
+    No-ops when the resolved log dir is None.
+    """
+    allowed = {
+        "ts",
+        "session_id",
+        "top_level_parent",
+        "join_batch_id",
+        "assignment",
+        "tool_use_id",
+        "skill_name",
+        "semantic_digest",
+        "adaptation_digest",
+        "artifact_digest",
+        "artifact_incarnation",
+        "selector_presence",
+        "activation_source",
+        "launch_policy_state",
+        "status",
+        "public_child_id",
+        "team_name",
+        "execution_mode",
+        "wave_outcome",
+        "gate",
+        "binding_valid",
+    }
+    bounded = {key: value for key, value in record.items() if key in allowed}
+    bounded.setdefault("ts", datetime.now(UTC).isoformat())
+    log_dir = resolve_quota_log_dir(caller=caller or "join_diagnostic")
+    if log_dir is None:
+        return
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(bounded, sort_keys=True) + "\n"
+        with open(log_dir / "join_diagnostics.jsonl", "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as exc:
+        if caller:
+            print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)

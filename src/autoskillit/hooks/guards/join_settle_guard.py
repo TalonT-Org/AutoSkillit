@@ -41,6 +41,7 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     OUTCOME_TIMEOUT,
     JoinLedgerError,
     settle_assignment,
+    write_diagnostic,
 )
 
 
@@ -114,7 +115,7 @@ def main() -> None:
     flag_dir = find_project_root() / ".autoskillit" / "temp"
     top_level_parent = "top_level"
     try:
-        settle_assignment(
+        batch = settle_assignment(
             flag_dir,
             session_id=sid,
             top_level_parent=top_level_parent,
@@ -122,9 +123,30 @@ def main() -> None:
             outcome=outcome,
         )
     except JoinLedgerError as exc:
+        write_diagnostic(
+            {
+                "gate": "join_settle_guard",
+                "session_id": sid,
+                "tool_use_id": tool_use_id,
+                "status": "settle_refused",
+                "selector_presence": [outcome],
+            },
+            caller="join_settle_guard",
+        )
         sys.stderr.write(f"join_settle_guard: settlement refused: {exc}\n")
         sys.exit(0)
 
+    write_diagnostic(
+        {
+            "gate": "join_settle_guard",
+            "session_id": sid,
+            "tool_use_id": tool_use_id,
+            "join_batch_id": batch.get("join_batch_id", ""),
+            "wave_outcome": batch.get("wave_outcome", ""),
+            "status": outcome,
+        },
+        caller="join_settle_guard",
+    )
     sys.exit(0)
 
 

@@ -30,7 +30,10 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
-from _join_ledger import can_release_stop  # type: ignore[import-not-found]  # noqa: E402
+from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
+    can_release_stop,
+    write_diagnostic,
+)
 
 
 def _session_binding() -> dict[str, object] | None:
@@ -72,6 +75,17 @@ def main() -> None:
         session_id=sid,
         top_level_parent=top_level_parent,
         session_binding=binding,
+    )
+    write_diagnostic(
+        {
+            "gate": "join_stop_guard",
+            "session_id": sid,
+            "top_level_parent": top_level_parent,
+            "status": "allow" if allow_stop else "block",
+            "binding_valid": bool(binding.get("binding_valid", True)),
+            "wave_outcome": reason,
+        },
+        caller="join_stop_guard",
     )
     if allow_stop:
         sys.exit(0)

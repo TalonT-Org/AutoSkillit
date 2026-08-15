@@ -38,7 +38,53 @@ from tests.contracts.test_delivery_bound_fitness import (
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
-def test_implementation_plan_shape_supplies_unavailable_audit_context(
+@pytest.mark.parametrize(
+    ("step_name", "skill_command", "resolved", "expected_shape"),
+    [
+        pytest.param(
+            "plan",
+            "/autoskillit:make-plan",
+            {
+                "task": "test task",
+                "issue_url": "https://github.com/test/test/issues/1",
+                "adversarial_review_level": "standard",
+            },
+            {
+                "keys": ["task", "issue_url", "adversarial_review_level", "audit_cycle_path"],
+                "unresolved_defaults": {"audit_cycle_path": ""},
+            },
+            id="plan",
+        ),
+        pytest.param(
+            "fix",
+            "/autoskillit:resolve-failures",
+            {
+                "worktree_path": "/tmp/worktree",
+                "plan_path": "/tmp/plan.md",
+                "base_branch": "develop",
+            },
+            {
+                "keys": [
+                    "worktree_path",
+                    "plan_path",
+                    "base_branch",
+                    "ci_conclusion",
+                    "diagnosis_path",
+                ],
+                "unresolved_defaults": {
+                    "ci_conclusion": "",
+                    "diagnosis_path": "",
+                },
+            },
+            id="fix",
+        ),
+    ],
+)
+def test_implementation_shape_supplies_unavailable_context(
+    step_name: str,
+    skill_command: str,
+    resolved: dict[str, str],
+    expected_shape: dict[str, object],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -54,7 +100,7 @@ def test_implementation_plan_shape_supplies_unavailable_audit_context(
         Any,
         SimpleNamespace(
             backend=None,
-            kitchen_id="implementation-plan-shape",
+            kitchen_id=f"implementation-{step_name}-shape",
             temp_dir=tmp_path,
         ),
     )
@@ -65,23 +111,15 @@ def test_implementation_plan_shape_supplies_unavailable_audit_context(
         finalized_projection=projection,
     )
     credential = build_recipe_execution_credential(prepared.execution_snapshot)
-    shape = credential.as_wire_block()["skill_input_shapes"]["plan"]
-    assert shape == {
-        "keys": ["task", "issue_url", "adversarial_review_level", "audit_cycle_path"],
-        "unresolved_defaults": {"audit_cycle_path": ""},
-    }
+    shape = credential.as_wire_block()["skill_input_shapes"][step_name]
+    assert shape == expected_shape
 
-    resolved = {
-        "task": "test task",
-        "issue_url": "https://github.com/test/test/issues/1",
-        "adversarial_review_level": "standard",
-    }
     defaults = cast(dict[str, str | int | bool], shape["unresolved_defaults"])
     assembled = {
         name: resolved[name] if name in resolved else defaults[name]
         for name in cast(list[str], shape["keys"])
     }
-    template = prepared.execution_snapshot.templates["plan"]
+    template = prepared.execution_snapshot.templates[step_name]
     actual_mcp_kwargs = {
         value.name: value.effective_value
         for value in template.invocation.mcp_kwargs
@@ -91,79 +129,8 @@ def test_implementation_plan_shape_supplies_unavailable_audit_context(
     bound = bind_runtime_skill_invocation(
         template,
         execution_id=prepared.execution_snapshot.execution_id,
-        step_name="plan",
-        skill_command="/autoskillit:make-plan",
-        skill_inputs=assembled,
-        actual_mcp_kwargs=actual_mcp_kwargs,
-    )
-
-    assert dict(bound) == assembled
-
-
-def test_implementation_fix_shape_supplies_unavailable_failure_context(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.recipe._binding import bind_runtime_skill_invocation
-    from autoskillit.server import _recipe_generation
-
-    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-    monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
-    payload, projection = _full_open_kitchen_generation("implementation")
-    tool_ctx = cast(
-        Any,
-        SimpleNamespace(
-            backend=None,
-            kitchen_id="implementation-fix-shape",
-            temp_dir=tmp_path,
-        ),
-    )
-    prepared = prepare_recipe_delivery_generation(
-        payload,
-        recipe_name="implementation",
-        tool_ctx=tool_ctx,
-        finalized_projection=projection,
-    )
-    credential = build_recipe_execution_credential(prepared.execution_snapshot)
-    shape = credential.as_wire_block()["skill_input_shapes"]["fix"]
-    assert shape == {
-        "keys": [
-            "worktree_path",
-            "plan_path",
-            "base_branch",
-            "ci_conclusion",
-            "diagnosis_path",
-        ],
-        "unresolved_defaults": {
-            "ci_conclusion": "",
-            "diagnosis_path": "",
-        },
-    }
-
-    resolved = {
-        "worktree_path": "/tmp/worktree",
-        "plan_path": "/tmp/plan.md",
-        "base_branch": "develop",
-    }
-    defaults = cast(dict[str, str | int | bool], shape["unresolved_defaults"])
-    assembled = {
-        name: resolved[name] if name in resolved else defaults[name]
-        for name in cast(list[str], shape["keys"])
-    }
-    template = prepared.execution_snapshot.templates["fix"]
-    actual_mcp_kwargs = {
-        value.name: value.effective_value
-        for value in template.invocation.mcp_kwargs
-        if isinstance(value.effective_value, (str, int, bool))
-    }
-
-    bound = bind_runtime_skill_invocation(
-        template,
-        execution_id=prepared.execution_snapshot.execution_id,
-        step_name="fix",
-        skill_command="/autoskillit:resolve-failures",
+        step_name=step_name,
+        skill_command=skill_command,
         skill_inputs=assembled,
         actual_mcp_kwargs=actual_mcp_kwargs,
     )

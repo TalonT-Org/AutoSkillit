@@ -75,6 +75,34 @@ class TestRunPythonObservability:
         assert result["success"] is (expected_kind == "success")
         assert result["recipe_segment"]["kind"] == expected_kind
 
+    @pytest.mark.anyio
+    async def test_run_python_selects_carrier_from_shaped_failure(
+        self,
+        tool_ctx_kitchen_open,
+        mock_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        install_prepared_recipe_segment(monkeypatch, tools_execution, step_name="python")
+        monkeypatch.setattr(
+            tools_execution,
+            "shape_execution_response",
+            lambda *_args, **_kwargs: json.dumps(
+                {"success": False, "error": "response shaping failed"}
+            ),
+        )
+
+        result = json.loads(
+            await run_python(
+                callable="json.dumps",
+                args={"obj": 1},
+                step_name="python",
+                ctx=mock_ctx,
+            )
+        )
+
+        assert result["success"] is False
+        assert result["recipe_segment"]["kind"] == "recovery"
+
 
 class TestRunPythonHeadlessGate:
     """run_python returns headless_error when AUTOSKILLIT_HEADLESS=1."""

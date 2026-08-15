@@ -897,7 +897,7 @@ async def run_python(
                 attach_recipe_segment(
                     shaped,
                     prepared_segment,
-                    success=result.get("success") is True,
+                    success=shaped.get("success") is True,
                 )
             )
     except Exception as exc:

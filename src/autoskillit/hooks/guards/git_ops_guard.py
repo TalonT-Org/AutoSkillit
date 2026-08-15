@@ -770,11 +770,9 @@ def main() -> None:
             UnicodeDecodeError,
             ValueError,
         ) as exc:
-            # Fail-closed: an unhandled exception in the checked-out-ref
-            # preflight must NOT silently allow the operation. Log the error
-            # and exit non-zero so the caller can decide. (SystemExit raised
-            # by _deny_checked_out_ref is BaseException, not Exception, so it
-            # is preserved as the explicit deny signal.)
+            # Fail-closed on preflight exception. SystemExit raised by
+            # _deny_checked_out_ref is BaseException, not Exception, so it
+            # bypasses this handler and serves as the explicit deny signal.
             sys.stderr.write(f"git_ops_guard: preflight failed: {exc}\n")
             sys.exit(2)
 

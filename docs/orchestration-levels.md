@@ -8,14 +8,14 @@ used in module docstrings and `pyproject.toml` import-linter contracts.
 
 ### L0 — Leaf Subagent
 
-A terminal node (actual leaf) in the execution graph. L0 agents are always
-headless, spawned by an L1 session via Claude Code's Agent or Task tool. They
-cannot launch sub-agents or headless sessions of their own.
+A terminal node (actual leaf) in the execution graph. L0 agents are always headless and cannot
+launch sub-agents or headless sessions of their own. Ordinary leaves use the backend-native
+Agent/Task mechanism; behavioral evidence readers use the dedicated delegation boundary below.
 
 Key properties:
 
 - Always headless (never interactive)
-- Spawned via the Agent/Task tool, not `run_skill`
+- Spawned through a backend-native leaf mechanism or dedicated evidence delegation, not `run_skill`
 - Cannot call `run_skill`, `run_cmd`, or `run_python`
 - Session type: n/a (Claude Agent, not a full session)
 
@@ -23,6 +23,12 @@ The specialized Codex explorers are L0 leaves as well. An L1 exploration parent 
 `semantic-code-navigator` or `repository-impact-profiler`; each is terminal, read-only, and
 returns evidence for the parent to synthesize. They cannot delegate, mutate the repository, or
 replace the deterministic repository collectors. See [Explorer agents](execution/explorer-agents.md).
+
+Behavioral evidence readers are also terminal L0 leaves, but use a distinct launch boundary. A
+writable L1 Codex skill session calls `delegate_evidence_reader`, and AutoSkillit synchronously
+joins a separate sterile top-level process. The reader sees only its authenticated one-artifact
+brokers, not the repository or ordinary kitchen/headless surfaces. This preserves the writable
+parent while keeping the reader's evidence contract read-only and non-delegating.
 
 ### L1 — Session
 
@@ -61,7 +67,7 @@ Key properties:
 - Interactive variant: `autoskillit order` (CLI label `"order"`; headless equivalent carries SessionType `ORCHESTRATOR`)
 - Headless variant: food truck (dispatched by L3, SessionType `ORCHESTRATOR`)
 - Owns `run_skill` exactly and spawns L1 workers through it
-- Has full kitchen access (38 kitchen-tagged MCP tools)
+- Has full kitchen access (52 kitchen-tagged MCP tools)
 
 ```
 L2 (interactive order)

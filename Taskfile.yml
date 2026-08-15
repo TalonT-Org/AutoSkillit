@@ -381,6 +381,57 @@ tasks:
         fi
         $PYTHON_CMD -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-production-shared-explorer-principal-v2","principal_role":"shared-explorer-session","authenticated_resume":"denied"}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live explorer evidence: {data!r}" if bad else 0)' "$EVIDENCE"
 
+  test-smoke-codex-evidence-reader-live-gate:
+    desc: Run the uncached authenticated sterile Codex evidence-reader gate
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      CODEX_SMOKE_TEST: "1"
+      AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    preconditions:
+      - sh: command -v codex >/dev/null 2>&1
+        msg: "Codex CLI must be installed"
+      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY"
+        msg: "Sterile evidence-reader authentication requires OPENAI_API_KEY or CODEX_API_KEY"
+    cmds:
+      - |
+        if [[ -d ".venv" ]]; then
+          PYTHON_CMD=".venv/bin/python"
+        else
+          PYTHON_CMD="python"
+        fi
+        ARTIFACT_DIR=".autoskillit/temp/conformance/live-evidence-reader-gate"
+        EVIDENCE="$ARTIFACT_DIR/live-evidence-reader-gate.json"
+        TEST_OUTPUT="$ARTIFACT_DIR/pytest-output.txt"
+        JUNIT_REPORT="$ARTIFACT_DIR/pytest-report.xml"
+        RUN_ID="$(date +%s%N)-$$"
+        mkdir -p "$ARTIFACT_DIR"
+        rm -f "$EVIDENCE" "$TEST_OUTPUT" "$JUNIT_REPORT"
+        export AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE_ARTIFACT_DIR="$ARTIFACT_DIR"
+        export AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE_RUN_ID="$RUN_ID"
+        set +e
+        $PYTHON_CMD -m pytest tests/execution/backends/test_evidence_reader_live_gate.py \
+          -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --junitxml="$JUNIT_REPORT" >"$TEST_OUTPUT" 2>&1
+        PYTEST_EXIT=$?
+        set -e
+        tail -c 16000 "$TEST_OUTPUT"
+        if [[ $PYTEST_EXIT -ne 0 ]]; then
+          echo "Live evidence-reader gate failed; bounded output is saved to: $TEST_OUTPUT"
+          exit $PYTEST_EXIT
+        fi
+        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); bad=len(cases) != 1 or skipped; sys.exit(f"live evidence-reader gate requires exactly one non-skipped test, got tests={len(cases)} skipped={skipped}" if bad else 0)' "$JUNIT_REPORT"
+        if [[ ! -s "$EVIDENCE" ]]; then
+          echo "Live evidence-reader gate did not publish fresh evidence: $EVIDENCE"
+          exit 1
+        fi
+        $PYTHON_CMD -c 'import json, pathlib, re, sys; path=pathlib.Path(sys.argv[1]); path.stat().st_size <= 4096 or sys.exit("live evidence-reader evidence exceeds 4096 bytes"); data=json.loads(path.read_text(encoding="utf-8")); keys={"contract","run_id","role","status","artifact_path","snapshot_digest","citation_receipts","command_surface_observed","repository_changed","invocation_cleaned","isolated_home_cleaned","isolated_cwd_cleaned"}; expected={"contract":"live-codex-evidence-reader-v1","run_id":sys.argv[2],"role":"pr-source-reader","status":"answered","artifact_path":"evidence.txt","command_surface_observed":False,"repository_changed":False,"invocation_cleaned":True,"isolated_home_cleaned":True,"isolated_cwd_cleaned":True}; bad=set(data) != keys or any(data.get(key) != value for key, value in expected.items()) or type(data.get("citation_receipts")) is not int or data["citation_receipts"] < 1 or not isinstance(data.get("snapshot_digest"), str) or re.fullmatch(r"sha256:[0-9a-f]{64}", data["snapshot_digest"]) is None; sys.exit("invalid or stale live evidence-reader evidence" if bad else 0)' "$EVIDENCE" "$RUN_ID"
+        echo "Live evidence-reader evidence: $EVIDENCE"
+        echo "Live evidence-reader JUnit: $JUNIT_REPORT"
+
   test-smoke-codex-web-agent-live-gate:
     desc: Run the pinned, uncached live-web Luna child conformance gate
     deps: [_tmpdir-setup]

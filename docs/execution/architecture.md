@@ -30,9 +30,11 @@ When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. I
 
 ## Tool Visibility (Kitchen Gating)
 
-AutoSkillit uses a three-tier tool visibility model:
+AutoSkillit uses several overlapping tool visibility surfaces:
 
-- **Free-range (4 tools)**: Always visible — `open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`
+- **Free-range (8 tools)**: Ordinarily visible — `open_kitchen`, `close_kitchen`,
+  `disable_quota_guard`, `enable_exploration`, `reload_session`, `configure_fleet`,
+  `configure_order`, and `lock_ingredients`.
 - **Headless tools (8 tools)**: Revealed in headless sessions via
   `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`, `commit_files`,
   `write_audit_semantic_result`, `write_standalone_audit_evidence`,
@@ -44,8 +46,8 @@ AutoSkillit uses a three-tier tool visibility model:
   deliberately not application-gated.
 
 The two authenticated evidence-reader broker tools are outside the kitchen, free-range,
-and fleet surfaces. They remain hidden unless a verified evidence-reader binding enables
-their dedicated visibility tag.
+and fleet surfaces. A sterile evidence-reader child presents a complete private startup identity
+that reveals exactly those two brokers; partial or malformed identity fails startup closed.
 
 When you call `open_kitchen` (automatically done by `order`), all 52 kitchen-tagged tools become
 available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
@@ -54,6 +56,27 @@ cluttering the tool list.
 Functional category subsets (`github`, `ci`, `clone`, `telemetry`) can be disabled in config;
 those tools remain hidden even after `open_kitchen`.
 See **[MCP Tool Access Control](tool-access.md)** for the complete tool map.
+
+### Behavioral evidence readers
+
+A writable headless L1 Codex session can call `delegate_evidence_reader` without giving up its own
+write authority. The pilot `pr-source-reader` accepts only a repository-relative artifact path and
+a bounded requested-field list. AutoSkillit captures the trusted worktree's current one-artifact
+state—including dirty, staged, or untracked content—and serves immutable pages through two
+authenticated brokers with receipt-backed citations.
+
+The reader is a separate top-level Codex process in a sterile home and working directory. It uses
+the role's fixed model and catalog projection, a `read-only` sandbox, `never` approvals, no direct
+repository mount, and no command, delegation, web, app, plugin, or permission-request surface.
+AutoSkillit validates its result and citations, recaptures the artifact for staleness, then revokes
+the authority and verifies process and generated-state cleanup before returning success.
+
+This is a behavioral evidence boundary, not a claim of complete native-tool observability. The
+gate attests generated configuration, catalog projection, the exact configured AutoSkillit MCP
+allowlist, observed calls, and adversarial canaries; Codex does not expose a complete inventory of
+all built-in tools it offered. See
+[MCP Tool Access Control](tool-access.md#behavioral-evidence-readers) for the caller and broker
+contract.
 
 ## Clone Isolation
 
@@ -78,7 +101,7 @@ Within the clone, implementation happens in git worktrees:
 AutoSkillit supports four session modes with different tool and skill visibility:
 
 - **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
-  loaded. Sees 4 Free Range MCP tools (`open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`) and Tier 1 skills only
+  loaded. Sees the 8 Free Range MCP tools and Tier 1 skills only
   (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 52 kitchen-tagged MCP
   tools become available.
 
@@ -88,10 +111,11 @@ AutoSkillit supports four session modes with different tool and skill visibility
 
 - **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup.
   The authenticated evidence-reader brokers remain hidden among the 75 registered MCP tools
-  until a verified reader binding enables them. All skill tiers are accessible. The orchestrator
-  delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
+  because only a separately launched reader child receives their binding. All skill tiers are
+  accessible. The orchestrator delegates work through `run_skill` (headless sessions) and
+  `run_cmd` (shell commands).
 
-- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 4 always-visible
+- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 8 always-visible
   tools plus the 8 headless-tagged tools listed above. Cannot call `run_skill`, `run_cmd`, or `run_python`
   — enforced by hooks and code guards. Has access to all native Claude Code tools (Read, Write,
   Bash, etc.) and all skill tiers via `--add-dir skills_extended/`.

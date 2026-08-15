@@ -13,12 +13,13 @@ AutoSkillit defines four orchestration levels (L0–L3). The recipe execution
 pipeline primarily connects the L2 orchestrator and L1 workers:
 
 - **L2 — orchestrator.** A Claude Code session running the
-  `autoskillit order` CLI command, with the kitchen pre-opened. Sees all 42
-  MCP tools, spawns headless workers, and routes verdicts. Never reads or
+  `autoskillit order` CLI command, with the kitchen pre-opened. Sees its kitchen and
+  free-range surfaces, spawns headless workers, and routes verdicts. Never reads or
   writes code itself.
 - **L1 — worker.** A headless Claude session launched by `run_skill`.
-  Sees the 2 free range tools plus `test_check` (the only `headless`-tagged
-  tool). Cannot call `run_skill`, `run_cmd`, or `run_python`.
+  Sees the 8 free-range and 8 headless-tagged tools. A writable Codex worker may use
+  `delegate_evidence_reader` for one bounded artifact; it still cannot call `run_skill`,
+  `run_cmd`, or `run_python`.
 - **L3 — fleet.** Dispatches L2 food trucks through `dispatch_food_truck`.
   It may use `run_cmd` and `run_python`, but cannot call `run_skill` directly.
 

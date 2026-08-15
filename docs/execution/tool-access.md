@@ -1,27 +1,33 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 75 MCP tools organized into three access levels that control which
-session types can see each tool.
+AutoSkillit provides 75 MCP tools across overlapping visibility surfaces that control which
+session types can see each tool. Visibility determines addressability; each tool still enforces
+its own authority contract.
 
-## Three Access Levels
+## Principal Access Surfaces
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  FREE RANGE  (4 tools, always visible)                  │
-│  open_kitchen, close_kitchen, disable_quota_guard,      │
-│  reload_session                                         │
-│  Always visible — no gating, no headless restriction    │
+│  FREE RANGE  (8 registry entries; ordinarily visible)   │
+│  Kitchen transitions and session configuration          │
+│  Ordinarily visible — no application gate               │
 ├─────────────────────────────────────────────────────────┤
 │  HEADLESS-TAGGED  (8 tools)                             │
 │  test/check, commit, audit, and review worker tools     │
 │  Revealed in headless sessions via mcp.enable(headless) │
-│  Also carries the kitchen tag; hidden in plain sessions │
+│  Seven also carry kitchen; one is headless-only         │
 ├─────────────────────────────────────────────────────────┤
 │  KITCHEN  (45 kitchen-only tools)                       │
-│  All remaining tools                                    │
+│  52 total when the seven headless overlaps are included │
 │  Hidden at startup; revealed when open_kitchen is called│
+├─────────────────────────────────────────────────────────┤
+│  EVIDENCE READER  (2 authenticated broker tools)        │
+│  Exact reader-only startup projection; never kitchen    │
 └─────────────────────────────────────────────────────────┘
 ```
+
+Fleet and fleet-dispatch tags further narrow their session-specific tools and are not an
+additional authority tier.
 
 ## Session Mode Access Matrix
 
@@ -33,6 +39,7 @@ session types can see each tool.
 | `$ autoskillit cook` (after `/open-kitchen`) | ✓ | ✓ | ✗ |
 | `$ autoskillit order` | ✓ | ✓ (pre-opened) | ✗ |
 | `run_skill` (headless) | ✓ | ✗ | ✓ |
+| Evidence-reader child | ✗ | ✗ | ✗ (reader brokers only) |
 | L2 food truck | ✓ | ✓ (pre-opened) | ✗ |
 | L3 fleet | ✓ | fleet surface | ✗ |
 
@@ -40,12 +47,44 @@ Note: Disabled subsets further restrict visibility within the Kitchen tier — t
 remain hidden even after `open_kitchen`.
 
 The two authenticated evidence-reader broker tools belong to a separate private surface.
-They are not kitchen, free-range, or fleet tools and remain hidden until a future verified
-reader binding enables the `evidence-reader` tag.
+They are not kitchen, free-range, or fleet tools. A complete reader startup identity reveals
+exactly those two tools; an absent identity follows ordinary startup, while a partial or malformed
+identity fails closed.
 
 Visibility is not authority. At the application and hook layers, `run_skill` is restricted
 to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks through
 `dispatch_food_truck`; they retain `run_cmd` and `run_python` but cannot call `run_skill`.
+
+## Behavioral Evidence Readers
+
+`delegate_evidence_reader` is a headless parent tool for writable L1 Codex skill sessions.
+The first eligible role is the bundled `pr-source-reader`. Its `role_data` accepts exactly one
+repository-relative `artifact_path` and a bounded `requested_fields` list; callers cannot override
+the role definition, repository root, model, prompt, tools, transport, environment, catalog,
+sandbox, approval policy, or authority binding.
+
+The server resolves the trusted worktree and captures one stable artifact before launch. The
+snapshot covers the current bytes, mode, repository identity, revision, and path-specific index
+records, so tracked, dirty, staged, and untracked artifacts are handled without widening access to
+the repository. The captured bytes remain immutable for paging. Broker receipts bind every issued
+citation to that snapshot and record its byte and line location.
+
+The reader runs as a separate top-level Codex process with a sterile home and working directory,
+`read-only` sandbox, `never` approval policy, no repository mount, and command, delegation, web,
+app, plugin, and permission-request surfaces disabled. Its complete private startup identity
+selects only `read_authorized_artifact` and `get_authorized_artifact_page`; both brokers reopen and
+authenticate the invocation authority on every call.
+
+Completion is fail closed. AutoSkillit validates the bounded result and receipt citations,
+recaptures the artifact to reject stale evidence, terminates the process tree, revokes the reader
+authority, and removes its generated state. Cleanup, recapture, binding, schema, timeout, and
+cancellation failures cannot be reported as successful evidence.
+
+The conformance record attests generated configuration, the selected catalog projection, the
+exact configured AutoSkillit MCP allowlist, and observed calls and behavioral canaries. Codex does
+not expose a complete offered built-in tool inventory, so this evidence demonstrates the supported
+behavioral contract; it does not claim exhaustive observation of every built-in tool Codex might
+offer.
 
 ## FastMCP Tag Glossary
 
@@ -65,8 +104,8 @@ to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks t
 Server startup sequence:
 
 ```
-1. mcp.disable(tags={"kitchen"})
-   → hides 52 kitchen-tagged tools (including the 7 headless-tagged tools)
+1. Disable every conditional visibility tag at server construction
+   → hides kitchen, headless, fleet, exploration, and evidence-reader surfaces
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled
@@ -75,7 +114,11 @@ Server startup sequence:
    mcp.enable(tags={"headless"})
    → reveals the eight HEADLESS_TOOLS entries
 
-4. When open_kitchen is called:
+4. If a complete evidence-reader identity is present at startup:
+   mcp.enable(tags={"evidence-reader"}, components={"tool"}, only=True)
+   → reveals exactly the two brokers; a partial or malformed identity aborts startup
+
+5. When open_kitchen is called:
    ctx.enable_components(tags={"kitchen"})   → reveals kitchen-tagged tools (not fleet)
    ctx.disable_components(tags={subset})     → re-hides each disabled subset
    (session-level enable overwrites server-level disable, so re-disabling is required)
@@ -112,9 +155,11 @@ TL = `telemetry`, FL = `fleet`
 | `open_kitchen` | AS | `server/tools_kitchen.py` |
 | `close_kitchen` | AS | `server/tools_kitchen.py` |
 | `disable_quota_guard` | AS | `server/tools_kitchen.py` |
+| `enable_exploration` | AS | `server/tools_kitchen.py` |
 | `reload_session` | AS | `server/tools_kitchen.py` |
 | `configure_fleet` | AS | `server/tools_config.py` |
 | `configure_order` | AS | `server/tools_config.py` |
+| `lock_ingredients` | AS | `server/tools_config.py` |
 
 ---
 

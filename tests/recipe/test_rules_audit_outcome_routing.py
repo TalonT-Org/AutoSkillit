@@ -154,6 +154,7 @@ def test_implementation_semantic_rejection_uses_bounded_remediation_loop() -> No
     assert semantic_route == "check_audit_remediation_loop"
     loop_step = recipe.steps[semantic_route]
     assert loop_step.with_args == {
+        "step_name": "check_audit_remediation_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.audit_remediation_count }}",
         "max_iterations": "${{ inputs.audit_remediation_max_retries }}",

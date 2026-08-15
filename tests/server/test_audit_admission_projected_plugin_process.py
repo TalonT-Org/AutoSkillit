@@ -28,6 +28,7 @@ from tests.server._helpers import (
     _credit_initialization_sections,
     _open_kitchen_patched,
     _pull_step_section,
+    _ready_recipe_segment_step,
     _skill_ok,
 )
 from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
@@ -64,6 +65,7 @@ def _initialize_git_root(path: Path) -> None:
 async def _install_attested_recipe(
     monkeypatch: pytest.MonkeyPatch,
     parent_project: Path,
+    tool_ctx,
 ) -> tuple[dict[str, object], dict[str, object]]:
     monkeypatch.chdir(parent_project)
     envelope = await _open_kitchen_patched(_RECIPE, _OVERRIDES, monkeypatch)
@@ -74,6 +76,8 @@ async def _install_attested_recipe(
     assert receipt["success"] is True
     credential = receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
     assert isinstance(credential, dict)
+    if "recipe_segment" in envelope:
+        step, credential = _ready_recipe_segment_step(tool_ctx, _STEP)
     return credential, step
 
 
@@ -103,7 +107,11 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
     )
     _initialize_git_root(parent_project)
     _initialize_git_root(clone)
-    credential, step = await _install_attested_recipe(monkeypatch, parent_project)
+    credential, step = await _install_attested_recipe(
+        monkeypatch,
+        parent_project,
+        tool_ctx_kitchen_open,
+    )
 
     installed = get_recipe_execution(tool_ctx_kitchen_open)
     assert installed is not None

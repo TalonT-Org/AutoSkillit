@@ -122,7 +122,6 @@ class McpResponseRecord:
 class McpCallCounter:
     """Record one session-start MCP sequence with initialization identity."""
 
-    calls: list[tuple[str, str | None]] = field(default_factory=list)
     delivery_mode: str | None = None
     responses: list[McpResponseRecord] = field(default_factory=list)
 
@@ -137,7 +136,6 @@ class McpCallCounter:
         part: int | None = None,
         bucket: str = "success",
     ) -> None:
-        self.calls.append((tool_name, initialization_id))
         if response is not None:
             self.responses.append(
                 McpResponseRecord(
@@ -162,7 +160,7 @@ class McpCallCounter:
         }
 
     def __len__(self) -> int:
-        return len(self.calls)
+        return len(self.responses)
 
 
 async def simulate_session_start(

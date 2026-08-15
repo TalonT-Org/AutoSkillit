@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -111,7 +112,7 @@ async def _record_implementation_bounded_path(
         ("claude-code", "consolidate-health-reports", "NON_SEGMENTED_INLINE"),
         ("claude-code", "research", "NON_SEGMENTED_ENVELOPE"),
         ("codex", "implementation", "SEGMENTED_INLINE"),
-        ("codex", "consolidate-health-reports", "NON_SEGMENTED_ENVELOPE"),
+        ("codex", "consolidate-health-reports", "NON_SEGMENTED_INLINE"),
         ("codex", "research", "NON_SEGMENTED_ENVELOPE"),
     ],
     ids=[
@@ -209,7 +210,11 @@ async def test_delivery_surface_matrix_reaches_ready_with_complete_credit(
 async def test_implementation_bounded_path_counts_automatic_and_advertised_delivery(
     tool_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    delivery_temp = tmp_path / "bounded-delivery"
+    delivery_temp.mkdir()
+    monkeypatch.setattr(tool_ctx, "temp_dir", delivery_temp)
     counter = await _record_implementation_bounded_path(tool_ctx, monkeypatch)
 
     automatic = [

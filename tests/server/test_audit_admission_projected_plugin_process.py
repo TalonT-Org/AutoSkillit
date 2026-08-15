@@ -275,7 +275,9 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
     replay_raw = await run_skill(**invocation)
     replay = json.loads(replay_raw)
 
-    assert len(reservation_outcomes) == 1
+    assert len(reservation_outcomes) == 2
+    assert reservation_outcomes[-1].decision.value == "EXACT_REPLAY"
+    assert reservation_outcomes[-1].attempt_id == reservation_outcomes[0].attempt_id
     assert len(dispatches) == 1
     assert replay["audit_status"] == "EXACT_REPLAY"
     assert replay["audit_cycle_path"] == published["audit_cycle_path"]

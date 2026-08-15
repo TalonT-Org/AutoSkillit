@@ -179,7 +179,7 @@ def test_check_review_loop_has_no_subprocess_calls() -> None:
     """The simplified check_review_loop must not use subprocess at all."""
     import ast
 
-    src = Path("src/autoskillit/smoke_utils/_review.py").read_text()
+    src = Path("src/autoskillit/smoke_utils/_review_design.py").read_text()
     tree = ast.parse(src)
 
     # Find the check_review_loop function node

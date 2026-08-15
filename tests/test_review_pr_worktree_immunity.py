@@ -1,4 +1,11 @@
-"""Real-Git regression coverage for local review annotation in linked worktrees."""
+"""Local review annotation byte-stability coverage for linked worktrees.
+
+Builds a real linked-worktree topology on disk (real git init/clone/worktree/add)
+and exercises the annotation machinery with ``subprocess.run`` patched to
+simulate the remote provider. Asserts that ``annotate_pr_diff`` preserves
+checked-out branch state in the primary repo across failure, interruption,
+retry, and downstream-review-failure paths.
+"""
 
 from __future__ import annotations
 
@@ -295,19 +302,32 @@ def test_byte_stable_on_downstream_review_failure(
     repo = topology["repo"]
     assert isinstance(repo, Path)
     before = _primary_state(repo)
-    with patch("subprocess.run", side_effect=_stub_for(topology)):
-        result = annotate_pr_diff(**_annotation_args(topology))
+    base_run = _stub_for(topology)
+    fail_at_authority = {"triggered": False}
 
-    def fail_downstream_review(_result: dict[str, str]) -> None:
-        raise RuntimeError("injected downstream review failure")
+    def fail_on_second_authority(args, **kwargs):
+        # The local-mode path inside annotate_pr_diff calls
+        # _read_provider_authority TWICE: once before the diff and once
+        # after, to ensure the provider's head/base SHAs did not move while
+        # the diff was being captured. Inject a failure into the SECOND
+        # call so we exercise the real "downstream review" cleanup path
+        # (the metrics_path.unlink(missing_ok=True) in the except branch).
+        if (
+            not fail_at_authority["triggered"]
+            and args[:2] == ["gh", "api"]
+            and "/compare/" not in args[2]
+        ):
+            fail_at_authority["triggered"] = True
+            raise RuntimeError("injected downstream review failure")
+        return base_run(args, **kwargs)
 
     with (
-        patch("subprocess.run") as run,
+        patch("subprocess.run", side_effect=fail_on_second_authority),
         pytest.raises(RuntimeError, match="injected downstream review failure"),
     ):
-        fail_downstream_review(result)
+        annotate_pr_diff(**_annotation_args(topology))
 
-    run.assert_not_called()
+    assert fail_at_authority["triggered"]
     assert _primary_state(repo) == before
 
 

@@ -209,16 +209,24 @@ def _parse_worktree_owners(raw: bytes) -> dict[str, list[str]]:
     return owners
 
 
-def _repository_context(execution_cwd: str) -> dict[str, object] | None:
-    git_dir = _git_text(execution_cwd, "rev-parse", "--absolute-git-dir")
-    common_raw = _git_text(execution_cwd, "rev-parse", "--git-common-dir")
-    requesting = _git_text(execution_cwd, "rev-parse", "--show-toplevel")
-    if not git_dir or not common_raw or not requesting:
+def _resolve_git_common_dir(cwd: str) -> Path | None:
+    """Return the resolved common git dir for cwd, or None if rev-parse fails."""
+    common_raw = _git_text(cwd, "rev-parse", "--git-common-dir")
+    if not common_raw:
         return None
     common_path = Path(common_raw)
     if not common_path.is_absolute():
-        common_path = Path(execution_cwd) / common_path
-    common_git_dir = str(common_path.resolve())
+        common_path = Path(cwd) / common_path
+    return common_path.resolve()
+
+
+def _repository_context(execution_cwd: str) -> dict[str, object] | None:
+    git_dir = _git_text(execution_cwd, "rev-parse", "--absolute-git-dir")
+    common_path = _resolve_git_common_dir(execution_cwd)
+    requesting = _git_text(execution_cwd, "rev-parse", "--show-toplevel")
+    if not git_dir or common_path is None or not requesting:
+        return None
+    common_git_dir = str(common_path)
     worktrees = _git_result(execution_cwd, "worktree", "list", "--porcelain", "-z")
     if worktrees.returncode != 0:
         return None
@@ -296,6 +304,13 @@ def _threatened_for_target(context: dict[str, object], target_ref: str) -> list[
     ]
 
 
+def _ctx_str(context: dict[str, object] | None, key: str) -> str:
+    """Return str(context[key]) when context has the key, else ""."""
+    if context is None:
+        return ""
+    return str(context.get(key, ""))
+
+
 def _deny_checked_out_ref(
     *,
     data: dict[str, object],
@@ -305,17 +320,17 @@ def _deny_checked_out_ref(
 ) -> None:
     details = {
         "attempted_value": attempted_value,
-        "common_git_dir": str(context["common_git_dir"]) if context else "",
-        "execution_cwd": str(context["execution_cwd"]) if context else "",
-        "requesting_worktree_path": (str(context["requesting_worktree_path"]) if context else ""),
+        "common_git_dir": _ctx_str(context, "common_git_dir"),
+        "execution_cwd": _ctx_str(context, "execution_cwd"),
+        "requesting_worktree_path": _ctx_str(context, "requesting_worktree_path"),
         "resolved_attempted_new_sha": (
-            _resolve_attempted_sha(str(context["execution_cwd"]), attempted_value)
+            _resolve_attempted_sha(_ctx_str(context, "execution_cwd"), attempted_value)
             if context
             else ""
         ),
         "session_id": str(data.get("session_id", "")),
         "threatened_refs": threatened_refs,
-        "worktree_git_dir": str(context["worktree_git_dir"]) if context else "",
+        "worktree_git_dir": _ctx_str(context, "worktree_git_dir"),
     }
     reason = CHECKED_OUT_REF_DENY_PREFIX + json.dumps(
         details, sort_keys=True, separators=(",", ":")
@@ -383,18 +398,18 @@ def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | N
 
 def _classify_branch_position(subcommand: str, args: list[str]) -> tuple[str, str, bool] | None:
     if subcommand == "branch":
-        try:
-            force_index = next(i for i, token in enumerate(args) if token in ("-f", "--force"))
-        except StopIteration:
+        if not any(token in ("-f", "--force") for token in args):
             return None
-        positional = [token for token in args[force_index + 1 :] if not token.startswith("-")]
+        # Force marker can appear anywhere in the arg list (git accepts
+        # options in any position); gather positionals across the whole
+        # list rather than only after the marker.
+        positional = [token for token in args if not token.startswith("-")]
     else:
         marker = "-B" if subcommand == "checkout" else "-C"
-        try:
-            marker_index = args.index(marker)
-        except ValueError:
+        if marker not in args:
             return None
-        positional = [token for token in args[marker_index + 1 :] if not token.startswith("-")]
+        # Same position-flexibility reasoning as the branch branch above.
+        positional = [token for token in args if not token.startswith("-")]
     if not positional:
         return None
     target = positional[0]
@@ -495,33 +510,38 @@ def _same_repository(candidate: str, context: dict[str, object]) -> bool | None:
     candidate_path = candidate
     if not os.path.isabs(candidate_path):
         candidate_path = str(Path(str(context["execution_cwd"])) / candidate_path)
-    candidate_common = _git_text(candidate_path, "rev-parse", "--git-common-dir")
-    if not candidate_common:
+    common_path = _resolve_git_common_dir(candidate_path)
+    if common_path is None:
         # rev-parse failed transiently (unreachable git, ref removed, fs error);
         # caller must treat as ambiguous rather than silently allowing push through.
         return None
-    common_path = Path(candidate_common)
-    if not common_path.is_absolute():
-        common_path = Path(candidate_path) / common_path
-    return str(common_path.resolve()) == str(context["common_git_dir"])
+    return str(common_path) == str(context["common_git_dir"])
 
 
 def _classify_push(
     args: list[str], context: dict[str, object], owned_refs: list[str]
 ) -> list[tuple[str, str, bool]]:
     positional = [token for token in args if not token.startswith("-")]
-    if len(positional) < 2:
+    if not positional:
         return []
     same_repo = _same_repository(positional[0], context)
     if same_repo is False:
         return []
     if same_repo is None:
         return [("", "<unresolved>", True)]
+    # Same-repository push with no explicit refspec (e.g. `git push .` or
+    # `git push origin`) uses remote.pushDefault / branch.<name>.merge to
+    # resolve the target — we cannot enumerate without reading config, so
+    # treat as ambiguous: route through _all_threatened rather than fail-open.
+    if len(positional) < 2:
+        return [("", "<unresolved>", True)]
     result: list[tuple[str, str, bool]] = []
     for refspec in positional[1:]:
-        if ":" not in refspec:
-            continue
-        source, destination = refspec.removeprefix("+").split(":", 1)
+        # Colonless refspec (e.g. `git push . feature-branch`) defaults to
+        # `feature-branch:feature-branch` and still updates a checked-out
+        # ref if it lands in owned_refs — normalize before classifying.
+        normalized = refspec if ":" in refspec else f"{refspec}:{refspec}"
+        source, destination = normalized.removeprefix("+").split(":", 1)
         if _DYNAMIC_TOKEN_RE.search(destination):
             return [("", "<unresolved>", True)]
         target = _normal_branch_ref(destination)
@@ -610,6 +630,7 @@ def _raw_target_mutations(
         return [("", "<unresolved>", True)]
     common = Path(str(context["common_git_dir"])).resolve()
     worktree_git = Path(str(context["worktree_git_dir"])).resolve()
+    worktrees_dir = common / "worktrees"
     result: list[tuple[str, str, bool]] = []
     for raw_target in targets:
         target = Path(raw_target)
@@ -623,6 +644,25 @@ def _raw_target_mutations(
         elif target == common / "packed-refs":
             result.append(("", "<unresolved>", True))
         else:
+            try:
+                relative = target.relative_to(worktrees_dir)
+            except ValueError:
+                pass
+            else:
+                # <common>/worktrees/<name>/HEAD writes the HEAD of another
+                # worktree (the per-worktree HEAD symref). Fail closed by
+                # routing it through _all_threatened against every owned ref
+                # — we can't cheaply resolve which branch that worktree
+                # checked out, so we deny any owner to be safe.
+                if relative.parts and len(relative.parts) == 2 and relative.parts[1] == "HEAD":
+                    result.append(("", "<unresolved>", True))
+                    continue
+                # <common>/worktrees/<name>/refs/... is a per-worktree
+                # ref store; any write to it must deny against every
+                # owned ref (ambiguous which branch it lands in).
+                if len(relative.parts) >= 2 and relative.parts[1] == "refs":
+                    result.append(("", "<unresolved>", True))
+                    continue
             try:
                 relative = target.relative_to(common / "refs" / "heads")
             except ValueError:
@@ -683,11 +723,36 @@ def _preflight_checked_out_ref_mutation(
     current_cwd = execution_cwd
     for segment in outer_segments:
         verb, args = command_verb_and_args(segment)
-        if verb == "cd" and len(args) == 1 and not _DYNAMIC_TOKEN_RE.search(args[0]):
+        if verb == "cd":
+            # Accept `cd <dir>`, `cd -P <dir>` (-P resolves physical path),
+            # and `cd -- <dir>` (-- ends option parsing). Reject dynamic
+            # dirs (`cd $foo`, `cd $(cmd)`) by keeping current_cwd unchanged.
+            target_args = [arg for arg in args if arg not in ("-P", "--")]
+            if len(target_args) == 1 and not _DYNAMIC_TOKEN_RE.search(target_args[0]):
+                candidate = Path(target_args[0])
+                current_cwd = str(
+                    (
+                        candidate if candidate.is_absolute() else Path(current_cwd) / candidate
+                    ).resolve()
+                )
+                continue
+            if len(args) != 1:
+                # Anything else (cd with no args, cd -, nested-expansion)
+                # cannot be resolved safely; bail out rather than letting
+                # later git segments classify against a stale cwd.
+                current_cwd = ""
+                continue
+        elif verb == "pushd" and len(args) == 1 and not _DYNAMIC_TOKEN_RE.search(args[0]):
+            # pushd swaps cwd into the new dir; track it like cd.
             candidate = Path(args[0])
             current_cwd = str(
                 (candidate if candidate.is_absolute() else Path(current_cwd) / candidate).resolve()
             )
+            continue
+        if not current_cwd:
+            # cwd resolution failed earlier in this command — refuse to
+            # classify subsequent git segments rather than silently routing
+            # them against the wrong repo.
             continue
         segment_context = _repository_context(_git_segment_cwd(segment, current_cwd))
         if segment_context is None:

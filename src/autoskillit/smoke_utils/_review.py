@@ -197,16 +197,16 @@ def annotate_pr_diff(
 
     def _ensure_provider_objects(shas: tuple[str, ...], repository: str) -> None:
         missing: list[str] = []
+        # dict.fromkeys preserves order while deduping; iteration order matters
+        # because we want the first occurrence of each sha to drive the
+        # fetch loop below (avoiding duplicate fetch invocations).
         for sha in dict.fromkeys(shas):
-            result = subprocess.run(
-                ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
-                capture_output=True,
-                text=False,
-                check=False,
-                cwd=str(review_root),
-                timeout=10,
-            )
-            if result.returncode != 0:
+            try:
+                _run(
+                    ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
+                    timeout=10,
+                )
+            except RuntimeError:
                 missing.append(sha)
         if not missing:
             return
@@ -258,18 +258,6 @@ def annotate_pr_diff(
         ) = provider_authority
         if checkout_head_sha != head_sha:
             raise RuntimeError("checkout head does not match provider head authority")
-        # rc=1 (ref missing) is benign; rc>=2 is a real failure _run raises on.
-        _run(
-            [
-                "git",
-                "rev-parse",
-                "--verify",
-                "-q",
-                f"refs/heads/{base_branch.strip()}",
-            ],
-            timeout=10,
-            ok_returncodes=frozenset({0, 1}),
-        )
         _ensure_provider_objects((base_sha, provider_merge_base_sha), provider_base_repo_full_name)
         local_computed_merge_base_sha = _required_scalar(
             ["git", "merge-base", base_sha, checkout_head_sha],

@@ -49,6 +49,7 @@ class TestToolRegistration:
         mcp.enable(tags={"fleet"})
         mcp.enable(tags={"fleet-dispatch"})
         mcp.enable(tags={"headless"})
+        mcp.enable(tags={"evidence-reader"})
 
         async with Client(mcp) as client:
             all_tools = await client.list_tools()
@@ -124,6 +125,10 @@ class TestToolRegistration:
             "write_audit_disposition_bundle",
             "write_audit_semantic_result",
             "write_standalone_audit_evidence",
+            # Behavioral evidence reader tool surface (#4585).
+            "delegate_evidence_reader",
+            "read_authorized_artifact",
+            "get_authorized_artifact_page",
         } | EXPLORATION_TOOLS
         assert expected == tool_names
 

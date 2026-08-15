@@ -95,6 +95,30 @@ def annotate_pr_diff(
             raise RuntimeError(f"annotation command failed ({' '.join(args)}): {detail}")
         return result
 
+    def _run_tolerant(
+        args: list[str], *, timeout: int, ok_returncodes: frozenset[int] = frozenset({0})
+    ) -> subprocess.CompletedProcess[bytes]:
+        """Like ``_run`` but treats ``ok_returncodes`` (default {0}) as success.
+
+        Used by probes whose meaning of "the ref does not exist" is rc=1
+        (e.g. ``git rev-parse --verify``), which is a benign observation
+        rather than a failure.
+        """
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=False,
+            check=False,
+            cwd=str(review_root),
+            timeout=timeout,
+        )
+        if result.returncode not in ok_returncodes:
+            detail = result.stderr.decode("utf-8", errors="backslashreplace").strip()
+            raise RuntimeError(
+                f"annotation command failed ({' '.join(args)}, rc={result.returncode}): {detail}"
+            )
+        return result
+
     def _required_scalar(args: list[str], *, timeout: int) -> str:
         value = _stdout_bytes(_run(args, timeout=timeout)).decode("utf-8", errors="strict").strip()
         if not is_valid_github_review_head_sha(value):
@@ -266,7 +290,7 @@ def annotate_pr_diff(
             ) = provider_authority
             if checkout_head_sha != head_sha:
                 raise RuntimeError("checkout head does not match provider head authority")
-            local_base_observation = subprocess.run(
+            local_base_observation = _run_tolerant(
                 [
                     "git",
                     "rev-parse",
@@ -274,11 +298,8 @@ def annotate_pr_diff(
                     "-q",
                     f"refs/heads/{base_branch.strip()}",
                 ],
-                capture_output=True,
-                text=False,
-                check=False,
-                cwd=str(review_root),
                 timeout=10,
+                ok_returncodes=frozenset({0, 1}),
             )
             if local_base_observation.returncode not in (0, 1):
                 logger.warning("local_base_tip_observation_failed: %s", base_branch.strip())
@@ -420,7 +441,9 @@ def annotate_pr_diff(
 
 
 # Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
-# of local rounds: approved comments are one-shot, while needs_human skips review.
+# of local rounds: ``approved_with_comments`` is one-shot and its resolve
+# pass does not re-trigger the review loop; ``needs_human`` skips review
+# entirely. All other verdicts respect the local-rounds budget.
 LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
     {
         "approved_with_comments",

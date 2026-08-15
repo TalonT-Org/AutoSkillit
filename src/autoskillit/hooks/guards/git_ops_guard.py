@@ -658,7 +658,7 @@ def _preflight_checked_out_ref_mutation(
     interpreter_payloads, interpreter_unresolved = extract_interpreter_command_payloads(command)
     structural_mutation = bool(
         re.search(
-            r"\bgit\s+(?:update-ref|branch\s+(?:-f|--force)|checkout\s+-B|switch\s+-C|"
+            r"\bgit\b[^\n;&|]*(?:update-ref|branch\s+(?:-f|--force)|checkout\s+-B|switch\s+-C|"
             r"reset\b|fetch\b|push\b|symbolic-ref\s+HEAD)\b",
             command,
         )

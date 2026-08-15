@@ -127,6 +127,7 @@ def test_config_command_and_schema_are_exact_sterile_projection(tmp_path: Path) 
         tmp_path / "models.json",
         auth,
         ("HOME", "OPENAI_API_KEY"),
+        tmp_path,
     )
     assert 'forced_login_method = "api"' in config
     assert 'approval_policy = "never"' in config
@@ -134,6 +135,7 @@ def test_config_command_and_schema_are_exact_sterile_projection(tmp_path: Path) 
     assert 'inherit = "none"' in config
     assert "project_root_markers = []" in config
     assert "enabled_tools" in config
+    assert f'cwd = "{tmp_path}"' in config
     assert "run_cmd" not in config
 
     schema_path = tmp_path / "result.schema.json"

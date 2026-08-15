@@ -21,6 +21,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.evidence_reader import (
     EvidenceReaderLaunchError,
+    evidence_reader_mcp_transport,
     launch_evidence_reader,
 )
 
@@ -87,6 +88,27 @@ def _transport() -> dict[str, object]:
         "env_vars": sorted(_EVIDENCE_ENV),
         "startup_timeout_sec": 2,
         "tool_timeout_sec": 2,
+    }
+
+
+def test_mcp_transport_resolves_configured_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = tmp_path / "autoskillit"
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    config = tmp_path / "config.toml"
+    config.write_text(
+        '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(launcher.shutil, "which", lambda command: str(executable))
+
+    transport = evidence_reader_mcp_transport(config)
+
+    assert transport == {
+        "command": str(executable.resolve()),
+        "env_vars": sorted(_EVIDENCE_ENV),
     }
 
 
@@ -158,7 +180,8 @@ def _stream(
 def _private_tempdirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[Path]:
     created: list[Path] = []
 
-    def make_directory(*, prefix: str) -> str:
+    def make_directory(*, prefix: str, dir: Path | None = None) -> str:
+        del dir
         path = tmp_path / "isolated" / f"{prefix}{len(created)}"
         path.mkdir(parents=True)
         created.append(path)
@@ -335,7 +358,8 @@ def test_launch_rejects_isolated_cwd_overlap_with_authorized_roots(
     home = tmp_path / "safe-home"
     calls = 0
 
-    def overlapping_directory(*, prefix: str) -> str:
+    def overlapping_directory(*, prefix: str, dir: Path | None = None) -> str:
+        del dir
         nonlocal calls
         calls += 1
         path = home if calls == 1 else worktree
@@ -475,6 +499,44 @@ def test_stream_validation_accepts_exact_partial_and_blocked_partitions(
         max_result_bytes=256_000,
     )
     assert result.status.value == status
+
+
+def test_stream_validation_accepts_reused_receipt_with_bounded_locations() -> None:
+    payload = _payload()
+    payload["evidence"] = [
+        {
+            **payload["evidence"][0],
+            "field": field,
+            "citation_id": citation_id,
+            "location": {
+                "start_byte": start,
+                "end_byte": end,
+                "start_line": 1,
+                "end_line": 1,
+            },
+        }
+        for field, citation_id, start, end in (
+            ("first", _CITATION, 0, 5),
+            ("second", "model-copy-error", 1, 4),
+        )
+    ]
+
+    result = launcher._validate_stream(
+        _stream(payload=payload),
+        definition=_definition(),
+        allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+        canary=_CANARY,
+        scope=_SCOPE,
+        snapshot=_SNAPSHOT,
+        requested_fields=("first", "second"),
+        max_result_bytes=256_000,
+    )
+
+    assert [(item.start_byte, item.end_byte) for item in result.citations] == [(0, 5), (1, 4)]
+    assert {item.citation_id for item in result.citations} == {_CITATION}
+    assert {item["citation_id"] for item in json.loads(result.payload_json)["evidence"]} == {
+        _CITATION
+    }
 
 
 @pytest.mark.parametrize(

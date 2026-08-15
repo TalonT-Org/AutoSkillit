@@ -18,6 +18,7 @@ import pytest
 from tests.execution.backends._live_codex_parent import (
     prepare_live_codex_parent,
     run_live_codex_parent,
+    write_luna_direct_catalog,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.timeout(1200)]
@@ -28,7 +29,7 @@ _RUN_ID_ENV = "AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE_RUN_ID"
 _AUTH_ENV_NAMES = ("CODEX_API_KEY", "OPENAI_API_KEY")
 _SOURCE_AUTH = Path("~/.codex/auth.json").expanduser()
 _ROLE = "pr-source-reader"
-_DELEGATE_TOOL = "mcp__autoskillit__delegate_evidence_reader"
+_PARENT_MODEL = "gpt-5.6-luna"
 _ARTIFACTS = ("tracked.txt", "dirty.txt", "untracked.txt")
 _REQUESTED_FIELDS = (
     "title",
@@ -242,21 +243,25 @@ def _parent_thread_id(stdout: str) -> str:
 
 
 def _delegate_prompt(run_id: str) -> str:
-    calls = "\n".join(
-        (
-            f"const r{index} = await tools.{_DELEGATE_TOOL}({{role: {_ROLE!r}, "
-            f"role_data: {{artifact_path: {artifact!r}, requested_fields: "
-            f"{json.dumps(_REQUESTED_FIELDS)}}}}}); text(r{index});"
-        )
-        for index, artifact in enumerate(_ARTIFACTS, start=1)
-    )
+    requests = [
+        {
+            "role": _ROLE,
+            "role_data": {
+                "artifact_path": artifact,
+                "requested_fields": list(_REQUESTED_FIELDS),
+            },
+        }
+        for artifact in _ARTIFACTS
+    ]
     return f"""
 You are the writable headless L1 parent for acceptance run {run_id}. Do not inspect or change
-repository files in this turn. Make exactly three sequential functions.exec gateway calls. Each
-cell must contain exactly one of the following direct broker calls and no other tool call:
-{calls}
-After all three return, report their statuses and the marker READER_DELEGATIONS_COMPLETE_{run_id}.
-Do not use shell, Git, web, delegation, permissions, or any other MCP tool in this turn.
+repository files in this turn. Call the native autoskillit delegate_evidence_reader MCP tool
+exactly three times, sequentially, using these exact argument objects in order:
+{json.dumps(requests, sort_keys=True)}
+Do not rename, omit, or add any argument or role_data key. Require one successful delegation per
+artifact. After all three succeed, report their statuses and marker
+READER_DELEGATIONS_COMPLETE_{run_id}. Do not use shell, Git, web, other delegation, permissions,
+or any other tool in this turn.
 """.strip()
 
 
@@ -270,7 +275,13 @@ the marker PARENT_SENTINEL_WRITTEN_{run_id}.
 
 
 def _reader_temp_directories() -> set[Path]:
-    return set(Path(tempfile.gettempdir()).glob("autoskillit-reader-*-*"))
+    roots = {Path(tempfile.gettempdir()), Path("/var/tmp")}
+    return {
+        directory
+        for root in roots
+        if root.is_dir()
+        for directory in root.glob("autoskillit-reader-*-*")
+    }
 
 
 def _assert_only_private_probe_cache(readers_root: Path) -> None:
@@ -326,16 +337,18 @@ def test_live_codex_evidence_reader_gate(tmp_path: Path, monkeypatch: pytest.Mon
             "AUTOSKILLIT_PROJECT_DIR": str(repository),
             "AUTOSKILLIT_SESSION_TYPE": "skill",
             "AUTOSKILLIT_SKILL_NAME": "analyze-prs",
+            "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
         }
     )
     if use_credential_file:
         for name in _AUTH_ENV_NAMES:
             prepared.env.pop(name, None)
+    write_luna_direct_catalog(prepared.session_home, prepared.env)
     reader_temp_before = _reader_temp_directories()
     first = run_live_codex_parent(
         env=prepared.env,
         cwd=repository,
-        model="gpt-5.6-sol",
+        model=_PARENT_MODEL,
         prompt=_delegate_prompt(run_id),
         timeout=int(os.environ.get("AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE_TIMEOUT", "900")),
         stdout=subprocess.PIPE,
@@ -392,7 +405,7 @@ def test_live_codex_evidence_reader_gate(tmp_path: Path, monkeypatch: pytest.Mon
     resumed = run_live_codex_parent(
         env=prepared.env,
         cwd=repository,
-        model="gpt-5.6-sol",
+        model=_PARENT_MODEL,
         prompt=_sentinel_prompt(run_id),
         timeout=180,
         stdout=subprocess.PIPE,

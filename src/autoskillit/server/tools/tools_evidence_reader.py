@@ -321,8 +321,8 @@ def _validate_child(
         receipt = issued.get(citation.citation_id)
         if (
             receipt is None
-            or receipt.byte_start != citation.start_byte
-            or receipt.byte_end != citation.end_byte
+            or citation.start_byte < receipt.byte_start
+            or citation.end_byte > receipt.byte_end
             or not 0 <= citation.start_byte <= citation.end_byte <= len(capture.content)
         ):
             raise _DelegateError("citation_receipt_invalid")

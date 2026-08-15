@@ -211,13 +211,7 @@ def _secure_json(path: Path, *, max_bytes: int) -> dict[str, Any]:
     return value
 
 
-def _readers_root(tool_ctx: ToolContext, *, create: bool) -> Path:
-    root = tool_ctx.temp_dir / "evidence-readers"
-    if create:
-        try:
-            root.mkdir(mode=0o700, parents=True, exist_ok=False)
-        except FileExistsError:
-            pass
+def _verified_readers_root(root: Path) -> Path:
     try:
         metadata = root.lstat()
         resolved = root.resolve(strict=True)
@@ -233,6 +227,16 @@ def _readers_root(tool_ctx: ToolContext, *, create: bool) -> Path:
     return resolved
 
 
+def _readers_root(tool_ctx: ToolContext, *, create: bool) -> Path:
+    root = tool_ctx.temp_dir / "evidence-readers"
+    if create:
+        try:
+            root.mkdir(mode=0o700, parents=True, exist_ok=False)
+        except FileExistsError:
+            pass
+    return _verified_readers_root(root)
+
+
 def _environment(values: Mapping[str, str]) -> dict[str, str]:
     if set(values) != _REQUIRED_ENV:
         raise EvidenceReaderError("environment_invalid")
@@ -243,20 +247,22 @@ def _environment(values: Mapping[str, str]) -> dict[str, str]:
 
 
 def _open_authority(tool_ctx: ToolContext, environment: Mapping[str, str]) -> _OpenedAuthority:
+    del tool_ctx
     env = _environment(environment)
-    root = _readers_root(tool_ctx, create=False)
     raw_path = Path(env[EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR])
     if not raw_path.is_absolute():
         raise EvidenceReaderError("authority_path_invalid")
     try:
         resolved_path = raw_path.resolve(strict=True)
         invocation_dir = resolved_path.parent
+        root = _verified_readers_root(invocation_dir.parent)
         directory_metadata = invocation_dir.lstat()
     except OSError as exc:
         raise EvidenceReaderError("authority_unavailable") from exc
     if (
         resolved_path != raw_path
         or resolved_path.name != _AUTHORITY_FILE
+        or root.name != "evidence-readers"
         or invocation_dir.parent != root
         or not stat.S_ISDIR(directory_metadata.st_mode)
         or stat.S_ISLNK(directory_metadata.st_mode)

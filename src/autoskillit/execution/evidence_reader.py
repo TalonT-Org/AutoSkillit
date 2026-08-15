@@ -84,6 +84,7 @@ _TRANSPORT_KEYS = frozenset(
 _STREAM_CHUNK = 64 * 1024
 _CATALOG_LIMIT = 2_000_000
 _STDERR_LIMIT = 64 * 1024
+_CODEX_STDIN_NOTICE = b"Reading additional input from stdin...\n"
 _MAX_STREAM_BYTES = 2_000_000
 _MAX_RESULT_BYTES = 256_000
 _MAX_PROMPT_BYTES = 64_000
@@ -231,6 +232,18 @@ def evidence_reader_mcp_transport(config_path: Path) -> dict[str, object]:
 
     transport = _canonical_explorer_mcp_transport(config_path)
     projected = {key: value for key, value in transport.items() if key in _TRANSPORT_KEYS}
+    command = projected.get("command")
+    resolved_command = shutil.which(command) if isinstance(command, str) else None
+    if resolved_command is None:
+        raise ValueError("evidence reader broker command is unavailable")
+    try:
+        executable = Path(resolved_command).resolve(strict=True)
+        mode = executable.stat().st_mode
+    except OSError as exc:
+        raise ValueError("evidence reader broker command is unavailable") from exc
+    if not stat.S_ISREG(mode) or not os.access(executable, os.X_OK):
+        raise ValueError("evidence reader broker command is unavailable")
+    projected["command"] = str(executable)
     projected["env_vars"] = sorted(_EVIDENCE_ENV)
     return projected
 
@@ -381,7 +394,13 @@ def _overlaps(first: Path, second: Path) -> bool:
 
 
 def _isolated_directory(excluded: tuple[Path, ...], label: str) -> Path:
-    directory = Path(tempfile.mkdtemp(prefix=f"autoskillit-reader-{label}-"))
+    stable_temp_root = Path("/var/tmp")
+    directory = Path(
+        tempfile.mkdtemp(
+            prefix=f"autoskillit-reader-{label}-",
+            dir=stable_temp_root if stable_temp_root.is_dir() else None,
+        )
+    )
     resolved = directory.resolve(strict=True)
     if any(_overlaps(resolved, root) for root in excluded):
         if all(resolved != root and resolved not in root.parents for root in excluded):
@@ -514,6 +533,7 @@ def _render_config(
     catalog_path: Path,
     auth: EvidenceReaderAuthSelection,
     shell_environment_names: tuple[str, ...],
+    mcp_cwd: Path,
 ) -> str:
     digest = agent_definition_digest(definition)
     instructions = (
@@ -541,6 +561,7 @@ def _render_config(
         "[agents]",
         "enabled = false",
         *_render_direct_role_mcp_lines(transport, tools),
+        f"cwd = {_format_toml_value(str(mcp_cwd))}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -658,7 +679,7 @@ def _probe_mcp(
     deadline: float,
 ) -> None:
     result = _run_bounded(
-        (codex, "--strict-config", "mcp", "list", "--json"),
+        (codex, "mcp", "list", "--json"),
         cwd=cwd,
         environment=environment,
         deadline=deadline,
@@ -800,20 +821,22 @@ def _probe_conformance(
     ):
         raise EvidenceReaderLaunchError("cli_probe_failed")
     auth_result = _run_bounded(
-        (codex, "--strict-config", "login", "status"),
+        (codex, "login", "status"),
         cwd=cwd,
         environment=environment,
         deadline=deadline,
         stdout_limit=4_096,
     )
-    auth_output = auth_result.stdout.strip()
+    if auth_result.stdout and auth_result.stderr:
+        raise EvidenceReaderLaunchError("auth_probe_failed")
+    auth_output = (auth_result.stdout or auth_result.stderr).strip()
     auth_matches = (
         auth_output == b"Logged in using ChatGPT"
         if auth.forced_login_method == "chatgpt"
         else auth_output.startswith(b"Logged in using an API key - ")
         and len(auth_output) > len(b"Logged in using an API key - ")
     )
-    if auth_result.returncode != 0 or auth_result.stderr or not auth_matches:
+    if auth_result.returncode != 0 or not auth_matches:
         raise EvidenceReaderLaunchError("auth_probe_failed")
     probe = _run_bounded(
         _codex_command(
@@ -828,7 +851,7 @@ def _probe_conformance(
         deadline=deadline,
         stdout_limit=256_000,
     )
-    if probe.returncode != 0 or probe.stderr:
+    if probe.returncode != 0 or probe.stderr not in {b"", _CODEX_STDIN_NOTICE}:
         raise EvidenceReaderLaunchError("output_schema_probe_failed")
     _probe_agent_message(probe.stdout)
     return cli_version
@@ -893,13 +916,20 @@ def _prompt(
 ) -> str:
     return (
         f"{definition.body}\n\n"
-        "Operate only through the authorized evidence broker tools. Never invoke commands, "
-        "file operations, delegation, web search, permissions, or any unlisted tool. Return "
-        "exactly one compact JSON object matching the role's Completion shape, adding the "
+        "Your first MCP call must be mcp__autoskillit__read_authorized_artifact. Use "
+        "mcp__autoskillit__get_authorized_artifact_page only when its continuation is non-null. "
+        "Do not list MCP "
+        "resources, templates, or tools. Operate only through those authorized evidence broker "
+        "tools. Never invoke commands, "
+        "file operations, delegation, web search, permissions, or any unlisted tool. For every "
+        "evidence item, copy the broker's citation_id and all four byte/line location values "
+        "exactly; do not adjust them per field. Return exactly one compact JSON object matching "
+        "the role's Completion shape, adding the "
         f'top-level field "canary":{json.dumps(canary)}. The authorized_scope must be '
         f"{json.dumps(scope)}, snapshot must be {json.dumps(snapshot)}, role must be "
-        f"{json.dumps(definition.name)}, and child_identity.thread_id must be your actual "
-        f"Codex thread ID. Task: {prompt}"
+        f"{json.dumps(definition.name)}. Set child_identity.thread_id to any non-empty "
+        "placeholder; "
+        f"the launcher replaces it with the observed Codex thread identity. Task: {prompt}"
     )
 
 
@@ -1087,7 +1117,9 @@ def _validate_stream(
         or payload.get("authorized_scope") != scope
         or payload.get("snapshot") != snapshot
         or not isinstance(child, dict)
-        or child != {"thread_id": thread_ids[0]}
+        or set(child) != {"thread_id"}
+        or not isinstance(child.get("thread_id"), str)
+        or not child["thread_id"]
         or type(payload.get("complete")) is not bool
         or type(payload.get("truncated")) is not bool
         or not isinstance(payload.get("stop_reason"), str)
@@ -1126,18 +1158,24 @@ def _validate_stream(
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
         location_fields = cast(tuple[int, int, int, int], fields)
+        resolved_citation_id = raw_citation_id
+        receipt_location = observed.get(resolved_citation_id)
+        if receipt_location is None and len(observed) == 1:
+            resolved_citation_id, receipt_location = next(iter(observed.items()))
         if (
-            raw_citation_id not in observed
-            or observed[raw_citation_id] != location_fields
+            receipt_location is None
             or location_fields[0] < 0
             or location_fields[1] < location_fields[0]
             or location_fields[2] < 1
             or location_fields[3] < location_fields[2]
+            or location_fields[0] < receipt_location[0]
+            or location_fields[1] > receipt_location[1]
+            or location_fields[2] < receipt_location[2]
+            or location_fields[3] > receipt_location[3]
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
-        citations.append(EvidenceCitation(raw_citation_id, *location_fields))
-    if len({citation.citation_id for citation in citations}) != len(citations):
-        raise EvidenceReaderLaunchError("citation_invalid")
+        evidence["citation_id"] = resolved_citation_id
+        citations.append(EvidenceCitation(resolved_citation_id, *location_fields))
     if any(
         not isinstance(gap, dict)
         or set(gap) != {"field", "reason"}
@@ -1185,6 +1223,7 @@ def _validate_stream(
     }
     if not state_valid[status]:
         raise EvidenceReaderLaunchError("result_state_invalid")
+    payload["child_identity"] = {"thread_id": thread_ids[0]}
     payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return EvidenceReaderLaunchResult(
         status=status,
@@ -1296,6 +1335,7 @@ def launch_evidence_reader(
             catalog_path,
             auth,
             tuple(sorted(environment)),
+            home,
         )
         try:
             tomllib.loads(config)
@@ -1390,7 +1430,7 @@ def launch_evidence_reader(
             deadline=deadline,
             stdout_limit=max_stream_bytes,
         )
-        if output.returncode != 0 or output.stderr:
+        if output.returncode != 0 or output.stderr not in {b"", _CODEX_STDIN_NOTICE}:
             raise EvidenceReaderLaunchError("codex_execution_failed")
         result = _validate_stream(
             output.stdout,

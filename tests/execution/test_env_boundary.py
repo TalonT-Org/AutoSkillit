@@ -117,6 +117,7 @@ def test_codex_forward_vars_cover_server_consumed() -> None:
             SESSION_TYPE_ENV_VAR,
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
             AGENT_BACKEND_DYNACONF_ENV_VAR,
+            "AUTOSKILLIT_SKILL_NAME",
         }
     )
     missing = server_consumed_forward_vars - CODEX_MCP_ENV_FORWARD_VARS

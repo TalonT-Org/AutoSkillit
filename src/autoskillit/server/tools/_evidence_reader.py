@@ -417,7 +417,9 @@ def _write_receipt_state(opened: _OpenedAuthority, state: dict[str, Any]) -> Non
 
 def _acquire_call_lock(invocation_dir: Path) -> tuple[int, os.stat_result]:
     path = invocation_dir / _CALL_LOCK_FILE
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise EvidenceReaderError("platform_unsupported")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     try:
         descriptor = os.open(path, flags, 0o600)
     except FileExistsError as exc:
@@ -426,9 +428,9 @@ def _acquire_call_lock(invocation_dir: Path) -> tuple[int, os.stat_result]:
         raise EvidenceReaderError("call_lock_unavailable") from exc
     try:
         opened = os.fstat(descriptor)
-    except OSError:
+    except OSError as exc:
         os.close(descriptor)
-        raise
+        raise EvidenceReaderError("call_lock_unavailable") from exc
     return descriptor, opened
 
 

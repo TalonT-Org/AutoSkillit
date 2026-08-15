@@ -114,6 +114,7 @@ class TestResearchDesignRecipeStructure:
 
     def test_dial_skip_behavior(self, recipe) -> None:
         assert recipe.steps["dial"].skip_when_false == "inputs.review_design"
+        assert recipe.steps["dial"].on_skip == "synthesize"
 
     def test_dial_on_success(self, recipe) -> None:
         assert recipe.steps["dial"].on_success == "select_review_dimensions"

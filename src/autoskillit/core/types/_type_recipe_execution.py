@@ -80,7 +80,7 @@ def _bound_value_payload(value: BoundValue) -> dict[str, object]:
         "origin": value.origin.value,
         "state": value.state.value,
         "template_dependencies": list(value.template_dependencies),
-        "unresolved_default": value.unresolved_default,
+        "absence_value": value.absence_value,
     }
 
 
@@ -212,7 +212,7 @@ RUN_SKILL_ATTESTATION_PARAMS: frozenset[str] = frozenset(
 
 class _SkillInputShape(TypedDict):
     keys: list[str]
-    unresolved_defaults: dict[str, BoundScalar]
+    absence_values: dict[str, BoundScalar]
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,7 +231,7 @@ class RecipeExecutionCredential:
             "skill_input_shapes": {
                 step_name: {
                     "keys": list(shape["keys"]),
-                    "unresolved_defaults": dict(shape["unresolved_defaults"]),
+                    "absence_values": dict(shape["absence_values"]),
                 }
                 for step_name, shape in self.skill_input_shapes.items()
             },
@@ -253,10 +253,10 @@ def build_recipe_execution_credential(
         present = tuple(value for value in template.invocation.skill_inputs if value.is_present)
         skill_input_shapes[step_name] = {
             "keys": [value.name for value in present],
-            "unresolved_defaults": {
-                value.name: value.unresolved_default
+            "absence_values": {
+                value.name: value.absence_value
                 for value in present
-                if value.unresolved_default is not None
+                if value.absence_value is not None
             },
         }
     return RecipeExecutionCredential(

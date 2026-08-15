@@ -66,7 +66,7 @@ class TestNullableOptionalContextRefRule:
         value: str,
         optional_refs: list[str],
         required: bool,
-        unresolved_default: str | None,
+        absence_value: str | None,
         monkeypatch: pytest.MonkeyPatch,
     ):
         input_def: dict[str, object] = {
@@ -74,8 +74,8 @@ class TestNullableOptionalContextRefRule:
             "type": "str",
             "required": required,
         }
-        if unresolved_default is not None:
-            input_def["unresolved_default"] = unresolved_default
+        if absence_value is not None:
+            input_def["absence_value"] = absence_value
         manifest = {
             "skills": {
                 "demo-skill": {
@@ -100,7 +100,7 @@ class TestNullableOptionalContextRefRule:
             }
         )
 
-    def test_optional_run_skill_input_requires_unresolved_default(
+    def test_optional_run_skill_input_requires_absence_value(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -108,15 +108,14 @@ class TestNullableOptionalContextRefRule:
             value="${{ context.optional_value }}",
             optional_refs=["optional_value"],
             required=False,
-            unresolved_default=None,
+            absence_value=None,
             monkeypatch=monkeypatch,
         )
 
         findings = run_semantic_rules(recipe)
 
         assert any(
-            finding.rule == "nullable-optional-context-ref"
-            and "unresolved_default" in finding.message
+            finding.rule == "nullable-optional-context-ref" and "absence_value" in finding.message
             for finding in findings
         )
 
@@ -128,7 +127,7 @@ class TestNullableOptionalContextRefRule:
             value="${{ context.optional_value }}",
             optional_refs=["optional_value"],
             required=False,
-            unresolved_default="",
+            absence_value="",
             monkeypatch=monkeypatch,
         )
 
@@ -152,7 +151,7 @@ class TestNullableOptionalContextRefRule:
             value=value,
             optional_refs=["optional_value"],
             required=True,
-            unresolved_default=None,
+            absence_value=None,
             monkeypatch=monkeypatch,
         )
 
@@ -171,7 +170,7 @@ class TestNullableOptionalContextRefRule:
             value="${{ context.optional_value }}",
             optional_refs=["different_value"],
             required=False,
-            unresolved_default=None,
+            absence_value=None,
             monkeypatch=monkeypatch,
         )
 

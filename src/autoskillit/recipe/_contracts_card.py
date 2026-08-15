@@ -162,8 +162,8 @@ def generate_recipe_card(
                                 "required": item.required,
                                 "recommended": item.recommended,
                                 **(
-                                    {"unresolved_default": item.unresolved_default}
-                                    if item.unresolved_default is not None
+                                    {"absence_value": item.absence_value}
+                                    if item.absence_value is not None
                                     else {}
                                 ),
                             }

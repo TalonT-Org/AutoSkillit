@@ -29,7 +29,7 @@ def test_recipe_execution_credential_projects_ordered_keys_and_falsey_defaults()
             state=BoundValueState.PRESENT,
             origin=BoundValueOrigin.CONTEXT,
             context_dependencies=("empty",),
-            unresolved_default="",
+            absence_value="",
         ),
         BoundValue(
             name="zero",
@@ -38,7 +38,7 @@ def test_recipe_execution_credential_projects_ordered_keys_and_falsey_defaults()
             state=BoundValueState.PRESENT,
             origin=BoundValueOrigin.CONTEXT,
             context_dependencies=("zero",),
-            unresolved_default=0,
+            absence_value=0,
         ),
         BoundValue(
             name="disabled",
@@ -47,7 +47,7 @@ def test_recipe_execution_credential_projects_ordered_keys_and_falsey_defaults()
             state=BoundValueState.PRESENT,
             origin=BoundValueOrigin.CONTEXT,
             context_dependencies=("disabled",),
-            unresolved_default=False,
+            absence_value=False,
         ),
         BoundValue(
             name="resolved",
@@ -108,12 +108,12 @@ def test_recipe_execution_credential_projects_ordered_keys_and_falsey_defaults()
     expected_shapes = {
         "invoke": {
             "keys": ["empty", "zero", "disabled", "resolved"],
-            "unresolved_defaults": {"empty": "", "zero": 0, "disabled": False},
+            "absence_values": {"empty": "", "zero": 0, "disabled": False},
         }
     }
     assert wire["skill_input_shapes"] == expected_shapes
 
     wire["skill_input_shapes"]["invoke"]["keys"].append("mutated")
-    wire["skill_input_shapes"]["invoke"]["unresolved_defaults"]["empty"] = "mutated"
+    wire["skill_input_shapes"]["invoke"]["absence_values"]["empty"] = "mutated"
 
     assert credential.as_wire_block()["skill_input_shapes"] == expected_shapes

@@ -44,7 +44,7 @@ def test_get_skill_contract_rejects_non_boolean_scope_discipline(value: object) 
         ("boolean", 0),
     ],
 )
-def test_get_skill_contract_rejects_invalid_unresolved_default(
+def test_get_skill_contract_rejects_invalid_absence_value(
     input_type: str,
     value: object,
 ) -> None:
@@ -56,14 +56,14 @@ def test_get_skill_contract_rejects_invalid_unresolved_default(
                         "name": "value",
                         "type": input_type,
                         "required": False,
-                        "unresolved_default": value,
+                        "absence_value": value,
                     }
                 ]
             }
         }
     }
 
-    with pytest.raises(ValueError, match="unresolved_default"):
+    with pytest.raises(ValueError, match="absence_value"):
         get_skill_contract("demo-skill", manifest)
 
 
@@ -71,7 +71,7 @@ def test_get_skill_contract_rejects_invalid_unresolved_default(
     ("input_type", "value"),
     [("str", ""), ("integer", 0), ("boolean", False)],
 )
-def test_get_skill_contract_preserves_falsey_unresolved_default(
+def test_get_skill_contract_preserves_falsey_absence_value(
     input_type: str,
     value: str | int | bool,
 ) -> None:
@@ -83,7 +83,7 @@ def test_get_skill_contract_preserves_falsey_unresolved_default(
                         "name": "value",
                         "type": input_type,
                         "required": False,
-                        "unresolved_default": value,
+                        "absence_value": value,
                     }
                 ]
             }
@@ -93,12 +93,12 @@ def test_get_skill_contract_preserves_falsey_unresolved_default(
     contract = get_skill_contract("demo-skill", manifest)
 
     assert contract is not None
-    restored = contract.inputs[0].unresolved_default
+    restored = contract.inputs[0].absence_value
     assert restored == value
     assert type(restored) is type(value)
 
 
-def test_get_skill_contract_rejects_required_unresolved_default() -> None:
+def test_get_skill_contract_rejects_required_absence_value() -> None:
     manifest = {
         "skills": {
             "demo-skill": {
@@ -107,7 +107,7 @@ def test_get_skill_contract_rejects_required_unresolved_default() -> None:
                         "name": "value",
                         "type": "str",
                         "required": True,
-                        "unresolved_default": "",
+                        "absence_value": "",
                     }
                 ]
             }
@@ -118,7 +118,7 @@ def test_get_skill_contract_rejects_required_unresolved_default() -> None:
         get_skill_contract("demo-skill", manifest)
 
 
-def test_unresolved_default_changes_skill_contract_identity() -> None:
+def test_absence_value_changes_skill_contract_identity() -> None:
     def manifest(default: str) -> dict[str, object]:
         return {
             "skills": {
@@ -128,7 +128,7 @@ def test_unresolved_default_changes_skill_contract_identity() -> None:
                             "name": "value",
                             "type": "str",
                             "required": False,
-                            "unresolved_default": default,
+                            "absence_value": default,
                         }
                     ]
                 }

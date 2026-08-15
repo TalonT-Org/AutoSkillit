@@ -168,7 +168,7 @@ def test_persisted_audit_contract_preserves_selected_output_mode() -> None:
     ("input_type", "value"),
     [("str", ""), ("integer", 0), ("boolean", False)],
 )
-def test_persisted_skill_contract_preserves_falsey_unresolved_default(
+def test_persisted_skill_contract_preserves_falsey_absence_value(
     input_type: str,
     value: str | int | bool,
 ) -> None:
@@ -180,7 +180,7 @@ def test_persisted_skill_contract_preserves_falsey_unresolved_default(
                 name="value",
                 type=input_type,
                 required=False,
-                unresolved_default=value,
+                absence_value=value,
             ),
         ),
         outputs=[],
@@ -189,7 +189,7 @@ def test_persisted_skill_contract_preserves_falsey_unresolved_default(
     restored = helpers.deserialize_skill_contract(helpers.serialize_skill_contract(selected))
 
     assert restored is not None
-    restored_default = restored.inputs[0].unresolved_default
+    restored_default = restored.inputs[0].absence_value
     assert restored_default == value
     assert type(restored_default) is type(value)
 

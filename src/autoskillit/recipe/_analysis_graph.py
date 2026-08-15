@@ -137,7 +137,7 @@ def build_recipe_graph(recipe: Recipe) -> nx.DiGraph:
 # ---------------------------------------------------------------------------
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, slots=True)
 class RouteEdge:
     """A single routing edge from a recipe step to a target step.
 
@@ -146,27 +146,33 @@ class RouteEdge:
             ``"result_condition"``, ``"exhausted"``.
         target: The target step name.
         condition: Populated for ``on_result`` conditions — the ``when`` expression.
+        capture_available: Whether captures declared by the source step exist on this edge.
     """
 
     edge_type: str
     target: str
     condition: str | None = None
+    capture_available: bool = False
 
 
 def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
     """Return all routing edges declared on *step*.
 
-    Covers every routing field on :class:`RecipeStep`:
+    Covers every runtime routing field on :class:`RecipeStep`:
     ``on_success``, ``on_failure``, ``on_context_limit``, ``on_rate_limit``, ``on_exhausted``,
     ``on_result.conditions[].route``, and ``on_result.routes`` (dict form).
 
-    None targets are skipped. The caller is responsible for filtering by
+    Configuration-only ``on_skip`` and sub-recipe bypasses are added by
+    :func:`_build_raw_step_edges`, not exposed as runtime routes here. None
+    targets are skipped. The caller is responsible for filtering by
     known step names if graph-membership checks are needed.
     """
     edges: list[RouteEdge] = []
 
     if step.on_success:
-        edges.append(RouteEdge(edge_type="success", target=step.on_success))
+        edges.append(
+            RouteEdge(edge_type="success", target=step.on_success, capture_available=True)
+        )
     if step.on_failure:
         edges.append(RouteEdge(edge_type="failure", target=step.on_failure))
     if step.on_context_limit:
@@ -185,6 +191,7 @@ def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
                         edge_type="result_condition",
                         target=cond.route,
                         condition=cond.when,
+                        capture_available=True,
                     )
                 )
         elif sr.routes:
@@ -194,6 +201,7 @@ def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
                         edge_type="result_condition",
                         target=target,
                         condition=key,
+                        capture_available=True,
                     )
                 )
 
@@ -205,51 +213,65 @@ def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
 # ---------------------------------------------------------------------------
 
 
+def _build_raw_step_edges(recipe: Recipe) -> dict[str, tuple[RouteEdge, ...]]:
+    """Build typed runtime and configuration-time edges for every recipe step."""
+    step_names = set(recipe.steps)
+    edges_by_source: dict[str, list[RouteEdge]] = {name: [] for name in step_names}
+
+    for name, step in recipe.steps.items():
+        for edge in _extract_routing_edges(step):
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
+            if edge.target in step_names:
+                edges_by_source[name].append(edge)
+        if step.skip_when_false and step.on_skip in step_names:
+            edges_by_source[name].append(
+                RouteEdge(edge_type="configuration_skip", target=step.on_skip)
+            )
+
+    predecessors: dict[str, set[str]] = {name: set() for name in step_names}
+    for source, edges in edges_by_source.items():
+        for edge in edges:
+            predecessors[edge.target].add(source)
+
+    for name, step in recipe.steps.items():
+        if not step.skip_when_false or step.on_skip not in step_names:
+            continue
+        for predecessor in sorted(predecessors[name]):
+            edges_by_source[predecessor].append(
+                RouteEdge(
+                    edge_type="configuration_skip_bypass",
+                    target=step.on_skip,
+                )
+            )
+
+    ordered_names = list(recipe.steps)
+    for index, (name, step) in enumerate(recipe.steps.items()):
+        if step.sub_recipe is None or index + 1 >= len(ordered_names):
+            continue
+        next_step = ordered_names[index + 1]
+        edges_by_source[name].append(
+            RouteEdge(edge_type="configuration_sub_recipe", target=next_step)
+        )
+        for predecessor in sorted(predecessors[name]):
+            edges_by_source[predecessor].append(
+                RouteEdge(
+                    edge_type="configuration_sub_recipe_bypass",
+                    target=next_step,
+                )
+            )
+
+    return {source: tuple(edges) for source, edges in edges_by_source.items()}
+
+
 def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
-    """Build a routing adjacency list from all step routing fields.
+    """Project typed raw edges into a routing adjacency list.
 
     Each key is a step name, each value is the set of step names
     reachable in one hop (successors). Terminal targets like "done"
     are excluded since they are not real steps.
     """
-    step_names = set(recipe.steps.keys())
-    graph: dict[str, set[str]] = {name: set() for name in step_names}
-
-    for name, step in recipe.steps.items():
-        for edge in _extract_routing_edges(step):
-            # exhausted only applies to non-terminal steps
-            if edge.edge_type == "exhausted" and step.action is not None:
-                continue
-            if edge.target in step_names:
-                graph[name].add(edge.target)
-        if step.skip_when_false and step.on_skip in step_names:
-            graph[name].add(step.on_skip)
-
-    # Build predecessor map for bypass edge injection below.
-    predecessors: dict[str, set[str]] = {name: set() for name in step_names}
-    for name, successors in graph.items():
-        for s in successors:
-            predecessors[s].add(name)
-
-    # Make the explicit configuration-time continuation visible to skip-sensitive
-    # graph rules without exposing it through runtime edge extraction.
-    for name, step in recipe.steps.items():
-        if not step.skip_when_false or step.on_skip not in step_names:
-            continue
-        for pred in predecessors[name]:
-            graph[pred].add(step.on_skip)
-
-    # For each sub_recipe placeholder step (gate-controlled), add a bypass edge
-    # to the next step in YAML order. When the gate is false the step is dropped
-    # at load time; without this edge the next step becomes unreachable in the
-    # raw recipe graph, breaking reachability-based semantic rules.
-    step_names_list = list(recipe.steps.keys())
-    for i, (name, step) in enumerate(recipe.steps.items()):
-        if step.sub_recipe is None or i + 1 >= len(step_names_list):
-            continue
-        next_step = step_names_list[i + 1]
-        graph[name].add(next_step)
-        for pred in predecessors[name]:
-            graph[pred].add(next_step)
-
-    return graph
+    return {
+        source: {edge.target for edge in edges}
+        for source, edges in _build_raw_step_edges(recipe).items()
+    }

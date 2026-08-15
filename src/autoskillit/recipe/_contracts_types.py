@@ -22,15 +22,22 @@ class SkillInput:
     required: bool
     recommended: bool = False
     nullable: bool = True
-    unresolved_default: BoundScalar | None = None
+    absence_value: BoundScalar | None = None
 
     def __post_init__(self) -> None:
-        if self.unresolved_default is not None and type(self.unresolved_default) not in (
-            str,
-            int,
-            bool,
-        ):
-            raise ValueError("SkillInput.unresolved_default must be a strict scalar or None")
+        if not self.has_absence_value:
+            return
+        value = self.absence_value
+        if self.required:
+            raise ValueError(f"required input {self.name!r} cannot declare absence_value")
+        if type(value) not in (str, int, bool):
+            raise TypeError(f"absence_value for {self.name!r} must be a strict scalar")
+        if not self.accepts(value):
+            raise ValueError(f"skill input {self.name!r} does not accept absence_value {value!r}")
+
+    @property
+    def has_absence_value(self) -> bool:
+        return self.absence_value is not None
 
     def accepts(self, value: object) -> bool:
         normalized = self.type

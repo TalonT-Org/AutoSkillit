@@ -103,7 +103,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         contract = get_skill_contract(skill_name, manifest)
         assert contract is not None
         input_def = next(item for item in contract.inputs if item.name == input_name)
-        assert input_def.unresolved_default == ""
+        assert input_def.absence_value == ""
 
 
 def test_required_optional_context_routes_are_gated_or_guaranteed() -> None:

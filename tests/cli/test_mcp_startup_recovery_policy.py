@@ -59,6 +59,6 @@ def test_startup_policy_preserves_attested_skill_input_shape() -> None:
         "recipe_execution.skill_input_shapes[step_name], initialize skill_inputs "
         "with exactly its ordered keys, and replace available values in place. "
         "For unavailable context, copy only that key's advertised "
-        'unresolved_defaults entry by key presence, so "", 0, and False remain '
+        'absence_values entry by key presence, so "", 0, and False remain '
         "verbatim; never delete or invent a key."
     ) in rendered

@@ -502,12 +502,24 @@ def _structured_skill_inputs(
             hidden_inputs=hidden_inputs,
             ingredient_values=ingredient_values,
         )
+        exact_context = (
+            _EXACT_CONTEXT_REF_RE.fullmatch(declared) if isinstance(declared, str) else None
+        )
+        if (
+            exact_context is not None
+            and exact_context.group(1) in optional_context_refs
+            and effective == declared
+            and input_def.has_absence_value
+        ):
+            absence_value = input_def.absence_value
+            assert isinstance(absence_value, (str, int, bool))
+            resolved = absence_value
         value = _bound_value(input_def.name, declared, resolved)
         if (
             not input_def.required
             and frozenset(value.context_dependencies) & optional_context_refs
         ):
-            value = replace(value, unresolved_default=input_def.unresolved_default)
+            value = replace(value, absence_value=input_def.absence_value)
         bound.append(value)
         unresolved = bool(value.context_dependencies or value.input_dependencies)
         if not unresolved and not _skill_value_is_valid(resolved, input_def):

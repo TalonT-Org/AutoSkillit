@@ -276,6 +276,7 @@ class TestReservation:
         assert authority.authority_id == same_authority.authority_id
         assert authority.authority_id != different_owner.authority_id
         assert re.fullmatch(r"ada1-[0-9a-f]{64}", authority.authority_id)
+        assert AuditAdmissionStoreAuthority.is_valid_authority_id(authority.authority_id)
         with pytest.raises((AttributeError, TypeError)):
             authority.authority_id = "replacement"  # type: ignore[misc]
         with pytest.raises(AttributeError):
@@ -285,6 +286,20 @@ class TestReservation:
         assert version_prefix == "adr1"
         assert handle_authority_id == authority.authority_id
         assert re.fullmatch(r"[0-9a-f]{64}", secret)
+
+    @pytest.mark.parametrize(
+        "value",
+        (
+            "",
+            "ada1-",
+            f"ada1-{'0' * 63}",
+            f"ada1-{'0' * 65}",
+            f"ada1-{'g' * 64}",
+            f"ADA1-{'0' * 64}",
+        ),
+    )
+    def test_authority_id_shape_rejects_malformed_values(self, value: str) -> None:
+        assert not AuditAdmissionStoreAuthority.is_valid_authority_id(value)
 
     def test_foreign_authority_handle_rejects_before_store_recovery(
         self,

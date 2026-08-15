@@ -55,6 +55,8 @@ __all__ = [
 
 
 _STORE_AUTHORITY_ID_DOMAIN = b"autoskillit.audit-admission.store-authority.v1\x00"
+_STORE_AUTHORITY_ID_PREFIX = "ada1-"
+_STORE_AUTHORITY_ID_HEX_LENGTH = hashlib.sha256().digest_size * 2
 
 
 class AuditAdmissionStorageHealthStatus(StrEnum):
@@ -130,7 +132,18 @@ class AuditAdmissionStoreAuthority:
             + b"\x00"
             + str(self.expected_owner_id).encode("ascii")
         )
-        return f"ada1-{hashlib.sha256(identity).hexdigest()}"
+        return f"{_STORE_AUTHORITY_ID_PREFIX}{hashlib.sha256(identity).hexdigest()}"
+
+    @staticmethod
+    def is_valid_authority_id(value: str) -> bool:
+        """Return whether *value* has the versioned authority-id shape."""
+        return (
+            len(value) == len(_STORE_AUTHORITY_ID_PREFIX) + _STORE_AUTHORITY_ID_HEX_LENGTH
+            and value.startswith(_STORE_AUTHORITY_ID_PREFIX)
+            and all(
+                char in "0123456789abcdef" for char in value[len(_STORE_AUTHORITY_ID_PREFIX) :]
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)

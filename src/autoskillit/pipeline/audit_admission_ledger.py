@@ -1143,9 +1143,7 @@ class DefaultAuditAdmissionLedger:
             return None
         handle_authority_id, secret = parts[1:]
         if (
-            len(handle_authority_id) != 69
-            or not handle_authority_id.startswith("ada1-")
-            or any(char not in "0123456789abcdef" for char in handle_authority_id[5:])
+            not AuditAdmissionStoreAuthority.is_valid_authority_id(handle_authority_id)
             or len(secret) != 64
             or any(char not in "0123456789abcdef" for char in secret)
         ):

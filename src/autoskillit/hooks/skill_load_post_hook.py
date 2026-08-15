@@ -46,6 +46,47 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
+def _read_existing_flag(path: Path) -> dict[str, object] | None:
+    """Return the existing flag content as a parsed JSON dict, or None if absent/invalid.
+
+    Existing single-skill flags written by the previous version of this hook
+    (raw skill name strings) are migrated in place to the new JSON envelope
+    so older skill loads remain visible after an upgrade.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
+
+
+def _merge_existing_entry(
+    existing: dict[str, object],
+    new_entry: dict[str, object],
+) -> dict[str, object]:
+    """OR-accumulate the join bit across loaded skills and append the new entry.
+
+    Loaded-skill entries are immutable; the ``join_required`` boolean in the
+    flag is the OR of every loaded skill's ``join_required`` value. A later
+    join-false load does NOT downgrade an established required-join binding.
+    """
+    loaded_obj = existing.get("loaded_skills", [])
+    loaded: list[dict[str, object]] = list(loaded_obj) if isinstance(loaded_obj, list) else []
+    loaded.append(new_entry)
+    existing_join = bool(existing.get("join_required", False))
+    new_join = bool(new_entry.get("join_required", False))
+    result = dict(existing)
+    result["loaded_skills"] = loaded
+    result["join_required"] = existing_join or new_join
+    return result
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -83,8 +124,31 @@ def main() -> None:
         sys.exit(0)
 
     flag_path = find_project_root() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
+
+    existing = _read_existing_flag(flag_path)
+
+    new_entry: dict[str, object] = {
+        "skill_name": skill_name,
+        "ts": datetime.now(UTC).isoformat(),
+        "join_required": False,
+        "child_spawn_cardinality": {},
+        "semantic_digest": "",
+        "adaptation_digest": "",
+        "artifact_digest": "",
+        "artifact_incarnation": "",
+    }
+    merged = (
+        _merge_existing_entry(existing or {}, new_entry)
+        if existing
+        else {
+            "schema_version": 1,
+            "session_id": session_id,
+            "join_required": False,
+            "loaded_skills": [new_entry],
+        }
+    )
     try:
-        _atomic_write(flag_path, skill_name)
+        _atomic_write(flag_path, json.dumps(merged, sort_keys=True))
     except Exception as exc:
         sys.stderr.write(f"skill_load_post_hook: failed to write flag {flag_path}: {exc}\n")
 

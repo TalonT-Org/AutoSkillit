@@ -587,7 +587,20 @@ def _manifest_skill_entry(
     document: AgentSkillDocument,
 ) -> dict[str, Any]:
     role = skill.execution_role
-    return {
+    semantic_plan = skill.semantic_plan
+    join_required = bool(
+        semantic_plan is not None
+        and semantic_plan.join is not None
+        and semantic_plan.join.required
+    )
+    child_cardinality: dict[str, int | str] = {}
+    if semantic_plan is not None:
+        for spawn in semantic_plan.child_spawns:
+            if spawn.count is not None:
+                child_cardinality[spawn.role] = int(spawn.count)
+            elif spawn.for_each is not None:
+                child_cardinality[spawn.role] = str(spawn.for_each)
+    entry: dict[str, Any] = {
         "canonical_digest": document.canonical_digest,
         "projected_digest": document.projected_digest,
         "source": document.source_identity.origin.value,
@@ -597,7 +610,12 @@ def _manifest_skill_entry(
         "uses_capabilities": sorted(skill.uses_capabilities),
         "execution_role": role.value if role is not None else None,
         "activate_deps": list(skill.activate_deps),
+        "join_required": join_required,
+        "child_spawn_cardinality": dict(sorted(child_cardinality.items())),
+        "semantic_digest": document.semantic_digest,
+        "adaptation_digest": document.adaptation_digest,
     }
+    return entry
 
 
 def _projection_skills_manifest(
@@ -843,7 +861,7 @@ def validate_sanitized_plugin_artifact(
         canonical_digest = (
             info.canonical_digest or hashlib.sha256(info.canonical_content.encode()).hexdigest()
         )
-        expected_entry = {
+        expected_entry: dict[str, object] = {
             "projected_digest": projected_digest,
             "canonical_digest": canonical_digest,
             "source": info.source.value,
@@ -856,6 +874,26 @@ def validate_sanitized_plugin_artifact(
             ),
             "activate_deps": list(info.activate_deps),
         }
+        semantic_plan = info.semantic_plan
+        expected_entry["join_required"] = bool(
+            semantic_plan is not None
+            and semantic_plan.join is not None
+            and semantic_plan.join.required
+        )
+        cardinality: dict[str, int | str] = {}
+        if semantic_plan is not None:
+            for spawn in semantic_plan.child_spawns:
+                if spawn.count is not None:
+                    cardinality[spawn.role] = int(spawn.count)
+                elif spawn.for_each is not None:
+                    cardinality[spawn.role] = str(spawn.for_each)
+        expected_entry["child_spawn_cardinality"] = dict(sorted(cardinality.items()))
+        expected_entry["semantic_digest"] = (
+            semantic_plan.digest if semantic_plan is not None else ""
+        )
+        # adaptation_digest is produced at materialization time and validated
+        # downstream via digest pinning (re-parsing the projected artifact).
+        expected_entry["adaptation_digest"] = ""
         for field_name, value in expected_entry.items():
             if entry.get(field_name) != value:
                 errors.append(

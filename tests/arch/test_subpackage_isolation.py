@@ -1516,6 +1516,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "bind_session_scoped/session_scoped_capability authority mode, and the "
         "supporting lease management (+89 net lines)",
     ),
+    "smoke_utils/_review.py": (
+        1100,
+        "REQ-CNST-010-E26: #4592 annotate_pr_diff is the canonical smoke-utils annotation "
+        "entry point — provider authority cross-check, linked-worktree topology support, "
+        "local-mode diff acquisition, and SHA-embedded artifact writes must stay adjacent "
+        "to the byte-stable metrics_path ledger they produce (cleanup tested by "
+        "test_annotate_pr_diff_cleans_commit_marker_on_baseexception_and_retry).",
+    ),
 }
 
 

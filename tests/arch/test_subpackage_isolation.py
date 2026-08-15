@@ -137,6 +137,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # _RETENTION_SECONDS resolved once at import time from the single-source-of-truth
         # STATE_RECLAIMABILITY sweep grace (_lifecycle_policy.SWEEP_GRACE_SECONDS).
         "_capture_lifecycle",
+        # join ledger alphabet/filename constants resolved once at import time.
+        "_join_ledger",  # hooks/_join_ledger.py: _BATCH_ID_ALPHABET, LEDGER_FILENAME
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1002,7 +1004,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
         # so it lives at this IL-1 layer rather than splitting further — its 176 lines
         # are one cohesive read/write/clear API with no internal seam to extract)
-        "hooks": 23,  # +_capture_process owned shell process-group boundary;
+        "hooks": 24,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
         # and request-correlated exploration identity records
@@ -1018,7 +1020,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
         # +_recipe_section_handler.py (bounded recipe-section pull handler)
-        "hooks/guards": 35,  # +github_mutation_guard (#4432);
+        "hooks/guards": 38,  # +github_mutation_guard (#4432); +3 join_*_guard (#4575)
         # +fabricated_completion_guard (#4457)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,

@@ -192,15 +192,14 @@ def test_gate_imports_only_from_core():
                     )
 
 
-def test_all_tool_sets_disjoint_and_complete():
+def test_tool_sets_have_only_the_declared_gated_headless_overlap():
     from autoskillit.core.types import HEADLESS_TOOLS
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
-    assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
+    assert GATED_TOOLS & HEADLESS_TOOLS == {"delegate_evidence_reader"}
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert "post_pr_review" in HEADLESS_TOOLS
-    assert "delegate_evidence_reader" in HEADLESS_TOOLS
 
 
 def test_worker_tools_removed_from_core():

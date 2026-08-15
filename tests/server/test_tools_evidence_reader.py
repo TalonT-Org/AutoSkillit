@@ -557,13 +557,3 @@ async def test_broker_boundary_never_raises_and_shields_cancellation(
     else:
         assert payload == {"status": "error", "code": _ErrorCode.BROKER_UNAVAILABLE}
     assert "private failure detail" not in json.dumps(payload)
-
-
-@pytest.mark.anyio
-async def test_delegate_remains_fail_closed_until_launcher_integration() -> None:
-    payload = json.loads(
-        await handler_module.delegate_evidence_reader("pr-source-reader", {"prompt": "read"})
-    )
-
-    assert payload["status"] == "unsupported"
-    assert payload["code"] == "evidence_reader_authority_uninitialized"

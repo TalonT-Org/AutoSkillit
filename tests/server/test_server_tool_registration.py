@@ -255,6 +255,7 @@ class TestToolRegistration:
     async def test_headless_enable_reveals_only_headless_tagged_tools(self, headless_enabled):
         from fastmcp.client import Client
 
+        from autoskillit.core import EVIDENCE_READER_TOOLS, HEADLESS_TOOLS
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
@@ -262,8 +263,9 @@ class TestToolRegistration:
             visible = {t.name for t in await client.list_tools()}
         assert "test_check" in visible
         assert "delegate_evidence_reader" in visible
+        assert visible.isdisjoint(EVIDENCE_READER_TOOLS)
         # Kitchen-only tools (no headless tag) must NOT be revealed
-        kitchen_only = GATED_TOOLS - {"test_check"}
+        kitchen_only = GATED_TOOLS - HEADLESS_TOOLS
         for name in kitchen_only:
             assert name not in visible, f"{name} should not be revealed by headless-only enable"
 

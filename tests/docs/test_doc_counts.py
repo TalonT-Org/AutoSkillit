@@ -99,6 +99,26 @@ def _count_headless_tools() -> int:
     return total
 
 
+def test_doc_count_script_counts_overlapping_gated_and_headless_tools_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from scripts import check_doc_counts
+
+    registry = tmp_path / "registries.py"
+    registry.write_text(
+        """
+GATED_TOOLS: frozenset[str] = frozenset({"gated", "shared"})
+HEADLESS_TOOLS: frozenset[str] = frozenset({"headless", "shared"})
+FREE_RANGE_TOOLS: frozenset[str] = frozenset({"free"})
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_doc_counts, "TYPES_FILE", registry)
+
+    assert check_doc_counts.count_tools() == (3, 1)
+
+
 def _count_skills_total() -> int:
     tier1 = sum(1 for p in (SRC_DIR / "skills").iterdir() if p.is_dir())
     tier23 = sum(1 for p in (SRC_DIR / "skills_extended").iterdir() if p.is_dir())

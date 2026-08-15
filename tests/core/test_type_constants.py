@@ -517,8 +517,8 @@ def test_evidence_reader_tools_are_exact_internal_subset() -> None:
     )
     assert EVIDENCE_READER_TOOLS <= GATED_TOOLS
     assert EVIDENCE_READER_TOOLS.isdisjoint(FREE_RANGE_TOOLS | HEADLESS_TOOLS)
-    assert "delegate_evidence_reader" in HEADLESS_TOOLS
-    assert "delegate_evidence_reader" not in FREE_RANGE_TOOLS | GATED_TOOLS
+    assert "delegate_evidence_reader" in HEADLESS_TOOLS & GATED_TOOLS
+    assert "delegate_evidence_reader" not in FREE_RANGE_TOOLS
     assert "evidence-reader" in ALL_VISIBILITY_TAGS
     assert {tool_name: TOOL_SUBSET_TAGS[tool_name] for tool_name in EVIDENCE_READER_TOOLS} == {
         "read_authorized_artifact": frozenset({"evidence-reader"}),

@@ -29,6 +29,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 from autoskillit.execution.backends._codex.explorer_projection import (
+    _canonical_explorer_mcp_transport,
     _render_direct_role_mcp_lines,
 )
 from autoskillit.execution.backends._codex_catalog import project_codex_catalog
@@ -96,10 +97,30 @@ _RESULT_KEYS = frozenset(
 )
 
 
+def evidence_reader_provider_environment() -> dict[str, str]:
+    """Return only positive provider authentication and transport variables."""
+
+    return {name: os.environ[name] for name in _PROVIDER_ENV if os.environ.get(name)}
+
+
+def evidence_reader_mcp_transport(config_path: Path) -> dict[str, object]:
+    """Project the current local broker transport with only reader authority env."""
+
+    transport = _canonical_explorer_mcp_transport(config_path)
+    projected = {key: value for key, value in transport.items() if key in _TRANSPORT_KEYS}
+    projected["env_vars"] = sorted(_EVIDENCE_ENV)
+    return projected
+
+
 class EvidenceReaderInvocationLike(Protocol):
-    invocation_dir: Path
-    environment: tuple[tuple[str, str], ...]
-    expires_at: float
+    @property
+    def invocation_dir(self) -> Path: ...
+
+    @property
+    def environment(self) -> tuple[tuple[str, str], ...]: ...
+
+    @property
+    def expires_at(self) -> float: ...
 
 
 class EvidenceReaderLaunchError(RuntimeError):

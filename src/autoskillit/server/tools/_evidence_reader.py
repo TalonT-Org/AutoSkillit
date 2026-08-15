@@ -567,6 +567,15 @@ def _scope_digest(authority: Mapping[str, Any]) -> str:
     )
 
 
+def evidence_reader_scope_digest(
+    tool_ctx: ToolContext,
+    environment: Mapping[str, str],
+) -> str:
+    """Return the verified invocation-wide scope expected from the child."""
+
+    return _scope_digest(_open_authority(tool_ctx, environment).authority)
+
+
 def _page_end(content: bytes, offset: int, byte_limit: int, line_limit: int) -> int:
     end = min(len(content), offset + byte_limit)
     while end > offset:

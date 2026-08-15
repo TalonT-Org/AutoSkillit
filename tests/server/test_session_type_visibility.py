@@ -180,7 +180,7 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_skill_headless_enables_headless_tag(self, monkeypatch):
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -192,7 +192,7 @@ class TestSessionTypeVisibility:
         assert "test_check" in tool_names, "test_check should be visible for skill+headless"
         assert "post_pr_review" in tool_names
         assert "delegate_evidence_reader" in tool_names
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 
     @pytest.mark.anyio
@@ -220,7 +220,7 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_skill_headless_without_auto_gate_only_headless(self, monkeypatch):
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -231,12 +231,12 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for skill+headless"
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 
     @pytest.mark.anyio
     async def test_skill_headless_auto_gate_zero_only_headless(self, monkeypatch):
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -247,7 +247,7 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for skill+headless+gate=0"
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, (
                 f"{name} (kitchen) should be hidden for skill+headless+gate=0"
             )

@@ -270,10 +270,7 @@ def annotate_pr_diff(
             ) = provider_authority
             if checkout_head_sha != head_sha:
                 raise RuntimeError("checkout head does not match provider head authority")
-            # Probe whether the local base ref exists; rc=1 is benign
-            # (the local base branch simply is not present locally, which is
-            # expected when working off a shallow or freshly-cloned checkout).
-            # rc >= 2 indicates a real git failure and _run raises.
+            # rc=1 (ref missing) is benign; rc>=2 is a real failure _run raises on.
             _run(
                 [
                     "git",

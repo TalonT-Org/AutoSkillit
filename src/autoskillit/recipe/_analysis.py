@@ -113,39 +113,60 @@ def _must_definition_facts(
             predecessor_edges[edge.target].append((source, edge))
 
     entry = next(iter(recipe.steps))
-    facts: dict[str, frozenset[str] | None] = {name: None for name in recipe.steps}
+    reachable = {entry}
+    reachability_queue: deque[str] = deque([entry])
+    while reachability_queue:
+        source = reachability_queue.popleft()
+        for edge in raw_edges[source]:
+            if edge.target not in reachable:
+                reachable.add(edge.target)
+                reachability_queue.append(edge.target)
+
+    capture_domain = frozenset(
+        capture
+        for name in reachable
+        for capture in (*recipe.steps[name].capture, *recipe.steps[name].capture_list)
+    )
+    facts = {name: capture_domain for name in reachable}
     facts[entry] = frozenset()
-    incoming: dict[tuple[str, RouteEdge], frozenset[str]] = {}
-    queue: deque[str] = deque([entry])
+    queue: deque[str] = deque(name for name in recipe.steps if name in reachable)
+    queued = set(queue)
     while queue:
         source = queue.popleft()
-        source_facts = facts[source]
-        if source_facts is None:
-            continue
-        captures = frozenset(recipe.steps[source].capture) | frozenset(
-            recipe.steps[source].capture_list
-        )
+        queued.remove(source)
         for edge in raw_edges[source]:
-            transferred = source_facts | captures if edge.capture_available else source_facts
-            incoming[(source, edge)] = transferred
             target = edge.target
-            if target == entry:
+            if target == entry or target not in reachable:
                 continue
-            known = [
-                incoming[(predecessor, predecessor_edge)]
+            incoming = [
+                (
+                    facts[predecessor]
+                    | frozenset(recipe.steps[predecessor].capture)
+                    | frozenset(recipe.steps[predecessor].capture_list)
+                    if predecessor_edge.capture_available
+                    else facts[predecessor]
+                )
                 for predecessor, predecessor_edge in predecessor_edges[target]
-                if (predecessor, predecessor_edge) in incoming
+                if predecessor in reachable
             ]
-            updated = frozenset.intersection(*known) if known else frozenset()
+            updated = frozenset.intersection(*incoming) if incoming else frozenset()
             if facts[target] != updated:
                 facts[target] = updated
-                queue.append(target)
+                if target not in queued:
+                    queue.append(target)
+                    queued.add(target)
 
     return (
-        {name: value for name, value in facts.items() if value is not None},
+        facts,
         {
-            name: tuple(sorted(edges, key=lambda item: (item[0], item[1].edge_type)))
+            name: tuple(
+                sorted(
+                    (edge for edge in edges if edge[0] in reachable),
+                    key=lambda item: (item[0], item[1].edge_type),
+                )
+            )
             for name, edges in predecessor_edges.items()
+            if name in reachable
         },
     )
 

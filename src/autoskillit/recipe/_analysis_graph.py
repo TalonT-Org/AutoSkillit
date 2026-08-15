@@ -229,19 +229,22 @@ def _build_raw_step_edges(recipe: Recipe) -> dict[str, tuple[RouteEdge, ...]]:
                 RouteEdge(edge_type="configuration_skip", target=step.on_skip)
             )
 
-    predecessors: dict[str, set[str]] = {name: set() for name in step_names}
+    predecessors: dict[str, list[tuple[str, RouteEdge]]] = {name: [] for name in step_names}
     for source, edges in edges_by_source.items():
         for edge in edges:
-            predecessors[edge.target].add(source)
+            predecessors[edge.target].append((source, edge))
 
     for name, step in recipe.steps.items():
         if not step.skip_when_false or step.on_skip not in step_names:
             continue
-        for predecessor in sorted(predecessors[name]):
+        for predecessor, predecessor_edge in sorted(
+            predecessors[name], key=lambda item: (item[0], item[1].edge_type)
+        ):
             edges_by_source[predecessor].append(
                 RouteEdge(
                     edge_type="configuration_skip_bypass",
                     target=step.on_skip,
+                    capture_available=predecessor_edge.capture_available,
                 )
             )
 
@@ -253,11 +256,14 @@ def _build_raw_step_edges(recipe: Recipe) -> dict[str, tuple[RouteEdge, ...]]:
         edges_by_source[name].append(
             RouteEdge(edge_type="configuration_sub_recipe", target=next_step)
         )
-        for predecessor in sorted(predecessors[name]):
+        for predecessor, predecessor_edge in sorted(
+            predecessors[name], key=lambda item: (item[0], item[1].edge_type)
+        ):
             edges_by_source[predecessor].append(
                 RouteEdge(
                     edge_type="configuration_sub_recipe_bypass",
                     target=next_step,
+                    capture_available=predecessor_edge.capture_available,
                 )
             )
 

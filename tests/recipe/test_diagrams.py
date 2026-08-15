@@ -187,7 +187,7 @@ def test_raw_step_graph_preserves_capturing_and_bypass_edges() -> None:
     assert any(
         edge.edge_type == "configuration_skip_bypass"
         and edge.target == "consumer"
-        and not edge.capture_available
+        and edge.capture_available
         for edge in raw_edges["start"]
     )
     assert _build_step_graph(recipe)["start"] == {"optional", "consumer"}

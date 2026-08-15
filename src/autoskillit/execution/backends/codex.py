@@ -452,8 +452,7 @@ class CodexEnvPolicy:
                 for key, value in filtered_extras.items()
                 if key != CODEX_STARTUP_TRACE_ENV_VAR
             )
-        out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")
-        # This is an outer-cook control signal, never child or nested-session state.
+        out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")  # Outer-cook control only.
         out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
         if required is not None:
             missing = required - frozenset(out)

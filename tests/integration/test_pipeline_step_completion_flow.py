@@ -86,10 +86,10 @@ async def _deliver_run_skill_result(tmp_path, tool_ctx, result: SkillResult) -> 
     tool_ctx.executor = AsyncMock()
     tool_ctx.executor.run = AsyncMock(return_value=result)
 
-    async def placeholder() -> str:
-        return "unused"
+    async def registered_run_skill() -> str:
+        raise AssertionError("registered run_skill callable must not execute")
 
-    registered = FunctionTool.from_function(placeholder, name="run_skill")
+    registered = FunctionTool.from_function(registered_run_skill, name="run_skill")
     middleware = RunSkillCompletionMiddleware(
         SimpleNamespace(get_tool=AsyncMock(return_value=registered))  # type: ignore[arg-type]
     )

@@ -59,13 +59,14 @@ def fleet_runtime():
 @pytest.mark.integration
 @pytest.mark.anyio
 async def test_implementation_food_truck_real_subprocess_tool_surface(fleet_runtime):
-    from autoskillit.core import UNGATED_TOOLS
+    from autoskillit.core import EVIDENCE_READER_TOOLS, UNGATED_TOOLS
 
     visible = await fleet_runtime("implementation")
     expected = compute_food_truck_tool_surface("implementation")
 
     extras = visible - expected - UNGATED_TOOLS
     assert not extras, f"Unexpected tools visible for implementation food truck: {extras}"
+    assert EVIDENCE_READER_TOOLS.isdisjoint(visible)
     for name in expected:
         assert name in visible, f"{name} should be visible for implementation food truck"
 
@@ -73,12 +74,13 @@ async def test_implementation_food_truck_real_subprocess_tool_surface(fleet_runt
 @pytest.mark.integration
 @pytest.mark.anyio
 async def test_merge_prs_food_truck_real_subprocess_tool_surface(fleet_runtime):
-    from autoskillit.core import UNGATED_TOOLS
+    from autoskillit.core import EVIDENCE_READER_TOOLS, UNGATED_TOOLS
 
     visible = await fleet_runtime("merge-prs")
     expected = compute_food_truck_tool_surface("merge-prs")
 
     extras = visible - expected - UNGATED_TOOLS
     assert not extras, f"Unexpected tools visible for merge-prs food truck: {extras}"
+    assert EVIDENCE_READER_TOOLS.isdisjoint(visible)
     for name in expected:
         assert name in visible, f"{name} should be visible for merge-prs food truck"

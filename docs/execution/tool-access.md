@@ -12,12 +12,12 @@ session types can see each tool.
 │  reload_session                                         │
 │  Always visible — no gating, no headless restriction    │
 ├─────────────────────────────────────────────────────────┤
-│  HEADLESS-TAGGED  (7 tools)                             │
+│  HEADLESS-TAGGED  (8 tools)                             │
 │  test/check, commit, audit, and review worker tools     │
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Also carries the kitchen tag; hidden in plain sessions │
 ├─────────────────────────────────────────────────────────┤
-│  KITCHEN  (44 kitchen-only tools)                       │
+│  KITCHEN  (45 kitchen-only tools)                       │
 │  All remaining tools                                    │
 │  Hidden at startup; revealed when open_kitchen is called│
 └─────────────────────────────────────────────────────────┘
@@ -39,6 +39,10 @@ session types can see each tool.
 Note: Disabled subsets further restrict visibility within the Kitchen tier — their tools
 remain hidden even after `open_kitchen`.
 
+The two authenticated evidence-reader broker tools belong to a separate private surface.
+They are not kitchen, free-range, or fleet tools and remain hidden until a future verified
+reader binding enables the `evidence-reader` tag.
+
 Visibility is not authority. At the application and hook layers, `run_skill` is restricted
 to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks through
 `dispatch_food_truck`; they retain `run_cmd` and `run_python` but cannot call `run_skill`.
@@ -48,8 +52,9 @@ to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks t
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 50 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 52 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Most also carry `kitchen`; `post_pr_review` is headless-only and deliberately ungated. |
+| `evidence-reader` | Authenticated artifact brokers enabled only by a verified reader binding. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
 | `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
 | `clone` | Functional category: Clone-based isolation tools. Can be disabled as a subset. |
@@ -61,14 +66,14 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 51 kitchen-tagged tools (including the 6 headless-tagged tools)
+   → hides 52 kitchen-tagged tools (including the 7 headless-tagged tools)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled
 
 3. If AUTOSKILLIT_HEADLESS=1:
    mcp.enable(tags={"headless"})
-   → reveals the seven HEADLESS_TOOLS entries
+   → reveals the eight HEADLESS_TOOLS entries
 
 4. When open_kitchen is called:
    ctx.enable_components(tags={"kitchen"})   → reveals kitchen-tagged tools (not fleet)
@@ -95,7 +100,8 @@ missing kitchen visibility.
 All 75 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
-GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
+ER = `evidence-reader`, GH = `github`, CI = `ci`, CL = `clone`,
+TL = `telemetry`, FL = `fleet`
 
 ---
 
@@ -122,6 +128,17 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 | `write_audit_semantic_result` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed audit semantics |
 | `write_standalone_audit_evidence` | AS, K, HL | `server/tools_audit_artifacts.py` | Standalone evidence |
 | `write_audit_disposition_bundle` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed disposition bundle |
+| `post_pr_review` | AS, HL, GH | `server/tools_pr_ops.py` | PR review worker |
+| `delegate_evidence_reader` | AS, K, HL | `server/tools_evidence_reader.py` | Authenticated reader delegation |
+
+---
+
+### AUTHENTICATED EVIDENCE READER
+
+| Tool | Tags | Source File | Notes |
+|------|------|-------------|-------|
+| `read_authorized_artifact` | AS, ER | `server/tools_evidence_reader.py` | Bounded artifact read |
+| `get_authorized_artifact_page` | AS, ER | `server/tools_evidence_reader.py` | Authorized page retrieval |
 
 ---
 
@@ -238,7 +255,9 @@ dynamically gated until opening completes. The bounded client snapshot and
 fresh/resume behavior are documented in
 [Claude startup readiness](claude-startup-readiness.md).
 
-**Total: 52 tools** — 4 Free Range + 11 Fleet + 37 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
+**Total: 75 registered tools**. The 52 kitchen-tagged tools include seven of the eight
+headless tools. The two authenticated evidence-reader brokers are excluded from the
+kitchen, free-range, and fleet counts.
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](../skills/subsets.md).

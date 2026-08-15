@@ -84,7 +84,12 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_fleet_enables_fleet_tag(self, monkeypatch):
-        from autoskillit.core import FLEET_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
+        from autoskillit.core import (
+            EVIDENCE_READER_TOOLS,
+            FLEET_TOOLS,
+            GATED_TOOLS,
+            HEADLESS_TOOLS,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
@@ -100,6 +105,7 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} should be hidden for fleet session"
         for name in HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} should be hidden for fleet session"
+        assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
     @pytest.mark.anyio
     async def test_fleet_tools_do_not_carry_kitchen_tag(self, monkeypatch):
@@ -137,7 +143,12 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_orchestrator_headless_enables_kitchen_tag(self, monkeypatch):
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+        from autoskillit.core import (
+            EVIDENCE_READER_TOOLS,
+            FLEET_DISPATCH_TOOLS,
+            FLEET_TOOLS,
+            GATED_TOOLS,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -146,8 +157,10 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
+        kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+        for name in kitchen_tools:
             assert name in tool_names, f"{name} should be visible for orchestrator+headless"
+        assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
     @pytest.mark.anyio
     async def test_orchestrator_interactive_no_pre_reveal(self, monkeypatch):
@@ -178,6 +191,7 @@ class TestSessionTypeVisibility:
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for skill+headless"
         assert "post_pr_review" in tool_names
+        assert "delegate_evidence_reader" in tool_names
         for name in GATED_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 
@@ -278,7 +292,12 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_food_truck_without_tool_tags_sees_full_kitchen(self, monkeypatch):
         """ORCHESTRATOR+HEADLESS without FOOD_TRUCK_TOOL_TAGS falls back to full kitchen."""
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+        from autoskillit.core import (
+            EVIDENCE_READER_TOOLS,
+            FLEET_DISPATCH_TOOLS,
+            FLEET_TOOLS,
+            GATED_TOOLS,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -289,8 +308,10 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
 
-        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
+        kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+        for name in kitchen_tools:
             assert name in tool_names
+        assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
     @pytest.mark.anyio
     async def test_cook_interactive_unaffected_by_tool_tags(self, monkeypatch):

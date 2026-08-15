@@ -33,17 +33,21 @@ When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. I
 AutoSkillit uses a three-tier tool visibility model:
 
 - **Free-range (4 tools)**: Always visible — `open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`
-- **Headless tools (7 tools)**: Revealed in headless sessions via
+- **Headless tools (8 tools)**: Revealed in headless sessions via
   `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`, `commit_files`,
   `write_audit_semantic_result`, `write_standalone_audit_evidence`,
-  `write_audit_disposition_bundle`, and `post_pr_review`.
-- **Kitchen-tagged tools (50 tools total)**: Gated behind `open_kitchen` — `run_skill`,
-  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 44 more.
-  Six kitchen tools also carry the `headless` tag and are
+  `write_audit_disposition_bundle`, `post_pr_review`, and `delegate_evidence_reader`.
+- **Kitchen-tagged tools (52 tools total)**: Gated behind `open_kitchen` — `run_skill`,
+  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 46 more.
+  Seven kitchen tools also carry the `headless` tag and are
   additionally pre-enabled in headless sessions. `post_pr_review` is headless-only and
   deliberately not application-gated.
 
-When you call `open_kitchen` (automatically done by `order`), all 51 kitchen-tagged tools become
+The two authenticated evidence-reader broker tools are outside the kitchen, free-range,
+and fleet surfaces. They remain hidden unless a verified evidence-reader binding enables
+their dedicated visibility tag.
+
+When you call `open_kitchen` (automatically done by `order`), all 52 kitchen-tagged tools become
 available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
 cluttering the tool list.
 
@@ -75,19 +79,20 @@ AutoSkillit supports four session modes with different tool and skill visibility
 
 - **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
   loaded. Sees 4 Free Range MCP tools (`open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`) and Tier 1 skills only
-  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 51 kitchen-tagged MCP
+  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 52 kitchen-tagged MCP
   tools become available.
 
 - **`$ autoskillit cook`**: Interactive development session. Sees all three skill tiers
   (Tier 1+2+3) via an ephemeral session directory. MCP tools are initially ungated (same as
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
-- **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
-  all 75 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
+- **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup.
+  The authenticated evidence-reader brokers remain hidden among the 75 registered MCP tools
+  until a verified reader binding enables them. All skill tiers are accessible. The orchestrator
   delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
 - **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 4 always-visible
-  tools plus the 7 headless-tagged tools listed above. Cannot call `run_skill`, `run_cmd`, or `run_python`
+  tools plus the 8 headless-tagged tools listed above. Cannot call `run_skill`, `run_cmd`, or `run_python`
   — enforced by hooks and code guards. Has access to all native Claude Code tools (Read, Write,
   Bash, etc.) and all skill tiers via `--add-dir skills_extended/`.
 

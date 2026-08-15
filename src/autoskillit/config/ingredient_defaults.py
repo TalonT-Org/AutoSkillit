@@ -58,6 +58,14 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("Agents", ("unlock_agent_pack",)),
     (
+        "Evidence Readers",
+        (
+            "delegate_evidence_reader",
+            "read_authorized_artifact",
+            "get_authorized_artifact_page",
+        ),
+    ),
+    (
         "Repository Exploration",
         (
             "enable_exploration",

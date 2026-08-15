@@ -67,6 +67,8 @@ def test_gated_tools_contains_expected_names():
         "get_exploration_page",
         "resume_exploration_context",
         "inspect_session_logs",
+        "read_authorized_artifact",
+        "get_authorized_artifact_page",
     }
     assert GATED_TOOLS == expected
 
@@ -198,6 +200,7 @@ def test_all_tool_sets_disjoint_and_complete():
     assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert "post_pr_review" in HEADLESS_TOOLS
+    assert "delegate_evidence_reader" in HEADLESS_TOOLS
 
 
 def test_worker_tools_removed_from_core():

@@ -222,7 +222,7 @@ class TestSyntheticPackScenarios:
     ):
         from fastmcp.client import Client
 
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+        from autoskillit.core import EVIDENCE_READER_TOOLS, KITCHEN_GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -234,11 +234,12 @@ class TestSyntheticPackScenarios:
             tools = await client.list_tools()
         visible = {t.name for t in tools}
 
-        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
+        for name in KITCHEN_GATED_TOOLS:
             assert name in visible, (
                 f"{name} should be visible under full kitchen fallback"
                 " (empty FOOD_TRUCK_TOOL_TAGS)"
             )
+        assert EVIDENCE_READER_TOOLS.isdisjoint(visible)
 
     @pytest.mark.anyio
     async def test_food_truck_with_single_pack_sees_kitchen_core_plus_pack(self, monkeypatch):
@@ -319,9 +320,12 @@ async def test_no_tool_has_bare_kitchen_tag_only() -> None:
 
 
 def test_kitchen_core_and_packs_partition_kitchen_gated_tools() -> None:
-    from autoskillit.core.types._type_constants_registries import TOOL_SUBSET_TAGS
+    from autoskillit.core.types._type_constants_registries import (
+        EVIDENCE_READER_TOOLS,
+        TOOL_SUBSET_TAGS,
+    )
 
-    all_tools_in_subsets = set(TOOL_SUBSET_TAGS.keys())
+    all_tools_in_subsets = set(TOOL_SUBSET_TAGS.keys()) - EVIDENCE_READER_TOOLS
     union_of_packs: set[str] = set()
     for tools in TOOLS_BY_PACK.values():
         union_of_packs |= tools

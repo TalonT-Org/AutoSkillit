@@ -132,7 +132,7 @@ class TestToolRegistration:
         """Agent tool declarations must name real FastMCP-registered tools."""
         from autoskillit.server import mcp
 
-        mcp.enable(tags={"exploration", "kitchen-core"}, components={"tool"})
+        mcp.enable(tags={"evidence-reader", "exploration", "kitchen-core"}, components={"tool"})
         registered = {tool.name for tool in await mcp.list_tools()}
 
         for definition in load_bundled_agent_definitions():
@@ -176,7 +176,7 @@ class TestToolRegistration:
     @pytest.mark.anyio
     async def test_kitchen_tools_have_autoskillit_and_kitchen_tags(self, kitchen_enabled):
         """Every non-fleet tool in GATED_TOOLS carries both 'autoskillit' and 'kitchen' tags."""
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+        from autoskillit.core import EVIDENCE_READER_TOOLS, FLEET_DISPATCH_TOOLS, FLEET_TOOLS
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
@@ -185,7 +185,8 @@ class TestToolRegistration:
         mcp.enable(tags={"headless"})
 
         all_tools = {t.name: t for t in await mcp.list_tools()}
-        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
+        kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+        for name in kitchen_tools:
             tool = all_tools.get(name)
             assert tool is not None, f"Gated tool '{name}' not registered on server"
             assert "autoskillit" in tool.tags, f"Gated tool '{name}' missing 'autoskillit' tag"
@@ -225,6 +226,27 @@ class TestToolRegistration:
         assert "autoskillit" in tc.tags
 
     @pytest.mark.anyio
+    async def test_evidence_reader_tools_have_exact_visibility_tags(self):
+        from autoskillit.server import mcp
+
+        mcp.enable(tags={"evidence-reader", "headless"})
+        all_tools = {tool.name: tool for tool in await mcp.list_tools()}
+        assert all_tools["delegate_evidence_reader"].tags == {
+            "autoskillit",
+            "headless",
+            "kitchen",
+            "kitchen-core",
+        }
+        assert all_tools["read_authorized_artifact"].tags == {
+            "autoskillit",
+            "evidence-reader",
+        }
+        assert all_tools["get_authorized_artifact_page"].tags == {
+            "autoskillit",
+            "evidence-reader",
+        }
+
+    @pytest.mark.anyio
     async def test_headless_enable_reveals_only_headless_tagged_tools(self, headless_enabled):
         from fastmcp.client import Client
 
@@ -234,6 +256,7 @@ class TestToolRegistration:
         async with Client(mcp) as client:
             visible = {t.name for t in await client.list_tools()}
         assert "test_check" in visible
+        assert "delegate_evidence_reader" in visible
         # Kitchen-only tools (no headless tag) must NOT be revealed
         kitchen_only = GATED_TOOLS - {"test_check"}
         for name in kitchen_only:
@@ -260,7 +283,7 @@ class TestToolRegistration:
     async def test_kitchen_core_and_packs_partition_kitchen_gated_tools(
         self, kitchen_enabled
     ) -> None:
-        """Every gated/headless tool has kitchen-core and/or a pack tag — full coverage."""
+        """Every gated/headless tool has a functional visibility classification."""
         from autoskillit.core.types import HEADLESS_TOOLS, PACK_REGISTRY
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
@@ -268,9 +291,10 @@ class TestToolRegistration:
         mcp.enable(tags={"fleet"})
         mcp.enable(tags={"fleet-dispatch"})
         mcp.enable(tags={"headless"})
+        mcp.enable(tags={"evidence-reader"})
 
         all_gated = GATED_TOOLS | HEADLESS_TOOLS
-        pack_tags = frozenset(PACK_REGISTRY.keys())
+        pack_tags = frozenset(PACK_REGISTRY.keys()) | {"evidence-reader"}
 
         all_tools = {t.name: t for t in await mcp.list_tools()}
         missing: list[str] = []
@@ -281,7 +305,7 @@ class TestToolRegistration:
                 missing.append(f"{name}: tags={sorted(tool.tags)}")
 
         assert not missing, (
-            "Tools in GATED_TOOLS|HEADLESS_TOOLS without kitchen-core or pack tag:\n"
+            "Tools in GATED_TOOLS|HEADLESS_TOOLS without a functional visibility tag:\n"
             + "\n".join(f"  {m}" for m in missing)
         )
 

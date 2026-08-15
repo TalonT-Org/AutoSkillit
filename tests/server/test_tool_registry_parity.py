@@ -21,14 +21,6 @@ from autoskillit.core import (
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
-_PENDING_EVIDENCE_READER_HANDLERS = frozenset(
-    {
-        "delegate_evidence_reader",
-        "get_authorized_artifact_page",
-        "read_authorized_artifact",
-    }
-)
-
 
 def _handler_signatures(
     tools_dir: Path | None = None,
@@ -79,9 +71,7 @@ def test_handler_collection_rejects_duplicate_registrations(tmp_path: Path) -> N
 
 
 def test_registry_matches_handler_names_bidirectionally() -> None:
-    handlers = set(_handler_signatures())
-    assert _PENDING_EVIDENCE_READER_HANDLERS.isdisjoint(handlers)
-    assert set(TOOL_REGISTRY) == handlers | _PENDING_EVIDENCE_READER_HANDLERS
+    assert set(TOOL_REGISTRY) == set(_handler_signatures())
 
 
 def test_tool_builder_rejects_roles_for_unknown_parameters() -> None:

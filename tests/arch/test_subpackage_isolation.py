@@ -982,7 +982,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
         "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
-        "execution": 20,  # +session_index strict byte-bounded retained-index reads (#4514)
+        "execution": 21,  # +session_index strict byte-bounded retained-index reads (#4514)
+        # +evidence_reader sterile reader lifecycle (#4585)
         # +agent_definition native-role authority (#4443).
         "core": 32,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
         # +GitHub review types, portable launch authority, stable contract,
@@ -1026,7 +1027,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         # +_explorer_conformance version-bound live attestation authority (#4443)
-        "execution/backends": 19,  # +execution identity parser and explorer dispatch adapter
+        "execution/backends": 20,  # +execution identity parser and explorer dispatch adapter
+        # +_codex_catalog shared validated catalog projection (#4585)
         "smoke_utils": 12,  # +_review_design split from _review
     }
     violations: list[str] = []

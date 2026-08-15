@@ -339,7 +339,8 @@ def _run_bounded(
     except OSError as exc:
         raise EvidenceReaderLaunchError("codex_unavailable") from exc
     output = {"stdout": bytearray(), "stderr": bytearray()}
-    selector = selectors.DefaultSelector()
+    selector_factory = selectors.DefaultSelector
+    selector = selector_factory()
     try:
         assert owner.process.stdout is not None and owner.process.stderr is not None
         selector.register(owner.process.stdout, selectors.EVENT_READ, "stdout")

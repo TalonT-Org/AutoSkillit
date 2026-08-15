@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import logging
 import os
 import re
 import sqlite3
@@ -307,6 +308,7 @@ class TestReservation:
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        caplog.set_level(logging.DEBUG)
         authority_a = AuditAdmissionStoreAuthority(
             database_path=(tmp_path / "a" / "ledger.sqlite3").resolve(),
             expected_owner_id=os.getuid(),
@@ -361,6 +363,7 @@ class TestReservation:
         caplog: pytest.LogCaptureFixture,
         scenario: str,
     ) -> None:
+        caplog.set_level(logging.DEBUG)
         authority = _authority(tmp_path)
         ledger = DefaultAuditAdmissionLedger(authority)
         execution_id = RecipeExecutionId("exec-1")

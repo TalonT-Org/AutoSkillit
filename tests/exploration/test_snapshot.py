@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 import time
 from dataclasses import replace
@@ -202,7 +203,7 @@ def test_stable_artifact_capture_returns_current_worktree_bytes(
     assert captured.content == expected_content
     assert captured.size == len(expected_content)
     assert captured.content_digest == (f"sha256:{hashlib.sha256(expected_content).hexdigest()}")
-    assert captured.repository_identity_digest.startswith("sha256:")
+    assert re.fullmatch(r"[0-9a-f]{64}", captured.repository_identity_digest)
     assert captured.revision
     assert captured.snapshot_digest.startswith("sha256:")
     if state == "untracked":
@@ -341,7 +342,7 @@ def test_stable_artifact_capture_stops_after_bounded_instability(
     with pytest.raises(ArtifactCaptureError) as raised:
         _capture_artifact(root, "tracked.txt", max_attempts=2)
 
-    assert raised.value.status == "stale"
+    assert raised.value.status == SnapshotCaptureStatus.STALE
     assert raised.value.stop_reason
     assert calls == 2
 

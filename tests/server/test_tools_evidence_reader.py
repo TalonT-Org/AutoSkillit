@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import stat
 import time
 from collections.abc import Callable
@@ -11,7 +13,9 @@ from typing import cast
 
 import pytest
 
+import autoskillit.server as server_module
 import autoskillit.server.tools._evidence_reader as reader_module
+import autoskillit.server.tools.tools_evidence_reader as handler_module
 from autoskillit.core import (
     DIRECT_PREFIX,
     EVIDENCE_READER_AUTHORITY_ENV_VAR,
@@ -24,6 +28,7 @@ from autoskillit.server.tools._evidence_reader import (
     EvidenceReaderError,
     EvidenceReaderInvocation,
     EvidenceReaderLimits,
+    EvidenceReaderPage,
     create_evidence_reader_invocation,
     load_evidence_reader_receipts,
     read_evidence_reader_page,
@@ -51,6 +56,7 @@ class _ErrorCode(StrEnum):
     AUTHORITY_EXPIRED = "authority_expired"
     AUTHORITY_TAMPERED = "authority_tampered"
     AUTHORITY_UNAVAILABLE = "authority_unavailable"
+    BROKER_UNAVAILABLE = "evidence_reader_broker_unavailable"
     CALL_BUDGET_EXHAUSTED = "call_budget_exhausted"
     CALL_IN_FLIGHT = "call_in_flight"
     CAPABILITY_INVALID = "capability_invalid"
@@ -365,3 +371,196 @@ def test_revocation_is_synchronous_and_leaves_verified_absence(tmp_path: Path) -
         _ErrorCode.AUTHORITY_UNAVAILABLE,
         lambda: load_evidence_reader_receipts(context, environment),
     )
+
+
+def _bind_handler_authority(
+    context: ToolContext,
+    invocation: EvidenceReaderInvocation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, str]:
+    environment = dict(invocation.environment)
+    monkeypatch.setattr(server_module, "_get_ctx", lambda: context)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    return environment
+
+
+@pytest.mark.anyio
+async def test_brokers_serve_initial_and_continuation_pages_with_exact_citations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = "αlpha\nβeta\ngamma\n".encode()
+    context, invocation = _create(tmp_path, capture=_capture(tmp_path, content))
+    _bind_handler_authority(context, invocation, monkeypatch)
+
+    initial_raw = await handler_module.read_authorized_artifact(page_size=6)
+    initial = json.loads(initial_raw)
+    assert initial == {
+        "status": "ok",
+        "content": "αlpha",
+        "citation_id": initial["citation_id"],
+        "byte_start": 0,
+        "byte_end": 6,
+        "line_start": 1,
+        "line_end": 1,
+        "snapshot_digest": "sha256:snapshot",
+        "continuation": initial["continuation"],
+    }
+    assert initial["continuation"]
+
+    continued_raw = await handler_module.get_authorized_artifact_page(
+        initial["continuation"],
+        page_size=6,
+    )
+    continued = json.loads(continued_raw)
+    assert continued["status"] == "ok"
+    assert continued["byte_start"] == initial["byte_end"]
+    assert continued["citation_id"] != initial["citation_id"]
+    assert continued["snapshot_digest"] == initial["snapshot_digest"]
+
+
+@pytest.mark.anyio
+async def test_brokers_apply_default_explicit_page_sizes_deadlines_and_private_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, invocation = _create(tmp_path)
+    expected_environment = _bind_handler_authority(context, invocation, monkeypatch)
+    monkeypatch.setenv("AUTOSKILLIT_UNTRUSTED_REQUEST_OVERRIDE", "attacker-value")
+    calls: list[dict[str, object]] = []
+
+    def observe_bound_read(
+        observed_context: ToolContext,
+        environment: dict[str, str],
+        *,
+        canonical_tool: str,
+        page_size: int,
+        continuation: str | None,
+        deadline: float,
+    ) -> EvidenceReaderPage:
+        calls.append(
+            {
+                "context": observed_context,
+                "environment": environment,
+                "canonical_tool": canonical_tool,
+                "page_size": page_size,
+                "continuation": continuation,
+                "deadline": deadline,
+            }
+        )
+        return EvidenceReaderPage("page", "citation", "next", 1, 5, 2, 2, "snapshot")
+
+    monkeypatch.setattr(handler_module, "read_bound_evidence_reader_page", observe_bound_read)
+    started = time.monotonic()
+
+    initial = json.loads(await handler_module.read_authorized_artifact())
+    continued = json.loads(
+        await handler_module.get_authorized_artifact_page("opaque", page_size=7)
+    )
+
+    assert initial == {
+        "status": "ok",
+        "content": "page",
+        "citation_id": "citation",
+        "byte_start": 1,
+        "byte_end": 5,
+        "line_start": 2,
+        "line_end": 2,
+        "snapshot_digest": "snapshot",
+        "continuation": "next",
+    }
+    assert continued == initial
+    assert [call["page_size"] for call in calls] == [64_000, 7]
+    assert [call["continuation"] for call in calls] == [None, "opaque"]
+    assert [call["canonical_tool"] for call in calls] == [
+        f"{DIRECT_PREFIX}read_authorized_artifact",
+        f"{DIRECT_PREFIX}get_authorized_artifact_page",
+    ]
+    assert all(call["context"] is context for call in calls)
+    assert all(call["environment"] == expected_environment for call in calls)
+    assert all(
+        started < call["deadline"] <= started + handler_module._BROKER_TIMEOUT_SECONDS + 0.1
+        for call in calls
+    )
+
+    invalid = json.loads(await handler_module.read_authorized_artifact(page_size=0))
+    assert invalid == {"status": "error", "code": "page_size_invalid"}
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    [
+        ("capability", _ErrorCode.CAPABILITY_INVALID),
+        ("tamper", _ErrorCode.AUTHORITY_TAMPERED),
+        ("expiry", _ErrorCode.AUTHORITY_EXPIRED),
+        ("replay", _ErrorCode.CONTINUATION_INVALID),
+        ("budget", _ErrorCode.CALL_BUDGET_EXHAUSTED),
+    ],
+)
+@pytest.mark.anyio
+async def test_broker_error_envelopes_do_not_leak_authority_secrets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+    expected_code: _ErrorCode,
+) -> None:
+    limits = EvidenceReaderLimits(max_calls=1) if failure == "budget" else None
+    context, invocation = _create(tmp_path, limits=limits)
+    environment = _bind_handler_authority(context, invocation, monkeypatch)
+    continuation: str | None = None
+    if failure == "capability":
+        monkeypatch.setenv(EVIDENCE_READER_CAPABILITY_ENV_VAR, "forged-capability")
+    elif failure == "tamper":
+        authority = invocation.invocation_dir / "authority.json"
+        authority.write_text("{}")
+        authority.chmod(0o600)
+    elif failure == "expiry":
+        monkeypatch.setattr(reader_module.time, "time", lambda: invocation.expires_at + 1)
+    else:
+        initial = json.loads(await handler_module.read_authorized_artifact(page_size=5))
+        continuation = initial["continuation"]
+        if failure == "replay":
+            assert continuation
+            await handler_module.get_authorized_artifact_page(continuation, page_size=5)
+
+    raw = await (
+        handler_module.read_authorized_artifact(page_size=5)
+        if continuation is None
+        else handler_module.get_authorized_artifact_page(continuation, page_size=5)
+    )
+
+    assert json.loads(raw) == {"status": "error", "code": expected_code}
+    assert environment[EVIDENCE_READER_CAPABILITY_ENV_VAR] not in raw
+    assert environment[EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR] not in raw
+
+
+@pytest.mark.parametrize("failure", ["unexpected", "cancelled"])
+@pytest.mark.anyio
+async def test_broker_boundary_never_raises_and_shields_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    def fail_closed(**_kwargs: object) -> str:
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        raise RuntimeError("private failure detail")
+
+    monkeypatch.setattr(handler_module, "_serve_page", fail_closed)
+
+    payload = json.loads(await handler_module.read_authorized_artifact())
+
+    if failure == "cancelled":
+        assert payload == {"success": False, "error": "cancelled", "subtype": "cancelled"}
+    else:
+        assert payload == {"status": "error", "code": _ErrorCode.BROKER_UNAVAILABLE}
+    assert "private failure detail" not in json.dumps(payload)
+
+
+@pytest.mark.anyio
+async def test_delegate_remains_fail_closed_until_launcher_integration() -> None:
+    payload = json.loads(
+        await handler_module.delegate_evidence_reader("pr-source-reader", {"prompt": "read"})
+    )
+
+    assert payload["status"] == "unsupported"
+    assert payload["code"] == "evidence_reader_authority_uninitialized"

@@ -15,7 +15,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from autoskillit.core import (
     EVIDENCE_READER_AUTHORITY_ENV_VAR,
@@ -552,15 +552,16 @@ def _authority_content(authority: Mapping[str, Any]) -> bytes:
     return content
 
 
-def _scope_digest(authority: Mapping[str, Any], canonical_tool: str, bare_tool: str) -> str:
+def _scope_digest(authority: Mapping[str, Any]) -> str:
     return _digest(
         _SCOPE_DOMAIN,
         {
+            "invocation_id": authority["invocation_id"],
             "caller_session_id": authority["caller_session_id"],
             "role": authority["role"],
             "role_definition_digest": authority["role_definition_digest"],
-            "canonical_tool": canonical_tool,
-            "bare_tool": bare_tool,
+            "canonical_tools": authority["canonical_tools"],
+            "bare_tools": authority["bare_tools"],
             "policy": authority["policy"],
         },
     )
@@ -627,7 +628,7 @@ def read_evidence_reader_page(
             raise EvidenceReaderError("call_budget_exhausted")
         if state.get("pages", limits.max_pages) >= limits.max_pages:
             raise EvidenceReaderError("page_budget_exhausted")
-        scope_digest = _scope_digest(authority, canonical_tool, bare_tool)
+        scope_digest = _scope_digest(authority)
         if continuation is None:
             offset = 0
         else:
@@ -710,6 +711,57 @@ def read_evidence_reader_page(
         )
     finally:
         _release_call_lock(opened.invocation_dir, lock_fd, lock_stat)
+
+
+def read_bound_evidence_reader_page(
+    tool_ctx: ToolContext,
+    environment: Mapping[str, str],
+    *,
+    canonical_tool: str,
+    page_size: int,
+    continuation: str | None,
+    deadline: float,
+) -> EvidenceReaderPage:
+    """Read a page using bindings recovered from verified disk authority."""
+
+    opened = _open_authority(tool_ctx, environment)
+    authority = opened.authority
+    canonical_tools = authority.get("canonical_tools")
+    bare_tools = authority.get("bare_tools")
+    if not isinstance(canonical_tools, list) or not isinstance(bare_tools, list):
+        raise EvidenceReaderError("authority_tampered")
+    try:
+        tool_index = canonical_tools.index(canonical_tool)
+        bare_tool = bare_tools[tool_index]
+    except (ValueError, IndexError) as exc:
+        raise EvidenceReaderError("tool_not_authorized") from exc
+    raw_bindings = {
+        name: authority.get(name)
+        for name in (
+            "caller_session_id",
+            "role",
+            "role_definition_digest",
+            "policy",
+        )
+    }
+    if not isinstance(bare_tool, str) or any(
+        not isinstance(value, str) or not value for value in raw_bindings.values()
+    ):
+        raise EvidenceReaderError("authority_tampered")
+    bindings = cast(dict[str, str], raw_bindings)
+    return read_evidence_reader_page(
+        tool_ctx,
+        environment,
+        caller_session_id=bindings["caller_session_id"],
+        role=bindings["role"],
+        role_definition_digest=bindings["role_definition_digest"],
+        canonical_tool=canonical_tool,
+        bare_tool=bare_tool,
+        policy=bindings["policy"],
+        page_size=page_size,
+        continuation=continuation,
+        deadline=deadline,
+    )
 
 
 def load_evidence_reader_receipts(

@@ -726,8 +726,27 @@ async def _explorer_auto_gate_boot(ctx: Any) -> bool:
     return True
 
 
+async def _evidence_reader_auto_gate_boot(ctx: Any) -> bool:
+    """Reveal exactly the reader brokers for one complete startup identity."""
+    from autoskillit.server import mcp  # circular-break
+    from autoskillit.server._session_type import (  # circular-break
+        _evidence_reader_binding_state,
+    )
+
+    binding_state = _evidence_reader_binding_state()
+    if binding_state == "absent":
+        return False
+    if binding_state == "malformed" or ctx.gate is None:
+        raise RuntimeError("evidence reader startup identity is malformed")
+    ctx.gate.enable()
+    mcp.enable(tags={"evidence-reader"}, components={"tool"}, only=True)
+    return True
+
+
 async def _run_lifespan_session_boot(ctx: Any) -> None:
-    """Apply exactly one authenticated explorer or ordinary session boot path."""
+    """Apply exactly one restricted-child or ordinary session boot path."""
+    if await _evidence_reader_auto_gate_boot(ctx):
+        return
     if await _explorer_auto_gate_boot(ctx):
         return
     boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())

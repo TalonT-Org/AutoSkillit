@@ -144,6 +144,7 @@ def test_edge_routes_success_requires_exact_result_equality(
         edge_type="result_condition",
         target="done",
         condition=condition,
+        result_field=None,
     )
 
     assert edge_routes_success("wait_for_ci", edge, automatic=True, recovery=True) is expected

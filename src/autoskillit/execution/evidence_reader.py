@@ -272,10 +272,10 @@ class EvidenceReaderResultStatus(StrEnum):
 @dataclass(frozen=True, slots=True)
 class EvidenceCitation:
     citation_id: str
-    start_byte: int
-    end_byte: int
-    start_line: int
-    end_line: int
+    byte_start: int
+    byte_end: int
+    line_start: int
+    line_end: int
 
 
 @dataclass(frozen=True, slots=True)

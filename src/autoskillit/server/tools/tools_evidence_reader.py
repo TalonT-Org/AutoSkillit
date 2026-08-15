@@ -317,15 +317,15 @@ def _validate_child(
         receipt = issued.get(citation.citation_id)
         if (
             receipt is None
-            or citation.start_byte < receipt.byte_start
-            or citation.end_byte > receipt.byte_end
-            or not 0 <= citation.start_byte <= citation.end_byte <= len(capture.content)
+            or citation.byte_start < receipt.byte_start
+            or citation.byte_end > receipt.byte_end
+            or not 0 <= citation.byte_start <= citation.byte_end <= len(capture.content)
         ):
             raise _DelegateError("citation_receipt_invalid")
-        page = capture.content[citation.start_byte : citation.end_byte]
-        line_start = capture.content[: citation.start_byte].count(b"\n") + 1
+        page = capture.content[citation.byte_start : citation.byte_end]
+        line_start = capture.content[: citation.byte_start].count(b"\n") + 1
         line_end = line_start + page.count(b"\n") - int(page.endswith(b"\n"))
-        if citation.start_line != line_start or citation.end_line != max(line_start, line_end):
+        if citation.line_start != line_start or citation.line_end != max(line_start, line_end):
             raise _DelegateError("citation_receipt_invalid")
     payload.pop("canary", None)
     return payload

@@ -24,8 +24,7 @@ from autoskillit.core import (
     atomic_write,
     canonical_reader_tools_to_bare,
 )
-from autoskillit.exploration import StableArtifactCapture
-from autoskillit.exploration._digest import canonical_json, qualified_digest
+from autoskillit.exploration import StableArtifactCapture, canonical_json, qualified_digest
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -354,7 +353,6 @@ def _initial_receipts(authority_digest: str, capability_hash: str) -> dict[str, 
         "calls": 0,
         "pages": 0,
         "output_bytes": 0,
-        "started": False,
         "receipts": [],
         "continuations": {},
     }
@@ -371,18 +369,17 @@ def _receipt_state(opened: _OpenedAuthority) -> dict[str, Any]:
         or state.get("capability_hash") != opened.capability_hash
         or state_digest != _digest(_RECEIPT_DOMAIN, state)
     ):
-        raise EvidenceReaderError("receipt_tampered")
+        raise EvidenceReaderError("authority_tampered")
     counters = (state.get("calls"), state.get("pages"), state.get("output_bytes"))
     if (
         any(
             not isinstance(value, int) or isinstance(value, bool) or value < 0
             for value in counters
         )
-        or not isinstance(state.get("started"), bool)
         or not isinstance(state.get("receipts"), list)
         or not isinstance(state.get("continuations"), dict)
     ):
-        raise EvidenceReaderError("receipt_tampered")
+        raise EvidenceReaderError("authority_tampered")
     return state
 
 
@@ -632,8 +629,6 @@ def read_evidence_reader_page(
             raise EvidenceReaderError("page_budget_exhausted")
         scope_digest = _scope_digest(authority, canonical_tool, bare_tool)
         if continuation is None:
-            if state["started"]:
-                raise EvidenceReaderError("initial_page_replayed")
             offset = 0
         else:
             if not isinstance(continuation, str) or not continuation:
@@ -690,7 +685,6 @@ def read_evidence_reader_page(
         state["calls"] += 1
         state["pages"] += 1
         state["output_bytes"] += len(page_bytes)
-        state["started"] = True
         receipt = {
             "sequence": state["calls"],
             "outcome": "complete",
@@ -736,11 +730,11 @@ def load_evidence_reader_receipts(
     state = _receipt_state(opened)
     raw_receipts = state.get("receipts")
     if not isinstance(raw_receipts, list):
-        raise EvidenceReaderError("receipt_tampered")
+        raise EvidenceReaderError("authority_tampered")
     try:
         receipts = tuple(EvidenceReaderReceipt(**item) for item in raw_receipts[-max_receipts:])
     except (TypeError, ValueError) as exc:
-        raise EvidenceReaderError("receipt_tampered") from exc
+        raise EvidenceReaderError("authority_tampered") from exc
     return receipts
 
 

@@ -1,5 +1,6 @@
 """Read-only deterministic substrate for specialized repository exploration."""
 
+from ._digest import canonical_json, qualified_digest
 from .collectors import (
     COLLECTOR_PROFILES,
     CollectorInvocation,
@@ -54,6 +55,7 @@ __all__ = [
     "activate_repository_profiles",
     "capture_repository_snapshot",
     "capture_stable_artifact",
+    "canonical_json",
     "build_canonical_evidence_graph",
     "collect_search",
     "collector_manifest_digest",
@@ -61,6 +63,7 @@ __all__ = [
     "normalize_query",
     "pagination_identity",
     "page_evidence",
+    "qualified_digest",
     "resolve_repository_identity",
     "resolve_repository_profile",
     "resolve_repository_path",

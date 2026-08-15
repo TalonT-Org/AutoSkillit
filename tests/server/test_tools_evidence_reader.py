@@ -4,6 +4,7 @@ import hashlib
 import stat
 import time
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -44,6 +45,27 @@ _CALL_BINDING = {
     "bare_tool": _BARE_TOOLS[0],
     "policy": "read-only",
 }
+
+
+class _ErrorCode(StrEnum):
+    AUTHORITY_EXPIRED = "authority_expired"
+    AUTHORITY_TAMPERED = "authority_tampered"
+    AUTHORITY_UNAVAILABLE = "authority_unavailable"
+    CALL_BUDGET_EXHAUSTED = "call_budget_exhausted"
+    CALL_IN_FLIGHT = "call_in_flight"
+    CAPABILITY_INVALID = "capability_invalid"
+    CONTENT_NOT_UTF8 = "content_not_utf8"
+    CONTINUATION_INVALID = "continuation_invalid"
+    DEADLINE_EXCEEDED = "deadline_exceeded"
+    OUTPUT_BUDGET_EXHAUSTED = "output_budget_exhausted"
+    PAGE_BUDGET_EXHAUSTED = "page_budget_exhausted"
+    RECEIPT_LIMIT_INVALID = "receipt_limit_invalid"
+    SCOPE_MISMATCH = "scope_mismatch"
+    TOOL_NOT_AUTHORIZED = "tool_not_authorized"
+
+
+class _ReceiptOutcome(StrEnum):
+    COMPLETE = "complete"
 
 
 def _capture(tmp_path: Path, content: bytes = b"alpha\nbeta\ngamma\n") -> StableArtifactCapture:
@@ -107,7 +129,7 @@ def _read(
     )
 
 
-def _assert_error(code: str, operation: Callable[[], object]) -> None:
+def _assert_error(code: _ErrorCode, operation: Callable[[], object]) -> None:
     with pytest.raises(EvidenceReaderError) as raised:
         operation()
     assert raised.value.code == code
@@ -134,17 +156,17 @@ def test_invocations_use_unique_private_directories_and_files(tmp_path: Path) ->
 @pytest.mark.parametrize(
     ("override", "code"),
     [
-        ({"caller_session_id": "other-session"}, "scope_mismatch"),
-        ({"role": "other-role"}, "scope_mismatch"),
-        ({"role_definition_digest": "sha256:other-role"}, "scope_mismatch"),
-        ({"policy": "other-policy"}, "scope_mismatch"),
-        ({"bare_tool": _BARE_TOOLS[1]}, "tool_not_authorized"),
+        ({"caller_session_id": "other-session"}, _ErrorCode.SCOPE_MISMATCH),
+        ({"role": "other-role"}, _ErrorCode.SCOPE_MISMATCH),
+        ({"role_definition_digest": "sha256:other-role"}, _ErrorCode.SCOPE_MISMATCH),
+        ({"policy": "other-policy"}, _ErrorCode.SCOPE_MISMATCH),
+        ({"bare_tool": _BARE_TOOLS[1]}, _ErrorCode.TOOL_NOT_AUTHORIZED),
     ],
 )
 def test_call_authority_is_bound_to_session_role_policy_and_tool_pair(
     tmp_path: Path,
     override: dict[str, str],
-    code: str,
+    code: _ErrorCode,
 ) -> None:
     context, invocation = _create(tmp_path)
 
@@ -160,15 +182,15 @@ def test_call_authority_is_bound_to_session_role_policy_and_tool_pair(
 @pytest.mark.parametrize(
     ("tamper", "code"),
     [
-        ("authority", "authority_tampered"),
-        ("receipt", "authority_tampered"),
-        ("capability", "capability_invalid"),
+        ("authority", _ErrorCode.AUTHORITY_TAMPERED),
+        ("receipt", _ErrorCode.AUTHORITY_TAMPERED),
+        ("capability", _ErrorCode.CAPABILITY_INVALID),
     ],
 )
 def test_tampered_authority_receipt_or_capability_fails_closed(
     tmp_path: Path,
     tamper: str,
-    code: str,
+    code: _ErrorCode,
 ) -> None:
     context, invocation = _create(tmp_path)
     environment = dict(invocation.environment)
@@ -196,15 +218,16 @@ def test_expired_authority_replayed_cursor_and_cross_invocation_cursor_are_denie
     assert first_page.continuation is not None
     _read(context, first, page_size=5, continuation=first_page.continuation)
     _assert_error(
-        "continuation_invalid",
+        _ErrorCode.CONTINUATION_INVALID,
         lambda: _read(context, first, page_size=5, continuation=first_page.continuation),
     )
 
-    other_context, second = _create(tmp_path)
-    cross_page = _read(context, first, page_size=5)
+    source_context, source = _create(tmp_path)
+    cross_page = _read(source_context, source, page_size=5)
     assert cross_page.continuation is not None
+    other_context, second = _create(tmp_path)
     _assert_error(
-        "continuation_invalid",
+        _ErrorCode.CONTINUATION_INVALID,
         lambda: _read(
             other_context,
             second,
@@ -214,7 +237,7 @@ def test_expired_authority_replayed_cursor_and_cross_invocation_cursor_are_denie
     )
 
     monkeypatch.setattr(reader_module.time, "time", lambda: first.expires_at + 1)
-    _assert_error("authority_expired", lambda: _read(context, first))
+    _assert_error(_ErrorCode.AUTHORITY_EXPIRED, lambda: _read(context, first))
 
 
 def test_utf8_paging_is_byte_and_line_exact_with_opaque_single_use_cursors(
@@ -245,18 +268,24 @@ def test_utf8_paging_is_byte_and_line_exact_with_opaque_single_use_cursors(
 @pytest.mark.parametrize(
     ("limits", "expected_code"),
     [
-        (EvidenceReaderLimits(max_calls=1, max_pages=2), "call_budget_exhausted"),
-        (EvidenceReaderLimits(max_calls=2, max_pages=1), "page_budget_exhausted"),
+        (
+            EvidenceReaderLimits(max_calls=1, max_pages=2),
+            _ErrorCode.CALL_BUDGET_EXHAUSTED,
+        ),
+        (
+            EvidenceReaderLimits(max_calls=2, max_pages=1),
+            _ErrorCode.PAGE_BUDGET_EXHAUSTED,
+        ),
         (
             EvidenceReaderLimits(max_calls=2, max_pages=2, max_output_bytes=5),
-            "output_budget_exhausted",
+            _ErrorCode.OUTPUT_BUDGET_EXHAUSTED,
         ),
     ],
 )
 def test_reader_denies_exhausted_call_page_and_output_budgets(
     tmp_path: Path,
     limits: EvidenceReaderLimits,
-    expected_code: str,
+    expected_code: _ErrorCode,
 ) -> None:
     context, invocation = _create(tmp_path, limits=limits)
     first = _read(context, invocation, page_size=5)
@@ -270,27 +299,28 @@ def test_reader_denies_exhausted_call_page_and_output_budgets(
 def test_reader_denies_expired_deadline_and_existing_inflight_lock(tmp_path: Path) -> None:
     context, invocation = _create(tmp_path)
     environment = dict(invocation.environment)
-    with pytest.raises(EvidenceReaderError) as deadline:
-        read_evidence_reader_page(
+    _assert_error(
+        _ErrorCode.DEADLINE_EXCEEDED,
+        lambda: read_evidence_reader_page(
             context,
             environment,
             **_CALL_BINDING,
             page_size=5,
             continuation=None,
             deadline=time.monotonic() - 1,
-        )
-    assert deadline.value.code == "deadline_exceeded"
+        ),
+    )
 
     lock = invocation.invocation_dir / "call.lock"
     lock.write_text("")
     lock.chmod(0o600)
-    _assert_error("call_in_flight", lambda: _read(context, invocation))
+    _assert_error(_ErrorCode.CALL_IN_FLIGHT, lambda: _read(context, invocation))
 
 
 def test_invalid_utf8_is_rejected_before_authority_is_created(tmp_path: Path) -> None:
     invalid = _capture(tmp_path, b"valid\xffinvalid")
 
-    _assert_error("content_not_utf8", lambda: _create(tmp_path, capture=invalid))
+    _assert_error(_ErrorCode.CONTENT_NOT_UTF8, lambda: _create(tmp_path, capture=invalid))
     assert not (tmp_path / "evidence-readers").exists()
 
 
@@ -309,9 +339,9 @@ def test_receipt_loader_returns_only_the_bounded_verified_suffix(tmp_path: Path)
     )
 
     assert tuple(receipt.sequence for receipt in receipts) == (3,)
-    assert receipts[0].outcome == "complete"
+    assert receipts[0].outcome == _ReceiptOutcome.COMPLETE
     _assert_error(
-        "receipt_limit_invalid",
+        _ErrorCode.RECEIPT_LIMIT_INVALID,
         lambda: load_evidence_reader_receipts(
             context,
             dict(invocation.environment),
@@ -332,6 +362,6 @@ def test_revocation_is_synchronous_and_leaves_verified_absence(tmp_path: Path) -
     assert not authority_path.exists()
     assert authority_digest
     _assert_error(
-        "authority_unavailable",
+        _ErrorCode.AUTHORITY_UNAVAILABLE,
         lambda: load_evidence_reader_receipts(context, environment),
     )

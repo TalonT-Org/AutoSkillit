@@ -6,9 +6,11 @@ import asyncio
 import json
 import os
 import time
+from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Final
 
 import anyio
 import regex as re
@@ -114,27 +116,35 @@ def _delegate_outcome(status: str, code: str) -> str:
     return json.dumps({"status": status, "code": code}, separators=(",", ":"))
 
 
+# Explicit dispatch table for known non-rejected terminal outcomes.
+# Substring matching was tried first (PR #4596 review W19) but proved
+# forward-fragile: a future code like "cancellation_failed" would be
+# misclassified as "cancelled". An explicit table forces every new code
+# to be considered at the point of addition. Unmatched codes fall
+# through to "rejected" (fail-closed default).
+_DELEGATE_OUTCOMES: Final[Mapping[str, str]] = {
+    "artifact_unsupported": "unsupported",
+    "catalog_invalid": "unsupported",
+    "catalog_probe_failed": "unsupported",
+    "cli_probe_failed": "unsupported",
+    "codex_unavailable": "unsupported",
+    "output_schema_probe_failed": "unsupported",
+    "platform_unsupported": "unsupported",
+    "provider_auth_invalid": "unsupported",
+    "deadline_exceeded": "timeout",
+    "deadline_invalid": "timeout",
+    "reader_deadline_exceeded": "timeout",
+    "reader_cancelled": "cancelled",
+    "cleanup_incomplete": "failed",
+    "codex_execution_failed": "failed",
+    "process_cleanup_incomplete": "failed",
+    "reader_cleanup_failed": "failed",
+}
+
+
 def _delegate_error_outcome(code: str) -> str:
-    unsupported = {
-        "artifact_unsupported",
-        "catalog_invalid",
-        "catalog_probe_failed",
-        "cli_probe_failed",
-        "codex_unavailable",
-        "output_schema_probe_failed",
-        "provider_auth_invalid",
-    }
-    if code in unsupported or "unsupported" in code:
-        return _delegate_outcome("unsupported", code)
-    if "deadline" in code or "timeout" in code:
-        return _delegate_outcome("timeout", code)
-    if "cancel" in code:
-        return _delegate_outcome("cancelled", code)
-    if code == "codex_execution_failed" or any(
-        part in code for part in ("cleanup", "process", "survivor", "revoke", "removal")
-    ):
-        return _delegate_outcome("failed", code)
-    return _delegate_outcome("rejected", code)
+    status = _DELEGATE_OUTCOMES.get(code, "rejected")
+    return _delegate_outcome(status, code)
 
 
 def _page_payload(page: EvidenceReaderPage) -> str:

@@ -390,6 +390,7 @@ def _checkpoint_carrier(
     *,
     ready: ReadyRecipe,
     step_name: str,
+    tool_name: str,
     success: bool,
     target_index: int | None = None,
     recovery_target: str | None = None,
@@ -445,7 +446,7 @@ def _checkpoint_carrier(
                 admitted = _admit_carrier(carrier)
                 build_post_effect_segment_failure(
                     admitted,
-                    tool_name="complete_run_skill_result",
+                    tool_name=tool_name,
                 )
                 return admitted
             except RecipeSegmentDeliveryError:
@@ -520,19 +521,21 @@ def prepare_recipe_segment_delivery(
     if normalized_key != state.generation_store_key:
         raise RecipeSegmentDeliveryError("READY compile identity differs from artifact")
     validate_segment_delivery_projection(state.finalized_projection)
+    tool_name = _delivery_tool_name(state.finalized_projection, step_name) or "unknown"
     success_carrier = _checkpoint_carrier(
         persisted,
         ready=state,
         step_name=step_name,
+        tool_name=tool_name,
         success=True,
     )
     recovery_carrier = _checkpoint_carrier(
         persisted,
         ready=state,
         step_name=step_name,
+        tool_name=tool_name,
         success=False,
     )
-    tool_name = _delivery_tool_name(state.finalized_projection, step_name) or "unknown"
     build_post_effect_segment_failure(success_carrier, tool_name=tool_name)
     build_post_effect_segment_failure(recovery_carrier, tool_name=tool_name)
     return PreparedRecipeSegmentDelivery(

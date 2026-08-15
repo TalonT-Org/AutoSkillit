@@ -180,6 +180,35 @@ async def test_checkpoint_delivery_reads_ready_exact_durable_artifact(
 
 
 @pytest.mark.anyio
+async def test_checkpoint_delivery_sizes_failure_with_actual_tool_name(
+    tool_ctx_ready_recipe,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state, _persisted = _install_segmented_ready(tool_ctx_ready_recipe)
+    invocation = state.finalized_projection.binding_projection.invocations["scope"]
+    expected_tool_name = (
+        "complete_run_skill_result"
+        if invocation.tool_name == "run_skill"
+        else invocation.tool_name
+    )
+    seen_tool_names: list[str] = []
+
+    def record_tool_name(carrier, *, tool_name: str):
+        seen_tool_names.append(tool_name)
+        return carrier
+
+    monkeypatch.setattr(
+        segment_delivery_module,
+        "build_post_effect_segment_failure",
+        record_tool_name,
+    )
+
+    prepare_recipe_segment_delivery(tool_ctx_ready_recipe.tool_ctx, "scope")
+
+    assert seen_tool_names == [expected_tool_name, expected_tool_name, expected_tool_name]
+
+
+@pytest.mark.anyio
 async def test_persisted_generation_recomputes_original_compile_identity(
     tool_ctx_ready_recipe,
 ) -> None:

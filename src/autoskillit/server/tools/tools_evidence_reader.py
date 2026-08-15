@@ -101,17 +101,13 @@ def _broker_cancelled(
     _state: _EvidenceReaderCancellationState,
     _exc: asyncio.CancelledError,
 ) -> str:
-    return _failure("cancelled")
+    return _delegate_outcome("error", "cancelled")
 
 
 def _get_tool_context() -> ToolContext:
     from autoskillit.server import _get_ctx  # circular-break: server composition root
 
     return _get_ctx()
-
-
-def _failure(code: str) -> str:
-    return json.dumps({"status": "error", "code": code}, separators=(",", ":"))
 
 
 def _delegate_outcome(status: str, code: str) -> str:
@@ -178,7 +174,7 @@ def _serve_page(
         or isinstance(effective_page_size, bool)
         or not 1 <= effective_page_size <= _MAX_PAGE_SIZE
     ):
-        return _failure("page_size_invalid")
+        return _delegate_outcome("error", "page_size_invalid")
     from autoskillit.server import _get_ctx  # circular-break: server composition root
 
     try:
@@ -191,7 +187,7 @@ def _serve_page(
             deadline=deadline,
         )
     except EvidenceReaderError as exc:
-        return _failure(exc.code)
+        return _delegate_outcome("error", exc.code)
     return _page_payload(page)
 
 
@@ -240,7 +236,7 @@ def _reader_definition(role: str):
     return definition, bare_tools, definition_digest
 
 
-def _trusted_repository(tool_ctx):
+def _trusted_repository(tool_ctx: ToolContext):
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if not skill_name or tool_ctx.skill_resolver is None:
         raise _DelegateError("invocation_authority_unavailable")
@@ -273,7 +269,7 @@ def _trusted_repository(tool_ctx):
     return trusted_root, worktree_root, common_git_dir
 
 
-def _reader_transport(tool_ctx) -> dict[str, object]:
+def _reader_transport(tool_ctx: ToolContext) -> dict[str, object]:
     backend = tool_ctx.backend
     if not isinstance(backend, CodexBackend) or backend.source_codex_home is None:
         raise _DelegateError("reader_backend_invalid")
@@ -303,7 +299,7 @@ def _validate_child(
     result: EvidenceReaderLaunchResult,
     capture: StableArtifactCapture,
     invocation: EvidenceReaderInvocation,
-    tool_ctx,
+    tool_ctx: ToolContext,
 ) -> dict[str, object]:
     try:
         payload = json.loads(result.payload_json)
@@ -336,7 +332,7 @@ def _validate_child(
 
 
 def _delegate_sync(
-    tool_ctx,
+    tool_ctx: ToolContext,
     *,
     caller_session_id: str,
     role: str,
@@ -420,9 +416,10 @@ def _delegate_sync(
         if invocation is not None:
             try:
                 revoke_evidence_reader_invocation(tool_ctx, dict(invocation.environment))
-            except Exception:
+            except Exception as exc:
                 logger.error("evidence reader authority cleanup failed", exc_info=True)
                 terminal_error = _DelegateError("reader_cleanup_failed")
+                terminal_error.__cause__ = exc
         if capture is not None:
             try:
                 terminal = capture_stable_artifact(
@@ -437,13 +434,13 @@ def _delegate_sync(
                 terminal_error = terminal_error or _DelegateError(
                     "artifact_stale"
                     if exc.status is ArtifactCaptureStatus.STALE
-                    else "artifact_terminal_recapture_failed"
+                    else "artifact_unsupported"
                 )
-            except Exception:
+            except Exception as exc:
                 logger.error("evidence reader terminal recapture failed", exc_info=True)
-                terminal_error = terminal_error or _DelegateError(
-                    "artifact_terminal_recapture_failed"
-                )
+                recapture_error = _DelegateError("artifact_unsupported")
+                recapture_error.__cause__ = exc
+                terminal_error = terminal_error or recapture_error
         if terminal_error is not None:
             raise terminal_error
 
@@ -551,7 +548,7 @@ async def read_authorized_artifact(page_size: int | None = None) -> str:
         )
     except Exception:
         logger.warning("authorized evidence artifact read failed closed", exc_info=True)
-        return _failure(_BROKER_UNAVAILABLE)
+        return _delegate_outcome("error", _BROKER_UNAVAILABLE)
 
 
 @mcp.tool(
@@ -581,4 +578,4 @@ async def get_authorized_artifact_page(
         )
     except Exception:
         logger.warning("authorized evidence artifact pagination failed closed", exc_info=True)
-        return _failure(_BROKER_UNAVAILABLE)
+        return _delegate_outcome("error", _BROKER_UNAVAILABLE)

@@ -91,6 +91,20 @@ _SUPPORTS_NOFOLLOW_DIRECTORY_OPEN: Final = (
 _SUPPORTS_DIRECTORY_FD_SCANDIR: Final = os.scandir in os.supports_fd
 
 
+def _open(
+    path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    flags: int,
+    mode: int = 0o777,
+    *,
+    dir_fd: int | None = None,
+) -> int:
+    return os.open(path, flags, mode, dir_fd=dir_fd)
+
+
+def _read(fd: int, size: int) -> bytes:
+    return os.read(fd, size)
+
+
 def _same_inode(first: os.stat_result, second: os.stat_result) -> bool:
     """Return whether two observations name the same inode and file type."""
 
@@ -124,7 +138,7 @@ def _open_verified_root_directory(root: Path, *, scanning: bool = False) -> int:
         before = root.lstat()
         if not stat.S_ISDIR(before.st_mode):
             raise CollectorSafetyError("collector root must be a real directory")
-        root_fd = os.open(root, _OPEN_DIRECTORY_FLAGS)
+        root_fd = _open(root, _OPEN_DIRECTORY_FLAGS)
     except CollectorSafetyError:
         raise
     except OSError as exc:
@@ -162,7 +176,7 @@ def _open_verified_directory_at(
     if expected is not None and not _same_inode(expected, before):
         raise CollectorSafetyError(changed_message)
 
-    child_fd = os.open(component, _OPEN_DIRECTORY_FLAGS, dir_fd=parent_fd)
+    child_fd = _open(component, _OPEN_DIRECTORY_FLAGS, dir_fd=parent_fd)
     try:
         opened = os.fstat(child_fd)
         after = os.stat(component, dir_fd=parent_fd, follow_symlinks=False)
@@ -223,7 +237,7 @@ def open_contained_regular_file(root: Path, relative_path: str) -> int:
         before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if not stat.S_ISREG(before.st_mode):
             raise CollectorSafetyError("requested path must be a non-symlink regular file")
-        file_fd = os.open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
+        file_fd = _open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
         opened = os.fstat(file_fd)
         after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if (
@@ -285,7 +299,7 @@ def read_contained_file(root: Path, relative_path: str, limits: CollectorLimits)
             raise CollectorSafetyError("requested artifact exceeds collector byte limit")
         payload = bytearray()
         while len(payload) <= limits.max_file_bytes:
-            chunk = os.read(
+            chunk = _read(
                 artifact_fd,
                 min(_READ_CHUNK_BYTES, limits.max_file_bytes + 1 - len(payload)),
             )
@@ -332,7 +346,7 @@ def read_stable_contained_file(
         target_observed = True
         if not stat.S_ISREG(before.st_mode):
             raise CollectorSafetyError("requested path must be a non-symlink regular file")
-        file_fd = os.open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
+        file_fd = _open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
         opened_before = os.fstat(file_fd)
         path_opened = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if (
@@ -346,7 +360,7 @@ def read_stable_contained_file(
 
         payload = bytearray()
         while len(payload) <= max_bytes:
-            chunk = os.read(file_fd, min(_READ_CHUNK_BYTES, max_bytes + 1 - len(payload)))
+            chunk = _read(file_fd, min(_READ_CHUNK_BYTES, max_bytes + 1 - len(payload)))
             if not chunk:
                 break
             payload.extend(chunk)
@@ -533,7 +547,7 @@ def _drain_bounded_process(
             for key, _ in selector.select(remaining):
                 fileobj = key.fileobj
                 file_descriptor = fileobj if isinstance(fileobj, int) else fileobj.fileno()
-                chunk = os.read(file_descriptor, _READ_CHUNK_BYTES)
+                chunk = _read(file_descriptor, _READ_CHUNK_BYTES)
                 if not chunk:
                     selector.unregister(key.fileobj)
                     continue

@@ -908,10 +908,7 @@ def revoke_evidence_reader_invocation(
     authority_path = Path(env[EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR])
     if not authority_path.exists() and not authority_path.is_symlink():
         invocation_dir = authority_path.parent
-        try:
-            root = _verified_readers_root(invocation_dir.parent)
-        except EvidenceReaderError:
-            raise
+        root = _verified_readers_root(invocation_dir.parent)
         if (
             not authority_path.is_absolute()
             or authority_path.name != _AUTHORITY_FILE

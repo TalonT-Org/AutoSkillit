@@ -724,7 +724,7 @@ def _codex_command(
     return command
 
 
-def _probe_agent_message(output: bytes) -> dict[str, Any]:
+def _probe_agent_message(output: bytes) -> None:
     messages: list[dict[str, Any]] = []
     try:
         lines = output.decode("utf-8", errors="strict").splitlines()
@@ -768,7 +768,6 @@ def _probe_agent_message(output: bytes) -> dict[str, Any]:
         raise EvidenceReaderLaunchError("output_schema_probe_failed") from exc
     if messages != [{"probe": "ok"}]:
         raise EvidenceReaderLaunchError("output_schema_probe_failed")
-    return messages[0]
 
 
 def _probe_conformance(
@@ -776,24 +775,13 @@ def _probe_conformance(
     definition: AgentDef,
     auth: EvidenceReaderAuthSelection,
     *,
+    cli_version: str,
     cwd: Path,
     environment: Mapping[str, str],
     probe_schema_path: Path,
     deadline: float,
-) -> str:
-    version = _run_bounded(
-        (codex, "--version"),
-        cwd=cwd,
-        environment=environment,
-        deadline=deadline,
-        stdout_limit=4_096,
-    )
-    try:
-        cli_version = version.stdout.decode("utf-8", errors="strict").strip()
-    except UnicodeDecodeError as exc:
-        raise EvidenceReaderLaunchError("cli_probe_failed") from exc
-    if version.returncode != 0 or version.stderr or cli_version != _SUPPORTED_CODEX_CLI_VERSION:
-        raise EvidenceReaderLaunchError("cli_probe_failed")
+) -> None:
+    del cli_version  # pre-validated by the caller via _probe_cli_version
     help_result = _run_bounded(
         (codex, "exec", "--help"),
         cwd=cwd,
@@ -850,7 +838,6 @@ def _probe_conformance(
     if probe.returncode != 0 or probe.stderr not in {b"", _CODEX_STDIN_NOTICE}:
         raise EvidenceReaderLaunchError("output_schema_probe_failed")
     _probe_agent_message(probe.stdout)
-    return cli_version
 
 
 def _probe_cli_version(
@@ -1252,8 +1239,8 @@ def launch_evidence_reader(
     expected_scope_digest: str,
     expected_snapshot_digest: str,
     deadline: float,
-    max_stream_bytes: int = 2_000_000,
-    max_result_bytes: int = 256_000,
+    max_stream_bytes: int = _MAX_STREAM_BYTES,
+    max_result_bytes: int = _MAX_RESULT_BYTES,
 ) -> EvidenceReaderLaunchResult:
     """Launch, validate, and completely remove one sterile Codex reader session."""
 
@@ -1381,6 +1368,7 @@ def launch_evidence_reader(
                     codex,
                     definition,
                     auth,
+                    cli_version=cli_version,
                     cwd=cwd,
                     environment=environment,
                     probe_schema_path=probe_schema_path,

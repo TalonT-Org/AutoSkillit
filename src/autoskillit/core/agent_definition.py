@@ -54,14 +54,31 @@ _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _DIRECT_TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _CODEX_CLI_VERSION_RE = re.compile(r"(?:codex-cli )?(?P<version>[0-9]+\.[0-9]+\.[0-9]+)")
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
-_CODEX_DISABLEABLE_FEATURES = tuple(
-    """
-    apps browser_use browser_use_external browser_use_full_cdp_access
-    code_mode code_mode_buffered_exec code_mode_host code_mode_only computer_use
-    enable_mcp_apps goals image_generation in_app_browser multi_agent multi_agent_v2
-    plugin_sharing plugins remote_plugin request_permissions_tool shell_tool
-    standalone_web_search tool_suggest unified_exec unified_exec_zsh_fork
-    """.split()
+_CODEX_DISABLEABLE_FEATURES = (
+    "apps",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "code_mode",
+    "code_mode_buffered_exec",
+    "code_mode_host",
+    "code_mode_only",
+    "computer_use",
+    "enable_mcp_apps",
+    "goals",
+    "image_generation",
+    "in_app_browser",
+    "multi_agent",
+    "multi_agent_v2",
+    "plugin_sharing",
+    "plugins",
+    "remote_plugin",
+    "request_permissions_tool",
+    "shell_tool",
+    "standalone_web_search",
+    "tool_suggest",
+    "unified_exec",
+    "unified_exec_zsh_fork",
 )
 _CODEX_DISABLEABLE_FEATURE_SET = frozenset(_CODEX_DISABLEABLE_FEATURES)
 _CodexWebSearchMode: TypeAlias = Literal["disabled", "cached", "indexed", "live"]

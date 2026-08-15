@@ -601,14 +601,14 @@ def _run_bounded(
             if not selector.get_map():
                 time.sleep(min(0.01, remaining))
                 continue
-                for key, _ in selector.select(min(0.1, remaining)):
-                    descriptor = (
-                        key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
-                    )
-                    chunk = os.read(descriptor, _STREAM_CHUNK)
-                    if not chunk:
-                        selector.unregister(key.fileobj)
-                        continue
+            for key, _ in selector.select(min(0.1, remaining)):
+                descriptor = (
+                    key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
+                )
+                chunk = os.read(descriptor, _STREAM_CHUNK)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
                 limit = stdout_limit if key.data == "stdout" else _STDERR_LIMIT
                 if len(output[key.data]) + len(chunk) > limit:
                     raise EvidenceReaderLaunchError("stream_limit_exceeded")

@@ -42,7 +42,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
 GIT_OPS_DENY_TRIGGER: str = "Destructive git operation blocked in headless session"
-CHECKED_OUT_REF_DENY_PREFIX = "Checked-out ref mutation blocked: "
+CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
 
 _DENY_REASON_TEMPLATE = (
     "Destructive git operation '{op}' is blocked in headless skill sessions. "

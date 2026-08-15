@@ -74,8 +74,13 @@ def test_food_truck_cmd_injects_write_guard_tool_names() -> None:
 def test_skill_session_audit_authority_env_contract(
     backend_factory: type[ClaudeCodeBackend] | type[CodexBackend],
     absent_value: str | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     trusted_path = "/parent/.autoskillit/temp/audit-admission/ledger.sqlite3"
+    monkeypatch.setenv(
+        AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+        "/untrusted/ambient/audit-admission.sqlite3",
+    )
     backend = backend_factory()
 
     attested = backend.build_skill_session_cmd(

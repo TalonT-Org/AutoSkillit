@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.cli._prompts import _read_full_sous_chef
+from tests._helpers import ATTESTED_SKILL_INPUT_SHAPE_ATOMS
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -88,14 +89,5 @@ def test_sous_chef_requires_progressive_segment_consumption() -> None:
 def test_sous_chef_preserves_attested_skill_input_shape_and_falsey_defaults() -> None:
     content = _read_full_sous_chef()
 
-    for required in (
-        "skill_input_shapes[step_name]",
-        "ordered keys",
-        "unresolved_defaults",
-        "replace available values in place",
-        "never delete or invent a key",
-        '""',
-        "0",
-        "False",
-    ):
+    for required in ATTESTED_SKILL_INPUT_SHAPE_ATOMS:
         assert required in content

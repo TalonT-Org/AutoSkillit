@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.cli import _prompts
+from tests._helpers import ATTESTED_SKILL_INPUT_SHAPE_ATOMS
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -54,14 +55,5 @@ def test_canonical_instruction_is_rendered_from_the_policy() -> None:
 def test_startup_policy_preserves_attested_skill_input_shape() -> None:
     rendered = _prompts._MCP_STARTUP_RECOVERY_SPEC.render()
 
-    for required in (
-        "skill_input_shapes[step_name]",
-        "ordered keys",
-        "unresolved_defaults",
-        "replace available values in place",
-        "never delete or invent a key",
-        '""',
-        "0",
-        "False",
-    ):
+    for required in ATTESTED_SKILL_INPUT_SHAPE_ATOMS:
         assert required in rendered

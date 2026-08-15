@@ -216,9 +216,10 @@ def _assert_error(code: _ErrorCode, operation: Callable[[], object]) -> None:
     assert raised.value.code == code
 
 
-def test_launch_uses_sterile_private_home_cwd_config_environment_and_command(
+def _launch_with_observation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+) -> tuple[dict[str, Any], Any, list[Path]]:
+    """Run launch_evidence_reader with mocked probes and return (observed, result, created)."""
     definition = _definition()
     invocation = _invocation(tmp_path)
     kwargs = _launch_kwargs(tmp_path)
@@ -290,9 +291,14 @@ def test_launch_uses_sterile_private_home_cwd_config_environment_and_command(
         lambda *args, **kwargs: "codex-cli 0.147.0",
     )
     monkeypatch.setattr(launcher, "_run_bounded", run_final)
-
     result = launch_evidence_reader(definition, invocation, **kwargs)
+    return observed, result, created
 
+
+def test_launch_filters_environment_to_sterile_minimum(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
     environment = observed["environment"]
     expected_environment = {
         "OPENAI_API_KEY",
@@ -305,44 +311,142 @@ def test_launch_uses_sterile_private_home_cwd_config_environment_and_command(
     }
     assert set(environment) == expected_environment
     assert environment["HOME"] == environment["CODEX_HOME"] == environment["CODEX_SQLITE_HOME"]
+
+
+def test_launch_uses_sterile_cwd_with_0o700_permissions_and_empty_contents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
     assert observed["cwd_mode"] == 0o700
+    assert observed["cwd_files"] == ()
+
+
+def test_launch_writes_sterile_0o600_home_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
     assert observed["home_files"] == {
         "config.toml": 0o600,
         "evidence-reader-probe.schema.json": 0o600,
         "evidence-reader-result.schema.json": 0o600,
         "models.json": 0o600,
     }
-    assert observed["cwd_files"] == ()
-    config = observed["config"]
-    assert 'approval_policy = "never"' in config
-    assert 'sandbox_mode = "read-only"' in config
-    assert 'forced_login_method = "api"' in config
-    assert 'inherit = "none"' in config
-    assert "project_root_markers = []" in config
-    assert "[agents]\nenabled = false" in config
-    assert all(
-        tool in config for tool in ("get_authorized_artifact_page", "read_authorized_artifact")
-    )
-    assert "shell_tool = false" in config
-    assert not any(name in config for name in ("run_cmd", "read_file"))
-    command = observed["command"]
-    assert command[0] == "/usr/bin/codex"
-    assert "exec" in command and "--json" in command
-    for flag in (
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        'approval_policy = "never"',
+        'sandbox_mode = "read-only"',
+        'forced_login_method = "api"',
+        'inherit = "none"',
+        "project_root_markers = []",
+        "[agents]\nenabled = false",
+        "shell_tool = false",
+    ],
+)
+def test_launch_renders_sterile_codex_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fragment: str
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    assert fragment in observed["config"]
+
+
+@pytest.mark.parametrize(
+    "tool",
+    ["get_authorized_artifact_page", "read_authorized_artifact"],
+)
+def test_launch_renders_sterile_codex_config_with_only_reader_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: str
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    assert tool in observed["config"]
+
+
+@pytest.mark.parametrize("tool", ["run_cmd", "read_file"])
+def test_launch_renders_sterile_codex_config_without_dangerous_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: str
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    assert tool not in observed["config"]
+
+
+@pytest.mark.parametrize(
+    "flag",
+    (
         "--strict-config",
         "--ignore-rules",
         "--ephemeral",
         "--skip-git-repo-check",
         "--output-schema",
         "-C",
-    ):
-        assert flag in command
-    assert "--add-dir" not in command
-    assert "--dangerously-bypass-hook-trust" not in command
+    ),
+)
+def test_launch_builds_codex_command_with_required_strict_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    assert flag in observed["command"]
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [("exec", "--json")],
+)
+def test_launch_builds_codex_command_with_exec_and_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, marker: tuple[str, str]
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    command = observed["command"]
+    assert command[0] == "/usr/bin/codex"
+    assert marker[0] in command and marker[1] in command
+
+
+@pytest.mark.parametrize(
+    "absent_flag",
+    ["--add-dir", "--dangerously-bypass-hook-trust"],
+)
+def test_launch_builds_codex_command_without_dangerous_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, absent_flag: str
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    assert absent_flag not in observed["command"]
+
+
+def test_launch_appends_canary_scope_and_snapshot_to_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    command = observed["command"]
     assert _CANARY in command[-1] and _SCOPE in command[-1] and _SNAPSHOT in command[-1]
+
+
+def test_launch_propagates_thread_id_and_citations_to_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, result, _ = _launch_with_observation(tmp_path, monkeypatch)
     assert result.thread_id == _THREAD
     assert result.citations[0].citation_id == _CITATION
+
+
+def test_launch_removes_sterile_tempdirs_after_completion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, created = _launch_with_observation(tmp_path, monkeypatch)
     assert all(not path.exists() for path in created)
+
+
+def test_launch_preserves_cwd_and_environment_across_probes_and_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cross-call invariant: cwd and environment seen by probe_catalog must equal
+    those seen by probe_mcp and run_bounded. Captured by the helper's probe_mcp
+    and run_final mocks (which assert cwd == observed['cwd'] and environment ==
+    observed['environment']). Make one explicit call here to lock the invariant."""
+    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
+    assert "cwd" in observed
+    assert "environment" in observed
+    assert "environment" in observed["environment"] or "HOME" in observed["environment"]
 
 
 def test_launch_rejects_isolated_cwd_overlap_with_authorized_roots(

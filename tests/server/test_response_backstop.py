@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import structlog
@@ -124,6 +125,115 @@ def test_artifact_failure_is_fail_closed(tmp_path, monkeypatch):
     )
     assert secret not in shaped
     assert "artifact_publication_failed" in shaped
+
+
+def _checkpoint_carrier() -> dict[str, object]:
+    return {
+        "kind": "success",
+        "source_step": "run_tests",
+        "segments": [{"index": 1, "name": "review"}],
+        "bodies": [
+            {
+                "step": "review",
+                "body": "review:\n  action: run_skill\n",
+                "body_sha256": "sha256:body",
+            }
+        ],
+        "recipe_execution": {"invocation_template_digests": {}},
+        "pull_closures": [],
+        "recipe_pull": {"recipe": "implementation", "generation_id": "g1"},
+    }
+
+
+def test_checkpoint_budget_spills_only_base_and_preserves_whole_carrier(tmp_path):
+    carrier = _checkpoint_carrier()
+    original = json.dumps(
+        {
+            "success": True,
+            "unknown_route_key": "preserve-me",
+            "stdout": "x" * 12_000,
+            "recipe_segment": carrier,
+        }
+    )
+
+    shaped = enforce_response_budget(
+        original,
+        tool_name="test_check",
+        artifact_dir=tmp_path,
+        config=_config(),
+    )
+
+    assert isinstance(shaped, str)
+    assert len(shaped.encode("utf-8")) < 10_000
+    payload = json.loads(shaped)
+    assert payload["recipe_segment"] == carrier
+    assert payload["unknown_route_key"] == "preserve-me"
+    artifact = Path(payload[RESPONSE_SPILL_METADATA_KEY]["artifact_path"])
+    persisted_base = json.loads(artifact.read_text())
+    assert persisted_base["unknown_route_key"] == "preserve-me"
+    assert "recipe_segment" not in persisted_base
+
+
+def test_checkpoint_budget_publication_failure_returns_no_repeat_carrier(tmp_path, monkeypatch):
+    from autoskillit.server import _response_budget
+
+    carrier = _checkpoint_carrier()
+    monkeypatch.setattr(
+        _response_budget,
+        "atomic_write",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("ENOSPC")),
+    )
+
+    shaped = enforce_response_budget(
+        json.dumps({"success": True, "stdout": "x" * 12_000, "recipe_segment": carrier}),
+        tool_name="test_check",
+        artifact_dir=tmp_path,
+        config=_config(),
+    )
+
+    assert isinstance(shaped, str)
+    payload = json.loads(shaped)
+    assert payload["subtype"] == "recipe_segment_post_effect_delivery_failure"
+    assert payload["operation_already_ran"] is True
+    assert payload["do_not_repeat"] is True
+    assert payload["tool_name"] == "test_check"
+    assert payload["step_name"] == "run_tests"
+    assert payload["recipe_segment"] == carrier
+    assert "stdout" not in payload
+
+
+def test_post_effect_carrier_rejection_preserves_no_repeat_fields(monkeypatch):
+    from autoskillit.server import _response_budget
+
+    carrier = _checkpoint_carrier()
+    mock_logger = MagicMock()
+
+    def reject_carrier(*_args, **_kwargs):
+        raise _response_budget.RecipeSegmentDeliveryError("carrier too large")
+
+    monkeypatch.setattr(_response_budget, "build_post_effect_segment_failure", reject_carrier)
+    monkeypatch.setattr(_response_budget, "logger", mock_logger)
+
+    fallback = _response_budget.post_effect_recipe_segment_failure(
+        {"success": True, "recipe_segment": carrier},
+        tool_name="test_check",
+    )
+
+    assert fallback == {
+        "success": False,
+        "subtype": "recipe_segment_post_effect_delivery_failure",
+        "error": "Response shaping failed after the operation ran; do not repeat it.",
+        "tool_name": "test_check",
+        "step_name": "run_tests",
+        "operation_already_ran": True,
+        "do_not_repeat": True,
+    }
+    mock_logger.warning.assert_called_once_with(
+        "recipe_segment_post_effect_carrier_dropped",
+        tool_name="test_check",
+        source_step="run_tests",
+        error="carrier too large",
+    )
 
 
 @pytest.mark.parametrize("kind", ["json", "plain"])

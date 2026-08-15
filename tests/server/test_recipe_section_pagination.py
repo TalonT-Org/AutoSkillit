@@ -30,6 +30,7 @@ from autoskillit.core import (
 )
 from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server import _recipe_section_planning as planning
+from autoskillit.server._recipe_artifact import extract_recipe_step_bodies
 from autoskillit.server._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
@@ -82,6 +83,27 @@ _RANGE_FIELDS_BY_FORMAT = {
         "fragment_byte_total",
     },
 }
+
+
+def test_extract_recipe_step_bodies_preserves_requested_order() -> None:
+    persisted = {
+        "content": """name: segmented
+steps:
+  first:
+    tool: run_cmd
+    with:
+      cmd: echo first
+  second:
+    action: stop
+    message: done
+"""
+    }
+    bodies = extract_recipe_step_bodies(persisted, ("second", "first"))
+    assert tuple(step_name for step_name, _body in bodies) == ("second", "first")
+    assert bodies[0][1] == '{"second":{"action":"stop","message":"done"}}'
+    assert bodies[1][1] == '{"first":{"tool":"run_cmd","with":{"cmd":"echo first"}}}'
+
+
 _PAGE_TEST_BOUND = 2_000
 
 

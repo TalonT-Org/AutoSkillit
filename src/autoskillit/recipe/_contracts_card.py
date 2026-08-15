@@ -118,7 +118,12 @@ def generate_recipe_card(
 
     recipe_hash = compute_recipe_hash(pipeline_path)
     data = load_yaml(pipeline_path)
-    recipe = _parse_recipe(data)
+    recipe_data = dict(data)
+    inputs = recipe_data.pop("inputs", None)
+    if "ingredients" not in recipe_data and isinstance(inputs, dict):
+        recipe_data["ingredients"] = inputs
+    recipe_data.pop("constraints", None)
+    recipe = _parse_recipe(recipe_data)
     manifest = load_bundled_manifest()
     binding_projection = bind_recipe(recipe, manifest=manifest)
 

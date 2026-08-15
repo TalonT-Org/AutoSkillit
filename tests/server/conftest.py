@@ -380,10 +380,12 @@ def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
     return lambda: monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", _forbidden)
 
 
-_READY_RECIPE_ENVELOPE = "remediation"
-_READY_RECIPE_ATTESTED_STEP = "investigate"
+_READY_RECIPE_ENVELOPE = "research"
+_READY_RECIPE_ATTESTED_STEP = "scope"
 _READY_RECIPE_OVERRIDES = {
     "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
+    "source_dir": ".",
+    "task": "test task",
     "task_description": "test task",
 }
 

@@ -974,7 +974,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 26,  # +_run_skill_completion exact receipt delivery boundary (#4457)
+        "server": 27,  # +_run_skill_completion exact receipt delivery boundary (#4457)
+        # +_recipe_segment_delivery plan-mandated progressive delivery boundary
         # +_recipe_artifact.py (persistence), +_recipe_delivery_helpers.py (attestation,
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
         # — #4557 decomposes three modules over the 750-line structural limit

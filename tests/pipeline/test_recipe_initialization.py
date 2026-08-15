@@ -13,9 +13,11 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_FLOW_SCHEMA_VERSION,
+    FinalizedRecipeProjection,
     InstallationVersion,
     InstalledRecipeExecution,
     RecipeArtifactGeneration,
+    RecipeBindingProjection,
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     compute_recipe_execution_snapshot_digest,
@@ -92,6 +94,15 @@ def _artifact(flow: RecipeFlowGeneration) -> RecipeArtifactGeneration:
     )
 
 
+def _projection() -> FinalizedRecipeProjection:
+    return FinalizedRecipeProjection(
+        binding_projection=RecipeBindingProjection(invocations={}),
+        ordered_step_names=("step",),
+        entrypoint="step",
+        ordered_flow_edges=(),
+    )
+
+
 def _initializing() -> InitializingRecipe:
     flow = _flow()
     return start_recipe_initialization(
@@ -115,6 +126,7 @@ def _initializing() -> InitializingRecipe:
             ),
         ),
         generation_store_key="compile-key",
+        finalized_projection=_projection(),
     )
 
 
@@ -254,6 +266,7 @@ def test_ready_recipe_rejects_direct_construction_without_transition_authority()
             initialization_id=state.initialization_id,
             installed_execution=installed,
             generation_store_key=state.generation_store_key,
+            finalized_projection=state.finalized_projection,
             completion_receipt=_hash("receipt"),
             _transition_token=object(),
         )

@@ -2,19 +2,161 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 
+from autoskillit.core import RecipeFlowEdge, get_tool_def, load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe_structure
+from autoskillit.recipe.validator import (
+    _extract_routing_edges,
+    _finalize_delivery_segments,
+    edge_routes_success,
+    validate_recipe_structure,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 RECIPE_PATH = builtin_recipes_dir() / "implementation.yaml"
+_PRE_DELIVERY_STRUCTURE_SHA256 = (
+    "sha256:c3e53626cbf7549b2bb225ff54fede2706ec85aef3296ce90678db4bcf4f8feb"
+)
+
+_CHECKPOINT_HANDLER_TABLE = {
+    "claim_and_resolve": "claim_and_resolve_issue",
+    "create_and_publish": "create_and_publish_branch",
+    "create_impl_worktree": "run_cmd",
+    "close_issue_no_changes": "release_issue",
+    "extract_pr_number": "run_cmd",
+    "capture_review_repository": "run_cmd",
+    "direct_merge": "run_cmd",
+    "redirect_merge": "run_cmd",
+    "immediate_merge": "run_cmd",
+    "remerge_immediate": "run_cmd",
+    "detect_ci_conflict": "run_cmd",
+}
+
+
+def _flow_edges(recipe) -> tuple[RecipeFlowEdge, ...]:
+    return tuple(
+        RecipeFlowEdge(
+            source=step_name,
+            edge_type=edge.edge_type,
+            target=edge.target,
+            condition=edge.condition,
+            result_field=(
+                step.on_result.field
+                if edge.edge_type == "result_condition" and step.on_result is not None
+                else None
+            ),
+        )
+        for step_name, step in recipe.steps.items()
+        for edge in _extract_routing_edges(step)
+    )
+
+
+def _source_structural_digest(recipe_path: Path) -> str:
+    data = load_yaml(recipe_path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    raw_steps = data.get("steps")
+    assert isinstance(raw_steps, dict) and raw_steps
+    normalized_steps: list[tuple[str, dict[str, object]]] = []
+    for step_name, raw_step in raw_steps.items():
+        assert isinstance(step_name, str) and isinstance(raw_step, dict)
+        step = dict(raw_step)
+        with_args = step.get("with")
+        if isinstance(with_args, dict):
+            normalized_with = {
+                key: value for key, value in with_args.items() if key != "step_name"
+            }
+            if normalized_with:
+                step["with"] = normalized_with
+            else:
+                step.pop("with")
+        normalized_steps.append((step_name, step))
+
+    payload = {
+        "entrypoint": normalized_steps[0][0],
+        "ordered_steps": [step_name for step_name, _step in normalized_steps],
+        "steps": normalized_steps,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _assert_delivery_projection_contract(
+    recipe,
+    recipe_path: Path,
+    expected_structure_sha256: str,
+) -> None:
+    assert _source_structural_digest(recipe_path) == expected_structure_sha256
+    edges = _flow_edges(recipe)
+    segments, errors = _finalize_delivery_segments(recipe, edges)
+    assert not errors
+    finalized_steps = frozenset(
+        step for segment in segments for step in segment.ordered_step_names
+    )
+    assert finalized_steps == frozenset(recipe.steps)
+
+    checkpoint_sources = frozenset(
+        source for segment in segments for source in segment.checkpoint_sources
+    )
+    for edge in edges:
+        step = recipe.steps[edge.source]
+        if step.tool is None or edge.source not in checkpoint_sources:
+            continue
+        tool_name = "complete_run_skill_result" if step.tool == "run_skill" else step.tool
+        definition = get_tool_def(tool_name)
+        assert definition is not None
+        if edge_routes_success(
+            tool_name,
+            edge,
+            automatic=definition.automatic_recipe_delivery,
+            recovery=definition.recovery_recipe_delivery,
+        ):
+            assert edge.target in finalized_steps
+
+    assert {
+        key: recipe.steps[key].tool for key in _CHECKPOINT_HANDLER_TABLE
+    } == _CHECKPOINT_HANDLER_TABLE
+    assert {
+        key: recipe.steps[key].with_args.get("step_name") for key in _CHECKPOINT_HANDLER_TABLE
+    } == {key: key for key in _CHECKPOINT_HANDLER_TABLE}
+
+
+@pytest.mark.parametrize(
+    ("condition", "expected"),
+    [
+        (" result.conclusion == 'success' ", True),
+        ('result.conclusion=="success"', True),
+        ("other.result.conclusion == 'success'", False),
+        ("result.conclusion == 'success' == true", False),
+    ],
+)
+def test_edge_routes_success_requires_exact_result_equality(
+    condition: str,
+    expected: bool,
+) -> None:
+    edge = RecipeFlowEdge(
+        source="wait",
+        edge_type="result_condition",
+        target="done",
+        condition=condition,
+        result_field=None,
+    )
+
+    assert edge_routes_success("wait_for_ci", edge, automatic=True, recovery=True) is expected
 
 
 @pytest.fixture(scope="module")
 def recipe():
     return load_recipe(RECIPE_PATH)
+
+
+def test_delivery_declarations_preserve_canonical_recipe_structure(recipe) -> None:
+    _assert_delivery_projection_contract(recipe, RECIPE_PATH, _PRE_DELIVERY_STRUCTURE_SHA256)
 
 
 # T_IP_LOOP1

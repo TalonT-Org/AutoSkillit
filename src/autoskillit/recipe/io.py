@@ -37,6 +37,7 @@ from autoskillit.recipe.schema import (
     RECIPE_VERSION_KEY,
     CampaignDispatch,
     Recipe,
+    RecipeDeliverySegment,
     RecipeInfo,
     RecipeIngredient,
     RecipeKind,
@@ -349,8 +350,13 @@ _PARSE_RECIPE_HANDLED_FIELDS: frozenset[str] = frozenset(
         "continue_on_failure",
         "requires_features",
         "dispatch_only",
+        "delivery_segments",
     }
 )
+
+# Skill frontmatter can share this parsing path, but its capability declaration is
+# metadata rather than part of the Recipe schema.
+_PARSE_RECIPE_IGNORED_FIELDS: frozenset[str] = frozenset({"uses_capabilities"})
 
 _RECIPE_COMPUTED_FIELDS: frozenset[str] = frozenset(
     {
@@ -421,6 +427,11 @@ def _parse_recipe(
     *,
     declared_data: dict[str, Any] | None = None,
 ) -> Recipe:
+    accepted_fields = _PARSE_RECIPE_HANDLED_FIELDS | {AUTOSKILLIT_VERSION_KEY}
+    unknown_fields = set(data) - accepted_fields - _PARSE_RECIPE_IGNORED_FIELDS
+    if unknown_fields:
+        raise ValueError(f"Recipe has unknown top-level fields: {sorted(unknown_fields)!r}")
+
     name = data.get("name", "")
     description = data.get("description", "")
     summary = data.get("summary", "")
@@ -529,6 +540,42 @@ def _parse_recipe(
         bad = [f for f in requires_features_raw if not isinstance(f, str)]
         raise ValueError(f"'requires_features' entries must be strings, got: {bad!r}")
 
+    delivery_segments_raw = data.get("delivery_segments")
+    delivery_segments: tuple[RecipeDeliverySegment, ...] = ()
+    if delivery_segments_raw is not None:
+        if not isinstance(delivery_segments_raw, list) or not delivery_segments_raw:
+            raise ValueError("'delivery_segments' must be a non-empty list when declared")
+        parsed_segments: list[RecipeDeliverySegment] = []
+        for index, segment_raw in enumerate(delivery_segments_raw):
+            if not isinstance(segment_raw, dict):
+                raise ValueError(
+                    f"delivery_segments[{index}] must be a mapping, "
+                    f"got {type(segment_raw).__name__!r}"
+                )
+            unknown_fields = set(segment_raw) - {"name", "steps"}
+            if unknown_fields:
+                raise ValueError(
+                    f"delivery_segments[{index}] has unknown fields: {sorted(unknown_fields)!r}"
+                )
+            segment_name = segment_raw.get("name")
+            segment_steps = segment_raw.get("steps")
+            if not isinstance(segment_name, str):
+                raise ValueError(f"delivery_segments[{index}].name must be a string")
+            if not isinstance(segment_steps, list) or not all(
+                isinstance(step_name, str) for step_name in segment_steps
+            ):
+                raise ValueError(f"delivery_segments[{index}].steps must be a list of strings")
+            parsed_segments.append(
+                RecipeDeliverySegment(name=segment_name, steps=tuple(segment_steps))
+            )
+        delivery_segments = tuple(parsed_segments)
+
+    # Recipe YAML uses the canonical key, while card-shaped metadata uses plain
+    # ``version``. Preserve canonical-key precedence when both are present.
+    declared_version = (
+        data[AUTOSKILLIT_VERSION_KEY] if AUTOSKILLIT_VERSION_KEY in data else data.get("version")
+    )
+
     return Recipe(
         name=name,
         description=description,
@@ -536,7 +583,7 @@ def _parse_recipe(
         ingredients=ingredients,
         steps=steps,
         kitchen_rules=kitchen_rules,
-        version=data.get(AUTOSKILLIT_VERSION_KEY),
+        version=declared_version,
         recipe_version=_rv,
         experimental=bool(data.get("experimental", False)),
         requires_packs=requires_packs_raw,
@@ -548,6 +595,7 @@ def _parse_recipe(
         continue_on_failure=continue_on_failure,
         requires_features=requires_features_raw,
         dispatch_only=bool(data.get("dispatch_only", False)),
+        delivery_segments=delivery_segments,
     )
 
 

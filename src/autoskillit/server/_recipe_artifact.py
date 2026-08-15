@@ -24,9 +24,12 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
+    YAMLError,
     atomic_write,
     build_recipe_execution_credential,
+    fast_dumps,
     get_logger,
+    load_yaml,
     validate_recipe_artifact_sections,
 )
 from autoskillit.server._recipe_generation import (
@@ -49,6 +52,74 @@ class RecipeArtifactSchemaError(RecipeArtifactError):
     """A recipe artifact violates the static pullable-section schema."""
 
 
+class RecipeStepExtractionError(Exception):
+    """A persisted recipe body could not be parsed or serialized."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+
+
+def _persisted_recipe_steps(persisted: dict[str, Any]) -> dict[str, Any]:
+    content = persisted.get("content", "") or ""
+    if not isinstance(content, str) or not content:
+        return {}
+    try:
+        parsed = load_yaml(content)
+    except YAMLError as exc:
+        get_logger(__name__).warning("recipe_step_yaml_parse_failed", exc_info=True)
+        raise RecipeStepExtractionError(
+            "recipe_artifact_parse_failed", f"{type(exc).__name__}: {exc}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise RecipeStepExtractionError(
+            "recipe_artifact_parse_failed", "recipe content is not a mapping"
+        )
+    steps = parsed.get("steps")
+    if not isinstance(steps, dict):
+        raise RecipeStepExtractionError(
+            "recipe_artifact_parse_failed", "recipe steps are not a mapping"
+        )
+    return steps
+
+
+def extract_recipe_step_bodies(
+    persisted: dict[str, Any],
+    ordered_step_names: tuple[str, ...],
+) -> tuple[tuple[str, str], ...]:
+    """Extract canonical compact bodies for ordered persisted steps."""
+    steps = _persisted_recipe_steps(persisted)
+    bodies: list[tuple[str, str]] = []
+    for step_name in ordered_step_names:
+        step_obj = steps.get(step_name)
+        if step_obj is None:
+            continue
+        if not isinstance(step_obj, dict):
+            raise RecipeStepExtractionError(
+                "recipe_section_serialization_failed", "recipe step is not a mapping"
+            )
+        try:
+            bodies.append((step_name, fast_dumps({step_name: step_obj})))
+        except Exception as exc:
+            get_logger(__name__).warning(
+                "recipe_step_yaml_serialize_failed",
+                step_name=step_name,
+                exc_info=True,
+            )
+            raise RecipeStepExtractionError(
+                "recipe_section_serialization_failed", f"{type(exc).__name__}: {exc}"
+            ) from exc
+    return tuple(bodies)
+
+
+def extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:
+    """Extract one compact step body from a persisted recipe artifact."""
+    if not step_name:
+        return ""
+    bodies = extract_recipe_step_bodies(persisted, (step_name,))
+    return bodies[0][1] if bodies else ""
+
+
 @dataclass(frozen=True, slots=True)
 class PreparedRecipeGeneration:
     """Canonical compile outputs shared by every delivery surface."""
@@ -65,9 +136,13 @@ _RECIPE_GENERATION_SOURCE_EXCLUDED_FIELDS = frozenset(
     {
         "_finalized_projection",
         "delivery_bound_spill",
+        "finalized_recipe_projection",
+        "flow_records",
         "hook_warning",
         "initialization_id",
         "kitchen",
+        RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+        "recipe_flow",
         "recipe_pull",
         "recovery",
         "required_sections",
@@ -120,6 +195,29 @@ def _recipe_generation_source_payload(payload: dict[str, Any]) -> dict[str, Any]
         for key, value in payload.items()
         if key not in _RECIPE_GENERATION_SOURCE_EXCLUDED_FIELDS
     }
+
+
+def _normalized_recipe_compile_identity(
+    payload: dict[str, Any],
+    *,
+    recipe_name: str,
+    finalized_projection: FinalizedRecipeProjection,
+    flow_generation: RecipeFlowGeneration,
+) -> tuple[dict[str, Any], str]:
+    """Return the canonical compile inputs and their generation identity."""
+    source_payload = _recipe_generation_source_payload(payload)
+    compile_inputs = {
+        "recipe_name": recipe_name,
+        "content_hash": source_payload.get("content_hash"),
+        "composite_hash": source_payload.get("composite_hash"),
+        "source_payload": generation_json_primitive(source_payload),
+        "finalized_projection": _finalized_projection_payload(finalized_projection),
+        "flow_generation": flow_generation.identity(),
+    }
+    return compile_inputs, _domain_sha256(
+        "autoskillit.recipe-compile-generation.v1",
+        _canonical_payload(compile_inputs),
+    )
 
 
 def build_recipe_flow_generation(
@@ -198,17 +296,11 @@ def prepare_recipe_delivery_generation(
 
     flow_generation = build_recipe_flow_generation(finalized_projection)
     source_payload = _recipe_generation_source_payload(payload)
-    compile_inputs = {
-        "recipe_name": recipe_name,
-        "content_hash": source_payload.get("content_hash"),
-        "composite_hash": source_payload.get("composite_hash"),
-        "source_payload": generation_json_primitive(source_payload),
-        "finalized_projection": _finalized_projection_payload(finalized_projection),
-        "flow_generation": flow_generation.identity(),
-    }
-    normalized_compile_key = _domain_sha256(
-        "autoskillit.recipe-compile-generation.v1",
-        _canonical_payload(compile_inputs),
+    compile_inputs, normalized_compile_key = _normalized_recipe_compile_identity(
+        source_payload,
+        recipe_name=recipe_name,
+        finalized_projection=finalized_projection,
+        flow_generation=flow_generation,
     )
     store = get_recipe_generation_store()
     existing = store.lookup_compile(tool_ctx.kitchen_id, normalized_compile_key)
@@ -615,8 +707,11 @@ __all__ = [
     "PreparedRecipeGeneration",
     "RecipeArtifactError",
     "RecipeArtifactSchemaError",
+    "RecipeStepExtractionError",
     "build_canonical_recipe_artifact_payload",
     "build_recipe_flow_generation",
+    "extract_recipe_step_bodies",
+    "extract_step_body_from_persisted",
     "load_recipe_artifact",
     "persist_recipe_artifact",
     "prepare_recipe_delivery_generation",

@@ -14,6 +14,11 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import resolve_repo_from_remote
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._recipe_segment_delivery import (
+    PreparedRecipeSegmentDelivery,
+    attach_recipe_segment,
+    prepare_recipe_segment_delivery,
+)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -127,6 +132,7 @@ async def enqueue_pr(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="enqueue_pr", pr_number=pr_number, target_branch=target_branch
         ):
@@ -143,13 +149,18 @@ async def enqueue_pr(
             )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
 
             if tool_ctx.merge_queue_watcher is None:
                 return json.dumps(
-                    {
-                        "success": False,
-                        "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
-                    }
+                    attach_recipe_segment(
+                        {
+                            "success": False,
+                            "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                        },
+                        prepared_segment,
+                        success=False,
+                    )
                 )
 
             resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
@@ -163,16 +174,34 @@ async def enqueue_pr(
                     cwd=cwd,
                     auto_merge_available=auto_merge_available,
                 )
-                return json.dumps(result)
+                return json.dumps(
+                    attach_recipe_segment(
+                        result,
+                        prepared_segment,
+                        success=result.get("success") is True,
+                    )
+                )
             except Exception as exc:
                 logger.error("enqueue_pr watcher error", exc_info=True)
-                return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+                return json.dumps(
+                    attach_recipe_segment(
+                        {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+                        prepared_segment,
+                        success=False,
+                    )
+                )
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("enqueue_pr unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(
+            attach_recipe_segment(
+                {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+                prepared_segment,
+                success=False,
+            )
+        )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
@@ -248,6 +277,7 @@ async def wait_for_merge_queue(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
         ):
@@ -264,16 +294,21 @@ async def wait_for_merge_queue(
             )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
 
             if tool_ctx.merge_queue_watcher is None:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, 0.0)
                 return json.dumps(
-                    {
-                        "success": False,
-                        "pr_state": "error",
-                        "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
-                    }
+                    attach_recipe_segment(
+                        {
+                            "success": False,
+                            "pr_state": "error",
+                            "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                        },
+                        prepared_segment,
+                        success=False,
+                    )
                 )
 
             resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
@@ -296,13 +331,31 @@ async def wait_for_merge_queue(
                     merge_group_drop_backoff=merge_group_drop_backoff,
                     progress_callback=lambda msg: _notify(ctx, "info", msg, __name__),
                 )
-                return json.dumps(result)
+                return json.dumps(
+                    attach_recipe_segment(
+                        result,
+                        prepared_segment,
+                        success=result.get("success") is True,
+                    )
+                )
             except Exception as exc:
                 logger.error("wait_for_merge_queue ci_watcher error", exc_info=True)
-                return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+                return json.dumps(
+                    attach_recipe_segment(
+                        {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+                        prepared_segment,
+                        success=False,
+                    )
+                )
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("wait_for_merge_queue unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(
+            attach_recipe_segment(
+                {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+                prepared_segment,
+                success=False,
+            )
+        )

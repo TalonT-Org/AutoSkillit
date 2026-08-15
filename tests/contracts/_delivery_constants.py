@@ -4,7 +4,7 @@ from autoskillit.core import RECIPE_SECTION_RESPONSE_FLOOR_BYTES
 
 MAX_ENVELOPE_MANIFEST_BYTES = 16_384
 MAX_OPEN_KITCHEN_CALLS = {
-    "claude_code_inline": 1,
+    "ordinary_inline": 1,
     "claude_code_bounded": 4,
     "codex_bounded": 4,
 }

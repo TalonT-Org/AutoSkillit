@@ -27,6 +27,7 @@ from tests.server._helpers import (
     _credit_initialization_sections,
     _open_kitchen_patched,
     _pull_step_section,
+    _ready_recipe_segment_step,
     _skill_ok,
 )
 from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
@@ -45,16 +46,20 @@ _BOUND_INVOCATION_MARKER = "AUTOSKILLIT_BOUND_INVOCATION_V1\n"
 async def _install_attested_recipe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    tool_ctx,
 ) -> tuple[dict[str, object], dict[str, object]]:
     monkeypatch.chdir(tmp_path)
     envelope = await _open_kitchen_patched(_RECIPE, _OVERRIDES, monkeypatch)
     assert envelope["success"] is True
     await _credit_initialization_sections(envelope)
-    step = await _pull_step_section(envelope, _STEP)
     receipt = json.loads(await complete_recipe_initialization(envelope["initialization_id"]))
     assert receipt["success"] is True
     credential = receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
     assert isinstance(credential, dict)
+    if "recipe_segment" in envelope:
+        step, credential = _ready_recipe_segment_step(tool_ctx, _STEP)
+    else:
+        step = await _pull_step_section(envelope, _STEP)
     return credential, step
 
 
@@ -63,7 +68,11 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     tmp_path: Path,
     tool_ctx_kitchen_open,
 ) -> None:
-    credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
+    credential, step = await _install_attested_recipe(
+        monkeypatch,
+        tmp_path,
+        tool_ctx_kitchen_open,
+    )
     installed = get_recipe_execution(tool_ctx_kitchen_open)
     assert installed is not None
     execution_id = credential["execution_id"]

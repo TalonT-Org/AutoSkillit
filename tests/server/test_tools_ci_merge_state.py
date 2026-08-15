@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+import autoskillit.server.tools.tools_ci as tools_ci
 from autoskillit.server.tools.tools_ci import check_repo_merge_state
+from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -47,10 +49,12 @@ async def test_check_repo_merge_state_uses_token_factory(tool_ctx_kitchen_open, 
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
+    install_prepared_recipe_segment(monkeypatch, tools_ci, step_name="merge_state")
 
-    await check_repo_merge_state(branch="main")
+    result = json.loads(await check_repo_merge_state(branch="main", step_name="merge_state"))
     assert captured_tokens == ["factory-token"]
     assert resolved_calls == [1]
+    assert result["recipe_segment"]["kind"] == "success"
 
 
 @pytest.mark.anyio
@@ -101,6 +105,8 @@ async def test_check_repo_merge_state_error_includes_http_status(
         "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
+    install_prepared_recipe_segment(monkeypatch, tools_ci, step_name="merge_state")
 
-    result = json.loads(await check_repo_merge_state(branch="main"))
+    result = json.loads(await check_repo_merge_state(branch="main", step_name="merge_state"))
     assert result["http_status"] == 403
+    assert result["recipe_segment"]["kind"] == "recovery"

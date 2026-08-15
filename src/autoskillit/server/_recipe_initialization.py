@@ -13,6 +13,7 @@ from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RECIPE_SECTION_PAGINATION_VERSION,
     RECIPE_SECTION_REGISTRY_DIGEST,
+    FinalizedRecipeProjection,
     RecipeArtifactGeneration,
     RecipeExecutionCredential,
     RecipeExecutionId,
@@ -202,6 +203,7 @@ def stage_recipe_initialization(
     staged_snapshot: RecipeExecutionSnapshot,
     requirements: tuple[RecipeInitializationRequirement, ...],
     generation_store_key: str,
+    finalized_projection: FinalizedRecipeProjection,
 ) -> InitializingRecipe:
     """Replace all prior recipe authority with one immutable INITIALIZING state."""
     with tool_ctx.recipe_execution_lock:
@@ -236,6 +238,7 @@ def stage_recipe_initialization(
             installation_version=installation_version,
             requirements=requirements,
             generation_store_key=generation_store_key,
+            finalized_projection=finalized_projection,
         )
         if previous_identity is not None and previous_identity != (
             execution_id,
@@ -535,6 +538,24 @@ def _render_completion_receipt(
     )
 
 
+def _public_completion_credential(
+    credential: RecipeExecutionCredential,
+    projection: FinalizedRecipeProjection,
+) -> RecipeExecutionCredential:
+    if not projection.delivery_segments:
+        return credential
+    initial_steps = frozenset(projection.delivery_segments[0].ordered_step_names)
+    return RecipeExecutionCredential(
+        execution_id=credential.execution_id,
+        snapshot_digest=credential.snapshot_digest,
+        invocation_template_digests={
+            step_name: digest
+            for step_name, digest in credential.invocation_template_digests.items()
+            if step_name in initial_steps
+        },
+    )
+
+
 def build_embedded_completion_response(
     *,
     initialization_id: str,
@@ -576,7 +597,10 @@ def build_completion_response(
                 recipe_name=state.recipe_name,
                 artifact_generation=state.artifact_generation,
                 flow_generation=state.flow_generation,
-                credential=build_recipe_execution_credential(state.installed_execution.snapshot),
+                credential=_public_completion_credential(
+                    build_recipe_execution_credential(state.installed_execution.snapshot),
+                    state.finalized_projection,
+                ),
             )
             return rendered
         if (
@@ -598,7 +622,10 @@ def build_completion_response(
             recipe_name=state.recipe_name,
             artifact_generation=state.artifact_generation,
             flow_generation=state.flow_generation,
-            credential=build_recipe_execution_credential(state.staged_snapshot),
+            credential=_public_completion_credential(
+                build_recipe_execution_credential(state.staged_snapshot),
+                state.finalized_projection,
+            ),
         )
         return FinalizedRecipeInitializationResponse(
             rendered=rendered,

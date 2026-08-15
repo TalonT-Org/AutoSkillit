@@ -9,7 +9,9 @@ import pytest
 import structlog.contextvars
 import structlog.testing
 
+import autoskillit.server.tools.tools_execution as tools_execution
 from autoskillit.server.tools.tools_execution import run_python
+from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -41,6 +43,65 @@ class TestRunPythonObservability:
         """run_python reports failure (success=false) when callable import fails."""
         result = json.loads(await run_python(callable="nonexistent.module.func", ctx=mock_ctx))
         assert result["success"] is False
+
+    @pytest.mark.parametrize(
+        ("callable_name", "args", "expected_kind"),
+        [
+            ("json.dumps", {"obj": 1}, "success"),
+            ("nonexistent.module.func", {}, "recovery"),
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_run_python_selects_carrier_from_result_success(
+        self,
+        tool_ctx_kitchen_open,
+        mock_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+        callable_name: str,
+        args: dict[str, object],
+        expected_kind: str,
+    ) -> None:
+        install_prepared_recipe_segment(monkeypatch, tools_execution, step_name="python")
+
+        result = json.loads(
+            await run_python(
+                callable=callable_name,
+                args=args,
+                step_name="python",
+                ctx=mock_ctx,
+            )
+        )
+
+        assert result["success"] is (expected_kind == "success")
+        assert result["recipe_segment"]["kind"] == expected_kind
+
+    @pytest.mark.anyio
+    async def test_run_python_selects_carrier_from_shaped_failure(
+        self,
+        tool_ctx_kitchen_open,
+        mock_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        install_prepared_recipe_segment(monkeypatch, tools_execution, step_name="python")
+        monkeypatch.setattr(
+            tools_execution,
+            "shape_execution_response",
+            lambda *_args, **_kwargs: json.dumps(
+                {"success": False, "error": "response shaping failed"}
+            ),
+        )
+
+        result = json.loads(
+            await run_python(
+                callable="json.dumps",
+                args={"obj": 1},
+                step_name="python",
+                ctx=mock_ctx,
+            )
+        )
+
+        assert result["success"] is False
+        assert result["recipe_segment"]["kind"] == "recovery"
 
 
 class TestRunPythonHeadlessGate:

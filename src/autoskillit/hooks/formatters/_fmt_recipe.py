@@ -91,6 +91,19 @@ def _strip_yaml_ingredients_block(yaml_text: str) -> str:
     return "".join(result)
 
 
+def _fmt_recipe_segment(carrier: object) -> str:
+    """Render an inseparable startup, success, or recovery carrier."""
+    if not isinstance(carrier, Mapping):
+        return ""
+    rendered = json.dumps(
+        dict(carrier),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"--- RECIPE SEGMENT ---\n{rendered}\n--- END RECIPE SEGMENT ---"
+
+
 def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
     """Render flow before content so bounded heads preserve step ordering."""
     lines: list[str] = []
@@ -203,6 +216,7 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "degraded_evidence",
         "ambiguity",
         "retry_disposition",
+        "recipe_segment",
         *_RECIPE_INITIALIZATION_FIELDS,
     }
 )
@@ -266,6 +280,9 @@ def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
     lines: list[str] = [f"## open_kitchen {mark} v{version}"]
     lines.extend(_fmt_kitchen_transition(data))
     lines.extend(_fmt_recipe_body(data))
+    formatted_segment = _fmt_recipe_segment(data.get("recipe_segment"))
+    if formatted_segment:
+        lines.extend(("", formatted_segment))
     formatted = "\n".join(lines)
 
     byte_len = len(formatted.encode("utf-8"))

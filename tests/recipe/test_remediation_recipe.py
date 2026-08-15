@@ -6,17 +6,25 @@ import pytest
 
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.validator import validate_recipe_structure
+from tests.recipe.test_implementation import _assert_delivery_projection_contract
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
+_PRE_DELIVERY_STRUCTURE_SHA256 = (
+    "sha256:2e7315d7256ce035110cd376ada4f5403c0a1ce574220ff488c004ec2cfea6e4"
+)
 
 
 @pytest.fixture(scope="module")
 def recipe():
     return load_recipe(RECIPE_PATH)
+
+
+def test_delivery_declarations_preserve_canonical_recipe_structure(recipe) -> None:
+    _assert_delivery_projection_contract(recipe, RECIPE_PATH, _PRE_DELIVERY_STRUCTURE_SHA256)
 
 
 def test_remediation_recipe_has_release_issue_success_step(recipe):

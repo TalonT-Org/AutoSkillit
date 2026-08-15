@@ -16,7 +16,6 @@ def _format_exit_code_line(data: dict) -> str:
     exit_code = data.get("exit_code", "")
     kill_reason = data.get("kill_reason")
     if kill_reason is None:
-        # Legacy payload — no annotation
         return f"exit_code: {exit_code}"
     if kill_reason == "kill_after_completion":
         return f"exit_code: {exit_code} (infra-terminated after completion — grace exceeded)"
@@ -25,7 +24,6 @@ def _format_exit_code_line(data: dict) -> str:
         if termination_reason:
             return f"exit_code: {exit_code} (infra-killed: {termination_reason})"
         return f"exit_code: {exit_code} (infra-killed)"
-    # natural_exit or any unknown value → bare
     return f"exit_code: {exit_code}"
 
 
@@ -56,7 +54,6 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     status = subtype if subtype else ("OK" if success else "FAIL")
 
     if pipeline:
-        # Compact format for pipeline mode
         header = f"run_skill: {'OK' if success else 'FAIL'} [{status}]"
         lines = [header]
         session_id = data.get("session_id", "")
@@ -84,7 +81,6 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
             lines.extend(["", "### stderr", stderr])
         return "\n".join(lines)
 
-    # Interactive mode
     lines = [f"## run_skill {mark} {status}", ""]
     lines.append(f"success: {success}")
     session_id = data.get("session_id", "")
@@ -229,6 +225,7 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "provider_used",
         "provider_fallback",
         "pipeline_tracker",
+        "recipe_segment",
         "receipt_id",
         "error",
     }
@@ -269,6 +266,7 @@ _FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset(
         "stderr",
         "stdout_artifact_path",
         "stderr_artifact_path",
+        "recipe_segment",
         "error",
     }
 )
@@ -287,6 +285,7 @@ _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
         "error",
         "infrastructure_missing",
         "raw_output_artifact_path",
+        "recipe_segment",
     }
 )
 _FMT_TEST_CHECK_SUPPRESSED: frozenset[str] = frozenset()
@@ -350,6 +349,7 @@ _FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
         "remote_sha",
         "remote_is_ancestor",
         "raw_output_artifact_path",
+        "recipe_segment",
     }
 )
 _FMT_MERGE_WORKTREE_SUPPRESSED: frozenset[str] = frozenset()

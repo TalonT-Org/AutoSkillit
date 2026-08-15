@@ -44,16 +44,24 @@ class _Invocation:
     step_name: str
 
 
+@dataclass(frozen=True, slots=True)
+class _AcknowledgedReceipt:
+    receipt: RunSkillCompletionReceipt
+    tracker_outcome: Mapping[str, Any] | None = None
+
+
 class DefaultRunSkillCompletionAuthority:
     """Own in-flight work, delivery receipts, and tracker repair credits."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
+        self._tracker_outcome_condition = threading.Condition(self._lock)
+        self._tracker_outcomes_in_flight: set[str] = set()
         self._in_flight: dict[str, _Invocation] = {}
         self._drafts: dict[str, RunSkillCompletionReceipt] = {}
         self._delivered: dict[str, RunSkillCompletionReceipt] = {}
         self._recovered: set[str] = set()
-        self._consumed: set[str] = set()
+        self._acknowledged: dict[str, _AcknowledgedReceipt] = {}
         self._credits: dict[tuple[str, str, str, str, str], set[str]] = {}
 
     def admission(self, tool_name: str) -> tuple[bool, str]:
@@ -163,7 +171,7 @@ class DefaultRunSkillCompletionAuthority:
             if not self._delivered:
                 if self._drafts:
                     raise ValueError("run_skill receipt has not been delivered")
-                if self._consumed:
+                if self._acknowledged:
                     raise ValueError("run_skill receipt has already been acknowledged")
                 raise ValueError("no delivered run_skill receipt is available for recovery")
             receipt_id, receipt = next(iter(self._delivered.items()))
@@ -183,23 +191,76 @@ class DefaultRunSkillCompletionAuthority:
         kitchen_id: str,
         request_session_id: str,
     ) -> RunSkillCompletionReceipt:
-        """Consume one delivered receipt from its launching request session."""
+        """Acknowledge one receipt, replaying its authenticated live-process record."""
         with self._lock:
-            if receipt_id in self._consumed:
-                raise ValueError("run_skill receipt has already been acknowledged")
-            receipt = self._delivered.get(receipt_id)
-            if receipt is None:
+            acknowledged = self._acknowledged.get(receipt_id)
+            if acknowledged is not None:
+                receipt = acknowledged.receipt
+                if receipt.kitchen_id != kitchen_id:
+                    raise ValueError("run_skill receipt belongs to another kitchen")
+                if receipt.request_session_id != request_session_id:
+                    raise ValueError("run_skill receipt belongs to another request session")
+                return receipt
+            delivered_receipt = self._delivered.get(receipt_id)
+            if delivered_receipt is None:
                 raise ValueError("run_skill receipt is not available for acknowledgement")
-            if receipt.kitchen_id != kitchen_id:
+            if delivered_receipt.kitchen_id != kitchen_id:
                 raise ValueError("run_skill receipt belongs to another kitchen")
-            if receipt.request_session_id != request_session_id:
+            if delivered_receipt.request_session_id != request_session_id:
                 raise ValueError("run_skill receipt belongs to another request session")
             del self._delivered[receipt_id]
             self._recovered.discard(receipt_id)
-            self._consumed.add(receipt_id)
-            if receipt.success and receipt.tracker_incarnation_id:
-                self._credits.setdefault(self._credit_key(receipt), set()).add(receipt_id)
-            return receipt
+            self._acknowledged[receipt_id] = _AcknowledgedReceipt(receipt=delivered_receipt)
+            if delivered_receipt.success and delivered_receipt.tracker_incarnation_id:
+                self._credits.setdefault(self._credit_key(delivered_receipt), set()).add(
+                    receipt_id
+                )
+            return delivered_receipt
+
+    def apply_acknowledged_tracker_outcome(
+        self,
+        receipt_id: str,
+        *,
+        kitchen_id: str,
+        request_session_id: str,
+        effect: Callable[[], Mapping[str, Any]],
+    ) -> Mapping[str, Any]:
+        """Run and cache the tracker outcome for one acknowledged receipt."""
+        with self._tracker_outcome_condition:
+            while True:
+                acknowledged = self._acknowledged.get(receipt_id)
+                if acknowledged is None:
+                    raise ValueError("run_skill receipt has not been acknowledged")
+                receipt = acknowledged.receipt
+                if receipt.kitchen_id != kitchen_id:
+                    raise ValueError("run_skill receipt belongs to another kitchen")
+                if receipt.request_session_id != request_session_id:
+                    raise ValueError("run_skill receipt belongs to another request session")
+                if acknowledged.tracker_outcome is not None:
+                    return dict(acknowledged.tracker_outcome)
+                if receipt_id not in self._tracker_outcomes_in_flight:
+                    self._tracker_outcomes_in_flight.add(receipt_id)
+                    break
+                self._tracker_outcome_condition.wait()
+
+        try:
+            outcome = dict(effect())
+        except BaseException:
+            with self._tracker_outcome_condition:
+                self._tracker_outcomes_in_flight.remove(receipt_id)
+                self._tracker_outcome_condition.notify_all()
+            raise
+
+        with self._tracker_outcome_condition:
+            try:
+                self._acknowledged[receipt_id] = replace(
+                    acknowledged,
+                    tracker_outcome=outcome,
+                )
+            finally:
+                self._tracker_outcomes_in_flight.remove(receipt_id)
+                self._tracker_outcome_condition.notify_all()
+            return dict(outcome)
 
     def apply_tracker_credit(
         self,
@@ -247,11 +308,16 @@ class DefaultRunSkillCompletionAuthority:
     def clear_if_idle(self) -> bool:
         """Clear retained credits only when no completion is active."""
         with self._lock:
-            if self._in_flight or self._drafts or self._delivered:
+            if (
+                self._in_flight
+                or self._drafts
+                or self._delivered
+                or self._tracker_outcomes_in_flight
+            ):
                 return False
             self._credits.clear()
             self._recovered.clear()
-            self._consumed.clear()
+            self._acknowledged.clear()
             return True
 
     @staticmethod

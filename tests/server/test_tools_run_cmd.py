@@ -9,9 +9,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog.testing
 
+import autoskillit.server.tools.tools_execution as tools_execution
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools.tools_execution import run_cmd, run_python
 from tests.conftest import _make_result, _make_timeout_result
+from tests.server._recipe_segment_test_helpers import (
+    assert_recovery_recipe_segment,
+    install_prepared_recipe_segment,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -37,6 +42,30 @@ class TestRunCmd:
 
         assert result["success"] is False
         assert result["exit_code"] == 1
+
+    @pytest.mark.parametrize(
+        ("returncode", "expected_success"),
+        [(0, True), (1, False)],
+    )
+    @pytest.mark.anyio
+    async def test_run_cmd_attaches_recovery_carrier_only_on_failure(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+        returncode: int,
+        expected_success: bool,
+    ) -> None:
+        install_prepared_recipe_segment(monkeypatch, tools_execution, step_name="command")
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode, "stdout", "stderr"))
+
+        result = json.loads(await run_cmd(cmd="command", cwd="/tmp", step_name="command"))
+
+        assert result["success"] is expected_success
+        assert result["exit_code"] == returncode
+        if expected_success:
+            assert "recipe_segment" not in result
+        else:
+            assert_recovery_recipe_segment(result, step_name="command")
 
     @pytest.mark.anyio
     async def test_custom_timeout(self, tool_ctx_kitchen_open):

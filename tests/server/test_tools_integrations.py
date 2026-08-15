@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_issue_labels as tools_issue_labels
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import DefaultGateState
@@ -22,6 +23,10 @@ from autoskillit.server.tools.tools_issue_labels import (
 )
 from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews
 from tests.conftest import _make_result
+from tests.server._recipe_segment_test_helpers import (
+    assert_recovery_recipe_segment,
+    install_prepared_recipe_segment,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -255,20 +260,42 @@ class TestReleaseIssueTool:
         assert "release_issue" in GATED_TOOLS
 
     @pytest.mark.anyio
-    async def test_release_issue_returns_error_without_github_client(self, tool_ctx_kitchen_open):
+    async def test_release_issue_returns_error_without_github_client(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         tool_ctx_kitchen_open.github_client = None
-        result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
+        install_prepared_recipe_segment(monkeypatch, tools_issue_labels, step_name="release")
+        result = json.loads(
+            await release_issue(
+                "https://github.com/owner/repo/issues/42",
+                step_name="release",
+            )
+        )
         assert result["success"] is False
         assert "error" in result
+        assert_recovery_recipe_segment(result, step_name="release")
 
     @pytest.mark.anyio
-    async def test_release_issue_success(self, tool_ctx_kitchen_open):
+    async def test_release_issue_success_returns_recovery_segment(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         mock_client = AsyncMock()
         mock_client.remove_label.return_value = {"success": True}
         tool_ctx_kitchen_open.github_client = mock_client
-        result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
+        install_prepared_recipe_segment(monkeypatch, tools_issue_labels, step_name="release")
+        result = json.loads(
+            await release_issue(
+                "https://github.com/owner/repo/issues/42",
+                step_name="release",
+            )
+        )
         assert result["success"] is True
         assert result["issue_number"] == 42
+        assert_recovery_recipe_segment(result, step_name="release")
 
     # P5F4-T2
     @pytest.mark.anyio

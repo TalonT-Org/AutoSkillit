@@ -14,8 +14,11 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_FLOW_SCHEMA_VERSION,
+    FinalizedRecipeProjection,
+    FinalizedRecipeSegment,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
+    RecipeExecutionCredential,
     RecipeFlowGeneration,
 )
 from autoskillit.pipeline import (
@@ -101,6 +104,12 @@ def _stage(tool_ctx, tmp_path) -> InitializingRecipe:
             ),
         ),
         generation_store_key="compile-key",
+        finalized_projection=FinalizedRecipeProjection(
+            binding_projection=RecipeBindingProjection({}),
+            ordered_step_names=("step",),
+            entrypoint="step",
+            ordered_flow_edges=(),
+        ),
     )
 
 
@@ -158,6 +167,30 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
         "snapshot_digest",
     }
     assert parsed_initial["recipe_execution"] == parsed_replay["recipe_execution"]
+
+
+def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
+    projection = FinalizedRecipeProjection(
+        binding_projection=RecipeBindingProjection({}),
+        ordered_step_names=("initial", "future"),
+        entrypoint="initial",
+        ordered_flow_edges=(),
+        delivery_segments=(
+            FinalizedRecipeSegment(name="S0", ordered_step_names=("initial",)),
+            FinalizedRecipeSegment(name="S1", ordered_step_names=("future",)),
+        ),
+    )
+    credential = RecipeExecutionCredential(
+        execution_id="execution",
+        snapshot_digest=_hash("snapshot"),
+        invocation_template_digests={"initial": _hash("initial"), "future": _hash("future")},
+    )
+
+    public_credential = recipe_initialization._public_completion_credential(credential, projection)
+
+    assert public_credential.execution_id == credential.execution_id
+    assert public_credential.snapshot_digest == credential.snapshot_digest
+    assert public_credential.invocation_template_digests == {"initial": _hash("initial")}
 
 
 def test_install_rejects_initializing_recipe_without_completion_receipt(

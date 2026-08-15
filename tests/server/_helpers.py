@@ -151,7 +151,7 @@ async def simulate_session_start(
         )
         await _credit_initialization_sections(envelope, counter=counter)
     else:
-        counter.delivery_mode = "claude_code_inline"
+        counter.delivery_mode = "ordinary_inline"
     return counter
 
 
@@ -207,7 +207,26 @@ async def _credit_initialization_sections(
 
     identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
     initialization_id = envelope["initialization_id"]
-    for requirement in envelope["required_sections"]:
+    requirements = envelope.get("required_sections")
+    if requirements is None:
+        from autoskillit.pipeline import InitializingRecipe, ReadyRecipe
+        from autoskillit.server import _get_ctx
+
+        state = _get_ctx().recipe_initialization_state
+        if isinstance(state, ReadyRecipe):
+            assert state.initialization_id == initialization_id
+            return
+        assert isinstance(state, InitializingRecipe)
+        assert state.initialization_id == initialization_id
+        requirements = [
+            {
+                "section": item.section,
+                "page_plan_sha256": item.page_plan_sha256,
+                "total_parts": item.total_parts,
+            }
+            for item in state.requirements
+        ]
+    for requirement in requirements:
         continuation: str | None = None
         for part in range(requirement["total_parts"]):
             if counter is not None:
@@ -242,6 +261,46 @@ async def _pull_step_section(envelope: dict[str, Any], step_name: str) -> dict[s
     step_obj = parsed[step_name]
     assert isinstance(step_obj, dict), f"step section {step_name!r} body is not a mapping"
     return step_obj
+
+
+def _ready_recipe_segment_step(
+    tool_ctx: ToolContext,
+    step_name: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return one automatically delivered READY step and its scoped credential."""
+    from autoskillit.core import RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY
+    from autoskillit.core.io import load_yaml
+    from autoskillit.pipeline import ReadyRecipe
+    from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
+
+    state = tool_ctx.recipe_initialization_state
+    assert isinstance(state, ReadyRecipe)
+    target_segment = next(
+        (
+            segment
+            for segment in state.finalized_projection.delivery_segments
+            if step_name in segment.ordered_step_names
+        ),
+        None,
+    )
+    assert target_segment is not None, (
+        f"step {step_name!r} is not present in any finalized delivery segment"
+    )
+    for source_step in target_segment.checkpoint_sources:
+        prepared = prepare_recipe_segment_delivery(tool_ctx, source_step)
+        assert prepared is not None
+        for carrier in (prepared.success_carrier, prepared.recovery_carrier):
+            for body in carrier.get("bodies", ()):
+                if body.get("step") != step_name:
+                    continue
+                parsed = load_yaml(body["body"])
+                assert isinstance(parsed, dict)
+                step = parsed[step_name]
+                assert isinstance(step, dict)
+                credential = carrier[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+                assert step_name in credential["invocation_template_digests"]
+                return step, credential
+    raise AssertionError(f"step {step_name!r} was not delivered by its checkpoint carrier")
 
 
 def _with_finalized_projection(

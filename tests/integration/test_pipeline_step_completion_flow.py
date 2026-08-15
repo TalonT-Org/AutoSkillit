@@ -15,7 +15,10 @@ from mcp.types import CallToolRequestParams, TextContent
 
 from autoskillit.core.types import RetryReason
 from autoskillit.core.types._type_results import SkillResult
+from autoskillit.server import _notify
+from autoskillit.server._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 from autoskillit.server._run_skill_completion import RunSkillCompletionMiddleware
+from autoskillit.server.tools import tools_pipeline_tracker
 from autoskillit.server.tools.tools_execution import run_skill
 from autoskillit.server.tools.tools_pipeline_tracker import (
     complete_run_skill_result,
@@ -51,6 +54,23 @@ _FAIL_RESULT = dataclasses.replace(
     subtype="error",
 )
 
+_SUCCESS_CARRIER = {
+    "kind": "success",
+    "source_step": "rectify",
+    "segments": [{"index": 1, "name": "next"}],
+    "bodies": [{"step": "next", "body": "next:\n  action: stop\n"}],
+    "pull_closures": [],
+    "recipe_pull": {"artifact_blob_sha256": f"sha256:{'a' * 64}"},
+}
+_RECOVERY_CARRIER = {
+    "kind": "recovery",
+    "source_step": "rectify",
+    "target_steps": ["repair"],
+    "pull_closure": ["repair"],
+    "pull_requests": [{"section": "repair", "part": 0}],
+    "recipe_pull": {"artifact_blob_sha256": f"sha256:{'a' * 64}"},
+}
+
 
 def _setup_project(tmp_path, tool_ctx_kitchen_open):
     _shared_setup_project(tmp_path, tool_ctx_kitchen_open)
@@ -60,6 +80,46 @@ def _setup_project(tmp_path, tool_ctx_kitchen_open):
 def _read_tracker(tmp_path, kitchen_id="test-kitchen"):
     tracker_path = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / f"{kitchen_id}.json"
     return json.loads(tracker_path.read_text())
+
+
+async def _deliver_run_skill_result(tmp_path, tool_ctx, result: SkillResult) -> str:
+    tool_ctx.executor = AsyncMock()
+    tool_ctx.executor.run = AsyncMock(return_value=result)
+
+    async def registered_run_skill() -> str:
+        raise AssertionError("registered run_skill callable must not execute")
+
+    registered = FunctionTool.from_function(registered_run_skill, name="run_skill")
+    middleware = RunSkillCompletionMiddleware(
+        SimpleNamespace(get_tool=AsyncMock(return_value=registered))  # type: ignore[arg-type]
+    )
+    context = MiddlewareContext(
+        message=CallToolRequestParams(name="run_skill", arguments={}),
+        fastmcp_context=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+        method="tools/call",
+        type="request",
+    )
+
+    async def call_next(_context) -> ToolResult:
+        rendered = await run_skill(
+            "/autoskillit:rectify task",
+            str(tmp_path),
+            step_name="rectify",
+        )
+        return registered.convert_result(rendered)
+
+    delivered = await middleware.on_call_tool(context, call_next)  # type: ignore[arg-type]
+    assert len(delivered.content) == 1
+    assert isinstance(delivered.content[0], TextContent)
+    return json.loads(delivered.content[0].text)["receipt_id"]
+
+
+def _prepared_delivery() -> PreparedRecipeSegmentDelivery:
+    return PreparedRecipeSegmentDelivery(
+        step_name="rectify",
+        success_carrier=_SUCCESS_CARRIER,
+        recovery_carrier=_RECOVERY_CARRIER,
+    )
 
 
 class TestServerSideStepCompletionMarking:
@@ -204,6 +264,194 @@ class TestServerSideStepCompletionMarking:
         assert completed["success"] is True
         assert completed["tracker"]["success"] is True
         assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
+
+
+class TestAcknowledgedReceiptReplay:
+    @pytest.mark.parametrize("failure_stage", ["artifact_extraction", "response_enforcement"])
+    @pytest.mark.anyio
+    async def test_retry_after_post_ack_failure_replays_carrier_and_tracker_once(
+        self,
+        failure_stage,
+        tool_ctx_kitchen_open,
+        tmp_path,
+        monkeypatch,
+    ):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {"rectify": {"status": "pending"}},
+            {},
+        )
+        receipt_id = await _deliver_run_skill_result(
+            tmp_path,
+            tool_ctx_kitchen_open,
+            _SUCCESS_RESULT,
+        )
+
+        original_mark_step_complete = tools_pipeline_tracker.mark_step_complete
+        tracker_effects = 0
+
+        def counted_mark_step_complete(*args, **kwargs):
+            nonlocal tracker_effects
+            tracker_effects += 1
+            return original_mark_step_complete(*args, **kwargs)
+
+        monkeypatch.setattr(
+            tools_pipeline_tracker,
+            "mark_step_complete",
+            counted_mark_step_complete,
+        )
+        prepare_attempts = 0
+        enforcement_attempts = 0
+
+        def prepare(*_args, **_kwargs):
+            nonlocal prepare_attempts
+            prepare_attempts += 1
+            if failure_stage == "artifact_extraction" and prepare_attempts == 1:
+                raise OSError("artifact extraction failed")
+            return _prepared_delivery()
+
+        original_enforce_response_budget = _notify.enforce_response_budget
+
+        def enforce_response_budget(*args, **kwargs):
+            nonlocal enforcement_attempts
+            enforcement_attempts += 1
+            if failure_stage == "response_enforcement" and enforcement_attempts == 1:
+                raise RuntimeError("response enforcement failed")
+            return original_enforce_response_budget(*args, **kwargs)
+
+        monkeypatch.setattr(tools_pipeline_tracker, "prepare_recipe_segment_delivery", prepare)
+        monkeypatch.setattr(_notify, "enforce_response_budget", enforce_response_budget)
+        request_context = SimpleNamespace(session_id="request-session")
+
+        failed = json.loads(
+            await complete_run_skill_result(receipt_id, ctx=request_context)  # type: ignore[arg-type]
+        )
+        retried = json.loads(
+            await complete_run_skill_result(receipt_id, ctx=request_context)  # type: ignore[arg-type]
+        )
+        replayed = json.loads(
+            await complete_run_skill_result(receipt_id, ctx=request_context)  # type: ignore[arg-type]
+        )
+
+        assert failed["success"] is False
+        if failure_stage == "artifact_extraction":
+            assert "recipe_segment" not in failed
+        else:
+            assert failed["subtype"] == "recipe_segment_post_effect_delivery_failure"
+            assert failed["operation_already_ran"] is True
+            assert failed["do_not_repeat"] is True
+            assert failed["recipe_segment"] == _SUCCESS_CARRIER
+        assert retried == replayed
+        assert retried["receipt_id"] == receipt_id
+        assert retried["recipe_segment"] == _SUCCESS_CARRIER
+        assert tracker_effects == 1
+        assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
+
+    @pytest.mark.anyio
+    async def test_failed_receipt_uses_bodyless_recovery_carrier(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {"rectify": {"status": "pending"}},
+            {},
+        )
+        receipt_id = await _deliver_run_skill_result(
+            tmp_path,
+            tool_ctx_kitchen_open,
+            _FAIL_RESULT,
+        )
+        monkeypatch.setattr(
+            tools_pipeline_tracker,
+            "prepare_recipe_segment_delivery",
+            lambda *_args, **_kwargs: _prepared_delivery(),
+        )
+
+        completed = json.loads(
+            await complete_run_skill_result(
+                receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            )
+        )
+
+        assert completed["success"] is True
+        assert completed["run_skill_success"] is False
+        assert completed["recipe_segment"] == _RECOVERY_CARRIER
+        assert "bodies" not in completed["recipe_segment"]
+        assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "pending"
+
+    @pytest.mark.anyio
+    async def test_acknowledged_replay_rejects_other_bindings_and_unknown_receipts(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {"rectify": {"status": "pending"}},
+            {},
+        )
+        receipt_id = await _deliver_run_skill_result(
+            tmp_path,
+            tool_ctx_kitchen_open,
+            _SUCCESS_RESULT,
+        )
+        monkeypatch.setattr(
+            tools_pipeline_tracker,
+            "prepare_recipe_segment_delivery",
+            lambda *_args, **_kwargs: _prepared_delivery(),
+        )
+        original = json.loads(
+            await complete_run_skill_result(
+                receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            )
+        )
+
+        wrong_session = json.loads(
+            await complete_run_skill_result(
+                receipt_id,
+                ctx=SimpleNamespace(session_id="other-session"),  # type: ignore[arg-type]
+            )
+        )
+        tool_ctx_kitchen_open.kitchen_id = "other-kitchen"
+        wrong_kitchen = json.loads(
+            await complete_run_skill_result(
+                receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            )
+        )
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        unknown = json.loads(
+            await complete_run_skill_result(
+                "unknown-receipt",
+                ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            )
+        )
+        replay = json.loads(
+            await complete_run_skill_result(
+                receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            )
+        )
+
+        assert wrong_session["success"] is False
+        assert "another request session" in wrong_session["error"]
+        assert wrong_kitchen["success"] is False
+        assert "another kitchen" in wrong_kitchen["error"]
+        assert unknown["success"] is False
+        assert "not available" in unknown["error"]
+        assert replay == original
 
 
 class TestDependentStepAllowedAfterServerSideMarking:

@@ -214,6 +214,14 @@ class RecipeBlock:
     gh_api_occurrences: int  # total count of "gh api" substrings across all run_cmd cmds
 
 
+@dataclass(frozen=True, slots=True)
+class RecipeDeliverySegment:
+    """One ordered public-delivery segment declared by a recipe."""
+
+    name: str
+    steps: tuple[str, ...]
+
+
 @dataclass
 class CampaignDispatch:
     """A single dispatch entry in a campaign recipe."""
@@ -263,6 +271,7 @@ class Recipe:
     dispatch_only: bool = False
     # When True, this sub-recipe is excluded from fleet dispatch listings and MCP
     # list_recipes. It is only loaded via campaign dispatch by name.
+    delivery_segments: tuple[RecipeDeliverySegment, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

@@ -191,6 +191,41 @@ def test_run_python_accepts_callable_param() -> None:
     assert not dead, "valid param 'callable' must not trigger dead-with-param"
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "with_args"),
+    [
+        ("run_python", {"callable": "mod.fn", "step_name": "compute"}),
+        (
+            "check_pr_mergeable",
+            {"pr_number": "42", "cwd": "/tmp", "step_name": "check_mergeable"},
+        ),
+        (
+            "claim_and_resolve_issue",
+            {
+                "issue_url": "https://github.com/owner/repo/issues/42",
+                "step_name": "claim_issue",
+            },
+        ),
+        (
+            "release_issue",
+            {
+                "issue_url": "https://github.com/owner/repo/issues/42",
+                "step_name": "release_issue",
+            },
+        ),
+    ],
+)
+def test_dead_with_param_allows_recipe_delivery_step_name(
+    tool_name: str,
+    with_args: dict[str, str],
+) -> None:
+    recipe = _make_recipe_with_args(tool_name, with_args)
+
+    dead = [f for f in run_semantic_rules(recipe) if f.rule == "dead-with-param"]
+
+    assert not dead
+
+
 def test_clone_repo_rejects_stale_params() -> None:
     recipe = _make_recipe_with_args("clone_repo", {"repo": "owner/repo", "target_dir": "/tmp/x"})
     findings = run_semantic_rules(recipe)

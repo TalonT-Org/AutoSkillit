@@ -5,18 +5,9 @@ Intercepts MCP tool responses and reformats them from raw JSON to Markdown-KV
 before Claude consumes them. Reduces token overhead 30-77% and improves
 LLM field-extraction accuracy.
 
-This module is the dispatch entrypoint. The per-tool formatters live in four
-private helper modules to keep this file under its line budget:
-
-  * ``_fmt_primitives`` — payload dataclasses, token formatter, pipeline-mode
-    detector, and short-name extractor.
-  * ``_fmt_response_spill`` — artifact metadata trust and integrity validation.
-  * ``_fmt_execution``  — ``run_skill``, ``run_cmd``, ``test_check``,
-    ``merge_worktree``.
-  * ``_fmt_status``     — ``get_token_summary``, ``get_timing_summary``,
-    ``kitchen_status``, ``clone_repo``.
-  * ``_fmt_recipe``     — ``load_recipe``, ``open_kitchen``, ``list_recipes``
-    plus the recipe field-coverage contracts.
+This dispatch entrypoint delegates to the ``_fmt_primitives``,
+``_fmt_response_spill``, ``_fmt_execution``, ``_fmt_status``, and
+``_fmt_recipe`` helpers to stay within its line budget.
 
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """
@@ -95,6 +86,7 @@ from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _fmt_open_kitchen,
     _fmt_open_kitchen_plain_text,
     _fmt_recipe_body,
+    _fmt_recipe_segment,
     _strip_yaml_ingredients_block,
 )
 from _fmt_status import (  # type: ignore[import-not-found]  # noqa: E402, F401
@@ -278,6 +270,7 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
 
     # DictPayload path — envelope was successfully unwrapped (or was never an envelope).
     data = dict(payload.data)
+    recipe_segment = data.pop("recipe_segment", None)
     raw_spill_metadata = data.get(_RESPONSE_SPILL_METADATA_KEY)
     spill_metadata = _validate_response_spill_metadata(raw_spill_metadata)
     artifact_backed = spill_metadata is not None
@@ -309,6 +302,10 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
     error_text = data.get("error", "")
     if error_text and isinstance(error_text, str) and error_text not in rendered:
         rendered = f"{rendered}\nerror: {error_text}"
+
+    formatted_segment = _fmt_recipe_segment(recipe_segment)
+    if formatted_segment:
+        rendered = f"{rendered}\n\n{formatted_segment}" if rendered else formatted_segment
 
     return with_spill(rendered)
 

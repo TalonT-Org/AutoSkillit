@@ -176,6 +176,7 @@ class OpenKitchenResult(TypedDict, total=False):
     recipe_flow: dict[str, str | int]
     recipe_execution: dict[str, Any]
     recipe_pull: dict[str, str | int]
+    recipe_segment: dict[str, Any]
     initialization_id: str
     delivery_bound_spill: bool
     required_sections: list[dict[str, Any]]

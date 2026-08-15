@@ -8,12 +8,14 @@ and server internals — not cross-layer protocols.
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Required, TypedDict
 
 from autoskillit.core import ExecutionIdentityDict, ModelTotalEntry, RetryReason
 
 __all__ = [
     "RunSkillResult",
+    "RecipeSegmentSuccessCarrier",
+    "RecipeSegmentRecoveryCarrier",
     "RunCmdResult",
     "TestCheckResult",
     "MergeWorktreeResult",
@@ -27,6 +29,41 @@ __all__ = [
     "deny_envelope",
     "_validate_result",
 ]
+
+
+class RecipeSegmentBody(TypedDict, total=False):
+    """One canonical body delivered in a success carrier."""
+
+    step: Required[str]
+    body: Required[str]
+    body_sha256: Required[str]
+    invocation_template_digest: str
+
+
+class RecipeSegmentSuccessCarrier(TypedDict, total=False):
+    """Full-body carrier selected after a successful checkpoint."""
+
+    kind: Required[Literal["success"]]
+    source_step: Required[str]
+    segments: Required[list[dict[str, Any]]]
+    bodies: Required[list[RecipeSegmentBody]]
+    recipe_execution: Required[dict[str, Any]]
+    pull_closures: Required[list[dict[str, Any]]]
+    recipe_pull: Required[dict[str, Any]]
+
+
+class RecipeSegmentRecoveryCarrier(TypedDict):
+    """Body-free closure carrier selected after a failed checkpoint."""
+
+    kind: Literal["recovery"]
+    source_step: str
+    target_steps: list[str]
+    pull_closure: list[str]
+    pull_requests: list[dict[str, Any]]
+    recipe_pull: dict[str, Any]
+
+
+RecipeSegmentCarrier = RecipeSegmentSuccessCarrier | RecipeSegmentRecoveryCarrier
 
 
 class _RunSkillResultBase(TypedDict):
@@ -82,6 +119,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     error: str
     stage: str
     retriable: bool
+    recipe_segment: RecipeSegmentCarrier
 
 
 class _RunCmdResultBase(TypedDict):
@@ -99,6 +137,7 @@ class RunCmdResult(_RunCmdResultBase, total=False):
     stdout_artifact_path: str
     stderr_artifact_path: str
     error: str
+    recipe_segment: RecipeSegmentCarrier
 
 
 class _TestCheckResultBase(TypedDict):
@@ -120,6 +159,7 @@ class TestCheckResult(_TestCheckResultBase, total=False):
     full_run_reason: str
     error: str
     infrastructure_missing: bool
+    recipe_segment: RecipeSegmentCarrier
 
 
 class MergeWorktreeResult(TypedDict, total=False):
@@ -148,6 +188,7 @@ class MergeWorktreeResult(TypedDict, total=False):
     local_sha: str
     remote_sha: str
     remote_is_ancestor: bool
+    recipe_segment: RecipeSegmentCarrier
 
 
 class TokenSummaryResult(TypedDict, total=False):

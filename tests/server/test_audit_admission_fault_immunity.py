@@ -38,6 +38,7 @@ from tests.server._helpers import (
     _credit_initialization_sections,
     _open_kitchen_patched,
     _pull_step_section,
+    _ready_recipe_segment_step,
     _skill_ok,
 )
 from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
@@ -81,16 +82,20 @@ _STAGES = (
 async def _install_attested_recipe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    tool_ctx,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     monkeypatch.chdir(tmp_path)
     envelope = await _open_kitchen_patched(_RECIPE, _OVERRIDES, monkeypatch)
     assert envelope["success"] is True
     await _credit_initialization_sections(envelope)
-    step = await _pull_step_section(envelope, _STEP)
     receipt = json.loads(await complete_recipe_initialization(envelope["initialization_id"]))
     assert receipt["success"] is True
     credential = receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
     assert isinstance(credential, dict)
+    if "recipe_segment" in envelope:
+        step, credential = _ready_recipe_segment_step(tool_ctx, _STEP)
+    else:
+        step = await _pull_step_section(envelope, _STEP)
     return credential, step
 
 
@@ -253,7 +258,11 @@ async def test_staged_fault_retry_preserves_one_durable_audit_lifecycle(
     tool_ctx_kitchen_open,
 ) -> None:
     monkeypatch.setattr(tool_ctx_kitchen_open, "background", None)
-    credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
+    credential, step = await _install_attested_recipe(
+        monkeypatch,
+        tmp_path,
+        tool_ctx_kitchen_open,
+    )
     execution_id = str(credential["execution_id"])
     work_dir = tmp_path / "worktree"
     audit_root = resolve_temp_dir(
@@ -459,7 +468,11 @@ async def test_active_installation_barrier_fences_prepared_authority_without_red
     tool_ctx_kitchen_open,
 ) -> None:
     monkeypatch.setattr(tool_ctx_kitchen_open, "background", None)
-    credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
+    credential, step = await _install_attested_recipe(
+        monkeypatch,
+        tmp_path,
+        tool_ctx_kitchen_open,
+    )
     execution_id = str(credential["execution_id"])
     work_dir = tmp_path / "worktree"
     audit_root = resolve_temp_dir(
@@ -537,6 +550,7 @@ async def test_active_installation_barrier_fences_prepared_authority_without_red
                     staged_snapshot=replacement_snapshot,
                     requirements=(),
                     generation_store_key=state.generation_store_key,
+                    finalized_projection=state.finalized_projection,
                 )
                 prepared = prepare_recipe_execution(
                     tool_ctx_kitchen_open,

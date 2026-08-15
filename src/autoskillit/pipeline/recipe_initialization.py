@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import TypeAlias
 
 from autoskillit.core import (
+    FinalizedRecipeProjection,
     InstallationVersion,
     InstalledRecipeExecution,
     RecipeArtifactGeneration,
@@ -88,6 +89,7 @@ class InitializingRecipe:
     requirements: tuple[RecipeInitializationRequirement, ...]
     progress: tuple[RecipeInitializationProgress, ...]
     generation_store_key: str
+    finalized_projection: FinalizedRecipeProjection
     completion_receipt: str | None = None
 
     def __post_init__(self) -> None:
@@ -103,6 +105,8 @@ class InitializingRecipe:
             raise ValueError("recipe initialization identity is incomplete")
         if not isinstance(self.installation_version, InstallationVersion):
             raise ValueError("recipe initialization installation version is invalid")
+        if not isinstance(self.finalized_projection, FinalizedRecipeProjection):
+            raise ValueError("recipe initialization finalized projection is invalid")
         requirements = tuple(self.requirements)
         progress = tuple(self.progress)
         if len(requirements) != len(progress):
@@ -133,6 +137,7 @@ class ReadyRecipe:
     initialization_id: str
     installed_execution: InstalledRecipeExecution
     generation_store_key: str
+    finalized_projection: FinalizedRecipeProjection
     completion_receipt: str
     _transition_token: object = field(repr=False, compare=False)
 
@@ -150,6 +155,8 @@ class ReadyRecipe:
             )
         ):
             raise ValueError("ready recipe identity and completion receipt must be non-empty")
+        if not isinstance(self.finalized_projection, FinalizedRecipeProjection):
+            raise ValueError("ready recipe finalized projection is invalid")
         if (
             self.artifact_generation.recipe_name != self.recipe_name
             or self.installed_execution.snapshot.recipe_name != self.recipe_name
@@ -178,6 +185,7 @@ def start_recipe_initialization(
     installation_version: InstallationVersion,
     requirements: tuple[RecipeInitializationRequirement, ...],
     generation_store_key: str,
+    finalized_projection: FinalizedRecipeProjection,
 ) -> InitializingRecipe:
     """Start a fresh generation and discard all prior authority."""
     progress = tuple(
@@ -200,6 +208,7 @@ def start_recipe_initialization(
         requirements=requirements,
         progress=progress,
         generation_store_key=generation_store_key,
+        finalized_projection=finalized_projection,
     )
 
 
@@ -267,6 +276,7 @@ def transition_recipe_ready(
         initialization_id=state.initialization_id,
         installed_execution=installed_execution,
         generation_store_key=state.generation_store_key,
+        finalized_projection=state.finalized_projection,
         completion_receipt=completion_receipt,
         _transition_token=_READY_RECIPE_TRANSITION_TOKEN,
     )

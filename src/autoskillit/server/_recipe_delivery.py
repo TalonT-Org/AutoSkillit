@@ -89,6 +89,10 @@ from autoskillit.server._recipe_initialization import (
     stage_recipe_initialization,
 )
 from autoskillit.server._recipe_section_pagination import resolve_recipe_section_bound_bytes
+from autoskillit.server._recipe_segment_delivery import (
+    RecipeSegmentDeliveryError,
+    shape_segmented_startup_payload,
+)
 from autoskillit.server._response_budget import enforce_response_budget
 
 if TYPE_CHECKING:
@@ -242,6 +246,27 @@ def finalize_recipe_delivery(
             initialization_id = current_initialization.initialization_id
     if initialization_id is not None:
         surface_payload["initialization_id"] = initialization_id
+    try:
+        surface_payload = shape_segmented_startup_payload(
+            surface_payload,
+            candidate_payload,
+            surface=surface,
+            projection=finalized_projection,
+            generation=generation,
+            execution_snapshot=execution_snapshot,
+        )
+    except RecipeSegmentDeliveryError as exc:
+        reason = str(exc)
+        decision = _failure_decision(
+            producer=surface_definition.producer_tool,
+            reason=reason,
+            selected_limit=ordinary_limit,
+            contract_digest=(delivery_budget.contract_digest if delivery_budget else ""),
+        )
+        return FinalizedRecipeResponse(
+            rendered=json.dumps({"success": False, "error": reason}, separators=(",", ":")),
+            decision=decision,
+        )
     ordinary_rendered = json.dumps(
         surface_payload,
         ensure_ascii=False,
@@ -524,6 +549,7 @@ def complete_finalized_recipe_response(
         assert finalized.artifact_generation is not None
         assert finalized.flow_generation is not None
         assert finalized.execution_snapshot is not None
+        assert finalized.finalized_projection is not None
         assert finalized.normalized_compile_key is not None
         assert finalized.initialization_id is not None
         assert parsed is not None
@@ -543,6 +569,7 @@ def complete_finalized_recipe_response(
                     else ()
                 ),
                 generation_store_key=finalized.normalized_compile_key,
+                finalized_projection=finalized.finalized_projection,
             )
             if parsed.get("delivery_bound_spill") is not True:
                 prepared_execution = prepare_recipe_execution(

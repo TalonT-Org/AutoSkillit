@@ -18,6 +18,11 @@ from autoskillit.core import (
     atomic_write,
     get_logger,
 )
+from autoskillit.server._recipe_segment_delivery import (
+    RECIPE_SEGMENT_MAX_BYTES,
+    RecipeSegmentDeliveryError,
+    build_post_effect_segment_failure,
+)
 
 if TYPE_CHECKING:
     from autoskillit.config import OutputBudgetConfig
@@ -953,6 +958,19 @@ def enforce_response_budget(
     Payloads whose estimated token count exceeds it are spilled even if they
     pass the server-side exemption or response-byte ceilings.
     """
+    segmented = _checkpoint_segmented_mapping(result)
+    if segmented is not None:
+        base, carrier = segmented
+        return _enforce_checkpoint_segmented_response(
+            result,
+            base=base,
+            carrier=carrier,
+            tool_name=tool_name,
+            artifact_dir=artifact_dir,
+            config=config,
+            force_spill=force_spill,
+            selected_result_token_limit=selected_result_token_limit,
+        )
     try:
         original = _serialized(result)
     except (TypeError, ValueError, OverflowError, RecursionError):
@@ -1126,6 +1144,125 @@ def enforce_response_budget(
         return {"success": False, "error": "response_budget_projection_invalid"}
 
 
+def _checkpoint_segmented_mapping(
+    result: Any,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    parsed: Any = result
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+        except (TypeError, ValueError, RecursionError):
+            return None
+    if not isinstance(parsed, dict):
+        return None
+    carrier = parsed.get("recipe_segment")
+    if not isinstance(carrier, dict) or carrier.get("kind") not in {"success", "recovery"}:
+        return None
+    base = dict(parsed)
+    base.pop("recipe_segment")
+    return base, carrier
+
+
+def _segment_failure_like(
+    original: Any,
+    carrier: dict[str, Any],
+    *,
+    tool_name: str,
+) -> Any:
+    try:
+        failure = build_post_effect_segment_failure(carrier, tool_name=tool_name)
+    except RecipeSegmentDeliveryError as exc:
+        source_step = carrier.get("source_step", "")
+        logger.warning(
+            "recipe_segment_post_effect_carrier_dropped",
+            tool_name=tool_name,
+            source_step=source_step,
+            error=str(exc),
+        )
+        failure = {
+            "success": False,
+            "subtype": "recipe_segment_post_effect_delivery_failure",
+            "error": "Response shaping failed after the operation ran; do not repeat it.",
+            "tool_name": tool_name,
+            "step_name": source_step,
+            "operation_already_ran": True,
+            "do_not_repeat": True,
+        }
+    return _canonical_json(failure) if isinstance(original, str) else failure
+
+
+def post_effect_recipe_segment_failure(result: Any, *, tool_name: str) -> Any | None:
+    """Preserve the selected carrier when outer response enforcement itself fails."""
+    segmented = _checkpoint_segmented_mapping(result)
+    if segmented is None:
+        return None
+    _base, carrier = segmented
+    return _segment_failure_like(result, carrier, tool_name=tool_name)
+
+
+def _enforce_checkpoint_segmented_response(
+    original: Any,
+    *,
+    base: dict[str, Any],
+    carrier: dict[str, Any],
+    tool_name: str,
+    artifact_dir: Path | None,
+    config: OutputBudgetConfig,
+    force_spill: bool,
+    selected_result_token_limit: int | None,
+) -> Any:
+    """Artifactize only the base mapping and preserve the checkpoint carrier whole."""
+    combined = {**base, "recipe_segment": carrier}
+    try:
+        rendered = _canonical_json(combined)
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        return _segment_failure_like(original, carrier, tool_name=tool_name)
+    rendered_size = len(rendered.encode("utf-8"))
+    final_limit = RECIPE_SEGMENT_MAX_BYTES - 1
+    over_delivery_bound = (
+        selected_result_token_limit is not None
+        and selected_result_token_limit > 0
+        and _estimated_tokens(rendered_size) > selected_result_token_limit
+    )
+    if not force_spill and not over_delivery_bound and rendered_size <= final_limit:
+        return rendered if isinstance(original, str) else combined
+    if artifact_dir is None:
+        return _segment_failure_like(original, carrier, tool_name=tool_name)
+
+    base_input: Any = _canonical_json(base) if isinstance(original, str) else base
+    shaped_base = enforce_response_budget(
+        base_input,
+        tool_name=tool_name,
+        artifact_dir=artifact_dir,
+        config=config,
+        force_spill=True,
+        selected_result_token_limit=selected_result_token_limit,
+    )
+    try:
+        shaped_mapping = json.loads(shaped_base) if isinstance(shaped_base, str) else shaped_base
+    except (TypeError, ValueError, RecursionError):
+        return _segment_failure_like(original, carrier, tool_name=tool_name)
+    if not isinstance(shaped_mapping, dict):
+        return _segment_failure_like(original, carrier, tool_name=tool_name)
+    shaped_error = shaped_mapping.get("error")
+    if isinstance(shaped_error, str) and shaped_error.startswith("response_budget_"):
+        return _segment_failure_like(original, carrier, tool_name=tool_name)
+
+    recombined = {**shaped_mapping, "recipe_segment": carrier}
+    try:
+        final_rendered = _canonical_json(recombined)
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        return _segment_failure_like(original, carrier, tool_name=tool_name)
+    final_size = len(final_rendered.encode("utf-8"))
+    if final_size > final_limit or (
+        selected_result_token_limit is not None
+        and selected_result_token_limit > 0
+        and _estimated_tokens(final_size) > selected_result_token_limit
+    ):
+        return _segment_failure_like(original, carrier, tool_name=tool_name)
+    return final_rendered if isinstance(original, str) else recombined
+
+
 def shape_json_response(
     payload: dict[str, Any],
     *,
@@ -1159,5 +1296,6 @@ __all__ = [
     "bounded_response_budget_failure",
     "emit_response_budget_failure",
     "enforce_response_budget",
+    "post_effect_recipe_segment_failure",
     "shape_json_response",
 ]

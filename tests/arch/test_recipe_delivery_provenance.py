@@ -169,20 +169,11 @@ def test_launcher_attestation_env_reaches_server_context_unchanged(
     )
 
 
-def test_implementation_recipe_envelope_is_physically_required(
+def test_implementation_recipe_segments_public_startup_but_persists_full_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The implementation recipe's flow records make inline delivery impossible.
-
-    Without finalized_recipe_projection, the implementation recipe payload
-    is ~154K serialized chars — well
-    under the annotation ceiling. However, the surface_payload rendered at
-    delivery time includes 651 flow records, bringing the total to ~286K
-    serialized chars — far exceeding the 175,500-char annotation ceiling.
-    The ledger correctly pins implementation/claude-code to ENVELOPE.
-    This is not a deficiency but a physical constraint: flow records
-    dominate the payload size for recipes with substantial pipeline state.
-    """
+    """Segmented public startup remains compact while durable authority stays complete."""
+    import json
     import tempfile
     import threading
     from types import SimpleNamespace
@@ -199,6 +190,7 @@ def test_implementation_recipe_envelope_is_physically_required(
     from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
     from autoskillit.recipe import load_and_validate
+    from autoskillit.server._recipe_artifact import load_recipe_artifact
     from autoskillit.server._recipe_delivery import (
         finalize_recipe_delivery,
         prepare_recipe_delivery_generation,
@@ -261,9 +253,17 @@ def test_implementation_recipe_envelope_is_physically_required(
             normalized_compile_key=prepared.normalized_compile_key,
             host_client_attestation=attestation,
         )
-        # The implementation recipe must resolve to ENVELOPE — its rendered
-        # payload (with flow records) exceeds the annotation ceiling.
-        assert finalized.decision.mode == RecipeDeliveryMode.ENVELOPE, (
-            f"implementation/claude-code should be ENVELOPE due to flow records, "
-            f"got {finalized.decision.mode}"
+        assert finalized.decision.mode == RecipeDeliveryMode.ORDINARY_INLINE
+        public = json.loads(finalized.rendered)
+        assert len(finalized.rendered.encode("utf-8")) < 10_000
+        assert public["recipe_segment"]["kind"] == "startup"
+        assert "content" not in public
+        assert "flow_records" not in public
+        assert finalized.artifact_generation is not None
+        persisted = load_recipe_artifact(
+            tmp_path,
+            kitchen_id=tool_ctx.kitchen_id,
+            identity=finalized.artifact_generation,
         )
+        assert persisted["content"] == prepared.canonical_artifact_payload["content"]
+        assert persisted["flow_records"] == prepared.canonical_artifact_payload["flow_records"]

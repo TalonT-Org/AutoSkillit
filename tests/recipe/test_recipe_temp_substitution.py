@@ -28,7 +28,7 @@ steps:
     tool: run_cmd
     with:
       cmd: echo done
-output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr"
+summary: "{{AUTOSKILLIT_TEMP}}/review-pr"
 """
 
 
@@ -105,7 +105,7 @@ steps:
   end:
     tool: stop
     message: done
-output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr"
+summary: "{{AUTOSKILLIT_TEMP}}/review-pr"
 """
 
 

@@ -43,11 +43,12 @@ from tests.server.test_tools_recipe_pull import (
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
-_RECIPE_ENVELOPE = "remediation"
+_RECIPE_ENVELOPE = "research"
 _RECIPE_INLINE_SMALL = "promote-to-main-wrapper"
-_ATTESTED_STEP = "investigate"
+_ATTESTED_STEP = "scope"
 _OVERRIDES = {
     "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
+    "task": "test task",
     "task_description": "test task",
 }
 
@@ -161,11 +162,10 @@ async def test_attested_run_skill_admits_explicit_order_id(
     model/stale_threshold RecipeStep-fallback e2e coverage (T3.b/T3.c) lives
     in test_run_skill_execution_tuning_fallbacks.py instead of here: that
     fallback block runs whenever step_name and tool_ctx.active_recipe_steps
-    are set, independent of attestation status, and the real "remediation"
-    recipe's investigate step declares only a templated model: field (bare
-    aliases, #4412 — out of scope here) and no stale_threshold: field at all,
-    so it cannot pin a literal fallback value without a bespoke fixture
-    recipe this plan does not add.
+    are set, independent of attestation status. This shared fixture uses the
+    non-segmented research recipe so it continues to exercise envelope
+    initialization after implementation and remediation moved to progressive
+    startup delivery.
     """
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
@@ -199,23 +199,11 @@ async def test_attested_run_skill_admits_explicit_order_id(
     assert executor.calls[0].order_id == "AB"
 
 
-async def test_attested_run_skill_never_forwards_an_unresolved_model_template(
+async def test_attested_run_skill_preserves_recipe_model_vacancy(
     tmp_path,
     tool_ctx_ready_recipe,
 ) -> None:
-    """#4402 remediation — restores T3.b's original intent against the real
-    recipe, catching the defect the synthetic-literal-model unit tests in
-    test_run_skill_execution_tuning_fallbacks.py structurally could not see.
-
-    The real remediation.yaml investigate step declares
-    ``model: ${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}`` — a
-    template load_recipe() never interpolates (it's a thin YAML parse; see
-    the output_dir fallback's identical "${{" guard). Since sous-chef now
-    mandates omitting model from attested calls, every real invocation of
-    this step reaches the RecipeStep.model fallback. Before the fix, the
-    fallback had no template guard (unlike its output_dir sibling) and would
-    forward the raw, broken template string straight to --model.
-    """
+    """The real research scope step keeps the executor model sentinel vacant."""
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -367,13 +355,12 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
             from autoskillit.recipe._api_cache import LoadCache
 
             monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-            # The real ``remediation`` recipe's full payload (104 KB body +
-            # 98 KB flow_records + ~250 KB metadata) renders to ~453 KB —
-            # far above Codex's authoritative attested budget of 56_750 bytes.
-            # Use a synthetic small payload that fits the ATTESTED_INLINE
-            # window while still exercising the real finalize path with a
-            # non-trivial body, projection, and flow records.
-            payload = _payload("remediation body\n" + ("x" * 30_000))
+            # The real non-segmented ``research`` recipe exceeds the ordinary
+            # bound and therefore still exercises ENVELOPE independently of
+            # progressive implementation/remediation startup. A synthetic small
+            # payload fits the ATTESTED_INLINE window while still exercising the
+            # real finalize path with a non-trivial body, projection, and flow.
+            payload = _payload("research body\n" + ("x" * 30_000))
             payload["recipe_name"] = _RECIPE_ENVELOPE
             tool_ctx_kitchen_open.backend = _protected_codex_backend()
             arm()

@@ -146,6 +146,264 @@
     "SOURCE ISOLATION: After bootstrap_clone returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote.",
     "MERGE ROUTING: check_repo_merge_state performs a single GraphQL round-trip to detect queue_available, merge_group_trigger, and auto_merge_available for the target branch. route_queue_mode then routes to: enable_auto_merge → wait_for_queue ONLY when queue_available=true AND merge_group_trigger=true; direct_merge → wait_for_direct_merge (no queue or trigger missing, autoMergeAllowed=true); or immediate_merge → wait_for_immediate_merge (no queue, autoMergeAllowed=false). Never call gh pr merge directly via run_cmd — all merges go through these named recipe steps so CI enforcement and conflict routing are preserved."
   ],
+  "delivery_segments": [
+    {
+      "name": "I0",
+      "steps": [
+        "clone"
+      ]
+    },
+    {
+      "name": "I1",
+      "steps": [
+        "claim_and_resolve",
+        "create_and_publish",
+        "plan",
+        "salvage_plan"
+      ]
+    },
+    {
+      "name": "I2",
+      "steps": [
+        "review_approach",
+        "verify",
+        "create_impl_worktree",
+        "implement",
+        "retry_worktree",
+        "check_changes",
+        "close_issue_no_changes"
+      ]
+    },
+    {
+      "name": "I3",
+      "steps": [
+        "test",
+        "check_merge_fix_loop",
+        "diagnose_merge_gate",
+        "check_merge_rebase_loop",
+        "check_dirty_main_retry",
+        "check_ref_push_loop",
+        "ref_push",
+        "check_audit_remediation_loop"
+      ]
+    },
+    {
+      "name": "I4",
+      "steps": [
+        "reset_test_fix_counter",
+        "reset_merge_test_fix_counter",
+        "reset_merge_fix_counter",
+        "reset_ref_push_counter",
+        "commit_guard",
+        "main_repo_guard"
+      ]
+    },
+    {
+      "name": "I5",
+      "steps": [
+        "merge",
+        "check_has_commits",
+        "close_issue_already_done"
+      ]
+    },
+    {
+      "name": "I6",
+      "steps": [
+        "push",
+        "fix",
+        "check_test_fix_loop",
+        "merge_gate_fix"
+      ]
+    },
+    {
+      "name": "I7",
+      "steps": [
+        "merge_gate_test",
+        "check_merge_test_fix_loop",
+        "rebase_conflict_fix",
+        "inter_part_push",
+        "next_or_done",
+        "audit_impl"
+      ]
+    },
+    {
+      "name": "I8",
+      "steps": [
+        "remediate",
+        "prepare_pr",
+        "run_arch_lenses",
+        "compose_pr"
+      ]
+    },
+    {
+      "name": "I9",
+      "steps": [
+        "guard_pr_url",
+        "extract_pr_number",
+        "capture_review_repository",
+        "init_review_loop_count",
+        "clear_review_annotation_context",
+        "annotate_pr_diff"
+      ]
+    },
+    {
+      "name": "I10",
+      "steps": [
+        "review_pr",
+        "enrich_diff_context",
+        "resolve_review"
+      ]
+    },
+    {
+      "name": "I11",
+      "steps": [
+        "check_resolve_review_posted",
+        "pre_review_rebase",
+        "resolve_pre_review_conflicts"
+      ]
+    },
+    {
+      "name": "I12",
+      "steps": [
+        "re_push_review",
+        "check_review_posted",
+        "check_review_loop",
+        "pre_review_cleanup"
+      ]
+    },
+    {
+      "name": "I13",
+      "steps": [
+        "check_repo_ci_event",
+        "route_ci_applicable",
+        "check_pr_state",
+        "ci_watch",
+        "check_ci_timed_out_loop"
+      ]
+    },
+    {
+      "name": "I14",
+      "steps": [
+        "handle_no_ci_runs",
+        "check_ci_loop",
+        "check_active_trigger_loop",
+        "trigger_ci_actively",
+        "check_ci_already_passed",
+        "mark_issue_failed_no_ci",
+        "register_clone_no_ci",
+        "analyze_pipeline_health_no_ci",
+        "escalate_stop_no_ci"
+      ]
+    },
+    {
+      "name": "I15",
+      "steps": [
+        "check_repo_merge_state",
+        "route_queue_mode",
+        "enqueue_to_queue",
+        "verify_queue_enrollment"
+      ]
+    },
+    {
+      "name": "I16",
+      "steps": [
+        "wait_for_queue",
+        "reenroll_stalled_pr",
+        "check_stall_loop",
+        "check_eject_limit"
+      ]
+    },
+    {
+      "name": "I17",
+      "steps": [
+        "check_dropped_healthy_loop",
+        "check_dropped_ci_loop"
+      ]
+    },
+    {
+      "name": "I18",
+      "steps": [
+        "queue_ejected_fix",
+        "resolve_queue_merge_conflicts",
+        "re_push_queue_fix",
+        "classify_push_failure",
+        "wait_dequeue_retry",
+        "ci_watch_post_queue_fix"
+      ]
+    },
+    {
+      "name": "I19",
+      "steps": [
+        "check_ci_post_queue_loop",
+        "reenter_merge_queue",
+        "reenter_merge_queue_cheap"
+      ]
+    },
+    {
+      "name": "I20",
+      "steps": [
+        "direct_merge",
+        "wait_for_direct_merge",
+        "direct_merge_conflict_fix",
+        "resolve_direct_merge_conflicts",
+        "re_push_direct_fix",
+        "redirect_merge",
+        "immediate_merge",
+        "wait_for_immediate_merge",
+        "immediate_merge_conflict_fix",
+        "resolve_immediate_merge_conflicts"
+      ]
+    },
+    {
+      "name": "I21",
+      "steps": [
+        "re_push_immediate_fix",
+        "remerge_immediate",
+        "diagnose_ci"
+      ]
+    },
+    {
+      "name": "I22",
+      "steps": [
+        "resolve_ci",
+        "pre_resolve_rebase",
+        "resolve_pre_resolve_conflicts",
+        "check_ci_rebase_loop",
+        "check_flake_loop"
+      ]
+    },
+    {
+      "name": "I23",
+      "steps": [
+        "re_push",
+        "detect_ci_conflict",
+        "ci_conflict_fix"
+      ]
+    },
+    {
+      "name": "I24",
+      "steps": [
+        "release_issue_success",
+        "patch_token_summary",
+        "register_clone_unconfirmed",
+        "analyze_pipeline_health_unconfirmed",
+        "done_unconfirmed",
+        "release_issue_failure",
+        "register_clone_success",
+        "register_clone_failure",
+        "analyze_pipeline_health",
+        "analyze_pipeline_health_error",
+        "register_clone_no_changes",
+        "analyze_pipeline_health_no_changes",
+        "register_clone_already_done",
+        "analyze_pipeline_health_already_done",
+        "done",
+        "done_no_changes",
+        "done_already_done",
+        "escalate_stop"
+      ]
+    }
+  ],
   "steps": {
     "clone": {
       "tool": "bootstrap_clone",
@@ -153,7 +411,7 @@
         "source_dir": "${{ inputs.source_dir }}",
         "run_name": "${{ inputs.run_name }}",
         "base_branch": "${{ inputs.base_branch }}",
-        "step_name": "bootstrap_clone"
+        "step_name": "clone"
       },
       "capture": {
         "work_dir": "${{ result.work_dir }}",
@@ -171,6 +429,7 @@
       "skip_when_false": "inputs.issue_url",
       "on_skip": "create_and_publish",
       "with": {
+        "step_name": "claim_and_resolve",
         "issue_url": "${{ inputs.issue_url }}",
         "allow_reentry": "${{ inputs.upfront_claimed }}"
       },
@@ -203,7 +462,7 @@
         "issue_number": "${{ context.issue_number }}",
         "work_dir": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "step_name": "create_and_publish_branch"
+        "step_name": "create_and_publish"
       },
       "capture": {
         "merge_target": "${{ result.merge_target }}"
@@ -254,6 +513,7 @@
     "salvage_plan": {
       "tool": "run_python",
       "with": {
+        "step_name": "salvage_plan",
         "callable": "autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
         "plan_parts": "${{ context.plan_parts }}",
         "audit_cycle_path": "${{ context.audit_cycle_path }}"
@@ -412,6 +672,7 @@
     "check_changes": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_changes",
         "callable": "autoskillit.smoke_utils.detect_zero_changes",
         "worktree_path": "${{ context.worktree_path }}",
         "base_branch": "${{ inputs.base_branch }}",
@@ -438,6 +699,7 @@
       "skip_when_false": "inputs.issue_url",
       "on_skip": "register_clone_no_changes",
       "with": {
+        "step_name": "close_issue_no_changes",
         "issue_url": "${{ inputs.issue_url }}",
         "target_branch": "${{ inputs.base_branch }}",
         "close_issue": "true"
@@ -449,6 +711,7 @@
     "test": {
       "tool": "test_check",
       "with": {
+        "step_name": "test",
         "worktree_path": "${{ context.worktree_path }}"
       },
       "on_success": "commit_guard",
@@ -457,6 +720,7 @@
     "check_merge_fix_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_merge_fix_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.merge_fix_count }}",
         "max_iterations": "${{ inputs.merge_fix_max_retries }}"
@@ -482,6 +746,7 @@
     "diagnose_merge_gate": {
       "tool": "run_python",
       "with": {
+        "step_name": "diagnose_merge_gate",
         "callable": "autoskillit.smoke_utils.diagnose_merge_gate",
         "test_stdout": "${{ context.merge_test_stdout }}",
         "test_stderr": "${{ context.merge_test_stderr }}",
@@ -505,6 +770,7 @@
     "check_merge_rebase_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_merge_rebase_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.merge_fix_count }}",
         "max_iterations": "${{ inputs.merge_fix_max_retries }}"
@@ -530,6 +796,7 @@
     "check_dirty_main_retry": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_dirty_main_retry",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.merge_fix_count }}",
         "max_iterations": "${{ inputs.merge_fix_max_retries }}"
@@ -555,6 +822,7 @@
     "check_ref_push_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_ref_push_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.ref_push_count }}",
         "max_iterations": "2"
@@ -580,6 +848,7 @@
     "ref_push": {
       "tool": "push_to_remote",
       "with": {
+        "step_name": "ref_push",
         "clone_path": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
         "branch": "${{ context.merge_target }}",
@@ -592,6 +861,7 @@
     "check_audit_remediation_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_audit_remediation_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.audit_remediation_count }}",
         "max_iterations": "${{ inputs.audit_remediation_max_retries }}"
@@ -656,6 +926,7 @@
     "reset_ref_push_counter": {
       "tool": "run_python",
       "with": {
+        "step_name": "reset_ref_push_counter",
         "callable": "autoskillit.smoke_utils.init_counter",
         "counter_value": ""
       },
@@ -669,6 +940,7 @@
     "commit_guard": {
       "tool": "run_python",
       "with": {
+        "step_name": "commit_guard",
         "callable": "autoskillit.recipe._cmd_rpc.commit_guard",
         "worktree_path": "${{ context.worktree_path }}",
         "base_branch": "${{ inputs.base_branch }}"
@@ -688,6 +960,7 @@
     "main_repo_guard": {
       "tool": "run_python",
       "with": {
+        "step_name": "main_repo_guard",
         "callable": "autoskillit.recipe._cmd_rpc.main_repo_guard",
         "clone_path": "${{ context.work_dir }}"
       },
@@ -706,6 +979,7 @@
     "merge": {
       "tool": "merge_worktree",
       "with": {
+        "step_name": "merge",
         "worktree_path": "${{ context.worktree_path }}",
         "base_branch": "${{ context.merge_target }}"
       },
@@ -759,6 +1033,7 @@
     "check_has_commits": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_has_commits",
         "callable": "autoskillit.smoke_utils.check_commits_ahead",
         "cwd": "${{ context.work_dir }}",
         "base_branch": "${{ inputs.base_branch }}"
@@ -780,6 +1055,7 @@
       "skip_when_false": "inputs.issue_url",
       "on_skip": "register_clone_already_done",
       "with": {
+        "step_name": "close_issue_already_done",
         "callable": "autoskillit.smoke_utils.close_issue_already_done",
         "issue_url": "${{ inputs.issue_url }}"
       },
@@ -790,6 +1066,7 @@
     "push": {
       "tool": "push_to_remote",
       "with": {
+        "step_name": "push",
         "clone_path": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
         "branch": "${{ context.merge_target }}",
@@ -860,6 +1137,7 @@
     "check_test_fix_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_test_fix_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.test_fix_loop_count }}",
         "max_iterations": "${{ inputs.test_fix_max_retries }}"
@@ -951,6 +1229,7 @@
     "check_merge_test_fix_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_merge_test_fix_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.merge_test_fix_loop_count }}",
         "max_iterations": "${{ inputs.merge_test_fix_max_retries }}"
@@ -1310,6 +1589,7 @@
     "annotate_pr_diff": {
       "tool": "run_python",
       "with": {
+        "step_name": "annotate_pr_diff",
         "callable": "autoskillit.smoke_utils.annotate_pr_diff",
         "pr_number": "${{ context.pr_number }}",
         "cwd": "${{ context.work_dir }}",
@@ -1497,6 +1777,7 @@
     "check_resolve_review_posted": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_resolve_review_posted",
         "callable": "autoskillit.smoke_utils.check_review_posted",
         "work_dir": "${{ context.work_dir }}",
         "args": {
@@ -1528,6 +1809,7 @@
     "pre_review_rebase": {
       "tool": "run_python",
       "with": {
+        "step_name": "pre_review_rebase",
         "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
         "args": {
           "work_dir": "${{ context.work_dir }}",
@@ -1580,6 +1862,7 @@
     "re_push_review": {
       "tool": "push_to_remote",
       "with": {
+        "step_name": "re_push_review",
         "clone_path": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
         "branch": "${{ context.merge_target }}",
@@ -1592,6 +1875,7 @@
     "check_review_posted": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_review_posted",
         "callable": "autoskillit.smoke_utils.check_review_posted",
         "work_dir": "${{ context.work_dir }}",
         "args": {
@@ -1628,6 +1912,7 @@
     "check_review_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_review_loop",
         "callable": "autoskillit.smoke_utils.check_review_loop",
         "pr_number": "${{ context.pr_number }}",
         "current_iteration": "${{ context.review_loop_count }}",
@@ -1709,6 +1994,7 @@
     "check_pr_state": {
       "tool": "check_pr_mergeable",
       "with": {
+        "step_name": "check_pr_state",
         "pr_number": "${{ context.pr_number }}",
         "cwd": "${{ context.work_dir }}"
       },
@@ -1729,6 +2015,7 @@
     "ci_watch": {
       "tool": "wait_for_ci",
       "with": {
+        "step_name": "ci_watch",
         "branch": "${{ context.merge_target }}",
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 600,
@@ -1766,6 +2053,7 @@
     "check_ci_timed_out_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_ci_timed_out_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.ci_timed_out_loop_count }}",
         "max_iterations": "2"
@@ -1873,6 +2161,7 @@
     "check_ci_already_passed": {
       "tool": "wait_for_ci",
       "with": {
+        "step_name": "check_ci_already_passed",
         "branch": "${{ context.merge_target }}",
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 30,
@@ -2000,6 +2289,7 @@
     "enqueue_to_queue": {
       "tool": "enqueue_pr",
       "with": {
+        "step_name": "enqueue_to_queue",
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
@@ -2014,6 +2304,7 @@
     "verify_queue_enrollment": {
       "tool": "wait_for_merge_queue",
       "with": {
+        "step_name": "verify_queue_enrollment",
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
@@ -2066,6 +2357,7 @@
     "wait_for_queue": {
       "tool": "wait_for_merge_queue",
       "with": {
+        "step_name": "wait_for_queue",
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "timeout_seconds": 900,
@@ -2122,6 +2414,7 @@
     "reenroll_stalled_pr": {
       "tool": "enqueue_pr",
       "with": {
+        "step_name": "reenroll_stalled_pr",
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
@@ -2135,6 +2428,7 @@
     "check_stall_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_stall_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.stall_loop_count }}",
         "max_iterations": "3"
@@ -2160,6 +2454,7 @@
     "check_eject_limit": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_eject_limit",
         "callable": "autoskillit.recipe._cmd_rpc.check_eject_limit",
         "counter_file": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count",
         "max_ejects": "3"
@@ -2179,6 +2474,7 @@
     "check_dropped_healthy_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_dropped_healthy_loop",
         "callable": "autoskillit.recipe._cmd_rpc.check_dropped_healthy_loop",
         "counter_file": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count",
         "max_drops": "2"
@@ -2198,6 +2494,7 @@
     "check_dropped_ci_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_dropped_ci_loop",
         "callable": "autoskillit.recipe._cmd_rpc.check_dropped_ci_loop",
         "counter_file": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_ci_count",
         "max_drops": "2"
@@ -2275,6 +2572,7 @@
     "re_push_queue_fix": {
       "tool": "push_to_remote",
       "with": {
+        "step_name": "re_push_queue_fix",
         "clone_path": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
         "branch": "${{ context.merge_target }}",
@@ -2305,6 +2603,7 @@
     "wait_dequeue_retry": {
       "tool": "wait_for_merge_queue",
       "with": {
+        "step_name": "wait_dequeue_retry",
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
@@ -2353,6 +2652,7 @@
     "ci_watch_post_queue_fix": {
       "tool": "wait_for_ci",
       "with": {
+        "step_name": "ci_watch_post_queue_fix",
         "branch": "${{ context.merge_target }}",
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 600,
@@ -2389,6 +2689,7 @@
     "check_ci_post_queue_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_ci_post_queue_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.ci_post_queue_loop_count }}",
         "max_iterations": "2"
@@ -2416,6 +2717,7 @@
     "reenter_merge_queue": {
       "tool": "enqueue_pr",
       "with": {
+        "step_name": "reenter_merge_queue",
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
@@ -2430,6 +2732,7 @@
     "reenter_merge_queue_cheap": {
       "tool": "enqueue_pr",
       "with": {
+        "step_name": "reenter_merge_queue_cheap",
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
@@ -2457,6 +2760,7 @@
     "wait_for_direct_merge": {
       "tool": "run_python",
       "with": {
+        "step_name": "wait_for_direct_merge",
         "callable": "autoskillit.recipe._cmd_rpc.wait_for_direct_merge",
         "pr_number": "${{ context.pr_number }}",
         "max_polls": "90",
@@ -2580,6 +2884,7 @@
     "wait_for_immediate_merge": {
       "tool": "run_python",
       "with": {
+        "step_name": "wait_for_immediate_merge",
         "callable": "autoskillit.recipe._cmd_rpc.wait_for_immediate_merge",
         "pr_number": "${{ context.pr_number }}",
         "max_polls": "30",
@@ -2606,6 +2911,7 @@
     "immediate_merge_conflict_fix": {
       "tool": "run_python",
       "with": {
+        "step_name": "immediate_merge_conflict_fix",
         "callable": "autoskillit.recipe._cmd_rpc.immediate_merge_conflict_fix",
         "args": {
           "work_dir": "${{ context.work_dir }}",
@@ -2825,6 +3131,7 @@
     "check_ci_rebase_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_ci_rebase_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.ci_rebase_count }}",
         "max_iterations": "3"
@@ -2850,6 +3157,7 @@
     "check_flake_loop": {
       "tool": "run_python",
       "with": {
+        "step_name": "check_flake_loop",
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.ci_flake_count }}",
         "max_iterations": "3"

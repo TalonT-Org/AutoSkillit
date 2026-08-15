@@ -99,6 +99,7 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.validator import (
+    _finalize_delivery_segments,
     compute_recipe_validity,
     filter_version_rule,
     findings_to_dicts,
@@ -489,27 +490,39 @@ def load_and_validate(
             )
             if include_finalized_projection:
                 _ordered_step_names = tuple(active_recipe.steps)
+                _ordered_flow_edges = tuple(
+                    RecipeFlowEdge(
+                        source=step_name,
+                        edge_type=edge.edge_type,
+                        target=edge.target,
+                        condition=edge.condition,
+                        result_field=(
+                            step.on_result.field
+                            if edge.edge_type == "result_condition"
+                            and step.on_result is not None
+                            and step.on_result.field
+                            else None
+                        ),
+                    )
+                    for step_name, step in active_recipe.steps.items()
+                    for edge in _extract_routing_edges(step)
+                )
+                _delivery_segments, _delivery_segment_errors = _finalize_delivery_segments(
+                    active_recipe,
+                    _ordered_flow_edges,
+                )
+                if _delivery_segment_errors:
+                    errors.extend(
+                        f"[post-prune] delivery segments: {error}"
+                        for error in _delivery_segment_errors
+                    )
+                    raw = ""
                 _finalized_projection = FinalizedRecipeProjection(
                     binding_projection=_post_prune_bindings,
                     ordered_step_names=_ordered_step_names,
                     entrypoint=next(iter(_ordered_step_names), ""),
-                    ordered_flow_edges=tuple(
-                        RecipeFlowEdge(
-                            source=step_name,
-                            edge_type=edge.edge_type,
-                            target=edge.target,
-                            condition=edge.condition,
-                            result_field=(
-                                step.on_result.field
-                                if edge.edge_type == "result_condition"
-                                and step.on_result is not None
-                                and step.on_result.field
-                                else None
-                            ),
-                        )
-                        for step_name, step in active_recipe.steps.items()
-                        for edge in _extract_routing_edges(step)
-                    ),
+                    ordered_flow_edges=_ordered_flow_edges,
+                    delivery_segments=_delivery_segments,
                 )
             val_ctx = make_validation_context(
                 active_recipe,

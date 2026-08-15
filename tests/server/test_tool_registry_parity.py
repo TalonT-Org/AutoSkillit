@@ -93,6 +93,74 @@ def test_registry_matches_handler_order_and_requiredness() -> None:
         assert registry_params == handler_params, name
 
 
+def test_recipe_delivery_tool_classifications_are_exact() -> None:
+    expected_automatic = {
+        "bootstrap_clone",
+        "check_pr_mergeable",
+        "check_repo_merge_state",
+        "complete_run_skill_result",
+        "enqueue_pr",
+        "merge_worktree",
+        "push_to_remote",
+        "run_python",
+        "test_check",
+        "wait_for_ci",
+        "wait_for_merge_queue",
+    }
+    expected_recovery = expected_automatic | {
+        "claim_and_resolve_issue",
+        "create_and_publish_branch",
+        "release_issue",
+        "run_cmd",
+    }
+
+    actual_automatic = {
+        name for name, definition in TOOL_REGISTRY.items() if definition.automatic_recipe_delivery
+    }
+    actual_recovery = {
+        name for name, definition in TOOL_REGISTRY.items() if definition.recovery_recipe_delivery
+    }
+
+    assert actual_automatic == expected_automatic
+    assert actual_recovery == expected_recovery
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "expected_params"),
+    [
+        ("run_python", ("callable", "args", "timeout", "work_dir", "step_name")),
+        ("check_pr_mergeable", ("pr_number", "cwd", "repo", "step_name")),
+        (
+            "claim_and_resolve_issue",
+            ("issue_url", "label", "allow_reentry", "step_name"),
+        ),
+        (
+            "release_issue",
+            (
+                "issue_url",
+                "label",
+                "target_branch",
+                "staged_label",
+                "fail_label",
+                "close_issue",
+                "step_name",
+            ),
+        ),
+    ],
+)
+def test_recipe_delivery_checkpoint_tools_expose_optional_step_name(
+    tool_name: str,
+    expected_params: tuple[str, ...],
+) -> None:
+    tool_def = TOOL_REGISTRY[tool_name]
+
+    assert tool_def.param_names == expected_params
+    step_name = tool_def.param_def("step_name")
+    assert step_name is not None
+    assert step_name.required is False
+    assert step_name.handler_parameter is True
+
+
 def test_registry_preserves_typed_handler_wire_contracts() -> None:
     expected = {
         "configure_fleet": {

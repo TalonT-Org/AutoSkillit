@@ -328,7 +328,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "bash_write_targets": frozenset({"core", "execution", "server"}),
     "_delivery_bounds": frozenset({"core", "execution", "server"}),
     "_type_audit_cycle": frozenset({"core", "pipeline", "recipe", "server"}),
-    "_type_recipe_binding": frozenset({"core", "recipe", "server"}),
+    "_type_recipe_binding": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_execution": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_closure_report": frozenset({"core"}),
     "context_admission": frozenset({"core", "pipeline"}),

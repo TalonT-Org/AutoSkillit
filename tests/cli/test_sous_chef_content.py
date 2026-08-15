@@ -67,3 +67,19 @@ def test_sous_chef_requires_real_result_receipt_acknowledgement() -> None:
     assert "<bg_result>" in content
     assert "complete_run_skill_result" in content
     assert 'receipt_id="<exact delivered receipt_id>"' in content
+
+
+def test_sous_chef_requires_progressive_segment_consumption() -> None:
+    content = _read_full_sous_chef()
+
+    for required in (
+        "recipe_segment",
+        "body_sha256",
+        "segment-scoped",
+        "pull_closure",
+        "recipe_segment_post_effect_delivery_failure",
+        "operation already ran",
+        "do not repeat it",
+        "full recipe horizon",
+    ):
+        assert required in content

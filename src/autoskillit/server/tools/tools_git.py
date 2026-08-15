@@ -1,13 +1,11 @@
-"""MCP tool handlers: merge_worktree, classify_fix, create_and_publish_branch, commit_files."""
+"""MCP tool handlers for merge, branch creation, and fix classification."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-import shutil
 import time
-from pathlib import Path
 from typing import Any
 
 import structlog
@@ -18,6 +16,11 @@ from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._recipe_segment_delivery import (
+    PreparedRecipeSegmentDelivery,
+    attach_recipe_segment,
+    prepare_recipe_segment_delivery,
+)
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
@@ -35,6 +38,15 @@ def _compute_branch_name(issue_slug: str, run_name: str, issue_number: str) -> s
 
 
 logger = get_logger(__name__)
+
+
+def _render_segment_result(
+    result: dict[str, Any],
+    prepared: PreparedRecipeSegmentDelivery | None,
+    *,
+    success: bool,
+) -> str:
+    return json.dumps(attach_recipe_segment(result, prepared, success=success))
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -63,6 +75,7 @@ async def merge_worktree(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="merge_worktree", cwd=worktree_path):
             logger.info("merge_worktree", path=worktree_path, base=base_branch)
             await _notify(
@@ -78,6 +91,7 @@ async def merge_worktree(
             from autoskillit.server.git import perform_merge  # circular-break
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             runner = tool_ctx.runner
             assert runner is not None, "No subprocess runner configured"
             _start = time.monotonic()
@@ -101,13 +115,21 @@ async def merge_worktree(
                         extra={"reason": result["error"]},
                     )
 
-                return json.dumps(result)
+                return _render_segment_result(
+                    result,
+                    prepared_segment,
+                    success=result.get("merge_succeeded") is True,
+                )
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("merge_worktree unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return _render_segment_result(
+            {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+            prepared_segment,
+            success=False,
+        )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -367,6 +389,7 @@ async def check_pr_mergeable(
     pr_number: int,
     cwd: str,
     repo: str = "",
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Check whether a GitHub PR is mergeable.
@@ -384,12 +407,14 @@ async def check_pr_mergeable(
         pr_number: GitHub pull request number.
         cwd: Working directory for gh commands.
         repo: Repository as owner/repo. Passed as -R flag when provided.
+        step_name: Optional YAML step key for progressive recipe delivery.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="check_pr_mergeable", cwd=cwd):
             logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
             await _notify(
@@ -400,9 +425,15 @@ async def check_pr_mergeable(
                 extra={"repo": repo},
             )
 
+            from autoskillit.server import _get_ctx  # circular-break
+
+            prepared_segment = prepare_recipe_segment_delivery(_get_ctx(), step_name)
+
             if not cwd or not os.path.isdir(cwd):
-                return json.dumps(
-                    {"success": False, "error": f"cwd is not a valid directory: {cwd!r}"}
+                return _render_segment_result(
+                    {"success": False, "error": f"cwd is not a valid directory: {cwd!r}"},
+                    prepared_segment,
+                    success=False,
                 )
 
             cmd = ["gh", "pr", "view", str(pr_number), "--json", "mergeable,mergeStateStatus"]
@@ -411,25 +442,37 @@ async def check_pr_mergeable(
 
             rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
             if rc != 0:
-                return json.dumps(
-                    {"success": False, "error": stderr.strip() or "gh command failed"}
+                return _render_segment_result(
+                    {"success": False, "error": stderr.strip() or "gh command failed"},
+                    prepared_segment,
+                    success=False,
                 )
 
             try:
                 data = json.loads(stdout)
             except json.JSONDecodeError:
-                return json.dumps({"success": False, "error": "Failed to parse gh output"})
+                return _render_segment_result(
+                    {"success": False, "error": "Failed to parse gh output"},
+                    prepared_segment,
+                    success=False,
+                )
 
-            return json.dumps(
+            return _render_segment_result(
                 {
                     "mergeable": data.get("mergeable") == "MERGEABLE",
                     "merge_state_status": data.get("mergeStateStatus", ""),
                     "mergeable_status": data.get("mergeable", ""),
-                }
+                },
+                prepared_segment,
+                success=True,
             )
     except Exception as exc:
         logger.error("check_pr_mergeable unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return _render_segment_result(
+            {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+            prepared_segment,
+            success=False,
+        )
 
 
 async def _resolve_and_create_branch(
@@ -529,6 +572,7 @@ async def create_and_publish_branch(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
+        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="create_and_publish_branch",
             work_dir=work_dir,
@@ -551,12 +595,21 @@ async def create_and_publish_branch(
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             clone_mgr = tool_ctx.clone_mgr
             if clone_mgr is None:
-                return json.dumps({"error": "Clone manager not configured"})
+                return _render_segment_result(
+                    {"error": "Clone manager not configured"},
+                    prepared_segment,
+                    success=False,
+                )
 
             if not work_dir or not os.path.isdir(work_dir):
-                return json.dumps({"error": f"work_dir is not a valid directory: {work_dir!r}"})
+                return _render_segment_result(
+                    {"error": f"work_dir is not a valid directory: {work_dir!r}"},
+                    prepared_segment,
+                    success=False,
+                )
 
             _total_start = time.monotonic()
 
@@ -572,7 +625,7 @@ async def create_and_publish_branch(
             branch_create_ms = int((time.monotonic() - _branch_start) * 1000)
 
             if "error" in branch_result:
-                return json.dumps(
+                return _render_segment_result(
                     {
                         "error": branch_result["error"],
                         "merge_target": base_name,
@@ -581,7 +634,9 @@ async def create_and_publish_branch(
                             "branch_create_ms": branch_create_ms,
                             "push_ms": 0,
                         },
-                    }
+                    },
+                    prepared_segment,
+                    success=False,
                 )
 
             branch_name: str = branch_result["branch_name"]
@@ -610,13 +665,15 @@ async def create_and_publish_branch(
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
 
             if not push_result.get("success"):
-                return json.dumps(
+                return _render_segment_result(
                     {
                         "error": push_result.get("stderr", "push failed"),
                         "error_type": push_result.get("error_type", ""),
                         "merge_target": branch_name,
                         "timings": timings,
-                    }
+                    },
+                    prepared_segment,
+                    success=False,
                 )
 
             return json.dumps(
@@ -628,113 +685,8 @@ async def create_and_publish_branch(
             )
     except Exception as exc:
         logger.error("create_and_publish_branch unhandled exception", exc_info=True)
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-
-
-@mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
-    annotations={"readOnlyHint": True},
-)
-@_cancellation_shield()
-@track_response_size("commit_files")
-async def commit_files(
-    paths: list[str],
-    message: str,
-    cwd: str,
-    step_name: str = "",
-    ctx: Context = CurrentContext(),
-) -> str:
-    """Stage and commit specified files in a worktree via the server process.
-
-    Runs pre-commit hooks on the staged files before committing. If hooks
-    auto-fix files, re-stages and retries the commit once. On hard hook
-    failure, returns an error envelope without committing.
-
-    Args:
-        paths: List of file paths (relative to cwd) to stage and commit.
-        message: Commit message.
-        cwd: Absolute path to the git worktree.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
-
-    Never raises.
-    """
-    try:
-        with structlog.contextvars.bound_contextvars(tool="commit_files", cwd=cwd):
-            logger.info("commit_files", path_count=len(paths), cwd=cwd)
-
-            if not cwd or not os.path.isdir(cwd):
-                return json.dumps(
-                    {"success": False, "error": f"cwd does not exist or is not a directory: {cwd}"}
-                )
-            if not paths:
-                return json.dumps({"success": False, "error": "paths list is empty"})
-
-            from autoskillit.server.git import validate_commit_paths  # circular-break
-
-            if (path_error := validate_commit_paths(cwd, paths)) is not None:
-                return json.dumps({"success": False, "error": path_error})
-
-            from autoskillit.server import _get_ctx  # circular-break
-
-            tool_ctx = _get_ctx()
-            _start = time.monotonic()
-
-            try:
-                rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
-                )
-                if rc != 0:
-                    return json.dumps(
-                        {"success": False, "error": f"git add failed: {stderr.strip()}"}
-                    )
-
-                pre_commit_bin = shutil.which("pre-commit", path=os.environ.get("PATH", ""))
-                uv_bin = shutil.which("uv", path=os.environ.get("PATH", ""))
-                hook_cmd: list[str] | None = None
-                if (Path(cwd) / ".pre-commit-config.yaml").exists():
-                    if uv_bin and (Path(cwd) / "uv.lock").exists():
-                        hook_cmd = [uv_bin, "run", "pre-commit", "run", "--files"] + paths
-                    elif pre_commit_bin:
-                        hook_cmd = [pre_commit_bin, "run", "--files"] + paths
-                    else:
-                        return json.dumps(
-                            {
-                                "success": False,
-                                "error": "pre-commit config exists but no pre-commit binary found",
-                            }
-                        )
-
-                if hook_cmd is not None:
-                    rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
-                    if rc != 0:
-                        rc2, _, _ = await _run_subprocess(
-                            ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
-                        )
-                        if rc2 != 0:
-                            _err = f"pre-commit + re-add failed: {stderr.strip()}"
-                            return json.dumps({"success": False, "error": _err})
-                        rc3, _, stderr3 = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
-                        if rc3 != 0:
-                            _err = f"pre-commit retry failed: {stderr3.strip()}"
-                            return json.dumps({"success": False, "error": _err})
-
-                rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "commit", "-m", message], cwd=cwd, timeout=30
-                )
-                if rc != 0:
-                    return json.dumps(
-                        {"success": False, "error": f"git commit failed: {stderr.strip()}"}
-                    )
-
-                rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "rev-parse", "HEAD"], cwd=cwd, timeout=10
-                )
-                commit_sha = stdout.strip()
-
-                return json.dumps({"success": True, "commit_sha": commit_sha})
-            finally:
-                if step_name:
-                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
-    except Exception as exc:
-        logger.error("commit_files unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return _render_segment_result(
+            {"error": f"{type(exc).__name__}: {exc}"},
+            prepared_segment,
+            success=False,
+        )

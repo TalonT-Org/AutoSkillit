@@ -59,6 +59,43 @@ def test_mapped_skill_context_requires_all_path_definition(monkeypatch) -> None:
     assert "producer -[success]-> consumer" in findings[0].message
 
 
+def test_mapped_skill_context_preserves_definition_across_loop(monkeypatch) -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe._binding import bind_recipe
+    from autoskillit.recipe.rules.rules_contracts import (
+        _check_mapped_skill_context_definitions,
+    )
+
+    manifest = {"skills": {"demo": {"inputs": [{"name": "report", "type": "string"}]}}}
+    recipe = Recipe(
+        name="loop",
+        description="test",
+        steps={
+            "producer": RecipeStep(
+                tool="run_skill",
+                on_success="consumer",
+                capture={"report": "${{ result.report }}"},
+            ),
+            "consumer": RecipeStep(
+                tool="run_skill",
+                on_success="consumer",
+                with_args={
+                    "skill_command": "/autoskillit:demo",
+                    "skill_inputs": {"report": "${{ context.report }}"},
+                },
+            ),
+        },
+    )
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    ctx = make_validation_context(
+        recipe,
+        binding_projection=bind_recipe(recipe, manifest=manifest),
+    )
+
+    assert ctx.must_defined_context["consumer"] == frozenset({"report"})
+    assert not _check_mapped_skill_context_definitions(ctx)
+
+
 def test_mapped_skill_context_accepts_explicit_vacancy(monkeypatch) -> None:
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe._binding import bind_recipe

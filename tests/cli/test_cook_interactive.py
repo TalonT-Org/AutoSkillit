@@ -395,7 +395,8 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
     assert captured["mapped_targets"] == {"pr-source-reader", "pr-synthesizer"}
     role_names = captured["role_names"]
     assert isinstance(role_names, frozenset)
-    assert mapped_targets <= role_names
+    assert mapped_targets & role_names == {"pr-synthesizer"}
+    assert "pr-source-reader" not in role_names
 
 
 def test_notification_capable_cook_has_no_pre_reveal_guidance(

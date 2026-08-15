@@ -26,8 +26,8 @@ from autoskillit.core import (
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
+    load_bundled_agent_definitions,
 )
-from autoskillit.core.paths import pkg_root
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend, _generate_agent_tomls
 from tests.execution.backends._plugin_binding import plugin_binding
@@ -338,14 +338,11 @@ class TestAgentTomlDelivery:
     def test_every_bundled_agent_toml_carries_the_composed_suffix(self, tmp_path) -> None:
         from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 
-        agents_src = pkg_root() / "agents"
-        total_agents = sum(
+        expected_count = sum(
             1
-            for md_path in agents_src.glob("*.md")
-            if md_path.name not in ("AGENTS.md", "CLAUDE.md")
+            for definition in load_bundled_agent_definitions()
+            if definition.name not in BUNDLED_EXPLORER_ROLES and not definition.reader_tools
         )
-        # Unbound call excludes explorer roles (no bindings = not advertised)
-        expected_count = total_agents - len(BUNDLED_EXPLORER_ROLES)
 
         count = _generate_agent_tomls(tmp_path)
 

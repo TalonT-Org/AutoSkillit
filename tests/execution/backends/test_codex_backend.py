@@ -1766,16 +1766,15 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "config.toml").read_text() == invalid_transport
         assert not (self.session_dir / "agents").exists()
 
-    def test_bundled_direct_mcp_agent_rejects_malformed_transport_before_mutation(
+    def test_bundled_reader_agent_does_not_require_direct_mcp_transport(
         self,
     ) -> None:
         invalid_transport = "[mcp_servers.autoskillit]\n"
         (self.session_dir / "config.toml").write_text(invalid_transport)
 
-        with pytest.raises(ValueError, match="requires exactly one canonical.*transport"):
-            CodexBackend().setup_session_dir(self.session_dir)
+        CodexBackend().setup_session_dir(self.session_dir)
 
-        assert not (self.session_dir / "agents").exists()
+        assert not (self.session_dir / "agents" / "pr-source-reader.toml").exists()
 
     def test_session_log_reader_projects_direct_mcp_only_policy(self) -> None:
         self._write_all_source_files()
@@ -1896,7 +1895,7 @@ class TestCodexBackendSetupSessionDir:
         expected_names = {
             f"{definition.name}.toml"
             for definition in load_agent_definitions(pkg_root() / "agents")
-            if definition.name not in BUNDLED_EXPLORER_ROLES
+            if definition.name not in BUNDLED_EXPLORER_ROLES and not definition.reader_tools
         }
         actual_names = {path.name for path in toml_files}
         assert actual_names == expected_names, (
@@ -1910,7 +1909,6 @@ class TestCodexBackendSetupSessionDir:
         required_new_roles = {
             "friction-batch-scanner",
             "friction-category-analyzer",
-            "pr-source-reader",
             "pr-synthesizer",
             "research-source-reader",
             "research-synthesizer",
@@ -1954,6 +1952,7 @@ class TestCodexBackendSetupSessionDir:
             definition.name
             for definition in definitions
             if definition.name not in BUNDLED_EXPLORER_ROLES
+            and not definition.reader_tools
             and definition.codex.sandbox_mode == "read-only"
         }
         assert WEB_EVIDENCE_RESEARCHER_ROLE in read_only_names
@@ -2670,7 +2669,7 @@ class TestCodexBackendSetupSessionDir:
         eligible_bundled = {
             definition.name
             for definition in load_agent_definitions(pkg_root() / "agents")
-            if definition.name not in BUNDLED_EXPLORER_ROLES
+            if definition.name not in BUNDLED_EXPLORER_ROLES and not definition.reader_tools
         }
         assert role_names == frozenset(
             {"default", "explorer", "worker", "valid-ambient"} | eligible_bundled

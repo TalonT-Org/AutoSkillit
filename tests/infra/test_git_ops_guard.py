@@ -219,6 +219,23 @@ class TestGitResetHardDenied:
         out = _run_guard("git reset --soft HEAD~1", kitchen_open=True, tmpdir=tmp_path)
         assert out.strip() == ""
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # Read forms: 1 positional must not IndexError (would fail-open
+            # since IndexError is not in the preflight except tuple).
+            "git symbolic-ref HEAD",
+            "git symbolic-ref --short HEAD",
+            "git symbolic-ref -q HEAD",
+        ],
+    )
+    def test_allows_symbolic_ref_read_forms(self, tmp_path, command: str) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+        # Must not raise (exit 0, no JSON, no exception). An IndexError here
+        # would surface as exit 1, which PreToolUse treats as non-blocking
+        # (silent allow).
+        assert out.strip() == ""
+
 
 # ---------------------------------------------------------------------------
 # Denied cases: clean
@@ -406,6 +423,23 @@ class TestCheckedOutRefMutations:
             ("git reset {new}", "refs/heads/review", "linked"),
             (
                 "git symbolic-ref HEAD refs/heads/develop",
+                "refs/heads/develop",
+                "primary",
+            ),
+            # -m <reason> can appear before OR after <name> and <ref>; both
+            # orderings must deny the target ref.
+            (
+                "git symbolic-ref HEAD refs/heads/develop -m switching",
+                "refs/heads/develop",
+                "primary",
+            ),
+            (
+                "git symbolic-ref -m switching HEAD refs/heads/develop",
+                "refs/heads/develop",
+                "primary",
+            ),
+            (
+                "git symbolic-ref HEAD -m switching refs/heads/develop",
                 "refs/heads/develop",
                 "primary",
             ),

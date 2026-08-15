@@ -544,7 +544,7 @@ def _classify_git_segment(
         return _classify_push(args, context, owned_refs)
     elif subcommand == "symbolic-ref":
         positional = [token for token in args if not token.startswith("-")]
-        if len(positional) == 2 and positional[0] == "HEAD":
+        if positional and positional[0] == "HEAD":
             one = (_normal_branch_ref(positional[1]), positional[1], False)
     return [one] if one is not None else []
 

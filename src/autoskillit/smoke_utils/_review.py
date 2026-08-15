@@ -250,163 +250,163 @@ def annotate_pr_diff(
                 timeout=60,
             )
 
-    try:
-        merge_base_sha = ""
-        provider_base_repo_full_name = ""
-        if selected_review_mode == "local" and not base_branch.strip():
-            logger.warning(
-                "local_review_mode_downgrade: base_branch empty, falling back to gh pr diff"
-            )
-            selected_review_mode = "github"
+    merge_base_sha = ""
+    provider_base_repo_full_name = ""
+    if selected_review_mode == "local" and not base_branch.strip():
+        logger.warning(
+            "local_review_mode_downgrade: base_branch empty, falling back to gh pr diff"
+        )
+        selected_review_mode = "github"
 
-        if selected_review_mode == "local":
-            checkout_head_sha = _required_scalar(["git", "rev-parse", "HEAD"], timeout=10)
-            provider_authority = _read_provider_authority()
-            (
-                head_sha,
-                base_sha,
-                provider_merge_base_sha,
-                provider_base_repo_full_name,
-            ) = provider_authority
-            if checkout_head_sha != head_sha:
-                raise RuntimeError("checkout head does not match provider head authority")
-            # rc=1 (ref missing) is benign; rc>=2 is a real failure _run raises on.
-            _run(
-                [
-                    "git",
-                    "rev-parse",
-                    "--verify",
-                    "-q",
-                    f"refs/heads/{base_branch.strip()}",
-                ],
-                timeout=10,
-                ok_returncodes=frozenset({0, 1}),
-            )
-            _ensure_provider_objects(
-                (base_sha, provider_merge_base_sha), provider_base_repo_full_name
-            )
-            local_computed_merge_base_sha = _required_scalar(
-                ["git", "merge-base", base_sha, checkout_head_sha],
-                timeout=10,
-            )
-            if local_computed_merge_base_sha != provider_merge_base_sha:
-                raise RuntimeError("local and provider merge base authorities disagree")
-            merge_base_sha = provider_merge_base_sha
-            diff_args = [
+    if selected_review_mode == "local":
+        checkout_head_sha = _required_scalar(["git", "rev-parse", "HEAD"], timeout=10)
+        provider_authority = _read_provider_authority()
+        (
+            head_sha,
+            base_sha,
+            provider_merge_base_sha,
+            provider_base_repo_full_name,
+        ) = provider_authority
+        if checkout_head_sha != head_sha:
+            raise RuntimeError("checkout head does not match provider head authority")
+        # rc=1 (ref missing) is benign; rc>=2 is a real failure _run raises on.
+        _run(
+            [
                 "git",
-                "diff",
-                "--no-color",
-                "--no-ext-diff",
-                "--no-textconv",
-                "--find-renames=50%",
-                "--unified=3",
-                merge_base_sha,
-                checkout_head_sha,
-            ]
-            diff_bytes = _stdout_bytes(_run(diff_args, timeout=60))
-            if _read_provider_authority() != provider_authority:
-                raise RuntimeError("provider PR authority moved during diff acquisition")
-            profile_id = "local_git_pinned_v1"
-            diff_source = {
-                "kind": "local_git",
-                "comparison": "merge_base_to_head",
-                "context_lines": 3,
-                "rename_detection": "50%",
-                "external_diff": False,
-                "text_conversion": False,
-                "profile_id": profile_id,
-            }
-        else:
-            refs_before = _read_pr_refs()
-            head_sha, base_sha = refs_before
-            diff_bytes = _stdout_bytes(_run(["gh", "pr", "diff", str(pr_number)], timeout=60))
-            refs_after = _read_pr_refs()
-            if refs_after != refs_before:
-                raise RuntimeError("live PR head/base refs moved during diff acquisition")
-            profile_id = "github_pr_diff_v1"
-            diff_source = {
-                "kind": "github_pr",
-                "comparison": "pull_request",
-                "context_lines": 3,
-                "rename_detection": "provider_default",
-                "external_diff": False,
-                "text_conversion": False,
-                "profile_id": profile_id,
-            }
-
-        diff_text = diff_bytes.decode("utf-8", errors="strict")
-        annotated_text = f"# sha: {head_sha}\n{annotate_diff(diff_text)}"
-        ranges_text = json.dumps(
-            parse_hunk_ranges(diff_text),
-            sort_keys=True,
-            separators=(",", ":"),
+                "rev-parse",
+                "--verify",
+                "-q",
+                f"refs/heads/{base_branch.strip()}",
+            ],
+            timeout=10,
+            ok_returncodes=frozenset({0, 1}),
         )
-        valid_lines_text = json.dumps(
-            extract_valid_lines(diff_text),
-            sort_keys=True,
-            separators=(",", ":"),
+        _ensure_provider_objects((base_sha, provider_merge_base_sha), provider_base_repo_full_name)
+        local_computed_merge_base_sha = _required_scalar(
+            ["git", "merge-base", base_sha, checkout_head_sha],
+            timeout=10,
         )
-        metrics = compute_diff_metrics(diff_text)
-        loc_thresh = int(loc_threshold) if loc_threshold else 200
-        file_thresh = int(file_threshold) if file_threshold else 5
-        dispatch = select_review_agents(
-            metrics,
-            loc_threshold=loc_thresh,
-            file_threshold=file_thresh,
-        )
-        diff_sha256 = hashlib.sha256(diff_bytes).hexdigest()
-
-        def _artifact_record(path: Path, text: str) -> dict[str, str | int]:
-            encoded = text.encode("utf-8")
-            return {
-                "basename": path.name,
-                "sha256": hashlib.sha256(encoded).hexdigest(),
-                "byte_length": len(encoded),
-            }
-
-        artifacts = {
-            "annotated_diff": _artifact_record(annotated_path, annotated_text),
-            "hunk_ranges": _artifact_record(ranges_path, ranges_text),
-            "valid_lines": _artifact_record(valid_lines_path, valid_lines_text),
+        if local_computed_merge_base_sha != provider_merge_base_sha:
+            raise RuntimeError("local and provider merge base authorities disagree")
+        merge_base_sha = provider_merge_base_sha
+        diff_args = [
+            "git",
+            "diff",
+            "--no-color",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--find-renames=50%",
+            "--unified=3",
+            merge_base_sha,
+            checkout_head_sha,
+        ]
+        diff_bytes = _stdout_bytes(_run(diff_args, timeout=60))
+        if _read_provider_authority() != provider_authority:
+            raise RuntimeError("provider PR authority moved during diff acquisition")
+        profile_id = "local_git_pinned_v1"
+        diff_source = {
+            "kind": "local_git",
+            "comparison": "merge_base_to_head",
+            "context_lines": 3,
+            "rename_detection": "50%",
+            "external_diff": False,
+            "text_conversion": False,
+            "profile_id": profile_id,
         }
-        generation_material = json.dumps(
-            {
-                "head_sha": head_sha,
-                "base_sha": base_sha,
-                "merge_base_sha": merge_base_sha,
-                "base_repo_full_name": provider_base_repo_full_name,
-                "diff_sha256": diff_sha256,
-                "profile": diff_source,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        metrics_data = {
-            "_head_sha": head_sha,
-            "_base_sha": base_sha,
-            "_merge_base_sha": merge_base_sha,
-            "_base_repo_full_name": provider_base_repo_full_name,
-            "review_mode": selected_review_mode,
-            "generation_id": hashlib.sha256(generation_material).hexdigest(),
+    else:
+        refs_before = _read_pr_refs()
+        head_sha, base_sha = refs_before
+        diff_bytes = _stdout_bytes(_run(["gh", "pr", "diff", str(pr_number)], timeout=60))
+        refs_after = _read_pr_refs()
+        if refs_after != refs_before:
+            raise RuntimeError("live PR head/base refs moved during diff acquisition")
+        profile_id = "github_pr_diff_v1"
+        diff_source = {
+            "kind": "github_pr",
+            "comparison": "pull_request",
+            "context_lines": 3,
+            "rename_detection": "provider_default",
+            "external_diff": False,
+            "text_conversion": False,
+            "profile_id": profile_id,
+        }
+
+    diff_text = diff_bytes.decode("utf-8", errors="strict")
+    annotated_text = f"# sha: {head_sha}\n{annotate_diff(diff_text)}"
+    ranges_text = json.dumps(
+        parse_hunk_ranges(diff_text),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    valid_lines_text = json.dumps(
+        extract_valid_lines(diff_text),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    metrics = compute_diff_metrics(diff_text)
+    loc_thresh = int(loc_threshold) if loc_threshold else 200
+    file_thresh = int(file_threshold) if file_threshold else 5
+    dispatch = select_review_agents(
+        metrics,
+        loc_threshold=loc_thresh,
+        file_threshold=file_thresh,
+    )
+    diff_sha256 = hashlib.sha256(diff_bytes).hexdigest()
+
+    def _artifact_record(path: Path, text: str) -> dict[str, str | int]:
+        encoded = text.encode("utf-8")
+        return {
+            "basename": path.name,
+            "sha256": hashlib.sha256(encoded).hexdigest(),
+            "byte_length": len(encoded),
+        }
+
+    artifacts = {
+        "annotated_diff": _artifact_record(annotated_path, annotated_text),
+        "hunk_ranges": _artifact_record(ranges_path, ranges_text),
+        "valid_lines": _artifact_record(valid_lines_path, valid_lines_text),
+    }
+    generation_material = json.dumps(
+        {
+            "head_sha": head_sha,
+            "base_sha": base_sha,
+            "merge_base_sha": merge_base_sha,
+            "base_repo_full_name": provider_base_repo_full_name,
             "diff_sha256": diff_sha256,
-            "diff_byte_length": len(diff_bytes),
-            "diff_source": diff_source,
-            "artifacts": artifacts,
-            "added_lines": metrics.added_lines,
-            "removed_lines": metrics.removed_lines,
-            "changed_files": metrics.changed_files,
-            "file_paths": metrics.file_paths,
-            "dispatch_agents": dispatch,
-            "run_overengineering_audits": (metrics.added_lines + metrics.removed_lines) > 2000,
-        }
-        metrics_text = json.dumps(metrics_data, sort_keys=True, separators=(",", ":"))
+            "profile": diff_source,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    metrics_data = {
+        "_head_sha": head_sha,
+        "_base_sha": base_sha,
+        "_merge_base_sha": merge_base_sha,
+        "_base_repo_full_name": provider_base_repo_full_name,
+        "review_mode": selected_review_mode,
+        "generation_id": hashlib.sha256(generation_material).hexdigest(),
+        "diff_sha256": diff_sha256,
+        "diff_byte_length": len(diff_bytes),
+        "diff_source": diff_source,
+        "artifacts": artifacts,
+        "added_lines": metrics.added_lines,
+        "removed_lines": metrics.removed_lines,
+        "changed_files": metrics.changed_files,
+        "file_paths": metrics.file_paths,
+        "dispatch_agents": dispatch,
+        "run_overengineering_audits": (metrics.added_lines + metrics.removed_lines) > 2000,
+    }
+    metrics_text = json.dumps(metrics_data, sort_keys=True, separators=(",", ":"))
+    _writes_succeeded = False
+    try:
         atomic_write(annotated_path, annotated_text)
         atomic_write(ranges_path, ranges_text)
         atomic_write(valid_lines_path, valid_lines_text)
         atomic_write(metrics_path, metrics_text)
-    except BaseException:
-        metrics_path.unlink(missing_ok=True)
-        raise
+        _writes_succeeded = True
+    finally:
+        if not _writes_succeeded:
+            metrics_path.unlink(missing_ok=True)
 
     return {
         "head_sha": head_sha,

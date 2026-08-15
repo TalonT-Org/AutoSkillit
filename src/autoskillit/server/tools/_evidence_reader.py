@@ -152,9 +152,9 @@ def _write_secure_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _secure_json(path: Path, *, max_bytes: int) -> dict[str, Any]:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     if not hasattr(os, "O_NOFOLLOW"):
         raise EvidenceReaderError("platform_unsupported")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     try:
         before = path.lstat()
         descriptor = os.open(path, flags)

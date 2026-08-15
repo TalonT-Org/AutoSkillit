@@ -202,8 +202,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "submit_exploration_query",  # bounded evidence page JSON, generic renders correctly
         "get_exploration_page",  # bounded evidence page JSON, generic renders correctly
         "resume_exploration_context",  # bounded evidence page JSON, generic renders correctly
-        # Evidence-reader delegation and broker envelopes are compact JSON records (#4585).
-        "delegate_evidence_reader",
+        "delegate_evidence_reader",  # compact JSON delegation envelope (#4585)
         "read_authorized_artifact",
         "get_authorized_artifact_page",
     }

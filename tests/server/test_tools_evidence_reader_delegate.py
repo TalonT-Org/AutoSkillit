@@ -19,6 +19,7 @@ from autoskillit.execution.evidence_reader import (
     EvidenceCitation,
     EvidenceReaderLaunchError,
     EvidenceReaderLaunchResult,
+    EvidenceReaderResultStatus,
 )
 from autoskillit.exploration import StableArtifactCapture
 from autoskillit.server.tools._evidence_reader import (
@@ -194,7 +195,7 @@ def test_delegate_real_capture_authority_receipt_and_terminal_recapture(
             page.line_end,
         )
         return EvidenceReaderLaunchResult(
-            "answered",
+            EvidenceReaderResultStatus.ANSWERED,
             definition.name,
             kwargs["expected_scope_digest"],
             kwargs["expected_snapshot_digest"],
@@ -294,13 +295,13 @@ def test_delegate_failures_revoke_authority_and_remove_invocation(
             raise EvidenceReaderLaunchError(failure)
         if failure == "malformed-result":
             payload_json = "not-json"
-            status = "answered"
+            status = EvidenceReaderResultStatus.ANSWERED
         elif failure == "incomplete-result":
             payload_json = json.dumps({"complete": False, "truncated": False})
-            status = "partial"
+            status = EvidenceReaderResultStatus.PARTIAL
         else:
             payload_json = json.dumps({"complete": True, "truncated": False})
-            status = "answered"
+            status = EvidenceReaderResultStatus.ANSWERED
         citation = EvidenceCitation("missing-receipt", 0, 1, 1, 1)
         return EvidenceReaderLaunchResult(
             status,
@@ -352,7 +353,13 @@ def test_cleanup_failure_overrides_otherwise_successful_delegate(
         delegate_module,
         "launch_evidence_reader",
         lambda *args, **kwargs: EvidenceReaderLaunchResult(
-            "answered", "pr-source-reader", "scope", capture.snapshot_digest, "thread", (), "{}"
+            EvidenceReaderResultStatus.ANSWERED,
+            "pr-source-reader",
+            "scope",
+            capture.snapshot_digest,
+            "thread",
+            (),
+            "{}",
         ),
     )
     monkeypatch.setattr(delegate_module, "_validate_child", lambda *args, **kwargs: {"ok": True})

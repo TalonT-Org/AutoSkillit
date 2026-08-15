@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 import anyio
-import regex as re  # type: ignore[import-untyped]
+import regex as re
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 

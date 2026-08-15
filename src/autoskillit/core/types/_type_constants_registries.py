@@ -211,6 +211,7 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset(
         "configure_fleet",
         "configure_order",
         "lock_ingredients",  # NEW (#3357)
+        "declare_join_batch",  # NEW (REQ-JOIN-001 — REQ-JOIN-002, #4575)
     }
 )
 

@@ -34,7 +34,6 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class _ErrorCode(StrEnum):
-    ARTIFACT_TERMINAL_RECAPTURE_FAILED = "artifact_terminal_recapture_failed"
     READER_CLEANUP_FAILED = "reader_cleanup_failed"
     READER_REQUEST_INVALID = "reader_request_invalid"
     READER_ROLE_UNAVAILABLE = "reader_role_unavailable"

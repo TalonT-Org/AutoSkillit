@@ -533,6 +533,27 @@ def test_stream_validation_rejects_unissued_receipt_even_with_one_observed_recei
 
 
 @pytest.mark.parametrize(
+    ("limit", "value"),
+    [
+        ("max_stream_bytes", True),
+        ("max_stream_bytes", 0),
+        ("max_stream_bytes", launcher._MAX_STREAM_BYTES + 1),
+        ("max_result_bytes", True),
+        ("max_result_bytes", 0),
+        ("max_result_bytes", launcher._MAX_RESULT_BYTES + 1),
+    ],
+)
+def test_launch_limits_reject_invalid_int_values(
+    tmp_path: Path, limit: str, value: object
+) -> None:
+    kwargs = _launch_kwargs(tmp_path)
+    kwargs[limit] = value  # type: ignore[assignment]
+    with pytest.raises(EvidenceReaderLaunchError) as raised:
+        launch_evidence_reader(_definition(), _invocation(tmp_path), **kwargs)
+    assert raised.value.code == "launch_limits_invalid"
+
+
+@pytest.mark.parametrize(
     "mutate",
     [
         lambda payload: payload["coverage_gaps"].append(

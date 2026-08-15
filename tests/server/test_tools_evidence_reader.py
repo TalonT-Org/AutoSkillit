@@ -389,6 +389,14 @@ def test_receipt_loader_returns_only_the_bounded_verified_suffix(tmp_path: Path)
             max_receipts=65,
         ),
     )
+    _assert_error(
+        _ErrorCode.RECEIPT_LIMIT_INVALID,
+        lambda: load_evidence_reader_receipts(
+            context,
+            dict(invocation.environment),
+            max_receipts=True,
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -537,6 +545,8 @@ async def test_brokers_apply_default_explicit_page_sizes_deadlines_and_private_e
 
     invalid = json.loads(await handler_module.read_authorized_artifact(page_size=0))
     assert invalid == {"status": "error", "code": "page_size_invalid"}
+    bool_invalid = json.loads(await handler_module.read_authorized_artifact(page_size=True))
+    assert bool_invalid == {"status": "error", "code": "page_size_invalid"}
     assert len(calls) == 2
 
 

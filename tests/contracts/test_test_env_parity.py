@@ -83,6 +83,8 @@ tasks:
 # separately by scripts/pytest_tmp_lifecycle.py; the paths have masked failures before.
 _TASKFILE_NON_PARITY_VARS: frozenset[str] = frozenset(
     {
+        # Target-owned opt-in for one live smoke; ordinary harnesses must not propagate it.
+        "AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE",
         "AUTOSKILLIT_EXPLORER_LIVE_GATE",
         "AUTOSKILLIT_TEST_FILTER",
         "CLAUDE_CODE_SMOKE_TEST",

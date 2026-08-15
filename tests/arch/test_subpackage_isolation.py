@@ -1020,7 +1020,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
         # +_recipe_section_handler.py (bounded recipe-section pull handler)
-        "hooks/guards": 38,  # +github_mutation_guard (#4432); +3 join_*_guard (#4575)
+        "hooks/guards": 39,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
         # +fabricated_completion_guard (#4457)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,

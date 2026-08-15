@@ -159,7 +159,8 @@ TL = `telemetry`, FL = `fleet`
 | `reload_session` | AS | `server/tools_kitchen.py` |
 | `configure_fleet` | AS | `server/tools_config.py` |
 | `configure_order` | AS | `server/tools_config.py` |
-| `lock_ingredients` | AS | `server/tools_config.py` |
+| `lock_ingredients` | AS | `server/tools_kitchen.py` |
+| `declare_join_batch` | AS, K | `server/tools_kitchen.py` | Opens one declared-batch JoinLedger for the next wave; see `JoinLedger` lifecycle. Claude-only when `fixed_set_join_capable`. |
 
 ---
 

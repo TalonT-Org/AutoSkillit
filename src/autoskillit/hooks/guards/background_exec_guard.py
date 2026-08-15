@@ -92,6 +92,8 @@ def main() -> None:
 
     tool_name = data.get("tool_name")
 
+    join_required = False  # default; tightened below when the binding is consulted
+
     # --- Join-bound session enforcement (Claude, all session types) ---
     # Inside a claimed child's own subagent context, exempt join re-evaluation:
     # blocking them would self-lock every join.
@@ -127,6 +129,29 @@ def main() -> None:
                 )
                 sys.stdout.write(payload + "\n")
                 sys.exit(0)
+
+    # --- Join-bound ScheduleWakeup rejection (independent of headless state) ---
+    # Deferral/stall is an escape hatch that could let a wave close with an
+    # empty child set. Reject ScheduleWakeup whenever the session reports a
+    # join-bearing skill load, even in interactive Claude sessions that have
+    # not entered the headless tier.
+    if is_governed and join_required and tool_name == "ScheduleWakeup":
+        denial_reason = (
+            f"{SCHEDULE_WAKEUP_DENY_TRIGGER} (ADR-0001) — ScheduleWakeup is "
+            "prohibited in a join-bound session because deferral cannot "
+            "produce the declared-batch evidence the join contract requires."
+        )
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": denial_reason,
+                }
+            }
+        )
+        sys.stdout.write(payload + "\n")
+        sys.exit(0)
 
     if not headless:
         # Interactive non-governed sessions fall through after the join check.

@@ -126,6 +126,24 @@ def build_skill_projection_binding(
     capability_union = frozenset().union(
         *(skill.uses_capabilities for skill in projection_context.skills)
     )
+    join_required_by_member: dict[str, bool] = {}
+    cardinality_by_member: dict[str, dict[str, object]] = {}
+    artifact_digest_by_member: dict[str, str] = {}
+    artifact_incarnation_by_member: dict[str, str] = {}
+    for name, skill in zip(
+        (skill.name for skill in projection_context.skills), projection_context.skills
+    ):
+        plan = skill.semantic_plan
+        if plan is None:
+            continue
+        join_required_by_member[name] = bool(plan.join is not None and plan.join.required)
+        card: dict[str, object] = {}
+        for spawn in plan.child_spawns:
+            if spawn.count is not None:
+                card[spawn.role] = int(spawn.count)
+            elif spawn.for_each is not None:
+                card[spawn.role] = str(spawn.for_each)
+        cardinality_by_member[name] = dict(sorted(card.items()))
     return SkillProjectionBinding(
         root_name=invocation.root.name if invocation is not None else None,
         member_names=tuple(skill.name for skill in projection_context.skills),
@@ -159,6 +177,10 @@ def build_skill_projection_binding(
         cwd=str(projection_context.cwd),
         backend=backend.name,
         artifact_paths=tuple(artifact_paths),
+        join_required_by_member=dict(join_required_by_member),
+        child_spawn_cardinality_by_member=dict(cardinality_by_member),
+        artifact_digest_by_member=dict(artifact_digest_by_member),
+        artifact_incarnation_by_member=dict(artifact_incarnation_by_member),
     )
 
 

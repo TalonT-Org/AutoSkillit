@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 49 Claude Code hook scripts: 36 PreToolUse, 10 PostToolUse,
+AutoSkillit registers 50 Claude Code hook scripts: 37 PreToolUse, 10 PostToolUse,
 2 SessionStart, and 1 Stop. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (36)
+## PreToolUse hooks (37)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`

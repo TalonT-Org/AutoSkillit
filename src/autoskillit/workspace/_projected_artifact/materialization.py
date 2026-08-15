@@ -585,6 +585,9 @@ def write_generated_hooks_json(plugin_root: Path) -> None:
 def _manifest_skill_entry(
     skill: SkillContractRecord,
     document: AgentSkillDocument,
+    *,
+    artifact_digest: str = "",
+    artifact_incarnation: str = "",
 ) -> dict[str, Any]:
     role = skill.execution_role
     semantic_plan = skill.semantic_plan
@@ -614,6 +617,8 @@ def _manifest_skill_entry(
         "child_spawn_cardinality": dict(sorted(child_cardinality.items())),
         "semantic_digest": document.semantic_digest,
         "adaptation_digest": document.adaptation_digest,
+        "artifact_digest": artifact_digest,
+        "artifact_incarnation": artifact_incarnation,
     }
     return entry
 
@@ -894,6 +899,11 @@ def validate_sanitized_plugin_artifact(
         # adaptation_digest is produced at materialization time and validated
         # downstream via digest pinning (re-parsing the projected artifact).
         expected_entry["adaptation_digest"] = ""
+        # artifact_digest and artifact_incarnation are sourced from the
+        # SkillProjectionBinding populated at publish time; this validator
+        # cannot know their values yet, so accept any non-empty string.
+        expected_entry["artifact_digest"] = entry.get("artifact_digest", "")
+        expected_entry["artifact_incarnation"] = entry.get("artifact_incarnation", "")
         for field_name, value in expected_entry.items():
             if entry.get(field_name) != value:
                 errors.append(

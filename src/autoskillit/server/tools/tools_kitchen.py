@@ -2145,6 +2145,7 @@ def _declare_join_batch_handler(
     top_level_parent: str | None = None,
 ) -> dict[str, object]:
     """Core logic for the declare_join_batch tool — testable without FastMCP."""
+    from autoskillit.execution.backends import get_backend
     from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
 
     flag_dir = Path.cwd() / ".autoskillit" / "temp"
@@ -2158,6 +2159,62 @@ def _declare_join_batch_handler(
             binding = {}
     if not isinstance(binding, dict):
         binding = {}
+
+    # Fail-closed validation: a join-bearing session binding, a loaded skill
+    # entry, and the backend's fixed-set-join capability must all line up
+    # before we open a wave.
+    if not bool(binding.get("join_required", False)):
+        return {
+            "success": False,
+            "error": "declare_join_batch requires a join-bearing session binding",
+        }
+    loaded = binding.get("loaded_skills", [])
+    if not isinstance(loaded, list) or not any(
+        isinstance(entry, dict) and entry.get("skill_name") == skill_name for entry in loaded
+    ):
+        return {
+            "success": False,
+            "error": f"declare_join_batch: skill {skill_name!r} is not loaded in this session",
+        }
+    backend_name = (
+        os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "claude-code").strip() or "claude-code"
+    )
+    backend = None
+    try:
+        backend = get_backend(backend_name)
+    except Exception:
+        backend = None
+    if backend is None or not getattr(backend.capabilities, "fixed_set_join_capable", False):
+        return {
+            "success": False,
+            "error": (
+                f"declare_join_batch: backend {backend_name!r} does not attest "
+                "fixed_set_join_capable"
+            ),
+        }
+    # Check backend supports the requested assignments against the manifest's
+    # declared child_spawn_cardinality.
+    manifest_cardinality: dict[str, object] = {}
+    for entry in loaded:
+        if isinstance(entry, dict) and entry.get("skill_name") == skill_name:
+            card = entry.get("child_spawn_cardinality", {})
+            if isinstance(card, dict):
+                manifest_cardinality = card
+            break
+    declared_count: object | None = None
+    for spawn in manifest_cardinality.values():
+        declared_count = spawn
+        break
+    if declared_count is not None and isinstance(declared_count, int):
+        if len(assignments) != declared_count:
+            return {
+                "success": False,
+                "error": (
+                    f"declare_join_batch: skill {skill_name!r} declares "
+                    f"count={declared_count}; received {len(assignments)} assignments"
+                ),
+            }
+
     artifact_digest = str(binding.get("artifact_digest", "")) or _derive_artifact_digest(binding)
     parent = top_level_parent or "top_level"
     try:

@@ -123,6 +123,23 @@ AutoSkillit supports four session modes with different tool and skill visibility
 This prevents recursive session nesting and keeps the orchestrator as a pure routing engine.
 See **[Skill Visibility](../skills/visibility.md)** for the full tier breakdown and configuration.
 
+## Join Contract and Batch Admission
+
+A skill that declares `semantic_requirements.join.required: true` enters a join-bound session the moment Claude loads it. The hook layer carries the join policy and the batch ledger:
+
+1. **`declare_join_batch`** opens one parent/wave with resolved assignment labels, validates the loaded skill's `join.required` and `child_spawn_cardinality` against the projection manifest, and returns a fresh `join_batch_id`.
+2. **JoinLedger** keys membership and outcomes by `(session_id, top_level_parent, join_batch_id, assignment, tool_use_id)`. Persistence uses `fcntl.flock` + atomic `os.replace` (`hooks/_join_ledger.py`).
+3. **Claim → Settle → Stop lifecycle** —
+   * `join_claim_guard` (PreToolUse, matcher `Agent`) atomically claims one declared assignment per top-level direct `Agent` `tool_use_id`.
+   * `join_settle_guard` (PostToolUse + PostToolUseFailure) maps the upstream event to one of `success / failure / timeout / cancelled / interruption / missing` and records the outcome on the claimed handle. Empty results are mapped to `missing`, never `success`.
+   * `join_followup_guard` (matcherless PreToolUse) denies non-`Agent` side-effecting calls while a wave is unresolved.
+   * `join_stop_guard` (Stop, exit code 2) blocks Claude from completing until the wave is `complete`.
+4. **Backend admission** — `BackendCapabilities.fixed_set_join_capable` is statically `True` only for Claude Code, and only when the full guard set is registered in the same commit. Codex returns `unsupported_operation(REQUIRED_JOIN)` at admission; current Codex has wait-any/mailbox semantics, not fixed-set fan-in.
+5. **Session binding monotonicity** — `skill_load_post_hook.py` writes a JSON envelope with OR-accumulated `join_required`. A later join-false Skill load does not downgrade an established binding. A missing or unreadable projection manifest fails closed by forcing `join_required: true` so dispatch guards refuse all join-bearing work.
+6. **Repository force-inactive option** — `agent_backend.force_claude_agent_teams_inactive` (default False) neutralizes `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and detects conflicting entries in the target repository's `.claude/settings.json` / `.claude/settings.local.json`. Repositories with the option disabled remain byte-for-byte unchanged.
+
+The session flag carries join policy; the manifest carries projection identity; the ledger carries wave state. Each is read by the matching hook family. None of them is a duplicate authority — they are three projections of one decision.
+
 ## Durable Codex Cook Sessions
 
 Codex cook history uses a per-attempt view rather than exposing the complete

@@ -174,6 +174,7 @@ def _count_hooks_by_event() -> dict[str, int]:
         "SessionStart": set(),
         "Stop": set(),
     }
+    # join_followup_guard adds one PreToolUse script to the count.
     for hook_def in HOOK_REGISTRY:
         for script in hook_def.scripts:
             by_event[hook_def.event_type].add(script)

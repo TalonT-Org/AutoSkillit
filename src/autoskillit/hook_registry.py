@@ -371,6 +371,14 @@ HOOK_REGISTRY: list[HookDef] = [
         enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
     ),
     HookDef(
+        matcher="",
+        scripts=["guards/join_followup_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
         matcher="Agent",
         event_type="PostToolUse",
         scripts=["guards/join_settle_guard.py"],
@@ -588,6 +596,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "join_claim_guard.py",  # NEW (#4575, #4520)
         "join_settle_guard.py",  # NEW (#4575, #4520)
         "join_stop_guard.py",  # NEW (#4575, #4520)
+        "join_followup_guard.py",  # NEW (#4575, #4520)
     }
 )
 

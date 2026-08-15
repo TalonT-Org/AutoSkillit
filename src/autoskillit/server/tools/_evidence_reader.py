@@ -21,6 +21,7 @@ from autoskillit.core import (
     EVIDENCE_READER_AUTHORITY_ENV_VAR,
     EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
     EVIDENCE_READER_CAPABILITY_ENV_VAR,
+    EVIDENCE_READER_ENV_FORWARD_VARS,
     EVIDENCE_READER_TOOLS,
     atomic_write,
     canonical_reader_tools_to_bare,
@@ -60,13 +61,7 @@ _SCOPE_DOMAIN: Final = b"autoskillit.evidence-reader-scope.v1\0"
 _CITATION_DOMAIN: Final = b"autoskillit.evidence-reader-citation.v1\0"
 _MAX_AUTHORITY_BYTES: Final = 2_000_000
 _MAX_RECEIPT_BYTES: Final = 1_000_000
-_REQUIRED_ENV: Final = frozenset(
-    {
-        EVIDENCE_READER_AUTHORITY_ENV_VAR,
-        EVIDENCE_READER_CAPABILITY_ENV_VAR,
-        EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
-    }
-)
+_REQUIRED_ENV: Final = EVIDENCE_READER_ENV_FORWARD_VARS
 
 
 class EvidenceReaderError(RuntimeError):

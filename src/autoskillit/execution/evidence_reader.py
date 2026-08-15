@@ -25,7 +25,7 @@ from autoskillit.core import (
     DIRECT_PREFIX,
     EVIDENCE_READER_AUTHORITY_ENV_VAR,
     EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
-    EVIDENCE_READER_CAPABILITY_ENV_VAR,
+    EVIDENCE_READER_ENV_FORWARD_VARS,
     AgentDef,
     agent_definition_digest,
     atomic_write,
@@ -47,13 +47,7 @@ from autoskillit.execution.backends._probe_cache import (
 from autoskillit.execution.backends.codex import _validate_codex_mcp_inventory
 from autoskillit.execution.process._process_kill import spawn_owned_process
 
-_EVIDENCE_ENV = frozenset(
-    {
-        EVIDENCE_READER_AUTHORITY_ENV_VAR,
-        EVIDENCE_READER_CAPABILITY_ENV_VAR,
-        EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
-    }
-)
+_EVIDENCE_ENV = EVIDENCE_READER_ENV_FORWARD_VARS
 _PROVIDER_ENV = frozenset(
     {
         "ALL_PROXY",

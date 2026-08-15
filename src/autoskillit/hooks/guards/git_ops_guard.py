@@ -554,12 +554,9 @@ def _classify_git_segment(
     elif subcommand == "push":
         return _classify_push(args, context, owned_refs)
     elif subcommand == "symbolic-ref":
-        # Parse out positionals while consuming the value-taking flag -m.
-        # -m <reason> can appear before OR after <name> and <ref>, and its
-        # value looks positional — a naive filter would mis-shift the index.
-        # Also enforce len >= 2: a 1-positional form like `git symbolic-ref
-        # HEAD` (read) and `--short HEAD` must not IndexError (which would
-        # fail-open since IndexError is not in the preflight exception tuple).
+        # -m <reason> can appear before OR after the positionals — its value
+        # looks positional, so we skip past it instead of naively filtering.
+        # `len >= 2` guards against IndexError on read forms like `symbolic-ref HEAD`.
         positional: list[str] = []
         index = 0
         while index < len(args):

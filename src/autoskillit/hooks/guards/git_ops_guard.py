@@ -70,10 +70,9 @@ _BLOCKED_GIT_OPS: frozenset[tuple[str, ...]] = frozenset(
 # No skill legitimately needs destructive git ops in a headless session.
 _EXEMPT_SKILLS: frozenset[str] = frozenset()
 
-# Orchestrator exemption is intentionally not modelled here — the all-session
-# preflight (above) denies unconditionally, and the legacy destructive-ops phase
-# (below) is also unconditional. If a future threat-model needs exemptions,
-# reintroduce _EXEMPT_SESSION_TYPES and a check in main().
+# Must stay in sync with exempt_session_types on the git_ops_guard HookDef
+# in hook_registry.py — stdlib-only boundary prevents a shared import.
+_EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
 
 _DYNAMIC_TOKEN_RE = re.compile(r"[$`?\[]")
 _RAW_WRITE_VERBS = frozenset(
@@ -762,6 +761,10 @@ def main() -> None:
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:
+        sys.exit(0)
+
+    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+    if session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
     # Hook config file is written by open_kitchen and removed by close_kitchen.

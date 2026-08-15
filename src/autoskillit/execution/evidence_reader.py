@@ -775,13 +775,11 @@ def _probe_conformance(
     definition: AgentDef,
     auth: EvidenceReaderAuthSelection,
     *,
-    cli_version: str,
     cwd: Path,
     environment: Mapping[str, str],
     probe_schema_path: Path,
     deadline: float,
 ) -> None:
-    del cli_version  # pre-validated by the caller via _probe_cli_version
     help_result = _run_bounded(
         (codex, "exec", "--help"),
         cwd=cwd,
@@ -1368,7 +1366,6 @@ def launch_evidence_reader(
                     codex,
                     definition,
                     auth,
-                    cli_version=cli_version,
                     cwd=cwd,
                     environment=environment,
                     probe_schema_path=probe_schema_path,

@@ -29895,13 +29895,16 @@
     "tests/test_smoke_utils.py"
   ],
   "src/autoskillit/smoke_utils/_review.py": [
-    "tests/recipe/test_review_loop_routing_integration.py",
     "tests/test_smoke_utils.py"
   ],
   "src/autoskillit/smoke_utils/_review_contracts.py": [
     "tests/skills/test_deletion_regression_guards.py",
     "tests/skills/test_resolve_review_diff_context_consumption.py",
     "tests/skills/test_review_pr_adaptive_dispatch_guards.py",
+    "tests/test_smoke_utils.py"
+  ],
+  "src/autoskillit/smoke_utils/_review_design.py": [
+    "tests/recipe/test_review_loop_routing_integration.py",
     "tests/test_smoke_utils.py"
   ],
   "src/autoskillit/smoke_utils/_telemetry.py": [

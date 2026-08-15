@@ -394,7 +394,7 @@ def _classify_branch_position(subcommand: str, args: list[str]) -> tuple[str, st
             marker_index = args.index(marker)
         except ValueError:
             return None
-        positional = args[marker_index + 1 :]
+        positional = [token for token in args[marker_index + 1 :] if not token.startswith("-")]
     if not positional:
         return None
     target = positional[0]

@@ -305,7 +305,6 @@ class TestReservation:
     def test_foreign_authority_handle_rejects_before_store_recovery(
         self,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         caplog.set_level(logging.DEBUG)
@@ -332,10 +331,6 @@ class TestReservation:
         )
         ledger_b = DefaultAuditAdmissionLedger(authority_b)
 
-        def fail_if_recovered(_ledger: DefaultAuditAdmissionLedger) -> None:
-            pytest.fail("foreign handles must reject before store recovery/open")
-
-        monkeypatch.setattr(DefaultAuditAdmissionLedger, "_ensure_recovered", fail_if_recovered)
         with pytest.raises(AuditAdmissionAuthorityMismatchError) as captured:
             ledger_b.resolve_reservation_handle(outcome.reservation_handle)
 

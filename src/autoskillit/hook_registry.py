@@ -23,7 +23,13 @@ class HookDef:
     """A single hook group: event type, matcher pattern, and ordered script list."""
 
     matcher: str = ""
-    event_type: Literal["PreToolUse", "PostToolUse", "SessionStart"] = "PreToolUse"
+    event_type: Literal[
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "SessionStart",
+        "Stop",
+    ] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
     session_scope: Literal["any", "headless_only", "interactive_only"] = "any"
@@ -353,6 +359,41 @@ HOOK_REGISTRY: list[HookDef] = [
         enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
     ),
     HookDef(
+        matcher="Agent",
+        scripts=["guards/join_claim_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
+        matcher="Agent",
+        event_type="PostToolUse",
+        scripts=["guards/join_settle_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="side-effect",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
+        matcher="Agent",
+        event_type="PostToolUseFailure",
+        scripts=["guards/join_settle_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="side-effect",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
+        matcher="",
+        event_type="Stop",
+        scripts=["guards/join_stop_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
         scripts=[
             "guards/fleet_dispatch_guard.py",
@@ -540,6 +581,9 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "github_mutation_guard.py",
         "fabricated_completion_guard.py",
         "exploration_request_identity_guard.py",
+        "join_claim_guard.py",  # NEW (#4575, #4520)
+        "join_settle_guard.py",  # NEW (#4575, #4520)
+        "join_stop_guard.py",  # NEW (#4575, #4520)
     }
 )
 

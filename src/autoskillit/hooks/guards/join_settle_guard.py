@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""PostToolUse / PostToolUseFailure settlement — record claimed handle outcomes.
+
+When ``join_required=true`` in the session flag (or env mirror), every
+claimed direct ``Agent`` handle must be settled with one of:
+
+    * ``success``         — substantive public result evidence received;
+    * ``failure``         — explicit terminal failure;
+    * ``timeout``         — declared timeout exceeded;
+    * ``cancelled``       — user cancellation;
+    * ``interruption``    — user interrupt;
+    * ``missing``         — no terminal evidence at all.
+
+Identical duplicate (tool_use_id, outcome) events are idempotent.
+Conflicting terminal events for the same handle fail closed.
+
+Empty / non-substantive results are mapped to ``missing`` and never
+silently converted to success.
+
+Stdlib-only — no autoskillit imports.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
+from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
+    OUTCOME_CANCELLED,
+    OUTCOME_FAILURE,
+    OUTCOME_INTERRUPTION,
+    OUTCOME_MISSING,
+    OUTCOME_SUCCESS,
+    OUTCOME_TIMEOUT,
+    JoinLedgerError,
+    settle_assignment,
+)
+
+
+def _session_join_required() -> bool:
+    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
+    if flag_path:
+        try:
+            raw = open(flag_path, encoding="utf-8").read()
+        except OSError:
+            raw = ""
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+        if isinstance(parsed, dict) and bool(parsed.get("join_required", False)):
+            return True
+    return os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1"
+
+
+def _resolve_outcome(event_type: str, payload: dict[str, object]) -> str | None:
+    """Map an upstream event to the canonical outcome, or None to skip."""
+    if event_type == "PostToolUse":
+        tool_input = payload.get("tool_input")
+        if not isinstance(tool_input, dict):
+            return OUTCOME_MISSING
+        if bool(payload.get("is_error")) or bool(payload.get("error")):
+            return OUTCOME_FAILURE
+        tool_response = payload.get("tool_response")
+        if not tool_response:
+            return OUTCOME_MISSING
+        return OUTCOME_SUCCESS
+    if event_type == "PostToolUseFailure":
+        reason = payload.get("reason") or payload.get("error")
+        text = str(reason).casefold() if isinstance(reason, str) else ""
+        if "timeout" in text:
+            return OUTCOME_TIMEOUT
+        if "cancel" in text:
+            return OUTCOME_CANCELLED
+        if "interrupt" in text:
+            return OUTCOME_INTERRUPTION
+        return OUTCOME_FAILURE
+    return None
+
+
+def main() -> None:
+    event_type = os.environ.get("AUTOSKILLIT_HOOK_EVENT", "").strip()
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, ValueError, OSError):
+        sys.exit(0)
+
+    if not _session_join_required():
+        sys.exit(0)
+
+    tool_name = data.get("tool_name")
+    if tool_name != "Agent":
+        sys.exit(0)
+
+    outcome = _resolve_outcome(event_type, data)
+    if outcome is None:
+        sys.exit(0)
+
+    tool_use_id = data.get("tool_use_id") or ""
+    if not isinstance(tool_use_id, str) or not tool_use_id:
+        sys.exit(0)
+
+    sid = data.get("session_id", "")
+    if not isinstance(sid, str) or not sid:
+        sys.exit(0)
+
+    flag_dir = find_project_root() / ".autoskillit" / "temp"
+    top_level_parent = "top_level"
+    try:
+        settle_assignment(
+            flag_dir,
+            session_id=sid,
+            top_level_parent=top_level_parent,
+            tool_use_id=tool_use_id,
+            outcome=outcome,
+        )
+    except JoinLedgerError as exc:
+        sys.stderr.write(f"join_settle_guard: settlement refused: {exc}\n")
+        sys.exit(0)
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

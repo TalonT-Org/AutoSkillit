@@ -108,7 +108,7 @@ def test_skill_session_audit_authority_env_contract(
 
 @pytest.mark.parametrize(
     "builder_name",
-    ("skill", "food-truck", "headless", "resume", "interactive"),
+    ("food-truck", "headless", "resume", "interactive"),
 )
 def test_all_codex_builders_forward_audit_authority_or_empty_sentinel(
     builder_name: str,
@@ -117,13 +117,6 @@ def test_all_codex_builders_forward_audit_authority_or_empty_sentinel(
     trusted_path = "/parent/.autoskillit/temp/audit-admission/ledger.sqlite3"
 
     def build(env_extras: dict[str, str] | None) -> CmdSpec:
-        if builder_name == "skill":
-            return backend.build_skill_session_cmd(
-                "/autoskillit:investigate",
-                "/clone",
-                completion_marker="DONE",
-                provider_extras=env_extras,
-            )
         if builder_name == "food-truck":
             return backend.build_food_truck_cmd(
                 orchestrator_prompt="test prompt",

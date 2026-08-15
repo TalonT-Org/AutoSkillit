@@ -371,12 +371,12 @@ def test_delegate_failures_revoke_authority_and_remove_invocation(
     elif failure == "preflight":
         expected_exception = delegate_module._DelegateError
     elif failure == "recapture":
-        expected_exception = RuntimeError
+        expected_exception = delegate_module._DelegateError
     elif failure in {"malformed-result", "incomplete-result", "receipt-mismatch"}:
         expected_exception = delegate_module._DelegateError
     else:
         expected_exception = EvidenceReaderLaunchError
-    with pytest.raises(expected_exception):
+    with pytest.raises(expected_exception) as raised:
         delegate_module._delegate_sync(
             context,
             caller_session_id="session",
@@ -384,6 +384,8 @@ def test_delegate_failures_revoke_authority_and_remove_invocation(
             artifact_path=capture.artifact_path,
             requested_fields=("field",),
         )
+    if failure == "recapture":
+        assert getattr(raised.value, "code", None) == "artifact_unsupported"
     assert invocation_dirs and all(not path.exists() for path in invocation_dirs)
 
 

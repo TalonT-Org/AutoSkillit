@@ -822,7 +822,7 @@ def test_bounded_process_fails_when_owned_process_cleanup_is_incomplete(
     try:
         process = SimpleNamespace(stdout=stdout_file, stderr=stderr_file)
         owner = SimpleNamespace(process=process, observe_exit=lambda: None)
-        owner.settle_preserving = lambda exc, *, timeout: SimpleNamespace(complete=False)
+        owner.settle_preserving = lambda exc, timeout=2.0: SimpleNamespace(complete=False)
         monkeypatch.setattr(launcher, "spawn_owned_process", lambda *args, **kwargs: owner)
 
         def expire(_deadline: float) -> float:

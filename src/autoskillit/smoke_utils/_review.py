@@ -270,7 +270,11 @@ def annotate_pr_diff(
             ) = provider_authority
             if checkout_head_sha != head_sha:
                 raise RuntimeError("checkout head does not match provider head authority")
-            local_base_observation = _run(
+            # Probe whether the local base ref exists; rc=1 is benign
+            # (the local base branch simply is not present locally, which is
+            # expected when working off a shallow or freshly-cloned checkout).
+            # rc >= 2 indicates a real git failure and _run raises.
+            _run(
                 [
                     "git",
                     "rev-parse",
@@ -281,8 +285,6 @@ def annotate_pr_diff(
                 timeout=10,
                 ok_returncodes=frozenset({0, 1}),
             )
-            if local_base_observation.returncode not in (0, 1):
-                logger.warning("local_base_tip_observation_failed: %s", base_branch.strip())
             _ensure_provider_objects(
                 (base_sha, provider_merge_base_sha), provider_base_repo_full_name
             )
@@ -420,8 +422,8 @@ def annotate_pr_diff(
     }
 
 
-# Verdicts in this set yield ``had_blocking=false`` unconditionally
-# (approved_with_comments is one-shot; needs_human skips review).
+# Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
+# of local rounds: approved comments are one-shot, while needs_human skips review.
 LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
     {
         "approved_with_comments",

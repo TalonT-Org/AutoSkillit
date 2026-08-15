@@ -85,7 +85,7 @@ def _count_free_range_tools() -> int:
     total = 0
     for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
-            if '"kitchen"' not in dec:
+            if '"kitchen"' not in dec and '"evidence-reader"' not in dec:
                 total += 1
     return total
 

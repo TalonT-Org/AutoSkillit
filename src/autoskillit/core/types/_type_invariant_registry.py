@@ -103,7 +103,10 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
     ),
     "skill-orchestration-from-L1": InvariantDef(
         id="skill-orchestration-from-L1",
-        prohibition="Orchestration tools cannot be called from L1 skill sessions",
+        prohibition=(
+            "General orchestration tools cannot be called from L1 skill sessions; "
+            "dedicated evidence-reader delegation is allowed"
+        ),
         source_doc="SKILL.md",
         gate_target="guards/skill_orchestration_guard.py",
         enforcement_layer="hook-deny",

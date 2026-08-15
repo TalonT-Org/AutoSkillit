@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, get_args
 
-from ._plugin_ids import DIRECT_PREFIX
+from ._plugin_ids import DIRECT_PREFIX, validate_agent_tool_canonical
 from .io import load_yaml
 from .paths import pkg_root
 from .types import (
@@ -17,6 +17,7 @@ from .types import (
     CODEX_MODEL_ALIASES,
     CODEX_VALID_MODEL_IDS,
     CODEX_VALID_REASONING_EFFORTS,
+    EVIDENCE_READER_TOOLS,
     PARENT_SANDBOX_MODES,
 )
 
@@ -32,6 +33,7 @@ __all__ = [
     "AgentDefinitionError",
     "CodexAgentProjectionDef",
     "agent_definition_digest",
+    "canonical_reader_tools_to_bare",
     "load_agent_definition",
     "load_agent_definitions",
     "load_bundled_agent_definitions",
@@ -68,6 +70,25 @@ _CODEX_WEB_SEARCH_MODES: frozenset[str] = frozenset(get_args(_CodexWebSearchMode
 
 class AgentDefinitionError(ValueError):
     """Raised when an agent definition cannot be validated canonically."""
+
+
+def canonical_reader_tools_to_bare(reader_tools: tuple[str, ...]) -> tuple[str, ...]:
+    """Validate the pilot reader allowlist and return its ordered bare tool names."""
+    if not isinstance(reader_tools, tuple):
+        raise AgentDefinitionError("reader tools must be an immutable tuple")
+    if any(not isinstance(tool, str) or not tool for tool in reader_tools):
+        raise AgentDefinitionError("reader tools must contain non-empty strings")
+    if len(reader_tools) != len(set(reader_tools)):
+        raise AgentDefinitionError("reader tools must be unique")
+    try:
+        bare_tools = tuple(validate_agent_tool_canonical(tool) for tool in reader_tools)
+    except ValueError as exc:
+        raise AgentDefinitionError(str(exc)) from exc
+    if frozenset(bare_tools) != EVIDENCE_READER_TOOLS:
+        raise AgentDefinitionError(
+            "reader tools must match the canonical evidence-reader tool set exactly"
+        )
+    return bare_tools
 
 
 def normalize_codex_cli_version(value: str) -> str:

@@ -116,3 +116,14 @@ def test_risky_git_ops_covered_by_guard_detection_sets() -> None:
         f"{sorted(missing)}. "
         f"Add the tuples to git_ops_guard._BLOCKED_GIT_OPS or equivalent."
     )
+
+
+def test_legacy_risky_git_tuples_match_git_ops_guard_exactly() -> None:
+    """The tuple registry covers simple legacy forms, not operand-bearing ref writes."""
+    spec = importlib.util.spec_from_file_location(
+        "_git_ops_guard_legacy_sync", _GUARDS_DIR / "git_ops_guard.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    assert module._BLOCKED_GIT_OPS == RISKY_GIT_OPERATIONS

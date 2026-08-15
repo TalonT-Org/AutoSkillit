@@ -95,6 +95,8 @@ def _extract_prose_anchor(prohibition: str) -> str:
 
 def _collect_source_doc_files(source_doc: str) -> list[Path]:
     if "/" in source_doc:
+        if source_doc.startswith(("skills/", "skills_extended/")):
+            return [_SRC_ROOT / source_doc]
         return [_PROJECT_ROOT / source_doc]
     if source_doc == "AGENTS.md":
         candidates = [_PROJECT_ROOT / "AGENTS.md"]
@@ -119,6 +121,14 @@ def test_every_gate_target_resolves():
             f"{key}: gate_target {inv.gate_target!r} "
             "does not resolve to an existing file or module"
         )
+
+
+def test_checked_out_ref_invariant_has_review_pr_source_and_git_guard_gate() -> None:
+    invariant = INVARIANT_REGISTRY["git-checked-out-ref-mutation"]
+    assert invariant.source_doc == "skills_extended/review-pr/SKILL.md"
+    assert invariant.gate_target == "guards/git_ops_guard.py"
+    assert invariant.enforcement_layer == "hook-deny"
+    assert invariant.backends == frozenset({"claude-code", "codex"})
 
 
 def test_every_prohibition_appears_in_registry():

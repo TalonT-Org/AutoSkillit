@@ -16,6 +16,7 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     RecipeBindingProjection,
     SkillResult,
+    client_serialized_char_len,
     recipe_section_digest,
     recipe_section_element_digest,
 )
@@ -89,19 +90,76 @@ def _configure_admitted_recipe(ctx: Any, path: Path) -> None:
 
 
 @dataclass
+class McpResponseRecord:
+    """One exact model-visible MCP response and its delivery identity."""
+
+    tool_name: str
+    raw: str
+    initialization_id: str | None = None
+    delivery_shape: str | None = None
+    segment_or_section: str | None = None
+    part: int | None = None
+    bucket: str = "success"
+
+    @property
+    def raw_chars(self) -> int:
+        return len(self.raw)
+
+    @property
+    def utf8_bytes(self) -> int:
+        return len(self.raw.encode("utf-8"))
+
+    @property
+    def client_serialized_chars(self) -> int:
+        return client_serialized_char_len(self.raw).value
+
+    @property
+    def estimated_tokens(self) -> int:
+        return self.utf8_bytes // 4
+
+
+@dataclass
 class McpCallCounter:
     """Record one session-start MCP sequence with initialization identity."""
 
     calls: list[tuple[str, str | None]] = field(default_factory=list)
     delivery_mode: str | None = None
-    responses: list[str] = field(default_factory=list)
+    responses: list[McpResponseRecord] = field(default_factory=list)
 
     def record(
-        self, tool_name: str, initialization_id: str | None = None, response: str | None = None
+        self,
+        tool_name: str,
+        initialization_id: str | None = None,
+        response: str | None = None,
+        *,
+        delivery_shape: str | None = None,
+        segment_or_section: str | None = None,
+        part: int | None = None,
+        bucket: str = "success",
     ) -> None:
         self.calls.append((tool_name, initialization_id))
         if response is not None:
-            self.responses.append(response)
+            self.responses.append(
+                McpResponseRecord(
+                    tool_name=tool_name,
+                    raw=response,
+                    initialization_id=initialization_id,
+                    delivery_shape=delivery_shape,
+                    segment_or_section=segment_or_section,
+                    part=part,
+                    bucket=bucket,
+                )
+            )
+
+    def totals(self, *, bucket: str = "success") -> dict[str, int]:
+        records = [record for record in self.responses if record.bucket == bucket]
+        return {
+            "raw_chars": sum(record.raw_chars for record in records),
+            "utf8_bytes": sum(record.utf8_bytes for record in records),
+            "client_serialized_chars": sum(record.client_serialized_chars for record in records),
+            "estimated_tokens": sum(record.estimated_tokens for record in records),
+            "responses": len(records),
+        }
 
     def __len__(self) -> int:
         return len(self.calls)
@@ -133,6 +191,7 @@ async def simulate_session_start(
                 "source_dir": str(project_root),
             },
             monkeypatch,
+            counter=counter,
         )
     except ValueError as exc:
         if str(exc) != "cannot prepare response from failed_ambiguous":
@@ -141,7 +200,6 @@ async def simulate_session_start(
             f"recipe delivery is unavailable under the active feature scope: {recipe_name}"
         )
     assert envelope.get("success") is True, envelope
-    counter.record("open_kitchen", response=json.dumps(envelope))
     if envelope.get("delivery_bound_spill") is True:
         capabilities = BACKEND_REGISTRY[backend_name]().capabilities
         counter.delivery_mode = (
@@ -173,7 +231,13 @@ def _mock_fmcp_ctx() -> MagicMock:
     return ctx
 
 
-async def _open_kitchen_patched(name, overrides, monkeypatch):
+async def _open_kitchen_patched(
+    name,
+    overrides,
+    monkeypatch,
+    *,
+    counter: McpCallCounter | None = None,
+):
     """Call open_kitchen with all infrastructure side-effects patched out."""
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
@@ -188,9 +252,26 @@ async def _open_kitchen_patched(name, overrides, monkeypatch):
                     "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
                     return_value="test-kitchen",
                 ):
-                    return json.loads(
-                        await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)
-                    )
+                    raw_response = await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)
+                    envelope = json.loads(raw_response)
+                    if counter is not None:
+                        if envelope.get("recipe_segment") is not None:
+                            delivery_shape = "SEGMENTED_INLINE"
+                            segment_or_section = "startup"
+                        elif envelope.get("delivery_bound_spill") is True:
+                            delivery_shape = "NON_SEGMENTED_ENVELOPE"
+                            segment_or_section = None
+                        else:
+                            delivery_shape = "NON_SEGMENTED_INLINE"
+                            segment_or_section = "content"
+                        counter.record(
+                            "open_kitchen",
+                            envelope.get("initialization_id"),
+                            raw_response,
+                            delivery_shape=delivery_shape,
+                            segment_or_section=segment_or_section,
+                        )
+                    return envelope
 
 
 async def _credit_initialization_sections(
@@ -203,7 +284,10 @@ async def _credit_initialization_sections(
     Passes ``initialization_id`` and ``page_plan_sha256`` so each page is credited to the
     server-owned initialization, which ``complete_recipe_initialization`` requires.
     """
-    from autoskillit.server.tools.tools_recipe import get_recipe_section
+    from autoskillit.server.tools.tools_recipe import (
+        complete_recipe_initialization,
+        get_recipe_section,
+    )
 
     identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
     initialization_id = envelope["initialization_id"]
@@ -215,35 +299,54 @@ async def _credit_initialization_sections(
         state = _get_ctx().recipe_initialization_state
         if isinstance(state, ReadyRecipe):
             assert state.initialization_id == initialization_id
-            return
-        assert isinstance(state, InitializingRecipe)
-        assert state.initialization_id == initialization_id
-        requirements = [
-            {
-                "section": item.section,
-                "page_plan_sha256": item.page_plan_sha256,
-                "total_parts": item.total_parts,
-            }
-            for item in state.requirements
-        ]
+            requirements = []
+        else:
+            assert isinstance(state, InitializingRecipe)
+            assert state.initialization_id == initialization_id
+            requirements = [
+                {
+                    "section": item.section,
+                    "page_plan_sha256": item.page_plan_sha256,
+                    "total_parts": item.total_parts,
+                }
+                for item in state.requirements
+            ]
     for requirement in requirements:
         continuation: str | None = None
         for part in range(requirement["total_parts"]):
-            if counter is not None:
-                counter.record("get_recipe_section", initialization_id)
-            response = json.loads(
-                await get_recipe_section(
-                    section=requirement["section"],
-                    part=part,
-                    initialization_id=initialization_id,
-                    page_plan_sha256=requirement["page_plan_sha256"],
-                    continuation=continuation,
-                    **identity,
-                )
+            raw_response = await get_recipe_section(
+                section=requirement["section"],
+                part=part,
+                initialization_id=initialization_id,
+                page_plan_sha256=requirement["page_plan_sha256"],
+                continuation=continuation,
+                **identity,
             )
+            response = json.loads(raw_response)
+            if counter is not None:
+                counter.record(
+                    "get_recipe_section",
+                    initialization_id,
+                    raw_response,
+                    delivery_shape="NON_SEGMENTED_ENVELOPE",
+                    segment_or_section=requirement["section"],
+                    part=part,
+                )
             assert response.get("success") is True, f"pull failed: {response}"
             assert response.get("page_plan_sha256") == requirement["page_plan_sha256"], response
             continuation = response.get("continuation")
+
+    raw_completion = await complete_recipe_initialization(initialization_id=initialization_id)
+    completion = json.loads(raw_completion)
+    if counter is not None:
+        counter.record(
+            "complete_recipe_initialization",
+            initialization_id,
+            raw_completion,
+            delivery_shape="NON_SEGMENTED_ENVELOPE",
+            segment_or_section="completion",
+        )
+    assert completion.get("success") is True, f"completion failed: {completion}"
 
 
 async def _pull_step_section(envelope: dict[str, Any], step_name: str) -> dict[str, Any]:

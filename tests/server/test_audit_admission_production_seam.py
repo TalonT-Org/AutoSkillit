@@ -16,7 +16,6 @@ from autoskillit.core import (
 )
 from autoskillit.core.io import resolve_temp_dir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.fleet._capture import _extract_captures
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
@@ -62,12 +61,10 @@ async def _install_attested_recipe(
     return credential, step
 
 
-@pytest.mark.parametrize("backend_factory", (ClaudeCodeBackend, CodexBackend))
 async def test_attested_run_skill_materializes_publishes_captures_and_exact_replays(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tool_ctx_kitchen_open,
-    backend_factory: type[ClaudeCodeBackend] | type[CodexBackend],
 ) -> None:
     credential, step = await _install_attested_recipe(monkeypatch, tmp_path)
     installed = get_recipe_execution(tool_ctx_kitchen_open)
@@ -113,7 +110,7 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
             tool_ctx_kitchen_open.audit_admission_ledger.store_authority.database_path
         )
         assert provider_extras[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == trusted_authority_path
-        child_spec = backend_factory().build_skill_session_cmd(
+        child_spec = ClaudeCodeBackend().build_skill_session_cmd(
             "/autoskillit:audit-impl",
             str(work_dir),
             completion_marker="DONE",

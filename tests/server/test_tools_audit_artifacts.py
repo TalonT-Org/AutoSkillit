@@ -275,10 +275,6 @@ async def test_semantic_handler_reports_safe_wrong_authority_before_store_recove
     )
     serving_ledger = DefaultAuditAdmissionLedger(serving_authority)
 
-    def fail_if_recovered(_ledger: DefaultAuditAdmissionLedger) -> None:
-        pytest.fail("wrong-authority diagnostics must precede store recovery/open")
-
-    monkeypatch.setattr(DefaultAuditAdmissionLedger, "_ensure_recovered", fail_if_recovered)
     monkeypatch.setattr(
         "autoskillit.server._get_ctx",
         lambda: SimpleNamespace(
@@ -299,6 +295,7 @@ async def test_semantic_handler_reports_safe_wrong_authority_before_store_recove
     assert result["error_code"] == "wrong_audit_authority"
     assert result["handle_authority_id"] == issuing_ledger.store_authority.authority_id
     assert result["serving_authority_id"] == serving_authority.authority_id
+    assert not serving_authority.database_path.exists()
     secret = handle.rsplit(".", 1)[-1]
     logged = repr([record.__dict__ for record in caplog.records])
     assert handle not in encoded

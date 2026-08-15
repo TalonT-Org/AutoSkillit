@@ -400,20 +400,40 @@ def _classify_branch_position(subcommand: str, args: list[str]) -> tuple[str, st
     if subcommand == "branch":
         if not any(token in ("-f", "--force") for token in args):
             return None
-        # Force marker can appear anywhere in the arg list (git accepts
-        # options in any position); gather positionals across the whole
-        # list rather than only after the marker.
+        # `git branch -f <name> [<start-point>]` — `-f` is a flag that
+        # may appear anywhere in the arg list, so gather positionals
+        # across the whole list. Target is the first positional, start
+        # point (if any) is the second.
         positional = [token for token in args if not token.startswith("-")]
+        if not positional:
+            return None
+        target = positional[0]
+        attempted = positional[1] if len(positional) > 1 else "HEAD"
     else:
         marker = "-B" if subcommand == "checkout" else "-C"
-        if marker not in args:
+        try:
+            marker_index = args.index(marker)
+        except ValueError:
             return None
-        # Same position-flexibility reasoning as the branch branch above.
-        positional = [token for token in args if not token.startswith("-")]
-    if not positional:
-        return None
-    target = positional[0]
-    attempted = positional[1] if len(positional) > 1 else "HEAD"
+        # `git checkout -B <branch> [<start-point>]` and `git switch -C
+        # <branch> [<start-point>]` — the marker MUST be followed by the
+        # new branch name (next positional token), but the start-point
+        # may appear anywhere else (before or after the marker). Do NOT
+        # conflate "any positional after marker" with "target", since
+        # start-points placed before the marker would silently bypass
+        # detection (`git checkout <sha> -B main` must still deny against
+        # `refs/heads/main`).
+        if marker_index + 1 >= len(args):
+            return None
+        target = args[marker_index + 1]
+        if target.startswith("-"):
+            return None
+        other_positionals = [
+            token
+            for index, token in enumerate(args)
+            if index != marker_index + 1 and not token.startswith("-")
+        ]
+        attempted = other_positionals[0] if other_positionals else "HEAD"
     if _DYNAMIC_TOKEN_RE.search(target) or _DYNAMIC_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
     return (_normal_branch_ref(target), attempted, False)
@@ -726,7 +746,13 @@ def _preflight_checked_out_ref_mutation(
         if verb == "cd":
             # Accept `cd <dir>`, `cd -P <dir>` (-P resolves physical path),
             # and `cd -- <dir>` (-- ends option parsing). Reject dynamic
-            # dirs (`cd $foo`, `cd $(cmd)`) by keeping current_cwd unchanged.
+            # dirs (`cd $foo`, `cd $(cmd)`) and `cd -` (which swaps to
+            # OLDPWD — unresolvable without $OLDPWD state) by bailing to
+            # an empty cwd so subsequent git segments are skipped rather
+            # than classified against a stale or invalid cwd.
+            if any(arg == "-" for arg in args):
+                current_cwd = ""
+                continue
             target_args = [arg for arg in args if arg not in ("-P", "--")]
             if len(target_args) == 1 and not _DYNAMIC_TOKEN_RE.search(target_args[0]):
                 candidate = Path(target_args[0])
@@ -737,7 +763,7 @@ def _preflight_checked_out_ref_mutation(
                 )
                 continue
             if len(args) != 1:
-                # Anything else (cd with no args, cd -, nested-expansion)
+                # Anything else (cd with no args, nested-expansion)
                 # cannot be resolved safely; bail out rather than letting
                 # later git segments classify against a stale cwd.
                 current_cwd = ""

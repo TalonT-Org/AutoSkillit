@@ -550,6 +550,40 @@ class TestCheckedOutRefMutations:
         assert result["resolved_attempted_new_sha"] == linked_repo["old_sha"]
 
     @pytest.mark.parametrize(
+        "command_template",
+        [
+            # branch -f: target is the FIRST positional (branch name),
+            # start-point is the second. Force flag can be anywhere.
+            "git branch develop {new} --force",
+            "git branch develop --force {new}",
+            "git branch --force develop {new}",
+            # checkout/switch: start-point before the marker — the marker
+            # MUST be followed by the new branch name, but the start-point
+            # can appear anywhere else.
+            "git checkout {new} -B develop",
+            "git switch {new} -C develop",
+        ],
+    )
+    def test_force_marker_anywhere_still_protects_checked_out_destination(
+        self, linked_repo: dict[str, Path | str], command_template: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        new_sha = str(linked_repo["new_sha"])
+        out = _run_guard(command_template.format(new=new_sha), kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out), f"Expected deny for: {command_template.format(new=new_sha)}"
+        result = _checked_out_ref_result(out)
+        # For branch -f: target is the FIRST positional (the branch name),
+        # attempted is the start-point. For checkout/switch -B/-C: target
+        # is the token immediately after the marker, attempted is the
+        # start-point.
+        assert result["attempted_value"] == new_sha
+        threatened = result["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert any(row["target_ref"] == "refs/heads/develop" for row in threatened)
+        _assert_ref_unchanged(linked, "refs/heads/develop", str(linked_repo["old_sha"]))
+
+    @pytest.mark.parametrize(
         "command",
         [
             "git update-ref -d refs/heads/develop",

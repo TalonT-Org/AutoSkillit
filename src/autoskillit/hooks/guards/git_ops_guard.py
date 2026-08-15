@@ -496,13 +496,16 @@ def _classify_fetch(
     return result
 
 
-def _same_repository(candidate: str, context: dict[str, object]) -> bool:
+def _same_repository(candidate: str, context: dict[str, object]) -> bool | None:
+    """Return True if candidate resolves to the same repo, False if not, None if uncertain."""
     candidate_path = candidate
     if not os.path.isabs(candidate_path):
         candidate_path = str(Path(str(context["execution_cwd"])) / candidate_path)
     candidate_common = _git_text(candidate_path, "rev-parse", "--git-common-dir")
     if not candidate_common:
-        return False
+        # rev-parse failed transiently (unreachable git, ref removed, fs error);
+        # caller must treat as ambiguous rather than silently allowing push through.
+        return None
     common_path = Path(candidate_common)
     if not common_path.is_absolute():
         common_path = Path(candidate_path) / common_path
@@ -513,8 +516,13 @@ def _classify_push(
     args: list[str], context: dict[str, object], owned_refs: list[str]
 ) -> list[tuple[str, str, bool]]:
     positional = [token for token in args if not token.startswith("-")]
-    if len(positional) < 2 or not _same_repository(positional[0], context):
+    if len(positional) < 2:
         return []
+    same_repo = _same_repository(positional[0], context)
+    if same_repo is False:
+        return []
+    if same_repo is None:
+        return [("", "<unresolved>", True)]
     result: list[tuple[str, str, bool]] = []
     for refspec in positional[1:]:
         if ":" not in refspec:

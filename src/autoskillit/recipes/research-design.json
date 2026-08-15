@@ -162,7 +162,6 @@
       },
       "optional_context_refs": [
         "is_silent_type",
-        "classification_timestamp",
         "design_review_count"
       ],
       "skip_when_true": "context.is_silent_type",
@@ -339,8 +338,6 @@
         "output_dir": "{{AUTOSKILLIT_TEMP}}/resolve-design-review/iter_${{ context.design_review_count }}"
       },
       "optional_context_refs": [
-        "evaluation_dashboard",
-        "experiment_plan",
         "revision_guidance",
         "findings_manifest_path"
       ],

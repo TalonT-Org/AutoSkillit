@@ -1566,8 +1566,7 @@
       "with": {
         "step_name": "init_review_loop_count",
         "callable": "autoskillit.smoke_utils.init_counter",
-        "counter_value": "${{ context.review_loop_count }}",
-        "step_name": "init_review_loop_count"
+        "counter_value": "${{ context.review_loop_count }}"
       },
       "capture": {
         "review_loop_count": "${{ result.value }}"

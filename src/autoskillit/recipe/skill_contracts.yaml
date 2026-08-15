@@ -47,7 +47,7 @@ skills:
     - name: event
       type: string
       required: false
-      absence_value: "-"
+      absence_value: ""
     outputs:
     - name: diagnosis_path
       type: file_path
@@ -87,6 +87,7 @@ skills:
     - name: revision_guidance
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: resolution
       type: string
@@ -114,7 +115,7 @@ skills:
     - name: ci_conclusion
       type: string
       required: false
-      absence_value: "-"
+      absence_value: ""
     - name: ci_failed_jobs
       type: string
       required: false
@@ -122,7 +123,7 @@ skills:
     - name: diagnosis_path
       type: file_path
       required: false
-      absence_value: "-"
+      absence_value: ""
     outputs:
     - name: verdict
       type: string
@@ -183,6 +184,7 @@ skills:
     - name: mode
       type: string
       required: false
+      absence_value: ""
     - name: repository
       type: string
       required: false
@@ -826,6 +828,7 @@ skills:
     - name: mode
       type: string
       required: false
+      absence_value: ""
     - name: repository
       type: string
       required: true
@@ -1580,6 +1583,7 @@ skills:
     - name: scope_directions_path
       type: file_path
       required: false
+      absence_value: ""
     - name: revision_guidance
       type: file_path
       required: false

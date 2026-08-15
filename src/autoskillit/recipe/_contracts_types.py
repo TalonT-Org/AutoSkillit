@@ -31,7 +31,7 @@ class SkillInput:
         if self.required:
             raise ValueError(f"required input {self.name!r} cannot declare absence_value")
         if type(value) not in (str, int, bool):
-            raise TypeError(f"absence_value for {self.name!r} must be a strict scalar")
+            raise ValueError("absence_value must be a strict scalar")
         if not self.accepts(value):
             raise ValueError(f"skill input {self.name!r} does not accept absence_value {value!r}")
 

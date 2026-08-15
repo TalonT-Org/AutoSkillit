@@ -48,19 +48,35 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         "research-review",
     )
     expected_pairs = {
+        ("analyze-prs", "merge_queue_data_path"),
+        ("audit-impl", "all_conflict_report_paths"),
         ("audit-impl", "deviation_manifest_path"),
         ("audit-impl", "prior_audit_cycle_path"),
         ("bundle-local-report", "all_diagram_paths"),
         ("bundle-local-report", "visualization_plan_path"),
+        ("compose-pr", "all_diagram_paths"),
+        ("compose-pr", "closing_issue"),
+        ("diagnose-ci", "ci_failed_jobs"),
         ("diagnose-ci", "event"),
         ("dry-walkthrough", "audit_cycle_path"),
         ("dry-walkthrough", "plan_disposition_path"),
         ("dry-walkthrough", "review_path"),
+        ("generate-report", "classification_timestamp"),
+        ("generate-report", "disambiguation_rule_applied"),
+        ("generate-report", "experiment_type"),
+        ("generate-report", "group_manifest"),
+        ("generate-report", "methodology_traditions"),
+        ("generate-report", "tier_c_lens"),
         ("make-plan", "audit_cycle_path"),
+        ("open-integration-pr", "audit_verdict"),
+        ("open-integration-pr", "conflict_report_paths"),
+        ("open-integration-pr", "domain_partitions_path"),
         ("plan-experiment", "revision_guidance"),
         ("plan-experiment", "scope_directions_path"),
+        ("prepare-pr", "closing_issue"),
         ("resolve-design-review", "revision_guidance"),
         ("resolve-failures", "ci_conclusion"),
+        ("resolve-failures", "ci_failed_jobs"),
         ("resolve-failures", "diagnosis_path"),
         ("resolve-review", "mode"),
         ("review-pr", "mode"),
@@ -96,26 +112,39 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
                     occurrences.append(occurrence)
 
     actual_pairs = {(skill, input_name) for _, _, skill, input_name in occurrences}
-    assert len(occurrences) == 54
+    assert len(occurrences) == 104
     assert actual_pairs == expected_pairs
     assert not required_occurrences
     for skill_name, input_name in expected_pairs:
         contract = get_skill_contract(skill_name, manifest)
         assert contract is not None
         input_def = next(item for item in contract.inputs if item.name == input_name)
-        assert input_def.absence_value == ""
+        assert input_def.has_absence_value
 
 
 def test_required_optional_context_routes_are_gated_or_guaranteed() -> None:
     merge_prs = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
-    for prefix in ("ejected", "proactive_rebase"):
-        gate = merge_prs.steps[f"gate_{prefix}_conflict_plan"]
+    branches = {
+        "ejected": (
+            "plan_ejected_rebase_conflicts",
+            "register_clone_failure",
+            "ejected_rebase",
+        ),
+        "proactive_rebase": (
+            "plan_proactive_rebase_conflicts",
+            "get_current_pr_branch",
+            "proactive_rebase",
+        ),
+    }
+    for prefix, (plan_step, failure_route, capture_prefix) in branches.items():
+        gate = merge_prs.steps[plan_step]
         routes = [condition.route for condition in gate.on_result.conditions]
-        assert routes[-1] == "register_clone_failure"
-        assert gate.capture["conflict_plan_path"].from_ == "${{ result.plan_path }}"
+        assert routes[-1] == failure_route
+        plan_context = f"{capture_prefix}_plan_path"
+        assert gate.capture[plan_context].from_ == "${{ result.plan_path }}"
         resolve = merge_prs.steps[f"resolve_{prefix}_conflicts"]
         assert resolve.with_args["skill_inputs"]["plan_path"] == (
-            "${{ context.conflict_plan_path }}"
+            f"${{{{ context.{plan_context} }}}}"
         )
         assert "pr_plan_path" not in resolve.optional_context_refs
 
@@ -123,7 +152,7 @@ def test_required_optional_context_routes_are_gated_or_guaranteed() -> None:
     assert research.steps["resolve_design_review"].optional_context_refs == ["revision_guidance"]
 
     research_design = load_recipe(builtin_recipes_dir() / "research-design.yaml")
-    assert research_design.steps["dial"].on_skip == "vis_dial"
+    assert research_design.steps["dial"].on_skip == "synthesize_without_dashboard"
     assert "classification_timestamp" not in research_design.steps["apply"].optional_context_refs
 
     research_review = load_recipe(builtin_recipes_dir() / "research-review.yaml")

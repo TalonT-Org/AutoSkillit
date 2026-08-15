@@ -175,7 +175,7 @@ steps:
         experiment_plan_path: ${{ context.experiment_plan }}
       cwd: ${{ inputs.source_dir }}
       step_name: dial
-      output_dir: '{{AUTOSKILLIT_TEMP}}/classify-experiment-type'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/classify-experiment-type/iter_${{ context.design_review_count }}'
     capture:
       experiment_type: ${{ result.experiment_type }}
       dimensions_manifest_path: ${{ result.dimensions_manifest_path }}
@@ -185,8 +185,10 @@ steps:
     - experiment_type
     - classification_timestamp
     - is_silent_type
+    optional_context_refs:
+    - design_review_count
     skip_when_false: inputs.review_design
-    on_skip: silent_type_gate
+    on_skip: create_worktree
     retries: 2
     on_exhausted: create_worktree
     on_context_limit: create_worktree
@@ -317,7 +319,7 @@ steps:
   revise_design:
     action: route
     on_result:
-    - route: check_design_review_loop
+    - route: dial
   check_design_review_loop:
     tool: run_python
     with:
@@ -334,7 +336,7 @@ steps:
     optional_context_refs:
     - design_review_count
     note: 'Iteration guard for the dial → apply → synthesize REVISE → revise_design → check_design_review_loop → apply cycle.
-      Re-entry skips re-dialing since experiment_type is stable across revision cycles. Caps design revision loops at 3 iterations.
+      Re-entry reclassifies the revised plan before selecting dimensions. Caps design revision loops at 3 iterations.
       On exhaustion, proceeds to create_worktree with the best available design.
 
       '
@@ -941,6 +943,12 @@ steps:
   generate_report:
     tool: run_skill
     model: ''
+    optional_context_refs:
+    - classification_timestamp
+    - disambiguation_rule_applied
+    - experiment_type
+    - methodology_tradition
+    - tier_c_lens
     with:
       skill_command: /autoskillit:generate-report
       skill_inputs:
@@ -962,11 +970,18 @@ steps:
       report_path: ${{ result.report_path }}
     on_success: test
     on_failure: escalate_stop
-    on_context_limit: test
+    on_context_limit: escalate_stop
     note: Writes a conclusive research report to research/ in the worktree.
   generate_report_inconclusive:
     tool: run_skill
     model: ''
+    optional_context_refs:
+    - classification_timestamp
+    - disambiguation_rule_applied
+    - experiment_type
+    - group_manifest
+    - methodology_tradition
+    - tier_c_lens
     with:
       skill_command: /autoskillit:generate-report
       skill_inputs:
@@ -989,7 +1004,7 @@ steps:
       report_path: ${{ result.report_path }}
     on_success: test
     on_failure: escalate_stop
-    on_context_limit: test
+    on_context_limit: escalate_stop
     note: 'Writes an inconclusive research report. Experiments could not prove or disprove the hypothesis. This is a valid
       outcome.
 
@@ -1062,6 +1077,16 @@ steps:
       prep_path: ${{ result.prep_path }}
       selected_lenses: ${{ result.selected_lenses }}
       lens_context_paths: ${{ result.lens_context_paths }}
+    on_success: initialize_diagram_paths
+    on_failure: escalate_stop
+  initialize_diagram_paths:
+    tool: run_cmd
+    with:
+      cmd: ':'
+      cwd: ${{ context.worktree_path }}
+      step_name: initialize_diagram_paths
+    capture:
+      all_diagram_paths: ${{ result.stdout | trim }}
     on_success: run_experiment_lenses
     on_failure: escalate_stop
   run_experiment_lenses:
@@ -1419,6 +1444,13 @@ steps:
   re_generate_report:
     tool: run_skill
     model: ''
+    optional_context_refs:
+    - classification_timestamp
+    - disambiguation_rule_applied
+    - experiment_type
+    - group_manifest
+    - methodology_tradition
+    - tier_c_lens
     with:
       skill_command: /autoskillit:generate-report
       skill_inputs:
@@ -1473,7 +1505,7 @@ steps:
       cmd: cd '${{ context.worktree_path }}' && git push
       cwd: ${{ context.worktree_path }}
       step_name: re_push_research
-    on_success: finalize_bundle_render
+    on_success: finalize_bundle
     on_failure: begin_archival
   finalize_bundle:
     tool: run_cmd
@@ -1484,7 +1516,7 @@ steps:
       step_name: finalize_bundle
     capture:
       report_path_after_finalize: ${{ result.report_path_after_finalize }}
-    on_success: re_push_research
+    on_success: push_finalized_bundle
     on_failure: begin_archival
     note: 'Single compression point. Runs exactly once per recipe run. In pr mode: renames report.md → README.md, archives
       supporting artifacts, appends Archive Manifest, commits. In local mode: keeps report.md, excludes report.html/mermaid.min.js/images
@@ -1492,9 +1524,20 @@ steps:
       of mode.
 
       '
+  push_finalized_bundle:
+    tool: run_cmd
+    with:
+      cmd: cd '${{ context.worktree_path }}' && git push
+      cwd: ${{ context.worktree_path }}
+      step_name: push_finalized_bundle
+    on_success: finalize_bundle_render
+    on_failure: begin_archival
   finalize_bundle_render:
     tool: run_skill
     model: ''
+    optional_context_refs:
+    - all_diagram_paths
+    - visualization_plan_path
     with:
       skill_command: /autoskillit:bundle-local-report
       skill_inputs:

@@ -40,12 +40,14 @@ skills:
     - name: ci_failed_jobs
       type: string
       required: false
+      absence_value: "-"
     - name: workflow
       type: string
       required: false
     - name: event
       type: string
       required: false
+      absence_value: "-"
     outputs:
     - name: diagnosis_path
       type: file_path
@@ -112,12 +114,15 @@ skills:
     - name: ci_conclusion
       type: string
       required: false
+      absence_value: "-"
     - name: ci_failed_jobs
       type: string
       required: false
+      absence_value: "-"
     - name: diagnosis_path
       type: file_path
       required: false
+      absence_value: "-"
     outputs:
     - name: verdict
       type: string
@@ -254,12 +259,15 @@ skills:
     - name: review_path
       type: file_path
       required: false
+      absence_value: ""
     - name: audit_cycle_path
       type: file_path
       required: false
+      absence_value: ""
     - name: plan_disposition_path
       type: file_path
       required: false
+      absence_value: ""
     outputs: []
     write_behavior: always
     input_preflight: audit_cycle_inventory
@@ -501,6 +509,7 @@ skills:
     - name: all_conflict_report_paths
       type: file_path_list
       required: false
+      absence_value: ""
     - name: branch_name
       type: string
       required: false
@@ -516,9 +525,11 @@ skills:
     - name: deviation_manifest_path
       type: file_path
       required: false
+      absence_value: ""
     - name: prior_audit_cycle_path
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: verdict
       type: string
@@ -563,6 +574,7 @@ skills:
     - name: merge_queue_data_path
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: pr_order_file
       type: file_path
@@ -650,6 +662,7 @@ skills:
     - name: closing_issue
       type: string
       required: false
+      absence_value: ""
     - name: arch_lenses
       type: string
       required: false
@@ -706,6 +719,7 @@ skills:
     - name: closing_issue
       type: string
       required: false
+      absence_value: ""
     outputs:
     - name: pr_url
       type: string
@@ -744,12 +758,15 @@ skills:
     - name: audit_verdict
       type: string
       required: false
+      absence_value: ""
     - name: conflict_report_paths
       type: file_path_list
       required: false
+      absence_value: ""
     - name: domain_partitions_path
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: pr_url
       type: string
@@ -1855,24 +1872,30 @@ skills:
     - name: experiment_type
       type: string
       required: false
+      absence_value: "null"
     - name: methodology_traditions
       type: string
       required: false
+      absence_value: "null"
     - name: design_review_verdict
       type: string
       required: false
     - name: disambiguation_rule_applied
       type: string
       required: false
+      absence_value: "null"
     - name: tier_c_lens
       type: string
       required: false
+      absence_value: "null"
     - name: classification_timestamp
       type: string
       required: false
+      absence_value: "null"
     - name: group_manifest
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: report_path
       type: file_path
@@ -2516,9 +2539,11 @@ skills:
     - name: all_diagram_paths
       type: string
       required: false
+      absence_value: ""
     - name: visualization_plan_path
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: html_path
       type: file_path

@@ -24,12 +24,16 @@ def _write_rebase_conflict_report(
 ) -> None:
     """Publish bounded rebase evidence before the rebase is aborted."""
     unmerged = run_git(["diff", "--name-only", "--diff-filter=U"], cwd=work_dir)
+    bounded_stderr = truncate_text(rebase_stderr)
+    stderr_prefix = rebase_stderr[:120]
+    if stderr_prefix and not bounded_stderr.startswith(stderr_prefix):
+        bounded_stderr = f"{stderr_prefix}\n{bounded_stderr}"
     report = (
         "# Rebase Conflict\n\n"
         "## Unmerged files\n\n"
         f"{truncate_text(unmerged.stdout)}\n\n"
         "## Rebase stderr\n\n"
-        f"{truncate_text(rebase_stderr)}\n"
+        f"{bounded_stderr}\n"
     )
     atomic_write(Path(conflict_report_path), report)
 

@@ -153,6 +153,7 @@ def test_extract_routing_edges_covers_all_routing_fields() -> None:
 
     fallback = RecipeStep(
         on_failure=None,
+        on_exhausted="",
         on_result=StepResultRoute(routes={"ok": "step_result_route"}),
     )
     fallback_edges = _extract_routing_edges(fallback)

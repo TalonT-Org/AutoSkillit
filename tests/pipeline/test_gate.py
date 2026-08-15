@@ -67,6 +67,7 @@ def test_gated_tools_contains_expected_names():
         "get_exploration_page",
         "resume_exploration_context",
         "inspect_session_logs",
+        "delegate_evidence_reader",
         "read_authorized_artifact",
         "get_authorized_artifact_page",
     }

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import time
 from pathlib import Path
 
 import anyio
+import regex as re  # type: ignore[import-untyped]
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
@@ -22,21 +22,14 @@ from autoskillit.core import (
     get_logger,
     load_bundled_agent_definitions,
 )
-from autoskillit.execution import CodexBackend
-from autoskillit.execution.evidence_reader import (
+from autoskillit.execution import (
+    CodexBackend,
     EvidenceReaderLaunchError,
     EvidenceReaderLaunchResult,
+    EvidenceReaderResultStatus,
     evidence_reader_mcp_transport,
     evidence_reader_provider_environment,
     launch_evidence_reader,
-)
-from autoskillit.exploration import (
-    ArtifactCaptureError,
-    ArtifactCaptureStatus,
-    StableArtifactCapture,
-    capture_stable_artifact,
-    resolve_repository_identity,
-    stable_artifact_matches,
 )
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
@@ -45,14 +38,20 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._run_skill_completion import current_request_session_id
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._evidence_reader import (
+    ArtifactCaptureError,
+    ArtifactCaptureStatus,
     EvidenceReaderError,
     EvidenceReaderInvocation,
     EvidenceReaderPage,
+    StableArtifactCapture,
+    capture_stable_artifact,
     create_evidence_reader_invocation,
     evidence_reader_scope_digest,
     load_evidence_reader_receipts,
     read_bound_evidence_reader_page,
+    resolve_repository_identity,
     revoke_evidence_reader_invocation,
+    stable_artifact_matches,
 )
 
 logger = get_logger(__name__)
@@ -238,7 +237,7 @@ def _validate_child(
         raise _DelegateError("reader_result_invalid") from exc
     if (
         not isinstance(payload, dict)
-        or result.status != "answered"
+        or result.status is not EvidenceReaderResultStatus.ANSWERED
         or payload.get("complete") is not True
         or payload.get("truncated") is not False
         or not result.citations
@@ -341,6 +340,7 @@ def _delegate_sync(
             try:
                 revoke_evidence_reader_invocation(tool_ctx, dict(invocation.environment))
             except Exception:
+                logger.error("evidence reader authority cleanup failed", exc_info=True)
                 terminal_error = _DelegateError("reader_cleanup_failed")
         if capture is not None:
             try:
@@ -359,6 +359,7 @@ def _delegate_sync(
                     else "artifact_terminal_recapture_failed"
                 )
             except Exception:
+                logger.error("evidence reader terminal recapture failed", exc_info=True)
                 terminal_error = _DelegateError("artifact_terminal_recapture_failed")
         if terminal_error is not None:
             raise terminal_error

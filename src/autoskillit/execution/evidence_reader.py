@@ -15,6 +15,7 @@ import time
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -131,6 +132,12 @@ class EvidenceReaderLaunchError(RuntimeError):
         super().__init__(code)
 
 
+class EvidenceReaderResultStatus(StrEnum):
+    ANSWERED = "answered"
+    PARTIAL = "partial"
+    BLOCKED = "blocked"
+
+
 @dataclass(frozen=True, slots=True)
 class EvidenceCitation:
     citation_id: str
@@ -142,7 +149,7 @@ class EvidenceCitation:
 
 @dataclass(frozen=True, slots=True)
 class EvidenceReaderLaunchResult:
-    status: str
+    status: EvidenceReaderResultStatus
     role: str
     authorized_scope: str
     snapshot_digest: str
@@ -598,6 +605,13 @@ def _validate_stream(
         raise EvidenceReaderLaunchError("result_schema_invalid") from exc
     if not isinstance(payload, dict) or set(payload) != _RESULT_KEYS:
         raise EvidenceReaderLaunchError("result_schema_invalid")
+    raw_status = payload.get("status")
+    if not isinstance(raw_status, str):
+        raise EvidenceReaderLaunchError("result_schema_invalid")
+    try:
+        status = EvidenceReaderResultStatus(raw_status)
+    except (TypeError, ValueError) as exc:
+        raise EvidenceReaderLaunchError("result_schema_invalid") from exc
     child = payload.get("child_identity")
     if (
         payload.get("canary") != canary
@@ -606,7 +620,6 @@ def _validate_stream(
         or payload.get("snapshot") != snapshot
         or not isinstance(child, dict)
         or child != {"thread_id": thread_ids[0]}
-        or payload.get("status") not in {"answered", "partial", "blocked"}
         or type(payload.get("complete")) is not bool
         or type(payload.get("truncated")) is not bool
         or not isinstance(payload.get("stop_reason"), str)
@@ -662,7 +675,7 @@ def _validate_stream(
         raise EvidenceReaderLaunchError("result_schema_invalid")
     payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return EvidenceReaderLaunchResult(
-        status=payload["status"],
+        status=status,
         role=definition.name,
         authorized_scope=scope,
         snapshot_digest=snapshot,

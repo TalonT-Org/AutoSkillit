@@ -350,7 +350,7 @@ class TestSessionTypeVisibility:
     async def test_transitional_bridge_enables_headless(self, monkeypatch):
         import warnings
 
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import EVIDENCE_READER_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -362,7 +362,9 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for bridge HEADLESS=1"
-        for name in GATED_TOOLS:
+        assert "delegate_evidence_reader" in tool_names
+        assert EVIDENCE_READER_TOOLS.isdisjoint(tool_names)
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for bridge"
 
     @pytest.mark.anyio

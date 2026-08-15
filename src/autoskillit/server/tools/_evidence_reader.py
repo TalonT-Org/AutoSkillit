@@ -24,10 +24,27 @@ from autoskillit.core import (
     atomic_write,
     canonical_reader_tools_to_bare,
 )
-from autoskillit.exploration import StableArtifactCapture, canonical_json, qualified_digest
+from autoskillit.exploration import (
+    ArtifactCaptureError,
+    ArtifactCaptureStatus,
+    StableArtifactCapture,
+    canonical_json,
+    capture_stable_artifact,
+    qualified_digest,
+    resolve_repository_identity,
+    stable_artifact_matches,
+)
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
+
+__all__ = [
+    "ArtifactCaptureError",
+    "ArtifactCaptureStatus",
+    "capture_stable_artifact",
+    "resolve_repository_identity",
+    "stable_artifact_matches",
+]
 
 _AUTHORITY_SCHEMA: Final = 1
 _RECEIPT_SCHEMA: Final = 1

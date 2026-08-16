@@ -11,6 +11,7 @@ import pytest
 from autoskillit.core import (
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     RECIPE_RESPONSE_MAX_UTF8_BYTES,
+    pkg_root,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline import ReadyRecipe, ToolContext
@@ -229,12 +230,29 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
         "plan",
     ]
     assert len(counter.responses) == 1 + len(automatic) + len(manual)
-    totals = counter.totals()
+    # `create_impl_worktree`'s body renders `{{AUTOSKILLIT_SCRIPTS}}`
+    # (substitute_scripts_placeholder()) to this checkout's real bundled-scripts
+    # path, so its length depends on where the repository happens to be checked
+    # out (a long worktree path locally vs. a short fixed CI runner path).
+    # Normalize that one occurrence to a fixed-length placeholder before pinning
+    # the drift baseline so the assertion is portable across checkouts.
+    checkout_scripts_dir = str(pkg_root() / "recipes" / "scripts")
+    normalized_counter = McpCallCounter()
+    for record in counter.responses:
+        normalized_counter.record(
+            record.tool_name,
+            record.initialization_id,
+            record.raw.replace(checkout_scripts_dir, "<CHECKOUT>/src/autoskillit/recipes/scripts"),
+            delivery_shape=record.delivery_shape,
+            segment_or_section=record.segment_or_section,
+            part=record.part,
+        )
+    totals = normalized_counter.totals()
     # Drift baseline, not a production-safe threshold.
     assert totals == {
-        "raw_chars": 22_438,
-        "utf8_bytes": 22_452,
-        "client_serialized_chars": 25_113,
-        "estimated_tokens": 5_611,
+        "raw_chars": 22_318,
+        "utf8_bytes": 22_332,
+        "client_serialized_chars": 24_993,
+        "estimated_tokens": 5_581,
         "responses": 5,
     }

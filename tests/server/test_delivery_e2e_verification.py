@@ -203,7 +203,6 @@ async def test_delivery_surface_matrix_reaches_ready_with_complete_credit(
     assert all(
         record.initialization_id == startup.initialization_id for record in counter.responses
     )
-    assert counter.totals(bucket="overhead")["responses"] == 0
     assert isinstance(tool_ctx.recipe_initialization_state, ReadyRecipe)
 
 
@@ -248,4 +247,3 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
     assert totals["estimated_tokens"] == sum(
         record.estimated_tokens for record in counter.responses
     )
-    assert counter.totals(bucket="overhead")["responses"] == 0

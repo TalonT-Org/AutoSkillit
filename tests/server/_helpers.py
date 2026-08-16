@@ -99,7 +99,6 @@ class McpResponseRecord:
     delivery_shape: str | None = None
     segment_or_section: str | None = None
     part: int | None = None
-    bucket: str = "success"
 
     @property
     def raw_chars(self) -> int:
@@ -134,7 +133,6 @@ class McpCallCounter:
         delivery_shape: str | None = None,
         segment_or_section: str | None = None,
         part: int | None = None,
-        bucket: str = "success",
     ) -> None:
         if response is not None:
             self.responses.append(
@@ -145,12 +143,11 @@ class McpCallCounter:
                     delivery_shape=delivery_shape,
                     segment_or_section=segment_or_section,
                     part=part,
-                    bucket=bucket,
                 )
             )
 
-    def totals(self, *, bucket: str = "success") -> dict[str, int]:
-        records = [record for record in self.responses if record.bucket == bucket]
+    def totals(self) -> dict[str, int]:
+        records = self.responses
         return {
             "raw_chars": sum(record.raw_chars for record in records),
             "utf8_bytes": sum(record.utf8_bytes for record in records),

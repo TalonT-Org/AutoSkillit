@@ -239,8 +239,6 @@ def _reader_definition(role: str):
         bare_tools = canonical_reader_tools_to_bare(definition.reader_tools)
     except ValueError as exc:
         raise _DelegateError("reader_role_invalid") from exc
-    if frozenset(bare_tools) != EVIDENCE_READER_TOOLS:
-        raise _DelegateError("reader_role_invalid")
     definition_digest = agent_definition_digest(definition)
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", definition_digest):
         raise _DelegateError("reader_role_invalid")

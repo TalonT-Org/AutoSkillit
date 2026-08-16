@@ -1500,8 +1500,8 @@ steps:
   re_push_research:
     tool: run_cmd
     with:
-      cmd: cd '${{ context.worktree_path }}' && git push
-      cwd: ${{ context.worktree_path }}
+      cmd: &push_research_worktree_cmd cd '${{ context.worktree_path }}' && git push
+      cwd: &push_research_worktree_cwd ${{ context.worktree_path }}
       step_name: re_push_research
     on_success: finalize_bundle
     on_failure: begin_archival
@@ -1525,8 +1525,8 @@ steps:
   push_finalized_bundle:
     tool: run_cmd
     with:
-      cmd: cd '${{ context.worktree_path }}' && git push
-      cwd: ${{ context.worktree_path }}
+      cmd: *push_research_worktree_cmd
+      cwd: *push_research_worktree_cwd
       step_name: push_finalized_bundle
     on_success: finalize_bundle_render
     on_failure: begin_archival

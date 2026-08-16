@@ -102,6 +102,14 @@ model:
 
 Recipe steps can also specify a `model` field per-step in their YAML definition.
 
+The logical `opus` class resolves to the canonical `claude-opus-5` model ID by
+default. Projects that route Claude through a provider whose deployment does
+not accept that raw ID (Amazon Bedrock, Microsoft Foundry, or a custom
+gateway) should supply the provider's own accepted deployment/model
+identifier via a `providers.profiles` entry and a matching `step_overrides` /
+`recipe_overrides` / `model_overrides` binding — those overrides are resolved
+before this alias and always take precedence.
+
 ## Specialized Explorer Agents
 
 `semantic-code-navigator` and `repository-impact-profiler` are built-in terminal Codex explorer

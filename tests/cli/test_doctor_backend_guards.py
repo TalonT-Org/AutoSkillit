@@ -593,14 +593,14 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("2.1.141 (Claude Code)\n"),
+            lambda *a, **kw: self._codex_result("2.1.218 (Claude Code)\n"),
         )
 
         result = _check_backend_version(backend=ClaudeCodeBackend())
 
         assert result.severity == Severity.WARNING
-        assert "Claude Code 2.1.141" in result.message
-        assert "2.1.142" in result.message
+        assert "Claude Code 2.1.218" in result.message
+        assert "2.1.219" in result.message
         assert "Codex CLI" not in result.message
 
 

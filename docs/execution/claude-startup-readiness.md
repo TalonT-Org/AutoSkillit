@@ -18,7 +18,7 @@ Claude interactive launches seal these values after caller environment overlays:
 |---|---:|---|
 | `MCP_CONNECTION_NONBLOCKING` | `0` | Ask Claude to wait for the connection batch |
 | `MCP_CONNECT_TIMEOUT_MS` | `30000` | Bound the connection batch and tool-list snapshot |
-| minimum Claude Code version | `2.1.142` | First supported nonblocking-startup contract |
+| minimum Claude Code version | `2.1.219` | Anthropic's documented floor for launching Claude Opus 5, which is now the pinned `opus` target |
 | fresh prompt attempts | `3` | Defense-in-depth dispatch cap after a pre-dispatch failure |
 
 `MCP_CONNECT_TIMEOUT_MS` is the connection batch/list-snapshot deadline. It is
@@ -73,8 +73,8 @@ The weekly `conformance-probes.yml` workflow runs these pinned rows:
 
 | Platform | Claude Code |
 |---|---|
-| Ubuntu 22.04 | 2.1.142 and 2.1.197 |
-| macOS 14 | 2.1.142 and 2.1.197 |
+| Ubuntu 22.04 | 2.1.219 |
+| macOS 14 | 2.1.219 |
 
 Each row installs the named version, exports its canonical path as
 `CLAUDE_CODE_EXECPATH`, and runs the exact restricted interactive surface with

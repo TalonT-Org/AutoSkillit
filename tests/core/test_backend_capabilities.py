@@ -233,7 +233,7 @@ def test_claude_code_capabilities_field_values():
         {"Write", "Edit", "Bash", "apply_patch"}
     )
     assert CLAUDE_CODE_CAPABILITIES.env_denylist_prefixes == ()
-    assert CLAUDE_CODE_CAPABILITIES.min_version == "2.1.142"
+    assert CLAUDE_CODE_CAPABILITIES.min_version == "2.1.219"
     assert CLAUDE_CODE_CAPABILITIES.version_check_command == "claude --version"
     assert CLAUDE_CODE_CAPABILITIES.process_name == "claude"
     assert CLAUDE_CODE_CAPABILITIES.process_name_aliases == frozenset({"claude"})

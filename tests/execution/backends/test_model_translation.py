@@ -39,8 +39,14 @@ class TestClaudeTranslateModel:
     def test_sonnet_alias(self) -> None:
         assert ClaudeCodeBackend().translate_model("sonnet") == CLAUDE_MODEL_ALIASES["sonnet"]
 
-    def test_preserves_context_suffix(self) -> None:
-        assert ClaudeCodeBackend().translate_model("opus[1m]") == "opus[1m]"
+    def test_opus_alias(self) -> None:
+        assert ClaudeCodeBackend().translate_model("opus") == CLAUDE_MODEL_ALIASES["opus"]
+
+    def test_translates_opus_and_preserves_context_suffix(self) -> None:
+        assert (
+            ClaudeCodeBackend().translate_model("opus[1m]")
+            == f"{CLAUDE_MODEL_ALIASES['opus']}[1m]"
+        )
 
     def test_unknown_passthrough(self) -> None:
         assert ClaudeCodeBackend().translate_model("custom-model-xyz") == "custom-model-xyz"
@@ -49,7 +55,10 @@ class TestClaudeTranslateModel:
         assert ClaudeCodeBackend().translate_model("haiku") == "haiku"
 
     def test_suffix_case_insensitive(self) -> None:
-        assert ClaudeCodeBackend().translate_model("opus[1M]") == "opus[1M]"
+        assert (
+            ClaudeCodeBackend().translate_model("opus[1M]")
+            == f"{CLAUDE_MODEL_ALIASES['opus']}[1M]"
+        )
 
 
 class TestCodexBuildCmdTranslatesModel:
@@ -85,7 +94,7 @@ class TestClaudeBuildCmdTranslatesModel:
     def test_build_headless_cmd_preserves_suffix(self) -> None:
         spec = ClaudeCodeBackend().build_headless_cmd("test prompt", model="opus[1m]")
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "opus[1m]"
+        assert spec.cmd[model_idx + 1] == f"{CLAUDE_MODEL_ALIASES['opus']}[1m]"
 
     def test_build_interactive_cmd_preserves_suffix(self) -> None:
         spec = ClaudeCodeBackend().build_interactive_cmd(model="sonnet[1m]")
@@ -109,7 +118,7 @@ class TestClaudeBuildCmdTranslatesModel:
             model="opus[1m]",
         )
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "opus[1m]"
+        assert spec.cmd[model_idx + 1] == f"{CLAUDE_MODEL_ALIASES['opus']}[1m]"
 
 
 class TestCodexModelConfigOverrides:

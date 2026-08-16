@@ -134,10 +134,8 @@ class TestVersionResolution:
         matrix = workflow["jobs"]["claude-probe"]["strategy"]["matrix"]["include"]
         rows = {(row["os"], row["claude-version"], row["probe-tmpdir"]) for row in matrix}
         assert rows == {
-            ("ubuntu-22.04", "2.1.142", "/dev/shm/pytest-probes"),
-            ("ubuntu-22.04", "2.1.197", "/dev/shm/pytest-probes"),
-            ("macos-14", "2.1.142", "/tmp/pytest-probes"),
-            ("macos-14", "2.1.197", "/tmp/pytest-probes"),
+            ("ubuntu-22.04", "2.1.219", "/dev/shm/pytest-probes"),
+            ("macos-14", "2.1.219", "/tmp/pytest-probes"),
         }
 
     def test_claude_probe_installs_and_exports_exact_pinned_binary(self, workflow: dict) -> None:

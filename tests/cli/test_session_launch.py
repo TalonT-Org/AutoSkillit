@@ -161,7 +161,7 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
                 (),
                 {
                     "returncode": 0,
-                    "stdout": "2.1.197 (Claude Code)",
+                    "stdout": "2.1.219 (Claude Code)",
                     "stderr": "",
                 },
             )()
@@ -1180,7 +1180,7 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.197", "stderr": ""},
+                {"returncode": 0, "stdout": "2.1.219", "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
@@ -1224,7 +1224,7 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.197", "stderr": ""},
+                {"returncode": 0, "stdout": "2.1.219", "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
@@ -1270,7 +1270,7 @@ def test_cross_validation_contract_all_flags_known(
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.197", "stderr": ""},
+                {"returncode": 0, "stdout": "2.1.219", "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()

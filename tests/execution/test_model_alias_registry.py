@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"claude-sonnet-5", "opus", "haiku"})
+VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"claude-sonnet-5", "claude-opus-5", "haiku"})
 
 
 def test_anomaly_detection_aliases_keys_match_shared() -> None:
@@ -72,6 +72,12 @@ def test_claude_sonnet_alias_uses_sonnet_5() -> None:
     from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 
     assert CLAUDE_MODEL_ALIASES["sonnet"] == "claude-sonnet-5"
+
+
+def test_claude_opus_alias_uses_opus_5() -> None:
+    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+
+    assert CLAUDE_MODEL_ALIASES["opus"] == "claude-opus-5"
 
 
 def test_codex_alias_values_differ_from_keys() -> None:

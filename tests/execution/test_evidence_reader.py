@@ -411,12 +411,9 @@ def test_launch_preserves_cwd_and_environment_across_probes_and_run(
     those seen by probe_mcp and run_bounded. Captured by the helper's probe_mcp
     and run_final mocks (which assert cwd == observed['cwd'] and environment ==
     observed['environment']). Make one explicit call here to lock the invariant."""
-    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
-    assert "cwd" in observed
-    assert "environment" in observed
-    forward = observed["environment"]
-    assert "HOME" in forward
-    assert forward["HOME"] == str(observed["cwd"].parent) or forward["HOME"].startswith("/")
+    observed, _, created = _launch_with_observation(tmp_path, monkeypatch)
+    assert observed["cwd"] == created[1]
+    assert observed["environment"]["HOME"] == str(created[0])
 
 
 def test_launch_rejects_isolated_cwd_overlap_with_authorized_roots(
@@ -573,6 +570,37 @@ def test_stream_validation_accepts_exact_partial_and_blocked_partitions(
     assert result.status.value == status
 
 
+@pytest.mark.parametrize(
+    ("complete", "truncated"),
+    [
+        (False, True),
+        (True, True),
+    ],
+)
+def test_stream_validation_rejects_partial_with_inconsistent_completeness(
+    complete: bool, truncated: bool
+) -> None:
+    payload = _payload()
+    payload.update(
+        status="partial",
+        coverage_gaps=[{"field": "missing", "reason": "artifact exhausted"}],
+        complete=complete,
+        truncated=truncated,
+        stop_reason="artifact exhausted",
+    )
+    with pytest.raises(EvidenceReaderLaunchError, match="result_state_invalid"):
+        launcher._validate_stream(
+            _stream(payload=payload),
+            definition=_definition(),
+            allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+            canary=_CANARY,
+            scope=_SCOPE,
+            snapshot=_SNAPSHOT,
+            requested_fields=("field", "missing"),
+            max_result_bytes=256_000,
+        )
+
+
 def test_stream_validation_rejects_unissued_receipt_even_with_one_observed_receipt() -> None:
     payload = _payload()
     payload["evidence"] = [
@@ -713,6 +741,47 @@ def test_stream_validation_allows_recovery_after_failed_continuation() -> None:
     assert result.status is EvidenceReaderResultStatus.ANSWERED
 
 
+def test_stream_validation_rejects_completed_for_unstarted_call_id() -> None:
+    """An item.completed for a call_id with no matching item.started must be
+    rejected as mcp_call_failed. Locks the C5 fix."""
+    events = [
+        {"type": "thread.started", "thread_id": _THREAD},
+        {
+            "type": "item.completed",
+            "item": {
+                "type": "mcp_tool_call",
+                "id": "ghost-call-id",
+                "tool_name": "read_authorized_artifact",
+                "result": {
+                    "citation_id": _CITATION,
+                    "location": {
+                        "byte_start": 0,
+                        "byte_end": 5,
+                        "line_start": 1,
+                        "line_end": 1,
+                    },
+                },
+            },
+        },
+        {
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": json.dumps(_payload())},
+        },
+        {"type": "turn.completed", "usage": {}},
+    ]
+    with pytest.raises(EvidenceReaderLaunchError, match="mcp_call_failed"):
+        launcher._validate_stream(
+            ("\n".join(json.dumps(event) for event in events) + "\n").encode(),
+            definition=_definition(),
+            allowed_tools=("get_authorized_artifact_page", "read_authorized_artifact"),
+            canary=_CANARY,
+            scope=_SCOPE,
+            snapshot=_SNAPSHOT,
+            requested_fields=("field",),
+            max_result_bytes=256_000,
+        )
+
+
 def test_stream_validation_rejects_conflicting_citation_observations() -> None:
     events = [
         {"type": "thread.started", "thread_id": _THREAD},
@@ -834,6 +903,38 @@ def test_launch_fails_closed_when_sterile_home_removal_is_incomplete(
         lambda: launch_evidence_reader(definition, invocation, **kwargs),
     )
     assert not created[1].exists()
+
+
+def test_launch_preserves_cwd_error_when_both_cleanups_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When both cwd and home removals raise, the cwd error is preserved
+    as the primary exception and the home error is chained via __cause__.
+    Locks the C3 fix."""
+    definition = _definition()
+    invocation = _invocation(tmp_path)
+    kwargs = _launch_kwargs(tmp_path)
+    created = _private_tempdirs(tmp_path, monkeypatch)
+    monkeypatch.setattr(launcher.shutil, "which", lambda _name: "/usr/bin/codex")
+    monkeypatch.setattr(launcher, "_probe_catalog", lambda *args, **kwargs: b"{}")
+    monkeypatch.setattr(launcher, "_probe_mcp", lambda *args, **kwargs: None)
+    monkeypatch.setattr(launcher, "_probe_conformance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        launcher,
+        "_run_bounded",
+        lambda *args, **kwargs: launcher._ProcessOutput(0, _stream(), b""),
+    )
+
+    def both_cleanups_fail(path: Path) -> None:
+        raise EvidenceReaderLaunchError(f"cleanup_incomplete:{path.name}")
+
+    monkeypatch.setattr(launcher, "_remove_directory", both_cleanups_fail)
+
+    with pytest.raises(EvidenceReaderLaunchError) as exc_info:
+        launch_evidence_reader(definition, invocation, **kwargs)
+    assert "cwd" in str(exc_info.value)
+    assert exc_info.value.__cause__ is not None
+    assert "home" in str(exc_info.value.__cause__)
 
 
 @pytest.mark.parametrize("failure", ["timeout", "cancel"])

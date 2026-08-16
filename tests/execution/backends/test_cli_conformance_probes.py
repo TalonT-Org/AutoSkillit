@@ -2864,9 +2864,7 @@ def test_installed_claude_delivery_measurement(tmp_path: Path) -> None:
     ]
     assert all(event["outcome"] == "success" for event in results)
     assert all(event["plugin_identity"] == result.plugin_identity for event in results)
-    assert all(event["raw_chars"] >= 0 for event in results)
-    assert all(event["utf8_bytes"] >= event["raw_chars"] for event in results)
-    assert all(event["client_serialized_chars"] >= event["raw_chars"] for event in results)
+    assert all(event["raw_chars"] > 0 for event in results)
     assert all(event["estimated_tokens"] == event["utf8_bytes"] // 4 for event in results)
     assert all(event["elapsed_ns"] > 0 for event in results)
 

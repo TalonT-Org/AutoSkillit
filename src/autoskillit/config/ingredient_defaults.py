@@ -28,6 +28,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "run_skill",
             "recover_run_skill_result",
             "complete_run_skill_result",
+            "delegate_evidence_reader",
         ),
     ),
     ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
@@ -60,7 +61,6 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Evidence Readers",
         (
-            "delegate_evidence_reader",
             "read_authorized_artifact",
             "get_authorized_artifact_page",
         ),

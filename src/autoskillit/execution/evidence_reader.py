@@ -94,6 +94,15 @@ _RESULT_KEYS = frozenset(
     }
 )
 _OUTPUT_SCHEMA_NAME = "evidence-reader-result.schema.json"
+CITATION_LOCATION_KEYS = ("byte_start", "byte_end", "line_start", "line_end")
+_OBSERVATION_SCOPE_LABELS: tuple[str, ...] = (
+    "generated_config",
+    "configured_mcp_transport",
+    "supported_cli_and_catalog_shape",
+    "output_schema_behavioral_canary",
+    "observed_runtime_calls",
+    "not_exhaustive_native_tool_inventory",
+)
 _PROBE_SCHEMA_NAME = "evidence-reader-probe.schema.json"
 _PROBE_CACHE_NAME = "codex-evidence-reader-probe-cache.json"
 _PROBE_POLICY = "codex-evidence-reader-v1"
@@ -294,10 +303,7 @@ class _ProcessOutput:
 def _positive_mapping(
     values: Mapping[str, str], allowed: frozenset[str], code: str
 ) -> dict[str, str]:
-    try:
-        normalized = dict(values)
-    except (TypeError, ValueError) as exc:
-        raise EvidenceReaderLaunchError(code) from exc
+    normalized = dict(values)
     if set(normalized) - allowed or any(
         type(value) is not str or not value or len(value.encode("utf-8")) > 64_000
         for value in normalized.values()
@@ -307,10 +313,7 @@ def _positive_mapping(
 
 
 def _invocation_environment(invocation: EvidenceReaderInvocationLike) -> dict[str, str]:
-    try:
-        environment = dict(invocation.environment)
-    except (TypeError, ValueError) as exc:
-        raise EvidenceReaderLaunchError("invocation_invalid") from exc
+    environment = dict(invocation.environment)
     if set(environment) != _EVIDENCE_ENV or any(
         type(value) is not str or not value for value in environment.values()
     ):
@@ -335,10 +338,7 @@ def _invocation_environment(invocation: EvidenceReaderInvocationLike) -> dict[st
 
 
 def _transport(transport: Mapping[str, object]) -> dict[str, object]:
-    try:
-        normalized = dict(transport)
-    except (TypeError, ValueError) as exc:
-        raise EvidenceReaderLaunchError("transport_invalid") from exc
+    normalized = dict(transport)
     if set(normalized) - _TRANSPORT_KEYS or set(normalized) < {"command", "env_vars"}:
         raise EvidenceReaderLaunchError("transport_invalid")
     command = normalized.get("command")
@@ -436,14 +436,14 @@ def _result_output_schema() -> bytes:
     location = {
         "type": "object",
         "additionalProperties": False,
-        "required": ["start_byte", "end_byte", "start_line", "end_line"],
+        "required": ["byte_start", "byte_end", "line_start", "line_end"],
         "properties": {
             name: {"type": "integer", "minimum": minimum}
             for name, minimum in (
-                ("start_byte", 0),
-                ("end_byte", 0),
-                ("start_line", 1),
-                ("end_line", 1),
+                ("byte_start", 0),
+                ("byte_end", 0),
+                ("line_start", 1),
+                ("line_end", 1),
             )
         },
     }
@@ -602,9 +602,7 @@ def _run_bounded(
                 time.sleep(min(0.01, remaining))
                 continue
             for key, _ in selector.select(min(0.1, remaining)):
-                descriptor = (
-                    key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
-                )
+                descriptor = key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
                 chunk = os.read(descriptor, _STREAM_CHUNK)
                 if not chunk:
                     selector.unregister(key.fileobj)
@@ -929,15 +927,10 @@ def _observed_citations(value: Any) -> dict[str, tuple[int, int, int, int]]:
             return
         if isinstance(item, dict):
             citation_id = item.get("citation_id")
-            location = item.get("location")
             if isinstance(citation_id, str):
+                location = item.get("location")
                 source = location if isinstance(location, dict) else item
-                names = (
-                    ("start_byte", "end_byte", "start_line", "end_line")
-                    if isinstance(location, dict)
-                    else ("byte_start", "byte_end", "line_start", "line_end")
-                )
-                fields = tuple(source.get(name) for name in names)
+                fields = tuple(source.get(name) for name in CITATION_LOCATION_KEYS)
                 if all(isinstance(field, int) and not isinstance(field, bool) for field in fields):
                     normalized_fields = cast(tuple[int, int, int, int], fields)
                     if citation_id in found and found[citation_id] != normalized_fields:
@@ -1033,7 +1026,10 @@ def _validate_stream(
                         or item.get("error") not in {None, ""}
                         or (
                             isinstance(call_id, str)
-                            and started_mcp_calls.get(call_id, normalized_tool) != normalized_tool
+                            and (
+                                call_id not in started_mcp_calls
+                                or started_mcp_calls[call_id] != normalized_tool
+                            )
                         )
                     ):
                         raise EvidenceReaderLaunchError("mcp_call_failed")
@@ -1129,9 +1125,7 @@ def _validate_stream(
             or not isinstance(raw_location, dict)
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
-        fields = tuple(
-            raw_location.get(name) for name in ("start_byte", "end_byte", "start_line", "end_line")
-        )
+        fields = tuple(raw_location.get(name) for name in CITATION_LOCATION_KEYS)
         if (
             evidence.get("representation") not in {"literal", "summary"}
             or not isinstance(evidence.get("field"), str)
@@ -1189,7 +1183,8 @@ def _validate_stream(
         EvidenceReaderResultStatus.PARTIAL: (
             bool(evidence_fields)
             and bool(gap_fields)
-            and complete is not truncated
+            and complete
+            and not truncated
             and stop_reason in {"artifact exhausted", "concrete blocker"}
         ),
         EvidenceReaderResultStatus.BLOCKED: (
@@ -1439,26 +1434,22 @@ def launch_evidence_reader(
             + hashlib.sha256(
                 json.dumps(command, separators=(",", ":")).encode("utf-8")
             ).hexdigest(),
-            observation_scope=(
-                "generated_config",
-                "configured_mcp_transport",
-                "supported_cli_and_catalog_shape",
-                "output_schema_behavioral_canary",
-                "observed_runtime_calls",
-                "not_exhaustive_native_tool_inventory",
-            ),
+            observation_scope=_OBSERVATION_SCOPE_LABELS,
         )
         return replace(result, conformance=conformance)
     finally:
-        cleanup_error: EvidenceReaderLaunchError | None = None
+        cleanup_errors: list[EvidenceReaderLaunchError] = []
         if cwd is not None:
             try:
                 _remove_directory(cwd)
             except EvidenceReaderLaunchError as exc:
-                cleanup_error = exc
+                cleanup_errors.append(exc)
         try:
             _remove_directory(home)
         except EvidenceReaderLaunchError as exc:
-            cleanup_error = exc
-        if cleanup_error is not None:
-            raise cleanup_error
+            cleanup_errors.append(exc)
+        if cleanup_errors:
+            primary = cleanup_errors[0]
+            for follow_on in cleanup_errors[1:]:
+                primary.__cause__ = follow_on
+            raise primary

@@ -117,11 +117,11 @@ def _delegate_outcome(status: str, code: str) -> str:
 
 
 # Explicit dispatch table for known non-rejected terminal outcomes.
-# Substring matching was tried first (PR #4596 review W19) but proved
-# forward-fragile: a future code like "cancellation_failed" would be
-# misclassified as "cancelled". An explicit table forces every new code
-# to be considered at the point of addition. Unmatched codes fall
-# through to "rejected" (fail-closed default).
+# Substring matching would be forward-fragile: a future code like
+# "cancellation_failed" would be misclassified as "cancelled". An
+# explicit table forces every new code to be considered at the point
+# of addition. Unmatched codes fall through to "rejected" (fail-closed
+# default).
 _DELEGATE_OUTCOMES: Final[Mapping[str, str]] = {
     "artifact_unsupported": "unsupported",
     "catalog_invalid": "unsupported",

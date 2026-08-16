@@ -133,10 +133,6 @@ class _OpenedAuthority:
     capability_hash: str
 
 
-def _digest(domain: bytes, payload: object) -> str:
-    return qualified_digest(domain, payload)
-
-
 def _capability_hash(capability: str) -> str:
     return f"sha256:{hashlib.sha256(capability.encode('utf-8')).hexdigest()}"
 
@@ -272,7 +268,7 @@ def _open_authority(tool_ctx: ToolContext, environment: Mapping[str, str]) -> _O
     if (
         authority.get("schema_version") != _AUTHORITY_SCHEMA
         or authority.get("invocation_id") != invocation_dir.name
-        or authority_digest != _digest(_AUTHORITY_DOMAIN, authority)
+        or authority_digest != qualified_digest(_AUTHORITY_DOMAIN, authority)
         or authority_digest != env[EVIDENCE_READER_AUTHORITY_ENV_VAR]
     ):
         raise EvidenceReaderError("authority_tampered")
@@ -383,7 +379,7 @@ def _initial_receipts(authority_digest: str, capability_hash: str) -> dict[str, 
         "receipts": [],
         "continuations": {},
     }
-    payload["state_digest"] = _digest(_RECEIPT_DOMAIN, payload)
+    payload["state_digest"] = qualified_digest(_RECEIPT_DOMAIN, payload)
     return payload
 
 
@@ -394,7 +390,7 @@ def _receipt_state(opened: _OpenedAuthority) -> dict[str, Any]:
         state.get("schema_version") != _RECEIPT_SCHEMA
         or state.get("authority_digest") != opened.authority["authority_digest"]
         or state.get("capability_hash") != opened.capability_hash
-        or state_digest != _digest(_RECEIPT_DOMAIN, state)
+        or state_digest != qualified_digest(_RECEIPT_DOMAIN, state)
     ):
         raise EvidenceReaderError("authority_tampered")
     counters = (state.get("calls"), state.get("pages"), state.get("output_bytes"))
@@ -411,7 +407,7 @@ def _receipt_state(opened: _OpenedAuthority) -> dict[str, Any]:
 
 
 def _write_receipt_state(opened: _OpenedAuthority, state: dict[str, Any]) -> None:
-    state["state_digest"] = _digest(_RECEIPT_DOMAIN, state)
+    state["state_digest"] = qualified_digest(_RECEIPT_DOMAIN, state)
     _write_secure_json(opened.invocation_dir / _RECEIPT_FILE, state)
 
 
@@ -444,8 +440,6 @@ def _release_call_lock(invocation_dir: Path, descriptor: int, opened: os.stat_re
         os.close(descriptor)
         try:
             path.unlink()
-        except FileNotFoundError:
-            pass
         except OSError:
             pass
 
@@ -513,7 +507,7 @@ def create_evidence_reader_invocation(
         "capability_hash": capability_hash,
     }
     _validate_authority_fields(authority)
-    authority["authority_digest"] = _digest(_AUTHORITY_DOMAIN, authority)
+    authority["authority_digest"] = qualified_digest(_AUTHORITY_DOMAIN, authority)
     snapshot = {
         "schema_version": 1,
         "authority_digest": authority["authority_digest"],
@@ -617,7 +611,7 @@ def _snapshot_content(invocation_dir: Path, authority: Mapping[str, Any]) -> byt
 
 
 def _scope_digest(authority: Mapping[str, Any]) -> str:
-    return _digest(
+    return qualified_digest(
         _SCOPE_DOMAIN,
         {
             "invocation_id": authority["invocation_id"],
@@ -745,7 +739,7 @@ def read_evidence_reader_page(
             > limits.max_output_bytes
         ):
             raise EvidenceReaderError("output_budget_exhausted")
-        citation_id = _digest(
+        citation_id = qualified_digest(
             _CITATION_DOMAIN,
             {
                 "invocation_id": authority["invocation_id"],

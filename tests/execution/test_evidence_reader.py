@@ -128,10 +128,10 @@ def _payload(*, canary: str = _CANARY, scope: str = _SCOPE) -> dict[str, Any]:
                 "representation": "literal",
                 "citation_id": _CITATION,
                 "location": {
-                    "start_byte": 0,
-                    "end_byte": 5,
-                    "start_line": 1,
-                    "end_line": 1,
+                    "byte_start": 0,
+                    "byte_end": 5,
+                    "line_start": 1,
+                    "line_end": 1,
                 },
             }
         ],
@@ -151,10 +151,10 @@ def _stream(
     citation = {
         "citation_id": _CITATION,
         "location": {
-            "start_byte": 0,
-            "end_byte": 5,
-            "start_line": 1,
-            "end_line": 1,
+            "byte_start": 0,
+            "byte_end": 5,
+            "line_start": 1,
+            "line_end": 1,
         },
     }
     events = [
@@ -333,92 +333,60 @@ def test_launch_writes_sterile_0o600_home_files(
     }
 
 
-@pytest.mark.parametrize(
-    "fragment",
-    [
-        'approval_policy = "never"',
-        'sandbox_mode = "read-only"',
-        'forced_login_method = "api"',
-        'inherit = "none"',
-        "project_root_markers = []",
-        "[agents]\nenabled = false",
-        "shell_tool = false",
-    ],
+_REQUIRED_CONFIG_FRAGMENTS = (
+    'approval_policy = "never"',
+    'sandbox_mode = "read-only"',
+    'forced_login_method = "api"',
+    'inherit = "none"',
+    "project_root_markers = []",
+    "[agents]\nenabled = false",
+    "shell_tool = false",
 )
-def test_launch_renders_sterile_codex_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fragment: str
-) -> None:
-    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
-    assert fragment in observed["config"]
-
-
-@pytest.mark.parametrize(
-    "tool",
-    ["get_authorized_artifact_page", "read_authorized_artifact"],
+_READER_TOOLS_IN_CONFIG = ("get_authorized_artifact_page", "read_authorized_artifact")
+_DANGEROUS_TOOLS_NOT_IN_CONFIG = ("run_cmd", "read_file")
+_REQUIRED_COMMAND_FLAGS = (
+    "--strict-config",
+    "--ignore-rules",
+    "--ephemeral",
+    "--skip-git-repo-check",
+    "--output-schema",
+    "-C",
+    "exec",
+    "--json",
 )
-def test_launch_renders_sterile_codex_config_with_only_reader_tools(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: str
+_DANGEROUS_FLAGS_NOT_IN_COMMAND = ("--add-dir", "--dangerously-bypass-hook-trust")
+
+
+def _assert_all_in(haystack: str | tuple[str, ...], needles: tuple[str, ...]) -> None:
+    missing = [n for n in needles if n not in haystack]
+    assert not missing, f"missing from haystack: {missing}"
+
+
+def _assert_none_in(haystack: str | tuple[str, ...], needles: tuple[str, ...]) -> None:
+    present = [n for n in needles if n in haystack]
+    assert not present, f"unexpectedly present in haystack: {present}"
+
+
+def test_launch_renders_sterile_codex_config_with_required_content_and_excluded_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
-    assert tool in observed["config"]
+    config = observed["config"]
+    _assert_all_in(config, _REQUIRED_CONFIG_FRAGMENTS)
+    _assert_all_in(config, _READER_TOOLS_IN_CONFIG)
+    _assert_none_in(config, _DANGEROUS_TOOLS_NOT_IN_CONFIG)
 
 
-@pytest.mark.parametrize("tool", ["run_cmd", "read_file"])
-def test_launch_renders_sterile_codex_config_without_dangerous_tools(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: str
-) -> None:
-    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
-    assert tool not in observed["config"]
-
-
-@pytest.mark.parametrize(
-    "flag",
-    (
-        "--strict-config",
-        "--ignore-rules",
-        "--ephemeral",
-        "--skip-git-repo-check",
-        "--output-schema",
-        "-C",
-    ),
-)
-def test_launch_builds_codex_command_with_required_strict_flags(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str
-) -> None:
-    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
-    assert flag in observed["command"]
-
-
-@pytest.mark.parametrize(
-    "marker",
-    [("exec", "--json")],
-)
-def test_launch_builds_codex_command_with_exec_and_json(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, marker: tuple[str, str]
-) -> None:
-    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
-    command = observed["command"]
-    assert command[0] == "/usr/bin/codex"
-    assert marker[0] in command and marker[1] in command
-
-
-@pytest.mark.parametrize(
-    "absent_flag",
-    ["--add-dir", "--dangerously-bypass-hook-trust"],
-)
-def test_launch_builds_codex_command_without_dangerous_flags(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, absent_flag: str
-) -> None:
-    observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
-    assert absent_flag not in observed["command"]
-
-
-def test_launch_appends_canary_scope_and_snapshot_to_prompt(
+def test_launch_builds_codex_command_with_required_flags_and_excluded_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
     command = observed["command"]
-    assert _CANARY in command[-1] and _SCOPE in command[-1] and _SNAPSHOT in command[-1]
+    assert command[0] == "/usr/bin/codex"
+    _assert_all_in(command, _REQUIRED_COMMAND_FLAGS)
+    _assert_none_in(command, _DANGEROUS_FLAGS_NOT_IN_COMMAND)
+    prompt = command[-1]
+    _assert_all_in(prompt, (_CANARY, _SCOPE, _SNAPSHOT))
 
 
 def test_launch_propagates_thread_id_and_citations_to_result(
@@ -446,7 +414,9 @@ def test_launch_preserves_cwd_and_environment_across_probes_and_run(
     observed, _, _ = _launch_with_observation(tmp_path, monkeypatch)
     assert "cwd" in observed
     assert "environment" in observed
-    assert "environment" in observed["environment"] or "HOME" in observed["environment"]
+    forward = observed["environment"]
+    assert "HOME" in forward
+    assert forward["HOME"] == str(observed["cwd"].parent) or forward["HOME"].startswith("/")
 
 
 def test_launch_rejects_isolated_cwd_overlap_with_authorized_roots(
@@ -611,10 +581,10 @@ def test_stream_validation_rejects_unissued_receipt_even_with_one_observed_recei
             "field": field,
             "citation_id": citation_id,
             "location": {
-                "start_byte": start,
-                "end_byte": end,
-                "start_line": 1,
-                "end_line": 1,
+                "byte_start": start,
+                "byte_end": end,
+                "line_start": 1,
+                "line_end": 1,
             },
         }
         for field, citation_id, start, end in (
@@ -705,7 +675,7 @@ def test_stream_validation_requires_initial_read_before_continuation() -> None:
 def test_stream_validation_allows_recovery_after_failed_continuation() -> None:
     citation = {
         "citation_id": _CITATION,
-        "location": {"start_byte": 0, "end_byte": 5, "start_line": 1, "end_line": 1},
+        "location": {"byte_start": 0, "byte_end": 5, "line_start": 1, "line_end": 1},
     }
 
     def call(tool: str, result: dict[str, Any]) -> dict[str, Any]:
@@ -754,10 +724,10 @@ def test_stream_validation_rejects_conflicting_citation_observations() -> None:
                 "result": {
                     "citation_id": _CITATION,
                     "location": {
-                        "start_byte": 0,
-                        "end_byte": 5,
-                        "start_line": 1,
-                        "end_line": 1,
+                        "byte_start": 0,
+                        "byte_end": 5,
+                        "line_start": 1,
+                        "line_end": 1,
                     },
                 },
             },
@@ -770,10 +740,10 @@ def test_stream_validation_rejects_conflicting_citation_observations() -> None:
                 "result": {
                     "citation_id": _CITATION,
                     "location": {
-                        "start_byte": 1,
-                        "end_byte": 5,
-                        "start_line": 1,
-                        "end_line": 1,
+                        "byte_start": 1,
+                        "byte_end": 5,
+                        "line_start": 1,
+                        "line_end": 1,
                     },
                 },
             },

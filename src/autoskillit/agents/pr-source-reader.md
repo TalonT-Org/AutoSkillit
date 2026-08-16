@@ -60,7 +60,7 @@ locations returned by those tools.
   "role": "pr-source-reader",
   "authorized_scope": "server-issued scope digest",
   "snapshot": "server-issued snapshot digest",
-  "evidence": [{"field": "requested field", "value": "literal or bounded summary", "representation": "literal | summary", "citation_id": "server-issued citation", "location": {"start_byte": 0, "end_byte": 1, "start_line": 1, "end_line": 1}}],
+  "evidence": [{"field": "requested field", "value": "literal or bounded summary", "representation": "literal | summary", "citation_id": "server-issued citation", "location": {"byte_start": 0, "byte_end": 1, "line_start": 1, "line_end": 1}}],
   "coverage_gaps": [{"field": "requested field", "reason": "concrete blocker"}],
   "complete": true,
   "truncated": false,

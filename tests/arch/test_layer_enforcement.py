@@ -1390,10 +1390,10 @@ def test_evidence_reader_display_category_is_exact() -> None:
 
     categories = dict(_DISPLAY_CATEGORIES)
     assert categories["Evidence Readers"] == (
-        "delegate_evidence_reader",
         "read_authorized_artifact",
         "get_authorized_artifact_page",
     )
+    assert "delegate_evidence_reader" in categories["Execution"]
 
 
 def test_tool_categories_not_in_core() -> None:

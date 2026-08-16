@@ -1,6 +1,6 @@
 # Hooks
 
-AutoSkillit registers 50 Claude Code hook scripts: 37 PreToolUse, 10 PostToolUse,
+AutoSkillit registers 51 Claude Code hook scripts: 37 PreToolUse, 11 PostToolUse,
 2 SessionStart, and 1 Stop. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the

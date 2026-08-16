@@ -19,7 +19,7 @@ from autoskillit.core import installed_plugin_cache_dir, pkg_root
 
 # Events that do not require a tool-name matcher pattern (Stop fires once
 # per turn; SessionStart fires before any tool call).
-_MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset({"SessionStart", "Stop"})
+_MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset({"SessionStart", "Stop", "PreToolUse"})
 
 
 @dataclass(frozen=True, slots=True)

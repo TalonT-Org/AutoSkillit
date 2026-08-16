@@ -40,7 +40,7 @@ def test_all_pretooluse_hook_scripts_are_registered() -> None:
     post_or_session_registered = {
         script
         for hd in HOOK_REGISTRY
-        if hd.event_type in ("PostToolUse", "SessionStart")
+        if hd.event_type in ("PostToolUse", "SessionStart", "Stop", "PostToolUseFailure")
         for script in hd.scripts
     }
     hook_files = {
@@ -65,7 +65,10 @@ def test_all_posttooluse_hook_scripts_are_registered() -> None:
         script for hd in HOOK_REGISTRY if hd.event_type == "SessionStart" for script in hd.scripts
     }
     registered_post = {
-        script for hd in HOOK_REGISTRY if hd.event_type == "PostToolUse" for script in hd.scripts
+        script
+        for hd in HOOK_REGISTRY
+        if hd.event_type in ("PostToolUse", "PostToolUseFailure", "Stop")
+        for script in hd.scripts
     }
     all_scripts = _all_hook_script_relpaths()
     pre_registered = {

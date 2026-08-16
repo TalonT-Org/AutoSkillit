@@ -33,6 +33,11 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     write_diagnostic,
 )
 
+JOIN_FOLLOWUP_DENY_TRIGGER: str = (
+    "required-join wave is unresolved: top-level parent may not invoke non-Agent "
+    "follow-up effects before every declared Agent handle settles"
+)
+
 
 def _session_join_required() -> bool:
     flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()

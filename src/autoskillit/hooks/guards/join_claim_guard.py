@@ -40,7 +40,9 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     write_diagnostic,
 )
 
-DENY_TRIGGER: str = "required-join session requires a declared batch with an unclaimed assignment"
+JOIN_CLAIM_DENY_TRIGGER: str = (
+    "required-join session requires a declared batch with an unclaimed assignment"
+)
 
 
 def _session_join_required() -> bool:
@@ -95,7 +97,9 @@ def main() -> None:
 
     tool_use_id = data.get("tool_use_id") or tool_input.get("id") or ""
     if not isinstance(tool_use_id, str) or not tool_use_id:
-        denial_reason = f"{DENY_TRIGGER}: Agent tool_use_id was not provided by the harness."
+        denial_reason = (
+            f"{JOIN_CLAIM_DENY_TRIGGER}: Agent tool_use_id was not provided by the harness."
+        )
         payload = json.dumps(
             {
                 "hookSpecificOutput": {
@@ -133,7 +137,7 @@ def main() -> None:
             },
             caller="join_claim_guard",
         )
-        denial_reason = f"{DENY_TRIGGER}: {exc}"
+        denial_reason = f"{JOIN_CLAIM_DENY_TRIGGER}: {exc}"
         payload = json.dumps(
             {
                 "hookSpecificOutput": {
@@ -158,7 +162,7 @@ def main() -> None:
             caller="join_claim_guard",
         )
         denial_reason = (
-            f"{DENY_TRIGGER}: no declared batch is open for this turn. "
+            f"{JOIN_CLAIM_DENY_TRIGGER}: no declared batch is open for this turn. "
             "Call declare_join_batch with one assignment label per direct child first."
         )
         payload = json.dumps(

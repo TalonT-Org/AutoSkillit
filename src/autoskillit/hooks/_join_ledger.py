@@ -199,10 +199,14 @@ def declare_batch(
         if isinstance(parent_record, dict):
             active = parent_record.get("active_batch")
             if isinstance(active, dict):
-                raise JoinLedgerError(
-                    f"another wave is already open for {session_id!r}/{top_level_parent!r}: "
-                    f"join_batch_id={active.get('join_batch_id')!r}"
-                )
+                # Only refuse when the prior wave is still pending (not
+                # terminal). A complete/failed/etc wave is replaced by the
+                # new declaration.
+                if active.get("wave_outcome", WAVE_PENDING) == WAVE_PENDING:
+                    raise JoinLedgerError(
+                        f"another wave is already open for {session_id!r}/{top_level_parent!r}: "
+                        f"join_batch_id={active.get('join_batch_id')!r}"
+                    )
         join_batch_id = _new_batch_id()
         batch_record: dict[str, Any] = {
             "join_batch_id": join_batch_id,
@@ -358,8 +362,10 @@ def _aggregate_wave_outcome(assignments: list[object]) -> str:
     for entry in assignments:
         if isinstance(entry, dict):
             outcomes.append(str(entry.get("outcome", OUTCOME_PENDING)))
+    if any(o == OUTCOME_PENDING for o in outcomes):
+        return WAVE_PENDING
     if any(o == OUTCOME_SUCCESS for o in outcomes) and all(
-        o in (OUTCOME_PENDING, OUTCOME_SUCCESS) for o in outcomes
+        o in (OUTCOME_SUCCESS,) for o in outcomes
     ):
         return WAVE_COMPLETE
     if any(o == OUTCOME_INTERRUPTION for o in outcomes):

@@ -340,6 +340,7 @@ class ExplorationRouterPlan:
     snapshot: RepositorySnapshot | None
     tasks: tuple[ExplorationTaskSpec, ...]
     activations: tuple[ProfileActivation, ...]
+    join_required: bool = False
 
     @property
     def digest(self) -> str:
@@ -361,6 +362,7 @@ class ExplorationRouterPlan:
                     [activation.profile, activation.applicability, activation.reason]
                     for activation in self.activations
                 ],
+                "join_required": self.join_required,
             },
         )
 

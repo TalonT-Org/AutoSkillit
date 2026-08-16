@@ -167,6 +167,82 @@ def detect_repository_agent_teams_setting(
     return (None, "")
 
 
+#: Truthy values that re-enable Claude agent teams if present in the env.
+_AGENT_TEAMS_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _active_agent_teams(value: str) -> bool:
+    """Return True if the string value would re-enable agent teams."""
+    return value.strip().lower() in _AGENT_TEAMS_TRUTHY
+
+
+def neutralize_repository_agent_teams_settings(project_root: Path | str | None) -> int:
+    """Strip conflicting ``env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` entries.
+
+    Returns the number of settings files modified. Each file is rewritten
+    after the offending key is removed. Refuses to rewrite when the file
+    is malformed or unreadable.
+    """
+    if project_root is None:
+        return 0
+    root = Path(project_root).expanduser().resolve()
+    candidates = (root / ".claude" / "settings.json", root / ".claude" / "settings.local.json")
+    modified = 0
+    for candidate in candidates:
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError):
+            continue
+        try:
+            import json as _json
+
+            parsed = _json.loads(content)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        env = parsed.get("env")
+        if not isinstance(env, dict):
+            continue
+        if CLAUDE_AGENT_TEAMS_ENV_VAR not in env:
+            continue
+        del env[CLAUDE_AGENT_TEAMS_ENV_VAR]
+        try:
+            new_content = _json.dumps(parsed, indent=2, sort_keys=True)
+        except (ValueError, TypeError):
+            continue
+        candidate.write_text(new_content, encoding="utf-8")
+        modified += 1
+    return modified
+
+
+def assert_agent_teams_inactive(
+    env: Mapping[str, str],
+    project_root: Path | str | None,
+    *,
+    force_inactive: bool,
+) -> None:
+    """Verify that the effective environment will result in inactive agent teams.
+
+    Raises ``RuntimeError`` when ``force_inactive`` is True but neither the
+    process env nor the target repository's settings files positively
+    confirm an inactive policy. This is the pre-spawn refusal surface.
+    """
+    if not force_inactive:
+        return
+    if CLAUDE_AGENT_TEAMS_ENV_VAR in env and _active_agent_teams(env[CLAUDE_AGENT_TEAMS_ENV_VAR]):
+        raise RuntimeError(
+            f"force_inactive_agent_teams requested but {CLAUDE_AGENT_TEAMS_ENV_VAR} "
+            f"is set to {env[CLAUDE_AGENT_TEAMS_ENV_VAR]!r} in the launch env"
+        )
+    file_value, file_path = detect_repository_agent_teams_setting(project_root)
+    if file_value is not None and _active_agent_teams(file_value):
+        raise RuntimeError(
+            f"force_inactive_agent_teams requested but {CLAUDE_AGENT_TEAMS_ENV_VAR} "
+            f"is set to {file_value!r} in {file_path}"
+        )
+
+
 def _claude_host_attestation_env(
     installed_version: Version | None,
 ) -> dict[str, str]:
@@ -745,6 +821,13 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         )
         if force_inactive_agent_teams:
             _neutralize_agent_teams_env(dict(effective_env))
+            settings_root = str(executable.cwd) if executable is not None else None
+            assert_agent_teams_inactive(
+                dict(effective_env),
+                settings_root,
+                force_inactive=True,
+            )
+            neutralize_repository_agent_teams_settings(settings_root)
         if executable is not None and dict(effective_env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
@@ -801,6 +884,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env.update(_CLAUDE_SKILL_SESSION_HARDENING)
         if force_inactive_agent_teams:
             _neutralize_agent_teams_env(env)
+            assert_agent_teams_inactive(env, None, force_inactive=True)
         return CmdSpec(
             cmd=tuple(cmd),
             env=env,

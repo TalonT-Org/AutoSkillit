@@ -913,13 +913,13 @@ def validate_sanitized_plugin_artifact(
         )
         # adaptation_digest is produced at materialization time and validated
         # downstream via digest pinning (re-parsing the projected artifact).
-        expected_entry["adaptation_digest"] = ""
         # artifact_digest and artifact_incarnation are sourced from the
         # SkillProjectionBinding populated at publish time; this validator
         # cannot know their values yet, so accept any non-empty string.
-        expected_entry["artifact_digest"] = entry.get("artifact_digest", "")
-        expected_entry["artifact_incarnation"] = entry.get("artifact_incarnation", "")
+        skip_fields = {"adaptation_digest", "artifact_digest", "artifact_incarnation"}
         for field_name, value in expected_entry.items():
+            if field_name in skip_fields:
+                continue
             if entry.get(field_name) != value:
                 errors.append(
                     f"manifest {field_name} mismatch for {name}: "

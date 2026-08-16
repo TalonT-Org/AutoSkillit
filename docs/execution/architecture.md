@@ -39,8 +39,8 @@ AutoSkillit uses several overlapping tool visibility surfaces:
   `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`, `commit_files`,
   `write_audit_semantic_result`, `write_standalone_audit_evidence`,
   `write_audit_disposition_bundle`, `post_pr_review`, and `delegate_evidence_reader`.
-- **Kitchen-tagged tools (51 tools total)**: Gated behind `open_kitchen` — `run_skill`,
-  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 45 more.
+- **Kitchen-tagged tools (52 tools total)**: Gated behind `open_kitchen` — `run_skill`,
+  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 46 more.
   Seven kitchen tools also carry the `headless` tag and are
   additionally pre-enabled in headless sessions. `post_pr_review` is headless-only and
   deliberately not application-gated.
@@ -102,7 +102,7 @@ AutoSkillit supports four session modes with different tool and skill visibility
 
 - **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
   loaded. Sees the 8 Free Range MCP tools and Tier 1 skills only
-  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 51 kitchen-tagged MCP
+  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 52 kitchen-tagged MCP
   tools become available.
 
 - **`$ autoskillit cook`**: Interactive development session. Sees all three skill tiers

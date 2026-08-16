@@ -101,13 +101,21 @@ def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
 
     for backend_name, backend_cls in BACKEND_REGISTRY.items():
         result = backend_cls().adapt_skill_semantics(plan)
-        assert result.diagnostic is None, backend_name
-        assert result.unsupported_operation is None, backend_name
-        assert result.instruction_fragments, backend_name
-        assert result.logical_role_mapping["reviewer"], backend_name
-        assert result.sibling_skill_targets["investigate"].endswith("investigate"), backend_name
-        assert result.model_effort_policy["reviewer"][0], backend_name
-        assert result.model_effort_policy["reviewer"][1] == "high", backend_name
+        # Codex cannot provide fixed-set fan-in, so it honestly refuses
+        # the join-required plan. Other backends must realize it.
+        if backend_name == "codex":
+            assert result.unsupported_operation is not None, backend_name
+            assert result.diagnostic is not None, backend_name
+        else:
+            assert result.diagnostic is None, backend_name
+            assert result.unsupported_operation is None, backend_name
+            assert result.instruction_fragments, backend_name
+            assert result.logical_role_mapping["reviewer"], backend_name
+            assert result.sibling_skill_targets["investigate"].endswith("investigate"), (
+                backend_name
+            )
+            assert result.model_effort_policy["reviewer"][0], backend_name
+            assert result.model_effort_policy["reviewer"][1] == "high", backend_name
 
 
 def test_codex_adaptation_maps_namespaced_role_to_registered_agent() -> None:

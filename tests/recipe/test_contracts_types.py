@@ -27,6 +27,9 @@ def test_skill_input_validates_explicit_absence_value() -> None:
 def test_literal_absent_is_not_structural_absence() -> None:
     item = SkillInput(name="note", type="string", required=False, absence_value="absent")
     assert item.has_absence_value
+    structural = SkillInput(name="note", type="string", required=False)
+    assert not structural.has_absence_value
+    assert structural.absence_value is None
 
 
 @pytest.mark.parametrize("input_type", ["number", "float"])

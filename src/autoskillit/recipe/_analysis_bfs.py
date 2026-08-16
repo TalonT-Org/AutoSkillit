@@ -6,9 +6,22 @@ from collections import deque
 
 import regex as re
 
-from autoskillit.recipe._analysis_graph import _build_step_graph as _build_step_graph
+from autoskillit.recipe._analysis_graph import _build_step_graph
 from autoskillit.recipe.contracts import RESULT_CAPTURE_RE
 from autoskillit.recipe.schema import Recipe
+
+__all__ = [
+    "bfs_reachable",
+    "bfs_reachable_without_barrier",
+    "bfs_reachable_without_barrier_in_graph",
+    "all_paths_cross",
+    "_build_step_graph",
+    "_build_success_step_graph",
+    "_bfs_capped",
+    "_bfs_with_facts",
+    "_build_capture_origin_map",
+    "_INVALIDATING_TOOLS",
+]
 
 # ---------------------------------------------------------------------------
 # BFS helpers

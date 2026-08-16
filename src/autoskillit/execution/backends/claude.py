@@ -218,6 +218,40 @@ def neutralize_repository_agent_teams_settings(project_root: Path | str | None) 
     return modified
 
 
+def _interactive_invocation_environment_policy(
+    env: Mapping[str, str],
+    project_root: Path | str | None,
+) -> list[str]:
+    """Content-policy errors for an interactive Claude launch.
+
+    The interactive cook/order checkpoint must positively confirm that the
+    effective environment will leave Claude agent teams inactive. Returns
+    a list of human-readable error strings (empty list when no violation
+    is detected). The launch layer surfaces these as pre-spawn failures.
+
+    The policy matches what the per-builder assertions check — the launch
+    env must not carry a truthy ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS``
+    value, and any conflicting entry in the target repository's
+    ``.claude/settings*.json`` files would re-enable teams under Claude's
+    documented settings precedence.
+    """
+    errors: list[str] = []
+    env_value = env.get(CLAUDE_AGENT_TEAMS_ENV_VAR)
+    if env_value is not None and _active_agent_teams(env_value):
+        errors.append(
+            f"{CLAUDE_AGENT_TEAMS_ENV_VAR}={env_value!r} is set in the launch "
+            f"environment; Claude agent teams would be active at launch"
+        )
+    file_value, file_path = detect_repository_agent_teams_setting(project_root)
+    if file_value is not None and _active_agent_teams(file_value):
+        errors.append(
+            f"{CLAUDE_AGENT_TEAMS_ENV_VAR}={file_value!r} is set in "
+            f"{file_path}; Claude agent teams would be re-enabled by "
+            "repository settings precedence"
+        )
+    return errors
+
+
 def assert_agent_teams_inactive(
     env: Mapping[str, str],
     project_root: Path | str | None,
@@ -1311,8 +1345,21 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             return []
 
     def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-        del spec
-        return []
+        """Verify the interactive launch spec's effective environment policy.
+
+        When the spec carries a request to keep Claude agent teams inactive,
+        this checkpoint positively confirms that neither the resolved env
+        nor the target repository's ``.claude/settings*.json`` files
+        re-enable ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS``. The plan's
+        Step 5.4 mandates this content-policy surface here in addition to
+        the per-builder enforcement.
+        """
+        env = dict(spec.env) if spec is not None else {}
+        project_root: Path | str | None = None
+        cwd = spec.cwd if spec is not None else None
+        if cwd is not None:
+            project_root = cwd
+        return _interactive_invocation_environment_policy(env, project_root)
 
     def ensure_pre_launch(
         self,

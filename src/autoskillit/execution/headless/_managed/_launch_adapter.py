@@ -66,12 +66,14 @@ class _HeadlessLaunchAdapter:
         provider_extras: Mapping[str, str] | None,
         observer: _ManagedLineageObserver | None,
         managed_attempt_id: str | None,
+        force_inactive_agent_teams: bool = False,
     ) -> None:
         self._build_spec = build_spec
         self._binding = binding
         self._provider_extras = provider_extras
         self._observer = observer
         self._managed_attempt_id = managed_attempt_id
+        self._force_inactive_agent_teams = force_inactive_agent_teams
         self.secret_environment: Mapping[str, str] = {}
         self.inherited_fds: tuple[int, ...] = ()
 
@@ -104,6 +106,7 @@ class _HeadlessLaunchAdapter:
             "secret_keys": secret_keys,
             "process_idle_timeout_ms": spec.process_idle_timeout_ms,
             "inherited_fd_count": len(spec.inherited_fds),
+            "force_inactive_agent_teams": self._force_inactive_agent_teams,
         }
         adapter_digest = hashlib.sha256(
             json.dumps(adapter_payload, sort_keys=True, separators=(",", ":")).encode()

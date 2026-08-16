@@ -1384,6 +1384,19 @@ def test_display_categories_sync() -> None:
         f"  Extra: {as_set - all_registered}"
     )
 
+    # Free-range MCP tools must surface under the Kitchen category so the
+    # declared-batch gateway is discoverable alongside the other kitchen
+    # state primitives. Plan §Step 8.3 mandates this parity.
+    kitchen_tools = set(next(tools for name, tools in _DISPLAY_CATEGORIES if name == "Kitchen"))
+    assert "declare_join_batch" in kitchen_tools, (
+        "declare_join_batch must appear in the Kitchen display category"
+    )
+    kitchen_subset_of_free_range = kitchen_tools & FREE_RANGE_TOOLS
+    assert kitchen_subset_of_free_range == kitchen_tools, (
+        "Every Kitchen-category free-range tool must be registered as "
+        f"FREE_RANGE_TOOLS. Offenders: {kitchen_tools - FREE_RANGE_TOOLS}"
+    )
+
 
 def test_evidence_reader_display_category_is_exact() -> None:
     from autoskillit.config.ingredient_defaults import _DISPLAY_CATEGORIES

@@ -111,11 +111,13 @@ def attempt_cheap_rebase(
     conflict_report_path: str,
 ) -> dict[str, str]:
     """Checkout ejected branch and attempt rebase."""
+    remote = _detect_remote(work_dir)
     return _attempt_rebase_with_conflict_report(
         work_dir=work_dir,
         branch=ejected_pr_branch,
         base_branch=base_branch,
         checkout_args=[ejected_pr_branch],
+        remote=remote,
         conflict_report_path=conflict_report_path,
     )
 
@@ -126,10 +128,10 @@ def _attempt_rebase_with_conflict_report(
     branch: str,
     base_branch: str,
     checkout_args: list[str],
+    remote: str,
     conflict_report_path: str,
 ) -> dict[str, str]:
     """Fetch, checkout, rebase; on conflict write a report and abort the rebase."""
-    remote = _detect_remote(work_dir)
     run_git(["fetch", remote, branch], cwd=work_dir, check=True)
     fetch = run_git(["fetch", remote, base_branch], cwd=work_dir)
     if fetch.returncode != 0:
@@ -278,5 +280,6 @@ def proactive_rebase_next_pr(
         branch=next_pr_branch,
         base_branch=base_branch,
         checkout_args=["-B", next_pr_branch, f"{remote}/{next_pr_branch}"],
+        remote=remote,
         conflict_report_path=conflict_report_path,
     )

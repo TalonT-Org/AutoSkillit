@@ -152,7 +152,7 @@ def test_registry_keys_are_lowercase_kebab() -> None:
 
 
 def test_expected_entry_ids() -> None:
-    """Registry must contain exactly the 13 specified entries."""
+    """Registry must contain exactly the specified entries."""
     from autoskillit.core import INVARIANT_REGISTRY
 
     expected = {
@@ -161,6 +161,7 @@ def test_expected_entry_ids() -> None:
         "git-force-push",
         "git-reset-hard",
         "git-clean-f",
+        "git-checked-out-ref-mutation",
         "recipe-read-headless",
         "write-path-prefix",
         "skill-orchestration-from-L1",

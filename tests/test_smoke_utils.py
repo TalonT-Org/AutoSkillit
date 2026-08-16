@@ -179,7 +179,7 @@ def test_check_review_loop_has_no_subprocess_calls() -> None:
     """The simplified check_review_loop must not use subprocess at all."""
     import ast
 
-    src = Path("src/autoskillit/smoke_utils/_review.py").read_text()
+    src = Path("src/autoskillit/smoke_utils/_review_design.py").read_text()
     tree = ast.parse(src)
 
     # Find the check_review_loop function node
@@ -3093,10 +3093,124 @@ def _annotation_run_side_effect(
     return _run
 
 
+def _provider_annotation_run_side_effect(
+    *,
+    checkout_head: str = _SHA,
+    provider_head: str = _SHA,
+    provider_base: str = _BASE_SHA,
+    provider_merge_base: str = _MERGE_BASE_SHA,
+    local_base_tip: str | None = "d" * 40,
+    local_merge_base: str = _MERGE_BASE_SHA,
+    missing_objects: frozenset[str] = frozenset(),
+    repository: str = "Acme/Base",
+    diff_output: str = _DIFF_OUTPUT,
+):
+    """Model independent checkout, provider, and optional local observations."""
+
+    def _run(args, **_kwargs):
+        if args[:2] == ["gh", "api"]:
+            endpoint = args[2]
+            if "/compare/" in endpoint:
+                payload = {
+                    "merge_base_commit": {"sha": provider_merge_base},
+                    "mergeBaseOid": provider_merge_base,
+                }
+            else:
+                payload = {
+                    "head": {"sha": provider_head},
+                    "base": {"sha": provider_base, "repo": {"full_name": repository}},
+                    "headRefOid": provider_head,
+                    "baseRefOid": provider_base,
+                    "baseRepoFullName": repository,
+                }
+            return subprocess.CompletedProcess(args, 0, json.dumps(payload).encode(), b"")
+        if args[:3] == ["gh", "pr", "diff"]:
+            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
+        if args[:3] == ["git", "rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(args, 0, checkout_head.encode(), b"")
+        if args[:3] == ["git", "rev-parse", "--verify"]:
+            if local_base_tip is None:
+                return subprocess.CompletedProcess(args, 1, b"", b"")
+            return subprocess.CompletedProcess(args, 0, local_base_tip.encode(), b"")
+        if args[:2] == ["git", "rev-parse"]:
+            if local_base_tip is None:
+                return subprocess.CompletedProcess(args, 1, b"", b"")
+            return subprocess.CompletedProcess(args, 0, local_base_tip.encode(), b"")
+        if args[:2] == ["git", "cat-file"]:
+            sha = args[-1].removesuffix("^{commit}")
+            return subprocess.CompletedProcess(args, 1 if sha in missing_objects else 0, b"", b"")
+        if args == ["git", "remote"]:
+            return subprocess.CompletedProcess(args, 0, b"upstream\n", b"")
+        if args[:3] == ["git", "remote", "get-url"]:
+            return subprocess.CompletedProcess(
+                args, 0, f"git@github.com:{repository.lower()}.git\n".encode(), b""
+            )
+        if args[:2] == ["git", "fetch"]:
+            return subprocess.CompletedProcess(args, 0, b"", b"")
+        if args[:2] == ["git", "merge-base"]:
+            return subprocess.CompletedProcess(args, 0, local_merge_base.encode(), b"")
+        if args[:2] == ["git", "diff"]:
+            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    return _run
+
+
+@pytest.mark.parametrize(
+    ("mode", "rounds", "iteration", "expected"),
+    [
+        (None, "2", "0", "local"),
+        (None, "2", "2", "github"),
+        ("local", "0", "99", "local"),
+        ("github", "9", "0", "github"),
+    ],
+)
+@patch("subprocess.run")
+def test_annotate_pr_diff_explicit_or_derived_mode_selection(
+    mock_run, tmp_path: Path, mode: str | None, rounds: str, iteration: str, expected: str
+) -> None:
+    mock_run.side_effect = _provider_annotation_run_side_effect()
+    kwargs = {} if mode is None else {"mode": mode}
+
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        base_branch="main",
+        local_review_rounds=rounds,
+        current_iteration=iteration,
+        **kwargs,
+    )
+
+    assert result["review_mode"] == expected
+
+
+@pytest.mark.parametrize("mode", ["", "LOCAL", "other"])
+def test_annotate_pr_diff_rejects_invalid_explicit_mode(tmp_path: Path, mode: str) -> None:
+    with pytest.raises((ValueError, RuntimeError), match="mode"):
+        annotate_pr_diff(
+            pr_number="123",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            base_branch="main",
+            mode=mode,
+        )
+
+
+def test_annotate_pr_diff_explicit_local_requires_base_branch(tmp_path: Path) -> None:
+    with pytest.raises((ValueError, RuntimeError), match="base_branch"):
+        annotate_pr_diff(
+            pr_number="123",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            mode="local",
+        )
+
+
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) -> None:
     """T3.1: iteration < local_rounds → review_mode=local."""
-    mock_run.side_effect = _annotation_run_side_effect()
+    mock_run.side_effect = _provider_annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -3125,7 +3239,7 @@ def test_annotate_pr_diff_returns_review_mode_github(mock_run, tmp_path: Path) -
 @patch("subprocess.run")
 def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> None:
     """T3.3: local mode resolves refs before a pinned git diff."""
-    mock_run.side_effect = _annotation_run_side_effect()
+    mock_run.side_effect = _provider_annotation_run_side_effect()
     annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -3177,7 +3291,7 @@ def test_annotate_pr_diff_zero_local_rounds_always_github(mock_run, tmp_path: Pa
 @patch("subprocess.run")
 def test_annotate_pr_diff_missing_iteration_defaults_zero(mock_run, tmp_path: Path) -> None:
     """T3.6: empty current_iteration defaults to 0 → local mode when local_rounds > 0."""
-    mock_run.side_effect = _annotation_run_side_effect()
+    mock_run.side_effect = _provider_annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -3316,7 +3430,7 @@ def test_annotate_pr_diff_publishes_snapshot_manifest_last(
     import autoskillit.core as core
 
     diff = _churn_diff(additions=2, removals=1)
-    mock_run.side_effect = _annotation_run_side_effect(diff)
+    mock_run.side_effect = _provider_annotation_run_side_effect(diff_output=diff)
     original_atomic_write = core.atomic_write
     write_order: list[str] = []
 
@@ -3500,19 +3614,194 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
     assert not (tmp_path / "metrics_94.json").exists()
 
 
+@pytest.mark.parametrize("local_base_tip", ["0" * 40, "f" * 40, None])
 @patch("subprocess.run")
-def test_annotate_pr_diff_rejects_local_base_disagreement(mock_run, tmp_path: Path) -> None:
-    mock_run.side_effect = _annotation_run_side_effect(live_base_sha="d" * 40)
-    with pytest.raises(RuntimeError, match="local base ref does not match"):
+def test_annotate_pr_diff_local_base_tip_is_observational_only(
+    mock_run, tmp_path: Path, local_base_tip: str | None
+) -> None:
+    mock_run.side_effect = _provider_annotation_run_side_effect(local_base_tip=local_base_tip)
+
+    annotate_pr_diff(
+        pr_number="95",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        base_branch="main",
+        mode="local",
+    )
+
+    metrics = json.loads((tmp_path / "metrics_95.json").read_text())
+    assert metrics["_head_sha"] == _SHA
+    assert metrics["_base_sha"] == _BASE_SHA
+    assert metrics["_merge_base_sha"] == _MERGE_BASE_SHA
+    assert metrics["_base_repo_full_name"] == "Acme/Base"
+    commands = [call.args[0] for call in mock_run.call_args_list]
+    diff = next(command for command in commands if command[:2] == ["git", "diff"])
+    assert diff[-2:] == [_MERGE_BASE_SHA, _SHA]
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_requires_provider_and_checkout_head_agreement(
+    mock_run, tmp_path: Path
+) -> None:
+    mock_run.side_effect = _provider_annotation_run_side_effect(provider_head="e" * 40)
+
+    with pytest.raises(RuntimeError, match="head"):
         annotate_pr_diff(
-            pr_number="95",
+            pr_number="951",
             cwd=str(tmp_path),
             output_dir=str(tmp_path),
-            local_review_rounds="1",
-            current_iteration="0",
             base_branch="main",
+            mode="local",
         )
-    assert not (tmp_path / "metrics_95.json").exists()
+
+    assert not (tmp_path / "metrics_951.json").exists()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_uses_base_repository_compare_and_sha_only_fetches(
+    mock_run, tmp_path: Path
+) -> None:
+    mock_run.side_effect = _provider_annotation_run_side_effect(
+        missing_objects=frozenset({_BASE_SHA, _MERGE_BASE_SHA})
+    )
+
+    annotate_pr_diff(
+        pr_number="952",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        base_branch="main",
+        mode="local",
+    )
+
+    commands = [call.args[0] for call in mock_run.call_args_list]
+    compare = next(
+        command
+        for command in commands
+        if command[:2] == ["gh", "api"] and "/compare/" in command[2]
+    )
+    assert "Acme/Base" in compare[2]
+    assert _BASE_SHA in compare[2] and _SHA in compare[2]
+    fetches = [command for command in commands if command[:2] == ["git", "fetch"]]
+    assert fetches == [
+        ["git", "fetch", "--no-write-fetch-head", "upstream", _BASE_SHA],
+        ["git", "fetch", "--no-write-fetch-head", "upstream", _MERGE_BASE_SHA],
+    ]
+    assert all(":" not in argument for command in fetches for argument in command)
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_refuses_to_guess_canonical_remote(mock_run, tmp_path: Path) -> None:
+    side_effect = _provider_annotation_run_side_effect(missing_objects=frozenset({_BASE_SHA}))
+
+    def no_matching_remote(args, **kwargs):
+        if args[:3] == ["git", "remote", "get-url"]:
+            return subprocess.CompletedProcess(args, 0, b"git@github.com:Other/Repo.git\n", b"")
+        return side_effect(args, **kwargs)
+
+    mock_run.side_effect = no_matching_remote
+    with pytest.raises(RuntimeError, match="remote"):
+        annotate_pr_diff(
+            pr_number="953",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            base_branch="main",
+            mode="local",
+        )
+
+    commands = [call.args[0] for call in mock_run.call_args_list]
+    assert not any(command[:2] == ["git", "fetch"] for command in commands)
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_requires_local_and_provider_merge_base_agreement(
+    mock_run, tmp_path: Path
+) -> None:
+    mock_run.side_effect = _provider_annotation_run_side_effect(local_merge_base="9" * 40)
+
+    with pytest.raises(RuntimeError, match="merge base"):
+        annotate_pr_diff(
+            pr_number="954",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            base_branch="main",
+            mode="local",
+        )
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_revalidates_complete_provider_tuple(mock_run, tmp_path: Path) -> None:
+    side_effect = _provider_annotation_run_side_effect()
+    pr_reads = 0
+
+    def moving_repository(args, **kwargs):
+        nonlocal pr_reads
+        result = side_effect(args, **kwargs)
+        if args[:2] == ["gh", "api"] and "/compare/" not in args[2]:
+            pr_reads += 1
+            if pr_reads == 2:
+                payload = json.loads(result.stdout)
+                payload["base"]["repo"]["full_name"] = "Other/Base"
+                payload["baseRepoFullName"] = "Other/Base"
+                return subprocess.CompletedProcess(args, 0, json.dumps(payload).encode(), b"")
+        return result
+
+    mock_run.side_effect = moving_repository
+    with pytest.raises(RuntimeError, match="moved|changed|authority"):
+        annotate_pr_diff(
+            pr_number="955",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            base_branch="main",
+            mode="local",
+        )
+    assert not (tmp_path / "metrics_955.json").exists()
+
+
+class _AnnotationSentinel(BaseException):
+    pass
+
+
+# RuntimeError covers the standard cleanup branch; _AnnotationSentinel covers
+# the BaseException branch without redundantly listing KeyboardInterrupt.
+@pytest.mark.parametrize("exception_type", [RuntimeError, _AnnotationSentinel])
+@patch("subprocess.run")
+def test_annotate_pr_diff_cleans_commit_marker_on_baseexception_and_retry(
+    mock_run, tmp_path: Path, exception_type: type[BaseException]
+) -> None:
+    metrics_path = tmp_path / "metrics_956.json"
+    metrics_path.write_text('{"generation_id":"stale"}')
+    side_effect = _provider_annotation_run_side_effect()
+    interrupted = False
+
+    def interrupt_acquisition(args, **kwargs):
+        nonlocal interrupted
+        if not interrupted and args[:2] == ["git", "diff"]:
+            interrupted = True
+            raise exception_type("injected acquisition interruption")
+        return side_effect(args, **kwargs)
+
+    mock_run.side_effect = interrupt_acquisition
+    with pytest.raises(exception_type, match="injected"):
+        annotate_pr_diff(
+            pr_number="956",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            base_branch="main",
+            mode="local",
+        )
+    assert not metrics_path.exists()
+
+    mock_run.side_effect = side_effect
+    annotate_pr_diff(
+        pr_number="956",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        base_branch="main",
+        mode="local",
+    )
+    metrics = json.loads(metrics_path.read_text())
+    assert metrics["generation_id"] != "stale"
+    assert metrics["_base_repo_full_name"] == "Acme/Base"
 
 
 # ─── SHA embedding tests (T_SHA_1–T_SHA_4) ──────────────────────────────────

@@ -1027,7 +1027,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         # +_explorer_conformance version-bound live attestation authority (#4443)
         "execution/backends": 19,  # +execution identity parser and explorer dispatch adapter
-        "smoke_utils": 11,  # cross-interpreter upgrade smoke support
+        "smoke_utils": 12,  # +_review_design split from _review
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

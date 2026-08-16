@@ -188,7 +188,7 @@ def test_review_pr_step6_mode_branching_header():
     assert step6_section.count("post_pr_review") == 1
 
 
-def test_local_gate_validates_head_base_and_merge_base_authority() -> None:
+def test_local_gate_validates_provider_tuple_and_checkout_head_authority() -> None:
     text = _skill_text()
     step_2_7 = text[
         text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
@@ -197,13 +197,103 @@ def test_local_gate_validates_head_base_and_merge_base_authority() -> None:
     ]
 
     assert 'git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD' in step_2_7
-    assert 'git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "${base_branch}"' in step_2_7
-    assert (
-        'git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$CHECKOUT_BASE_SHA" "$CHECKOUT_HEAD_SHA"'
-    ) in step_2_7
-    assert '"$CHECKOUT_HEAD_SHA" != "$METRICS_HEAD_SHA"' in step_2_7
-    assert '"$CHECKOUT_BASE_SHA" != "$METRICS_BASE_SHA"' in step_2_7
-    assert '"$CHECKOUT_MERGE_BASE_SHA" != "$METRICS_MERGE_BASE_SHA"' in step_2_7
+    assert "_base_repo_full_name" in step_2_7
+    assert "merge_base_commit" in step_2_7
+    assert ".base.repo.full_name" in step_2_7
+    assert "METRICS_BASE_REPO_FULL_NAME" in step_2_7
+    assert "LIVE_BASE_REPO_FULL_NAME" in step_2_7
+    assert 'rev-parse "${base_branch}"' not in step_2_7
+    assert 'rev-parse "$base_branch"' not in step_2_7
+
+
+def test_standalone_local_mode_prepares_missing_artifacts_once() -> None:
+    text = _skill_text()
+    step_2_7 = text[
+        text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
+            "### Step 2.5: Deletion Context Pre-Computation"
+        )
+    ]
+
+    assert 'mktemp -d "${REVIEW_OUTPUT_DIR%/}/annotation.XXXXXX"' in step_2_7
+    assert step_2_7.count('callable="autoskillit.smoke_utils.annotate_pr_diff"') == 1
+    assert '"pr_number": pr_number' in step_2_7
+    assert '"cwd": REVIEW_CHECKOUT_ROOT' in step_2_7
+    assert '"output_dir": ANNOTATION_OUTPUT_DIR' in step_2_7
+    assert '"base_branch": base_branch' in step_2_7
+    assert '"mode": "local"' in step_2_7
+    assert "timeout=120" in step_2_7
+    assert "work_dir=REVIEW_CHECKOUT_ROOT" in step_2_7
+
+
+def test_standalone_preparation_binds_exact_returned_artifact_paths_before_gate() -> None:
+    text = _skill_text()
+    step_2_7 = text[
+        text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
+            "### Step 2.5: Deletion Context Pre-Computation"
+        )
+    ]
+    gate_start = step_2_7.index("GATE_STATE=degraded")
+
+    for variable, field in (
+        ("annotated_diff_path", "annotated_diff_path"),
+        ("hunk_ranges_path", "hunk_ranges_path"),
+        ("valid_lines_path", "valid_lines_path"),
+        ("diff_metrics_path", "diff_metrics_path"),
+    ):
+        preparation = step_2_7[:gate_start]
+        assignment = preparation.find(f"{variable}=")
+        result_read = preparation.find(f".result.{field}")
+        assert assignment >= 0
+        assert result_read >= 0
+        assert result_read <= assignment or result_read - assignment < 500
+
+
+def test_standalone_preparation_failure_stops_without_git_repair() -> None:
+    text = _skill_text()
+    step_2_7 = text[
+        text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
+            "### Step 2.5: Deletion Context Pre-Computation"
+        )
+    ]
+    preparation = step_2_7[: step_2_7.index("GATE_STATE=degraded")]
+
+    assert "needs_human" in preparation
+    assert "%%REVIEW_GATE::CLEAR%%" in preparation
+    assert "headless" in preparation.lower()
+    assert "run_python" in preparation
+    for forbidden in ("update-ref", "branch -f", "checkout -B", "switch -C", "reset --hard"):
+        assert forbidden not in preparation
+
+
+def test_review_pr_declares_observational_only_git_state_prohibition() -> None:
+    text = _skill_text().lower()
+    assert "observational" in text
+    assert "must not rewrite refs" in text or "do not rewrite refs" in text
+    assert "head" in text
+    assert "index" in text
+    assert "worktree" in text
+
+
+def test_initial_and_retained_gates_revalidate_complete_provider_authority() -> None:
+    text = _skill_text()
+    step_2_7 = text[
+        text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
+            "### Step 2.5: Deletion Context Pre-Computation"
+        )
+    ]
+    retained = step_2_7[step_2_7.index("revalidate_retained_snapshot") :]
+
+    for token in (
+        "METRICS_HEAD_SHA",
+        "METRICS_BASE_SHA",
+        "METRICS_MERGE_BASE_SHA",
+        "METRICS_BASE_REPO_FULL_NAME",
+        "merge_base_commit",
+        ".base.repo.full_name",
+    ):
+        assert token in step_2_7
+        assert token in retained
+    assert 'rev-parse "$base_branch"' not in retained
 
 
 def test_local_handoff_is_generation_bound_and_published_last() -> None:

@@ -57,27 +57,27 @@ def _parse_skill_input(skill_name: str, raw: Mapping[str, Any]) -> SkillInput:
         required=raw.get("required", False),
         recommended=raw.get("recommended", False),
     )
-    if "unresolved_default" not in raw:
+    if "absence_value" not in raw:
         return input_def
-    unresolved_default = raw["unresolved_default"]
-    if type(unresolved_default) not in (str, int, bool):
+    absence_value = raw["absence_value"]
+    if type(absence_value) not in (str, int, bool):
         raise ValueError(
-            f"unresolved_default for skill '{skill_name}' input "
+            f"absence_value for skill '{skill_name}' input "
             f"'{input_def.name}' must be a strict string, integer, or boolean"
         )
     if input_def.required:
         raise ValueError(
             f"required input '{input_def.name}' for skill '{skill_name}' "
-            "cannot declare unresolved_default"
+            "cannot declare absence_value"
         )
-    if not input_def.accepts(unresolved_default):
+    if not input_def.accepts(absence_value):
         raise ValueError(
-            f"unresolved_default for skill '{skill_name}' input "
+            f"absence_value for skill '{skill_name}' input "
             f"'{input_def.name}' does not satisfy type '{input_def.type}'"
         )
     return dataclasses.replace(
         input_def,
-        unresolved_default=cast(BoundScalar, unresolved_default),
+        absence_value=cast(BoundScalar, absence_value),
     )
 
 
@@ -318,7 +318,11 @@ def compute_skill_contract_identity(
                     "nullable": item.nullable,
                     "required": item.required,
                     "type": item.type,
-                    "unresolved_default": item.unresolved_default,
+                    **(
+                        {"absence_value": item.absence_value}
+                        if item.absence_value is not None
+                        else {}
+                    ),
                 }
                 for item in contract.inputs
             ],

@@ -109,6 +109,10 @@ def test_prepare_pr_arch_lenses_route_checks_ingredient(recipe):
     assert "arch_lenses" in arch_lens_condition.when
 
 
+def test_compose_pr_declares_optional_diagram_context(recipe):
+    assert "all_diagram_paths" in recipe.steps["compose_pr"].optional_context_refs
+
+
 def test_run_arch_lenses_still_gated_on_open_pr(recipe):
     step = recipe.steps["run_arch_lenses"]
     assert step.skip_when_false == "inputs.open_pr"

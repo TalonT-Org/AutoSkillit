@@ -186,8 +186,8 @@ def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
         snapshot_digest=_hash("snapshot"),
         invocation_template_digests={"initial": _hash("initial"), "future": _hash("future")},
         skill_input_shapes={
-            "initial": {"keys": ["task"], "unresolved_defaults": {}},
-            "future": {"keys": ["review_path"], "unresolved_defaults": {"review_path": ""}},
+            "initial": {"keys": ["task"], "absence_values": {}},
+            "future": {"keys": ["review_path"], "absence_values": {"review_path": ""}},
         },
     )
 
@@ -197,7 +197,7 @@ def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
     assert public_credential.snapshot_digest == credential.snapshot_digest
     assert public_credential.invocation_template_digests == {"initial": _hash("initial")}
     assert public_credential.skill_input_shapes == {
-        "initial": {"keys": ["task"], "unresolved_defaults": {}}
+        "initial": {"keys": ["task"], "absence_values": {}}
     }
 
 

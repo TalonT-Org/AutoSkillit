@@ -6,8 +6,22 @@ from collections import deque
 
 import regex as re
 
+from autoskillit.recipe._analysis_graph import _build_step_graph
 from autoskillit.recipe.contracts import RESULT_CAPTURE_RE
 from autoskillit.recipe.schema import Recipe
+
+__all__ = [
+    "bfs_reachable",
+    "bfs_reachable_without_barrier",
+    "bfs_reachable_without_barrier_in_graph",
+    "all_paths_cross",
+    "_build_step_graph",
+    "_build_success_step_graph",
+    "_bfs_capped",
+    "_bfs_with_facts",
+    "_build_capture_origin_map",
+    "_INVALIDATING_TOOLS",
+]
 
 # ---------------------------------------------------------------------------
 # BFS helpers
@@ -53,29 +67,6 @@ _INVALIDATING_TOOLS: dict[str, frozenset[str]] = {
     "merge_worktree": frozenset({"worktree_path", "branch_name"}),
     "remove_clone": frozenset({"clone_path"}),
 }
-
-
-def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
-    """Build an adjacency dict from recipe step routing edges.
-
-    Builds the routing graph from on_result.condition route edges and
-    unconditional route edges (on_success, on_failure, on_context_limit, on_rate_limit).
-    """
-    graph: dict[str, set[str]] = {name: set() for name in recipe.steps}
-    for step_name, step in recipe.steps.items():
-        if step.on_result and step.on_result.conditions:
-            for cond in step.on_result.conditions:
-                if cond.route:
-                    graph[step_name].add(cond.route)
-        if step.on_success:
-            graph[step_name].add(step.on_success)
-        if step.on_failure:
-            graph[step_name].add(step.on_failure)
-        if step.on_context_limit:
-            graph[step_name].add(step.on_context_limit)
-        if step.on_rate_limit:
-            graph[step_name].add(step.on_rate_limit)
-    return graph
 
 
 def _build_success_step_graph(recipe: Recipe) -> dict[str, set[str]]:

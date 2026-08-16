@@ -51,7 +51,7 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
             },
             {
                 "keys": ["task", "issue_url", "adversarial_review_level", "audit_cycle_path"],
-                "unresolved_defaults": {"audit_cycle_path": ""},
+                "absence_values": {"audit_cycle_path": ""},
             },
             id="plan",
         ),
@@ -71,7 +71,7 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
                     "ci_conclusion",
                     "diagnosis_path",
                 ],
-                "unresolved_defaults": {
+                "absence_values": {
                     "ci_conclusion": "",
                     "diagnosis_path": "",
                 },
@@ -114,7 +114,7 @@ def test_implementation_shape_supplies_unavailable_context(
     shape = credential.as_wire_block()["skill_input_shapes"][step_name]
     assert shape == expected_shape
 
-    defaults = cast(dict[str, str | int | bool], shape["unresolved_defaults"])
+    defaults = cast(dict[str, str | int | bool], shape["absence_values"])
     assembled = {
         name: resolved[name] if name in resolved else defaults[name]
         for name in cast(list[str], shape["keys"])

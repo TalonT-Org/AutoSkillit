@@ -3,6 +3,8 @@ version: 0.1.0
 #   skills section          → required=false (skills are permissive)
 #   callable_contracts section → required=true  (callables are strict)
 # Best practice: always declare 'required' explicitly on every input.
+# absence_value is AutoSkillit's loader/runtime sentinel convention for a mapped
+# optional input; JSON Schema does not enforce this distinction.
 skills:
   troubleshoot-experiment:
     inputs:
@@ -38,13 +40,14 @@ skills:
     - name: ci_failed_jobs
       type: string
       required: false
+      absence_value: "-"
     - name: workflow
       type: string
       required: false
     - name: event
       type: string
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs:
     - name: diagnosis_path
       type: file_path
@@ -84,7 +87,7 @@ skills:
     - name: revision_guidance
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs:
     - name: resolution
       type: string
@@ -112,14 +115,15 @@ skills:
     - name: ci_conclusion
       type: string
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: ci_failed_jobs
       type: string
       required: false
+      absence_value: "-"
     - name: diagnosis_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs:
     - name: verdict
       type: string
@@ -180,7 +184,7 @@ skills:
     - name: mode
       type: string
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: repository
       type: string
       required: false
@@ -257,15 +261,15 @@ skills:
     - name: review_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: audit_cycle_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: plan_disposition_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs: []
     write_behavior: always
     input_preflight: audit_cycle_inventory
@@ -351,7 +355,7 @@ skills:
     - name: audit_cycle_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs:
     - name: verdict
       type: string
@@ -507,6 +511,7 @@ skills:
     - name: all_conflict_report_paths
       type: file_path_list
       required: false
+      absence_value: ""
     - name: branch_name
       type: string
       required: false
@@ -522,11 +527,11 @@ skills:
     - name: deviation_manifest_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: prior_audit_cycle_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs:
     - name: verdict
       type: string
@@ -571,6 +576,7 @@ skills:
     - name: merge_queue_data_path
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: pr_order_file
       type: file_path
@@ -658,6 +664,7 @@ skills:
     - name: closing_issue
       type: string
       required: false
+      absence_value: ""
     - name: arch_lenses
       type: string
       required: false
@@ -704,7 +711,8 @@ skills:
       required: true
     - name: all_diagram_paths
       type: string
-      required: true
+      required: false
+      absence_value: ""
     - name: work_dir
       type: directory_path
       required: true
@@ -714,6 +722,7 @@ skills:
     - name: closing_issue
       type: string
       required: false
+      absence_value: ""
     outputs:
     - name: pr_url
       type: string
@@ -752,12 +761,15 @@ skills:
     - name: audit_verdict
       type: string
       required: false
+      absence_value: ""
     - name: conflict_report_paths
       type: file_path_list
       required: false
+      absence_value: ""
     - name: domain_partitions_path
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: pr_url
       type: string
@@ -816,7 +828,7 @@ skills:
     - name: mode
       type: string
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: repository
       type: string
       required: true
@@ -1571,11 +1583,11 @@ skills:
     - name: scope_directions_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: revision_guidance
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs:
     - name: experiment_plan
       type: file_path
@@ -1865,24 +1877,30 @@ skills:
     - name: experiment_type
       type: string
       required: false
+      absence_value: "null"
     - name: methodology_traditions
       type: string
       required: false
+      absence_value: "null"
     - name: design_review_verdict
       type: string
       required: false
     - name: disambiguation_rule_applied
       type: string
       required: false
+      absence_value: "null"
     - name: tier_c_lens
       type: string
       required: false
+      absence_value: "null"
     - name: classification_timestamp
       type: string
       required: false
+      absence_value: "null"
     - name: group_manifest
       type: file_path
       required: false
+      absence_value: ""
     outputs:
     - name: report_path
       type: file_path
@@ -2526,11 +2544,11 @@ skills:
     - name: all_diagram_paths
       type: string
       required: false
-      unresolved_default: ""
+      absence_value: ""
     - name: visualization_plan_path
       type: file_path
       required: false
-      unresolved_default: ""
+      absence_value: ""
     outputs:
     - name: html_path
       type: file_path
@@ -3368,7 +3386,7 @@ callable_contracts:
     inputs:
     - name: plan_parts
       type: str
-      required: false
+      required: true
     - name: audit_cycle_path
       type: str
       required: false
@@ -3465,8 +3483,13 @@ callable_contracts:
     - name: base_branch
       type: str
       required: true
+    - name: conflict_report_path
+      type: str
+      required: true
     outputs:
     - name: status
+      type: str
+    - name: conflict_report_path
       type: str
   autoskillit.recipe._cmd_rpc.wait_for_review_pr_mergeability:
     inputs:
@@ -3536,8 +3559,13 @@ callable_contracts:
     - name: base_branch
       type: str
       required: true
+    - name: conflict_report_path
+      type: str
+      required: true
     outputs:
     - name: status
+      type: str
+    - name: conflict_report_path
       type: str
   autoskillit.recipe._cmd_rpc.refetch_issues:
     inputs:

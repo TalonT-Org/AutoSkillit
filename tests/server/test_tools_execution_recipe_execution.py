@@ -33,7 +33,7 @@ class TestAttestationErrorMessages:
         assert (
             "structured calls must initialize skill_inputs from "
             "skill_input_shapes[step_name] ordered keys, replace available values in place, "
-            "copy only advertised unresolved_defaults by key presence "
+            "copy only advertised absence_values by key presence "
             'so "", 0, and False remain verbatim, and never delete or invent a key'
             in RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE
         )

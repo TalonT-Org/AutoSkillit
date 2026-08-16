@@ -13,6 +13,25 @@ from autoskillit.recipe._contracts_types import SkillContract, SkillInput, Skill
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
+def test_skill_input_validates_explicit_absence_value() -> None:
+    optional = SkillInput(name="note", type="string", required=False, absence_value="")
+    assert optional.has_absence_value
+    assert optional.absence_value == ""
+
+    with pytest.raises(ValueError, match="required input"):
+        SkillInput(name="note", type="string", required=True, absence_value="")
+    with pytest.raises(ValueError, match="does not accept"):
+        SkillInput(name="count", type="integer", required=False, absence_value="")
+
+
+def test_literal_absent_is_not_structural_absence() -> None:
+    item = SkillInput(name="note", type="string", required=False, absence_value="absent")
+    assert item.has_absence_value
+    structural = SkillInput(name="note", type="string", required=False)
+    assert not structural.has_absence_value
+    assert structural.absence_value is None
+
+
 @pytest.mark.parametrize("input_type", ["number", "float"])
 def test_skill_input_rejects_noncanonical_float(input_type: str) -> None:
     """Runtime-bound values must remain encodable by the canonical hash profile."""
@@ -22,16 +41,16 @@ def test_skill_input_rejects_noncanonical_float(input_type: str) -> None:
     assert not skill_input.accepts(1.5)
 
 
-@pytest.mark.parametrize("unresolved_default", [1.5, {}, []])
-def test_skill_input_rejects_non_scalar_unresolved_default(
-    unresolved_default: object,
+@pytest.mark.parametrize("absence_value", [1.5, {}, []])
+def test_skill_input_rejects_non_scalar_absence_value(
+    absence_value: object,
 ) -> None:
-    with pytest.raises(ValueError, match="unresolved_default must be a strict scalar"):
+    with pytest.raises(ValueError, match="absence_value must be a strict scalar"):
         SkillInput(
             name="value",
             type="string",
             required=False,
-            unresolved_default=unresolved_default,  # type: ignore[arg-type]
+            absence_value=absence_value,  # type: ignore[arg-type]
         )
 
 

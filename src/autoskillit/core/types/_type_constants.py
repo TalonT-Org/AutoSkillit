@@ -799,7 +799,7 @@ RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE: str = (
     "receipt (bounded delivery) or of the open_kitchen response (inline delivery), "
     "using invocation_template_digests[step_name] for this step; structured calls must "
     "initialize skill_inputs from skill_input_shapes[step_name] ordered keys, replace "
-    "available values in place, copy only advertised unresolved_defaults by key presence "
+    "available values in place, copy only advertised absence_values by key presence "
     'so "", 0, and False remain verbatim, and never delete or invent a key'
 )
 

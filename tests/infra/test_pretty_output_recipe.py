@@ -1063,9 +1063,8 @@ def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypa
             if recipe_name == "remediation":
                 remediation_note_checked = True
                 rectify_note = original_parsed["steps"]["rectify"]["note"]
-                assert "all_plan_paths accumulates" in rectify_note
+                assert "Glob plan_dir for *_part_*.md" in rectify_note
                 assert compacted_parsed["steps"]["rectify"]["note"] == rectify_note
-                assert "all_plan_paths accumulates" in compacted
 
     assert remediation_note_checked, "remediation recipe was not exercised by this test"
 
@@ -1164,9 +1163,9 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
         for ingredients_only in (False, True)
     }
     assert maxima == {
-        "get_recipe_section": (179_555, "remediation", "all_truthy"),
-        "load_recipe": (179_555, "remediation", "all_truthy"),
-        "open_kitchen": (179_608, "remediation", "all_truthy"),
+        "get_recipe_section": (179_951, "remediation", "all_truthy"),
+        "load_recipe": (179_951, "remediation", "all_truthy"),
+        "open_kitchen": (180_004, "remediation", "all_truthy"),
     }
 
 

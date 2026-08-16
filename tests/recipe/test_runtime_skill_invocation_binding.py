@@ -40,7 +40,7 @@ _MANIFEST = {
                     "name": "audit_cycle_path",
                     "type": "file_path",
                     "required": False,
-                    "unresolved_default": "",
+                    "absence_value": "",
                 },
             ]
         }
@@ -123,7 +123,7 @@ def _bind(
     )
 
 
-def _template_with_unresolved_default() -> InvocationTemplate:
+def _template_with_absence_value() -> InvocationTemplate:
     return _template(
         optional_context_refs=["audit_cycle_path"],
         skill_inputs={
@@ -147,7 +147,7 @@ def _template_with_unresolved_default() -> InvocationTemplate:
 def test_runtime_binding_rejects_missing_or_fabricated_skill_input_keys(
     skill_inputs: Mapping[str, BoundScalar],
 ) -> None:
-    template = _template_with_unresolved_default()
+    template = _template_with_absence_value()
 
     with pytest.raises(RuntimeBindingError) as excinfo:
         _bind(template, skill_inputs=skill_inputs)
@@ -156,9 +156,9 @@ def test_runtime_binding_rejects_missing_or_fabricated_skill_input_keys(
 
 
 def test_runtime_binding_admits_explicit_advertised_default_without_auto_fill() -> None:
-    template = _template_with_unresolved_default()
+    template = _template_with_absence_value()
     default = template.invocation.skill_input("audit_cycle_path")
-    assert default is not None and default.unresolved_default == ""
+    assert default is not None and default.absence_value == ""
 
     bound = _bind(
         template,

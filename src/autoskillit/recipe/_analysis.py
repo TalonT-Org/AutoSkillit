@@ -10,6 +10,7 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,6 +30,7 @@ from autoskillit.recipe._analysis_detectors import (
 )
 from autoskillit.recipe._analysis_graph import (
     RouteEdge,
+    _build_raw_step_edges,
     _build_step_graph,
     _extract_routing_edges,
     _is_infrastructure_step,
@@ -48,6 +50,7 @@ __all__ = [
     "RouteEdge",
     "_extract_routing_edges",
     "_build_step_graph",
+    "_build_raw_step_edges",
     "_is_infrastructure_step",
     "bfs_reachable",
     "_bfs_with_facts",
@@ -90,6 +93,82 @@ class ValidationContext:
     backend_origin_map: dict[str, str] | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
     predecessors: dict[str, set[str]] = field(default_factory=dict)
+    must_defined_context: dict[str, frozenset[str]] = field(default_factory=dict)
+    predecessor_edges: dict[str, tuple[tuple[str, RouteEdge], ...]] = field(default_factory=dict)
+
+
+def _must_definition_facts(
+    recipe: Recipe,
+    raw_edges: dict[str, tuple[RouteEdge, ...]],
+) -> tuple[
+    dict[str, frozenset[str]],
+    dict[str, tuple[tuple[str, RouteEdge], ...]],
+]:
+    """Compute context names guaranteed to be defined on every path to each step."""
+    if not recipe.steps:
+        return {}, {}
+    predecessor_edges: dict[str, list[tuple[str, RouteEdge]]] = {name: [] for name in recipe.steps}
+    for source, edges in raw_edges.items():
+        for edge in edges:
+            predecessor_edges[edge.target].append((source, edge))
+
+    entry = next(iter(recipe.steps))
+    reachable = {entry}
+    reachability_queue: deque[str] = deque([entry])
+    while reachability_queue:
+        source = reachability_queue.popleft()
+        for edge in raw_edges[source]:
+            if edge.target not in reachable:
+                reachable.add(edge.target)
+                reachability_queue.append(edge.target)
+
+    capture_domain = frozenset(
+        capture
+        for name in reachable
+        for capture in (*recipe.steps[name].capture, *recipe.steps[name].capture_list)
+    )
+    facts = {name: capture_domain for name in reachable}
+    facts[entry] = frozenset()
+    queue: deque[str] = deque(name for name in recipe.steps if name in reachable)
+    queued = set(queue)
+    while queue:
+        source = queue.popleft()
+        queued.remove(source)
+        for edge in raw_edges[source]:
+            target = edge.target
+            if target == entry or target not in reachable:
+                continue
+            incoming = [
+                (
+                    facts[predecessor]
+                    | frozenset(recipe.steps[predecessor].capture)
+                    | frozenset(recipe.steps[predecessor].capture_list)
+                    if predecessor_edge.capture_available
+                    else facts[predecessor]
+                )
+                for predecessor, predecessor_edge in predecessor_edges[target]
+                if predecessor in reachable
+            ]
+            updated = frozenset.intersection(*incoming) if incoming else frozenset()
+            if facts[target] != updated:
+                facts[target] = updated
+                if target not in queued:
+                    queue.append(target)
+                    queued.add(target)
+
+    return (
+        facts,
+        {
+            name: tuple(
+                sorted(
+                    (edge for edge in edges if edge[0] in reachable),
+                    key=lambda item: (item[0], item[1].edge_type),
+                )
+            )
+            for name, edges in predecessor_edges.items()
+            if name in reachable
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +230,9 @@ def make_validation_context(
     Constructs the step graph and data-flow report once so that semantic
     rules can share the pre-built objects without redundant computation.
     """
-    step_graph = _build_step_graph(recipe)
+    raw_edges = _build_raw_step_edges(recipe)
+    step_graph = {source: {edge.target for edge in edges} for source, edges in raw_edges.items()}
+    must_defined_context, predecessor_edges = _must_definition_facts(recipe, raw_edges)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)
     # Build predecessor map once; also passed to extract_blocks to avoid
     # recomputing the same inversion inside that function.
@@ -177,6 +258,8 @@ def make_validation_context(
         backend_origin_map=backend_origin_map,
         blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
         predecessors=predecessors,
+        must_defined_context=must_defined_context,
+        predecessor_edges=predecessor_edges,
         binding_projection=(
             binding_projection
             if binding_projection is not None

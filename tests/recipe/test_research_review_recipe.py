@@ -79,12 +79,13 @@ class TestResearchReviewRecipe:
 
     # --- Steps ---
     def test_step_count(self, recipe) -> None:
-        # 27 active steps + 3 terminal stops = 30
-        assert len(recipe.steps) == 30
+        # 28 active steps + 3 terminal stops = 31
+        assert len(recipe.steps) == 31
 
     def test_active_step_names(self, recipe) -> None:
         expected = {
             "prepare_research_pr",
+            "initialize_diagram_paths",
             "run_experiment_lenses",
             "stage_bundle",
             "route_pr_or_local",
@@ -121,6 +122,20 @@ class TestResearchReviewRecipe:
         step = recipe.steps["prepare_research_pr"]
         assert "inputs.worktree_path" in step.with_args.get("skill_command", "")
         assert step.with_args.get("cwd") == "${{ inputs.worktree_path }}"
+
+    def test_required_authorities_never_use_optional_context(self, recipe) -> None:
+        required_authorities = {
+            "worktree_path",
+            "research_dir",
+            "report_path",
+            "experiment_plan",
+            "experiment_results",
+            "experiment_type",
+            "scope_report",
+            "visualization_plan_path",
+        }
+        for step_name, step in recipe.steps.items():
+            assert required_authorities.isdisjoint(step.optional_context_refs), step_name
 
     def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
         step = recipe.steps["finalize_bundle"]

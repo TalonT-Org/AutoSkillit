@@ -58,6 +58,10 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - `plan_disposition_path` (optional) — Exact `PlanDispositionReport` paired with the
   authority and plan by input preflight.
 
+For structured recipe invocations, `""` is the explicit vacancy value for
+`review_path`, `audit_cycle_path`, and `plan_disposition_path`; treat it exactly as
+that optional authority not being supplied, and never discover a replacement.
+
 ## Critical Constraints
 
 **NEVER:**

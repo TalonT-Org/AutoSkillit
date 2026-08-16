@@ -102,7 +102,7 @@
         "skill_command": "/autoskillit:classify-experiment-type ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "dial",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/classify-experiment-type"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/classify-experiment-type/iter_${{ context.design_review_count }}"
       },
       "capture": {
         "experiment_type": "${{ result.experiment_type }}",
@@ -114,9 +114,12 @@
         "is_silent_type",
         "classification_timestamp"
       ],
+      "optional_context_refs": [
+        "design_review_count"
+      ],
       "skip_when_false": "inputs.review_design",
-      "on_skip": "vis_dial",
-      "on_context_limit": "synthesize",
+      "on_skip": "synthesize_without_dashboard",
+      "on_context_limit": "synthesize_without_dashboard",
       "on_success": "select_review_dimensions",
       "on_failure": "escalate_stop"
     },
@@ -163,10 +166,37 @@
       ],
       "skip_when_true": "context.is_silent_type",
       "retries": 2,
-      "on_exhausted": "synthesize",
-      "on_context_limit": "synthesize",
-      "on_failure": "synthesize",
+      "on_exhausted": "synthesize_without_dashboard",
+      "on_context_limit": "synthesize_without_dashboard",
+      "on_failure": "synthesize_without_dashboard",
       "on_success": "synthesize"
+    },
+    "synthesize_without_dashboard": {
+      "tool": "run_python",
+      "phoropter_family": "review-design",
+      "with": {
+        "callable": "autoskillit.smoke_utils.aggregate_review_verdict",
+        "findings_manifest_path": "${{ context.findings_manifest_path }}",
+        "dimensions_manifest_path": "${{ context.dimensions_manifest_path }}",
+        "experiment_type": "${{ context.experiment_type }}",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/aggregate-review-verdict",
+        "work_dir": "${{ inputs.source_dir }}"
+      },
+      "capture": {
+        "verdict": "${{ result.verdict }}",
+        "revision_guidance": "${{ result.revision_guidance_path }}"
+      },
+      "optional_context_refs": [
+        "findings_manifest_path",
+        "dimensions_manifest_path",
+        "experiment_type"
+      ],
+      "on_failure": "vis_dial",
+      "on_result": [
+        {
+          "route": "vis_dial"
+        }
+      ]
     },
     "synthesize": {
       "tool": "run_python",
@@ -199,7 +229,7 @@
         },
         {
           "when": "${{ result.verdict }} == STOP",
-          "route": "gate_design_review_inputs"
+          "route": "resolve_design_review"
         },
         {
           "route": "vis_dial"
@@ -269,7 +299,7 @@
       "action": "route",
       "on_result": [
         {
-          "route": "check_design_review_loop"
+          "route": "dial"
         }
       ]
     },
@@ -296,37 +326,13 @@
       "optional_context_refs": [
         "design_review_count"
       ],
-      "note": "Iteration guard for the apply → synthesize REVISE → revise_design → check_design_review_loop → apply cycle. Re-entry skips re-dialing since experiment_type is stable across revision cycles. Caps design revision loops at 3 iterations. On exhaustion, proceeds to vis_dial with the best available design.\n"
-    },
-    "gate_design_review_inputs": {
-      "tool": "run_python",
-      "with": {
-        "callable": "autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
-        "plan_parts": "${{ context.evaluation_dashboard }}",
-        "audit_cycle_path": ""
-      },
-      "capture": {
-        "required_evaluation_dashboard": "${{ result.plan_path }}"
-      },
-      "on_result": [
-        {
-          "when": "${{ result.verdict }} == salvaged",
-          "route": "resolve_design_review"
-        },
-        {
-          "route": "design_rejected"
-        }
-      ],
-      "on_failure": "design_rejected",
-      "optional_context_refs": [
-        "evaluation_dashboard"
-      ]
+      "note": "Iteration guard for the apply → synthesize REVISE → revise_design → dial → select_review_dimensions → check_design_review_loop → apply cycle. Re-entry reclassifies the revised plan before selecting dimensions. Caps design revision loops at 3 iterations. On exhaustion, proceeds to vis_dial with the best available design.\n"
     },
     "resolve_design_review": {
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:resolve-design-review ${{ context.required_evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
+        "skill_command": "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "resolve_design_review",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/resolve-design-review/iter_${{ context.design_review_count }}"

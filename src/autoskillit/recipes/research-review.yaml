@@ -95,11 +95,6 @@ steps:
   prepare_research_pr:
     tool: run_skill
     model: ''
-    optional_context_refs:
-    - experiment_results
-    - experiment_type
-    - scope_report
-    - visualization_plan_path
     with:
       skill_command: /autoskillit:prepare-research-pr ${{ inputs.report_path }} ${{ inputs.experiment_plan }} ${{ inputs.worktree_path
         }} ${{ inputs.base_branch }}
@@ -110,6 +105,16 @@ steps:
       prep_path: ${{ result.prep_path }}
       selected_lenses: ${{ result.selected_lenses }}
       lens_context_paths: ${{ result.lens_context_paths }}
+    on_success: initialize_diagram_paths
+    on_failure: escalate_stop
+  initialize_diagram_paths:
+    tool: run_cmd
+    with:
+      cmd: ':'
+      cwd: ${{ inputs.worktree_path }}
+      step_name: initialize_diagram_paths
+    capture:
+      all_diagram_paths: ${{ result.stdout | trim }}
     on_success: run_experiment_lenses
     on_failure: escalate_stop
   run_experiment_lenses:
@@ -176,11 +181,9 @@ steps:
     note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
   extract_pr_number:
     tool: run_cmd
-    optional_context_refs:
-    - worktree_path
     with:
       cmd: gh pr view '${{ context.pr_url }}' --json number -q .number
-      cwd: ${{ context.worktree_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: extract_pr_number
     capture:
       pr_number: ${{ result.stdout | trim }}
@@ -193,7 +196,6 @@ steps:
 
   capture_review_repository:
     tool: run_cmd
-    optional_context_refs: [worktree_path]
     with:
       cmd: gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'
       cwd: "${{ inputs.worktree_path }}"
@@ -205,8 +207,6 @@ steps:
 
   annotate_pr_diff:
     tool: run_python
-    optional_context_refs:
-    - worktree_path
     with:
       callable: autoskillit.smoke_utils.annotate_pr_diff
       pr_number: ${{ context.pr_number }}
@@ -487,12 +487,9 @@ steps:
       '
   re_stage_bundle:
     tool: run_cmd
-    optional_context_refs:
-    - research_dir
-    - worktree_path
     with:
-      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ context.research_dir }}' '${{ context.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'
-      cwd: ${{ context.worktree_path }}
+      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/stage_bundle.sh '${{ inputs.research_dir }}' '${{ inputs.worktree_path }}' '{{AUTOSKILLIT_TEMP}}'
+      cwd: ${{ inputs.worktree_path }}
       step_name: re_stage_bundle
     on_success: re_test
     on_failure: re_push_research
@@ -502,10 +499,8 @@ steps:
       '
   re_test:
     tool: test_check
-    optional_context_refs:
-    - worktree_path
     with:
-      worktree_path: ${{ context.worktree_path }}
+      worktree_path: ${{ inputs.worktree_path }}
     on_success: re_push_research
     on_failure: re_push_research
     note: 'Post-revalidation test gate. Both pass and fail route to push — the re-validation results should be pushed regardless
@@ -514,23 +509,18 @@ steps:
       '
   re_push_research:
     tool: run_cmd
-    optional_context_refs:
-    - worktree_path
     with:
       cmd: git push
-      cwd: ${{ context.worktree_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: re_push_research
     on_success: finalize_bundle
     on_failure: escalate_stop
   finalize_bundle:
     tool: run_cmd
-    optional_context_refs:
-    - research_dir
-    - worktree_path
     with:
-      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ context.research_dir }}' '${{
-        context.worktree_path }}'
-      cwd: ${{ context.worktree_path }}
+      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/finalize_bundle.sh '${{ inputs.output_mode }}' '${{ inputs.research_dir }}' '${{
+        inputs.worktree_path }}'
+      cwd: ${{ inputs.worktree_path }}
       step_name: finalize_bundle
     capture:
       report_path_after_finalize: ${{ result.report_path_after_finalize }}
@@ -547,10 +537,9 @@ steps:
     model: ''
     optional_context_refs:
     - all_diagram_paths
-    - visualization_plan_path
     with:
       skill_command: /autoskillit:bundle-local-report ${{ inputs.research_dir }} ${{ context.report_path_after_finalize }}
-        ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}
+        ${{ context.all_diagram_paths }} ${{ inputs.visualization_plan_path }}
       cwd: ${{ inputs.worktree_path }}
       step_name: finalize_bundle_render
       output_dir: .
@@ -574,12 +563,10 @@ steps:
       '
   export_local_bundle:
     tool: run_python
-    optional_context_refs:
-    - research_dir
     with:
       callable: autoskillit.recipe._cmd_rpc.export_local_bundle
       source_dir: ${{ inputs.source_dir }}
-      research_dir: ${{ context.research_dir }}
+      research_dir: ${{ inputs.research_dir }}
     capture:
       local_bundle_path: ${{ result.local_bundle_path }}
     on_success: review_local_complete
@@ -593,7 +580,7 @@ steps:
     action: stop
     message: 'Review phase complete (PR mode). Emit the L3 result sentinel JSON block now. The sentinel must include the following
       fields: success=true, pr_url=${{ context.pr_url }}, report_path_after_finalize=${{ context.report_path_after_finalize
-      }}, worktree_path=${{ context.worktree_path }}, research_dir=${{ context.research_dir }}. Note: report_path_after_finalize
+      }}, worktree_path=${{ inputs.worktree_path }}, research_dir=${{ inputs.research_dir }}. Note: report_path_after_finalize
       is empty string when reached via the guard_pr_url fallback (pr_url absent) — finalize_bundle is bypassed in that path.
       Emit empty string for this field in that case. Example sentinel: {"success": true, "pr_url": "<url>", "report_path_after_finalize":
       "<path>", "worktree_path": "<path>", "research_dir": "<path>"}'

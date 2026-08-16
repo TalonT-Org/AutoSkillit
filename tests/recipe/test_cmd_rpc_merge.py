@@ -50,7 +50,7 @@ def test_attempt_cheap_rebase_fetches_base_branch():
     fake = _fake_run_git_factory(call_log=call_log)
 
     with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
-        result = attempt_cheap_rebase("/work", "pr-branch", "develop")
+        result = attempt_cheap_rebase("/work", "pr-branch", "develop", "/tmp/report.md")
 
     assert result == {"status": "clean"}
     fetch_base_indices = [
@@ -77,7 +77,7 @@ def test_proactive_rebase_next_pr_fetches_base_branch():
     fake = _fake_run_git_factory(call_log=call_log)
 
     with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
-        result = proactive_rebase_next_pr("/work", "next-pr-branch", "develop")
+        result = proactive_rebase_next_pr("/work", "next-pr-branch", "develop", "/tmp/report.md")
 
     assert result == {"status": "clean"}
     fetch_base_indices = [
@@ -153,8 +153,8 @@ def test_queue_ejected_fix_distinguishes_dirty_tree():
     assert "unstaged changes" in result["stderr"]
 
 
-def test_attempt_cheap_rebase_returns_conflicts_with_stderr():
-    """attempt_cheap_rebase must preserve stderr on rebase failure path."""
+def test_attempt_cheap_rebase_publishes_bounded_conflict_report(tmp_path):
+    """attempt_cheap_rebase must atomically publish bounded conflict evidence."""
     from autoskillit.recipe._cmd_rpc_merge import attempt_cheap_rebase
 
     responses = [
@@ -162,23 +162,36 @@ def test_attempt_cheap_rebase_returns_conflicts_with_stderr():
         _mock_result(0, "", ""),  # fetch ejected_pr_branch (check=True)
         _mock_result(0, "", ""),  # fetch base_branch
         _mock_result(0, "", ""),  # checkout ejected_pr_branch (check=True)
-        _mock_result(1, "", "CONFLICT (content): Merge conflict in x.py"),  # rebase fails
+        _mock_result(1, "", "CONFLICT (content): " + "x" * 6000),  # rebase fails
+        _mock_result(0, "src/x.py\n" + "y" * 6000, ""),  # unmerged files
         _mock_result(0, "", ""),  # rebase --abort
     ]
-    fake = _fake_run_git_factory(responses=responses, call_log=[])
+    call_log: list[list[str]] = []
+    fake = _fake_run_git_factory(responses=responses, call_log=call_log)
+    report_path = tmp_path / "ejected.md"
 
     with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
         result = attempt_cheap_rebase(
-            work_dir="/tmp/test", ejected_pr_branch="pr-branch", base_branch="main"
+            work_dir="/tmp/test",
+            ejected_pr_branch="pr-branch",
+            base_branch="main",
+            conflict_report_path=str(report_path),
         )
 
     assert result["status"] == "conflicts"
-    assert "stderr" in result
-    assert "CONFLICT" in result["stderr"]
+    assert result["conflict_report_path"] == str(report_path)
+    report = report_path.read_text()
+    assert "y" * 100 in report
+    assert "CONFLICT" in report
+    assert report.count("...[truncated ") == 2
+    assert len(report) < 11_000
+    assert call_log.index(["diff", "--name-only", "--diff-filter=U"]) < call_log.index(
+        ["rebase", "--abort"]
+    )
 
 
-def test_proactive_rebase_next_pr_returns_conflicts_with_stderr():
-    """proactive_rebase_next_pr must preserve stderr on rebase failure path."""
+def test_proactive_rebase_next_pr_publishes_conflict_report(tmp_path):
+    """proactive_rebase_next_pr must publish evidence before aborting."""
     from autoskillit.recipe._cmd_rpc_merge import proactive_rebase_next_pr
 
     responses = [
@@ -187,15 +200,20 @@ def test_proactive_rebase_next_pr_returns_conflicts_with_stderr():
         _mock_result(0, "", ""),  # fetch base_branch
         _mock_result(0, "", ""),  # checkout -B (check=True)
         _mock_result(1, "", "CONFLICT (content): Merge conflict in y.py"),  # rebase fails
+        _mock_result(0, "src/y.py\n", ""),  # unmerged files
         _mock_result(0, "", ""),  # rebase --abort
     ]
     fake = _fake_run_git_factory(responses=responses, call_log=[])
+    report_path = tmp_path / "proactive.md"
 
     with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
         result = proactive_rebase_next_pr(
-            work_dir="/tmp/test", next_pr_branch="next-pr", base_branch="main"
+            work_dir="/tmp/test",
+            next_pr_branch="next-pr",
+            base_branch="main",
+            conflict_report_path=str(report_path),
         )
 
     assert result["status"] == "conflicts"
-    assert "stderr" in result
-    assert "CONFLICT" in result["stderr"]
+    assert result["conflict_report_path"] == str(report_path)
+    assert "src/y.py" in report_path.read_text()

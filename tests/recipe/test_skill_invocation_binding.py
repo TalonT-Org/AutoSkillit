@@ -140,21 +140,21 @@ def test_bound_value_rejects_raw_enum_values(
         BoundValue(**kwargs)  # type: ignore[arg-type]
 
 
-def test_bound_value_rejects_non_scalar_unresolved_default() -> None:
-    with pytest.raises(ValueError, match="unresolved_default"):
+def test_bound_value_rejects_non_scalar_absence_value() -> None:
+    with pytest.raises(ValueError, match="absence_value"):
         BoundValue(
             name="value",
             declared_value="declared",
             effective_value="effective",
             state=BoundValueState.PRESENT,
             origin=BoundValueOrigin.LITERAL,
-            unresolved_default=1.5,  # type: ignore[arg-type]
+            absence_value=1.5,  # type: ignore[arg-type]
         )
 
 
-def test_absent_bound_value_rejects_unresolved_default() -> None:
-    with pytest.raises(ValueError, match="unresolved_default"):
-        dataclasses.replace(BoundValue.absent("value"), unresolved_default="")
+def test_absent_bound_value_rejects_absence_value() -> None:
+    with pytest.raises(ValueError, match="absence_value"):
+        dataclasses.replace(BoundValue.absent("value"), absence_value="")
 
 
 def test_bound_step_invocation_freezes_collection_inputs() -> None:
@@ -227,10 +227,10 @@ def test_structured_binding_uses_contract_order_not_mapping_order() -> None:
     )
 
 
-def test_structured_binding_projects_step_local_unresolved_default_into_digest() -> None:
+def test_structured_binding_projects_step_local_absence_value_into_digest() -> None:
     manifest = _manifest()
     optional_note = manifest["skills"]["dry-walkthrough"]["inputs"][2]  # type: ignore[index]
-    optional_note["unresolved_default"] = ""  # type: ignore[index]
+    optional_note["absence_value"] = ""  # type: ignore[index]
     values = {**_required_inputs(), "optional_note": "${{ context.note }}"}
 
     with_default = bind_step_invocation(
@@ -247,8 +247,8 @@ def test_structured_binding_projects_step_local_unresolved_default_into_digest()
     projected = with_default.skill_input("optional_note")
     unprojected = without_default.skill_input("optional_note")
     omitted = with_default.skill_input("enabled")
-    assert projected is not None and projected.unresolved_default == ""
-    assert unprojected is not None and unprojected.unresolved_default is None
+    assert projected is not None and projected.absence_value == ""
+    assert unprojected is not None and unprojected.absence_value is None
     assert omitted is not None and omitted.state is BoundValueState.ABSENT
 
     digest_kwargs = {
@@ -340,6 +340,41 @@ def test_falsey_values_remain_present() -> None:
     assert invocation.skill_input("optional_note").effective_value == ""  # type: ignore[union-attr]
     assert invocation.skill_input("enabled").effective_value is False  # type: ignore[union-attr]
     assert invocation.skill_input("round").effective_value == 0  # type: ignore[union-attr]
+
+
+def test_optional_context_vacancy_is_materialized_without_losing_origin() -> None:
+    manifest: dict[str, object] = {
+        "skills": {
+            "demo": {
+                "inputs": [
+                    {
+                        "name": "note",
+                        "type": "string",
+                        "required": False,
+                        "absence_value": "",
+                    }
+                ]
+            }
+        }
+    }
+    invocation = bind_step_invocation(
+        "demo",
+        RecipeStep(
+            tool="run_skill",
+            optional_context_refs=["note"],
+            with_args={
+                "skill_command": "/autoskillit:demo",
+                "skill_inputs": {"note": "${{ context.note }}"},
+            },
+        ),
+        manifest=manifest,
+    )
+    note = invocation.skill_input("note")
+    assert note is not None
+    assert note.declared_value == "${{ context.note }}"
+    assert note.effective_value == ""
+    assert note.state is BoundValueState.PRESENT
+    assert note.origin is BoundValueOrigin.CONTEXT
 
 
 def test_recipe_step_rejects_float_skill_inputs() -> None:

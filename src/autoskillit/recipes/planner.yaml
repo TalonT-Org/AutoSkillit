@@ -179,8 +179,8 @@ steps:
       refined_plan_path: "${{ result.refined_plan_path }}"
     on_success: expand_assignments
     on_failure: escalate_stop
-    on_context_limit: expand_assignments
-    on_rate_limit: expand_assignments
+    on_context_limit: escalate_stop
+    on_rate_limit: escalate_stop
 
   # --- ASSIGNMENT TIER ---
 
@@ -244,8 +244,8 @@ steps:
     retries: 0
     on_success: merge_refined_assignments
     on_failure: escalate_stop
-    on_context_limit: expand_wps
-    on_rate_limit: expand_wps
+    on_context_limit: escalate_stop
+    on_rate_limit: escalate_stop
     note: >
       PARALLEL DISPATCH: context.refine_context_paths contains comma-separated
       paths to per-phase context files produced by merge_tier_results.
@@ -334,8 +334,8 @@ steps:
     retries: 0
     on_success: merge_refined_wps
     on_failure: escalate_stop
-    on_context_limit: reconcile_wp_files
-    on_rate_limit: reconcile_wp_files
+    on_context_limit: escalate_stop
+    on_rate_limit: escalate_stop
     note: >
       PARALLEL DISPATCH: context.wp_refine_context_paths contains comma-separated paths
       to per-phase WP context files. For each context_path, substitute it into

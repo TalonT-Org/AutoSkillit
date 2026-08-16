@@ -960,6 +960,8 @@ steps:
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
+    optional_context_refs:
+    - issue_number
     note: "Reads plan(s), runs git diff, classifies changed files, selects 1\u2013\
       3 arch-lens slugs (or skips lens selection when arch_lenses is false), writes\
       \ one PR context file per lens, and writes a PR prep file. Does NOT invoke arch-lens\
@@ -1019,6 +1021,8 @@ steps:
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
+    optional_context_refs:
+    - all_diagram_paths
     note: "Reads the PR prep file, validates arch-lens diagrams (must contain \u2605\
       \ or \u25CF), composes the PR body, and runs gh pr create. Degrades gracefully\
       \ if gh is unavailable (emits pr_url=). If context.issue_number is set, append\
@@ -1649,6 +1653,7 @@ steps:
     on_rate_limit: resolve_ci
     optional: true
     optional_context_refs:
+    - ci_failed_jobs
     - ci_event
     - ci_rebase_count
     - ci_flake_count
@@ -1695,6 +1700,10 @@ steps:
       route: release_issue_failure
     - route: release_issue_failure
     on_failure: release_issue_failure
+    optional_context_refs:
+    - ci_conclusion
+    - ci_failed_jobs
+    - diagnosis_path
     note: "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci\
       \ structured output to avoid redundant CI failure re-investigation. Routes via\
       \ on_result: verdict dispatch \u2014 real_fix pushes, already_green rebases\

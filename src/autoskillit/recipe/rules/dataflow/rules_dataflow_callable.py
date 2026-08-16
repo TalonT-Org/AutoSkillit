@@ -232,11 +232,11 @@ def _check_nullable_optional_context_ref(ctx: ValidationContext) -> list[RuleFin
                         f"'{skill_name}' depends on optional context ref '{dependency}'. "
                         "Capture or gate the value before dispatch."
                     )
-                elif input_def.unresolved_default is None:
+                elif input_def.absence_value is None:
                     message = (
                         f"Step '{step_name}' optional input '{input_name}' for skill "
                         f"'{skill_name}' depends on optional context ref '{dependency}' "
-                        "without a contract unresolved_default."
+                        "without a contract absence_value."
                     )
                 else:
                     continue

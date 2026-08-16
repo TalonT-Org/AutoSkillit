@@ -111,12 +111,30 @@ def attempt_cheap_rebase(
     conflict_report_path: str,
 ) -> dict[str, str]:
     """Checkout ejected branch and attempt rebase."""
+    return _attempt_rebase_with_conflict_report(
+        work_dir=work_dir,
+        branch=ejected_pr_branch,
+        base_branch=base_branch,
+        checkout_args=[ejected_pr_branch],
+        conflict_report_path=conflict_report_path,
+    )
+
+
+def _attempt_rebase_with_conflict_report(
+    *,
+    work_dir: str,
+    branch: str,
+    base_branch: str,
+    checkout_args: list[str],
+    conflict_report_path: str,
+) -> dict[str, str]:
+    """Fetch, checkout, rebase; on conflict write a report and abort the rebase."""
     remote = _detect_remote(work_dir)
-    run_git(["fetch", remote, ejected_pr_branch], cwd=work_dir, check=True)
+    run_git(["fetch", remote, branch], cwd=work_dir, check=True)
     fetch = run_git(["fetch", remote, base_branch], cwd=work_dir)
     if fetch.returncode != 0:
         return {"status": "fetch_error", "stderr": fetch.stderr}
-    run_git(["checkout", ejected_pr_branch], cwd=work_dir, check=True)
+    run_git(["checkout", *checkout_args], cwd=work_dir, check=True)
     rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
         return {"status": "clean"}
@@ -255,25 +273,10 @@ def proactive_rebase_next_pr(
 ) -> dict[str, str]:
     """Fetch, checkout, and rebase next PR branch."""
     remote = _detect_remote(work_dir)
-    run_git(["fetch", remote, next_pr_branch], cwd=work_dir, check=True)
-    fetch = run_git(["fetch", remote, base_branch], cwd=work_dir)
-    if fetch.returncode != 0:
-        return {"status": "fetch_error", "stderr": fetch.stderr}
-    run_git(
-        ["checkout", "-B", next_pr_branch, f"{remote}/{next_pr_branch}"], cwd=work_dir, check=True
+    return _attempt_rebase_with_conflict_report(
+        work_dir=work_dir,
+        branch=next_pr_branch,
+        base_branch=base_branch,
+        checkout_args=["-B", next_pr_branch, f"{remote}/{next_pr_branch}"],
+        conflict_report_path=conflict_report_path,
     )
-    rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
-    if rebase.returncode == 0:
-        return {"status": "clean"}
-    try:
-        _write_rebase_conflict_report(
-            work_dir=work_dir,
-            conflict_report_path=conflict_report_path,
-            rebase_stderr=rebase.stderr,
-        )
-    finally:
-        run_git(["rebase", "--abort"], cwd=work_dir)
-    return {
-        "status": "conflicts",
-        "conflict_report_path": conflict_report_path,
-    }

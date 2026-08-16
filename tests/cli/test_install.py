@@ -764,6 +764,29 @@ class TestGroupFInstall:
         assert "ingredients:" in content
         assert "inputs:" not in content
 
+    def test_upgrade_is_registered_as_cli_command(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """autoskillit upgrade must dispatch as a registered CLI command.
+
+        Regression guard: removal of `@app.command def upgrade()` in cli/app.py
+        fails this test via cyclopts raising SystemExit with a non-zero exit
+        code (no command named 'upgrade' found). Tests the actual dispatch
+        boundary rather than source-text greps.
+        """
+        from autoskillit.cli.app import app
+
+        monkeypatch.chdir(tmp_path)
+        # tmp_path has no .autoskillit/scripts/ → upgrade() prints
+        # "Nothing to do" and returns cleanly; cyclopts then exits 0.
+        with pytest.raises(SystemExit) as exc_info:
+            app(["upgrade"])
+        assert exc_info.value.code == 0, (
+            f"upgrade must dispatch as a registered CLI command (got exit {exc_info.value.code})"
+        )
+        captured = capsys.readouterr()
+        assert "Nothing to do" in captured.out
+
     def test_quota_status_subcommand_outputs_json(self, monkeypatch, capsys, tmp_path):
         """quota-status must emit JSON with required keys."""
 

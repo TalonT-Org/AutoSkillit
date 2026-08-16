@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import math
 import os
 import secrets
@@ -63,6 +64,8 @@ _CITATION_DOMAIN: Final = b"autoskillit.evidence-reader-citation.v1\0"
 _MAX_AUTHORITY_BYTES: Final = 2_000_000
 _MAX_RECEIPT_BYTES: Final = 1_000_000
 _REQUIRED_ENV: Final = EVIDENCE_READER_ENV_FORWARD_VARS
+
+logger = logging.getLogger(__name__)
 
 
 class EvidenceReaderError(RuntimeError):

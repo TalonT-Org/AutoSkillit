@@ -56,6 +56,16 @@ def _resume_stripped(force: bool) -> bool:
     return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
 
 
+def _interactive_stripped(force: bool) -> bool:
+    backend = ClaudeCodeBackend()
+    spec = backend.build_interactive_cmd(
+        initial_prompt="hello",
+        env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
+        force_inactive_agent_teams=force,
+    )
+    return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
+
+
 @pytest.mark.parametrize(
     "builder_name,builder_fn",
     [
@@ -63,6 +73,7 @@ def _resume_stripped(force: bool) -> bool:
         ("build_skill_session_cmd", _skill_session_stripped),
         ("build_food_truck_cmd", _food_truck_stripped),
         ("build_resume_cmd", _resume_stripped),
+        ("build_interactive_cmd", _interactive_stripped),
     ],
 )
 def test_force_inactive_false_keeps_env_var(builder_name: str, builder_fn) -> None:
@@ -76,3 +87,4 @@ def test_force_inactive_true_strips_in_every_path() -> None:
     assert _skill_session_stripped(True) is True
     assert _food_truck_stripped(True) is True
     assert _resume_stripped(True) is True
+    assert _interactive_stripped(True) is True

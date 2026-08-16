@@ -117,6 +117,7 @@ class TestToolRegistration:
             "record_pipeline_step",
             "lock_ingredients",
             "reset_dispatch",
+            "declare_join_batch",
             "get_recipe_section",
             "complete_recipe_initialization",
             "complete_run_skill_result",

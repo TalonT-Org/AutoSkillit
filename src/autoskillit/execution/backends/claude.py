@@ -820,14 +820,19 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             required=required_env,
         )
         if force_inactive_agent_teams:
-            _neutralize_agent_teams_env(dict(effective_env))
+            # ``build_agent_env`` returns a read-only ``MappingProxyType``;
+            # neutralize on a single mutable copy and re-derive both the
+            # assertion and the launch env from it.
+            neutralized_env = dict(effective_env)
+            _neutralize_agent_teams_env(neutralized_env)
             settings_root = str(executable.cwd) if executable is not None else None
             assert_agent_teams_inactive(
-                dict(effective_env),
+                neutralized_env,
                 settings_root,
                 force_inactive=True,
             )
             neutralize_repository_agent_teams_settings(settings_root)
+            effective_env = neutralized_env
         if executable is not None and dict(effective_env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()

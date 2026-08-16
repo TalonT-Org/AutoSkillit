@@ -10,6 +10,7 @@ import os
 import secrets
 import shutil
 import stat
+import sys
 import tempfile
 import time
 from collections.abc import Mapping
@@ -276,10 +277,10 @@ def _open_authority(tool_ctx: ToolContext, environment: Mapping[str, str]) -> _O
     _validate_authority_fields(authority)
     if authority["readers_root"] != str(root):
         raise EvidenceReaderError("authority_path_invalid")
-    _snapshot_content(invocation_dir, authority)
     capability_hash = _capability_hash(env[EVIDENCE_READER_CAPABILITY_ENV_VAR])
     if not secrets.compare_digest(str(authority.get("capability_hash", "")), capability_hash):
         raise EvidenceReaderError("capability_invalid")
+    _snapshot_content(invocation_dir, authority)
     return _OpenedAuthority(invocation_dir, authority, capability_hash)
 
 
@@ -430,18 +431,30 @@ def _acquire_call_lock(invocation_dir: Path) -> tuple[int, os.stat_result]:
     return descriptor, opened
 
 
-def _release_call_lock(invocation_dir: Path, descriptor: int, opened: os.stat_result) -> None:
+def _release_call_lock(
+    invocation_dir: Path,
+    descriptor: int,
+    opened: os.stat_result,
+) -> EvidenceReaderError | None:
+    """Release the call lock. Returns a tamper error instead of raising so the
+    caller's ``finally`` block can preserve any in-flight rejection reason."""
     path = invocation_dir / _CALL_LOCK_FILE
+    tamper: EvidenceReaderError | None = None
     try:
         current = path.lstat()
         if current.st_dev != opened.st_dev or current.st_ino != opened.st_ino:
-            raise EvidenceReaderError("call_lock_tampered")
+            tamper = EvidenceReaderError("call_lock_tampered")
+    except OSError as exc:
+        logger.warning("call_lock_lstat_failed", exc_info=True)
+        tamper = EvidenceReaderError("call_lock_unavailable")
+        tamper.__cause__ = exc
     finally:
         os.close(descriptor)
         try:
             path.unlink()
         except OSError:
-            pass
+            logger.warning("call_lock_unlink_failed", exc_info=True)
+    return tamper
 
 
 def create_evidence_reader_invocation(
@@ -789,7 +802,9 @@ def read_evidence_reader_page(
             snapshot_digest=authority["snapshot_digest"],
         )
     finally:
-        _release_call_lock(opened.invocation_dir, lock_fd, lock_stat)
+        tamper = _release_call_lock(opened.invocation_dir, lock_fd, lock_stat)
+        if tamper is not None and sys.exc_info()[1] is None:
+            raise tamper
 
 
 def read_bound_evidence_reader_page(
@@ -922,11 +937,14 @@ def revoke_evidence_reader_invocation(
     lock_fd, lock_stat = _acquire_call_lock(opened.invocation_dir)
     try:
         shutil.rmtree(opened.invocation_dir)
-    except BaseException:
+    except BaseException as exc:
+        tamper: EvidenceReaderError | None = None
         if opened.invocation_dir.exists():
-            _release_call_lock(opened.invocation_dir, lock_fd, lock_stat)
+            tamper = _release_call_lock(opened.invocation_dir, lock_fd, lock_stat)
         else:
             os.close(lock_fd)
+        if tamper is not None:
+            raise tamper from exc
         raise
     else:
         os.close(lock_fd)

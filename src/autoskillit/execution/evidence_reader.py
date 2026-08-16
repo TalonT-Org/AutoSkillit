@@ -1142,10 +1142,7 @@ def _validate_stream(
             or location_fields[1] < location_fields[0]
             or location_fields[2] < 1
             or location_fields[3] < location_fields[2]
-            or location_fields[0] < receipt_location[0]
-            or location_fields[1] > receipt_location[1]
-            or location_fields[2] < receipt_location[2]
-            or location_fields[3] > receipt_location[3]
+            or location_fields != receipt_location
         ):
             raise EvidenceReaderLaunchError("citation_invalid")
         citations.append(EvidenceCitation(raw_citation_id, *location_fields))

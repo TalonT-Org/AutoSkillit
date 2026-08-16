@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 import time
 from collections.abc import Mapping
 from contextvars import ContextVar
@@ -422,6 +423,7 @@ def _delegate_sync(
             separators=(",", ":"),
         )
     finally:
+        original_exc = sys.exc_info()[1]
         terminal_error: _DelegateError | None = None
         if invocation is not None:
             try:
@@ -452,6 +454,8 @@ def _delegate_sync(
                 recapture_error.__cause__ = exc
                 terminal_error = terminal_error or recapture_error
         if terminal_error is not None:
+            if isinstance(original_exc, _DelegateError):
+                raise terminal_error from original_exc
             raise terminal_error
 
 
@@ -508,6 +512,8 @@ async def delegate_evidence_reader(
     Never raises.
     """
     try:
+        if (gate := _require_enabled()) is not None:
+            return gate
         tool_ctx = _get_tool_context()
         caller_session_id = _delegate_caller_session(ctx, tool_ctx)
         artifact_path, requested_fields = _role_request(role, role_data)

@@ -27,6 +27,26 @@ class CollectorMutationError(CollectorSafetyError):
     """Raised when a descriptor-backed observation changes while being read."""
 
 
+class CollectorNoFollowUnsupportedError(CollectorSafetyError):
+    """Raised when the platform lacks no-follow descriptor support."""
+
+
+class CollectorByteLimitError(CollectorSafetyError):
+    """Raised when an observed artifact exceeds the collector byte limit."""
+
+
+class CollectorNotRegularFileError(CollectorSafetyError):
+    """Raised when a requested path is not a non-symlink regular file."""
+
+
+class CollectorRootInvalidError(CollectorSafetyError):
+    """Raised when the collector root is missing, not a directory, or raced."""
+
+
+class CollectorPathInvalidError(CollectorSafetyError):
+    """Raised when a requested path escapes or escapes-validation against the root."""
+
+
 @dataclass(frozen=True, slots=True)
 class CollectorLimits:
     """Hard resource limits shared by all observational collectors."""
@@ -129,7 +149,9 @@ def _require_directory_descriptor_support(*, scanning: bool = False) -> None:
     if scanning:
         supported = supported and _SUPPORTS_DIRECTORY_FD_SCANDIR
     if not supported:
-        raise CollectorSafetyError("collector platform lacks no-follow descriptor support")
+        raise CollectorNoFollowUnsupportedError(
+            "collector platform lacks no-follow descriptor support"
+        )
 
 
 def _open_verified_root_directory(root: Path, *, scanning: bool = False) -> int:
@@ -137,12 +159,12 @@ def _open_verified_root_directory(root: Path, *, scanning: bool = False) -> int:
     try:
         before = root.lstat()
         if not stat.S_ISDIR(before.st_mode):
-            raise CollectorSafetyError("collector root must be a real directory")
+            raise CollectorRootInvalidError("collector root must be a real directory")
         root_fd = _open(root, _OPEN_DIRECTORY_FLAGS)
     except CollectorSafetyError:
         raise
     except OSError as exc:
-        raise CollectorSafetyError("collector root must be a real directory") from exc
+        raise CollectorRootInvalidError("collector root must be a real directory") from exc
 
     try:
         opened = os.fstat(root_fd)
@@ -152,13 +174,13 @@ def _open_verified_root_directory(root: Path, *, scanning: bool = False) -> int:
             or not _same_inode(before, opened)
             or not _same_inode(opened, after)
         ):
-            raise CollectorSafetyError("collector root changed while opening")
+            raise CollectorRootInvalidError("collector root changed while opening")
     except CollectorSafetyError:
         os.close(root_fd)
         raise
     except OSError as exc:
         os.close(root_fd)
-        raise CollectorSafetyError("collector root changed while opening") from exc
+        raise CollectorRootInvalidError("collector root changed while opening") from exc
     return root_fd
 
 
@@ -271,13 +293,13 @@ def resolve_contained_path(root: Path, relative_path: str) -> Path:
     except OSError as exc:
         raise CollectorSafetyError("requested path is unavailable") from exc
     if resolved_root not in (resolved_candidate, *resolved_candidate.parents):
-        raise CollectorSafetyError("requested path escapes collector root")
+        raise CollectorPathInvalidError("requested path escapes collector root")
     try:
         file_stat = candidate.lstat()
     except OSError as exc:
         raise CollectorSafetyError("requested path is unavailable") from exc
     if not stat.S_ISREG(file_stat.st_mode) or candidate.is_symlink():
-        raise CollectorSafetyError("requested path must be a non-symlink regular file")
+        raise CollectorNotRegularFileError("requested path must be a non-symlink regular file")
     return candidate
 
 
@@ -296,7 +318,7 @@ def read_contained_file(root: Path, relative_path: str, limits: CollectorLimits)
         raise CollectorSafetyError("requested artifact is unavailable") from exc
     try:
         if size > limits.max_file_bytes:
-            raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+            raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
         payload = bytearray()
         while len(payload) <= limits.max_file_bytes:
             chunk = _read(
@@ -306,7 +328,7 @@ def read_contained_file(root: Path, relative_path: str, limits: CollectorLimits)
             if not chunk:
                 return bytes(payload)
             payload.extend(chunk)
-        raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+        raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
     except CollectorSafetyError:
         raise
     except OSError as exc:
@@ -356,7 +378,7 @@ def read_stable_contained_file(
         ):
             raise CollectorMutationError("requested artifact changed while opening")
         if opened_before.st_size > max_bytes:
-            raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+            raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
 
         payload = bytearray()
         while len(payload) <= max_bytes:
@@ -365,7 +387,7 @@ def read_stable_contained_file(
                 break
             payload.extend(chunk)
         if len(payload) > max_bytes:
-            raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+            raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
 
         opened_after = os.fstat(file_fd)
         path_after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)

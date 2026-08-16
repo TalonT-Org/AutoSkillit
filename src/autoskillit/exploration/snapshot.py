@@ -18,7 +18,12 @@ from autoskillit.core import RepositoryIdentity, RepositorySnapshot
 from ._digest import qualified_digest
 from .collectors import open_contained_regular_file
 from .collectors._bounded import (
+    CollectorByteLimitError,
     CollectorMutationError,
+    CollectorNoFollowUnsupportedError,
+    CollectorNotRegularFileError,
+    CollectorPathInvalidError,
+    CollectorRootInvalidError,
     CollectorSafetyError,
     read_stable_contained_file,
 )
@@ -779,15 +784,22 @@ def _artifact_repository_identity(root: Path, deadline: float) -> RepositoryIden
 
 
 def _artifact_unsupported_reason(exc: CollectorSafetyError) -> str:
-    message = str(exc)
-    if "no-follow descriptor support" in message:
+    """Map one ``CollectorSafetyError`` to a stable unsupported-reason code.
+
+    Dispatches on exception class first (the source-of-truth signal) so the
+    classifier does not silently misclassify a new error message that happens
+    to share a substring with an existing case.
+    """
+    if isinstance(exc, CollectorNoFollowUnsupportedError):
         return "no_follow_unsupported"
-    if "byte limit" in message:
+    if isinstance(exc, CollectorByteLimitError):
         return "artifact_too_large"
-    if "regular file" in message:
+    if isinstance(exc, CollectorNotRegularFileError):
         return "artifact_not_regular"
-    if "root" in message:
+    if isinstance(exc, CollectorRootInvalidError):
         return "invalid_repository_root"
+    if isinstance(exc, CollectorPathInvalidError):
+        return "artifact_path_invalid"
     return "artifact_unavailable"
 
 

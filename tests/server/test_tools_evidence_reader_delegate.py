@@ -430,7 +430,7 @@ def test_cleanup_failure_overrides_otherwise_successful_delegate(
         "revoke_evidence_reader_invocation",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("cleanup failed")),
     )
-    monkeypatch.setattr(delegate_module, "stable_artifact_matches", lambda *args: False)
+    monkeypatch.setattr(delegate_module, "stable_artifact_matches", lambda _a, _b: True)
 
     with pytest.raises(delegate_module._DelegateError) as raised:
         delegate_module._delegate_sync(

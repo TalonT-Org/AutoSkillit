@@ -2182,7 +2182,8 @@ def _declare_join_batch_handler(
     backend = None
     try:
         backend = get_backend(backend_name)
-    except Exception:
+    except (ImportError, AttributeError, ValueError, RuntimeError, OSError):
+        logger.warning("declare_join_batch_backend_lookup_failed", exc_info=True)
         backend = None
     if backend is None or not getattr(backend.capabilities, "fixed_set_join_capable", False):
         return {
@@ -2266,9 +2267,11 @@ def _emit_join_diagnostic(record: dict[str, object]) -> None:
         from autoskillit.hooks._join_ledger import write_diagnostic
 
         write_diagnostic(bounded, caller="declare_join_batch")
-    except Exception as exc:
-        print(
-            f"declare_join_batch: diagnostic emission failed: {exc}", file=__import__("sys").stderr
+    except (ImportError, AttributeError, ValueError, RuntimeError, OSError) as exc:
+        logger.warning(
+            "declare_join_batch_diagnostic_emission_failed",
+            exc_info=True,
+            error=str(exc),
         )
 
 

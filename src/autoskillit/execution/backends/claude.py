@@ -211,7 +211,9 @@ def neutralize_repository_agent_teams_settings(project_root: Path | str | None) 
             new_content = _json.dumps(parsed, indent=2, sort_keys=True)
         except (ValueError, TypeError):
             continue
-        candidate.write_text(new_content, encoding="utf-8")
+        from autoskillit.core.io import atomic_write
+
+        atomic_write(candidate, new_content)
         modified += 1
     return modified
 

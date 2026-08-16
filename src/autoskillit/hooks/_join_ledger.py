@@ -22,15 +22,17 @@ import contextlib
 import errno
 import fcntl
 import json
+import logging
 import os
 import secrets
 import string
-import sys
 import tempfile
 import time
 from collections.abc import Generator, Iterable
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 LEDGER_FILENAME = "join_ledger.json"
 LOCK_FILENAME = "join_ledger.lock"
@@ -526,9 +528,9 @@ def write_diagnostic(record: dict[str, object], *, caller: str = "") -> None:
         line = json.dumps(bounded, sort_keys=True) + "\n"
         with open(log_dir / "join_diagnostics.jsonl", "a", encoding="utf-8") as f:
             f.write(line)
-    except Exception as exc:
+    except OSError as exc:
         if caller:
-            print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)
+            _logger.warning("%s: failed to write join diagnostic: %s", caller, exc, exc_info=True)
 
 
 def _resolve_log_dir(*, caller: str) -> Path | None:
@@ -536,9 +538,9 @@ def _resolve_log_dir(*, caller: str) -> Path | None:
     try:
         candidate = Path.cwd() / ".autoskillit" / "logs"
         return candidate
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         if caller:
-            print(f"{caller}: failed to resolve log directory: {exc}", file=sys.stderr)
+            _logger.warning("%s: failed to resolve log directory: %s", caller, exc, exc_info=True)
         return None
 
 

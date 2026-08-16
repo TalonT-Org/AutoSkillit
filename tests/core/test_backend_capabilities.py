@@ -92,6 +92,7 @@ def test_backend_capabilities_field_count():
         "skill_injection_capable",
         "supports_thinking_blocks",
         "supports_claude_format_stdout",
+        "fixed_set_join_capable",
         "exit_code_is_terminal",
         "mcp_config_capable",
         "food_truck_capable",
@@ -198,6 +199,7 @@ def test_backend_capabilities_field_names_locked():
         "explicit_path_env_var",
         "recipe_delivery_budget",
         "hook_trust_policy",
+        "fixed_set_join_capable",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected

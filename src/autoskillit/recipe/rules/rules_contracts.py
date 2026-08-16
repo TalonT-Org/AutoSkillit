@@ -97,7 +97,7 @@ def _check_mapped_skill_context_definitions(
                 bypassing: list[str] = []
                 carrying: list[str] = []
                 for source, edge in ctx.predecessor_edges.get(step_name, ()):
-                    source_facts = ctx.must_defined_context.get(source, frozenset())
+                    source_facts = ctx.must_defined_context[source]
                     source_captures = frozenset(ctx.recipe.steps[source].capture) | frozenset(
                         ctx.recipe.steps[source].capture_list
                     )

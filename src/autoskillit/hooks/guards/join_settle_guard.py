@@ -31,6 +31,9 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    write_join_diagnostic,
+)
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     OUTCOME_CANCELLED,
@@ -41,7 +44,6 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     OUTCOME_TIMEOUT,
     JoinLedgerError,
     settle_assignment,
-    write_diagnostic,
 )
 
 
@@ -122,8 +124,8 @@ def main() -> None:
             tool_use_id=tool_use_id,
             outcome=outcome,
         )
-    except JoinLedgerError as exc:
-        write_diagnostic(
+    except (JoinLedgerError, OSError) as exc:
+        write_join_diagnostic(
             {
                 "gate": "join_settle_guard",
                 "session_id": sid,
@@ -134,9 +136,12 @@ def main() -> None:
             caller="join_settle_guard",
         )
         sys.stderr.write(f"join_settle_guard: settlement refused: {exc}\n")
+        # The ledger translates OSError into JoinLedgerError; this clause
+        # additionally covers the case where a non-translated OSError
+        # surfaces. Always refuse settlement rather than silently drop it.
         sys.exit(0)
 
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "join_settle_guard",
             "session_id": sid,

@@ -26,11 +26,13 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    write_join_diagnostic,
+)
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     JoinLedgerError,
     active_batch,
-    write_diagnostic,
 )
 
 JOIN_FOLLOWUP_DENY_TRIGGER: str = (
@@ -111,7 +113,7 @@ def main() -> None:
     if batch is None or not _is_unresolved(batch):
         sys.exit(0)
 
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "join_followup_guard",
             "session_id": session_id,

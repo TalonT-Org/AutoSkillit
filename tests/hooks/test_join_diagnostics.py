@@ -14,14 +14,16 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks._join_ledger import (
+from autoskillit.hooks._hook_settings import (
     DIAGNOSTIC_KEYS,
+    write_join_diagnostic,
+)
+from autoskillit.hooks._join_ledger import (
     OUTCOME_FAILURE,
     OUTCOME_SUCCESS,
     claim_assignment,
     declare_batch,
     settle_assignment,
-    write_diagnostic,
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
@@ -38,8 +40,9 @@ def _write_diagnostic_record(log_dir: Path, **fields: object) -> None:
 
 def test_diagnostics_write_redacts_to_bounded_keys(tmp_path: Path, monkeypatch) -> None:
     """Diagnostic writes are bounded to DIAGNOSTIC_KEYS — no child bodies."""
-    monkeypatch.chdir(tmp_path)
-    write_diagnostic(
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "autoskillit_logs"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    write_join_diagnostic(
         {
             "gate": "join_claim_guard",
             "session_id": "4575",
@@ -52,7 +55,7 @@ def test_diagnostics_write_redacts_to_bounded_keys(tmp_path: Path, monkeypatch) 
         },
         caller="join_claim_guard",
     )
-    log_path = tmp_path / ".autoskillit" / "logs" / "join_diagnostics.jsonl"
+    log_path = tmp_path / "autoskillit_logs" / "join_diagnostics.jsonl"
     assert log_path.exists()
     records = [json.loads(line) for line in log_path.read_text().splitlines()]
     assert len(records) == 1
@@ -72,6 +75,8 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
     operations.
     """
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "autoskillit_logs"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     flag_dir = tmp_path
 
     # Live ledger: produce the canonical #4575 events.
@@ -83,7 +88,7 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
         artifact_digest="abc",
         assignments=("a1", "a2"),
     )
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "declare_join_batch",
             "session_id": "4575",
@@ -95,7 +100,7 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
         caller="declare_join_batch",
     )
     claim_assignment(flag_dir, session_id="4575", top_level_parent="p1", tool_use_id="t1")
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "join_claim_guard",
             "session_id": "4575",
@@ -107,7 +112,7 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
         caller="join_claim_guard",
     )
     claim_assignment(flag_dir, session_id="4575", top_level_parent="p1", tool_use_id="t2")
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "join_claim_guard",
             "session_id": "4575",
@@ -125,7 +130,7 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
         tool_use_id="t1",
         outcome=OUTCOME_SUCCESS,
     )
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "join_settle_guard",
             "session_id": "4575",
@@ -144,7 +149,7 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
         tool_use_id="t2",
         outcome=OUTCOME_FAILURE,
     )
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "join_settle_guard",
             "session_id": "4575",
@@ -158,7 +163,7 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
     )
 
     # Reconstruct the wave state from join_diagnostics.jsonl alone.
-    log_path = tmp_path / ".autoskillit" / "logs" / "join_diagnostics.jsonl"
+    log_path = tmp_path / "autoskillit_logs" / "join_diagnostics.jsonl"
     records = [json.loads(line) for line in log_path.read_text().splitlines()]
     # The diagnostics stream covers the full lifecycle.
     gates = [r.get("gate") for r in records]
@@ -179,7 +184,8 @@ def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch)
 
 def test_diagnostics_no_child_bodies_under_any_gate(tmp_path: Path, monkeypatch) -> None:
     """Across all gates, no child body or private task ID is persisted."""
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "autoskillit_logs"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     for gate in (
         "join_claim_guard",
         "join_settle_guard",
@@ -187,7 +193,7 @@ def test_diagnostics_no_child_bodies_under_any_gate(tmp_path: Path, monkeypatch)
         "join_stop_guard",
         "declare_join_batch",
     ):
-        write_diagnostic(
+        write_join_diagnostic(
             {
                 "gate": gate,
                 "session_id": "s",
@@ -199,7 +205,7 @@ def test_diagnostics_no_child_bodies_under_any_gate(tmp_path: Path, monkeypatch)
             },
             caller=gate,
         )
-    log_path = tmp_path / ".autoskillit" / "logs" / "join_diagnostics.jsonl"
+    log_path = tmp_path / "autoskillit_logs" / "join_diagnostics.jsonl"
     records = [json.loads(line) for line in log_path.read_text().splitlines()]
     for record in records:
         assert "child_body" not in record

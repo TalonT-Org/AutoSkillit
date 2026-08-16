@@ -1602,6 +1602,7 @@ class CodexBackend(BackendCmdBuilderBase):
         add_dirs: Sequence[str] = (),
         force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         env_extras: Mapping[str, str] | None = None,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         cmd = _codex_exec_base(sandbox="workspace-write")
         if model:
@@ -1631,6 +1632,7 @@ class CodexBackend(BackendCmdBuilderBase):
         force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
+        project_root: Path | str | None = None,
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
@@ -1816,6 +1818,7 @@ class CodexBackend(BackendCmdBuilderBase):
         resume_message: str | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        project_root: Path | str | None = None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
@@ -2050,6 +2053,7 @@ class CodexBackend(BackendCmdBuilderBase):
         include_scope_discipline: bool = False,
         skill_session: bool = False,
         force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         del skill_session
         if not resume_session_id.strip():

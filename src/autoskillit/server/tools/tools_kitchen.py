@@ -2264,9 +2264,9 @@ def _emit_join_diagnostic(record: dict[str, object]) -> None:
     }
     bounded = {k: v for k, v in record.items() if k in allowed_keys}
     try:
-        from autoskillit.hooks._join_ledger import write_diagnostic
+        from autoskillit.hooks._hook_settings import write_join_diagnostic
 
-        write_diagnostic(bounded, caller="declare_join_batch")
+        write_join_diagnostic(bounded, caller="declare_join_batch")
     except (ImportError, AttributeError, ValueError, RuntimeError, OSError) as exc:
         logger.warning(
             "declare_join_batch_diagnostic_emission_failed",

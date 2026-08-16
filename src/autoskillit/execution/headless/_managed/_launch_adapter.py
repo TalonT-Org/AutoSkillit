@@ -208,6 +208,7 @@ def _skill_launch_spec_builder(
             cwd,
             config,
             force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=cwd,
         )
 
     return build
@@ -278,6 +279,7 @@ def _food_truck_launch_spec_builder(
             managed_lineage_ref=managed_lineage_ref,
             managed_attempt_id=managed_attempt_id,
             force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=attempt_cwd,
         )
 
     return build

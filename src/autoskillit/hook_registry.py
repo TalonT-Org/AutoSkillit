@@ -860,11 +860,17 @@ HOOK_REGISTRY_HASH: str = compute_registry_hash(
 def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
     """Build the per-entry dict for a hook definition.
 
-    SessionStart entries omit the 'matcher' key; all others include it.
+    Always-matcherless events (``SessionStart``, ``Stop``) omit the
+    ``matcher`` key entirely — Claude Code's documented matcherless event
+    schema has no matcher field. ``PreToolUse`` is treated as matcherless
+    only when its ``matcher`` is empty (the matcherless PreToolUse entries
+    added with REQ-JOIN-005). All other events include ``matcher``.
     This is the single authoritative formatter for both hooks.json and
     settings.json generation.
     """
-    if hook_def.event_type == "SessionStart":
+    if hook_def.event_type in {"SessionStart", "Stop"}:
+        return {"hooks": hook_commands}
+    if hook_def.event_type == "PreToolUse" and not hook_def.matcher:
         return {"hooks": hook_commands}
     return {"matcher": hook_def.matcher, "hooks": hook_commands}
 

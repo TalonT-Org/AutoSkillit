@@ -331,6 +331,7 @@ async def _attempt_contract_nudge(
                     managed_attempt_id=attempt_id,
                     skill_session=True,
                     force_inactive_agent_teams=force_inactive_agent_teams,
+                    project_root=cwd,
                 )
 
             plugin_identity = _binding_identity(binding)

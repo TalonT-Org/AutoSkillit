@@ -80,5 +80,22 @@ def test_force_inactive_strips_env_var() -> None:
         "hello",
         force_inactive_agent_teams=True,
         env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
+        project_root="/tmp",
     )
     assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in forced.env
+
+
+def test_force_inactive_without_project_root_refuses() -> None:
+    """REQ-B28: refuse headless launches that pass force_inactive_agent_teams=True
+    without a project_root — the settings file scan cannot confirm inactivity."""
+    import pytest
+
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    backend = ClaudeCodeBackend()
+    with pytest.raises(RuntimeError, match="project_root"):
+        backend.build_headless_cmd(
+            "hello",
+            force_inactive_agent_teams=True,
+            env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
+        )

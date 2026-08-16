@@ -427,14 +427,11 @@ def write_quota_log_event(event: dict, log_dir: Path | None, *, caller: str = ""
             print(f"{caller}: failed to write quota log event: {exc}", file=sys.stderr)
 
 
-def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
-    """Append one bounded join-gate diagnostic record to ``join_diagnostics.jsonl``.
-
-    The record is redacted to a fixed set of known-safe keys before write.
-    Child bodies, prompts, secrets, and private task IDs are never persisted.
-    No-ops when the resolved log dir is None.
-    """
-    allowed = {
+#: Bounded set of allowed join-diagnostic record keys. Anything else is
+#: stripped before write so child bodies, prompts, secrets, and private
+#: task IDs never land in the diagnostic sink.
+DIAGNOSTIC_KEYS: frozenset[str] = frozenset(
+    {
         "ts",
         "session_id",
         "top_level_parent",
@@ -457,7 +454,17 @@ def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
         "gate",
         "binding_valid",
     }
-    bounded = {key: value for key, value in record.items() if key in allowed}
+)
+
+
+def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
+    """Append one bounded join-gate diagnostic record to ``join_diagnostics.jsonl``.
+
+    The record is redacted to ``DIAGNOSTIC_KEYS`` before write.
+    Child bodies, prompts, secrets, and private task IDs are never persisted.
+    No-ops when the resolved log dir is None.
+    """
+    bounded = {key: value for key, value in record.items() if key in DIAGNOSTIC_KEYS}
     bounded.setdefault("ts", datetime.now(UTC).isoformat())
     log_dir = resolve_quota_log_dir(caller=caller or "join_diagnostic")
     if log_dir is None:

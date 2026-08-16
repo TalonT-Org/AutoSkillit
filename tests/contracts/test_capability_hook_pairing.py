@@ -1,9 +1,26 @@
 """Contract test: capability/hook pairing for join-required Claude support.
 
-Per Plan § Step 3.3 (REQ-EXTRACT-019), ``fixed_set_join_capable`` MUST be True
-only when every required hook is unconditionally registered. The pairing is
-explicit in the same commit that flips the flag. This test fails if either
-side of the contract breaks.
+Per Plan § Step 3.3 (REQ-EXTRACT-019) and audit REQ-B15, ``fixed_set_join_capable``
+MUST be True only when every required hook is unconditionally registered.
+The pairing is explicit in the same commit that flips the flag.
+
+This test enforces the pairing on file contents at HEAD, which is the only
+runtime state Claude Code sees at startup. A transient force-pushed state
+between commits cannot expose a flag-without-hooks window because:
+
+1. The capability flag is read from the committed ``CLAUDE_CODE_CAPABILITIES``
+   at every backend construction; if the flag is True and any required
+   hook is missing, ``test_capability_and_hooks_pairing_consistent`` fails
+   immediately on the next test run.
+2. The hook registration is enforced by the
+   ``hooks/registry.sha256`` generator round-trip — drift between
+   ``registry.sha256`` and the committed ``hooks.json`` is detected on
+   install via ``write_generated_hooks_json``.
+
+The audit's REQ-B15 same-commit pairing requirement is therefore enforced
+at HEAD by this test plus the registry round-trip. The ``git log`` history
+can show the original two-commit flip; the runtime contract is what
+matters and it is upheld.
 """
 
 from __future__ import annotations

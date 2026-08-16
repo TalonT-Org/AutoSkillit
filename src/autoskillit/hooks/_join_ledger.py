@@ -253,38 +253,47 @@ def claim_assignment(
         return None
 
     ledger_path, lock_path = ledger_paths(flag_dir)
-    with _flock(lock_path) as fd:
-        payload = _read_locked(ledger_path)
-        sessions = payload["sessions"]
-        session_record = sessions.get(session_id)
-        if not isinstance(session_record, dict):
-            return None
-        parents = session_record.get("top_level_parents", {})
-        parent_record = parents.get(top_level_parent) if isinstance(parents, dict) else None
-        if not isinstance(parent_record, dict):
-            return None
-        batch = parent_record.get("active_batch")
-        if not isinstance(batch, dict):
-            return None
-        assignments = batch.get("assignments")
-        if not isinstance(assignments, list):
-            return None
-        # Detect duplicate claims before taking a new slot.
-        for entry in assignments:
-            if (
-                isinstance(entry, dict)
-                and entry.get("tool_use_id") == tool_use_id
-                and entry.get("outcome") not in (OUTCOME_PENDING,)
-            ):
-                raise JoinLedgerError(f"tool_use_id {tool_use_id!r} already settled for this wave")
-        for entry in assignments:
-            if isinstance(entry, dict) and entry.get("tool_use_id") is None:
-                entry["tool_use_id"] = tool_use_id
-                entry["outcome"] = OUTCOME_PENDING
-                entry["ts"] = time.time()
-                _atomic_write_locked(fd, ledger_path, payload)
-                return entry
-        raise JoinLedgerError(f"no unclaimed assignment available for tool_use_id {tool_use_id!r}")
+    try:
+        with _flock(lock_path) as fd:
+            payload = _read_locked(ledger_path)
+            sessions = payload["sessions"]
+            session_record = sessions.get(session_id)
+            if not isinstance(session_record, dict):
+                return None
+            parents = session_record.get("top_level_parents", {})
+            parent_record = parents.get(top_level_parent) if isinstance(parents, dict) else None
+            if not isinstance(parent_record, dict):
+                return None
+            batch = parent_record.get("active_batch")
+            if not isinstance(batch, dict):
+                return None
+            assignments = batch.get("assignments")
+            if not isinstance(assignments, list):
+                return None
+            # Detect duplicate claims before taking a new slot.
+            for entry in assignments:
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("tool_use_id") == tool_use_id
+                    and entry.get("outcome") not in (OUTCOME_PENDING,)
+                ):
+                    raise JoinLedgerError(
+                        f"tool_use_id {tool_use_id!r} already settled for this wave"
+                    )
+            for entry in assignments:
+                if isinstance(entry, dict) and entry.get("tool_use_id") is None:
+                    entry["tool_use_id"] = tool_use_id
+                    entry["outcome"] = OUTCOME_PENDING
+                    entry["ts"] = time.time()
+                    _atomic_write_locked(fd, ledger_path, payload)
+                    return entry
+            raise JoinLedgerError(
+                f"no unclaimed assignment available for tool_use_id {tool_use_id!r}"
+            )
+    except _CorruptedLedger as exc:
+        raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
+    except OSError as exc:
+        raise JoinLedgerError(f"join ledger IO error during claim: {exc}") from exc
 
 
 def settle_assignment(
@@ -312,47 +321,52 @@ def settle_assignment(
         raise JoinLedgerError(f"invalid outcome {outcome!r}")
     ledger_path, lock_path = ledger_paths(flag_dir)
     ts = now if now is not None else time.time()
-    with _flock(lock_path) as fd:
-        payload = _read_locked(ledger_path)
-        sessions = payload["sessions"]
-        session_record = sessions.get(session_id)
-        if not isinstance(session_record, dict):
-            raise JoinLedgerError(f"no session record for {session_id!r}")
-        parents = session_record.get("top_level_parents", {})
-        parent_record = parents.get(top_level_parent) if isinstance(parents, dict) else None
-        if not isinstance(parent_record, dict):
-            raise JoinLedgerError(f"no parent record for {top_level_parent!r}")
-        batch = parent_record.get("active_batch")
-        if not isinstance(batch, dict):
-            raise JoinLedgerError("no active wave to settle")
-        assignments = batch.get("assignments")
-        if not isinstance(assignments, list):
-            raise JoinLedgerError("wave assignments malformed")
-        target: dict[str, Any] | None = None
-        for entry in assignments:
-            if isinstance(entry, dict) and entry.get("tool_use_id") == tool_use_id:
-                target = entry
-                break
-        if target is None:
-            raise JoinLedgerError(f"tool_use_id {tool_use_id!r} was not claimed by this wave")
-        existing_outcome = target.get("outcome")
-        if existing_outcome == outcome:
-            # Idempotent identical duplicate — accept without rewriting.
-            return batch
-        if existing_outcome != OUTCOME_PENDING and existing_outcome != outcome:
-            raise JoinLedgerError(
-                f"conflicting terminal outcome for {tool_use_id!r}: "
-                f"existing={existing_outcome!r}, new={outcome!r}"
-            )
-        target["outcome"] = outcome
-        target["ts"] = ts
+    try:
+        with _flock(lock_path) as fd:
+            payload = _read_locked(ledger_path)
+            sessions = payload["sessions"]
+            session_record = sessions.get(session_id)
+            if not isinstance(session_record, dict):
+                raise JoinLedgerError(f"no session record for {session_id!r}")
+            parents = session_record.get("top_level_parents", {})
+            parent_record = parents.get(top_level_parent) if isinstance(parents, dict) else None
+            if not isinstance(parent_record, dict):
+                raise JoinLedgerError(f"no parent record for {top_level_parent!r}")
+            batch = parent_record.get("active_batch")
+            if not isinstance(batch, dict):
+                raise JoinLedgerError("no active wave to settle")
+            assignments = batch.get("assignments")
+            if not isinstance(assignments, list):
+                raise JoinLedgerError("wave assignments malformed")
+            target: dict[str, Any] | None = None
+            for entry in assignments:
+                if isinstance(entry, dict) and entry.get("tool_use_id") == tool_use_id:
+                    target = entry
+                    break
+            if target is None:
+                raise JoinLedgerError(f"tool_use_id {tool_use_id!r} was not claimed by this wave")
+            existing_outcome = target.get("outcome")
+            if existing_outcome == outcome:
+                # Idempotent identical duplicate — accept without rewriting.
+                return batch
+            if existing_outcome != OUTCOME_PENDING and existing_outcome != outcome:
+                raise JoinLedgerError(
+                    f"conflicting terminal outcome for {tool_use_id!r}: "
+                    f"existing={existing_outcome!r}, new={outcome!r}"
+                )
+            target["outcome"] = outcome
+            target["ts"] = ts
 
-        # Compute the aggregate wave outcome.
-        aggregate = _aggregate_wave_outcome(assignments)
-        if aggregate != WAVE_PENDING:
-            batch["wave_outcome"] = aggregate
-            batch["settled_at"] = ts
-        _atomic_write_locked(fd, ledger_path, payload)
+            # Compute the aggregate wave outcome.
+            aggregate = _aggregate_wave_outcome(assignments)
+            if aggregate != WAVE_PENDING:
+                batch["wave_outcome"] = aggregate
+                batch["settled_at"] = ts
+            _atomic_write_locked(fd, ledger_path, payload)
+    except _CorruptedLedger as exc:
+        raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
+    except OSError as exc:
+        raise JoinLedgerError(f"join ledger IO error during settle: {exc}") from exc
     return batch
 
 
@@ -476,72 +490,3 @@ __all__ = [
 
 # Surface the errno re-export so callers can distinguish lock contention.
 __all__ += ["errno"]
-
-
-#: Bounded set of allowed diagnostic record keys. Anything else is stripped
-#: before write so child bodies, prompts, secrets, and private task IDs never
-#: land in the diagnostic sink.
-DIAGNOSTIC_KEYS: frozenset[str] = frozenset(
-    {
-        "ts",
-        "session_id",
-        "top_level_parent",
-        "join_batch_id",
-        "assignment",
-        "tool_use_id",
-        "skill_name",
-        "semantic_digest",
-        "adaptation_digest",
-        "artifact_digest",
-        "artifact_incarnation",
-        "selector_presence",
-        "activation_source",
-        "launch_policy_state",
-        "status",
-        "public_child_id",
-        "team_name",
-        "execution_mode",
-        "wave_outcome",
-        "gate",
-        "binding_valid",
-    }
-)
-
-
-def write_diagnostic(record: dict[str, object], *, caller: str = "") -> None:
-    """Append one bounded join-gate diagnostic to ``join_diagnostics.jsonl``.
-
-    Stdlib-only — uses the same log-dir resolution as ``_hook_settings`` but
-    no-ops when the directory cannot be resolved. The record is redacted to
-    ``DIAGNOSTIC_KEYS`` before write. No child bodies, prompts, secrets, or
-    private task IDs are ever persisted.
-    """
-    from datetime import UTC, datetime
-
-    bounded = {key: value for key, value in record.items() if key in DIAGNOSTIC_KEYS}
-    bounded.setdefault("ts", datetime.now(UTC).isoformat())
-    log_dir = _resolve_log_dir(caller=caller or "join_diagnostic")
-    if log_dir is None:
-        return
-    try:
-        log_dir.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(bounded, sort_keys=True) + "\n"
-        with open(log_dir / "join_diagnostics.jsonl", "a", encoding="utf-8") as f:
-            f.write(line)
-    except OSError as exc:
-        if caller:
-            _logger.warning("%s: failed to write join diagnostic: %s", caller, exc, exc_info=True)
-
-
-def _resolve_log_dir(*, caller: str) -> Path | None:
-    """Resolve the project-relative log directory without importing autoskillit."""
-    try:
-        candidate = Path.cwd() / ".autoskillit" / "logs"
-        return candidate
-    except (OSError, ValueError) as exc:
-        if caller:
-            _logger.warning("%s: failed to resolve log directory: %s", caller, exc, exc_info=True)
-        return None
-
-
-__all__ += ["DIAGNOSTIC_KEYS", "write_diagnostic"]

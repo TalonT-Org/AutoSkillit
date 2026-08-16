@@ -218,6 +218,22 @@ def neutralize_repository_agent_teams_settings(project_root: Path | str | None) 
     return modified
 
 
+def _resolve_project_root_for_inactive_check(project_root: Path | str | None) -> None:
+    """Refuse a headless launch when ``force_inactive_agent_teams=True`` but no project_root was provided.
+
+    Without ``project_root``, ``assert_agent_teams_inactive`` cannot read
+    the target repo's ``.claude/settings*.json`` files, so the only path
+    it can confirm is the resolved launcher env. The plan's Step 5 (3)
+    requires a positive confirmation of BOTH the env and the settings
+    files; passing ``None`` is a fail-open bypass.
+    """
+    if project_root is None:
+        raise RuntimeError(
+            "force_inactive_agent_teams=True requires project_root so the "
+            "settings file scan can confirm inactivity"
+        )
+
+
 def _interactive_invocation_environment_policy(
     env: Mapping[str, str],
     project_root: Path | str | None,
@@ -752,6 +768,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         base: Mapping[str, str] | None = None,
         required: frozenset[str] | None = None,
         force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
         if model:
@@ -760,6 +777,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         env.update(_HEADLESS_ENV_HARDENING)
         if force_inactive_agent_teams:
             _neutralize_agent_teams_env(env)
+            _resolve_project_root_for_inactive_check(project_root)
+            assert_agent_teams_inactive(env, project_root, force_inactive=True)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_interactive_cmd(
@@ -894,6 +913,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         include_scope_discipline: bool = False,
         skill_session: bool = False,
         force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -925,7 +945,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env.update(_CLAUDE_SKILL_SESSION_HARDENING)
         if force_inactive_agent_teams:
             _neutralize_agent_teams_env(env)
-            assert_agent_teams_inactive(env, None, force_inactive=True)
+            _resolve_project_root_for_inactive_check(project_root)
+            assert_agent_teams_inactive(env, project_root, force_inactive=True)
         return CmdSpec(
             cmd=tuple(cmd),
             env=env,
@@ -956,6 +977,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
         force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         if config is not None:
             cfg = self._apply_config(config)
@@ -1048,6 +1070,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             base=filtered_base,
             required=SKILL_SESSION_REQUIRED_ENV | _CLAUDE_SKILL_SESSION_HARDENING.keys(),
             force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=cwd,
         )
         cmd: list[str] = [*spec.cmd]
         if plugin_binding is not None:
@@ -1090,6 +1113,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
         force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -1150,6 +1174,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             base=filtered_base,
             required=ORCHESTRATOR_SESSION_REQUIRED_ENV,
             force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=project_root,
         )
 
         cmd: list[str] = [*spec.cmd]

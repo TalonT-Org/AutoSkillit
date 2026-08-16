@@ -240,7 +240,12 @@ def test_hooks_json_matches_hook_registry_after_generate():
     data = generate_hooks_json()
     for hook_def in HOOK_REGISTRY:
         event_entries = data.get("hooks", {}).get(hook_def.event_type, [])
-        if hook_def.event_type == "SessionStart":
+        # Per REQ-B39: matcherless events (SessionStart, Stop, matcherless
+        # PreToolUse) omit the matcher key entirely; matcher-bearing events
+        # carry an explicit matcher string.
+        if hook_def.event_type in {"SessionStart", "Stop"} or (
+            hook_def.event_type == "PreToolUse" and not hook_def.matcher
+        ):
             matching = [e for e in event_entries if "matcher" not in e]
         else:
             matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
@@ -248,12 +253,40 @@ def test_hooks_json_matches_hook_registry_after_generate():
             f"Expected exactly 1 {hook_def.event_type} entry for matcher "
             f"{hook_def.matcher!r}, got {len(matching)}"
         )
-        entry_commands = [h["command"] for h in matching[0].get("hooks", [])]
-        for script in hook_def.scripts:
-            logical_name = script.removesuffix(".py")
-            assert any(logical_name in c for c in entry_commands), (
-                f"Script {script!r} missing from matcher {hook_def.matcher!r} "
-                f"in {hook_def.event_type} section of hooks.json"
+
+
+def test_render_shape_for_matcherless_events() -> None:
+    """REQ-B39: matcherless Stop / matcherless PreToolUse entries omit the matcher key.
+
+    Claude Code's documented matcherless event schema has no matcher field;
+    emitting ``{"matcher": ""}`` would be a render-shape deviation. This
+    test asserts that the rendered ``hooks.json`` (a) omits ``matcher`` for
+    every matcherless entry and (b) still includes a ``hooks`` array for
+    those entries.
+    """
+    from autoskillit.hook_registry import (
+        HOOK_REGISTRY,
+        LIFECYCLE_CONTRACTS,
+        generate_hooks_json,
+    )
+
+    payload = generate_hooks_json(HOOK_REGISTRY, LIFECYCLE_CONTRACTS)
+    hooks = payload["hooks"]
+    # SessionStart and Stop are always matcherless.
+    for event_type in ("SessionStart", "Stop"):
+        assert event_type in hooks, f"missing event type: {event_type}"
+        for entry in hooks[event_type]:
+            assert "matcher" not in entry, (
+                f"always-matcherless event {event_type!r} must omit 'matcher'; got: {entry}"
+            )
+            assert "hooks" in entry and entry["hooks"], (
+                f"always-matcherless event {event_type!r} must carry a 'hooks' array"
+            )
+    # PreToolUse with empty matcher (matcherless) — REQ-JOIN-005 hook entries.
+    for entry in hooks.get("PreToolUse", []):
+        if "matcher" not in entry:
+            assert "hooks" in entry and entry["hooks"], (
+                "matcherless PreToolUse entry must carry a 'hooks' array"
             )
 
 

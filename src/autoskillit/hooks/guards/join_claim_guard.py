@@ -33,11 +33,13 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    write_join_diagnostic,
+)
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     JoinLedgerError,
     claim_assignment,
-    write_diagnostic,
 )
 
 JOIN_CLAIM_DENY_TRIGGER: str = (
@@ -125,8 +127,8 @@ def main() -> None:
             top_level_parent=top_level_parent,
             tool_use_id=tool_use_id,
         )
-    except JoinLedgerError as exc:
-        write_diagnostic(
+    except (JoinLedgerError, OSError) as exc:
+        write_join_diagnostic(
             {
                 "gate": "join_claim_guard",
                 "session_id": session_id,
@@ -148,10 +150,15 @@ def main() -> None:
             }
         )
         sys.stdout.write(payload + "\n")
+        # Exit 0 with a structured deny payload — Claude Code treats the
+        # tool call as DENY (non-zero would be treated as non-blocking).
+        # The exception was already translated by the ledger into a
+        # JoinLedgerError when possible; OSError here means the ledger
+        # could not confirm state, and the safe default is to deny.
         sys.exit(0)
 
     if claimed is None:
-        write_diagnostic(
+        write_join_diagnostic(
             {
                 "gate": "join_claim_guard",
                 "session_id": session_id,
@@ -177,7 +184,7 @@ def main() -> None:
         sys.stdout.write(payload + "\n")
         sys.exit(0)
 
-    write_diagnostic(
+    write_join_diagnostic(
         {
             "gate": "join_claim_guard",
             "session_id": session_id,

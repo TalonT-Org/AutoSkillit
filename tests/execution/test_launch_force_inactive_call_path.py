@@ -20,6 +20,7 @@ def _headless_stripped(force: bool) -> bool:
         "hello",
         env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
         force_inactive_agent_teams=force,
+        project_root="/tmp",
     )
     return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
 
@@ -29,6 +30,7 @@ def _skill_session_stripped(force: bool) -> bool:
     spec = backend.build_skill_session_cmd(
         "/test",
         force_inactive_agent_teams=force,
+        project_root="/tmp",
     )
     return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
 
@@ -41,6 +43,7 @@ def _food_truck_stripped(force: bool) -> bool:
         cwd="/tmp",
         completion_marker="DONE",
         force_inactive_agent_teams=force,
+        project_root="/tmp",
     )
     return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
 
@@ -52,6 +55,7 @@ def _resume_stripped(force: bool) -> bool:
         prompt="resume",
         env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
         force_inactive_agent_teams=force,
+        project_root="/tmp",
     )
     return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
 

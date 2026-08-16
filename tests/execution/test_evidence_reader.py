@@ -914,7 +914,7 @@ def test_launch_preserves_cwd_error_when_both_cleanups_fail(
     definition = _definition()
     invocation = _invocation(tmp_path)
     kwargs = _launch_kwargs(tmp_path)
-    created = _private_tempdirs(tmp_path, monkeypatch)
+    _private_tempdirs(tmp_path, monkeypatch)
     monkeypatch.setattr(launcher.shutil, "which", lambda _name: "/usr/bin/codex")
     monkeypatch.setattr(launcher, "_probe_catalog", lambda *args, **kwargs: b"{}")
     monkeypatch.setattr(launcher, "_probe_mcp", lambda *args, **kwargs: None)

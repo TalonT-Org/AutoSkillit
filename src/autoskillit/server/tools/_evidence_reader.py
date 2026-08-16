@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import logging
 import math
 import os
 import secrets
@@ -27,6 +26,7 @@ from autoskillit.core import (
     EVIDENCE_READER_TOOLS,
     atomic_write,
     canonical_reader_tools_to_bare,
+    get_logger,
 )
 from autoskillit.exploration import (
     ArtifactCaptureError,
@@ -65,7 +65,7 @@ _MAX_AUTHORITY_BYTES: Final = 2_000_000
 _MAX_RECEIPT_BYTES: Final = 1_000_000
 _REQUIRED_ENV: Final = EVIDENCE_READER_ENV_FORWARD_VARS
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EvidenceReaderError(RuntimeError):

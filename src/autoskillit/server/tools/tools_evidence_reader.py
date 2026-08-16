@@ -21,7 +21,6 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import (
     DIRECT_PREFIX,
     EVIDENCE_READER_ENV_FORWARD_VARS,
-    EVIDENCE_READER_TOOLS,
     HEADLESS_ENV_VAR,
     SessionType,
     SkillExecutionRole,

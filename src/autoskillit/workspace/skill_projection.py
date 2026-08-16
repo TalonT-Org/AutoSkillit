@@ -107,6 +107,8 @@ def build_skill_projection_binding(
     projection_context: SkillProjectionContext,
     *,
     artifact_paths: Iterable[str] = (),
+    artifact_digest: str = "",
+    artifact_incarnation: str = "",
 ) -> SkillProjectionBinding:
     """Freeze backend-adapted projection evidence without owning an executable."""
     backend = projection_context.backend
@@ -128,8 +130,6 @@ def build_skill_projection_binding(
     )
     join_required_by_member: dict[str, bool] = {}
     cardinality_by_member: dict[str, dict[str, object]] = {}
-    artifact_digest_by_member: dict[str, str] = {}
-    artifact_incarnation_by_member: dict[str, str] = {}
     for name, skill in zip(
         (skill.name for skill in projection_context.skills), projection_context.skills
     ):
@@ -144,6 +144,13 @@ def build_skill_projection_binding(
             elif spawn.for_each is not None:
                 card[spawn.role] = str(spawn.for_each)
         cardinality_by_member[name] = dict(sorted(card.items()))
+    member_names = [skill.name for skill in projection_context.skills]
+    artifact_digest_by_member: dict[str, str] = {}
+    artifact_incarnation_by_member: dict[str, str] = {}
+    if artifact_digest or artifact_incarnation:
+        for name in member_names:
+            artifact_digest_by_member[name] = artifact_digest
+            artifact_incarnation_by_member[name] = artifact_incarnation
     return SkillProjectionBinding(
         root_name=invocation.root.name if invocation is not None else None,
         member_names=tuple(skill.name for skill in projection_context.skills),
@@ -213,7 +220,12 @@ def _finalize_skill_projection_binding(
             "{{DEFAULT_BASE_BRANCH}}": preparation.default_base_branch,
         },
     )
-    return build_skill_projection_binding(context, artifact_paths=(str(destination),))
+    return build_skill_projection_binding(
+        context,
+        artifact_paths=(str(destination),),
+        artifact_digest=binding.identity.artifact_digest,
+        artifact_incarnation=binding.identity.incarnation_id,
+    )
 
 
 def finalize_skill_projection_binding(

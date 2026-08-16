@@ -626,10 +626,18 @@ def _manifest_skill_entry(
 def _projection_skills_manifest(
     skill_infos: tuple[SkillContractRecord, ...],
     documents: Mapping[str, AgentSkillDocument],
+    *,
+    artifact_digest: str = "",
+    artifact_incarnation: str = "",
 ) -> dict[str, dict[str, Any]]:
     skill_by_name = {skill.name: skill for skill in skill_infos}
     return {
-        name: _manifest_skill_entry(skill_by_name[name], document)
+        name: _manifest_skill_entry(
+            skill_by_name[name],
+            document,
+            artifact_digest=artifact_digest,
+            artifact_incarnation=artifact_incarnation,
+        )
         for name, document in documents.items()
     }
 
@@ -712,6 +720,8 @@ def materialize_sanitized_plugin_root(
     context: SkillProjectionContext,
     *,
     mcp_tool_prefix: str,
+    artifact_digest: str = "",
+    artifact_incarnation: str = "",
 ) -> Path:
     """Copy plugin assets and replace its public skills with safe projections.
 
@@ -749,7 +759,12 @@ def materialize_sanitized_plugin_root(
     manifest = {
         "schema_version": 1,
         "projection_version": context.projection_version,
-        "skills": _projection_skills_manifest(skill_infos, documents),
+        "skills": _projection_skills_manifest(
+            skill_infos,
+            documents,
+            artifact_digest=artifact_digest,
+            artifact_incarnation=artifact_incarnation,
+        ),
     }
     write_versioned_json(manifest_path, manifest, schema_version=1)
     return manifest_path

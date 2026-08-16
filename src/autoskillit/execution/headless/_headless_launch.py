@@ -230,6 +230,7 @@ async def _attempt_contract_nudge(
     launch_preparation: LaunchPreparation | None = None,
     expected_launch_contract: ResolvedLaunchContract | None = None,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    force_inactive_agent_teams: bool = False,
 ) -> SkillResult | None:
     """Resume once to recover omitted structured tokens or the completion marker."""
     if backend is None or not backend.capabilities.session_resume_capable:
@@ -327,6 +328,7 @@ async def _attempt_contract_nudge(
                     ),
                     managed_attempt_id=attempt_id,
                     skill_session=True,
+                    force_inactive_agent_teams=force_inactive_agent_teams,
                 )
 
             plugin_identity = _binding_identity(binding)

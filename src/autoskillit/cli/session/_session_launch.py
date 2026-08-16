@@ -90,6 +90,7 @@ def prepare_interactive_launch(
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
+    force_inactive_agent_teams: bool = False,
 ) -> PreparedInteractiveLaunch:
     """Probe an exact executable before sealing the capability-complete session env."""
 
@@ -122,6 +123,7 @@ def prepare_interactive_launch(
         add_dirs=add_dirs,
         generated_home=generated_home,
         tools=tools,
+        force_inactive_agent_teams=force_inactive_agent_teams,
     )
     final = resolve_executable_launch_binding(
         binary_name=backend.binary_name(),

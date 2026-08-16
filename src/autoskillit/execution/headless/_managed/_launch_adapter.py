@@ -164,6 +164,7 @@ def _skill_launch_spec_builder(
     network_access: bool,
     native_shell_capture_decision: NativeShellCaptureDecision | None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    force_inactive_agent_teams: bool = False,
 ) -> _BuildSpec:
     """Bind stable skill-command inputs while leaving attempt identity late-bound."""
 
@@ -197,8 +198,14 @@ def _skill_launch_spec_builder(
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
             managed_attempt_id=managed_attempt_id,
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
-        return backend.build_skill_session_cmd(skill_command, cwd, config)
+        return backend.build_skill_session_cmd(
+            skill_command,
+            cwd,
+            config,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+        )
 
     return build
 
@@ -224,6 +231,7 @@ def _food_truck_launch_spec_builder(
     resume_message: str | None,
     native_shell_capture_decision: NativeShellCaptureDecision | None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    force_inactive_agent_teams: bool = False,
 ) -> _BuildSpec:
     """Bind food-truck inputs while finalizing semantic capability per binding."""
 
@@ -266,6 +274,7 @@ def _food_truck_launch_spec_builder(
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
             managed_attempt_id=managed_attempt_id,
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     return build

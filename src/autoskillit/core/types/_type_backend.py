@@ -509,6 +509,7 @@ class SkillSessionConfig:
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
     managed_attempt_id: str | None = None
+    force_inactive_agent_teams: bool = False
 
     def __post_init__(self) -> None:
         managed_values = (

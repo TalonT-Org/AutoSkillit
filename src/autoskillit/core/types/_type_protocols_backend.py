@@ -242,6 +242,7 @@ class CodingAgentBackend(Protocol):
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
         skill_session: bool = False,
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec: ...
 
     def build_skill_session_cmd(
@@ -249,6 +250,8 @@ class CodingAgentBackend(Protocol):
         skill_command: str,
         cwd: str,
         config: SkillSessionConfig,
+        *,
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec: ...
 
     def build_food_truck_cmd(
@@ -274,6 +277,7 @@ class CodingAgentBackend(Protocol):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec: ...
 
     def build_interactive_cmd(
@@ -290,6 +294,7 @@ class CodingAgentBackend(Protocol):
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec: ...
 
     def validate_session_layout(

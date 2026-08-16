@@ -664,6 +664,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec:
         """Build a Claude interactive session command.
 
@@ -742,6 +743,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             extras=merged,
             required=required_env,
         )
+        if force_inactive_agent_teams:
+            _neutralize_agent_teams_env(dict(effective_env))
         if executable is not None and dict(effective_env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
@@ -766,6 +769,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
         skill_session: bool = False,
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -795,6 +799,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         env.update(_HEADLESS_ENV_HARDENING)
         if skill_session:
             env.update(_CLAUDE_SKILL_SESSION_HARDENING)
+        if force_inactive_agent_teams:
+            _neutralize_agent_teams_env(env)
         return CmdSpec(
             cmd=tuple(cmd),
             env=env,
@@ -824,6 +830,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec:
         if config is not None:
             cfg = self._apply_config(config)
@@ -844,6 +851,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             resume_checkpoint = cfg["resume_checkpoint"]
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]  # noqa: F841
+            force_inactive_agent_teams = cfg["force_inactive_agent_teams"]
 
         _has_prefix = (
             bool(profile_name)
@@ -914,6 +922,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env_extras=extras,
             base=filtered_base,
             required=SKILL_SESSION_REQUIRED_ENV | _CLAUDE_SKILL_SESSION_HARDENING.keys(),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
         cmd: list[str] = [*spec.cmd]
         if plugin_binding is not None:
@@ -955,6 +964,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
+        force_inactive_agent_teams: bool = False,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -1014,6 +1024,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env_extras=extras,
             base=filtered_base,
             required=ORCHESTRATOR_SESSION_REQUIRED_ENV,
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
         cmd: list[str] = [*spec.cmd]

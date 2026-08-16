@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.recipe._contracts_manifest as contracts_manifest
 from autoskillit.recipe._contracts_manifest import (
     compute_skill_contract_identity,
     get_callable_contract,
@@ -138,6 +139,28 @@ def test_absence_value_changes_skill_contract_identity() -> None:
     assert compute_skill_contract_identity(
         "demo-skill", manifest=manifest("")
     ) != compute_skill_contract_identity("demo-skill", manifest=manifest("unavailable"))
+
+
+def test_skill_contract_identity_omits_unconfigured_absence_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = {
+        "skills": {"demo-skill": {"inputs": [{"name": "value", "type": "str", "required": False}]}}
+    }
+    serialized_payload: dict[str, object] = {}
+    json_dumps = contracts_manifest.json.dumps
+
+    def capture_payload(value: dict[str, object], **kwargs: object) -> str:
+        serialized_payload.update(value)
+        return json_dumps(value, **kwargs)
+
+    monkeypatch.setattr(contracts_manifest.json, "dumps", capture_payload)
+
+    compute_skill_contract_identity("demo-skill", manifest=manifest)
+
+    inputs = serialized_payload["inputs"]
+    assert isinstance(inputs, list)
+    assert "absence_value" not in inputs[0]
 
 
 def test_get_callable_contract_promotes_allowed_values_for_commit_guard() -> None:

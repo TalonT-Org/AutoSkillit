@@ -123,6 +123,20 @@ class TestResearchReviewRecipe:
         assert "inputs.worktree_path" in step.with_args.get("skill_command", "")
         assert step.with_args.get("cwd") == "${{ inputs.worktree_path }}"
 
+    def test_required_authorities_never_use_optional_context(self, recipe) -> None:
+        required_authorities = {
+            "worktree_path",
+            "research_dir",
+            "report_path",
+            "experiment_plan",
+            "experiment_results",
+            "experiment_type",
+            "scope_report",
+            "visualization_plan_path",
+        }
+        for step_name, step in recipe.steps.items():
+            assert required_authorities.isdisjoint(step.optional_context_refs), step_name
+
     def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
         step = recipe.steps["finalize_bundle"]
         assert step.on_success == "finalize_bundle_render"

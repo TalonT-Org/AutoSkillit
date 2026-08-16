@@ -318,7 +318,11 @@ def compute_skill_contract_identity(
                     "nullable": item.nullable,
                     "required": item.required,
                     "type": item.type,
-                    "absence_value": item.absence_value,
+                    **(
+                        {"absence_value": item.absence_value}
+                        if item.absence_value is not None
+                        else {}
+                    ),
                 }
                 for item in contract.inputs
             ],

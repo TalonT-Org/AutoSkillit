@@ -447,6 +447,7 @@ def test_cleanup_failure_overrides_otherwise_successful_delegate(
 async def test_concurrent_same_session_delegates_remain_independent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(delegate_module, "_require_enabled", lambda: None)
     monkeypatch.setattr(
         delegate_module,
         "_delegate_caller_session",

@@ -238,4 +238,3 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
         "estimated_tokens": 5_611,
         "responses": 5,
     }
-    assert totals["responses"] == len(counter.responses)

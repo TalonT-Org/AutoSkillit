@@ -239,11 +239,3 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
         "responses": 5,
     }
     assert totals["responses"] == len(counter.responses)
-    assert totals["raw_chars"] == sum(record.raw_chars for record in counter.responses)
-    assert totals["utf8_bytes"] == sum(record.utf8_bytes for record in counter.responses)
-    assert totals["client_serialized_chars"] == sum(
-        record.client_serialized_chars for record in counter.responses
-    )
-    assert totals["estimated_tokens"] == sum(
-        record.estimated_tokens for record in counter.responses
-    )

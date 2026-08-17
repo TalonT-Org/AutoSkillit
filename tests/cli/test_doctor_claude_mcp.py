@@ -57,9 +57,6 @@ class TestCheckClaudeMcpTimeouts:
         )
         result = _check_claude_mcp_timeouts(backend=self._claude_backend(), run_skill=rs)
         assert result.severity == Severity.OK
-        # Inline companion: observed below expected must return WARNING.
-        # A buggy always-OK comparison would silently return OK here and
-        # fail this assertion, exposing the bug.
         self._write_claude_json(
             tmp_path,
             monkeypatch,

@@ -347,7 +347,7 @@ If `confidence == "low"`:
 - Ask: **"Classify as recipe:{route} ({issue_type})? [Y/n]"**
 - If user overrides: record their chosen route/type
 
-### Step 7a: Hard Constraints (rare)
+### Step 7a: Hard Requirements (rare)
 
 Skip when `is_validated_report = true` (the report IS the specification) or when route is
 `recipe:remediation`: set `requirements_generated: false`,
@@ -463,7 +463,7 @@ gh issue edit {issue_number} \
   pass `--body-file` (prevents LLM paraphrase, shell truncation, and special-character injection)
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{timestamp}.md` and use `--body-file`
-- Emit `REQ-` identifiers, requirement groups, or more than three constraint sentences in
+- Emit `REQ-` identifiers, requirement groups, or more than three requirement sentences in
   the `## Requirements` section
 
 **ALWAYS:**

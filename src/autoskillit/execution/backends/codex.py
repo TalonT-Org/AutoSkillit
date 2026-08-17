@@ -2318,7 +2318,7 @@ class CodexBackend(BackendCmdBuilderBase):
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Codex collaboration instructions."""
         if plan.join is not None and plan.join.required:
-            return SkillSemanticAdaptationResult(
+            result = SkillSemanticAdaptationResult(
                 unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
                 diagnostic=(
                     "Codex exposes wait-any/mailbox-activity semantics rather than "
@@ -2326,6 +2326,8 @@ class CodexBackend(BackendCmdBuilderBase):
                     "honestly realized on this backend and must be refused at admission."
                 ),
             )
+            result.validate_for(plan, backend=self.name)
+            raise AssertionError("unreachable")  # validate_for raises unconditionally
         role_mapping: dict[str, str] = {}
         for role in plan.logical_roles:
             if role.name.startswith("autoskillit:"):
@@ -2335,7 +2337,6 @@ class CodexBackend(BackendCmdBuilderBase):
             else:
                 native = role.name
             role_mapping[role.name] = native
-            role_mapping[native] = native
         sibling_targets = {sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills}
         model_policy: dict[str, tuple[str, str | None]] = {}
         fragments = [

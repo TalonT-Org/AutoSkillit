@@ -19,6 +19,7 @@ from autoskillit.core import (
     JoinSpec,
     LogicalRoleSpec,
     SiblingSkillSpec,
+    SkillContractError,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
@@ -57,7 +58,7 @@ def _semantic_plan() -> SkillSemanticPlan:
             ChildSpawnSpec(role=_WORKER_ROLE, count=1),
         ),
         concurrency=ConcurrencySpec(required=True),
-        join=JoinSpec(required=True),
+        join=JoinSpec(required=False),
         evidence=EvidenceSpec(required=True, independent=True),
         child_model_policies=(
             ChildModelPolicySpec(
@@ -413,98 +414,19 @@ def test_compose_pr_real_codex_trace_spawns_then_joins_registered_roles() -> Non
     assert not info.invalidities
     assert info.semantic_plan is not None
     plan = info.semantic_plan
-    adaptation = CodexBackend().adapt_skill_semantics(plan)
-    reader = adaptation.logical_role_mapping["pr-source-reader"]
-    synthesizer = adaptation.logical_role_mapping["pr-synthesizer"]
-    model, effort = adaptation.model_effort_policy[synthesizer]
-    assert (reader, synthesizer) == ("pr-source-reader", "pr-synthesizer")
-    assert (model, effort) == (
-        CODEX_MODEL_ALIASES["sonnet"],
-        CODEX_EFFORT_MAPPING["sonnet"],
-    )
-
-    parent_events = [
-        _codex_call(
-            "spawn-reader",
-            "spawn_agent",
-            {
-                "agent_type": reader,
-                "fork_turns": "none",
-                "task_name": "reader",
-            },
-        ),
-        _codex_output("spawn-reader", {"task_name": "/root/reader"}),
-        _codex_call(
-            "spawn-synthesizer",
-            "spawn_agent",
-            {
-                "agent_type": synthesizer,
-                "fork_turns": "none",
-                "model": model,
-                "task_name": "synthesizer",
-            },
-        ),
-        _codex_output("spawn-synthesizer", {"task_name": "/root/synthesizer"}),
-        _codex_call("wait", "wait_agent", {"timeout_ms": 3_600_000}),
-        _codex_output("wait", {"timed_out": False}),
-    ]
-    for task_name in ("reader", "synthesizer"):
-        parent_events.append(
-            {
-                "type": "response_item",
-                "payload": {
-                    "type": "message",
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                "<subagent_notification>\n"
-                                f'{{"agent_path":"/root/{task_name}","status":'
-                                f'{{"completed":"child-delivery-complete {task_name}"}}}}\n'
-                                "</subagent_notification>"
-                            ),
-                        }
-                    ],
-                },
-            }
-        )
-    parent_events.append(
-        {
-            "type": "response_item",
-            "payload": {
-                "type": "message",
-                "role": "assistant",
-                "content": [{"type": "output_text", "text": "parent-delivery-complete"}],
-            },
-        }
-    )
-    child_events = [
-        {
-            "type": "session_meta",
-            "payload": {
-                "id": f"child-{task_name}",
-                "parent_thread_id": "parent",
-                "agent_role": role,
-                "agent_path": f"/root/{task_name}",
-                "base_instructions": {"text": _DISCIPLINE_DIGEST},
-            },
-        }
-        for task_name, role in (("reader", reader), ("synthesizer", synthesizer))
-    ]
-
-    assert_generated_child_delivery(
-        parent_events,
-        child_events,
-        parent_id="parent",
-        agent_role=synthesizer,
-        output_discipline_digest=_DISCIPLINE_DIGEST,
-        backend="codex",
-        semantic_plan=plan,
-        semantic_adaptation=adaptation,
-        child_terminal_sentinel="child-delivery-complete",
-        parent_terminal_sentinel="parent-delivery-complete",
-    )
+    # compose-pr declares join.required: true; per the rectify-join contract,
+    # codex refuses join-bearing skills with a precise diagnostic instead of
+    # rendering an impossible exact-ID wait instruction. The legacy Codex
+    # trace (this test) is preserved for the wait-any/mailbox symptoms, but
+    # the backend must short-circuit before any spawn/wait fragments emit.
+    assert plan.join is not None and plan.join.required is True
+    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+        CodexBackend().adapt_skill_semantics(plan)
+    # The legacy test body that drove spawn_agent/wait_agent fragments is
+    # intentionally removed: codex refuses join-bearing skills at admission,
+    # so the prior trace is no longer reachable. The negative assertion above
+    # (SkillContractError raised with the refuse-join diagnostic) is the
+    # surviving contract.
 
 
 def test_dynamic_child_spawn_adapters_preserve_runtime_cardinality() -> None:
@@ -543,6 +465,10 @@ def test_review_approach_projects_the_real_named_web_role() -> None:
     assert not plan.child_model_policies
 
     claude_text = "\n".join(ClaudeCodeBackend().adapt_skill_semantics(plan).instruction_fragments)
+    if plan.join is not None and plan.join.required:
+        with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+            CodexBackend().adapt_skill_semantics(plan)
+        return
     codex_text = "\n".join(CodexBackend().adapt_skill_semantics(plan).instruction_fragments)
     assert "subagent_type='autoskillit:web-evidence-researcher'" in claude_text
     assert "per runtime item in 'research_topics'" in claude_text
@@ -571,6 +497,10 @@ def test_analyze_pipeline_health_projects_the_real_terminal_reader() -> None:
     assert not plan.child_model_policies
 
     claude_text = "\n".join(ClaudeCodeBackend().adapt_skill_semantics(plan).instruction_fragments)
+    if plan.join is not None and plan.join.required:
+        with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+            CodexBackend().adapt_skill_semantics(plan)
+        return
     codex_text = "\n".join(CodexBackend().adapt_skill_semantics(plan).instruction_fragments)
     assert "subagent_type='autoskillit:session-log-reader'" in claude_text
     assert "per runtime item in 'reader_packets'" in claude_text
@@ -609,12 +539,20 @@ def test_real_planner_workflows_project_their_runtime_collections(
     assert info.semantic_plan is not None
     assert info.semantic_plan.child_spawns == (ChildSpawnSpec(role=role, for_each=collection),)
     assert source_text in skill_md.read_text(encoding="utf-8")
-    for backend in (ClaudeCodeBackend(), CodexBackend()):
-        rendered = "\n".join(
-            backend.adapt_skill_semantics(info.semantic_plan).instruction_fragments
-        )
-        assert collection in rendered
-        assert " 1 " not in rendered
+    claude_text = "\n".join(
+        ClaudeCodeBackend().adapt_skill_semantics(info.semantic_plan).instruction_fragments
+    )
+    assert collection in claude_text
+    assert " 1 " not in claude_text
+    if info.semantic_plan.join is not None and info.semantic_plan.join.required:
+        with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+            CodexBackend().adapt_skill_semantics(info.semantic_plan)
+        return
+    codex_text = "\n".join(
+        CodexBackend().adapt_skill_semantics(info.semantic_plan).instruction_fragments
+    )
+    assert collection in codex_text
+    assert " 1 " not in codex_text
 
 
 @pytest.mark.parametrize(
@@ -629,6 +567,14 @@ def test_real_semantic_skill_materializes_through_codex_adapter(skill_name: str)
     skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
     info = _skill_info_from_frontmatter(skill_name, SkillSource.BUNDLED, skill_md)
     assert not info.invalidities
+    plan = info.semantic_plan
+    assert plan is not None
+    # Codex refuses join-bearing skills per the rectify-join contract; the
+    # adapter test only applies to skills whose runtime path codex can serve.
+    if plan.join is not None and plan.join.required:
+        pytest.skip(
+            f"codex cannot materialize {skill_name!r}: join.required=true is rejected"
+        )
     entry = SkillCatalogEntry.from_skill_info(info)
     catalog = EffectiveSkillCatalog(
         skills=(entry,),

@@ -368,7 +368,7 @@ sub-headings: that format invites specification.
 If nothing passes the bar: set `requirements_generated: false`,
 `requirements_appended: false`, and proceed to Step 8.
 
-If one or more constraints pass, write each as one plain sentence (at most three), then:
+If one or more requirements pass, write each as one plain sentence (at most three), then:
 
 1. Fetch the current issue body. If a `## Requirements` section already exists, skip
    (idempotent) and set `requirements_generated: true`, `requirements_appended: false`.
@@ -385,7 +385,7 @@ If one or more constraints pass, write each as one plain sentence (at most three
    # Fetch current issue body to temp file (avoids shell interpolation):
    gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
 
-   # Populate ${REQUIREMENTS_FILE} with the constraint sentences, then:
+   # Populate ${REQUIREMENTS_FILE} with the requirement sentences, then:
    printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
    cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 

@@ -279,7 +279,8 @@ This is not optional. Do not proceed to Step 5 without stating this.
 ```python
 decision_findings = [f for f in all_findings if f.get("requires_decision")]
 actionable_findings = [
-    f for f in all_findings
+    f
+    for f in all_findings
     if not f.get("requires_decision") and f["severity"] in ("critical", "warning")
 ]
 

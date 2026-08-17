@@ -97,7 +97,12 @@ feature_branch=$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD)
 Read config:
 ```python
 import yaml, pathlib
-cfg = yaml.safe_load(pathlib.Path(".autoskillit/config.yaml").read_text()) if pathlib.Path(".autoskillit/config.yaml").exists() else {}
+
+cfg = (
+    yaml.safe_load(pathlib.Path(".autoskillit/config.yaml").read_text())
+    if pathlib.Path(".autoskillit/config.yaml").exists()
+    else {}
+)
 rr_cfg = cfg.get("research_review", {})
 validation_command = rr_cfg.get("validation_command", None)
 validation_timeout = rr_cfg.get("validation_timeout", 120)
@@ -188,7 +193,8 @@ Include `critical` and `warning` only. Skip `info` findings.
 
 ```python
 import re
-DIMENSION_PATTERN = re.compile(r'^\[(?:critical|warning|info)\]\s+(\S+):\s+')
+
+DIMENSION_PATTERN = re.compile(r"^\[(?:critical|warning|info)\]\s+(\S+):\s+")
 ```
 
 Apply `DIMENSION_PATTERN` to each comment body to extract the dimension label.

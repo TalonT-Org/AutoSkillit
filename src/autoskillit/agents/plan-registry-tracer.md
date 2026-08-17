@@ -49,7 +49,7 @@ LSP tracks typed references but misses field names embedded as **string literals
 `tree-sitter-python` (v0.25) and `tree-sitter-language-pack` are installed as project dev dependencies. Run via `python3` in Bash. Example — find a field name inside registry dicts/frozensets:
 
 ```python
-python3 << 'PYEOF'
+python3 << "PYEOF"
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
 from pathlib import Path
@@ -58,24 +58,29 @@ import os
 FIELD = "TARGET_FIELD_NAME"  # replace with actual field
 parser = Parser(Language(tspython.language()))
 
+
 def find_in_file(fpath):
     source = fpath.read_bytes()
     tree = parser.parse(source)
     hits = []
+
     def walk(node):
         if node.type == "string":
             text = node.text.decode().strip('"').strip("'")
             if FIELD in text:
                 ctx = node.parent.type if node.parent else "?"
-                hits.append((node.start_point[0]+1, text, ctx))
+                hits.append((node.start_point[0] + 1, text, ctx))
         if node.type == "keyword_argument":
             name = node.child_by_field_name("name")
             if name and FIELD in name.text.decode():
-                hits.append((node.start_point[0]+1, name.text.decode(), "keyword_argument"))
-        for c in node.children: walk(c)
+                hits.append((node.start_point[0] + 1, name.text.decode(), "keyword_argument"))
+        for c in node.children:
+            walk(c)
+
     walk(tree.root_node)
     for line, text, ctx in hits:
         print(f"  {fpath}:{line} — '{text}' (inside {ctx})")
+
 
 root = os.environ.get("CODEBASE_ROOT", ".")
 for f in Path(root, "src").rglob("*.py"):

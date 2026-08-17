@@ -452,8 +452,9 @@ class InfraOutcome:
 
     exit_category: str = ""
     cleanup_incomplete: bool = False
-    """Diagnostic only — see ``SubprocessResult.cleanup_evidence`` for the
-    underlying teardown signal; this field just surfaces it for retry logic."""
+    """Surfaces ``SubprocessResult.cleanup_evidence`` for retry orchestration.
+    See ``_should_flag_cleanup_incomplete`` in execution.headless._headless_result
+    for the canonical contract."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -120,7 +120,15 @@ def _build_api_retry_outcome(session: ClaudeSessionResult) -> ApiRetryOutcome:
 
 
 def _should_flag_cleanup_incomplete(result: SubprocessResult, *, subtype: str) -> bool:
-    """Log incomplete owned-process cleanup evidence and report whether to flag infra."""
+    """Single canonical home for the cleanup-evidence contract:
+
+    Set ``cleanup_incomplete=True`` on InfraOutcome when an owned-process-group
+    teardown produced incomplete evidence (a survivor or access-denied PID)
+    even though the workload's own outcome was determined independently. This
+    is diagnostic only — does not affect needs_retry. ``SubprocessResult.cleanup_evidence``
+    and ``InfraOutcome.cleanup_incomplete`` both forward here so the contract
+    is documented exactly once.
+    """
     evidence = result.cleanup_evidence
     if evidence is None or evidence.complete:
         return False

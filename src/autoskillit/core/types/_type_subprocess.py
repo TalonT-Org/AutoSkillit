@@ -191,7 +191,10 @@ class SubprocessResult:
     stdout_path: Path | None = None
     stderr_path: Path | None = None
     cleanup_evidence: ProcessCleanupResult | None = None
-    """Diagnostic only — see ``InfraOutcome.cleanup_incomplete`` for surfacing."""
+    """Owned-process-group teardown evidence (set by run_managed_async/run_managed_sync
+    via execute_termination_action's settle_evidence() call). Diagnostic only; see
+    ``_should_flag_cleanup_incomplete`` in execution.headless._headless_result for
+    the canonical contract."""
 
 
 @runtime_checkable

@@ -20,10 +20,12 @@ def _fake_ctx() -> MagicMock:
 async def test_ticks_fire_at_least_twice_over_a_slow_body():
     ctx = _fake_ctx()
 
-    async with progress_heartbeat(ctx, interval=0.01, message="still running"):
-        await anyio.sleep(0.05)
+    # 0.005s interval over 0.06s body yields 12 expected ticks; the >= 4 floor
+    # is generous enough for `pytest -n 4` scheduling jitter without flaking.
+    async with progress_heartbeat(ctx, interval=0.005, message="still running"):
+        await anyio.sleep(0.06)
 
-    assert ctx.report_progress.await_count >= 2
+    assert ctx.report_progress.await_count >= 4
 
 
 @pytest.mark.anyio

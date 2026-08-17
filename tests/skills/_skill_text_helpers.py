@@ -18,8 +18,9 @@ import re
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 #: Canonical skill for the Step 7 self-check block. ``validate-test-audit``
-#: was the first one written and is byte-equal to the other two; the
-#: ``tests/skills/test_ticket_grouper_rules_sync.py`` test enforces that.
+#: is pinned here so the sync test (``tests/skills/test_ticket_grouper_rules_sync.py``)
+#: has a single byte-equal referent; the byte-equality itself is enforced
+#: by that test across all three bundled validate-* skills.
 CANONICAL_TICKET_GROUPER_SKILL = "validate-test-audit"
 
 

@@ -623,6 +623,7 @@ def _run_bounded_codex_probe(
         returncode, cleanup_result = owner.settle_evidence(
             timeout=max(0.0, deadline - time.monotonic())
         )
+        returncode = returncode if returncode is not None else -1
     except subprocess.TimeoutExpired:
         _terminate_probe(owner)
         return _BoundedProbeResult(
@@ -632,10 +633,7 @@ def _run_bounded_codex_probe(
             failure="timed out while reaping",
         )
     except BaseException as exc:
-        # Incomplete-cleanup-evidence handling now lives inline at each call site
-        # (both use settle_evidence(), which never raises). Neither of the two
-        # settle() calls this handler used to guard remains reachable, so a
-        # BaseException here is always a genuine crash, not stale cleanup evidence.
+        # settle_evidence() never raises, so any BaseException here is unrelated to cleanup.
         if process.returncode is None:
             try:
                 _terminate_probe(owner)

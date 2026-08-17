@@ -695,16 +695,13 @@ def test_extract_block_in_misc() -> None:
 
 
 def test_all_tools_importable_from_split_modules() -> None:
-    """All 9 tools are importable from their new home modules."""
+    """All 8 tools are importable from their new home modules."""
     from autoskillit.server.tools.tools_github import (
         fetch_github_issue,
         get_issue_title,
         report_bug,
     )
-    from autoskillit.server.tools.tools_issue_headless import (
-        enrich_issues,
-        prepare_issue,
-    )
+    from autoskillit.server.tools.tools_issue_headless import prepare_issue
     from autoskillit.server.tools.tools_issue_labels import (
         claim_issue,
         release_issue,
@@ -716,7 +713,6 @@ def test_all_tools_importable_from_split_modules() -> None:
         ("get_issue_title", get_issue_title),
         ("report_bug", report_bug),
         ("prepare_issue", prepare_issue),
-        ("enrich_issues", enrich_issues),
         ("claim_issue", claim_issue),
         ("release_issue", release_issue),
         ("get_pr_reviews", get_pr_reviews),
@@ -1017,7 +1013,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
-        # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
+        # for direct headless executor callers — report_bug, prepare_issue)
         # +tools_audit_artifacts.py (typed audit semantic/disposition producers, #4419;
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)

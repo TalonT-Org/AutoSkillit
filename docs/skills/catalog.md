@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (142 total: 3 in `src/autoskillit/skills/`,
-139 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (141 total: 3 in `src/autoskillit/skills/`,
+138 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (2 configured)
@@ -11,7 +11,7 @@ Plugin-scanned at `src/autoskillit/skills/`:
 - `open-kitchen` — reveals the 43 kitchen MCP tools
 - `close-kitchen` — re-hides them
 
-## Tier 2 — interactive cook + headless (106 configured)
+## Tier 2 — interactive cook + headless (105 configured)
 
 Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
@@ -28,7 +28,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 ### Requirements and planning
 `make-req`, `elaborate-phase`, `write-recipe`, `migrate-recipes`,
 `setup-project`, `design-guards`, `triage-issues`,
-`collapse-issues`, `issue-splitter`, `enrich-issues`, `prepare-issue`,
+`collapse-issues`, `issue-splitter`, `prepare-issue`,
 `make-campaign`
 
 ### Experiment family
@@ -145,9 +145,9 @@ symptom, and the audit suite is updated so the same class of bug cannot
 recur. Commit messages prefix with `Rectify:` for traceability; the count of
 `Rectify:` commits is reported in `docs/developer/contributing.md`.
 
-## Total: 142
+## Total: 141
 
-3 sources under `skills/` + 139 sources under `skills_extended/` = 142 bundled skills.
+3 sources under `skills/` + 138 sources under `skills_extended/` = 141 bundled skills.
 Configured tier counts exclude exact-role/internal sources. The filesystem total is
 verified by `tests/docs/test_doc_counts.py` against a filesystem walk so any
 addition or removal is caught immediately.

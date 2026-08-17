@@ -17,14 +17,11 @@ from autoskillit.core import (
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from autoskillit.server.tools.tools_issue_headless import (
-    _build_enrich_skill_command,
     _build_headless_error_response,
     _build_prepare_skill_command,
-    _parse_enrich_result,
     _parse_prepare_result,
     _retry_reason_to_error,
     _without_success_key,
-    enrich_issues,
     prepare_issue,
 )
 from autoskillit.server.tools.tools_issue_labels import (
@@ -246,30 +243,6 @@ def test_parse_prepare_result_invalid_json() -> None:
     text = "---prepare-issue-result---\nnot valid json\n---/prepare-issue-result---\n"
     result = _parse_prepare_result(text)
     assert result == {"success": False, "error": "result block contained invalid JSON"}
-
-
-def test_build_enrich_skill_command_with_all_args() -> None:
-    """All args provided → assembled command includes all flags."""
-    cmd = _build_enrich_skill_command(42, 3, True, "owner/repo")
-    assert "/enrich-issues" in cmd
-    assert "--issue 42" in cmd
-    assert "--batch 3" in cmd
-    assert "--dry-run" in cmd
-    assert "--repo owner/repo" in cmd
-
-
-def test_parse_enrich_result_success() -> None:
-    """Text with delimiters surrounding valid JSON → parsed dict."""
-    payload = json.dumps({"enriched": [1, 2]})
-    text = f"---enrich-issues-result---\n{payload}\n---/enrich-issues-result---\n"
-    result = _parse_enrich_result(text)
-    assert result["enriched"] == [1, 2]
-
-
-def test_parse_enrich_result_no_block() -> None:
-    """Text without delimiters → error dict."""
-    result = _parse_enrich_result("nothing")
-    assert result == {"success": False, "error": "no result block found"}
 
 
 # ---------------------------------------------------------------------------
@@ -540,30 +513,6 @@ async def test_prepare_issue_dry_run_with_labels_needs_no_client_or_sleep(
 
 
 @pytest.mark.anyio
-async def test_enrich_issues_gate_closed(tool_ctx) -> None:
-    """Gate disabled → gate error JSON."""
-    tool_ctx.gate = DefaultGateState(enabled=False)
-    result = json.loads(await enrich_issues())
-    assert result["success"] is False
-    assert result["subtype"] == "gate_error"
-
-
-@pytest.mark.anyio
-async def test_enrich_issues_success(tool_ctx_kitchen_open) -> None:
-    """Successful enrich → success=True, enriched list in response."""
-    block_data = {"enriched": [42], "skipped_already_enriched": []}
-    payload = json.dumps(block_data)
-    output = f"---enrich-issues-result---\n{payload}\n---/enrich-issues-result---\n"
-    skill_result = _make_skill_result(success=True, result=output)
-    tool_ctx_kitchen_open.executor = AsyncMock()
-    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
-
-    result = json.loads(await enrich_issues())
-    assert result["success"] is True
-    assert result["enriched"] == [42]
-
-
-@pytest.mark.anyio
 async def test_prepare_issue_dispatches_only_projected_skill_documents(
     tool_ctx_kitchen_open,
 ) -> None:
@@ -621,18 +570,8 @@ async def test_prepare_issue_dispatches_only_projected_skill_documents(
                 "---/prepare-issue-result---\n"
             ),
         ),
-        (
-            enrich_issues,
-            (),
-            "enrich-issues",
-            (
-                "---enrich-issues-result---\n"
-                '{"enriched": [42], "skipped_already_enriched": []}\n'
-                "---/enrich-issues-result---\n"
-            ),
-        ),
     ],
-    ids=("prepare-issue", "enrich-issues"),
+    ids=("prepare-issue",),
 )
 async def test_issue_launchers_deliver_winning_override_identity_and_projection(
     tool_ctx_kitchen_open,
@@ -703,9 +642,8 @@ async def test_issue_launchers_deliver_winning_override_identity_and_projection(
     ("handler", "args"),
     [
         (prepare_issue, ("Title", "Body")),
-        (enrich_issues, ()),
     ],
-    ids=("prepare-issue", "enrich-issues"),
+    ids=("prepare-issue",),
 )
 async def test_issue_headless_handlers_fail_closed_without_skill_resolver(
     tool_ctx_kitchen_open,
@@ -1053,51 +991,6 @@ async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(
                     repo="owner/repo",
                     dry_run=True,
                     split=False,
-                )
-
-    call_args = mock_ctx.executor.run.call_args
-    assert call_args is not None, "executor.run was not called"
-    actual_cwd = (
-        call_args.args[1]
-        if call_args.args and len(call_args.args) > 1
-        else call_args.kwargs.get("cwd")
-    )
-    assert actual_cwd == str(different_dir), (
-        f"executor.run was called with cwd={actual_cwd!r}, "
-        f"expected cwd={str(different_dir)!r}. "
-        "The subprocess must run in project_dir, not cwd."
-    )
-
-
-@pytest.mark.anyio
-async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(
-    tool_ctx_kitchen_open, tmp_path, monkeypatch
-):
-    """executor.run must be called with tool_ctx.project_dir as cwd, not Path.cwd().
-
-    Regression test: when project_dir differs from cwd, the headless skill subprocess
-    must run in project_dir.
-    """
-    monkeypatch.chdir(tmp_path)
-    different_dir = tmp_path / "project_root"
-    different_dir.mkdir()
-
-    mock_ctx = tool_ctx_kitchen_open
-    mock_ctx.project_dir = different_dir
-    mock_ctx.executor = MagicMock()
-    mock_ctx.executor.run = AsyncMock()
-    mock_ctx.executor.run.return_value = _make_skill_result(
-        success=True,
-        result="---enrich-issues-result---\n[]\n---/enrich-issues-result---",
-    )
-
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
-            with patch("autoskillit.server.logger"):
-                await enrich_issues(
-                    issue_number=123,
-                    repo="owner/repo",
-                    dry_run=True,
                 )
 
     call_args = mock_ctx.executor.run.call_args

@@ -87,10 +87,6 @@ Parse optional arguments from the user's invocation:
 - `--no-label` — skip GitHub label application after triage
 - `--dry-run` — run analysis but skip label application even if `--no-label` is not set
 - `--collapse` — invoke `collapse-issues` after split analysis to consolidate related issues
-- `--enrich` — for each issue classified as `recipe:implementation`, generate and append
-               structured requirements (`REQ-{GRP}-NNN` format) to the issue body.
-               Skips issues that already have a `## Requirements` section (idempotent).
-               No effect on `recipe:remediation` issues.
 
 ### Step 1: Authenticate and Fetch Issues
 
@@ -236,45 +232,6 @@ Present each ambiguous issue as follows:
 Wait for the user's response before continuing to the next ambiguous issue.
 Record all human decisions for inclusion in the triage report.
 
-### Step 3c: Requirement Enrichment (only when `--enrich` is passed)
-
-For each issue in the working set classified as `recipe:implementation`:
-
-1. Fetch issue body:
-   ```bash
-   gh issue view {N} --json body -q .body
-   ```
-2. If `## Requirements` section already present in the body: skip (idempotent).
-3. In-context requirement generation using the issue title, body, and classification
-   rationale already in context:
-   - Trace: "What must be true for this functionality to exist?"
-   - Group by co-implementation concern (short uppercase abbreviation, 2–5 letters).
-   - Format: `**REQ-{GRP}-NNN:** {single-sentence condition statement}.`
-4. If `--dry-run` or `--no-label` is active: print generated requirements to stdout
-   per issue but skip `gh issue edit`. Record `requirements_generated: true` in manifest.
-5. Otherwise, append via:
-   ```bash
-   ts=$(date +%Y-%m-%d_%H%M%S)
-   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_${ts}.md"
-   REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/requirements_${ts}.md"
-   mkdir -p "{{AUTOSKILLIT_TEMP}}/triage-issues"
-
-   # Fetch current body to temp file (avoids shell interpolation):
-   gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
-
-   # Populate ${REQUIREMENTS_FILE} with the generated requirements content, then:
-   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
-   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
-
-   gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
-   ```
-6. If the issue is too vague for clean extraction: skip silently and record
-   `requirements_generated: false` in the manifest for that issue.
-
-This step is in-context only — no subagents are spawned for enrichment.
-
-`recipe:remediation` issues are not enriched regardless of the `--enrich` flag.
-
 ### Step 4: Build Conflict Graph
 
 Build a conflict graph where:
@@ -335,8 +292,7 @@ The report contains:
                     "recipe": "implementation",
                     "confidence": "high",
                     "systems": ["auth", "api"],
-                    "rationale": "Well-defined feature with clear acceptance criteria",
-                    "requirements_generated": true
+                    "rationale": "Well-defined feature with clear acceptance criteria"
                 }
             ]
         }
@@ -347,8 +303,6 @@ The report contains:
     ]
 }
 ```
-
-Issues not enriched (`recipe:remediation`, or `--enrich` not passed) emit `"requirements_generated": null`.
 
 **7c. Label application (unless `--no-label` is passed):**
 

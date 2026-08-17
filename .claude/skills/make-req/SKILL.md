@@ -22,6 +22,12 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 
 ## Core Principles
 
+- **A requirement is permanent cost.** Every planner, implementer, and auditor downstream
+  treats it as absolute and squeezes the solution to fit. Write one only if it is
+  **absolute** (the work is not done without it, however it gets built), **broad** (states
+  the outcome, not a mechanism, name, shape, or step), and **unarguable** (no reasonable
+  implementer could dispute it must hold). When in doubt, leave it out — the group
+  background carries the rest.
 - **Requirements are acceptance criteria, not instructions.** Each requirement states a condition that must hold. It does not prescribe an approach, technology, pattern, or implementation step.
 - **Group by co-implementation.** Requirements that would naturally be delivered together belong in the same group. Each group should be independently plannable — someone could take a single group and produce a complete plan from it without needing to implement other groups first (though groups may have ordering preferences).
 - **Describe observable outcomes.** A requirement should be verifiable by observing the system's behavior, interfaces, or data — not by inspecting its internals.
@@ -35,6 +41,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Prescribe implementation approaches or libraries in requirements
 - Include implementation steps disguised as requirements ("Refactor X to use Y" is an instruction, not a requirement)
 - Write requirements that can only be verified by reading source code
+- Write a requirement that constrains how the outcome is reached
 
 **ALWAYS:**
 - Use subagents to understand the source material and relevant codebase context
@@ -139,6 +146,8 @@ Save to: `temp/make-req/requirements_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
 Before finalizing, verify:
 
+- Every requirement is absolute, broad, and unarguable — anything that is a design choice
+  has been moved into the group background
 - No requirement tells the reader what to build or how to build it
 - Every requirement is a testable condition
 - Groups are cohesive — moving a requirement to a different group would feel wrong

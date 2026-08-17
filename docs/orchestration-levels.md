@@ -74,7 +74,7 @@ Key properties:
 - Interactive variant: `autoskillit order` (CLI label `"order"`; headless equivalent carries SessionType `ORCHESTRATOR`)
 - Headless variant: food truck (dispatched by L3, SessionType `ORCHESTRATOR`)
 - Owns `run_skill` exactly and spawns L1 workers through it
-- Has full kitchen access (52 kitchen-tagged MCP tools)
+- Has full kitchen access (51 kitchen-tagged MCP tools)
 
 ```
 L2 (interactive order)

@@ -177,6 +177,7 @@ RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
         # Append retired names here atomically with the rename/deletion commit.
         # DO NOT REMOVE entries — this registry is append-only.
         "audit-feature-gates",  # Moved to .autoskillit/skills/; AutoSkillit-internal only
+        "enrich-issues",  # Retired; auto-generated requirements backfill removed (#4477)
         "open-research-pr",  # Retired; replaced by decomposed skills
         "sprint-planner",  # Retired; no replacement
         "vis-lens-domain-norms",  # Retired; renamed to vis-lens-methodology-norms

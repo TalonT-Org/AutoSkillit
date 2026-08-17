@@ -1482,15 +1482,6 @@ skills:
     - "## Parsed Issue\n\n---prepare-issue-result---\n{\"title\": \"Fix bug\"}\n---/prepare-issue-result---\n\n%%ORDER_UP%%"
     - "Analysis complete.\n\n---\nprepare-issue-result---\n{\"title\": \"Fix bug\"}\n---/prepare-issue-result---\n\n%%ORDER_UP%%"
 
-  enrich-issues:
-    inputs: []
-    outputs: []
-    expected_output_patterns:
-    - "---enrich-issues-result---"
-    pattern_examples:
-    - "Enrichment complete.\n\n---enrich-issues-result---\n[{\"issue\": 1}]\n---/enrich-issues-result---\n\n%%ORDER_UP%%"
-    - "Processing issues.\n\n---\nenrich-issues-result---\n[{\"issue\": 1}]\n---/enrich-issues-result---\n\n%%ORDER_UP%%"
-
   report-bug:
     inputs: []
     outputs: []

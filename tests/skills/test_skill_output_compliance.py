@@ -27,7 +27,6 @@ FIXED_NAME_SKILLS: frozenset[str] = frozenset(
         "close-kitchen",  # deletes singleton config file
         "sous-chef",  # no file output
         "smoke-task",  # no file output
-        "enrich-issues",  # no file output
         "prepare-issue",  # no file output
         "collapse-issues",  # no file output
         "issue-splitter",  # no file output

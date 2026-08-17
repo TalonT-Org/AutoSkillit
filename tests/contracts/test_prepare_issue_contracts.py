@@ -138,12 +138,6 @@ def test_prepare_issue_appends_requirements_section():
     assert "## Requirements" in text
 
 
-def test_prepare_issue_uses_req_id_format():
-    """Skill must document REQ- format identifiers."""
-    text = SKILL_MD.read_text()
-    assert "REQ-" in text
-
-
 def test_prepare_issue_uses_gh_issue_edit_for_requirements():
     """Skill must use gh issue edit to append requirements (not just labels)."""
     text = SKILL_MD.read_text()
@@ -157,6 +151,28 @@ def test_prepare_issue_result_block_includes_requirements_generated():
     """Result block schema must include requirements_generated field."""
     text = SKILL_MD.read_text()
     assert "requirements_generated" in text
+
+
+def test_prepare_issue_prohibits_req_id_format_in_prose():
+    """The new NEVER- clause must forbid REQ- identifiers, requirement groups, and
+    cap the constraint count. A future edit that drops the prohibition must be
+    detected here. Assert on the prohibition text rather than on the bare token
+    ``REQ-`` — the NEVER bullet itself contains that token.
+    """
+    text = SKILL_MD.read_text()
+    never_pos = text.find("**NEVER:**")
+    assert never_pos != -1, "Critical Constraints NEVER block missing"
+    always_pos = text.find("**ALWAYS:**", never_pos)
+    never_block = (
+        text[never_pos:always_pos] if always_pos != -1 else text[never_pos : never_pos + 800]
+    )
+    assert "REQ-" in never_block, (
+        "NEVER block must forbid REQ- identifiers (prohibition text contains the token)"
+    )
+    assert "requirement groups" in never_block, "NEVER block must forbid requirement groups"
+    assert "three" in never_block and (
+        "constraint" in never_block or "requirement" in never_block
+    ), "NEVER block must cap constraint/requirement sentences at three"
 
 
 def test_prepare_issue_skips_requirements_on_remediation():
@@ -175,22 +191,6 @@ def test_prepare_issue_skips_requirements_on_remediation():
     # requirements_generated must appear after the first implementation route reference
     assert req_gen_idx > impl_idx, (
         "requirements_generated must appear after the recipe:implementation gate, not before it"
-    )
-
-
-def test_prepare_issue_handles_vague_issues():
-    """Skill must document behavior when requirements cannot be cleanly extracted."""
-    text = SKILL_MD.read_text()
-    vague_handled = (
-        "can't be cleanly extracted" in text.lower()
-        or "cannot be cleanly extracted" in text.lower()
-        or "flag" in text.lower()
-        and "more detail" in text.lower()
-        or "needs more detail" in text.lower()
-        or "suggest remediation" in text.lower()
-    )
-    assert vague_handled, (
-        "Skill must document behavior when issue is too vague for requirement extraction"
     )
 
 

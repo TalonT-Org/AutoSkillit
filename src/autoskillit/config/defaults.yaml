@@ -228,7 +228,6 @@ skills:
     - triage-issues
     - collapse-issues
     - issue-splitter
-    - enrich-issues
     - prepare-issue
     - scope
     - select-directions

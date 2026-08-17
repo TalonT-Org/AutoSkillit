@@ -52,7 +52,7 @@ def test_merge_pr_includes_requirements_in_conflict_report():
 def test_requirements_section_header_consistent_across_skills():
     """All skills must use identical ## Requirements section header — no variation."""
     checked = 0
-    for skill_name in ["prepare-issue", "triage-issues", "open-pr", "pipeline-summary"]:
+    for skill_name in ["prepare-issue", "open-pr", "pipeline-summary"]:
         text = _read(skill_name)
         if "requirements" in text.lower():
             assert "## Requirements" in text, (
@@ -60,14 +60,6 @@ def test_requirements_section_header_consistent_across_skills():
             )
             checked += 1
     assert checked > 0, "No skills with requirements section found — test is vacuous"
-
-
-def test_req_id_format_consistent_across_skills():
-    """All skills generating or consuming requirements must use REQ-{GRP}-NNN format."""
-    generation_skills = ["prepare-issue", "triage-issues"]
-    for skill_name in generation_skills:
-        text = _read(skill_name)
-        assert "REQ-" in text, f"{skill_name}/SKILL.md must reference REQ- identifier format"
 
 
 def test_pr_skills_bind_exact_body_bytes_to_source_issue_identity():

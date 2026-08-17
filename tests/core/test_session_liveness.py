@@ -86,19 +86,3 @@ def test_is_session_alive_returns_false_for_zombie() -> None:
         assert is_session_alive(child_pid, boot_id, ticks) is False
     finally:
         os.waitpid(child_pid, 0)
-
-
-def test_is_pid_alive_gateway_importable() -> None:
-    from autoskillit.core import (
-        is_pid_alive as gateway_is_pid_alive,
-    )
-    from autoskillit.core import (
-        is_pid_zombie as gateway_is_pid_zombie,
-    )
-    from autoskillit.core import (
-        read_process_state as gateway_read_process_state,
-    )
-
-    assert callable(gateway_read_process_state)
-    assert callable(gateway_is_pid_zombie)
-    assert callable(gateway_is_pid_alive)

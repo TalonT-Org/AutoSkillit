@@ -123,12 +123,8 @@ class SubprocessResult:
     """Result from a managed subprocess execution."""
 
     returncode: int
-    """Final process return code.
-
-    Note: -1 collides with the SIGHUP signal-terminated returncode, so it cannot
-    reliably indicate "leader returncode unconfirmed after full escalation." Use
-    cleanup_evidence as the unambiguous discriminator for teardown status.
-    """
+    """Final process return code (-1 may indicate either SIGHUP-killed or
+    unconfirmed leader — see ``cleanup_evidence`` for teardown status)."""
     stdout: str
     stderr: str
     termination: TerminationReason
@@ -195,11 +191,7 @@ class SubprocessResult:
     stdout_path: Path | None = None
     stderr_path: Path | None = None
     cleanup_evidence: ProcessCleanupResult | None = None
-    """Set by run_managed_async/run_managed_sync via execute_termination_action's
-    settle_evidence() call. Diagnostic only — does not itself affect termination
-    behavior or force a retry; see InfraOutcome.cleanup_incomplete for downstream
-    surfacing.
-    """
+    """Diagnostic only — see ``InfraOutcome.cleanup_incomplete`` for surfacing."""
 
 
 @runtime_checkable

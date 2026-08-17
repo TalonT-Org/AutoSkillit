@@ -861,12 +861,12 @@ def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
                     abs(proc.create_time() - stored_create_time) < 1.0
                     and proc.status() != psutil.STATUS_ZOMBIE
                 )
-            except psutil.NoSuchProcess:
-                return False
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                return True
         try:
             return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
-        except psutil.NoSuchProcess:
-            return False
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return True
     if stored_create_time is not None:
         try:
             proc = psutil.Process(pid)
@@ -874,12 +874,12 @@ def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
                 abs(proc.create_time() - stored_create_time) < 1.0
                 and proc.status() != psutil.STATUS_ZOMBIE
             )
-        except psutil.NoSuchProcess:
-            return False
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return True
     try:
         return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
-    except psutil.NoSuchProcess:
-        return False
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return True
 
 
 def register_active_kitchen(identity: KitchenProcessIdentity) -> None:

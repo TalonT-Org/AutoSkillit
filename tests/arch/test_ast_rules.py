@@ -741,26 +741,15 @@ def _gather_import_aliases(tree: ast.AST) -> dict[str, tuple[str, str | None]]:
 
 
 def test_no_direct_settle_call_outside_allowlist() -> None:
-    """No src file may call .settle() outside the designated allowlist.
-
-    .settle() raises OwnedProcessCleanupError on incomplete teardown. Callers that
-    do not need that raising behavior must use .settle_evidence() or
-    .settle_preserving() instead — a bare .settle() call is deliberately narrow.
-
-    Allowed call sites:
-    - src/autoskillit/execution/process/_process_kill.py (defines settle())
-    - src/autoskillit/cli/session/_session_process.py (requires settle()'s raising
-      semantics)
-    - src/autoskillit/execution/evidence_reader.py (pre-existing, already-correct
-      catch-and-convert usage via owner.settle(...) in _run_bounded)
-    - src/autoskillit/hooks/_capture_process.py (hosts a structurally unrelated,
-      stdlib-only OwnedProcessGroup reimplementation with its own .settle() calls)
-    """
+    """No src file may call .settle() outside the designated allowlist."""
+    # .settle() raises OwnedProcessCleanupError on incomplete teardown. Callers
+    # that do not need that raising behavior must use .settle_evidence() or
+    # .settle_preserving() instead — a bare .settle() call is deliberately narrow.
     allowed_files = {
-        SRC_ROOT / "execution" / "process" / "_process_kill.py",
-        SRC_ROOT / "cli" / "session" / "_session_process.py",
-        SRC_ROOT / "execution" / "evidence_reader.py",
-        SRC_ROOT / "hooks" / "_capture_process.py",
+        SRC_ROOT / "execution" / "process" / "_process_kill.py",  # defines settle()
+        SRC_ROOT / "cli" / "session" / "_session_process.py",  # requires raising semantics
+        SRC_ROOT / "execution" / "evidence_reader.py",  # pre-existing catch-and-convert
+        SRC_ROOT / "hooks" / "_capture_process.py",  # structurally unrelated reimpl
     }
     violations: list[str] = []
 
@@ -797,46 +786,20 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
 
 
 def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
-    """No src file may call psutil.pid_exists(), the bare os.kill(pid, 0) existence
-    probe, or psutil.Process(pid).is_running() outside the shared zombie-aware
-    primitive.
-
-    All three checks are zombie-blind: a zombie process (exited but not yet reaped
-    by its parent) retains a readable /proc entry and reports as alive under an
-    exact-PID-existence check alone.
-
-    Allowed files:
-    - src/autoskillit/core/runtime/_linux_proc.py (defines the shared primitive:
-      is_pid_alive() / is_pid_zombie())
-    - src/autoskillit/core/_plugin_cache.py (keeps its own psutil-based zombie check
-      by design — its cross-boot stored_create_time verification cannot be reproduced
-      by the stdlib-only tick-count primitive without an out-of-scope boot-time/schema
-      migration)
-    - src/autoskillit/execution/process/_daemon_orphans.py (_owner_is_dead's
-      os.kill(owner_pid, 0) branch is a last-resort fallback reached only when
-      /proc/{pid}/stat is unreadable — in that degraded state zombie detection is
-      equally impossible, so this is not a new zombie-blind gap, and PermissionError/
-      OSError already fail closed to "unknown")
-    - src/autoskillit/fleet/_dispatch_reaper.py (pre-existing psutil.pid_exists() use
-      predating this guard; not yet migrated — tracked as a known follow-up, not
-      addressed here because doing so would require rewriting the file's extensive
-      existing psutil.pid_exists-mocked test suite, which is out of this guard's scope)
-    - src/autoskillit/hooks/guards/mcp_health_advisor.py (stdlib-only hook with no
-      autoskillit import path; uses os.kill(pid, 0) as the portable primary liveness
-      probe and /proc/{pid}/stat only as a zombie refinement)
-    - src/autoskillit/execution/process/_process_kill.py (_identity_is_alive uses
-      psutil.Process(pid).status() != psutil.STATUS_ZOMBIE alongside the matching
-      psutil.Process(pid).create_time() call in one expression; mixing in a /proc
-      zombie read would split the identity-coherence guarantee across two
-      primitives, so the carve-out is deliberate)
-    """
+    """No src file may call psutil.pid_exists(), bare os.kill(pid, 0), or
+    psutil.Process(pid).is_running() outside the shared zombie-aware primitive."""
+    # All three checks are zombie-blind — a zombie retains a readable /proc
+    # entry and reports as alive under an exact-PID-existence check alone.
     allowed_files = {
-        SRC_ROOT / "core" / "runtime" / "_linux_proc.py",
-        SRC_ROOT / "core" / "_plugin_cache.py",
-        SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",
-        SRC_ROOT / "execution" / "process" / "_process_kill.py",
-        SRC_ROOT / "fleet" / "_dispatch_reaper.py",
-        SRC_ROOT / "hooks" / "guards" / "mcp_health_advisor.py",
+        SRC_ROOT / "core" / "runtime" / "_linux_proc.py",  # defines the shared primitive
+        SRC_ROOT / "core" / "_plugin_cache.py",  # cross-boot stored_create_time needs psutil
+        SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",  # /proc unreadable fallback
+        SRC_ROOT
+        / "execution"
+        / "process"
+        / "_process_kill.py",  # identity-coherence with create_time
+        SRC_ROOT / "fleet" / "_dispatch_reaper.py",  # pre-existing follow-up
+        SRC_ROOT / "hooks" / "guards" / "mcp_health_advisor.py",  # stdlib-only hook
     }
     violations: list[str] = []
 

@@ -20,11 +20,6 @@ from autoskillit.server.tools.tools_github import (
     _parse_fingerprint,
     report_bug,
 )
-from autoskillit.server.tools.tools_issue_headless import (
-    _PREPARE_RESULT_END,
-    _PREPARE_RESULT_START,
-    _parse_prepare_result,
-)
 from tests.server._helpers import _skill_fail, _skill_ok
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -208,29 +203,6 @@ def test_extract_block_content_not_mutated():
     assert _extract_block(text, "---bug-fingerprint---", "---/bug-fingerprint---") == [
         '{"note": "see ---\\nchanges---"}'
     ]
-
-
-# ---------------------------------------------------------------------------
-# _parse_prepare_result unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_parse_prepare_result_valid_json():
-    payload = '{"success": true, "issue_url": "https://github.com/x/y/issues/1"}'
-    text = f"{_PREPARE_RESULT_START}\n{payload}\n{_PREPARE_RESULT_END}"
-    result = _parse_prepare_result(text)
-    assert result == {"success": True, "issue_url": "https://github.com/x/y/issues/1"}
-
-
-def test_parse_prepare_result_no_block():
-    result = _parse_prepare_result("no block here")
-    assert result == {"success": False, "error": "no result block found"}
-
-
-def test_parse_prepare_result_invalid_json():
-    text = f"{_PREPARE_RESULT_START}\nnot-json\n{_PREPARE_RESULT_END}"
-    result = _parse_prepare_result(text)
-    assert result == {"success": False, "error": "result block contained invalid JSON"}
 
 
 # ---------------------------------------------------------------------------

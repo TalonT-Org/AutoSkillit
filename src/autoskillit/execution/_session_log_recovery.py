@@ -7,13 +7,14 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import CampaignProtector, get_logger
-from autoskillit.execution.linux_tracing import (
+from autoskillit.core import (
+    CampaignProtector,
+    get_logger,
     is_pid_zombie,
     read_boot_id,
-    read_enrollment,
     read_starttime_ticks,
 )
+from autoskillit.execution.linux_tracing import read_enrollment
 from autoskillit.execution.session_log import flush_session_log
 
 logger = get_logger(__name__)

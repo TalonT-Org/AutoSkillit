@@ -41,7 +41,6 @@ from autoskillit.server._lifespan._startup_checks import (
     _activate_recipe_kitchen,
     _finalize_recorder,
     _retain_context_tracker_authority,
-    render_hooks_json_text,
     run_startup_drift_check,
     run_startup_fix_required_coverage_check,
     run_startup_hook_health_check,

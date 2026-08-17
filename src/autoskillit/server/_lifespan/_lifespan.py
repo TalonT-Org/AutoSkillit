@@ -43,7 +43,10 @@ from autoskillit.server._lifespan._startup_checks import (
     run_startup_hook_health_check,
     run_startup_install_state_check,
 )
-from autoskillit.server._state import _get_ctx_or_none, deferred_initialize  # noqa: E402  (kept module-level for clarity; the in-block import below is the actual circular-break)
+from autoskillit.server._state import (  # noqa: E402  (kept module-level for clarity; the in-block import below is the actual circular-break)
+    _get_ctx_or_none,
+    deferred_initialize,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend

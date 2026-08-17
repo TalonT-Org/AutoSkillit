@@ -851,46 +851,30 @@ def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        if stored_create_time is not None:
-            try:
-                proc = psutil.Process(pid)
-                return (
-                    abs(proc.create_time() - stored_create_time) < 1.0
-                    and proc.status() != psutil.STATUS_ZOMBIE
-                )
-            except psutil.NoSuchProcess:
-                # Process is definitively gone between the os.kill probe and
-                # this psutil call — do not keep reporting it as alive.
-                return False
-            except psutil.AccessDenied:
-                # Foreign-user PID — unverifiable, fall back to the prior
-                # "assume alive" portable contract.
-                return True
-        try:
-            return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            # Non-create-time path has no zombie-protection rationale to
-            # override the prior "assume alive when unverifiable" behavior.
-            return True
-    if stored_create_time is not None:
-        try:
-            proc = psutil.Process(pid)
-            return (
-                abs(proc.create_time() - stored_create_time) < 1.0
-                and proc.status() != psutil.STATUS_ZOMBIE
-            )
-        except psutil.NoSuchProcess:
-            # Same rationale as the PermissionError branch above — a
-            # definitively-gone process must not be reported alive.
-            return False
-        except psutil.AccessDenied:
-            return True
+        return _check_pid_with_psutil(pid, stored_create_time)
+    return _check_pid_with_psutil(pid, stored_create_time)
+
+
+def _check_pid_with_psutil(pid: int, stored_create_time: float | None) -> bool:
+    """Post-probe liveness check via psutil — assumes os.kill(pid, 0) already succeeded.
+
+    Reports False only when psutil definitively confirms the process is gone (NoSuchProcess)
+    or in a terminal zombie/dead state. Foreign-user PIDs (AccessDenied) are unverifiable,
+    so we assume alive to avoid retiring a live kitchen on a transient psutil failure.
+    """
     try:
-        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
-        # Non-create-time path, normal-error path — preserve the pre-8ebfde357
-        # "assume alive" behavior so a transient psutil failure (e.g. OS race)
-        # does not falsely retire a live kitchen.
+        proc = psutil.Process(pid)
+        if stored_create_time is not None:
+            identity_match = abs(proc.create_time() - stored_create_time) < 1.0
+        else:
+            identity_match = True
+        return identity_match and proc.status() not in (
+            psutil.STATUS_ZOMBIE,
+            psutil.STATUS_DEAD,
+        )
+    except psutil.NoSuchProcess:
+        return False
+    except psutil.AccessDenied:
         return True
 
 

@@ -25,7 +25,6 @@ Stdlib-only — no autoskillit imports.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -34,6 +33,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    session_join_required,
     write_join_diagnostic,
 )
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
@@ -45,23 +45,6 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
 JOIN_CLAIM_DENY_TRIGGER: str = (
     "required-join session requires a declared batch with an unclaimed assignment"
 )
-
-
-def _session_join_required() -> bool:
-    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
-    if flag_path:
-        try:
-            with open(flag_path, encoding="utf-8") as handle:
-                raw = handle.read()
-        except OSError:
-            raw = ""
-        try:
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            parsed = None
-        if isinstance(parsed, dict) and bool(parsed.get("join_required", False)):
-            return True
-    return os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1"
 
 
 def _resolve_session_id(data: dict[str, object]) -> str:
@@ -79,7 +62,7 @@ def main() -> None:
         # Inside a claimed child's own subagent context — exempt.
         sys.exit(0)
 
-    if not _session_join_required():
+    if not session_join_required():
         sys.exit(0)
 
     tool_name = data.get("tool_name")

@@ -477,3 +477,40 @@ def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
     except Exception as exc:
         if caller:
             print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)
+
+
+def read_session_binding() -> dict[str, object] | None:
+    """Read the ``AUTOSKILLIT_JOIN_FLAG_PATH`` flag file as JSON.
+
+    Returns the parsed dict on success, or ``None`` when the path is unset,
+    the file is unreadable, the JSON is malformed, or the top-level value
+    is not a dict. OSError on read is treated as 'no binding present' so
+    callers can fall through to the env-mirror ``AUTOSKILLIT_JOIN_REQUIRED``.
+    """
+    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
+    if not flag_path:
+        return None
+    try:
+        with open(flag_path, encoding="utf-8") as handle:
+            raw = handle.read()
+    except OSError:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def session_join_required() -> bool:
+    """True when the session flag reports ``join_required=true`` or the
+    ``AUTOSKILLIT_JOIN_REQUIRED=1`` env mirror is set.
+
+    The flag is consulted first; the env mirror is the documented fallback
+    for hooks that lose access to the binding file (e.g. when the
+    filesystem error is transient). Either signal alone is sufficient.
+    """
+    binding = read_session_binding()
+    if binding is not None and bool(binding.get("join_required", False)):
+        return True
+    return os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1"

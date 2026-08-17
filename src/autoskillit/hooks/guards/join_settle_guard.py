@@ -32,6 +32,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    session_join_required,
     write_join_diagnostic,
 )
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
@@ -45,22 +46,6 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     JoinLedgerError,
     settle_assignment,
 )
-
-
-def _session_join_required() -> bool:
-    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
-    if flag_path:
-        try:
-            raw = open(flag_path, encoding="utf-8").read()
-        except OSError:
-            raw = ""
-        try:
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            parsed = None
-        if isinstance(parsed, dict) and bool(parsed.get("join_required", False)):
-            return True
-    return os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1"
 
 
 def _resolve_outcome(event_type: str, payload: dict[str, object]) -> str | None:
@@ -101,7 +86,7 @@ def main() -> None:
     if isinstance(data, dict) and data.get("agent_id"):
         sys.exit(0)
 
-    if not _session_join_required():
+    if not session_join_required():
         sys.exit(0)
 
     tool_name = data.get("tool_name")
@@ -151,14 +136,16 @@ def main() -> None:
                 "tool_use_id": tool_use_id,
                 "status": "settle_refused",
                 "selector_presence": [outcome],
+                "denial_reason": "ledger_io_or_contract_error",
             },
             caller="join_settle_guard",
         )
         sys.stderr.write(f"join_settle_guard: settlement refused: {exc}\n")
-        # The ledger translates OSError into JoinLedgerError; this clause
-        # additionally covers the case where a non-translated OSError
-        # surfaces. Always refuse settlement rather than silently drop it.
-        sys.exit(0)
+        # Fail closed: a transient IO or contract error must not silently
+        # drop the settlement. Returning exit 2 surfaces the refusal to the
+        # hook harness so the PostToolUse can be replayed rather than
+        # leaving the wave permanently pending.
+        sys.exit(2)
 
     write_join_diagnostic(
         {

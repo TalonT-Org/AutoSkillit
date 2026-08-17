@@ -30,6 +30,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    read_session_binding,
     write_join_diagnostic,
 )
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
@@ -38,29 +39,13 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
 )
 
 
-def _session_binding() -> dict[str, object] | None:
-    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
-    if not flag_path:
-        return None
-    try:
-        with open(flag_path, encoding="utf-8") as handle:
-            raw = handle.read()
-    except OSError:
-        return None
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def main() -> None:
     try:
         sys.stdin.read()  # Stop hook payload is informational; we read & discard.
     except OSError:
         pass
 
-    binding = _session_binding()
+    binding = read_session_binding()
     if not binding or not binding.get("join_required"):
         sys.exit(0)
 

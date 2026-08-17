@@ -5,30 +5,9 @@ new Step 7 self-check instructions in a live ``claude --print`` session,
 asserting that neither effort tier (High or Medium) ends up collapsed into a
 single ticket group.
 
-Gating
-------
-The test uses the same opt-in mechanism as the sibling live-behavior probes
-in ``tests/execution/backends/test_cli_conformance_probes.py`` and
-``tests/server/test_output_budget_e2e.py``: the weekly ``conformance-probes.yml``
-``claude-probe`` job sets ``CLAUDE_CODE_SMOKE_TEST=1`` and the test only runs
-when (a) that flag is set, (b) ``claude`` is on ``PATH``, and (c) one of
-``ANTHROPIC_API_KEY`` / ``CLAUDE_CODE_OAUTH_TOKEN`` /
-``~/.claude/.credentials.json`` is present.
-
-Subprocess safety
------------------
-* The test invokes ``claude --dangerously-skip-permissions`` with permission
-  prompts suppressed. This is intentional: the probe exercises the bundled
-  skill instructions exactly as written, and any tool-use permission prompt
-  would defeat the point. The subprocess env is built from an explicit
-  allowlist (see ``_build_subprocess_env``) rather than ``os.environ.copy()``
-  to avoid leaking incidental CI/developer credentials.
-* The test copies the user's credentials file into a tmp ``HOME`` (rather
-  than symlinking) so a crash or interrupted cleanup cannot leave a live
-  pointer back into the user's real credential store.
-* The new file is set ``chmod 0o600`` to mirror the source file's permissions.
-
-Runs unattended via the weekly ``conformance-probes.yml`` ``claude-probe`` job.
+Gated by the weekly ``conformance-probes.yml`` ``claude-probe`` job — see
+``_require_live_gate`` for the opt-in / executable / auth predicate and
+``_build_subprocess_env`` for the explicit subprocess env allowlist.
 """
 
 from __future__ import annotations

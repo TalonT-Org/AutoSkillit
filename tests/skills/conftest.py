@@ -1,17 +1,47 @@
+import functools
 import re
 
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.workspace.skills import DefaultSkillResolver
+
+__all__ = [
+    "assert_ticket_grouper_has_effort_based_splitting",
+    "assert_ticket_grouper_has_minimum_group_floor",
+    "extract_step_section",
+    "extract_step7_ticket_grouper_block",
+    "resolve_skill_text",
+]
+
+
+def _extract_ticket_grouper_section(text: str) -> str:
+    start = text.find("Ticket Grouper")
+    if start == -1:
+        return ""
+    end = text.find("### Step 7")
+    return text[start : end if end != -1 else None]
+
+
+def extract_step7_ticket_grouper_block(text: str) -> str:
+    """Return the '**From Ticket Grouper:**' block of Step 7 (through the blank line before
+    '### Step 8'), including the new self-consistency-check bullet."""
+    start = text.find("**From Ticket Grouper:**")
+    end = text.find("### Step 8")
+    if start == -1 or end == -1:
+        return ""
+    return text[start:end]
+
+
+@functools.cache
+def resolve_skill_text(skill_name: str) -> str:
+    info = DefaultSkillResolver().resolve(skill_name)
+    assert info is not None, f"{skill_name} skill not found"
+    return info.path.read_text(encoding="utf-8")
 
 
 def assert_ticket_grouper_has_minimum_group_floor(text: str) -> None:
-    start = text.find("Ticket Grouper")
-    if start == -1:
-        grouper_section = ""
-    else:
-        end = text.find("### Step 7")
-        grouper_section = text[start : end if end != -1 else None]
+    grouper_section = _extract_ticket_grouper_section(text)
     has_floor = bool(
         re.search(
             r"(?:minimum|at least|floor|must produce)",
@@ -26,12 +56,7 @@ def assert_ticket_grouper_has_minimum_group_floor(text: str) -> None:
 
 
 def assert_ticket_grouper_has_effort_based_splitting(text: str) -> None:
-    start = text.find("Ticket Grouper")
-    if start == -1:
-        grouper_section = ""
-    else:
-        end = text.find("### Step 7")
-        grouper_section = text[start : end if end != -1 else None]
+    grouper_section = _extract_ticket_grouper_section(text)
     has_effort = bool(
         re.search(
             r"(?:effort-based|line count|high effort|medium effort)",

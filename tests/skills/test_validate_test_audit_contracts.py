@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import re
 
 import pytest
@@ -12,16 +11,14 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 from tests.skills.conftest import (
     assert_ticket_grouper_has_effort_based_splitting,
     assert_ticket_grouper_has_minimum_group_floor,
+    resolve_skill_text,
 )
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
-@functools.cache
 def _skill_text() -> str:
-    info = DefaultSkillResolver().resolve("validate-test-audit")
-    assert info is not None, "validate-test-audit skill not found"
-    return info.path.read_text(encoding="utf-8")
+    return resolve_skill_text("validate-test-audit")
 
 
 class TestValidateTestAuditSkillExists:

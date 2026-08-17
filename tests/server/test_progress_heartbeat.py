@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from unittest.mock import AsyncMock, MagicMock
 
 import anyio
@@ -17,7 +18,7 @@ def _fake_ctx() -> MagicMock:
 
 
 @pytest.mark.anyio
-async def test_ticks_fire_at_least_twice_over_a_slow_body():
+async def test_ticks_fire_at_least_four_times_over_a_slow_body():
     ctx = _fake_ctx()
 
     # 0.005s interval over 0.06s body yields 12 expected ticks; the >= 4 floor
@@ -80,3 +81,15 @@ async def test_base_exception_from_body_propagates_with_original_type():
     with pytest.raises(_Sentinel):
         async with progress_heartbeat(ctx, interval=30.0):
             raise _Sentinel("boom")
+
+
+@pytest.mark.parametrize(
+    "bad_interval",
+    [0.0, -1.0, math.inf, -math.inf, math.nan],
+)
+@pytest.mark.anyio
+async def test_interval_must_be_finite_positive(bad_interval):
+    ctx = _fake_ctx()
+    with pytest.raises(ValueError, match="interval"):
+        async with progress_heartbeat(ctx, interval=bad_interval):
+            pass

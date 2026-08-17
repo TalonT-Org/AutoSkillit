@@ -88,7 +88,7 @@ class TestOpenKitchenAutoInitTracker:
         error = _auto_init_pipeline_tracker(ctx)
 
         assert error is not None
-        assert "invalid" in error
+        assert "is invalid:" in error
         assert tracker_path.read_bytes() == b"{not-json"
         assert ctx.tracker_leases == {}
         assert ctx.kitchen_tracker_key is None

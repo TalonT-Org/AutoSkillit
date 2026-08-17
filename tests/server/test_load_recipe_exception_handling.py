@@ -153,7 +153,7 @@ class TestLoadRecipeFailClosed:
             raw = await load_recipe(name="test-recipe")
         parsed = json.loads(raw)
         assert parsed["success"] is False
-        assert "content" in parsed["error"].lower()
+        assert "Result content is empty" in parsed["error"]
 
     @pytest.mark.anyio
     async def test_load_recipe_fail_closed_missing_content(self, monkeypatch, tmp_path):
@@ -177,7 +177,7 @@ class TestLoadRecipeFailClosed:
             raw = await load_recipe(name="test-recipe")
         parsed = json.loads(raw)
         assert parsed["success"] is False
-        assert "content" in parsed["error"]
+        assert "Missing required key: content" in parsed["error"]
 
     @pytest.mark.anyio
     async def test_load_recipe_fail_closed_missing_finalized_projection(

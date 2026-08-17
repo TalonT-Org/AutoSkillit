@@ -6,6 +6,7 @@ import asyncio
 import functools
 import inspect
 import json
+import math
 import os
 from collections.abc import Callable
 from contextvars import ContextVar
@@ -668,7 +669,11 @@ async def dispatch_food_truck(
         cancel_scope: anyio.CancelScope | None = None
         try:
             tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec
-            if not isinstance(tool_timeout_sec, (int, float)) or tool_timeout_sec <= 0:
+            if (
+                not isinstance(tool_timeout_sec, (int, float))
+                or not math.isfinite(tool_timeout_sec)
+                or tool_timeout_sec <= 0
+            ):
                 return fleet_error(
                     FleetErrorCode.FLEET_INVALID_BACKEND,
                     f"run_skill.mcp_tool_timeout_sec must be a positive number of "

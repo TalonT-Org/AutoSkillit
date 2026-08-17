@@ -54,9 +54,12 @@ async def progress_heartbeat(
     """Emit periodic MCP progress notifications while the wrapped body runs.
 
     Guards long ``await``s inside MCP tool handlers (``run_skill``,
-    ``dispatch_food_truck``) against client-side idle-abort. ``report_progress``
-    is a no-op when no ``progressToken`` was supplied, so no capability branching
-    is needed.
+    ``dispatch_food_truck``) against client-side idle-abort.
+
+    Raises:
+        ValueError: ``interval`` is not a finite positive number of seconds.
+        BaseException: re-raised from the body, unwrapped if wrapped in a
+            single-item BaseExceptionGroup by anyio's task group.
     """
     if not math.isfinite(interval) or interval <= 0:
         raise ValueError(
@@ -69,9 +72,6 @@ async def progress_heartbeat(
             yield
             tg.cancel_scope.cancel()
     except BaseExceptionGroup as exc:
-        # Unwrap single-item groups so callers inspecting the exception type see
-        # the wrapped body's exception, not BaseExceptionGroup. Catches the
-        # wider BaseExceptionGroup to cover bodies raising plain BaseException.
         if len(exc.exceptions) == 1:
             raise exc.exceptions[0] from None
         raise

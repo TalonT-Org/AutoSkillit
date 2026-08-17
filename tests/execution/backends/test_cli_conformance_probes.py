@@ -96,7 +96,6 @@ from autoskillit.hooks._capture_contract import (
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
-from tests.execution._process_group_helpers import _cleanup_owned_process_group
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -124,6 +123,7 @@ from tests.execution.backends._live_codex_parent import (
     prepare_live_codex_parent,
     run_live_codex_parent,
 )
+from tests.process_group_helpers import _cleanup_owned_process_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.smoke]
 

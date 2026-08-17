@@ -27,8 +27,8 @@ from autoskillit.execution.process import (
     kill_process_tree,
     run_managed_async,
 )
-from tests.execution import _process_group_helpers
-from tests.execution._process_group_helpers import (
+from tests import process_group_helpers as _process_group_helpers
+from tests.process_group_helpers import (
     _cleanup_owned_process_group,
     _cleanup_process_identities,
 )

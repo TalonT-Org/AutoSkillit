@@ -110,22 +110,19 @@ def test_subagent_context_skips_flag_write(tmp_path: Path) -> None:
 
 
 def test_existing_flag_is_json_envelope(tmp_path: Path) -> None:
-    """The flag file is written as JSON, not a raw string."""
-    # Pre-create a valid existing flag
-    flag_dir = tmp_path / ".autoskillit" / "temp"
-    flag_dir.mkdir(parents=True, exist_ok=True)
-    flag_path = flag_dir / "skill_guard_abc123.flag"
-    payload = {
-        "schema_version": 1,
-        "session_id": "abc123",
-        "join_required": True,
-        "binding_valid": True,
-        "loaded_skills": [],
-    }
-    flag_path.write_text(json.dumps(payload), encoding="utf-8")
+    """The flag file written by the hook is a JSON envelope, not a raw string.
 
-    # Verify the contents parse as JSON
-    parsed = json.loads(flag_path.read_text())
-    assert parsed["join_required"] is True
+    Drives the hook's main() with a valid Skill event and asserts the
+    persisted flag file parses as JSON with the expected envelope keys.
+    """
+    (tmp_path / ".autoskillit").mkdir(parents=True)
+    event = _make_skill_event(session_id="abc123")
+    _, _ = _run_hook(stdin_data=event, tmp_dir=tmp_path)
+
+    flag_path = tmp_path / ".autoskillit" / "temp" / "skill_guard_abc123.flag"
+    assert flag_path.exists(), "Hook must write the skill guard flag for a valid event"
+    raw = flag_path.read_text(encoding="utf-8")
+    parsed = json.loads(raw)  # Raises if the hook wrote a non-JSON literal
+    assert parsed["session_id"] == "abc123"
     assert parsed["schema_version"] == 1
     assert "loaded_skills" in parsed

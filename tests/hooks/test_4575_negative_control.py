@@ -41,6 +41,7 @@ def _run_guard(
     headless: bool = False,
     session_type: str | None = "skill",
     raw_stdin: str | None = None,
+    flag_path: str | None = None,
 ) -> str:
     """Run a guard's main() with the given PreToolUse event envelope."""
     import importlib
@@ -64,6 +65,8 @@ def _run_guard(
         env_snapshot["AUTOSKILLIT_HEADLESS"] = "1"
     if session_type is not None:
         env_snapshot["AUTOSKILLIT_SESSION_TYPE"] = session_type
+    if flag_path is not None:
+        env_snapshot["AUTOSKILLIT_JOIN_FLAG_PATH"] = flag_path
 
     with (
         patch.dict(os.environ, env_snapshot, clear=True),
@@ -78,8 +81,12 @@ def _run_guard(
         return buf.getvalue()
 
 
-def _set_session_join_required(tmp_path: Path, join_required: bool) -> None:
-    """Write a session binding flag so the guard reads join_required."""
+def _set_session_join_required(tmp_path: Path, join_required: bool) -> str:
+    """Write a session binding flag so the guard reads join_required.
+
+    Returns the flag path so callers can route it through helpers that
+    pass env vars explicitly.
+    """
     flag_dir = tmp_path / ".autoskillit" / "temp"
     flag_dir.mkdir(parents=True, exist_ok=True)
     flag_path = flag_dir / "skill_guard_4575.flag"
@@ -92,6 +99,7 @@ def _set_session_join_required(tmp_path: Path, join_required: bool) -> None:
     }
     flag_path.write_text(json.dumps(payload), encoding="utf-8")
     os.environ["AUTOSKILLIT_JOIN_FLAG_PATH"] = str(flag_path)
+    return str(flag_path)
 
 
 def test_4575_named_teammate_call_denied(tmp_path: Path) -> None:
@@ -100,7 +108,7 @@ def test_4575_named_teammate_call_denied(tmp_path: Path) -> None:
     The fake boundary mimics the named-teammate dispatch that #4575
     records losing results. The guard must deny before child creation.
     """
-    _set_session_join_required(tmp_path, join_required=True)
+    flag_path = _set_session_join_required(tmp_path, join_required=True)
     # Run the follow-up guard which denies non-Agent follow-up effects.
     event = {
         "tool_name": "Agent",
@@ -111,20 +119,17 @@ def test_4575_named_teammate_call_denied(tmp_path: Path) -> None:
             "team_name": "team-a",
         },
     }
-    # The background_exec_guard only sees Bash/Agent. Use a Bash
-    # invocation routed through the same hook surface. We'll instead
-    # model the named dispatch via the guard's own deny path.
+    # The background_exec_guard sees the join-required binding plus a
+    # named/team_name selector and must emit a structured deny payload.
     _out = _run_guard(
         event,
         hook_module="autoskillit.hooks.guards.background_exec_guard",
         session_type="skill",
+        flag_path=flag_path,
     )
-    # The PostToolUse event is required; ours is malformed for the
-    # background_exec_guard. Assert that the boundary never observes
-    # a benign response for an event type it cannot authorize.
-    # When the guard returns no output, the dispatcher proceeds. We
-    # mainly assert that the surrounding code rejects the named input.
-    assert "reviewer" in event["tool_input"]["name"]
+    assert "deny" in _out, (
+        "background_exec_guard must deny a named/team_name Agent call in a join-required session"
+    )
 
 
 def test_4575_named_teammate_call_denied_background_run(tmp_path: Path) -> None:

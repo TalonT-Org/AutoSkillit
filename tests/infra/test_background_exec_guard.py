@@ -415,16 +415,23 @@ def test_missing_binding_fails_closed_for_join_required():
         },
         flag_path=None,
     )
-    # Without the ambient signal the guard cannot know join is required,
-    # so it falls through to the ADR-0001 background check (interactive
-    # non-governed exits 0 above the headless tier). The assertion here
-    # is that the path is silent rather than crash-looping — the actual
-    # production case (binding file present) is asserted elsewhere.
-    assert isinstance(response, dict)
+    # The guard treats absence of the binding flag as a non-join session,
+    # so the named Agent call passes through (no deny payload emitted).
+    assert "permissionDecision" not in response, (
+        "Without a binding flag the guard must default to non-join semantics; "
+        "the ambient signal is the production escalation path, asserted separately."
+    )
 
 
 def test_malformed_binding_does_not_admit_join_required(tmp_path):
-    """REQ-054: malformed binding file → fail-closed (no join-required promotion)."""
+    """REQ-054: malformed binding file → no join-required promotion.
+
+    A malformed binding must not promote the session to join_required
+    semantics — Claude Code may still parse the file permissively, but
+    the AutoSkillit guard defaults to the conservative non-join posture
+    so the hook does not lock the agent out of legitimate work on a
+    transient file-system error.
+    """
     flag_path = _write_session_binding(tmp_path, join_required=True, malformed=True)
     response = _run_guard_join_bound(
         {
@@ -435,10 +442,11 @@ def test_malformed_binding_does_not_admit_join_required(tmp_path):
         flag_path=flag_path,
     )
     # Malformed JSON → _read_session_binding returns None → join_required
-    # stays False (no ambient signal). The named Agent call passes
-    # through to the post-join dispatch checks. The assertion is that the
-    # malformed binding does not crash the hook.
-    assert isinstance(response, dict)
+    # stays False → no join-bound denial. The named Agent call passes
+    # through; we explicitly assert the hook does not emit a deny.
+    assert "permissionDecision" not in response, (
+        "Malformed binding must default to non-join semantics — no deny payload."
+    )
 
 
 def test_required_join_denial_includes_activation_source_and_state(tmp_path):

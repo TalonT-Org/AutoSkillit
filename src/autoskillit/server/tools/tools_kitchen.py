@@ -58,11 +58,20 @@ from autoskillit.core import (
     try_retire_tracker,
     unregister_active_kitchen,
 )
+
+# REQ-ARCH-001: the declare_join_batch tool handler must be importable from
+# server/tools without circular imports. The hooks layer is intentionally
+# package-flat (no package-level __init__ re-exporting the join ledger or
+# diagnostic writer), so these symbols are pulled into the module top-level
+# rather than re-deferred inside the handler.
+from autoskillit.execution import get_backend
 from autoskillit.fleet import (
     FleetSemaphore,
     discover_campaign_state_files,
     reap_stale_dispatches_async,
 )
+from autoskillit.hooks._hook_settings import write_join_diagnostic
+from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch, resolve_flag_dir
 from autoskillit.pipeline import (
     KITCHEN_EFFECT_RECIPE_SERVING,
     KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
@@ -143,15 +152,6 @@ from autoskillit.server.tools._serve_helpers import (
     serve_recipe,
 )
 from autoskillit.server.tools._types import _validate_result
-
-# REQ-ARCH-001: the declare_join_batch tool handler must be importable from
-# server/tools without circular imports. The hooks layer is intentionally
-# package-flat (no package-level __init__ re-exporting the join ledger or
-# diagnostic writer), so these symbols are pulled into the module top-level
-# rather than re-deferred inside the handler.
-from autoskillit.execution import get_backend
-from autoskillit.hooks._hook_settings import write_join_diagnostic
-from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch, resolve_flag_dir
 
 logger = get_logger(__name__)
 

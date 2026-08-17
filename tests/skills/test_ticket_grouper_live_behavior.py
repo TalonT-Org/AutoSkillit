@@ -212,7 +212,13 @@ def _extract_result_text(output: str) -> str:
     same shape already relied on by ``src/autoskillit/hooks/formatters/pretty_output_hook.py`` and
     ``token_summary_hook.py``.
     """
-    return json.loads(output)["result"]
+    try:
+        return json.loads(output)["result"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        pytest.fail(
+            f"Ticket Grouper self-check live gate returned non-JSON or malformed output: "
+            f"{exc}\nResponse tail:\n{output[-4000:]}"
+        )
 
 
 @_skip_unless_live_gate

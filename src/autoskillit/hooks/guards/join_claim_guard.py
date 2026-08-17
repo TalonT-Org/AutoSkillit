@@ -68,17 +68,6 @@ def _resolve_session_id(data: dict[str, object]) -> str:
     return sid if isinstance(sid, str) else ""
 
 
-_TOP_LEVEL_PARENT_MARKER = "top_level"
-
-
-def _resolve_top_level_parent(data: dict[str, object]) -> str:
-    # The caller already exited when agent_id was truthy, so this only
-    # runs for top-level calls. The marker is the stable identifier that
-    # pairs the claim with the active batch.
-    del data
-    return _TOP_LEVEL_PARENT_MARKER
-
-
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -119,7 +108,7 @@ def main() -> None:
 
     flag_dir = find_project_root() / ".autoskillit" / "temp"
     session_id = _resolve_session_id(data)
-    top_level_parent = _resolve_top_level_parent(data)
+    top_level_parent = "top_level"
     if not session_id:
         # join_required=true is established; missing session_id is a
         # fail-closed condition — we cannot attribute this Agent call

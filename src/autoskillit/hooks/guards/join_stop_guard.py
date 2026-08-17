@@ -43,7 +43,8 @@ def _session_binding() -> dict[str, object] | None:
     if not flag_path:
         return None
     try:
-        raw = open(flag_path, encoding="utf-8").read()
+        with open(flag_path, encoding="utf-8") as handle:
+            raw = handle.read()
     except OSError:
         return None
     try:
@@ -56,7 +57,7 @@ def _session_binding() -> dict[str, object] | None:
 def main() -> None:
     try:
         sys.stdin.read()  # Stop hook payload is informational; we read & discard.
-    except (json.JSONDecodeError, ValueError, OSError):
+    except OSError:
         pass
 
     binding = _session_binding()

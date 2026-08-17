@@ -45,7 +45,8 @@ def _session_join_required() -> bool:
     flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
     if flag_path:
         try:
-            raw = open(flag_path, encoding="utf-8").read()
+            with open(flag_path, encoding="utf-8") as handle:
+                raw = handle.read()
         except OSError:
             raw = ""
         try:

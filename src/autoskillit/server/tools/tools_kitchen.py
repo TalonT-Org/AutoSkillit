@@ -2202,11 +2202,13 @@ def _declare_join_batch_handler(
             if isinstance(card, dict):
                 manifest_cardinality = card
             break
-    declared_count: object | None = None
-    for spawn in manifest_cardinality.values():
-        declared_count = spawn
-        break
-    if declared_count is not None and isinstance(declared_count, int):
+    # Sum declared per-role counts. Any string entry (for_each) makes the
+    # total indeterminate, so we skip the strict check in that case.
+    declared_count: int | None = None
+    has_static_count = all(isinstance(v, int) for v in manifest_cardinality.values())
+    if has_static_count and manifest_cardinality:
+        declared_count = sum(manifest_cardinality.values())  # type: ignore[arg-type]
+    if declared_count is not None:
         if len(assignments) != declared_count:
             return {
                 "success": False,
@@ -2252,21 +2254,15 @@ def _declare_join_batch_handler(
 
 
 def _emit_join_diagnostic(record: dict[str, object]) -> None:
-    """Bounded MCP-side diagnostic emission. Falls back to stderr on failure."""
-    allowed_keys = {
-        "ts",
-        "session_id",
-        "top_level_parent",
-        "join_batch_id",
-        "skill_name",
-        "status",
-        "selector_presence",
-    }
-    bounded = {k: v for k, v in record.items() if k in allowed_keys}
+    """Bounded MCP-side diagnostic emission. Falls back to stderr on failure.
+
+    ``write_join_diagnostic`` already redacts to ``DIAGNOSTIC_KEYS``; the
+    caller passes the raw record and lets the canonical filter run.
+    """
     try:
         from autoskillit.hooks._hook_settings import write_join_diagnostic
 
-        write_join_diagnostic(bounded, caller="declare_join_batch")
+        write_join_diagnostic(record, caller="declare_join_batch")
     except (ImportError, AttributeError, ValueError, RuntimeError, OSError) as exc:
         logger.warning(
             "declare_join_batch_diagnostic_emission_failed",

@@ -40,7 +40,8 @@ def _read_session_binding() -> dict[str, object] | None:
     if not flag_path:
         return None
     try:
-        raw = open(flag_path, encoding="utf-8").read()
+        with open(flag_path, encoding="utf-8") as handle:
+            raw = handle.read()
     except OSError:
         return None
     try:

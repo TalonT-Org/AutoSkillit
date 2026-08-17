@@ -45,7 +45,12 @@ def _pid_alive(pid: int) -> bool:
         # PID belongs to another user — assume alive when unverifiable.
         return True
     except OSError:
-        return False
+        # Any other probe failure (rare: EINVAL, transient resource
+        # exhaustion) is unverifiable rather than a confirmed disappearance —
+        # assume alive to match the contract used by every other liveness
+        # site. A spurious false positive here would inject a /MCP reconnect
+        # hint and force the user to re-open a possibly-functional kitchen.
+        return True
     try:
         # Cannot import autoskillit.core.runtime._linux_proc here (stdlib-only
         # hook script); duplicate the rfind(')') /proc parsing rather than

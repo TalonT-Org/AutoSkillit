@@ -226,19 +226,58 @@ def test_denied_pre_tool_use_creates_no_result_record(tmp_path: Path) -> None:
     by refusing release (Stop is held until the parent either declares
     a wave and completes it, or closes the session).
     """
+    import importlib
+    import io
+    import json
+    import os
+    from contextlib import redirect_stdout
+    from unittest.mock import patch
+
     flag_dir = tmp_path
+    flag_path = flag_dir / "skill_guard_s1.flag"
+    flag_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "session_id": "s1",
+                "join_required": True,
+                "binding_valid": True,
+                "loaded_skills": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    # No declared batch yet — the production denial path runs against
-    # the absence of a wave and the presence of a binding.
-    # The ledger must be empty: no claim, no success record, no
-    # settlement under any tool_use_id.
+    # Use background_exec_guard (the production denial path for join-
+    # required named/team/background selectors) and confirm the ledged
+    # remains empty after the denial.
+    event = {
+        "tool_name": "Agent",
+        "session_id": "s1",
+        "tool_input": {
+            "prompt": "reviewer",
+            "name": "reviewer",
+            "team_name": "team-a",
+        },
+    }
+    env_snapshot = {
+        "AUTOSKILLIT_SESSION_TYPE": "skill",
+        "AUTOSKILLIT_JOIN_FLAG_PATH": str(flag_path),
+        "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
+    }
+    with (
+        patch.dict(os.environ, env_snapshot, clear=True),
+        patch("sys.stdin", io.StringIO(json.dumps(event))),
+    ):
+        with redirect_stdout(io.StringIO()):
+            module = importlib.import_module("autoskillit.hooks.guards.background_exec_guard")
+            try:
+                module.main()
+            except SystemExit:
+                pass
+
     pre_ledger = flag_dir / "join_ledger.json"
-    assert not pre_ledger.exists(), "Fresh dir must have no ledger"
-
-    # Simulate the denied Agent PreToolUse: claim_assignment would only
-    # be called if the guard passed. Because the guard denies, no claim
-    # path runs. Verify that nothing was created.
-    assert not pre_ledger.exists(), "Ledger must remain absent after a denied PreToolUse"
+    assert not pre_ledger.exists(), "background_exec_guard denial must not create a ledger entry"
 
     # Even with a binding that says join_required=true, an absent ledger
     # means can_release_stop blocks Stop — the unresolved path.

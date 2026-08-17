@@ -157,13 +157,7 @@ def test_4575_named_teammate_call_denied_background_run(tmp_path: Path) -> None:
 
 def test_4575_clean_session_allows_named_teammate(tmp_path: Path) -> None:
     """A clean (join-false) session preserves legitimate team dispatch."""
-    _set_session_join_required(tmp_path, join_required=False)
-    # Even with run_in_background in a join-false session, the
-    # background_exec_guard still denies run_in_background=true in
-    # skill sessions (this is a separate invariant). But the join
-    # contract itself does not block legitimate team calls.
-    # We simulate this by checking that the join_required flag is read
-    # as False from the binding.
+    flag_path = _set_session_join_required(tmp_path, join_required=False)
     event = {
         "tool_name": "Agent",
         "session_id": "clean",
@@ -171,16 +165,17 @@ def test_4575_clean_session_allows_named_teammate(tmp_path: Path) -> None:
     }
     _out = _run_guard(
         event,
-        hook_module="autoskillit.hooks.guards.skill_load_guard",
+        hook_module="autoskillit.hooks.guards.background_exec_guard",
         session_type="skill",
+        flag_path=flag_path,
     )
-    # The skill_load_guard is a session-start guard and never
-    # authorizes this event; the test ensures no spurious denial
-    # arises from the join contract on the load path.
-    # Globals: the join_required flag is False, so the contract is
-    # permissive. The assert is that the guard output is empty (no
-    # authorization request from a PreToolUse-style event).
-    assert "permissionDecision" not in _out
+    # background_exec_guard must NOT deny a named Agent call when the
+    # binding reports join_required=false (the join contract is inert).
+    assert "permissionDecision" not in _out, (
+        "background_exec_guard must not deny a clean (join-false) named "
+        "Agent call; the join contract should be permissive."
+    )
+    assert "deny" not in _out
 
 
 def test_4575_unnamed_foreground_succeeds_after_declaration(tmp_path: Path) -> None:

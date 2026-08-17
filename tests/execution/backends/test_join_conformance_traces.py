@@ -498,7 +498,7 @@ def test_codex_required_join_refused_at_admission() -> None:
 
 def test_codex_join_bearing_skill_removed_from_catalog() -> None:
     """compile_session_skill_catalog refuses to publish a join-bearing skill on Codex."""
-    from autoskillit.core import SkillExecutionRole, SkillSemanticOperation, SkillSource, pkg_root
+    from autoskillit.core import SkillExecutionRole, SkillSource, pkg_root
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillCatalogEntry,

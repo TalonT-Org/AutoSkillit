@@ -10,8 +10,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
-    CODEX_EFFORT_MAPPING,
-    CODEX_MODEL_ALIASES,
     ChildModelPolicySpec,
     ChildSpawnSpec,
     ConcurrencySpec,
@@ -572,9 +570,7 @@ def test_real_semantic_skill_materializes_through_codex_adapter(skill_name: str)
     # Codex refuses join-bearing skills per the rectify-join contract; the
     # adapter test only applies to skills whose runtime path codex can serve.
     if plan.join is not None and plan.join.required:
-        pytest.skip(
-            f"codex cannot materialize {skill_name!r}: join.required=true is rejected"
-        )
+        pytest.skip(f"codex cannot materialize {skill_name!r}: join.required=true is rejected")
     entry = SkillCatalogEntry.from_skill_info(info)
     catalog = EffectiveSkillCatalog(
         skills=(entry,),

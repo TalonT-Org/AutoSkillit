@@ -298,11 +298,11 @@ class TestWaitForMergeQueueTiming:
         assert_step_timed(tool_ctx_kitchen_open.timing_log, "mq_wait")
 
     @pytest.mark.anyio
-    async def test_wait_for_merge_queue_empty_step_name_skips_timing(self, tool_ctx):
+    async def test_wait_for_merge_queue_empty_step_name_skips_timing(self, tool_ctx_kitchen_open):
         watcher = InMemoryMergeQueueWatcher(
             wait_result={"success": True, "pr_state": "merged", "reason": "PR merged"}
         )
-        tool_ctx.merge_queue_watcher = watcher
+        tool_ctx_kitchen_open.merge_queue_watcher = watcher
         with patch(
             "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
@@ -314,4 +314,4 @@ class TestWaitForMergeQueueTiming:
             proc_inst.returncode = 0
             mock_proc.return_value = proc_inst
             await wait_for_merge_queue(pr_number=1, target_branch="main", cwd=".")
-        assert_no_timing(tool_ctx.timing_log)
+        assert_no_timing(tool_ctx_kitchen_open.timing_log)

@@ -385,10 +385,10 @@ class TestWaitForCiTiming:
         assert_step_timed(tool_ctx_kitchen_open.timing_log, "ci_wait")
 
     @pytest.mark.anyio
-    async def test_wait_for_ci_empty_step_name_skips_timing(self, tool_ctx):
+    async def test_wait_for_ci_empty_step_name_skips_timing(self, tool_ctx_kitchen_open):
         watcher = InMemoryCIWatcher(
             wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
         )
-        tool_ctx.ci_watcher = watcher
+        tool_ctx_kitchen_open.ci_watcher = watcher
         await wait_for_ci("main")
-        assert_no_timing(tool_ctx.timing_log)
+        assert_no_timing(tool_ctx_kitchen_open.timing_log)

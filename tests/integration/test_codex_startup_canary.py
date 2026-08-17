@@ -19,7 +19,7 @@ import pytest
 import zstandard
 
 from autoskillit.execution.backends.codex import CodexBackend
-from tests.process_group_helpers import (
+from tests._process_group_helpers import (
     _capture_owned_group_identities,
     _cleanup_owned_process_group,
     _cleanup_process_identities,

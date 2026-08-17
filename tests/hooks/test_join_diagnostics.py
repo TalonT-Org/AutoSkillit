@@ -29,15 +29,6 @@ from autoskillit.hooks._join_ledger import (
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
-def _write_diagnostic_record(log_dir: Path, **fields: object) -> None:
-    """Write a single diagnostic record to the log."""
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "join_diagnostics.jsonl"
-    payload = {key: value for key, value in fields.items() if key in DIAGNOSTIC_KEYS}
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, sort_keys=True) + "\n")
-
-
 def test_diagnostics_write_redacts_to_bounded_keys(tmp_path: Path, monkeypatch) -> None:
     """Diagnostic writes are bounded to DIAGNOSTIC_KEYS — no child bodies."""
     monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "autoskillit_logs"))

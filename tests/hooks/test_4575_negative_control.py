@@ -1,23 +1,7 @@
 """#4575 production-shaped negative control.
 
-Per Plan § Step 2.4, this test reproduces the active-team + named
-calls + multi-wave shape from issue #4575's canonical session
-(``6c17de31-59f0-49dc-8ad0-aee9fc2bd34f``). It uses a fake boundary
-that emulates the dispatch + post-tool events without requiring real
-Claude or MiniMax network access.
-
-The fake boundary exposes:
-
-- An ``Agent`` PreToolUse event with ``name`` and ``team_name`` set
-  (the named-teammate selector that #4575 records losing results).
-- A follow-up ``Stop`` event against a still-unresolved wave.
-- A retry path that uses ordinary unnamed foreground Agent calls.
-
-The test asserts:
-
-1. Pre-child denial when the dispatch path is named/team/background.
-2. Legitimate team allowance when join is false.
-3. Successful unnamed foreground retry after declaration / settlement.
+Exercises the join-bound dispatch surface against the production hooks
+without requiring real Claude or MiniMax network access.
 """
 
 from __future__ import annotations
@@ -107,7 +91,6 @@ def test_4575_named_teammate_call_denied(tmp_path: Path) -> None:
     records losing results. The guard must deny before child creation.
     """
     flag_path = _set_session_join_required(tmp_path, join_required=True)
-    # Run the follow-up guard which denies non-Agent follow-up effects.
     event = {
         "tool_name": "Agent",
         "session_id": "4575",
@@ -132,7 +115,7 @@ def test_4575_named_teammate_call_denied(tmp_path: Path) -> None:
 
 def test_4575_named_teammate_call_denied_background_run(tmp_path: Path) -> None:
     """A named Agent call with run_in_background is denied by the guard."""
-    _set_session_join_required(tmp_path, join_required=True)
+    flag_path = _set_session_join_required(tmp_path, join_required=True)
     event = {
         "tool_name": "Agent",
         "session_id": "4575",
@@ -147,6 +130,7 @@ def test_4575_named_teammate_call_denied_background_run(tmp_path: Path) -> None:
         hook_module="autoskillit.hooks.guards.background_exec_guard",
         session_type="skill",
         headless=True,
+        flag_path=flag_path,
     )
     # The background_exec_guard denies run_in_background in skill
     # sessions regardless of join semantics.
@@ -234,9 +218,7 @@ def test_4575_first_wave_denied_then_wave_resolves(tmp_path: Path) -> None:
     )
 
     flag_dir = tmp_path
-    # The first named dispatch is denied by the guard (asserted
-    # via the actual deny output above). The retry path opens a
-    # declared batch and completes.
+    # Retry path: open a declared batch and complete the wave.
     declare_batch(
         flag_dir,
         session_id="4575",

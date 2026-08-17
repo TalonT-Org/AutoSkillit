@@ -18,6 +18,7 @@ from pathlib import Path
 from autoskillit.core import (
     MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,
     ManagedHeadlessSessionKind,
+    ManagedHeadlessSessionLineage,
     NativeShellCaptureDecision,
     atomic_write,
 )
@@ -32,13 +33,22 @@ from autoskillit.execution.session._managed_headless_session_lineage import (
 )
 from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     canonical_json as _canonical_json,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     digest as _digest,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     lineage_from_dict as _lineage_from_dict,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     record_payload as _record_payload,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     record_to_dict as _record_to_dict,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     strict_json_load as _strict_json_load,
 )
-from autoskillit.core import ManagedHeadlessSessionLineage
 
 
 def _new_lineage(
@@ -189,4 +199,3 @@ def _read_bounded(path: Path) -> bytes:
     if len(raw) > _MAX_RECORD_BYTES:
         raise ValueError("Managed lineage artifact is oversized")
     return raw
-

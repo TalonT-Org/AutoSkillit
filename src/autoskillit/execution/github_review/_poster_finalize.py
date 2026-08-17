@@ -191,9 +191,7 @@ def finalize(
         response_class=response_class,
         review_id=reconciliation.review_id,
         comment_ids=tuple(
-            item.remote_comment_id
-            for item in dispositions
-            if item.remote_comment_id is not None
+            item.remote_comment_id for item in dispositions if item.remote_comment_id is not None
         ),
         canonical_finding_count=len(all_findings),
         reconciliation_result=reconciliation.result,

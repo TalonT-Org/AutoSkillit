@@ -23,6 +23,8 @@ from autoskillit.execution.session._managed_headless_session_lineage import (
 )
 from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     canonical_json as _canonical_json,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     strict_json_load as _strict_json_load,
 )
 
@@ -147,4 +149,3 @@ def _settle_runner_observation(
         if observations_fd >= 0:
             os.close(observations_fd)
         os.close(root_fd)
-

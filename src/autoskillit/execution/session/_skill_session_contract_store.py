@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import secrets
 import shutil
@@ -18,28 +17,13 @@ import regex as re
 
 from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
-    SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
-    ChildExecutionIdentity,
-    ExecutionIdentity,
-    ExplorationTaskSpec,
-    ExplorationVectorApplicabilityId,
-    ExplorationVectorDef,
-    ExplorationVectorDisposition,
     ManagedHeadlessSessionLineageRef,
-    RelationshipKind,
-    RepositoryProfileId,
     ResolvedLaunchContract,
-    SkillContractError,
-    SkillExecutionRole,
     SkillSessionContract,
-    SkillSource,
-    SkillSourceRef,
     StoredSkillSessionContract,
-    WriteBehaviorSpec,
     atomic_write,
     default_log_dir,
     read_versioned_json,
-    validate_skill_capability_roles,
     write_versioned_json,
 )
 
@@ -390,4 +374,3 @@ from autoskillit.execution.session._skill_session_contract_codec import (  # noq
     _validate_relative_path,
     _validate_snapshot_mapping,
 )
-

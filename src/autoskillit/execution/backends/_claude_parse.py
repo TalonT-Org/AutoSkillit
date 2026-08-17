@@ -13,10 +13,10 @@ from dataclasses import dataclass
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    CONTEXT_EXHAUSTION_MARKER,
     AgentSessionResult,
     BackendEventKind,
     ClaudeEventData,
-    CONTEXT_EXHAUSTION_MARKER,
     SessionEvent,
     fast_loads,
 )

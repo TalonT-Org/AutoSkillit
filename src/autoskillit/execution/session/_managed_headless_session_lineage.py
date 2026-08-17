@@ -2,45 +2,20 @@
 
 from __future__ import annotations
 
-import fcntl
-import hashlib
-import os
-import stat
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
 from autoskillit.core import (
-    MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineage,
     ManagedHeadlessSessionLineageRef,
     ManagedHeadlessSessionTerminalState,
     NativeShellCaptureDecision,
     NativeShellCaptureObservation,
-    atomic_write,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_codec import (
-    _strict_str,
 )
 from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     canonical_json as _canonical_json,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_codec import (
-    digest as _digest,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_codec import (
-    lineage_from_dict as _lineage_from_dict,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_codec import (
-    record_payload as _record_payload,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_codec import (
-    record_to_dict as _record_to_dict,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_codec import (
-    strict_json_load as _strict_json_load,
 )
 
 __all__ = [
@@ -551,6 +526,13 @@ class DefaultManagedHeadlessSessionLineageStore:
 
 # Index/runner/records helpers live in sibling modules; re-exported for
 # existing callers using the canonical _managed_headless_session_lineage path.
+from autoskillit.execution.session._managed_headless_session_lineage_indexes import (  # noqa: F401
+    _assert_index_available,
+    _index_path,
+    _read_index,
+    _remove_index,
+    _write_index,
+)
 from autoskillit.execution.session._managed_headless_session_lineage_records import (  # noqa: F401
     _creation_projection,
     _new_lineage,
@@ -566,13 +548,7 @@ from autoskillit.execution.session._managed_headless_session_lineage_runner impo
     _read_runner_markers,
     _settle_runner_observation,
 )
-from autoskillit.execution.session._managed_headless_session_lineage_indexes import (  # noqa: F401
-    _assert_index_available,
-    _index_path,
-    _read_index,
-    _remove_index,
-    _write_index,
-)
+
 
 def _validate_anchor_identity(
     lineage: ManagedHeadlessSessionLineage,

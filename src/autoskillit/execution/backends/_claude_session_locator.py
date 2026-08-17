@@ -22,7 +22,6 @@ from autoskillit.core import (
     read_registry,
 )
 
-
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
     "Order up! Today's special:",

@@ -15,6 +15,7 @@ Extracted from `process/__init__.py`. This module owns:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import assert_never
 
 import anyio
 import structlog
@@ -34,7 +35,6 @@ from autoskillit.execution.process._process_monitor import (
     _has_active_child_processes,
     _has_active_execution_marker,
 )
-from typing_extensions import assert_never
 
 
 def decide_termination_action(

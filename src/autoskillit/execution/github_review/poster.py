@@ -14,7 +14,6 @@ from typing import Any
 from autoskillit.core import (
     GitHubReviewFindingDisposition,
     GitHubReviewPostResult,
-    GitHubReviewReceipt,
     GitHubReviewRequest,
     ReviewFindingDispositionKind,
     ReviewOperationState,
@@ -754,7 +753,6 @@ class DefaultGitHubReviewPoster:
             reconciliation=reconciliation,
             executed_mutations=0,
         )
-
 
     async def _reconcile_payload(
         self,

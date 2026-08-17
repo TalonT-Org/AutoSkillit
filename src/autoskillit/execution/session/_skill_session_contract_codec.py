@@ -13,21 +13,35 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from autoskillit.core import (
+    SKILL_PROJECTION_VERSION,
+    SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
+    ChildExecutionIdentity,
     ExecutionIdentity,
+    ExplorationTaskSpec,
+    ExplorationVectorApplicabilityId,
     ExplorationVectorDef,
+    ExplorationVectorDisposition,
     ManagedHeadlessSessionLineageRef,
+    RelationshipKind,
+    RepositoryProfileId,
+    ResolvedLaunchContract,
+    SkillContractError,
+    SkillExecutionRole,
     SkillSessionContract,
+    SkillSource,
     SkillSourceRef,
-    atomic_write,
+    WriteBehaviorSpec,
+    validate_skill_capability_roles,
 )
 from autoskillit.execution.session._skill_session_contract_store import (
+    _SHA256_RE,
     _STORE_MANIFEST_SCHEMA_VERSION,
-    _MANIFEST_FILENAME,
 )
 
 

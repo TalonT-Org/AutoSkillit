@@ -133,8 +133,8 @@ from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_tran
 
 # Re-export probe helpers so existing consumers (e.g. evidence_reader, tests)
 # can keep importing them from the canonical codex module path.
-from autoskillit.execution.backends._codex_probes import (
-    _BoundedProbeResult,  # noqa: F401
+from autoskillit.execution.backends._codex_probes import (  # noqa: F401
+    _BoundedProbeResult,
     _validate_codex_mcp_inventory,
     _validate_global_codex_home,
     _validate_inert_rollout_paths,

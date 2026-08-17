@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
-import errno
-import stat
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
-    ApiRetryOutcome,
     ChannelConfirmation,
     CliSubtype,
     ClosureAuthoritySpec,
@@ -25,28 +21,21 @@ from autoskillit.core import (
     SkillResult,
     TerminationReason,
     WriteBehaviorSpec,
-    WriteEvidence,
     extract_skill_name,
     get_logger,
     validate_worktree_path,
 )
 from autoskillit.execution.headless._headless_evidence import (
-    _adapt_agent_result,
     _apply_budget_guard,
     _capture_failure,
     _compute_write_evidence,
     _extract_file_changes,
     _stdout_mentions_write_tools,
 )
-from autoskillit.execution.headless._headless_outcome import (
-    evaluate_outcome_invariants,
-    parse_outcome_fields,
-)
 from autoskillit.execution.headless._headless_path_tokens import (
     _extract_branch_name,
     _extract_output_paths,
     _extract_worktree_path,
-    _is_path_outside_cwd,
     _normalize_messages,
     _select_output_path_tokens,
     _validate_output_paths,
@@ -69,7 +58,6 @@ from autoskillit.execution.session._exit_classification import (
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
-    parse_session_result,
 )
 from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
@@ -104,7 +92,6 @@ from autoskillit.execution.headless._headless_adjudication import (  # noqa: F40
     _resolve_skill_session_id,
     _validate_declared_artifact,
 )
-
 
 
 def _build_skill_result(

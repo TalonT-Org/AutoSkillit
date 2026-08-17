@@ -5,9 +5,30 @@ Extracted from `_managed_headless_session_lineage.py`.
 
 from __future__ import annotations
 
+import hashlib
+import os
 from pathlib import Path
 
-from autoskillit.execution.session._managed_headless_session_lineage_codec import _strict_str
+from autoskillit.core import (
+    MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,
+    atomic_write,
+)
+from autoskillit.execution.session._managed_headless_session_lineage import (
+    _INDEXES_DIR,
+    ManagedHeadlessSessionLineageConflictError,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    _strict_str,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    canonical_json as _canonical_json,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    strict_json_load as _strict_json_load,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_records import (
+    _read_bounded,
+)
 
 
 def _index_path(root: Path, index_name: str, key: str) -> Path:
@@ -72,5 +93,3 @@ def _assert_index_available(
         raise ManagedHeadlessSessionLineageConflictError(
             f"Managed lineage {index_name} identity is already owned"
         )
-
-

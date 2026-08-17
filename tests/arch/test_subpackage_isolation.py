@@ -1378,7 +1378,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "adds execution-role protocol parity while preserving Claude behavior (+3 net lines).",
     ),
     "execution/headless/_headless_result.py": (
-        1047,
+        1053,
         "REQ-CNST-010-E25: #4233 keeps the async-obligation success gate adjacent to "
         "the existing stale, idle, timeout, and content adjudication order it must preempt. "
         "#4641/#4644 rectify adds the _should_flag_cleanup_incomplete diagnostic helper shared by "

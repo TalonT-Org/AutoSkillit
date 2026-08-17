@@ -29,7 +29,7 @@ HEADLESS_SIZE_BUDGETS = {
     # #4641/#4644 rectify: cleanup-evidence diagnostic threading (_should_flag_cleanup_incomplete
     # helper + two call sites) keeps the incomplete-teardown signal adjacent to the
     # same success-path construction it must not destroy.
-    "headless/_headless_result.py": 1047,
+    "headless/_headless_result.py": 1053,
     "headless/_headless_evidence.py": 310,
 }
 

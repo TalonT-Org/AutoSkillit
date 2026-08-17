@@ -58,8 +58,16 @@ def read_process_state(pid: int) -> str | None:
 
 
 def is_pid_zombie(pid: int) -> bool:
-    """True when pid is a zombie (exited but not yet reaped by its parent)."""
-    return read_process_state(pid) == "Z"
+    """True when pid is a zombie or in the transient dead-reaping window.
+
+    Matches 'Z' (zombie) and 'X' (dead, transient reaping per proc_pid_stat(5),
+    available since Linux 2.6.0). An 'X'-state process is briefly observable
+    before the kernel reaps it; treating it as non-zombie here lets a caller
+    race the reaper and miss cleanup. For liveness checks that exclude both
+    states, prefer is_pid_alive.
+    """
+    state = read_process_state(pid)
+    return state in ("Z", "X")
 
 
 def is_pid_alive(pid: int) -> bool:

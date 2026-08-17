@@ -468,6 +468,12 @@ After both parallel subagents return:
 **From Ticket Grouper:**
 - Record the grouping manifest (it will be written to disk in Step 8).
 - If the grouper returned fewer than 1 group: treat the entire validated report as a single ticket.
+- **Rationale self-consistency check**: For each returned ticket group, scan its Rationale for
+  named or numbered sub-units (e.g. "Pair A/B/C", "3 pairs", "small batches") describing more
+  file-level splits than that group has separate `### Ticket Group` entries for. If found, the
+  effort-based splitting rule was reasoned about correctly but not applied — re-split that
+  group into the sub-units its own Rationale names, one `### Ticket Group` per sub-unit, before
+  proceeding to Step 8. Do not write any ticket body files until every group passes this check.
 
 ### Step 8 — Split Validated Report by Grouping Manifest
 

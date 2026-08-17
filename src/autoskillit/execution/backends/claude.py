@@ -1,8 +1,10 @@
 """Backend orchestration for the Claude Code CLI session runner.
 
-This module owns the Claude Code-specific env policy, flag vocabulary,
-session locator, and result parsers alongside the ClaudeCodeBackend
-implementation.
+Owns the Claude Code env policy (`ClaudeEnvPolicy`), the host-attestation
+helper, and the `ClaudeCodeBackend` implementation. Re-exports the
+session locator and result parsers from sibling modules
+(`_claude_session_locator`, `_claude_parse`) as the backend's public
+surface.
 """
 
 from __future__ import annotations

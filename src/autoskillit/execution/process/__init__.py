@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, assert_never, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import anyio
 import anyio.abc
@@ -25,11 +25,8 @@ import anyio.abc
 from autoskillit.core import (
     ChannelBStatus,
     ChannelConfirmation,
-    KillReason,
-    ProcessCleanupResult,
     SessionEvent,
     SubprocessResult,
-    TerminationAction,
     TerminationReason,
     get_logger,
     normalize_inherited_fds,
@@ -64,7 +61,6 @@ from autoskillit.execution.process._process_jsonl import (
 )
 from autoskillit.execution.process._process_kill import (
     OwnedProcessGroup,
-    ProcessObservationSnapshot,
     _wait_process_dead,
     async_kill_process_tree,
     kill_process_tree,
@@ -92,10 +88,12 @@ from autoskillit.execution.process._process_race import (
     fold_lifecycle_evidence_path,
     resolve_termination,
 )
+from autoskillit.execution.process._termination import (
+    decide_termination_action,
+    execute_termination_action,
+)
 
 if TYPE_CHECKING:
-    import structlog
-
     from autoskillit.config import LinuxTracingConfig
     from autoskillit.core import InspectorCallback, StreamParser
     from autoskillit.execution.linux_tracing import TraceTarget
@@ -164,14 +162,6 @@ def _resolve_session_id(
 def _normalize_pass_fds(pass_fds: tuple[int, ...]) -> tuple[int, ...]:
     """Validate and de-duplicate inherited descriptors without reordering them."""
     return normalize_inherited_fds(pass_fds)
-
-
-# Termination decision/execution helpers live in _termination.py; re-exported
-# so existing callers using the canonical process.__init__ path keep working.
-from autoskillit.execution.process._termination import (  # noqa: F401
-    decide_termination_action,
-    execute_termination_action,
-)
 
 
 async def run_managed_async(

@@ -1,11 +1,10 @@
 """Adjudication helpers for headless Claude session SkillResult construction.
 
-Extracted from `_headless_result.py`. This module owns the post-session
-adjudication chain: parse-stdout, build-api-retry-outcome, make-terminated-
-result, out-of-cwd-file-change detection, post-session-adjudication, and
-declared-artifact validation. The SkillResult constructor itself
-(`_build_skill_result`) remains in the parent module because it is
-the headless orchestration authority.
+This module owns the post-session adjudication chain: parse-stdout,
+build-api-retry-outcome, make-terminated-result, out-of-cwd-file-change
+detection, post-session-adjudication, and declared-artifact validation.
+The SkillResult constructor itself (`_build_skill_result`) remains in
+the parent module because it is the headless orchestration authority.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
     ApiRetryOutcome,
     InfraOutcome,
     NdjsonDriftOutcome,
@@ -59,7 +57,7 @@ def _resolve_skill_session_id(
 
 
 def _parse_stdout(stdout: str, backend: CodingAgentBackend) -> ClaudeSessionResult:
-    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
+    if backend.capabilities.supports_claude_format_stdout:
         return parse_session_result(stdout)
     agent_result = backend.result_parser().parse_stdout(stdout)
     return _adapt_agent_result(agent_result)

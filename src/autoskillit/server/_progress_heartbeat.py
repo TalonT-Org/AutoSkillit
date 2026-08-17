@@ -11,6 +11,10 @@ import anyio
 from anyio import BrokenResourceError as _BrokenResource
 from anyio import ClosedResourceError as _ClosedResource
 
+from autoskillit.core import get_logger
+
+_logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from fastmcp import Context
 
@@ -19,16 +23,28 @@ if TYPE_CHECKING:
 # programming error worth surfacing.
 _SWALLOWED_EXCEPTIONS = (RuntimeError, AttributeError, KeyError, _ClosedResource, _BrokenResource)
 
+# First-occurrence flag so a permanently-failing heartbeat (wrong ctx type,
+# signature drift) becomes observable once instead of silently degrading every
+# tick to a no-op, which would undermine the idle-abort immunity this module adds.
+_tick_failure_logged: bool = False
+
 
 async def _tick(ctx: Context, interval: float, message: str) -> None:
+    global _tick_failure_logged
     progress = 0.0
     while True:
         await anyio.sleep(interval)
         progress += 1
         try:
             await ctx.report_progress(progress, message=message)
-        except _SWALLOWED_EXCEPTIONS:
-            pass
+        except _SWALLOWED_EXCEPTIONS as exc:
+            if not _tick_failure_logged:
+                _tick_failure_logged = True
+                _logger.debug(
+                    "progress_heartbeat: report_progress swallowed %r; "
+                    "further failures are silenced until process restart.",
+                    exc,
+                )
 
 
 @asynccontextmanager

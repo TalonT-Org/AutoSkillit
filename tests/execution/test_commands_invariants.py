@@ -166,6 +166,49 @@ def test_all_claude_session_builders_inject_mcp_tool_idle_timeout(builder_call) 
     assert spec.env["CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"] == "14364.0"
 
 
+@pytest.mark.parametrize(
+    "builder_call",
+    [
+        lambda: ClaudeCodeBackend().build_interactive_cmd(mcp_tool_timeout_sec=None),
+        lambda: ClaudeCodeBackend().build_interactive_cmd(mcp_tool_timeout_sec=0.0),
+        lambda: ClaudeCodeBackend().build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_binding=None,
+            output_format=OutputFormat.STREAM_JSON,
+            mcp_tool_timeout_sec=0.0,
+        ),
+        lambda: ClaudeCodeBackend().build_resume_cmd(
+            resume_session_id="abc", prompt="Emit", mcp_tool_timeout_sec=None
+        ),
+        lambda: _with_plugin_binding(
+            lambda binding: ClaudeCodeBackend().build_food_truck_cmd(
+                orchestrator_prompt="You are an L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+                mcp_tool_timeout_sec=0.0,
+            )
+        ),
+    ],
+    ids=[
+        "interactive_none",
+        "interactive_zero",
+        "skill_headless_zero",
+        "headless_resume_none",
+        "food_truck_zero",
+    ],
+)
+def test_claude_session_builders_omit_mcp_tool_idle_timeout_when_unset(builder_call) -> None:
+    """Builders must omit CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT when mcp_tool_timeout_sec
+    is None or 0.0 so Claude Code keeps its default idle-abort behavior.
+    """
+    spec = builder_call()
+    assert "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT" not in spec.env
+
+
 def test_launch_id_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_LAUNCH_ID" in _HEADLESS_EXCLUSIVE_VARS
 

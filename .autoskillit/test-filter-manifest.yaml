@@ -186,6 +186,9 @@ tests/arch/fixtures/*:
 tests/recipe/fixtures/*:
   - recipe/
 
+tests/skills/_fixtures/*:
+  - skills/
+
 tests/contracts/fixtures/skill_contract_corpus/*:
   - contracts/
 

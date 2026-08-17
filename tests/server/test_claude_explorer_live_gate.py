@@ -16,7 +16,7 @@ from autoskillit.core import (
     load_bundled_agent_definitions,
 )
 from autoskillit.hook_registry import generate_hooks_json
-from tests.execution._process_group_helpers import _cleanup_owned_process_group
+from tests._process_group_helpers import _cleanup_owned_process_group
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.large, pytest.mark.smoke]
 

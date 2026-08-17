@@ -284,6 +284,7 @@ jobs:
           .venv/bin/python -m pytest \
             tests/execution/backends/test_cli_conformance_probes.py \
             tests/server/test_output_budget_e2e.py \
+            tests/skills/test_ticket_grouper_live_behavior.py \
             -m smoke -v --tb=short -o "addopts=" \
             --basetemp="$TMPDIR/basetemp" \
             -o "cache_dir=$TMPDIR/cache"

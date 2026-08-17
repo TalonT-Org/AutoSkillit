@@ -2,26 +2,23 @@
 
 from __future__ import annotations
 
-import functools
 import re
 
 import pytest
 
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
-from tests.skills.conftest import (
+from tests.skills._skill_text_helpers import (
     assert_ticket_grouper_has_effort_based_splitting,
     assert_ticket_grouper_has_minimum_group_floor,
+    resolve_skill_text,
 )
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
-@functools.cache
 def _skill_text() -> str:
-    info = DefaultSkillResolver().resolve("validate-review-decisions")
-    assert info is not None, "validate-review-decisions skill not found"
-    return info.path.read_text(encoding="utf-8")
+    return resolve_skill_text("validate-review-decisions")
 
 
 class TestValidateReviewDecisionsSkillExists:

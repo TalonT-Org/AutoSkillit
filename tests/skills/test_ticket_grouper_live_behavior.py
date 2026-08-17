@@ -81,19 +81,18 @@ _LIVE_ENV = "CLAUDE_CODE_SMOKE_TEST"
 _SOURCE_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 
 
-def _has_authentication() -> bool:
-    """Re-evaluated on every skipif call so env mutations after import are seen."""
-    return bool(
-        os.environ.get("ANTHROPIC_API_KEY")
-        or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-        or _SOURCE_CREDENTIALS.is_file()
-    )
-
-
+# skipif is evaluated once at decoration time. CI sets ``CLAUDE_CODE_SMOKE_TEST``
+# and the credentials file path at the job level before pytest is invoked, so
+# module-import-time evaluation is the correct semantics — late env mutations
+# after import are not a realistic concern for this opt-in probe.
 _skip_unless_live_gate = pytest.mark.skipif(
     os.environ.get(_LIVE_ENV) != "1"
     or shutil.which("claude") is None
-    or not _has_authentication(),
+    or not (
+        os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        or _SOURCE_CREDENTIALS.is_file()
+    ),
     reason=(
         "Ticket Grouper self-check live gate requires its opt-in, executable, and isolated auth"
     ),
@@ -224,20 +223,24 @@ def test_step7_self_check_splits_the_real_broken_manifest(tmp_path: Path) -> Non
         "Ticket Grouper self-check returned no parseable ticket groups — "
         f"the Step 7 instructions may not be honoured.\nResponse tail:\n{result_text[-4000:]}"
     )
-    for tier_files in (_HIGH_EFFORT_FILES, _MEDIUM_EFFORT_FILES):
+    # Group 12 (HIGH) names "Pair A/B/C" — each ticket should pair at most one
+    # other file, so max files per block must be <= len / 3 (i.e. at most 2 of
+    # 6). Group 13 (MEDIUM) accepts "small groups" — at most half the tier
+    # (3 of 6). The joint bound catches both 6+0 (no split at all) and
+    # structurally unbalanced splits (5+1, 4+2, 3+3 for Group 12).
+    tier_bounds = (
+        (_HIGH_EFFORT_FILES, len(_HIGH_EFFORT_FILES) // 3),  # pairs
+        (_MEDIUM_EFFORT_FILES, len(_MEDIUM_EFFORT_FILES) // 2),  # small groups
+    )
+    for tier_files, max_per_block in tier_bounds:
         max_in_one_block = max((sum(f in b for f in tier_files) for b in blocks), default=0)
         assert max_in_one_block < len(tier_files), (
             "self-check failed to split an effort tier that was crushed into one ticket in the "
             f"real #4610 incident. Response tail:\n{result_text[-4000:]}"
         )
-        # The "small groups in the same package" wording in the Group 13
-        # rationale and the "Pair A/B/C" guidance in Group 12 both imply a
-        # balanced split; a 5+1 / 4+2 / 3+3 imbalance all satisfy the
-        # "anything but one block" check above but only the latter is
-        # consistent with the rationale.
-        assert max_in_one_block <= len(tier_files) // 2, (
-            "self-check produced an unbalanced split: a single block has "
-            f"{max_in_one_block} of {len(tier_files)} tier files. "
-            "The rationale's effort-tier rules imply a max block size of at "
-            f"most half the tier. Response tail:\n{result_text[-4000:]}"
+        assert max_in_one_block <= max_per_block, (
+            f"self-check produced an unbalanced split for an effort tier that explicitly "
+            f"names per-file pairings / small batches: a single block has "
+            f"{max_in_one_block} of {len(tier_files)} tier files (max allowed "
+            f"{max_per_block}). Response tail:\n{result_text[-4000:]}"
         )

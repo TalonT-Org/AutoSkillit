@@ -1,4 +1,10 @@
-"""Identity-fenced process cleanup helpers for execution tests."""
+"""Identity-fenced process cleanup helpers for tests that spawn real subprocesses.
+
+Cross-domain shared by ``tests/execution/``, ``tests/execution/backends/``,
+``tests/integration/``, ``tests/cli/``, ``tests/server/``, and
+``tests/skills/``. See ``tests/execution/_process_group_helpers.py`` in git
+history for the original execution-only location.
+"""
 
 from __future__ import annotations
 

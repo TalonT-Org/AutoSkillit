@@ -6,9 +6,8 @@ drift, the runtime Rationale self-consistency check stops applying
 identically across skills — exactly the bug class that produced #4610.
 
 The canonical source for the block is declared once in
-``tests/skills/_skill_text_helpers.py`` as
-``CANONICAL_TICKET_GROUPER_SKILL`` (``"validate-test-audit"``); the other two
-skills are asserted byte-equal to it here.
+``tests/skills/_skill_text_helpers.py`` as ``CANONICAL_TICKET_GROUPER_SKILL``;
+the other two skills are asserted byte-equal to it here.
 """
 
 from __future__ import annotations

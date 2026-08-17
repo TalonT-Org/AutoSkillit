@@ -886,7 +886,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",
             "server/test_tools_kitchen_gate_features.py",
-            "server/test_tools_load_recipe.py",
             "server/test_tools_recipe_pull.py",
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",
@@ -903,7 +902,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_load_recipe_exception_handling.py",
             "server/test_load_recipe_migration.py",
             "server/test_tools_kitchen_sous_chef.py",
-            "server/test_recipe_namespace_admission.py",
+            "server/test_open_kitchen_auto_init_tracker.py",
+            "server/test_tools_execution_input_gates_cross_binding.py",
+            "server/test_tools_execution_input_gates_real_contracts.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

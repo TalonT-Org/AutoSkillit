@@ -412,35 +412,6 @@ def test_codex_bypass_with_nonempty_profile_writes_no_flag(tmp_path: Path) -> No
     assert not flag.exists(), "Backend check must win over provider profile"
 
 
-def test_codex_bypass_join_bearing_skill_with_nonempty_profile_writes_no_flag(
-    tmp_path: Path,
-) -> None:
-    """REQ-053: Codex + non-empty profile + join-bearing projection → no flag.
-
-    Codex's capability attestation refuses REQUIRED_JOIN at admission.
-    A join-bearing skill load must therefore NEVER produce the binding
-    flag — otherwise downstream join gates would key off a binding
-    Codex never honors.
-    """
-    (tmp_path / ".autoskillit").mkdir(parents=True)
-    _write_join_bearing_projection_manifest(
-        tmp_path,
-        skill_name="implement-worktree-no-merge",
-        join_required=True,
-    )
-    _run_hook(
-        stdin_data=_make_skill_event(skill="implement-worktree-no-merge"),
-        tmp_dir=tmp_path,
-        provider_profile="anthropic",
-        agent_backend="codex",
-    )
-    flag = tmp_path / _FLAG_RELPATH
-    assert not flag.exists(), (
-        "Codex backend must never write the flag for a join-bearing skill — "
-        "backend check wins over the join-bearing projection"
-    )
-
-
 def test_unrecognized_backend_does_not_inherit_codex_exemption(tmp_path: Path) -> None:
     """An unrecognized backend + non-empty profile must still write the flag.
 

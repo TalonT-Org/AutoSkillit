@@ -292,7 +292,7 @@ def _interactive_invocation_environment_policy(
     """
     errors: list[str] = []
     env_value = env.get(CLAUDE_AGENT_TEAMS_ENV_VAR)
-    if env_value is not None and _active_agent_teams(env_value):
+    if isinstance(env_value, str) and _active_agent_teams(env_value):
         errors.append(
             f"{CLAUDE_AGENT_TEAMS_ENV_VAR}={env_value!r} is set in the launch "
             f"environment; Claude agent teams would be active at launch"

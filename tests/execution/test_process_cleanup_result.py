@@ -592,42 +592,41 @@ def test_settle_still_raises_on_genuinely_incomplete_evidence(
         owner.settle()
 
 
-def test_settle_evidence_returns_without_raising_on_incomplete(
+@pytest.mark.parametrize(
+    ("returncode", "complete", "expect_incomplete_log"),
+    [
+        (0, False, True),
+        (None, True, True),
+    ],
+)
+def test_settle_evidence_returns_without_raising(
     monkeypatch: pytest.MonkeyPatch,
+    returncode: int | None,
+    complete: bool,
+    expect_incomplete_log: bool,
 ) -> None:
+    """settle_evidence returns the cleanup tuple without raising across the
+    (incomplete + leader-confirmed) and (complete + leader-unconfirmed) cases."""
     owner = _spawn_owner(monkeypatch)
-    incomplete_result = _process_kill.ProcessCleanupResult(
+    result_stub = _process_kill.ProcessCleanupResult(
         root_pid=owner.pid,
-        access_denied_pids=(1234,),
-        observation_complete=True,
+        access_denied_pids=(1234,) if not complete else (),
+        observation_complete=complete,
     )
-    monkeypatch.setattr(owner, "cleanup", lambda timeout: (0, incomplete_result))
+    monkeypatch.setattr(owner, "cleanup", lambda timeout: (returncode, result_stub))
 
     with structlog.testing.capture_logs() as logs:
-        returncode, result = owner.settle_evidence()
+        actual_returncode, actual_result = owner.settle_evidence()
 
-    assert returncode == 0
-    assert result is incomplete_result
-    assert any(entry.get("event") == "owned_group_cleanup_incomplete" for entry in logs)
-
-
-def test_settle_evidence_returns_none_returncode_without_raising(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    owner = _spawn_owner(monkeypatch)
-    complete_result = _process_kill.ProcessCleanupResult(
-        root_pid=owner.pid,
-        observation_complete=True,
-    )
-    monkeypatch.setattr(owner, "cleanup", lambda timeout: (None, complete_result))
-
-    with structlog.testing.capture_logs() as logs:
-        returncode, result = owner.settle_evidence()
-
-    assert returncode is None
-    assert result is complete_result
-    entry = next(e for e in logs if e.get("event") == "owned_group_cleanup_incomplete")
-    assert entry.get("returncode_confirmed") is False
+    assert actual_returncode == returncode
+    assert actual_result is result_stub
+    incomplete_entries = [e for e in logs if e.get("event") == "owned_group_cleanup_incomplete"]
+    if expect_incomplete_log:
+        assert incomplete_entries
+        if returncode is None:
+            assert all(e.get("returncode_confirmed") is False for e in incomplete_entries)
+    else:
+        assert not incomplete_entries
 
 
 def test_subprocess_result_carries_cleanup_evidence_field() -> None:

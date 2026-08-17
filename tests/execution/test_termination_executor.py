@@ -224,19 +224,20 @@ async def test_child_deferral_stops_when_children_become_inactive(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("returncode", "complete", "expected_complete"),
+    ("returncode", "complete"),
     [
-        (0, False, False),
-        (None, True, True),
+        (0, False),
+        (None, True),
+        (0, True),
+        (None, False),
     ],
 )
 async def test_execute_termination_action_returns_cleanup_without_raising(
     monkeypatch: pytest.MonkeyPatch,
     returncode: int | None,
     complete: bool,
-    expected_complete: bool,
 ) -> None:
-    """Both the incomplete-evidence and the leader-unconfirmed paths must not raise."""
+    """All (returncode, complete) cross-products must not raise."""
     owner = await _spawn(0.05)
     while await anyio.to_thread.run_sync(owner.observe_exit) is None:
         await anyio.sleep(0.01)
@@ -259,7 +260,7 @@ async def test_execute_termination_action_returns_cleanup_without_raising(
     assert kill_reason is KillReason.NATURAL_EXIT
     assert actual_returncode == returncode
     assert cleanup is result
-    assert cleanup.complete is expected_complete
+    assert cleanup.complete is complete
 
 
 def test_run_managed_sync_survives_incomplete_cleanup_evidence(

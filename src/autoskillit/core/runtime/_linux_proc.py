@@ -65,9 +65,15 @@ def is_pid_zombie(pid: int) -> bool:
 
 
 def is_pid_alive(pid: int) -> bool:
-    """True when pid exists and is not a zombie — False on non-Linux."""
+    """True when pid exists and is not a dead or zombie state — False on non-Linux.
+
+    Excludes both 'Z' (zombie) and 'X' (dead, in process of being reaped on
+    Linux >= 2.6.33, per proc(5)). A 'X'-state process is brief but
+    real: a downstream caller that treats it as alive can race against
+    the reaper and miss cleanup.
+    """
     state = read_process_state(pid)
-    return state is not None and state != "Z"
+    return state is not None and state not in ("Z", "X")
 
 
 def is_session_alive(pid: int, boot_id: str, starttime_ticks: int) -> bool:

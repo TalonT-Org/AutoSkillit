@@ -94,6 +94,10 @@ _NON_HOOK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # Bare TOML scalars (tool_output_token_limit, auto-compact limit) — unrelated to hooks.
         ("execution/backends/_codex_config.py", "_ensure_top_level_key"),
         ("execution/backends/_codex_config.py", "_upsert_top_level_key_exact"),
+        # Drift-check re-renders hooks.json from the registry hash; same content
+        # unless the registry changes, so this is the canonical hook-config writer,
+        # not a hook-artifact writer.
+        ("server/_lifespan/_startup_checks.py", "run_startup_drift_check"),
     }
 )
 

@@ -100,6 +100,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "claude",  # execution/backends/claude.py: _ANNOTATION_SUPPORT_MIN = Version(...)
         "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
+        "_provenance",  # request-scoped fleet dispatch provenance ContextVars (submodule)
         "_run_skill_completion",  # request-scoped #4457 receipt delivery bindings
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
@@ -119,6 +120,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
+        "_primitives",  # server/_response_budget/_primitives.py: SHA-256 hexdigests derived once at import time from the canonical spill schema
         "_explorer_projection",  # server-owned logger and immutable projection authority
         "_explorer_dispatch",  # immutable backend-specific native dispatch renderers
         "tools_recipe",  # request-scoped recipe pagination ContextVar (delegated)

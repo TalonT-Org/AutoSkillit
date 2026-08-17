@@ -27,6 +27,7 @@ from autoskillit.core import (
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
+    _collect_disabled_feature_tags,
     detect_autoskillit_mcp_prefix,
     get_logger,
     sweep_stale_markers,
@@ -179,7 +180,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "registry_update"):
         try:
-            from autoskillit.server.tools.tools_kitchen._tracker_authority import (
+            from autoskillit.server.tools.tools_kitchen._tracker_authority import (  # circular-break
                 _retain_kitchen_tracker_authority,
             )
 
@@ -198,7 +199,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "tracker_prune"):
         try:
-            from autoskillit.server.tools.tools_kitchen._tracker_authority import (
+            from autoskillit.server.tools.tools_kitchen._tracker_authority import (  # circular-break
                 prune_stale_kitchen_state,
             )
 
@@ -277,9 +278,7 @@ async def _redisable_subsets(
 def _collect_disabled_feature_tags(
     features: dict[str, bool] | None = None, *, experimental_enabled: bool = False
 ) -> frozenset[str]:
-    from autoskillit.core import _collect_disabled_feature_tags as _real_collect
-
-    return _real_collect(features or {}, experimental_enabled=experimental_enabled)
+    return _collect_disabled_feature_tags(features or {}, experimental_enabled=experimental_enabled)
 
 
 @mcp.tool(
@@ -753,7 +752,7 @@ async def open_kitchen(
             tool_ctx.recipe_version = result.get("recipe_version") or ""
 
             try:
-                from autoskillit.server.tools.tools_kitchen import (
+                from autoskillit.server.tools.tools_kitchen import (  # circular-break
                     _update_hook_config_with_git_ops_policy,
                     _update_hook_config_with_recipe,
                 )
@@ -801,7 +800,7 @@ async def open_kitchen(
             # all fix-required hooks for the recipe's run_skill steps.
             if tool_ctx.active_recipe_steps is not None:
                 try:
-                    from autoskillit.server.tools.tools_kitchen import (
+                    from autoskillit.server.tools.tools_kitchen import (  # circular-break
                         prune_stale_kitchen_state,
                     )
 

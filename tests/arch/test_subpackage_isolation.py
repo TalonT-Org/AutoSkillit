@@ -1016,6 +1016,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
         # and request-correlated exploration identity records
+        # +_github_mutation_analysis (#4665) GitHub mutation cardinality/route sibling
+        # extracted from _command_classification.py
         "pipeline": 18,  # +run_skill_completion server-owned receipt authority (#4457)
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
@@ -1157,7 +1159,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(issue #4479).",
     ),
     "hooks/_command_classification.py": (
-        2350,
+        1300,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
         "interpreter-write detection, protected-path reads, recursive payload "
@@ -1172,7 +1174,24 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "edit's target/flag grammar and statically proven fan-out count remain beside "
         "the mutation aggregation authority they feed. Bumped to 2350 for #4581's "
         "quote-aware output-redirection partition, nested writer provenance, and "
-        "bounded diagnostic codes, which share that same mutation authority.",
+        "bounded diagnostic codes, which share that same mutation authority. #4665 "
+        "decomposes the GitHub mutation cardinality/route analysis into a sibling "
+        "module; cap reduced to 1300 to reflect the remaining shared primitives "
+        "(tokenization, shell-payload extraction, interpreter-write detection, "
+        "protected-path reads, recursive payload segmentation) and the constant "
+        "growth of the shared grammar; new sibling _github_mutation_analysis.py "
+        "holds the moved cardinality/route authority under E26.",
+    ),
+    "hooks/_github_mutation_analysis.py": (
+        1300,
+        "REQ-CNST-010-E26: #4665 decomposes the GitHub mutation cardinality/route "
+        "analysis out of _command_classification.py into this sibling module — the "
+        "gh/curl possible-exec token check, gh issue edit's target/flag grammar, "
+        "statically proven fan-out count, gh mutation subcommand classification, and "
+        "the recursive cardinality aggregator all share the same mutation authority "
+        "and must stay adjacent to one another for test inspection (test_command_"
+        "classification.py::TestAnalyzeGitHubMutations). Cap set to 1300 to bound "
+        "the shared mutation authority after decomposition.",
     ),
     "session.py": (
         1060,

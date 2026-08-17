@@ -26,7 +26,6 @@ def read_starttime_ticks(pid: int) -> int | None:
     """
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — rfind locates the last ")" as the field boundary
         rpar = stat.rfind(")")
         if rpar == -1:
             return None
@@ -47,7 +46,6 @@ def read_process_state(pid: int) -> str | None:
     """
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — rfind locates the last ")" as the field boundary
         rpar = stat.rfind(")")
         if rpar == -1:
             return None

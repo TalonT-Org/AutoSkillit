@@ -452,10 +452,8 @@ class InfraOutcome:
 
     exit_category: str = ""
     cleanup_incomplete: bool = False
-    """True when owned-process-group teardown evidence was incomplete (e.g. a
-    survivor or access-denied PID) even though the workload's own outcome was
-    determined independently. Diagnostic only — does not affect needs_retry.
-    """
+    """Diagnostic only — see ``SubprocessResult.cleanup_evidence`` for the
+    underlying teardown signal; this field just surfaces it for retry logic."""
 
 
 @dataclass(frozen=True, slots=True)

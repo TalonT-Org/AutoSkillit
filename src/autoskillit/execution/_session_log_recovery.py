@@ -65,9 +65,8 @@ def recover_crashed_sessions(
             enrollment_path.unlink(missing_ok=True)
             continue
 
-        # Gate 3: PID liveness + starttime_ticks identity. A zombie with matching
-        # ticks is treated as dead — its parent already stopped monitoring it,
-        # so the crash trace must be recovered, not skipped.
+        # Gate 3: PID liveness + starttime_ticks identity. A zombie with
+        # matching ticks is treated as dead so the crash trace is recovered.
         current_ticks = read_starttime_ticks(pid)
         if (
             current_ticks is not None

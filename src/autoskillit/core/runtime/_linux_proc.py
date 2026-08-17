@@ -26,7 +26,7 @@ def read_starttime_ticks(pid: int) -> int | None:
     """
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
+        # comm may contain ")" — rfind locates the last ")" as the field boundary
         rpar = stat.rfind(")")
         if rpar == -1:
             return None
@@ -47,7 +47,7 @@ def read_process_state(pid: int) -> str | None:
     """
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
+        # comm may contain ")" — rfind locates the last ")" as the field boundary
         rpar = stat.rfind(")")
         if rpar == -1:
             return None
@@ -66,7 +66,8 @@ def is_pid_zombie(pid: int) -> bool:
 
 def is_pid_alive(pid: int) -> bool:
     """True when pid exists and is not a zombie — False on non-Linux."""
-    return read_process_state(pid) is not None and not is_pid_zombie(pid)
+    state = read_process_state(pid)
+    return state is not None and state != "Z"
 
 
 def is_session_alive(pid: int, boot_id: str, starttime_ticks: int) -> bool:
@@ -81,4 +82,4 @@ def is_session_alive(pid: int, boot_id: str, starttime_ticks: int) -> bool:
         return False
     if actual_ticks != starttime_ticks:
         return False
-    return not is_pid_zombie(pid)
+    return is_pid_alive(pid)

@@ -57,8 +57,6 @@ class ExplorationDispatchConventions:
     role_prefix: str = ""
     description_argument: str | None = None
     provisioning_preamble: str | None = None
-    assignments_argument: str | None = None
-    fail_unsupported_join: bool = False
 
     def __post_init__(self) -> None:
         values = (self.launcher, self.role_argument, self.message_argument)
@@ -68,10 +66,6 @@ class ExplorationDispatchConventions:
             not self.description_argument or not self.description_argument.isidentifier()
         ):
             raise ValueError("exploration dispatch description argument must be valid")
-        if self.assignments_argument is not None and (
-            not self.assignments_argument or not self.assignments_argument.isidentifier()
-        ):
-            raise ValueError("exploration dispatch assignments argument must be valid")
 
 
 @dataclass(frozen=True, slots=True)

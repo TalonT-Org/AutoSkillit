@@ -89,8 +89,6 @@ class _NativeExplorationDispatchRenderer:
         self,
         definition: AgentDef,
         prompt: str,
-        *,
-        assignment_label: str,
     ) -> str:
         role = f"{self.conventions.role_prefix}{definition.name}"
         arguments = [f"{self.conventions.role_argument}={json.dumps(role)}"]
@@ -99,10 +97,6 @@ class _NativeExplorationDispatchRenderer:
                 f"{self.conventions.description_argument}={json.dumps(definition.description)}"
             )
         arguments.append(f"{self.conventions.message_argument}={json.dumps(prompt)}")
-        if self.conventions.assignments_argument is not None:
-            arguments.append(
-                f"{self.conventions.assignments_argument}={json.dumps(assignment_label)}"
-            )
         return f"{self.conventions.launcher}({', '.join(arguments)})"
 
     def render(
@@ -126,11 +120,6 @@ class _NativeExplorationDispatchRenderer:
             raise ValueError("native exploration dispatch requires migrated vectors")
         if tuple(vector.task for vector in migrated) != plan.tasks:
             raise ValueError("native exploration vectors do not match the canonical router plan")
-        if self.conventions.fail_unsupported_join and plan.join_required:
-            raise ValueError(
-                "native exploration dispatch cannot satisfy backend that does not "
-                "support required join — refusing the owning skill"
-            )
         definitions = _canonical_definitions(migrated)
         replacements: dict[str, str] = {}
         definition_digests: dict[str, str] = {}
@@ -149,7 +138,6 @@ class _NativeExplorationDispatchRenderer:
             native_call = self._native_call(
                 definition,
                 prompt,
-                assignment_label=assignment_label,
             )
             task_id = vector.task.task_id
             replacements[vector.id] = (
@@ -194,8 +182,6 @@ CLAUDE_EXPLORATION_DISPATCH_RENDERER = _NativeExplorationDispatchRenderer(
         description_argument="description",
         message_argument="prompt",
         role_prefix="autoskillit:",
-        assignments_argument=None,
-        fail_unsupported_join=False,
         provisioning_preamble=(
             "Before dispatching explorer subagents, call enable_exploration() to "
             "establish session-scoped exploration authority. The three broker tools "
@@ -210,8 +196,6 @@ CODEX_EXPLORATION_DISPATCH_RENDERER = _NativeExplorationDispatchRenderer(
         launcher="spawn_agent",
         role_argument="agent_type",
         message_argument="message",
-        assignments_argument=None,
-        fail_unsupported_join=True,
     )
 )
 

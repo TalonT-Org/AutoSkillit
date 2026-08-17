@@ -95,14 +95,13 @@ _SOURCE_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 # collection time rather than at module-import time, picking up any late
 # ``os.environ`` mutation made by a session-level fixture or conftest.
 def _live_gate_active() -> bool:
-    return (
-        os.environ.get(_LIVE_ENV) == "1"
-        and shutil.which("claude") is not None
-        and (
-            os.environ.get("ANTHROPIC_API_KEY")
-            or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-            or _SOURCE_CREDENTIALS.is_file()
-        )
+    has_auth = bool(
+        os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        or _SOURCE_CREDENTIALS.is_file()
+    )
+    return bool(
+        os.environ.get(_LIVE_ENV) == "1" and shutil.which("claude") is not None and has_auth
     )
 
 

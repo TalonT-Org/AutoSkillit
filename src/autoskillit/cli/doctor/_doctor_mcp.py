@@ -361,7 +361,7 @@ def _check_claude_mcp_timeouts(
             "claude_mcp_timeouts",
             f"Skipped (backend={backend.name if backend else 'none'})",
         )
-    from autoskillit.config._config_dataclasses import RunSkillConfig as _RunSkillConfig
+    from autoskillit.config import RunSkillConfig as _RunSkillConfig
 
     claude_json_path = Path.home() / ".claude.json"
     if not claude_json_path.is_file():

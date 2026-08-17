@@ -79,3 +79,18 @@ async def test_body_exception_is_not_wrapped_in_exception_group():
 
     assert type(caught) is _DistinctiveError
     assert not isinstance(caught, ExceptionGroup)
+
+
+@pytest.mark.anyio
+async def test_base_exception_from_body_propagates_with_original_type():
+    """A bare BaseException (not an Exception subclass) is wrapped by anyio in a
+    BaseExceptionGroup, not an ExceptionGroup — the narrower except clause would
+    miss it entirely (regression: this escaped uncaught before the fix)."""
+    ctx = _fake_ctx()
+
+    class _Sentinel(BaseException):
+        pass
+
+    with pytest.raises(_Sentinel):
+        async with progress_heartbeat(ctx, interval=30.0):
+            raise _Sentinel("boom")

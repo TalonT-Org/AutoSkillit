@@ -44,19 +44,24 @@ async def progress_heartbeat(
     ``progressToken`` (no capability branching required).
 
     ``anyio.create_task_group()`` wraps any exception escaping the ``async with``
-    body in an ``ExceptionGroup`` — even for a single exception — so this unwraps
-    a single-item group before re-raising, mirroring the existing pattern at
-    ``fleet/_api.py``'s ``execute_dispatch()``. Without this, callers that inspect
-    ``type(exception).__name__`` directly (``SkillResult.crashed()``,
+    body in a ``BaseExceptionGroup`` — even for a single exception — so this
+    unwraps a single-item group before re-raising, mirroring the existing pattern
+    at ``fleet/_api.py``'s ``execute_dispatch()``. Without this, callers that
+    inspect ``type(exception).__name__`` directly (``SkillResult.crashed()``,
     ``dispatch_food_truck``'s ``fleet_error()``) would see ``ExceptionGroup``
-    instead of the wrapped body's real exception type.
+    instead of the wrapped body's real exception type. Catches
+    ``BaseExceptionGroup`` rather than the narrower ``ExceptionGroup``: a wrapped
+    body that raises a plain ``BaseException`` (not an ``Exception`` subclass —
+    e.g. a bespoke sentinel, or ``CancelledError`` propagating from an outer
+    ``anyio.fail_after``) is wrapped in a ``BaseExceptionGroup`` that
+    ``ExceptionGroup`` does not catch.
     """
     try:
         async with anyio.create_task_group() as tg:
             tg.start_soon(_tick, ctx, interval, message)
             yield
             tg.cancel_scope.cancel()
-    except ExceptionGroup as exc:
+    except BaseExceptionGroup as exc:
         if len(exc.exceptions) == 1:
             raise exc.exceptions[0] from None
         raise

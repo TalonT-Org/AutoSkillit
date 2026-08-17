@@ -787,6 +787,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
             tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
             routing layer. Exempt at 16 files.
+            _progress_heartbeat.py adds the MCP progress-notification context manager guarding
+            run_skill/dispatch_food_truck's blocking spans against client idle-abort (#4620),
+            bringing the count to 28.
           recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
             (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
             Adding rules_cmd.py for run_cmd echo-capture alignment validation and
@@ -974,7 +977,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 27,  # +_run_skill_completion exact receipt delivery boundary (#4457)
+        "server": 28,  # +_progress_heartbeat MCP idle-abort immunity boundary (#4620)
         # +_recipe_segment_delivery plan-mandated progressive delivery boundary
         # +_recipe_artifact.py (persistence), +_recipe_delivery_helpers.py (attestation,
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
@@ -1366,7 +1369,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; #4641/#4644 rectify: settle_evidence() swap plus cleanup_incomplete diagnostic "
         "threading in _run_bounded_codex_probe/_terminate_probe/_validate_mcp_probe stays "
         "adjacent to the bounded probe it must not misclassify as a validation failure "
-        "(+10 net lines)",
+        "(+10 net lines)"
+        "; #4620 adds accept-and-ignore mcp_tool_timeout_sec params to build_interactive_cmd/"
+        "build_resume_cmd/build_food_truck_cmd for CodingAgentBackend Protocol parity with "
+        "Claude's MCP idle-abort timeout injection (+14 net lines)",
     ),
     "execution/backends/claude.py": (
         1600,
@@ -1384,7 +1390,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "async hardening beside the backend parser and command builder that own them. "
         "#4557 adds Claude-only host-attestation env, version-derived annotation support, "
         "and frozen attestation env at all 4 launch sites; #4566 "
-        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines).",
+        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines). "
+        "#4620 threads mcp_tool_timeout_sec through build_interactive_cmd, "
+        "build_skill_session_cmd, build_food_truck_cmd, and build_resume_cmd to give Claude "
+        "Code's client-side idle-abort timeout parity with the server-side anyio.fail_after "
+        "ceiling (+2 net lines).",
     ),
     "execution/headless/_headless_result.py": (
         1053,

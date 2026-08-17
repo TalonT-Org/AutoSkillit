@@ -850,7 +850,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_issue_lifecycle.py",
             "server/test_tools_report_bug.py",
             "server/test_tools_kitchen_envelope.py",
-            "server/test_tools_kitchen_sous_chef.py",
+            "server/test_tools_kitchen_visibility.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_persistent_root.py",
             "server/test_tools_execution_provider.py",
@@ -898,10 +898,12 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_bootstrap.py",
             "server/test_tools_execution_step_resolution.py",
             "server/test_tools_execution_input_gates_file_path_list.py",
+            "server/test_tools_execution_input_gates_contracts.py",
             "server/test_pipeline_deps_derivation.py",
             "server/test_load_recipe_contract_validation.py",
             "server/test_load_recipe_exception_handling.py",
             "server/test_load_recipe_migration.py",
+            "server/test_load_recipe_authority.py",
             "server/test_tools_kitchen_sous_chef.py",
             "server/test_open_kitchen_auto_init_tracker.py",
             "server/test_tools_execution_input_gates_cross_binding.py",
@@ -1163,10 +1165,14 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
     ),
     "recipe": frozenset(
         {
-            # kept test_tools_load_recipe.py uses autoskillit.recipe.* only as
-            # patch-string literals (no module-level AST import); the import-guard
-            # AST scan would otherwise flag the entry.
+            # These server tests reference autoskillit.recipe.* via patch-string
+            # literals or via test-internal helper modules that import recipe
+            # lazily (no module-level AST import); the import-guard AST scan
+            # would otherwise flag each entry. Same rationale as the original
+            # `server/test_tools_load_recipe.py` exemption.
             "server/test_tools_load_recipe.py",
+            "server/test_load_recipe_authority.py",
+            "server/test_tools_execution_input_gates_contracts.py",
         }
     ),
 }

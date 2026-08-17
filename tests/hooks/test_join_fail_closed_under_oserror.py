@@ -129,7 +129,7 @@ def test_active_batch_remains_safe_under_corruption(tmp_path: Path) -> None:
     batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
     assert batch is not None
     assert batch.get("_corrupted") is True
-    assert "garbage" in (batch.get("error") or "")
+    assert "not valid" in (batch.get("error") or "")
 
 
 def test_ledger_unreadable_propagates_as_corrupted_envelope(tmp_path: Path) -> None:

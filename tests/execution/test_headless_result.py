@@ -573,7 +573,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         mock_backend.write_tool_names.return_value = frozenset({"CustomWrite"})
         stdout = (
             _make_tool_use_line("CustomWrite", {"file_path": "/a/b.py", "content": "x"})
@@ -668,7 +671,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         _build_skill_result(result, backend=mock_backend)
@@ -691,7 +697,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.STALE)
         _build_skill_result(result, backend=mock_backend)
@@ -714,7 +723,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
         _build_skill_result(result, backend=mock_backend)
@@ -737,7 +749,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
         _build_skill_result(result, backend=mock_backend)
@@ -951,7 +966,7 @@ class TestParseStdout:
         """Non-Claude backend dispatches through result_parser().parse_stdout()."""
 
         mock_backend = Mock()
-        mock_backend.name = "not-claude-code"
+        mock_backend.capabilities.supports_claude_format_stdout = False
         parser = mock_backend.result_parser.return_value
         parser.parse_stdout.return_value = AgentSessionResult(
             success=True,

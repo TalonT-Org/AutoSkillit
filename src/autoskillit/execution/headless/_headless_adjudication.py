@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
     ApiRetryOutcome,
     InfraOutcome,
     NdjsonDriftOutcome,
@@ -59,7 +58,7 @@ def _resolve_skill_session_id(
 
 
 def _parse_stdout(stdout: str, backend: CodingAgentBackend) -> ClaudeSessionResult:
-    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
+    if backend.capabilities.supports_claude_format_stdout:
         return parse_session_result(stdout)
     agent_result = backend.result_parser().parse_stdout(stdout)
     return _adapt_agent_result(agent_result)

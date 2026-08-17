@@ -458,12 +458,10 @@ class TestCLIDoctor:
     def test_doctor_claude_mcp_timeouts_warns_when_stale(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """claude_mcp_timeouts is actually appended to run_doctor()'s output, not just defined.
+        """The claude_mcp_timeouts check actually runs and reaches run_doctor()'s output.
 
-        A defined-but-never-results.append()-ed check would pass a bare
-        `"claude_mcp_timeouts" in check_names` assertion trivially if that
-        assertion were the only guard — so this forces the check into a
-        non-OK state and asserts on severity, proving it actually ran.
+        Asserts on severity (not just check-name presence) to prove the check
+        executed, not just that it's defined.
         """
         claude_json = tmp_path / ".claude.json"
         claude_json.write_text(

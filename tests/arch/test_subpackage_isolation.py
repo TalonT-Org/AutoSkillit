@@ -787,8 +787,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
             tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
             tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
             routing layer. Exempt at 16 files.
-            _progress_heartbeat.py adds the MCP progress-notification context manager guarding
-            run_skill/dispatch_food_truck's blocking spans against client idle-abort (#4620),
+            _progress_heartbeat.py adds the MCP progress-notification context manager,
             bringing the count to 28.
           recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
             (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.

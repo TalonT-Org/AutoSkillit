@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -186,10 +187,10 @@ async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatc
 
 @pytest.mark.anyio
 async def test_middleware_denial_payload_when_delivered_only(monkeypatch) -> None:
-    """The actual shape of the 88-minute incident: a completed-but-unpolled receipt.
+    """A completed-but-unpolled receipt: the record lives in _delivered, not _drafts.
 
-    _finalized() only drafts (begin() + draft()) — publish it too, so the record
-    lives in _delivered rather than _drafts, matching the incident's steady state.
+    _finalized() only drafts (begin() + draft()) — publish it too so the record
+    sits in _delivered, exercising pending_info()'s _delivered-only branch.
     """
     finalized = _finalized()
     authority = finalized.authority
@@ -210,7 +211,7 @@ async def test_middleware_denial_payload_when_delivered_only(monkeypatch) -> Non
     assert denial["error"] == "run_skill_completion_pending"
     assert denial["guidance"]
     assert denial["step_name"] == "investigate"
-    assert denial["elapsed_seconds"] >= 0
+    assert denial["elapsed_seconds"] >= 0.02
     call_next.assert_not_awaited()
 
 
@@ -233,6 +234,7 @@ async def test_middleware_denial_payload_when_in_flight_only(monkeypatch) -> Non
         tracker_incarnation_id="incarnation",
         step_name="investigate",
     )
+    time.sleep(0.02)
     monkeypatch.setattr(
         "autoskillit.server._state._get_ctx_or_none",
         lambda: SimpleNamespace(run_skill_completion=authority),
@@ -250,7 +252,7 @@ async def test_middleware_denial_payload_when_in_flight_only(monkeypatch) -> Non
     assert denial["user_visible_message"] == "run_skill invocation in flight"
     assert denial["guidance"]
     assert denial["step_name"] == "investigate"
-    assert denial["elapsed_seconds"] >= 0
+    assert denial["elapsed_seconds"] >= 0.02
     call_next.assert_not_awaited()
 
 

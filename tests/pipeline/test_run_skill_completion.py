@@ -592,8 +592,25 @@ class TestPendingInfo:
         assert info["step_name"] == "investigate"
         assert info["elapsed_seconds"] >= 0.02
 
+    def test_drafts_only(self) -> None:
+        """pending_info() returns the draft when _drafts holds it but _delivered is empty."""
+        authority = DefaultRunSkillCompletionAuthority()
+        authority.draft(
+            _begin(authority),
+            classification="success",
+            success=True,
+            result_digest="digest",
+        )
+        time.sleep(0.02)
+
+        info = authority.pending_info("run_skill")
+
+        assert info is not None
+        assert info["step_name"] == "investigate"
+        assert info["elapsed_seconds"] >= 0.02
+
     def test_delivered_only(self) -> None:
-        """The actual shape of the 88-minute incident: _drafts is empty, _delivered holds it."""
+        """pending_info() returns the receipt when _delivered holds it but _drafts is empty."""
         authority = DefaultRunSkillCompletionAuthority()
         _publish(authority)
         time.sleep(0.02)

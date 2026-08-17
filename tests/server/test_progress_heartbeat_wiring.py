@@ -53,7 +53,9 @@ async def test_run_skill_reports_progress_during_blocking_span(tool_ctx_kitchen_
 
     await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
 
-    assert mock_ctx.report_progress.await_count >= 1
+    # SlowExecutor sleeps 0.03s; with interval=0.005s we expect ~5 ticks.
+    # Require at least 2 so a one-shot call would not satisfy the assertion.
+    assert mock_ctx.report_progress.await_count >= 2
 
 
 @pytest.mark.anyio
@@ -93,4 +95,5 @@ async def test_dispatch_food_truck_reports_progress_during_blocking_span(
 
     await dispatch_food_truck(recipe="full-audit", task="audit", ctx=mock_ctx)
 
-    assert mock_ctx.report_progress.await_count >= 1
+    # Same rationale: require periodic ticks, not just one.
+    assert mock_ctx.report_progress.await_count >= 2

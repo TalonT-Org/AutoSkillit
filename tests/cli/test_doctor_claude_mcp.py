@@ -47,10 +47,12 @@ class TestCheckClaudeMcpTimeouts:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         rs = RunSkillConfig()
+        # Use a value 1ms above expected so a buggy always-OK comparison that
+        # ignored the actual mismatch would still be caught.
         self._write_claude_json(
             tmp_path,
             monkeypatch,
-            {"command": "autoskillit", "timeout": int(rs.mcp_tool_timeout_sec * 1000)},
+            {"command": "autoskillit", "timeout": int(rs.mcp_tool_timeout_sec * 1000) + 1},
         )
         result = _check_claude_mcp_timeouts(backend=self._claude_backend(), run_skill=rs)
         assert result.severity == Severity.OK

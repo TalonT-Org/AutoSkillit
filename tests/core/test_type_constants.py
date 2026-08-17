@@ -603,11 +603,6 @@ def test_codex_schema_version_importable_from_core() -> None:
     assert CODEX_SCHEMA_VERSION == 2
 
 
-# ---------------------------------------------------------------------------
-# T1: CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR constant exists with correct value
-# ---------------------------------------------------------------------------
-
-
 def test_claude_code_mcp_tool_idle_timeout_env_var_value() -> None:
     from autoskillit.core.types._type_constants_env import (
         CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR,
@@ -617,37 +612,21 @@ def test_claude_code_mcp_tool_idle_timeout_env_var_value() -> None:
     assert isinstance(CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR, str)
 
 
-# ---------------------------------------------------------------------------
-# T2: CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR is in __all__
-# ---------------------------------------------------------------------------
-
-
 def test_claude_code_mcp_tool_idle_timeout_env_var_in_all() -> None:
     from autoskillit.core.types._type_constants_env import __all__ as env_all
 
     assert "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR" in env_all
 
 
-# ---------------------------------------------------------------------------
-# T3: CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR re-exported via types hub
-# ---------------------------------------------------------------------------
-
-
 def test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_types() -> None:
-    from autoskillit.core.types import CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR
-
-    assert CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR == "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"
-
-
-# ---------------------------------------------------------------------------
-# T4: CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR re-exported via core gateway
-# ---------------------------------------------------------------------------
+    # Import-path check is the new coverage; the value is asserted by the
+    # _value() test above (re-exports preserve the binding).
+    from autoskillit.core.types import CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR  # noqa: F401
 
 
 def test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_core() -> None:
-    from autoskillit.core import CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR
-
-    assert CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR == "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"
+    # Re-export via autoskillit.core gateway; value already asserted above.
+    from autoskillit.core import CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

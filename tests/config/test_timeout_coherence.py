@@ -126,12 +126,7 @@ class TestCodexMcpTimeoutCoherenceGate:
 
 
 class TestClaudeMcpTimeoutCoherenceGate:
-    """Tests for _claude_mcp_timeout_coherence_gate warning behavior.
-
-    This is the gate that would have caught #4620: RunSkillConfig.mcp_tool_timeout_sec
-    already encoded the right invariant (via the Codex gate) but was never checked
-    against the Claude backend, which had no consumer of the field at all.
-    """
+    """Tests for _claude_mcp_timeout_coherence_gate warning behavior."""
 
     def test_no_warning_with_default_configs(self):
         from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig

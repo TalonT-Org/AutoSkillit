@@ -128,6 +128,15 @@ def _neutralize_agent_teams_env(env: dict[str, str]) -> None:
     env.pop(CLAUDE_AGENT_TEAMS_ENV_VAR, None)
 
 
+#: Repository-local settings files consulted for env-based team re-enable.
+_AGENT_TEAMS_SETTINGS_CANDIDATE_NAMES = (".claude/settings.json", ".claude/settings.local.json")
+
+
+def _agent_teams_settings_candidates(root: Path) -> tuple[Path, ...]:
+    """Return the absolute candidate settings paths under ``root``."""
+    return tuple(root / name for name in _AGENT_TEAMS_SETTINGS_CANDIDATE_NAMES)
+
+
 def detect_repository_agent_teams_setting(
     project_root: Path | str | None,
 ) -> tuple[str | None, str]:
@@ -145,8 +154,7 @@ def detect_repository_agent_teams_setting(
     if project_root is None:
         return (None, "")
     root = Path(project_root).expanduser().resolve()
-    candidates = (root / ".claude" / "settings.json", root / ".claude" / "settings.local.json")
-    for candidate in candidates:
+    for candidate in _agent_teams_settings_candidates(root):
         try:
             content = candidate.read_text(encoding="utf-8")
         except (FileNotFoundError, OSError):
@@ -179,9 +187,8 @@ def find_malformed_agent_teams_settings(
     if project_root is None:
         return []
     root = Path(project_root).expanduser().resolve()
-    candidates = (root / ".claude" / "settings.json", root / ".claude" / "settings.local.json")
     malformed: list[str] = []
-    for candidate in candidates:
+    for candidate in _agent_teams_settings_candidates(root):
         try:
             content = candidate.read_text(encoding="utf-8")
         except FileNotFoundError:
@@ -223,9 +230,8 @@ def neutralize_repository_agent_teams_settings(project_root: Path | str | None) 
     if project_root is None:
         return 0
     root = Path(project_root).expanduser().resolve()
-    candidates = (root / ".claude" / "settings.json", root / ".claude" / "settings.local.json")
     modified = 0
-    for candidate in candidates:
+    for candidate in _agent_teams_settings_candidates(root):
         try:
             content = candidate.read_text(encoding="utf-8")
         except (FileNotFoundError, OSError):
@@ -290,6 +296,12 @@ def _interactive_invocation_environment_policy(
         errors.append(
             f"{CLAUDE_AGENT_TEAMS_ENV_VAR}={env_value!r} is set in the launch "
             f"environment; Claude agent teams would be active at launch"
+        )
+    malformed = find_malformed_agent_teams_settings(project_root)
+    if malformed:
+        errors.append(
+            f"settings file(s) could not be parsed and may re-enable teams: "
+            f"{', '.join(malformed)}; repair or remove the malformed file before launching"
         )
     file_value, file_path = detect_repository_agent_teams_setting(project_root)
     if file_value is not None and _active_agent_teams(file_value):

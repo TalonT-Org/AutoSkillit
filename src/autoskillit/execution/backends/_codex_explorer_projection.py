@@ -31,7 +31,6 @@ from autoskillit.core import (
     get_logger,
     load_bundled_agent_definitions,
 )
-from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 from autoskillit.execution.backends._codex.explorer_projection import (
     _EXPLORER_ROLE_NAMES,
@@ -65,9 +64,6 @@ def _canonical_codex_model_effort(
         return "", reasoning_effort
     model = CODEX_MODEL_ALIASES[model_class]
     return model, reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class)
-
-
-CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = _codex_cfg.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES
 
 
 def _preflight_agent_projection(

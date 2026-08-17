@@ -110,6 +110,7 @@ from autoskillit.execution.backends._codex_cmd_builders import (
 )
 from autoskillit.execution.backends._codex_config import (
     CODEX_RECIPE_DELIVERY_BUDGET,
+    CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES,
     _format_toml_value,
     ensure_codex_mcp_registered,
 )
@@ -160,6 +161,7 @@ _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
 __all__ = [
     "CODEX_EXEC_FLAGS",
+    "CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES",
     "CODEX_TOP_LEVEL_ONLY_FLAGS",
     "CodexBackend",
     "CodexEnvPolicy",

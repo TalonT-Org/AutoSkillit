@@ -25,16 +25,20 @@ CANONICAL_TICKET_GROUPER_SKILL = "validate-test-audit"
 
 @functools.cache
 def resolve_skill_text(skill_name: str) -> str:
-    """Read a bundled skill's ``SKILL.md`` as UTF-8 text, caching by name.
-
-    The cache is intentional: tests assert byte-stable invariants on bundled
-    skills, which are read-only under the test harness. Callers MUST NOT
-    mutate the resolved skill file mid-session — the cached copy will go
-    stale and downstream callers will keep reading the original bytes.
-    """
+    """Read a bundled skill's ``SKILL.md`` as UTF-8 text, caching by name."""
     info = DefaultSkillResolver().resolve(skill_name)
     assert info is not None, f"{skill_name} skill not found"
     return info.path.read_text(encoding="utf-8")
+
+
+def clear_resolve_skill_text_cache() -> None:
+    """Drop every cached skill-text entry.
+
+    Call this from a test fixture (e.g. ``autouse``) that mutates a bundled
+    skill on disk so subsequent ``resolve_skill_text`` callers don't read
+    the stale cached copy.
+    """
+    resolve_skill_text.cache_clear()
 
 
 def extract_step7_grouper_block(text: str) -> str:

@@ -47,7 +47,10 @@ _SCOPED_MODULES: tuple[str, ...] = (
     "cli/_hooks.py",
     "execution/backends/_codex_hooks.py",
     "execution/backends/_codex_config.py",
-    "server/_lifespan.py",
+    "server/_lifespan/__init__.py",
+    "server/_lifespan/_startup_checks.py",
+    "server/_lifespan/_session_boots.py",
+    "server/_lifespan/_lifespan.py",
 )
 
 #: Names of persistence functions/methods whose call sites count as a durable

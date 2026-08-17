@@ -21,8 +21,8 @@ from autoskillit.core.types._type_constants import RETIRED_READINESS_TOKENS
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
-_LIFESPAN_PATH = (
-    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "server" / "_lifespan.py"
+_LIFESPAN_PKG = (
+    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "server" / "_lifespan"
 )
 
 
@@ -78,7 +78,9 @@ def _first_real_stmt(body: list) -> ast.stmt | None:
 
 class TestLifespanReadinessStructural:
     def setup_method(self):
-        source = _LIFESPAN_PATH.read_text(encoding="utf-8")
+        source = ""
+        for py in sorted(_LIFESPAN_PKG.rglob("*.py")):
+            source += py.read_text(encoding="utf-8")
         self.tree = ast.parse(source)
         self.func = _find_lifespan_func(self.tree)
 

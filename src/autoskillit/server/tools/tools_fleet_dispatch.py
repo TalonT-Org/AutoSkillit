@@ -671,6 +671,7 @@ async def dispatch_food_truck(
             tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec
             if (
                 not isinstance(tool_timeout_sec, (int, float))
+                or isinstance(tool_timeout_sec, bool)
                 or not math.isfinite(tool_timeout_sec)
                 or tool_timeout_sec <= 0
             ):

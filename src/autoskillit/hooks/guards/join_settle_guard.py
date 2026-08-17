@@ -82,10 +82,12 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
+    if not isinstance(data, dict):
+        sys.exit(0)
     # Subagent contexts are exempt: the claimed child owns its own
     # settlement surface; re-evaluating the gate here would self-lock
     # every join. Mirrors the agent_id exemption in claim/followup guards.
-    if isinstance(data, dict) and data.get("agent_id"):
+    if data.get("agent_id"):
         sys.exit(0)
 
     if not session_join_required():

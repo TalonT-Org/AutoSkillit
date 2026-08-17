@@ -2119,3 +2119,93 @@ def test_update_checks_docstring_describes_both_windows() -> None:
                 "_is_dismissed docstring must mention the 12-hour window"
             )
             break
+
+
+# ---------------------------------------------------------------------------
+# Decomposition sibling-set guards for GitHub issue #4663
+#
+# These tests pin the exact set of submodules each decomposed package
+# contains. Adding or removing a sibling submodule is a structural decision
+# that must be reviewed (the registry tracer warns when test sites rebind
+# attributes via these exact module paths).
+# ---------------------------------------------------------------------------
+
+
+def test_response_budget_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "_response_budget"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_primitives",
+        "_projection",
+        "_spill",
+        "_enforce",
+    }
+
+
+def test_execution_helpers_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "_execution_helpers"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_skill_contract",
+        "_dispatch_metadata",
+        "_run_cmd_spill",
+        "_run_python_coercion",
+    }
+
+
+def test_evidence_reader_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "_evidence_reader"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_authority",
+        "_invocation",
+        "_reader",
+        "_startup",
+    }
+
+
+def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_kitchen"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_open_kitchen",
+        "_open_kitchen_transition",
+        "_open_kitchen_errors",
+        "_close_kitchen",
+        "_lock_ingredients",
+        "_reload_session",
+        "_disable_quota_guard",
+        "_get_recipe",
+        "_hook_config",
+        "_tracker_authority",
+    }
+
+
+def test_tools_fleet_dispatch_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_provenance",
+        "_campaign_state",
+        "_handlers",
+    }
+
+
+def test_tools_pipeline_tracker_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_pipeline_tracker"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_authority",
+        "_status",
+        "_handlers",
+    }
+
+
+def test_lifespan_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "_lifespan"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_startup_checks",
+        "_session_boots",
+        "_lifespan",
+    }

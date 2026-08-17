@@ -119,8 +119,8 @@ def _build_api_retry_outcome(session: ClaudeSessionResult) -> ApiRetryOutcome:
     )
 
 
-def _log_cleanup_incomplete(result: SubprocessResult, *, subtype: str) -> bool:
-    """Log incomplete owned-process cleanup evidence; return whether infra should flag it."""
+def _should_flag_cleanup_incomplete(result: SubprocessResult, *, subtype: str) -> bool:
+    """Log incomplete owned-process cleanup evidence and report whether to flag infra."""
     evidence = result.cleanup_evidence
     if evidence is None or evidence.complete:
         return False
@@ -145,7 +145,7 @@ def _make_terminated_result(
     api_retry: ApiRetryOutcome = ApiRetryOutcome(),
 ) -> SkillResult:
     """Construct SkillResult for infrastructure-terminated sessions (stale/idle_stall)."""
-    if _log_cleanup_incomplete(result, subtype=subtype):
+    if _should_flag_cleanup_incomplete(result, subtype=subtype):
         infra = dataclasses.replace(infra, cleanup_incomplete=True)
     return SkillResult(
         success=success,
@@ -913,7 +913,7 @@ def _build_skill_result(
             codex_boundary_proof=codex_boundary_proof,
         )
 
-    _cleanup_incomplete = _log_cleanup_incomplete(result, subtype=normalized_subtype)
+    _cleanup_incomplete = _should_flag_cleanup_incomplete(result, subtype=normalized_subtype)
 
     sr = SkillResult(
         success=success,

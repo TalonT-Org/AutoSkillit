@@ -23,14 +23,14 @@ from autoskillit.core.types import KillReason
 from autoskillit.core.types._type_results import ApiRetryOutcome, SkillResult, WriteEvidence
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
+from autoskillit.execution.headless._headless_adjudication import (
+    _apply_post_session_adjudication,
+    _validate_declared_artifact,
+)
 from autoskillit.execution.headless._headless_outcome import (
     evaluate_outcome_invariants,
     evaluate_success_qualifier,
     parse_outcome_fields,
-)
-from autoskillit.execution.headless._headless_result import (
-    _apply_post_session_adjudication,
-    _validate_declared_artifact,
 )
 from autoskillit.recipe import (
     OutcomeInvariantEntry,

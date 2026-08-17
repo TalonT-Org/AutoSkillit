@@ -973,7 +973,7 @@ class TestParseStdout:
     def test_parse_stdout_codex_backend_dispatches_through_adapter(self, monkeypatch):
         """CodexBackend dispatches through _adapt_agent_result (non-Claude path)."""
         from autoskillit.execution.headless import _headless_result
-        from autoskillit.execution.headless._headless_result import _parse_stdout
+        from autoskillit.execution.headless._headless_adjudication import _parse_stdout
 
         spy = Mock(wraps=_headless_result._adapt_agent_result)
         monkeypatch.setattr(_headless_result, "_adapt_agent_result", spy)

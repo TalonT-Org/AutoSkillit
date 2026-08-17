@@ -768,9 +768,11 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
         if py_file in allowed_files:
             continue
         try:
-            tree = ast.parse(py_file.read_text())
+            source = py_file.read_text()
+            tree = ast.parse(source)
         except SyntaxError:
             continue
+        aliases = _gather_import_aliases(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
@@ -779,6 +781,13 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
                     f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
                     f"direct call to .settle() outside allowed files"
                 )
+            elif isinstance(node.func, ast.Name):
+                _alias_entry = aliases.get(node.func.id)
+                if _alias_entry is not None and _alias_entry[1] == "settle":
+                    violations.append(
+                        f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                        f"direct call to settle (from-import or aliased) outside allowed files"
+                    )
 
     assert not violations, (
         "Direct .settle() calls found outside allowed files.\n"
@@ -815,6 +824,11 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
     - src/autoskillit/hooks/guards/mcp_health_advisor.py (stdlib-only hook with no
       autoskillit import path; uses os.kill(pid, 0) as the portable primary liveness
       probe and /proc/{pid}/stat only as a zombie refinement)
+    - src/autoskillit/execution/process/_process_kill.py (_identity_is_alive uses
+      psutil.Process(pid).status() != psutil.STATUS_ZOMBIE alongside the matching
+      psutil.Process(pid).create_time() call in one expression; mixing in a /proc
+      zombie read would split the identity-coherence guarantee across two
+      primitives, so the carve-out is deliberate)
     """
     allowed_files = {
         SRC_ROOT / "core" / "runtime" / "_linux_proc.py",
@@ -870,13 +884,22 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
         receiver = node.func.value
         if not isinstance(receiver, ast.Call):
             return False
-        if not (isinstance(receiver.func, ast.Attribute) and receiver.func.attr == "Process"):
-            return False
-        if (
-            isinstance(receiver.func.value, ast.Name)
-            and aliases.get(receiver.func.value.id, (None,))[0] == "psutil"
-        ):
-            return True
+        if isinstance(receiver.func, ast.Attribute) and receiver.func.attr == "Process":
+            # `psutil.Process(pid).is_running()` form
+            if (
+                isinstance(receiver.func.value, ast.Name)
+                and aliases.get(receiver.func.value.id, (None,))[0] == "psutil"
+            ):
+                return True
+        elif isinstance(receiver.func, ast.Name):
+            # `from psutil import Process; Process(pid).is_running()` form
+            _proc_alias = aliases.get(receiver.func.id)
+            if (
+                _proc_alias is not None
+                and _proc_alias[0] == "psutil"
+                and _proc_alias[1] == "Process"
+            ):
+                return True
         return False
 
     for py_file in sorted(SRC_ROOT.rglob("*.py")):

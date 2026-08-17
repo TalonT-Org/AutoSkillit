@@ -36,14 +36,7 @@ def _read_kitchens() -> list[dict]:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Check if a PID is running and not a zombie (stdlib-only, no create_time validation).
-
-    Duplicates the /proc/{pid}/stat state-char parse from
-    autoskillit.core.runtime._linux_proc.read_process_state by design — hook scripts
-    are stdlib-only and cannot import from autoskillit.*. Falls back to the
-    portable os.kill(pid, 0) probe on platforms without procfs or when /proc is
-    unreadable (e.g. macOS, Linux with hidepid=2 for foreign PIDs).
-    """
+    """Check if a PID is running and not a zombie (stdlib-only)."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

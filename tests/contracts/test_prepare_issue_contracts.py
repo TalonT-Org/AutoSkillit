@@ -153,6 +153,28 @@ def test_prepare_issue_result_block_includes_requirements_generated():
     assert "requirements_generated" in text
 
 
+def test_prepare_issue_prohibits_req_id_format_in_prose():
+    """The new NEVER- clause must forbid REQ- identifiers, requirement groups, and
+    cap the constraint count. A future edit that drops the prohibition must be
+    detected here. Assert on the prohibition text rather than on the bare token
+    ``REQ-`` — the NEVER bullet itself contains that token.
+    """
+    text = SKILL_MD.read_text()
+    never_pos = text.find("**NEVER:**")
+    assert never_pos != -1, "Critical Constraints NEVER block missing"
+    always_pos = text.find("**ALWAYS:**", never_pos)
+    never_block = (
+        text[never_pos:always_pos] if always_pos != -1 else text[never_pos : never_pos + 800]
+    )
+    assert "REQ-" in never_block, (
+        "NEVER block must forbid REQ- identifiers (prohibition text contains the token)"
+    )
+    assert "requirement groups" in never_block, "NEVER block must forbid requirement groups"
+    assert "three" in never_block and (
+        "constraint" in never_block or "requirement" in never_block
+    ), "NEVER block must cap constraint/requirement sentences at three"
+
+
 def test_prepare_issue_skips_requirements_on_remediation():
     """Remediation route must skip requirement generation."""
     text = SKILL_MD.read_text()

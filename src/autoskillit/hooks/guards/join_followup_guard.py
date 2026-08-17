@@ -97,7 +97,32 @@ def main() -> None:
 
     session_id = _resolve_session_id(data)
     if not session_id:
-        sys.exit(0)
+        # join_required=true is established; missing session_id is a
+        # fail-closed condition — we cannot attribute this follow-up tool
+        # to a declared batch, so deny rather than silently pass.
+        write_join_diagnostic(
+            {
+                "gate": "join_followup_guard",
+                "tool_use_id": data.get("tool_use_id", "") if isinstance(data, dict) else "",
+                "status": "block",
+                "denial_reason": "missing_session_id",
+            },
+            caller="join_followup_guard",
+        )
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "decision": "block",
+                    "reason": (
+                        "required-join wave is unresolved: top-level parent may not invoke "
+                        f"{tool_name!r} before every declared Agent handle settles "
+                        "(session_id missing — cannot attribute to declared batch)."
+                    ),
+                }
+            )
+            + "\n"
+        )
+        sys.exit(2)
 
     top_level_parent = "top_level"
     flag_dir = find_project_root() / ".autoskillit" / "temp"

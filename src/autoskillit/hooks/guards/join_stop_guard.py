@@ -68,7 +68,31 @@ def main() -> None:
         # Mirror the same env key the claim/settle guards read.
         sid = os.environ.get("AUTOSKILLIT_JOIN_SESSION_ID", "").strip()
     if not sid:
-        sys.exit(0)
+        # join_required=true is established; missing session_id is a
+        # fail-closed condition — we cannot verify wave completion, so
+        # block Stop rather than silently release.
+        write_join_diagnostic(
+            {
+                "gate": "join_stop_guard",
+                "status": "block",
+                "denial_reason": "missing_session_id",
+            },
+            caller="join_stop_guard",
+        )
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "decision": "block",
+                    "reason": (
+                        "required-join session has no session_id; cannot verify "
+                        "wave completion before Stop. Set AUTOSKILLIT_SESSION_ID "
+                        "or AUTOSKILLIT_JOIN_SESSION_ID."
+                    ),
+                }
+            )
+            + "\n"
+        )
+        sys.exit(2)
 
     top_level_parent = os.environ.get("AUTOSKILLIT_JOIN_PARENT", "top_level").strip()
     flag_dir = find_project_root() / ".autoskillit" / "temp"

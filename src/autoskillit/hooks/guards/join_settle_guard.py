@@ -95,6 +95,12 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
+    # Subagent contexts are exempt: the claimed child owns its own
+    # settlement surface; re-evaluating the gate here would self-lock
+    # every join. Mirrors the agent_id exemption in claim/followup guards.
+    if isinstance(data, dict) and data.get("agent_id"):
+        sys.exit(0)
+
     if not _session_join_required():
         sys.exit(0)
 
@@ -112,6 +118,19 @@ def main() -> None:
 
     sid = data.get("session_id", "")
     if not isinstance(sid, str) or not sid:
+        # join_required=true is established; missing session_id means
+        # we cannot record the settlement. Emit a structured diagnostic
+        # so the missing record is observable instead of silent.
+        write_join_diagnostic(
+            {
+                "gate": "join_settle_guard",
+                "tool_use_id": tool_use_id,
+                "outcome": outcome,
+                "status": "settle_skipped",
+                "denial_reason": "missing_session_id",
+            },
+            caller="join_settle_guard",
+        )
         sys.exit(0)
 
     flag_dir = find_project_root() / ".autoskillit" / "temp"

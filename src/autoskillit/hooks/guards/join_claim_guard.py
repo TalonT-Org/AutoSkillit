@@ -68,12 +68,15 @@ def _resolve_session_id(data: dict[str, object]) -> str:
     return sid if isinstance(sid, str) else ""
 
 
+_TOP_LEVEL_PARENT_MARKER = "top_level"
+
+
 def _resolve_top_level_parent(data: dict[str, object]) -> str:
-    parent = data.get("agent_id", "")
-    if not parent:
-        # Marker: a top-level call has no agent_id; treat "" as the parent.
-        return "top_level"
-    return ""
+    # The caller already exited when agent_id was truthy, so this only
+    # runs for top-level calls. The marker is the stable identifier that
+    # pairs the claim with the active batch.
+    del data
+    return _TOP_LEVEL_PARENT_MARKER
 
 
 def main() -> None:
@@ -118,6 +121,32 @@ def main() -> None:
     session_id = _resolve_session_id(data)
     top_level_parent = _resolve_top_level_parent(data)
     if not session_id:
+        # join_required=true is established; missing session_id is a
+        # fail-closed condition — we cannot attribute this Agent call
+        # to a declared batch, so deny rather than silently pass.
+        write_join_diagnostic(
+            {
+                "gate": "join_claim_guard",
+                "tool_use_id": tool_use_id,
+                "status": "deny",
+                "denial_reason": "missing_session_id",
+            },
+            caller="join_claim_guard",
+        )
+        denial_reason = (
+            f"{JOIN_CLAIM_DENY_TRIGGER}: session_id was not provided by the harness "
+            "for an Agent call in a join-required session."
+        )
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": denial_reason,
+                }
+            }
+        )
+        sys.stdout.write(payload + "\n")
         sys.exit(0)
 
     try:

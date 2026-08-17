@@ -1298,8 +1298,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     ),
     "execution/backends/codex.py": (
         1300,
-        "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1037 lines (cmd/cmd-spec "
-        "grammar with build_skill_session_cmd/build_food_truck_cmd/build_interactive_cmd/validate_interactive_invocation/setup_session_dir), "
+        "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1037 lines "
+        "(cmd/cmd-spec grammar with build_skill_session_cmd/"
+        "build_food_truck_cmd/build_interactive_cmd/"
+        "validate_interactive_invocation/setup_session_dir), "
         "with the four cmd-builder methods (≈465 lines) tightly coupled to CodexBackend "
         "state. After #4664 decomposition, command vocabulary, env policy, state-readiness "
         "probe, and session locator moved to _codex_cmd_builders.py; probes to "

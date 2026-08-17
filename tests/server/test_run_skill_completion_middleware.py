@@ -195,6 +195,7 @@ async def test_middleware_denial_payload_when_delivered_only(monkeypatch) -> Non
     finalized = _finalized()
     authority = finalized.authority
     authority.publish(finalized.receipt.receipt_id)
+    time.sleep(0.02)
     monkeypatch.setattr(
         "autoskillit.server._state._get_ctx_or_none",
         lambda: SimpleNamespace(run_skill_completion=authority),

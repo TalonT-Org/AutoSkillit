@@ -141,12 +141,10 @@ from autoskillit.execution.backends._explorer_dispatch import (
     CODEX_EXPLORATION_DISPATCH_RENDERER,
 )
 
+
 # Codex has its own timeout mechanism (``ensure_codex_mcp_registered`` /
-# ``CODEX_MCP_TOOL_TIMEOUT_FLOOR``). The ``mcp_tool_timeout_sec`` parameter on
-# Codex builder methods exists only to satisfy the shared
-# ``CodingAgentBackend`` Protocol signature and is intentionally ignored.
-
-
+# ``CODEX_MCP_TOOL_TIMEOUT_FLOOR``); ``mcp_tool_timeout_sec`` on Codex builders
+# exists only to satisfy the shared Protocol and is intentionally ignored.
 def _codex_home_from_plugin_binding(
     plugin_binding: PluginLaunchBinding | None,
 ) -> str | None:

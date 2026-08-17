@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.process_group_helpers import _cleanup_owned_process_group
+from tests._process_group_helpers import _cleanup_owned_process_group
 from tests.skills._fixtures import broken_ticket_grouper_manifest
 from tests.skills._skill_text_helpers import (
     CANONICAL_TICKET_GROUPER_SKILL,

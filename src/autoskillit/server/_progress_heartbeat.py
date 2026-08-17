@@ -21,11 +21,6 @@ _SWALLOWED_EXCEPTIONS = (RuntimeError, AttributeError, KeyError, _ClosedResource
 
 
 async def _tick(ctx: Context, interval: float, message: str) -> None:
-    if not math.isfinite(interval) or interval <= 0:
-        raise ValueError(
-            f"progress_heartbeat interval must be a finite positive number of "
-            f"seconds, got {interval!r}"
-        )
     progress = 0.0
     while True:
         await anyio.sleep(interval)
@@ -47,6 +42,11 @@ async def progress_heartbeat(
     is a no-op when no ``progressToken`` was supplied, so no capability branching
     is needed.
     """
+    if not math.isfinite(interval) or interval <= 0:
+        raise ValueError(
+            f"progress_heartbeat interval must be a finite positive number of "
+            f"seconds, got {interval!r}"
+        )
     try:
         async with anyio.create_task_group() as tg:
             tg.start_soon(_tick, ctx, interval, message)

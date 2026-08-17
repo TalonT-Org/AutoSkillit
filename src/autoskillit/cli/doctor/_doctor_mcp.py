@@ -350,10 +350,8 @@ def _check_claude_mcp_timeouts(
 ) -> DoctorResult:
     """Check that ~/.claude.json's autoskillit entry has a correct timeout value.
 
-    Unlike Codex's tool_timeout_sec (derived from run_skill+fleet via a formula),
-    the Claude-side value is a direct mirror of RunSkillConfig.mcp_tool_timeout_sec
-    (see _register_mcp_server) — so this checks deployed-vs-configured drift, not
-    session-duration coherence (that's _claude_mcp_timeout_coherence_gate's job).
+    Compares the deployed timeout against RunSkillConfig.mcp_tool_timeout_sec.
+    Session-duration coherence is enforced by _claude_mcp_timeout_coherence_gate.
     """
     if backend is None or backend.capabilities.mcp_config_capable:
         return DoctorResult(
@@ -372,11 +370,18 @@ def _check_claude_mcp_timeouts(
         )
     try:
         data = json.loads(claude_json_path.read_text())
-    except (OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         return DoctorResult(
             Severity.OK,
             "claude_mcp_timeouts",
-            "~/.claude.json not readable — timeout check skipped",
+            "~/.claude.json not found — timeout check skipped",
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        return DoctorResult(
+            Severity.WARNING,
+            "claude_mcp_timeouts",
+            f"~/.claude.json could not be read or parsed ({exc!r}). "
+            f"Run 'autoskillit init' to repair it.",
         )
     entry = data.get("mcpServers", {}).get("autoskillit")
     if not isinstance(entry, dict):
@@ -386,6 +391,13 @@ def _check_claude_mcp_timeouts(
             "No direct autoskillit mcpServers entry — timeout check skipped",
         )
     observed = entry.get("timeout")
+    if observed is not None and not isinstance(observed, (int, float)):
+        return DoctorResult(
+            Severity.WARNING,
+            "claude_mcp_timeouts",
+            f"timeout in ~/.claude.json is not numeric ({observed!r}). "
+            f"Run 'autoskillit init' to repair it.",
+        )
     expected = int((run_skill or _RunSkillConfig()).mcp_tool_timeout_sec * 1000)
     if observed is None:
         return DoctorResult(

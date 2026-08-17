@@ -667,7 +667,14 @@ async def dispatch_food_truck(
             )
         cancel_scope: anyio.CancelScope | None = None
         try:
-            with anyio.fail_after(tool_ctx.config.run_skill.mcp_tool_timeout_sec) as cancel_scope:
+            tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec
+            if not isinstance(tool_timeout_sec, (int, float)) or tool_timeout_sec <= 0:
+                return fleet_error(
+                    FleetErrorCode.FLEET_INVALID_BACKEND,
+                    f"run_skill.mcp_tool_timeout_sec must be a positive number of "
+                    f"seconds, got {tool_timeout_sec!r}.",
+                )
+            with anyio.fail_after(tool_timeout_sec) as cancel_scope:
                 async with progress_heartbeat(ctx):
                     result = await execute_dispatch(
                         tool_ctx=tool_ctx,

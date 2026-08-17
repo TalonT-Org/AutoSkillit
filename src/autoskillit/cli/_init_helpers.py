@@ -412,11 +412,9 @@ def _register_mcp_server(
 ) -> None:
     """Write autoskillit MCP server entry to claude.json (idempotent).
 
-    ``mcp_tool_timeout_sec``, when given, is written as a millisecond
-    ``timeout`` field — a per-server wall-clock ceiling that, as of Claude
-    Code v2.1.203+, also floors the client's idle-abort timeout for this
-    server's tool calls, mirroring the server-side ``anyio.fail_after``
-    ceiling (``RunSkillConfig.mcp_tool_timeout_sec``).
+    When given, ``mcp_tool_timeout_sec`` is written as a millisecond ``timeout``
+    field — Claude Code floors its per-tool idle-abort against this server value,
+    aligning with the server-side ``anyio.fail_after`` ceiling.
     """
     data: dict = {}
     if claude_json_path.exists():
@@ -436,6 +434,11 @@ def _register_mcp_server(
         "args": [],
     }
     if mcp_tool_timeout_sec is not None:
+        if not isinstance(mcp_tool_timeout_sec, (int, float)) or mcp_tool_timeout_sec <= 0:
+            raise ValueError(
+                f"mcp_tool_timeout_sec must be a positive number of seconds, got "
+                f"{mcp_tool_timeout_sec!r}"
+            )
         entry["timeout"] = int(mcp_tool_timeout_sec * 1000)
     data["mcpServers"]["autoskillit"] = entry
     atomic_write(claude_json_path, json.JSONEncoder(indent=2).encode(data))

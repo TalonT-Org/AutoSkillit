@@ -39,19 +39,33 @@ def _pid_alive(pid: int) -> bool:
     """Check if a PID is running and not a zombie (stdlib-only, no create_time validation).
 
     Duplicates the /proc/{pid}/stat state-char parse from
-    autoskillit.core.runtime._linux_proc.read_process_state by design: hook scripts
-    are stdlib-only and cannot import from autoskillit.*.
+    autoskillit.core.runtime._linux_proc.read_process_state by design — hook scripts
+    are stdlib-only and cannot import from autoskillit.*. Falls back to the
+    portable os.kill(pid, 0) probe on platforms without procfs or when /proc is
+    unreadable (e.g. macOS, Linux with hidepid=2 for foreign PIDs).
     """
     try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # PID belongs to another user — assume alive when unverifiable (matches
+        # the prior portable contract).
+        return True
+    except OSError:
+        return False
+    try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
+        # comm may contain ")" — rfind locates the last ")" as the field boundary
         rpar = stat.rfind(")")
         if rpar == -1:
-            return False
+            return True
         fields = stat[rpar + 2 :].split()
         return fields[0] != "Z"
     except (FileNotFoundError, PermissionError, OSError, ValueError, IndexError):
-        return False
+        # /proc unavailable (macOS, hidepid=2 on foreign PIDs); trust the
+        # os.kill(pid, 0) answer above.
+        return True
 
 
 def main() -> None:

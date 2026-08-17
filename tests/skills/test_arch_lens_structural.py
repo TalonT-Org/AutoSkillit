@@ -170,7 +170,7 @@ def test_related_skills_execution_guard_occurs_once_in_never_section(slug: str) 
 
 @pytest.mark.parametrize(
     ("backend_name", "mermaid_target"),
-    [("claude-code", "/autoskillit:mermaid"), ("codex", "$mermaid")],
+    [("claude-code", "/autoskillit:mermaid")],
 )
 @pytest.mark.parametrize("slug", ARCH_LENS_SLUGS)
 def test_projected_semantic_contract_invokes_only_mermaid(
@@ -182,6 +182,11 @@ def test_projected_semantic_contract_invokes_only_mermaid(
     assert adaptation_payload["sibling_skill_targets"] == {"mermaid": mermaid_target}
     assert f"Invoke sibling skill {mermaid_target}." in contract
     assert FORBIDDEN_PROJECTED_INVOCATION_TARGET.search(contract) is None
+    # The Codex parameterization was dropped here because arch-lens skills
+    # declare join.required=true and Codex refuses join-bearing skills at
+    # admission (REQUIRED_JOIN — wait-any/mailbox-activity). The structural
+    # contract for arch-lens is therefore only verified against Claude;
+    # the Codex exclusion lives in the negative-assertion test group.
 
 
 @pytest.mark.parametrize("slug", ARCH_LENS_SLUGS)

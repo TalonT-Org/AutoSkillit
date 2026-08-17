@@ -465,17 +465,11 @@ def test_codex_reusable_trace_reproves_unrelated_mailbox_wakeup() -> None:
     join. We assert that a 4-child join plan is refused at admission
     and that a stand-alone unrelated mailbox wakeup does not close the
     declared set."""
-    from autoskillit.core import SkillSemanticOperation
+    from autoskillit.core.types._type_exceptions import SkillContractError
 
     plan = _four_child_plan()
-    adaptation = CodexBackend().adapt_skill_semantics(plan)
-    assert adaptation.unsupported_operation == SkillSemanticOperation.REQUIRED_JOIN
-    assert adaptation.logical_role_mapping == {}
-    # The Codex projection must not instruct an exact-ID wait when
-    # adapting a join-required plan.
-    text = "\n".join(adaptation.instruction_fragments)
-    assert "wait on exact" not in text.lower()
-    assert "wait_for_ids" not in text.lower()
+    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+        CodexBackend().adapt_skill_semantics(plan)
 
 
 # ---------------------------------------------------------------------------
@@ -486,19 +480,20 @@ def test_codex_reusable_trace_reproves_unrelated_mailbox_wakeup() -> None:
 def test_codex_required_join_refused_at_admission() -> None:
     """Codex cannot provide fixed-set fan-in.
 
-    The current Codex adapt_skill_semantics path returns
-    ``unsupported_operation=REQUIRED_JOIN`` with a diagnostic
-    describing the wait-any/mailbox limitation. This is the source of
-    truth — a future Codex fixed-set primitive must pass the same
-    conformance fixture before the trait flips.
+    The Codex adapt_skill_semantics path now short-circuits with
+    ``SkillContractError`` carrying the ``wait-any/mailbox-activity``
+    diagnostic (the contract test relies on the fail-closed raise). The
+    ``unsupported_operation=REQUIRED_JOIN`` marker is still produced
+    before the raise so the catalog/doctor/preflight admission paths can
+    surface the same diagnostic during skill publication. This is the
+    source of truth — a future Codex fixed-set primitive must pass the
+    same conformance fixture before the trait flips.
     """
-    from autoskillit.core import SkillSemanticOperation
+    from autoskillit.core import SkillContractError
 
     plan = _four_child_plan()
-    adaptation = CodexBackend().adapt_skill_semantics(plan)
-    assert adaptation.unsupported_operation == SkillSemanticOperation.REQUIRED_JOIN
-    assert adaptation.diagnostic is not None
-    assert "fixed-set" in adaptation.diagnostic or "wait-any" in adaptation.diagnostic
+    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+        CodexBackend().adapt_skill_semantics(plan)
 
 
 def test_codex_join_bearing_skill_removed_from_catalog() -> None:
@@ -522,14 +517,19 @@ def test_codex_join_bearing_skill_removed_from_catalog() -> None:
     if info.semantic_plan is None or not info.semantic_plan.join.required:
         pytest.skip("review-pr is not a join-bearing skill in this checkout")
     backend = CodexBackend()
-    # The adaptation for Codex must mark it as REQUIRED_JOIN.
-    adaptation = backend.adapt_skill_semantics(info.semantic_plan)
-    assert adaptation.unsupported_operation == SkillSemanticOperation.REQUIRED_JOIN
+    # The adaptation for Codex must mark it as REQUIRED_JOIN. The new
+    # rectify-join contract short-circuits via SkillContractError at the
+    # adapter surface; the unsupported_operation marker is still produced
+    # before the raise so the catalog/doctor/preflight admission paths can
+    # surface the same diagnostic during skill publication.
+    from autoskillit.core.types._type_exceptions import SkillContractError
+
+    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+        backend.adapt_skill_semantics(info.semantic_plan)
     # And the projection must fail closed (no projected document for
     # a join-bearing skill on Codex).
     entry = SkillCatalogEntry.from_skill_info(info)
     catalog = EffectiveSkillCatalog(skills=(entry,), execution_role=SkillExecutionRole.SESSION)
-    from autoskillit.core.types._type_exceptions import SkillContractError
     from autoskillit.workspace import project_agent_skill_document
 
     with pytest.raises(SkillContractError):

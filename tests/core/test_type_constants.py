@@ -609,7 +609,6 @@ def test_claude_code_mcp_tool_idle_timeout_env_var_value() -> None:
     )
 
     assert CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR == "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"
-    assert isinstance(CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR, str)
 
 
 def test_claude_code_mcp_tool_idle_timeout_env_var_in_all() -> None:

@@ -101,20 +101,31 @@ _skip_unless_live_gate = pytest.mark.skipif(
 
 def _initialize_repository(project: Path) -> None:
     project.mkdir(parents=True)
-    subprocess.run(["git", "init", "-q"], cwd=project, check=True, timeout=10)
+    init_env = {k: os.environ[k] for k in _GIT_SUBPROCESS_ENV_ALLOWLIST if k in os.environ}
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True, timeout=10, env=init_env)
     subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=project, check=True, timeout=10
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=project,
+        check=True,
+        timeout=10,
+        env=init_env,
     )
-    subprocess.run(["git", "config", "user.name", "Test"], cwd=project, check=True, timeout=10)
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=project,
+        check=True,
+        timeout=10,
+        env=init_env,
+    )
     (project / ".gitignore").write_text(".autoskillit/\n")
     (project / "README.md").write_text("# Test\n")
-    subprocess.run(["git", "add", "."], cwd=project, check=True, timeout=10)
+    subprocess.run(["git", "add", "."], cwd=project, check=True, timeout=10, env=init_env)
     subprocess.run(
         ["git", "commit", "-q", "-m", "init"],
         cwd=project,
         check=True,
         timeout=10,
-        env={**os.environ, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com"},
+        env={**init_env, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com"},
     )
 
 
@@ -127,6 +138,15 @@ _CLAUDE_SUBPROCESS_ENV_ALLOWLIST = (
     "PATH",
     "ANTHROPIC_API_KEY",
     "CLAUDE_CODE_OAUTH_TOKEN",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+)
+# Allowlist of env vars the local git subprocess is permitted to inherit.
+# Kept narrower than the Claude allowlist above because git only needs PATH,
+# locale vars, and the agent identity env vars the test sets explicitly.
+_GIT_SUBPROCESS_ENV_ALLOWLIST = (
+    "PATH",
     "LANG",
     "LC_ALL",
     "LC_CTYPE",

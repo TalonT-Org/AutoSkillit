@@ -39,15 +39,17 @@ class TestCheckPipelineDepsImmutableTarget:
             tool_ctx_kitchen_open,
             "",
         )
-        result = _check_pipeline_deps("b", authority)
+        try:
+            result = _check_pipeline_deps("b", authority)
+        finally:
+            if key is not None:
+                from autoskillit.server.tools.tools_pipeline_tracker import (
+                    _release_context_tracker,
+                )
+
+                _release_context_tracker(tool_ctx_kitchen_open, key)
         assert _target is not None
         assert _target.target_order_id == "kitchen-xyz"
-        if key is not None:
-            from autoskillit.server.tools.tools_pipeline_tracker import (
-                _release_context_tracker,
-            )
-
-            _release_context_tracker(tool_ctx_kitchen_open, key)
         assert result is None
 
 

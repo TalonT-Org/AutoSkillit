@@ -228,13 +228,15 @@ class TestOpenKitchenAutoInitTracker:
             from autoskillit.server.tools.tools_execution import _select_tracker_authority
 
             _target, authority, key, _lease = _select_tracker_authority(ctx, "")
-            deny_result = _check_pipeline_deps("review_approach", authority)
-            if key is not None:
-                from autoskillit.server.tools.tools_pipeline_tracker import (
-                    _release_context_tracker,
-                )
+            try:
+                deny_result = _check_pipeline_deps("review_approach", authority)
+            finally:
+                if key is not None:
+                    from autoskillit.server.tools.tools_pipeline_tracker import (
+                        _release_context_tracker,
+                    )
 
-                _release_context_tracker(ctx, key)
+                    _release_context_tracker(ctx, key)
 
         assert deny_result is not None
         parsed = json.loads(deny_result)

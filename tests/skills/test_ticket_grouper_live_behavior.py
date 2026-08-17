@@ -184,10 +184,7 @@ def _copy_credentials(home: Path) -> None:
         return
     target = home / ".claude" / ".credentials.json"
     target.write_bytes(_SOURCE_CREDENTIALS.read_bytes())
-    try:
-        target.chmod(0o600)
-    except OSError:
-        pass
+    target.chmod(0o600)
 
 
 def _extract_result_text(output: str) -> str:

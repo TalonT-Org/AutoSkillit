@@ -189,3 +189,16 @@ class TestValidateAuditTicketGrouper:
     def test_ticket_grouper_has_effort_based_splitting(self) -> None:
         """Ticket Grouper instructions must include effort-based splitting."""
         assert_ticket_grouper_has_effort_based_splitting(_skill_text())
+
+    def test_ticket_grouper_has_rationale_self_consistency_check(self) -> None:
+        """Step 7 must include the Rationale self-consistency check bullet.
+
+        Catches a regression where the bullet is uniformly dropped from all
+        three bundled validate-* skills — see #4610 for the underlying
+        failure mode the bullet prevents.
+        """
+        text = _skill_text()
+        assert "Rationale self-consistency check" in text, (
+            "validate-audit SKILL.md Step 7 must contain the 'Rationale "
+            "self-consistency check' bullet"
+        )

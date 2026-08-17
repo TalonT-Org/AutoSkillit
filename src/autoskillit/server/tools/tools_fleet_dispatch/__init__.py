@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from autoskillit.fleet import execute_dispatch
 from autoskillit.server.tools.tools_fleet_dispatch._campaign_state import (
     _confirm_campaign_state_write,
     _dispatch_effect_identities,
@@ -23,6 +24,7 @@ from autoskillit.server.tools.tools_fleet_dispatch._provenance import (
 
 __all__ = [
     "dispatch_food_truck",
+    "execute_dispatch",
     "record_gate_dispatch",
     "_attach_dispatch_provenance",
     "_bind_dispatch_provenance",

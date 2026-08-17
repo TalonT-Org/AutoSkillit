@@ -845,10 +845,7 @@ def read_active_kitchens_registry() -> list[dict]:
 
 
 def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
-    # Intentionally excluded from the core.runtime.is_pid_alive consolidation: this
-    # function's cross-boot stored_create_time verification cannot be reproduced by
-    # the stdlib-only tick-count primitive without an out-of-scope boot-time/schema
-    # migration, so it keeps its own psutil-based zombie check.
+    # Allowlisted in test_no_raw_zombie_blind_liveness_check_outside_shared_primitive.
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

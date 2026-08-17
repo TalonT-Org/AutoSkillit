@@ -125,8 +125,9 @@ class SubprocessResult:
     returncode: int
     """Final process return code.
 
-    -1 means the leader's returncode could not be confirmed despite full
-    SIGTERM/SIGKILL escalation — see cleanup_evidence for diagnostic detail.
+    Note: -1 collides with the SIGHUP signal-terminated returncode, so it cannot
+    reliably indicate "leader returncode unconfirmed after full escalation." Use
+    cleanup_evidence as the unambiguous discriminator for teardown status.
     """
     stdout: str
     stderr: str

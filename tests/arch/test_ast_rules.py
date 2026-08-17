@@ -722,6 +722,24 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     )
 
 
+def _gather_import_aliases(tree: ast.AST) -> dict[str, tuple[str, str | None]]:
+    """Build a map from local name → (module, attr) for every import in the tree.
+
+    Handles `import x`, `import x as y`, `from x import a`, `from x import a as b`.
+    """
+    aliases: dict[str, tuple[str, str | None]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name
+                aliases[local] = (alias.name, None)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            for alias in node.names:
+                local = alias.asname or alias.name
+                aliases[local] = (node.module, alias.name)
+    return aliases
+
+
 def test_no_direct_settle_call_outside_allowlist() -> None:
     """No src file may call .settle() outside the designated allowlist.
 
@@ -754,11 +772,9 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
         except SyntaxError:
             continue
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "settle"
-            ):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "settle":
                 violations.append(
                     f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
                     f"direct call to .settle() outside allowed files"
@@ -772,12 +788,13 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
 
 
 def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
-    """No src file may call psutil.pid_exists() or the bare os.kill(pid, 0) existence
-    probe outside the shared zombie-aware primitive.
+    """No src file may call psutil.pid_exists(), the bare os.kill(pid, 0) existence
+    probe, or psutil.Process(pid).is_running() outside the shared zombie-aware
+    primitive.
 
-    Both checks are zombie-blind: a zombie process (exited but not yet reaped by its
-    parent) retains a readable /proc entry and reports as alive under an exact-PID-
-    existence check alone.
+    All three checks are zombie-blind: a zombie process (exited but not yet reaped
+    by its parent) retains a readable /proc entry and reports as alive under an
+    exact-PID-existence check alone.
 
     Allowed files:
     - src/autoskillit/core/runtime/_linux_proc.py (defines the shared primitive:
@@ -800,40 +817,90 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
         SRC_ROOT / "core" / "runtime" / "_linux_proc.py",
         SRC_ROOT / "core" / "_plugin_cache.py",
         SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",
+        SRC_ROOT / "execution" / "process" / "_process_kill.py",
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",
     }
     violations: list[str] = []
+
+    def _is_psutil_pid_exists_call(
+        node: ast.Call, aliases: dict[str, tuple[str, str | None]]
+    ) -> bool:
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "pid_exists":
+            if (
+                isinstance(node.func.value, ast.Name)
+                and aliases.get(node.func.value.id, (None,))[0] == "psutil"
+            ):
+                return True
+        elif isinstance(node.func, ast.Name) and aliases.get(node.func.id, (None,)) == (
+            "psutil",
+            "pid_exists",
+        ):
+            return True
+        return False
+
+    def _is_os_kill_probe_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) -> bool:
+        if (
+            len(node.args) != 2
+            or not isinstance(node.args[1], ast.Constant)
+            or node.args[1].value != 0
+        ):
+            return False
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "kill":
+            if (
+                isinstance(node.func.value, ast.Name)
+                and aliases.get(node.func.value.id, (None,))[0] == "os"
+            ):
+                return True
+        elif isinstance(node.func, ast.Name) and aliases.get(node.func.id, (None,)) == (
+            "os",
+            "kill",
+        ):
+            return True
+        return False
+
+    def _is_psutil_is_running_call(
+        node: ast.Call, aliases: dict[str, tuple[str, str | None]]
+    ) -> bool:
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "is_running"):
+            return False
+        receiver = node.func.value
+        if not isinstance(receiver, ast.Call):
+            return False
+        if not (isinstance(receiver.func, ast.Attribute) and receiver.func.attr == "Process"):
+            return False
+        if (
+            isinstance(receiver.func.value, ast.Name)
+            and aliases.get(receiver.func.value.id, (None,))[0] == "psutil"
+        ):
+            return True
+        return False
 
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
         if py_file in allowed_files:
             continue
         try:
-            tree = ast.parse(py_file.read_text())
+            source = py_file.read_text()
+            tree = ast.parse(source)
         except SyntaxError:
             continue
+        aliases = _gather_import_aliases(tree)
         for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            if not isinstance(node, ast.Call):
                 continue
-            if (
-                node.func.attr == "pid_exists"
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "psutil"
-            ):
+            if _is_psutil_pid_exists_call(node, aliases):
                 violations.append(
                     f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
                     f"direct call to psutil.pid_exists() outside allowed files"
                 )
-            elif (
-                node.func.attr == "kill"
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "os"
-                and len(node.args) == 2
-                and isinstance(node.args[1], ast.Constant)
-                and node.args[1].value == 0
-            ):
+            elif _is_os_kill_probe_call(node, aliases):
                 violations.append(
                     f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
                     f"direct call to os.kill(pid, 0) outside allowed files"
+                )
+            elif _is_psutil_is_running_call(node, aliases):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to psutil.Process(pid).is_running() outside allowed files"
                 )
 
     assert not violations, (

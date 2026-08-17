@@ -40,6 +40,7 @@ from _hook_utils import find_project_root  # type: ignore[import-not-found]  # n
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     JoinLedgerError,
     claim_assignment,
+    resolve_flag_dir,
 )
 
 JOIN_CLAIM_DENY_TRIGGER: str = (
@@ -90,7 +91,7 @@ def main() -> None:
         sys.stdout.write(payload + "\n")
         sys.exit(0)
 
-    flag_dir = find_project_root() / ".autoskillit" / "temp"
+    flag_dir = resolve_flag_dir(find_project_root())
     session_id = _resolve_session_id(data)
     top_level_parent = "top_level"
     if not session_id:

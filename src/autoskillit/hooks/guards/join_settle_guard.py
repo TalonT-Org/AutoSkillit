@@ -44,6 +44,7 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     OUTCOME_SUCCESS,
     OUTCOME_TIMEOUT,
     JoinLedgerError,
+    resolve_flag_dir,
     settle_assignment,
 )
 
@@ -118,7 +119,7 @@ def main() -> None:
         )
         sys.exit(0)
 
-    flag_dir = find_project_root() / ".autoskillit" / "temp"
+    flag_dir = resolve_flag_dir(find_project_root())
     top_level_parent = "top_level"
     try:
         batch = settle_assignment(

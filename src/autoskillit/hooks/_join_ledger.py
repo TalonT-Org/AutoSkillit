@@ -80,6 +80,16 @@ def ledger_paths(flag_dir: Path) -> tuple[Path, Path]:
     return (flag_dir / LEDGER_FILENAME, flag_dir / LOCK_FILENAME)
 
 
+def resolve_flag_dir(project_root: Path) -> Path:
+    """Return ``<project_root>/.autoskillit/temp`` — the canonical join flag dir.
+
+    The four join guards and the ``declare_join_batch`` tool all consult the
+    same on-disk ledger; this helper is the single source of truth for the
+    flag directory layout so a future rename only requires one edit.
+    """
+    return project_root / ".autoskillit" / "temp"
+
+
 @contextlib.contextmanager
 def _flock(lock_path: Path) -> Generator[int, None, None]:
     """Acquire an exclusive ``fcntl.flock`` on ``lock_path`` for this process.

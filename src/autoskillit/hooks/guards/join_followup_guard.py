@@ -32,6 +32,7 @@ from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     active_batch,
+    resolve_flag_dir,
 )
 
 JOIN_FOLLOWUP_DENY_TRIGGER: str = (
@@ -108,7 +109,7 @@ def main() -> None:
         sys.exit(2)
 
     top_level_parent = "top_level"
-    flag_dir = find_project_root() / ".autoskillit" / "temp"
+    flag_dir = resolve_flag_dir(find_project_root())
     batch = active_batch(
         flag_dir,
         session_id=session_id,

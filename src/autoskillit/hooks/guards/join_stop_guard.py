@@ -36,6 +36,7 @@ from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     can_release_stop,
+    resolve_flag_dir,
 )
 
 
@@ -81,7 +82,7 @@ def main() -> None:
         sys.exit(2)
 
     top_level_parent = os.environ.get("AUTOSKILLIT_JOIN_PARENT", "top_level").strip()
-    flag_dir = find_project_root() / ".autoskillit" / "temp"
+    flag_dir = resolve_flag_dir(find_project_root())
     allow_stop, reason = can_release_stop(
         flag_dir,
         session_id=sid,

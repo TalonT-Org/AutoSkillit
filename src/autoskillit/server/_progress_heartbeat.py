@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
@@ -20,6 +21,11 @@ _SWALLOWED_EXCEPTIONS = (RuntimeError, AttributeError, KeyError, _ClosedResource
 
 
 async def _tick(ctx: Context, interval: float, message: str) -> None:
+    if not math.isfinite(interval) or interval <= 0:
+        raise ValueError(
+            f"progress_heartbeat interval must be a finite positive number of "
+            f"seconds, got {interval!r}"
+        )
     progress = 0.0
     while True:
         await anyio.sleep(interval)

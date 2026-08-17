@@ -118,6 +118,7 @@ from autoskillit.server._misc import (
     resolve_closure_write_dirs,
 )
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._progress_heartbeat import progress_heartbeat
 from autoskillit.server._recipe_execution import (
     RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
@@ -2362,58 +2363,60 @@ async def run_skill(
                                 provider_extras[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] = str(
                                     tool_ctx.audit_admission_ledger.store_authority.database_path
                                 )
-                            skill_result = await tool_ctx.executor.run(
-                                resolved_command,
-                                _capability_contract.cwd,
-                                model=effective_model,
-                                add_dirs=skill_add_dirs,
-                                step_name=step_name,
-                                kitchen_id=tool_ctx.kitchen_id,
-                                order_id=effective_order_id,
-                                expected_output_patterns=expected_output_patterns,
-                                write_behavior=write_spec,
-                                stale_threshold=float(stale_threshold)
-                                if stale_threshold is not None
-                                else None,
-                                idle_output_timeout=float(idle_output_timeout)
-                                if idle_output_timeout is not None
-                                else None,
-                                completion_marker=invocation_marker,
-                                recipe_name=tool_ctx.recipe_name,
-                                recipe_content_hash=tool_ctx.recipe_content_hash,
-                                recipe_composite_hash=tool_ctx.recipe_composite_hash,
-                                recipe_version=tool_ctx.recipe_version,
-                                allowed_write_prefix=allowed_write_prefix,
-                                allowed_write_prefixes=allowed_write_prefixes,
-                                readonly_skill=is_read_only,
-                                scope_discipline_skill=scope_discipline_skill,
-                                completion_required=completion_required,
-                                write_watch_dirs=write_watch_dirs,
-                                provider_extras=provider_extras,
-                                profile_name=profile_name_out,
-                                provider_name=profile_name_out,
-                                backend_authority=_backend_authority,
-                                resume_session_id=resume_session_id,
-                                resume_launch_contract=_resume_launch_contract,
-                                marker_dir=_marker_dir,
-                                caller_session_id=_caller_hook_session_id,
-                                inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
-                                inspector_model=_inspector_model,
-                                network_access=_network_access,
-                                closure_spec=closure_spec,
-                                closure_report_root=closure_report_root,
-                                skill_contract=_skill_contract,
-                                capability_contract=_capability_contract,
-                                native_shell_capture_decision=(_native_shell_capture_decision),
-                                managed_lineage_ref=_managed_lineage_ref,
-                                on_launch_resolved=contract_lifecycle.bind_launch,
-                                execution_identity=_execution_identity,
-                                on_session_id_resolved=(
-                                    _observe_contract_session_id
-                                    if contract_lifecycle.correlation_key is not None
-                                    else None
-                                ),
-                            )
+                            async with progress_heartbeat(ctx):
+                                skill_result = await tool_ctx.executor.run(
+                                    resolved_command,
+                                    _capability_contract.cwd,
+                                    model=effective_model,
+                                    add_dirs=skill_add_dirs,
+                                    step_name=step_name,
+                                    kitchen_id=tool_ctx.kitchen_id,
+                                    order_id=effective_order_id,
+                                    expected_output_patterns=expected_output_patterns,
+                                    write_behavior=write_spec,
+                                    stale_threshold=float(stale_threshold)
+                                    if stale_threshold is not None
+                                    else None,
+                                    idle_output_timeout=float(idle_output_timeout)
+                                    if idle_output_timeout is not None
+                                    else None,
+                                    completion_marker=invocation_marker,
+                                    recipe_name=tool_ctx.recipe_name,
+                                    recipe_content_hash=tool_ctx.recipe_content_hash,
+                                    recipe_composite_hash=tool_ctx.recipe_composite_hash,
+                                    recipe_version=tool_ctx.recipe_version,
+                                    allowed_write_prefix=allowed_write_prefix,
+                                    allowed_write_prefixes=allowed_write_prefixes,
+                                    readonly_skill=is_read_only,
+                                    scope_discipline_skill=scope_discipline_skill,
+                                    completion_required=completion_required,
+                                    write_watch_dirs=write_watch_dirs,
+                                    provider_extras=provider_extras,
+                                    profile_name=profile_name_out,
+                                    provider_name=profile_name_out,
+                                    backend_authority=_backend_authority,
+                                    resume_session_id=resume_session_id,
+                                    resume_launch_contract=_resume_launch_contract,
+                                    marker_dir=_marker_dir,
+                                    caller_session_id=_caller_hook_session_id,
+                                    inspector_eligible=_in_fleet_dispatch
+                                    and bool(_inspector_model),
+                                    inspector_model=_inspector_model,
+                                    network_access=_network_access,
+                                    closure_spec=closure_spec,
+                                    closure_report_root=closure_report_root,
+                                    skill_contract=_skill_contract,
+                                    capability_contract=_capability_contract,
+                                    native_shell_capture_decision=(_native_shell_capture_decision),
+                                    managed_lineage_ref=_managed_lineage_ref,
+                                    on_launch_resolved=contract_lifecycle.bind_launch,
+                                    execution_identity=_execution_identity,
+                                    on_session_id_resolved=(
+                                        _observe_contract_session_id
+                                        if contract_lifecycle.correlation_key is not None
+                                        else None
+                                    ),
+                                )
                 except TimeoutError as exc:
                     contract_lifecycle.retain_bound = False
                     logger.error(

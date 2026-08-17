@@ -132,6 +132,7 @@ def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) ->
     "builder_call",
     [
         lambda: ClaudeCodeBackend().build_interactive_cmd(mcp_tool_timeout_sec=14364.0),
+        lambda: ClaudeCodeBackend().build_headless_cmd("Emit", mcp_tool_timeout_sec=14364.0),
         lambda: ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
@@ -154,7 +155,7 @@ def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) ->
             )
         ),
     ],
-    ids=["interactive", "skill_headless", "headless_resume", "food_truck"],
+    ids=["interactive", "headless", "skill_headless", "headless_resume", "food_truck"],
 )
 def test_all_claude_session_builders_inject_mcp_tool_idle_timeout(builder_call) -> None:
     """Every Claude session command builder injects CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT.
@@ -171,6 +172,8 @@ def test_all_claude_session_builders_inject_mcp_tool_idle_timeout(builder_call) 
     [
         lambda: ClaudeCodeBackend().build_interactive_cmd(mcp_tool_timeout_sec=None),
         lambda: ClaudeCodeBackend().build_interactive_cmd(mcp_tool_timeout_sec=0.0),
+        lambda: ClaudeCodeBackend().build_headless_cmd("Emit", mcp_tool_timeout_sec=None),
+        lambda: ClaudeCodeBackend().build_headless_cmd("Emit", mcp_tool_timeout_sec=0.0),
         lambda: ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
@@ -208,6 +211,8 @@ def test_all_claude_session_builders_inject_mcp_tool_idle_timeout(builder_call) 
     ids=[
         "interactive_none",
         "interactive_zero",
+        "headless_none",
+        "headless_zero",
         "skill_headless_zero",
         "headless_resume_none",
         "headless_resume_zero",

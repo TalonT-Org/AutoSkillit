@@ -116,6 +116,36 @@ def test_pid_alive_returns_false_for_zombie() -> None:
         os.waitpid(child_pid, 0)
 
 
+def test_pid_alive_returns_false_on_no_such_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A PID that vanished between os.kill and psutil.Process must be reported dead."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_no_such_process(*_args: object, **_kwargs: object) -> object:
+        raise psutil.NoSuchProcess(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
+
+    assert _pid_alive(42, stored_create_time=1.0) is False
+    assert _pid_alive(42, stored_create_time=None) is True
+
+
+def test_pid_alive_returns_true_on_access_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A foreign-user PID (psutil.AccessDenied) must remain 'assume alive'."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_access_denied(*_args: object, **_kwargs: object) -> object:
+        raise psutil.AccessDenied(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_access_denied)
+
+    assert _pid_alive(42, stored_create_time=1.0) is True
+    assert _pid_alive(42, stored_create_time=None) is True
+
+
 def test_repeated_exact_registration_does_not_grow_registry(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     identity = KitchenProcessIdentity("kitchen", 42, 123.5, str(tmp_path))

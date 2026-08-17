@@ -2,37 +2,21 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import math
 import os
-import selectors
 import shutil
-import sqlite3
-import stat
 import subprocess
-import tempfile
-import threading
-import time
 import tomllib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
-from enum import StrEnum, unique
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-import zstandard
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
-    AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
-    AUTOSKILLIT_APPLICABLE_GUARDS,
-    AUTOSKILLIT_PRIVATE_ENV_VARS,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
-    AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     BUNDLED_EXPLORER_ROLES,
     CODEX_COOK_RESERVED_ENV_VARS,
     CODEX_EFFORT_MAPPING,
@@ -40,7 +24,6 @@ from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     CODEX_MODEL_ALIASES,
     CODEX_SESSIONS_SUBDIR,
-    CODEX_STARTUP_TRACE_ENV_VAR,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
@@ -53,7 +36,6 @@ from autoskillit.core import (
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
-    WEB_EVIDENCE_RESEARCHER_ROLE,
     AgentDef,
     BackendCapabilities,
     BackendConventions,
@@ -71,32 +53,26 @@ from autoskillit.core import (
     NativeShellCaptureDecision,
     NativeShellCaptureMode,
     NoResume,
-    ObserverStatus,
     OutputFormat,
     PluginLaunchBinding,
     PreLaunchReadiness,
     ResumeSpec,
     SessionCheckpoint,
-    SessionLocator,
-    SessionSummary,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
-    agent_definition_digest,
     atomic_write,
     default_log_dir,
     extract_skill_name,
     get_logger,
-    load_bundled_agent_definitions,
 )
 from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
     FlagVocabulary,
-    _filter_protected_native_shell_env,
     _managed_native_shell_env,
     _merge_caller_env_extras,
 )
@@ -112,20 +88,27 @@ from autoskillit.execution.backends._claude_prompt import (
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._codex.explorer_projection import (
-    _EXPLORER_ROLE_NAMES,
     _canonical_explorer_mcp_transport,
-    _direct_agent_mcp_tools,
-    _explorer_mcp_projection,
-    _render_direct_role_mcp_lines,
     _render_parent_explorer_config,
-    _render_role_mcp_lines,
-    _resolve_role_mcp_transport,
     _validate_injected_explorer_parent_policy,
-    _validated_explorer_binding_env,
     _validated_explorer_binding_envs,
 )
+from autoskillit.execution.backends._codex_cmd_builders import (
+    _IMAGE_GENERATION_DISABLED,
+    CODEX_ENV_PREFIX_DENYLIST,
+    CODEX_EXEC_FLAGS,
+    CODEX_TOP_LEVEL_ONLY_FLAGS,
+    NON_VARIADIC_CODEX_FLAGS,
+    VARIADIC_CODEX_FLAGS,
+    CodexEnvPolicy,
+    CodexFlags,
+    CodexSessionLocator,
+    CodexStateReadinessProbe,
+    _codex_exec_base,
+    _codex_exec_extras,
+    _should_bypass_hook_trust,
+)
 from autoskillit.execution.backends._codex_config import (
-    _CODEX_AGENT_NAME_COLLISIONS,
     CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
     ensure_codex_mcp_registered,
@@ -133,8 +116,29 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_execution_identity import (
     extract_codex_execution_identity,
 )
+from autoskillit.execution.backends._codex_explorer_projection import (
+    _bundled_agent_definitions,
+    _canonical_codex_model_effort,
+    _generate_agent_tomls,
+    _materialize_profile_skills,
+    _preflight_agent_projection,
+    _register_agent_tomls,
+    _render_cli_auth_store,
+    _render_parent_sandbox_config,
+    clear_explorer_binding_env,
+    refresh_explorer_binding_env,
+)
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
+
+# Re-export probe helpers so existing consumers (e.g. evidence_reader, tests)
+# can keep importing them from the canonical codex module path.
+from autoskillit.execution.backends._codex_probes import (
+    _BoundedProbeResult,  # noqa: F401
+    _validate_global_codex_home,
+    _validate_inert_rollout_paths,
+    _validate_mcp_probe,
+)
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 from autoskillit.execution.backends._explorer_dispatch import (
     CODEX_EXPLORATION_DISPATCH_RENDERER,
@@ -147,6 +151,10 @@ def _codex_home_from_plugin_binding(
     if plugin_binding is None:
         return None
     return str(plugin_binding.plugin_dir)
+
+
+_CODEX_HOME_ENV_VAR = "CODEX_HOME"
+_CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
 
 __all__ = [
@@ -165,1243 +173,6 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
-
-
-@unique
-class CodexFlags(StrEnum):
-    JSON = "--json"
-    SANDBOX = "--sandbox"
-    MODEL = "--model"
-    MODEL_SHORT = "-m"
-    ADD_DIR = "--add-dir"
-    RESUME_SUBCOMMAND = "resume"
-    CONFIG_OVERRIDE = "-c"
-    PROFILE = "--profile"
-    DANGEROUSLY_BYPASS = "--dangerously-bypass-approvals-and-sandbox"
-    DANGEROUSLY_BYPASS_HOOK_TRUST = "--dangerously-bypass-hook-trust"
-
-
-CODEX_EXEC_FLAGS: frozenset[str] = frozenset(
-    {
-        CodexFlags.JSON,
-        CodexFlags.SANDBOX,
-        CodexFlags.MODEL,
-        CodexFlags.CONFIG_OVERRIDE,
-        CodexFlags.ADD_DIR,
-        CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST,
-    }
-)
-
-CODEX_TOP_LEVEL_ONLY_FLAGS: frozenset[str] = frozenset(
-    {
-        CodexFlags.DANGEROUSLY_BYPASS,
-        CodexFlags.MODEL_SHORT,
-        CodexFlags.PROFILE,
-    }
-)
-
-VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset({CodexFlags.ADD_DIR, CodexFlags.CONFIG_OVERRIDE})
-
-NON_VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset(
-    {
-        CodexFlags.JSON,
-        CodexFlags.SANDBOX,
-        CodexFlags.MODEL,
-        CodexFlags.MODEL_SHORT,
-        CodexFlags.PROFILE,
-        CodexFlags.RESUME_SUBCOMMAND,
-        CodexFlags.DANGEROUSLY_BYPASS,
-        CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST,
-    }
-)
-
-
-CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
-    {
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_BASE_URL",
-        "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
-    }
-)
-
-CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
-
-_IMAGE_GENERATION_DISABLED = "features.image_generation=false"
-_CODEX_HOME_ENV_VAR = "CODEX_HOME"
-_CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
-
-
-def _codex_exec_base(
-    *,
-    sandbox: str | None,
-    json: bool = True,
-    extra_overrides: Sequence[str] = (),
-    bypass_hook_trust: bool = False,
-) -> list[str]:
-    cmd: list[str] = ["codex", "exec"]
-    if json:
-        cmd.append(CodexFlags.JSON)
-    if sandbox is not None:
-        cmd.extend([CodexFlags.SANDBOX, sandbox])
-    for override in extra_overrides:
-        cmd.extend([CodexFlags.CONFIG_OVERRIDE, override])
-    cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
-    if bypass_hook_trust:
-        # Hook trust is independent from the sandbox selected by config/CLI.
-        cmd.append(CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST)
-    return cmd
-
-
-def _should_bypass_hook_trust(
-    policy: HookTrustPolicy,
-    *,
-    automated_session: bool,
-) -> bool:
-    """Translate backend hook policy at the command-construction boundary."""
-    if automated_session:
-        return True
-    match policy:
-        case HookTrustPolicy.AUTOMATED:
-            return True
-        case HookTrustPolicy.REVIEW_EACH_SESSION:
-            return False
-    raise AssertionError(f"Unhandled hook trust policy: {policy!r}")
-
-
-_CODEX_STATE_READINESS_COMMIT = "ad65f016ed0c91992fb175fa881a373cc460dd2a"
-
-
-@dataclass(frozen=True, slots=True)
-class _StateReadinessDef:
-    database_name: str
-    upstream_commit: str
-
-
-_SUPPORTED_STATE_CONTRACTS = {
-    "codex-cli 0.145.0": _StateReadinessDef(
-        database_name="state_5.sqlite",
-        upstream_commit=_CODEX_STATE_READINESS_COMMIT,
-    )
-}
-
-
-@dataclass(frozen=True, slots=True)
-class CodexStateReadinessProbe:
-    """Read the version-mapped disposable Codex state database without mutation."""
-
-    codex_version: str
-    sqlite_home: Path
-    poll_interval_seconds: float = 0.05
-    _clock: Callable[[], float] = field(default=time.monotonic, repr=False)
-    _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
-
-    def __post_init__(self) -> None:
-        if not math.isfinite(self.poll_interval_seconds) or self.poll_interval_seconds <= 0:
-            raise ValueError("poll_interval_seconds must be finite and positive")
-        object.__setattr__(self, "sqlite_home", Path(self.sqlite_home))
-
-    @property
-    def database_path(self) -> Path | None:
-        """Return the exact database path for a supported Codex version."""
-        compatibility = _SUPPORTED_STATE_CONTRACTS.get(self.codex_version)
-        return None if compatibility is None else self.sqlite_home / compatibility.database_name
-
-    @property
-    def upstream_commit(self) -> str | None:
-        """Return the source revision defining the probed schema contract."""
-        compatibility = _SUPPORTED_STATE_CONTRACTS.get(self.codex_version)
-        return None if compatibility is None else compatibility.upstream_commit
-
-    def check(self) -> ObserverStatus:
-        """Perform one zero-wait, read-only readiness observation."""
-        database_path = self.database_path
-        if database_path is None:
-            return ObserverStatus.UNSUPPORTED_VERSION
-        try:
-            path_stat = database_path.lstat()
-        except FileNotFoundError:
-            return ObserverStatus.ABSENT
-        except OSError:
-            return ObserverStatus.CORRUPT
-        if not stat.S_ISREG(path_stat.st_mode):
-            return ObserverStatus.CORRUPT
-
-        connection: sqlite3.Connection | None = None
-        try:
-            uri = f"{database_path.resolve(strict=True).as_uri()}?mode=ro"
-            connection = sqlite3.connect(
-                uri,
-                uri=True,
-                timeout=0.0,
-                isolation_level=None,
-            )
-            connection.execute("PRAGMA query_only = ON")
-            connection.execute("PRAGMA busy_timeout = 0")
-            columns = {
-                row[1]
-                for row in connection.execute("PRAGMA table_info(backfill_state)")
-                if len(row) > 1 and isinstance(row[1], str)
-            }
-            if not {"id", "status"}.issubset(columns):
-                return ObserverStatus.SCHEMA_CHANGED
-            row = connection.execute("SELECT status FROM backfill_state WHERE id = 1").fetchone()
-            if row is None or len(row) != 1 or not isinstance(row[0], str):
-                return ObserverStatus.INCOMPLETE
-            return ObserverStatus.READY if row[0] == "complete" else ObserverStatus.INCOMPLETE
-        except sqlite3.OperationalError as exc:
-            message = str(exc).lower()
-            if "locked" in message or "busy" in message:
-                return ObserverStatus.LOCKED
-            if "no such table" in message or "no such column" in message:
-                return ObserverStatus.SCHEMA_CHANGED
-            return ObserverStatus.CORRUPT
-        except (OSError, sqlite3.DatabaseError, ValueError):
-            return ObserverStatus.CORRUPT
-        finally:
-            if connection is not None:
-                connection.close()
-
-    def wait(
-        self,
-        *,
-        timeout_seconds: float,
-        cancelled: Callable[[], bool] | None = None,
-    ) -> ObserverStatus:
-        """Poll until ready, a terminal adapter failure, timeout, or cancellation."""
-        if not math.isfinite(timeout_seconds) or timeout_seconds < 0:
-            raise ValueError("timeout_seconds must be finite and non-negative")
-        is_cancelled = cancelled or (lambda: False)
-        deadline = self._clock() + timeout_seconds
-        while True:
-            if is_cancelled():
-                return ObserverStatus.CANCELLED
-            if self._clock() >= deadline:
-                return ObserverStatus.TIMEOUT
-            status = self.check()
-            if status is ObserverStatus.READY:
-                return status
-            if status in {
-                ObserverStatus.CORRUPT,
-                ObserverStatus.SCHEMA_CHANGED,
-                ObserverStatus.UNSUPPORTED_VERSION,
-            }:
-                return status
-            remaining = deadline - self._clock()
-            if remaining <= 0:
-                return ObserverStatus.TIMEOUT
-            self._sleep(min(self.poll_interval_seconds, remaining))
-
-
-def _codex_exec_extras(
-    *,
-    session_type: str,
-    include_session_baseline: bool = False,
-    include_agent_backend_flat: bool = False,
-    applicable_guards: frozenset[str] | None = None,
-    write_guard_tool_names: frozenset[str] | None = None,
-) -> dict[str, str]:
-    extras: dict[str, str] = {}
-    if include_session_baseline:
-        extras.update(SHARED_BASELINE_ENV)
-    extras.update(
-        {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-            "AUTOSKILLIT_SESSION_TYPE": session_type,
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            FLEET_INSPECTOR_MODEL_ENV_VAR: "",
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-        }
-    )
-    extras.setdefault(LAUNCH_ID_ENV_VAR, "")
-    extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
-    if include_agent_backend_flat:
-        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
-    if applicable_guards is not None:
-        extras[AUTOSKILLIT_APPLICABLE_GUARDS] = ",".join(sorted(applicable_guards))
-    if write_guard_tool_names is not None:
-        extras[AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES] = ",".join(sorted(write_guard_tool_names))
-    return extras
-
-
-@dataclass(frozen=True, slots=True)
-class CodexEnvPolicy:
-    denylist_prefixes: tuple[str, ...] = CODEX_ENV_PREFIX_DENYLIST
-
-    def build_env(
-        self,
-        base_env: Mapping[str, str],
-        *,
-        extras: Mapping[str, str] | None = None,
-        required: frozenset[str] | None = None,
-    ) -> dict[str, str]:
-        out: dict[str, str] = {
-            k: v
-            for k, v in base_env.items()
-            if k not in CODEX_ENV_DENYLIST
-            and k not in AUTOSKILLIT_PRIVATE_ENV_VARS
-            and not any(k.startswith(p) for p in self.denylist_prefixes)
-        }
-        if extras is not None:
-            filtered_extras = _filter_protected_native_shell_env(extras)
-            filtered_extras.setdefault("AUTOSKILLIT_SKILL_NAME", "")
-            out.update(
-                (key, value)
-                for key, value in filtered_extras.items()
-                if key != CODEX_STARTUP_TRACE_ENV_VAR
-            )
-        out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")  # Outer-cook control only.
-        out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
-        if required is not None:
-            missing = required - frozenset(out)
-            if missing:
-                raise ValueError(f"Required env vars missing from session env: {sorted(missing)}")
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class CodexSessionLocator(SessionLocator):
-    store_root: Path | None = None
-    index_path: Path | None = None
-
-    def _store(self) -> CodexSessionStore:
-        return CodexSessionStore(
-            log_dir=self.store_root or default_log_dir(),
-            index_path=self.index_path,
-        )
-
-    def locate_session(self, session_id: str) -> Path | None:
-        if not session_id or session_id.startswith(("no_session_", "crashed_")):
-            return None
-        return self._store().locate_session(session_id)
-
-    def read_session(self, path: Path) -> list[dict]:
-        """Read and parse a Codex session log file.
-
-        Handles both plain .jsonl (current Codex v0.133.0+) and
-        .jsonl.zst (legacy) formats based on file extension.
-        """
-        try:
-            if path.name.endswith(".zst"):
-                raw = path.read_bytes()
-                decompressed = zstandard.ZstdDecompressor().decompress(raw)
-                text = decompressed.decode("utf-8")
-            else:
-                text = path.read_text(encoding="utf-8")
-        except Exception:
-            logger.warning("read_session: failed to read", path=str(path), exc_info=True)
-            return []
-        result: list[dict] = []
-        for line in text.splitlines():
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(obj, dict):
-                result.append(obj)
-        return result
-
-    def project_log_dir(self, cwd: str) -> Path:  # cwd unused; Codex uses a global session store
-        return (self.store_root or default_log_dir()) / CODEX_SESSIONS_SUBDIR
-
-    def session_log_path(self, cwd: str, session_id: str) -> Path | None:
-        if not session_id or session_id.startswith(("no_session_", "crashed_")):
-            return None
-        return self.locate_session(session_id)
-
-    def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
-        return self._store().read_index(cwd)
-
-
-_CODEX_PROBE_TIMEOUT_SECONDS = 15.0
-_CODEX_PROBE_STREAM_LIMIT = 64 * 1024
-_CODEX_VALIDATION_CACHE_LIMIT = 128
-_CODEX_VALIDATION_CACHE: dict[str, None] = {}
-_CODEX_VALIDATION_CACHE_GUARD = threading.Lock()
-
-
-@dataclass(frozen=True, slots=True)
-class _BoundedProbeResult:
-    returncode: int | None
-    stdout: bytes
-    stderr: bytes
-    failure: str | None = None
-
-
-def _terminate_probe(owner: object) -> None:
-    from autoskillit.execution.process._process_kill import OwnedProcessGroup
-
-    if not isinstance(owner, OwnedProcessGroup):
-        raise TypeError("Codex probe cleanup requires its spawn-bound owner")
-    try:
-        owner.settle(timeout=2)
-    finally:
-        for stream in (owner.process.stdout, owner.process.stderr):
-            if stream is not None:
-                stream.close()
-
-
-def _run_bounded_codex_probe(
-    command: tuple[str, ...],
-    *,
-    env: Mapping[str, str],
-    cwd: str,
-) -> _BoundedProbeResult:
-    try:
-        from autoskillit.execution.process._process_kill import spawn_owned_process
-
-        owner = spawn_owned_process(
-            command,
-            cwd=cwd,
-            env=dict(env),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-        )
-        process = owner.process
-    except OSError as exc:
-        return _BoundedProbeResult(
-            returncode=None,
-            stdout=b"",
-            stderr=b"",
-            failure=f"binary unavailable ({type(exc).__name__})",
-        )
-
-    selector: selectors.BaseSelector | None = None
-    output = {"stdout": bytearray(), "stderr": bytearray()}
-    deadline = time.monotonic() + _CODEX_PROBE_TIMEOUT_SECONDS
-    try:
-        assert process.stdout is not None
-        assert process.stderr is not None
-        selector_factory = selectors.DefaultSelector
-        selector = selector_factory()
-        selector.register(process.stdout, selectors.EVENT_READ, "stdout")
-        selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-        while selector.get_map() or owner.observe_exit() is None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                _terminate_probe(owner)
-                return _BoundedProbeResult(
-                    returncode=None,
-                    stdout=bytes(output["stdout"]),
-                    stderr=bytes(output["stderr"]),
-                    failure="timed out",
-                )
-            if not selector.get_map():
-                time.sleep(min(0.01, remaining))
-                continue
-            events = selector.select(timeout=min(0.1, remaining))
-            for key, _ in events:
-                stream_name = key.data
-                try:
-                    file_descriptor = (
-                        key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
-                    )
-                    chunk = os.read(file_descriptor, 8192)
-                except OSError:
-                    chunk = b""
-                if not chunk:
-                    selector.unregister(key.fileobj)
-                    continue
-                target = output[stream_name]
-                target.extend(chunk)
-                if len(target) > _CODEX_PROBE_STREAM_LIMIT:
-                    del target[_CODEX_PROBE_STREAM_LIMIT:]
-                    _terminate_probe(owner)
-                    return _BoundedProbeResult(
-                        returncode=None,
-                        stdout=bytes(output["stdout"]),
-                        stderr=bytes(output["stderr"]),
-                        failure=f"{stream_name} exceeded {_CODEX_PROBE_STREAM_LIMIT} bytes",
-                    )
-        returncode, _cleanup = owner.settle(timeout=max(0.0, deadline - time.monotonic()))
-    except subprocess.TimeoutExpired:
-        _terminate_probe(owner)
-        return _BoundedProbeResult(
-            returncode=None,
-            stdout=bytes(output["stdout"]),
-            stderr=bytes(output["stderr"]),
-            failure="timed out while reaping",
-        )
-    except BaseException as exc:
-        if process.returncode is None:
-            try:
-                _terminate_probe(owner)
-            except BaseException as cleanup_exc:
-                logger.error("codex_probe_cleanup_failed", exc_info=True)
-                exc.add_note(f"Codex probe cleanup failed: {type(cleanup_exc).__name__}")
-        raise
-    finally:
-        if selector is not None:
-            selector.close()
-        for stream in (process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
-    return _BoundedProbeResult(
-        returncode=returncode,
-        stdout=bytes(output["stdout"]),
-        stderr=bytes(output["stderr"]),
-    )
-
-
-def _probe_diagnostic(result: _BoundedProbeResult) -> str:
-    """Return bounded, non-content diagnostics safe for configs containing secrets."""
-    stdout_digest = hashlib.sha256(result.stdout).hexdigest()[:16]
-    stderr_digest = hashlib.sha256(result.stderr).hexdigest()[:16]
-    return (
-        f"stdout_bytes={len(result.stdout)} stdout_sha256={stdout_digest} "
-        f"stderr_bytes={len(result.stderr)} stderr_sha256={stderr_digest}"
-    )
-
-
-def _mcp_inventory_entries(document: Any) -> list[dict[str, Any]] | None:
-    if isinstance(document, list):
-        return [entry for entry in document if isinstance(entry, dict)]
-    if not isinstance(document, dict):
-        return None
-    for key in ("servers", "mcp_servers"):
-        value = document.get(key)
-        if isinstance(value, list):
-            return [entry for entry in value if isinstance(entry, dict)]
-        if isinstance(value, dict):
-            return [
-                {"name": name, **entry}
-                for name, entry in value.items()
-                if isinstance(name, str) and isinstance(entry, dict)
-            ]
-    return None
-
-
-def _string_array(value: Any) -> list[str] | None:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        return None
-    return value
-
-
-def _validate_codex_mcp_inventory(stdout: bytes, config_bytes: bytes) -> list[str]:
-    try:
-        document = json.loads(stdout.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return ["Codex MCP validation returned malformed JSON"]
-    try:
-        config = tomllib.loads(config_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
-        return ["Final Codex config bytes are not valid UTF-8 TOML"]
-
-    expected = config.get("mcp_servers", {}).get("autoskillit")
-    if not isinstance(expected, dict):
-        return ["Final Codex config is missing mcp_servers.autoskillit"]
-    entries = _mcp_inventory_entries(document)
-    if entries is None:
-        return ["Codex MCP validation JSON has no server inventory"]
-    matches = [entry for entry in entries if entry.get("name") == "autoskillit"]
-    if len(matches) != 1:
-        return [
-            "Codex MCP validation expected exactly one enabled autoskillit server; "
-            f"found {len(matches)}"
-        ]
-    actual = matches[0]
-    if actual.get("enabled") is False:
-        return ["Codex MCP validation reports autoskillit as disabled"]
-    transport = actual.get("transport")
-    if not isinstance(transport, dict):
-        transport = actual
-    errors: list[str] = []
-    if transport.get("type", "stdio") != "stdio":
-        errors.append("Codex MCP autoskillit transport is not stdio")
-    if transport.get("command") != expected.get("command"):
-        errors.append("Codex MCP autoskillit command does not match final config")
-    expected_args = _string_array(expected.get("args", []))
-    actual_args = _string_array(transport.get("args", []))
-    if expected_args is None:
-        errors.append("Final Codex config autoskillit args are not an array of strings")
-    if actual_args is None:
-        errors.append("Codex MCP autoskillit args are not an array of strings")
-    elif expected_args is not None and actual_args != expected_args:
-        errors.append("Codex MCP autoskillit args do not match final config")
-    expected_env_vars = _string_array(expected.get("env_vars", []))
-    actual_env_vars = _string_array(transport.get("env_vars", []))
-    if expected_env_vars is None:
-        errors.append("Final Codex config autoskillit env_vars are not an array of strings")
-    if actual_env_vars is None:
-        errors.append("Codex MCP autoskillit env_vars are not an array of strings")
-    elif expected_env_vars is not None and set(actual_env_vars) != set(expected_env_vars):
-        errors.append("Codex MCP autoskillit env_vars do not match final config")
-    for key in ("startup_timeout_sec", "tool_timeout_sec"):
-        if key in expected and actual.get(key) != expected[key]:
-            errors.append(f"Codex MCP autoskillit {key} does not match final config")
-    return errors
-
-
-def _validation_digest(
-    command: tuple[str, ...],
-    *,
-    env: Mapping[str, str],
-    cwd: str,
-    config_bytes: bytes,
-) -> str:
-    digest = hashlib.sha256()
-    for value in command:
-        digest.update(value.encode("utf-8"))
-        digest.update(b"\0")
-    for key, value in sorted(env.items()):
-        digest.update(key.encode("utf-8"))
-        digest.update(b"=")
-        digest.update(value.encode("utf-8"))
-        digest.update(b"\0")
-    digest.update(cwd.encode("utf-8"))
-    digest.update(b"\0")
-    digest.update(config_bytes)
-    return digest.hexdigest()
-
-
-def _is_cached_validation(digest: str) -> bool:
-    with _CODEX_VALIDATION_CACHE_GUARD:
-        if digest not in _CODEX_VALIDATION_CACHE:
-            return False
-        _CODEX_VALIDATION_CACHE[digest] = _CODEX_VALIDATION_CACHE.pop(digest)
-        return True
-
-
-def _cache_validation(digest: str) -> None:
-    with _CODEX_VALIDATION_CACHE_GUARD:
-        _CODEX_VALIDATION_CACHE.pop(digest, None)
-        _CODEX_VALIDATION_CACHE[digest] = None
-        while len(_CODEX_VALIDATION_CACHE) > _CODEX_VALIDATION_CACHE_LIMIT:
-            del _CODEX_VALIDATION_CACHE[next(iter(_CODEX_VALIDATION_CACHE))]
-
-
-def _validate_mcp_probe(
-    command: tuple[str, ...],
-    *,
-    env: Mapping[str, str],
-    cwd: str,
-    config_bytes: bytes,
-) -> list[str]:
-    digest = _validation_digest(command, env=env, cwd=cwd, config_bytes=config_bytes)
-    if _is_cached_validation(digest):
-        return []
-    result = _run_bounded_codex_probe(command, env=env, cwd=cwd)
-    if result.failure is not None:
-        return [f"Codex MCP validation {result.failure}; {_probe_diagnostic(result)}"]
-    if result.returncode != 0:
-        return [
-            f"Codex MCP validation exited with status {result.returncode}; "
-            f"{_probe_diagnostic(result)}"
-        ]
-    errors = _validate_codex_mcp_inventory(result.stdout, config_bytes)
-    if errors:
-        diagnostic = _probe_diagnostic(result)
-        return [f"{error}; {diagnostic}" for error in errors]
-    _cache_validation(digest)
-    return []
-
-
-def _validate_global_codex_home(
-    source_codex_home: Path,
-    *,
-    config_path: Path,
-) -> list[str]:
-    try:
-        config_bytes = config_path.read_bytes()
-    except OSError as exc:
-        return [f"Failed to read final Codex config: {type(exc).__name__}: {exc}"]
-    sqlite_override = f"sqlite_home={_format_toml_value(str(source_codex_home))}"
-    command = (
-        "codex",
-        CodexFlags.CONFIG_OVERRIDE,
-        sqlite_override,
-        "mcp",
-        "list",
-        CodexFlags.JSON,
-    )
-    env = dict(os.environ)
-    for key in CODEX_COOK_RESERVED_ENV_VARS:
-        env[key] = str(source_codex_home)
-    return _validate_mcp_probe(
-        command,
-        env=env,
-        cwd=str(source_codex_home),
-        config_bytes=config_bytes,
-    )
-
-
-def _validate_inert_rollout_paths(
-    generated_home: Path,
-) -> tuple[list[str], tuple[tuple[str, str, int, int], ...]]:
-    errors: list[str] = []
-    fingerprint: list[tuple[str, str, int, int]] = []
-    for name in ("sessions", "archived_sessions"):
-        public_path = generated_home / name
-        if not public_path.is_symlink():
-            errors.append(f"{public_path} must be an inert pre-view symlink")
-            continue
-        try:
-            target = public_path.resolve(strict=True)
-            stat = target.stat()
-        except OSError as exc:
-            errors.append(f"{public_path} has an invalid target: {type(exc).__name__}: {exc}")
-            continue
-        if not target.is_relative_to(generated_home):
-            errors.append(f"{public_path} escapes the generated home")
-            continue
-        if not target.is_dir():
-            errors.append(f"{public_path} target is not a directory")
-            continue
-        try:
-            entries = list(target.iterdir())
-        except OSError as exc:
-            errors.append(f"{public_path} target is unreadable: {type(exc).__name__}: {exc}")
-            continue
-        if entries:
-            errors.append(f"{public_path} inert target is not empty")
-        fingerprint.append((name, os.readlink(public_path), stat.st_dev, stat.st_ino))
-    return errors, tuple(fingerprint)
-
-
-def _bundled_agent_definitions() -> tuple[AgentDef, ...]:
-    return load_bundled_agent_definitions()
-
-
-def _canonical_codex_model_effort(
-    model_class: str | None,
-    reasoning_effort: str | None = None,
-) -> tuple[str, str | None]:
-    if model_class is None:
-        return "", reasoning_effort
-    model = CODEX_MODEL_ALIASES[model_class]
-    return model, reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class)
-
-
-CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES = _codex_cfg.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES
-
-
-def _preflight_agent_projection(
-    session_dir: Path,
-    definitions: tuple[AgentDef, ...],
-    *,
-    exact_definitions: bool,
-) -> tuple[AgentDef, ...]:
-    """Validate the complete role set and select roles safe to project."""
-    names = tuple(definition.name for definition in definitions)
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise ValueError(f"duplicate Codex agent definitions: {duplicates}")
-    built_in_collisions = sorted(set(names) & _CODEX_AGENT_NAME_COLLISIONS)
-    if built_in_collisions:
-        raise ValueError(f"Codex built-in agent name collision: {built_in_collisions}")
-    config_path = session_dir / "config.toml"
-    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
-    if exact_definitions and any(map(_direct_agent_mcp_tools, definitions)):
-        _canonical_explorer_mcp_transport(config_path)
-    configured_agents = config.get("agents", {})
-    if not isinstance(configured_agents, dict):
-        raise ValueError("Codex config agents table must be a mapping")
-    protected_names = (
-        set(names)
-        if exact_definitions
-        else {*BUNDLED_EXPLORER_ROLES, WEB_EVIDENCE_RESEARCHER_ROLE}
-    )
-    ambient_collisions = sorted(set(names) & set(configured_agents) & protected_names)
-    if ambient_collisions:
-        raise ValueError(f"ambient Codex agent name collision: {ambient_collisions}")
-
-    agents_dir = session_dir / "agents"
-    if agents_dir.exists() and not agents_dir.is_dir():
-        raise ValueError(f"Codex agents path is not a directory: {agents_dir}")
-    artifact_collisions = sorted(
-        definition.name
-        for definition in definitions
-        if (agents_dir / f"{definition.name}.toml").exists()
-    )
-    if artifact_collisions:
-        raise ValueError(f"ambient Codex agent artifact collision: {artifact_collisions}")
-    return tuple(
-        definition for definition in definitions if definition.name not in configured_agents
-    )
-
-
-def _render_agent_toml(
-    definition: AgentDef,
-    *,
-    explorer_binding_env: Mapping[str, str] | None = None,
-    explorer_mcp_transport: Mapping[str, object] | None = None,
-    project_explorer_mcp: bool = False,
-) -> str:
-    """Render and parse one role before its output directory is touched."""
-    direct_mcp_tools = _direct_agent_mcp_tools(definition)
-    digest = agent_definition_digest(definition)
-    lines = [
-        f"name = {_format_toml_value(definition.name)}",
-        f"description = {_format_toml_value(definition.description)}",
-        f"sandbox_mode = {_format_toml_value(definition.codex.sandbox_mode)}",
-    ]
-    if definition.codex.model is not None:
-        lines.append(f"model = {_format_toml_value(definition.codex.model)}")
-    if definition.codex.reasoning_effort is not None:
-        lines.append(
-            f"model_reasoning_effort = {_format_toml_value(definition.codex.reasoning_effort)}"
-        )
-    if definition.codex.web_search is not None:
-        lines.append(f"web_search = {_format_toml_value(definition.codex.web_search)}")
-    body = (
-        f"{definition.body}\n\n"
-        f"AutoSkillit agent definition digest: {digest}\n\n"
-        f"{codex_discipline_suffix()}"
-    )
-    lines.append(f"instructions = '''\n{body}\n'''")
-    lines.append(f"developer_instructions = '''\n{body}\n'''")
-    if definition.codex.disabled_features:
-        lines.append("[features]")
-        lines.extend(f"{feature} = false" for feature in definition.codex.disabled_features)
-    if not definition.codex.agents_enabled:
-        lines.extend(("[agents]", "enabled = false"))
-    if explorer_binding_env is not None and not project_explorer_mcp:
-        raise ValueError("an explorer binding requires an explorer MCP projection")
-    if explorer_mcp_transport is not None and not project_explorer_mcp and not direct_mcp_tools:
-        raise ValueError("an explorer MCP transport requires an explorer MCP projection")
-    if project_explorer_mcp:
-        if explorer_mcp_transport is None:
-            raise ValueError("an explorer MCP projection requires a canonical transport")
-        projection = _explorer_mcp_projection(
-            explorer_mcp_transport,
-            explorer_binding_env,
-        )
-        lines.extend(_render_role_mcp_lines(projection, explorer_binding_env))
-    elif direct_mcp_tools:
-        lines.extend(_render_direct_role_mcp_lines(explorer_mcp_transport, direct_mcp_tools))
-    rendered = "\n".join(lines) + "\n"
-    tomllib.loads(rendered)
-    return rendered
-
-
-def _eligible_agent_definitions(
-    definitions: tuple[AgentDef, ...],
-    bindings: Mapping[str, Mapping[str, str]],
-    *,
-    exact: bool,
-) -> tuple[AgentDef, ...]:
-    definitions = tuple(d for d in definitions if not d.reader_tools)
-    if exact:
-        return definitions
-    return tuple(
-        definition
-        for definition in definitions
-        if definition.name not in BUNDLED_EXPLORER_ROLES or definition.name in bindings
-    )
-
-
-def _generate_agent_tomls(
-    session_dir: Path,
-    agent_defs: tuple[AgentDef, ...] | None = None,
-    *,
-    explorer_binding_envs: Mapping[str, Mapping[str, str]] | None = None,
-    explorer_mcp_transport: Mapping[str, object] | None = None,
-) -> int:
-    definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
-    bindings = explorer_binding_envs or {}
-    eligible = _eligible_agent_definitions(
-        definitions,
-        bindings,
-        exact=agent_defs is not None,
-    )
-    direct_mcp_transport = _resolve_role_mcp_transport(
-        session_dir, eligible, bindings, explorer_mcp_transport
-    )
-    rendered = {
-        definition.name: _render_agent_toml(
-            definition,
-            explorer_binding_env=bindings.get(definition.name),
-            explorer_mcp_transport=(
-                direct_mcp_transport
-                if definition.name in bindings or _direct_agent_mcp_tools(definition)
-                else None
-            ),
-            project_explorer_mcp=definition.name in bindings,
-        )
-        for definition in eligible
-    }
-    out_dir = session_dir / "agents"
-    out_dir.mkdir(exist_ok=True)
-    for definition in eligible:
-        toml_path = out_dir / f"{definition.name}.toml"
-        atomic_write(toml_path, rendered[definition.name])
-    logger.debug("codex_agents_generated", count=len(eligible), dest=str(out_dir))
-    return len(eligible)
-
-
-def _register_agent_tomls(
-    session_dir: Path,
-    agent_defs: tuple[AgentDef, ...] | None = None,
-    *,
-    explorer_binding_envs: Mapping[str, Mapping[str, str]] | None = None,
-) -> int:
-    config_path = session_dir / "config.toml"
-    config_text = config_path.read_text(encoding="utf-8")
-    tomllib.loads(config_text)
-    registrations: list[str] = []
-    definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
-    bindings = explorer_binding_envs or {}
-    eligible = _eligible_agent_definitions(
-        definitions,
-        bindings,
-        exact=agent_defs is not None,
-    )
-    for definition in eligible:
-        agent_path = session_dir / "agents" / f"{definition.name}.toml"
-        agent = tomllib.loads(agent_path.read_text(encoding="utf-8"))
-        if agent.get("name") != definition.name:
-            raise ValueError(f"generated agent identity mismatch: {agent_path}")
-        registrations.extend(
-            [
-                f"[agents.{_format_toml_value(definition.name)}]",
-                f"description = {_format_toml_value(definition.description)}",
-                f"config_file = {_format_toml_value(f'agents/{agent_path.name}')}",
-                "",
-            ]
-        )
-    if not registrations:
-        return 0
-    separator = "\n" if config_text.endswith("\n") else "\n\n"
-    registration_text = "\n".join(registrations)
-    updated = f"{config_text}{separator}{registration_text}"
-    tomllib.loads(updated)
-    atomic_write(config_path, updated)
-    return len(registrations) // 4
-
-
-def _validate_existing_explorer_role_toml(
-    toml_path: Path,
-    definition: AgentDef,
-    *,
-    require_binding_env: bool,
-    explorer_mcp_transport: Mapping[str, object],
-) -> dict[str, str] | None:
-    """Validate persisted role identity and recover its binding environment."""
-    try:
-        current = tomllib.loads(toml_path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ValueError(f"invalid materialized explorer role {toml_path}: {exc}") from exc
-    servers = current.get("mcp_servers")
-    if not isinstance(servers, dict) or set(servers) != {"autoskillit"}:
-        raise ValueError(f"materialized explorer role missing MCP projection: {toml_path}")
-    current_server = servers.get("autoskillit")
-    if not isinstance(current_server, dict):
-        raise ValueError(f"materialized explorer role missing MCP projection: {toml_path}")
-    current_server = dict(current_server)
-    current_env = current_server.pop("env", None)
-    expected_server = _explorer_mcp_projection(explorer_mcp_transport, None)
-    if current_server != expected_server:
-        raise ValueError(f"materialized explorer role has a divergent MCP projection: {toml_path}")
-    if current.get("name") != definition.name:
-        raise ValueError(f"materialized explorer role identity mismatch: {toml_path}")
-    if current_env is None and not require_binding_env:
-        return None
-    if not isinstance(current_env, dict):
-        raise ValueError(
-            f"materialized explorer role has an invalid binding environment: {toml_path}"
-        )
-    return _validated_explorer_binding_env(definition.name, current_env)
-
-
-def _validate_existing_parent_explorer_projection(
-    session_config: Mapping[str, object],
-    *,
-    require_binding_env: bool,
-    explorer_mcp_transport: Mapping[str, object],
-) -> dict[str, str] | None:
-    """Validate the parent half of the shared-principal MCP projection."""
-    if session_config.get("sandbox_mode") != "read-only":
-        raise ValueError("materialized explorer parent must be read-only")
-    servers = session_config.get("mcp_servers")
-    if not isinstance(servers, dict) or set(servers) != {"autoskillit"}:
-        raise ValueError("materialized explorer parent must configure exactly one MCP server")
-    current_server = servers.get("autoskillit")
-    if not isinstance(current_server, dict):
-        raise ValueError("materialized explorer parent is missing its MCP projection")
-    current_server = dict(current_server)
-    current_env = current_server.pop("env", None)
-    expected_server = _explorer_mcp_projection(explorer_mcp_transport, None)
-    if current_server != expected_server:
-        raise ValueError("materialized explorer parent has a divergent MCP projection")
-    if current_env is None and not require_binding_env:
-        return None
-    if not isinstance(current_env, dict):
-        raise ValueError("materialized explorer parent has an invalid binding environment")
-    return _validated_explorer_binding_env("parent", current_env)
-
-
-def _validate_materialized_explorer_roles(
-    session_dir: Path,
-    definitions: tuple[AgentDef, ...],
-    roles: frozenset[str],
-    *,
-    require_binding_env: bool,
-) -> tuple[dict[str, AgentDef], dict[str, object], str]:
-    """Validate registered persisted explorer artifacts before a grouped rewrite."""
-    if any(type(role) is not str for role in roles):
-        raise ValueError("explorer role cleanup set must contain only text names")
-    definitions_by_name = {definition.name: definition for definition in definitions}
-    if roles != _EXPLORER_ROLE_NAMES or not roles <= set(definitions_by_name):
-        raise ValueError(f"unknown explorer roles: {sorted(roles - set(definitions_by_name))}")
-    agents_dir = session_dir / "agents"
-    if not agents_dir.is_dir():
-        raise ValueError(f"materialized Codex agents directory is missing: {agents_dir}")
-    config_path = session_dir / "config.toml"
-    try:
-        config_text = config_path.read_text(encoding="utf-8")
-        session_config = tomllib.loads(config_text)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ValueError(f"invalid materialized Codex config: {exc}") from exc
-    registered_agents = session_config.get("agents")
-    if not isinstance(registered_agents, dict):
-        raise ValueError("materialized Codex config has no agent registrations")
-    explorer_mcp_transport = _canonical_explorer_mcp_transport(config_path)
-    projected_bindings = [
-        _validate_existing_parent_explorer_projection(
-            session_config,
-            require_binding_env=require_binding_env,
-            explorer_mcp_transport=explorer_mcp_transport,
-        )
-    ]
-
-    selected: dict[str, AgentDef] = {}
-    for role in sorted(roles):
-        definition = definitions_by_name[role]
-        registration = registered_agents.get(role)
-        expected_path = f"agents/{role}.toml"
-        if not isinstance(registration, dict) or registration.get("config_file") != expected_path:
-            raise ValueError(
-                f"materialized Codex config has no canonical registration for {role!r}"
-            )
-        projected_bindings.append(
-            _validate_existing_explorer_role_toml(
-                agents_dir / f"{role}.toml",
-                definition,
-                require_binding_env=require_binding_env,
-                explorer_mcp_transport=explorer_mcp_transport,
-            )
-        )
-        selected[role] = definition
-    if any(binding != projected_bindings[0] for binding in projected_bindings[1:]):
-        raise ValueError("materialized explorer bindings diverge from the shared principal")
-    return selected, explorer_mcp_transport, config_text
-
-
-def _atomically_replace_explorer_projection(
-    session_dir: Path,
-    rendered_config: str,
-    rendered_roles: Mapping[str, str],
-) -> None:
-    """Swap the parent and both roles as one staged session-root transaction."""
-    stage_root = Path(
-        tempfile.mkdtemp(prefix=".autoskillit-explorer-refresh-", dir=session_dir.parent)
-    )
-    staged_session = stage_root / "session"
-    backup_session = stage_root / "previous-session"
-    moved_original = False
-    try:
-        shutil.copytree(session_dir, staged_session, symlinks=True)
-        atomic_write(staged_session / "config.toml", rendered_config)
-        for role, content in rendered_roles.items():
-            atomic_write(staged_session / "agents" / f"{role}.toml", content)
-        os.replace(session_dir, backup_session)
-        moved_original = True
-        try:
-            os.replace(staged_session, session_dir)
-        except OSError as install_error:
-            try:
-                os.replace(backup_session, session_dir)
-            except OSError as restore_error:
-                raise restore_error from install_error
-            moved_original = False
-            raise
-        moved_original = False
-    finally:
-        if not moved_original:
-            shutil.rmtree(stage_root, ignore_errors=True)
-
-
-def refresh_explorer_binding_env(
-    session_dir: Path,
-    explorer_binding_env: Mapping[str, Mapping[str, str]],
-) -> None:
-    """Atomically replace only server-issued explorer binding values on resume.
-
-    The helper validates the persisted parent and both definition-derived role
-    layers before staging a replacement session root, so a failed refresh
-    cannot leave any of the three configs on a different principal.
-    """
-    definitions = _bundled_agent_definitions()
-    binding_envs = _validated_explorer_binding_envs(definitions, explorer_binding_env)
-    if not binding_envs:
-        return
-
-    definitions_by_name, explorer_mcp_transport, config_text = (
-        _validate_materialized_explorer_roles(
-            session_dir,
-            definitions,
-            frozenset(binding_envs),
-            require_binding_env=True,
-        )
-    )
-    shared_binding = next(iter(binding_envs.values()))
-    rendered_config = _render_parent_explorer_config(
-        config_text,
-        explorer_mcp_transport=explorer_mcp_transport,
-        explorer_binding_env=shared_binding,
-    )
-    rendered_roles: dict[str, str] = {}
-    for role, definition in definitions_by_name.items():
-        rendered_roles[role] = _render_agent_toml(
-            definition,
-            explorer_binding_env=shared_binding,
-            explorer_mcp_transport=explorer_mcp_transport,
-            project_explorer_mcp=True,
-        )
-    _atomically_replace_explorer_projection(
-        session_dir,
-        rendered_config,
-        rendered_roles,
-    )
-
-
-def clear_explorer_binding_env(session_dir: Path, roles: frozenset[str]) -> None:
-    """Atomically scrub persisted explorer secrets while retaining the broker allowlist."""
-    if not isinstance(roles, frozenset):
-        raise ValueError("explorer role cleanup set must be a frozenset")
-    if not roles:
-        return
-    definitions = _bundled_agent_definitions()
-    definitions_by_name, explorer_mcp_transport, config_text = (
-        _validate_materialized_explorer_roles(
-            session_dir,
-            definitions,
-            roles,
-            require_binding_env=False,
-        )
-    )
-    rendered_config = _render_parent_explorer_config(
-        config_text,
-        explorer_mcp_transport=explorer_mcp_transport,
-        explorer_binding_env=None,
-    )
-    rendered_roles = {
-        role: _render_agent_toml(
-            definition,
-            explorer_mcp_transport=explorer_mcp_transport,
-            project_explorer_mcp=True,
-        )
-        for role, definition in definitions_by_name.items()
-    }
-    _atomically_replace_explorer_projection(
-        session_dir,
-        rendered_config,
-        rendered_roles,
-    )
-
-
-def _render_parent_sandbox_config(config_text: str, sandbox_mode: str) -> str:
-    """Render the generated-home config with the normalized parent sandbox."""
-    if sandbox_mode not in {"read-only", "workspace-write"}:
-        raise ValueError(f"unsupported parent sandbox mode: {sandbox_mode!r}")
-    lines = config_text.splitlines()
-    table_start = next(
-        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
-    )
-    key_indexes = [
-        i
-        for i, line in enumerate(lines[:table_start])
-        if line.split("=", 1)[0].strip() == "sandbox_mode"
-    ]
-    if len(key_indexes) > 1:
-        raise ValueError("generated Codex config has duplicate top-level sandbox_mode keys")
-    if key_indexes:
-        del lines[key_indexes[0]]
-    if sandbox_mode == "read-only":
-        table_start = next(
-            (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
-        )
-        replacement = f"sandbox_mode = {_format_toml_value(sandbox_mode)}"
-        lines.insert(table_start, replacement)
-    updated = "\n".join(lines) + "\n"
-    parsed = tomllib.loads(updated)
-    if sandbox_mode == "read-only" and parsed.get("sandbox_mode") != sandbox_mode:
-        raise ValueError("generated Codex config did not retain the parent sandbox mode")
-    if sandbox_mode == "workspace-write" and "sandbox_mode" in parsed:
-        raise ValueError("generated Codex config retained a workspace-write sandbox pin")
-    return updated
-
-
-def _render_cli_auth_store(config_text: str, execution_role: SkillExecutionRole) -> str:
-    """Pin ORCHESTRATOR homes to the durable file credential store."""
-    if execution_role is not SkillExecutionRole.ORCHESTRATOR:
-        return config_text
-    lines = config_text.splitlines()
-    table_start = next(
-        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
-    )
-    key_indexes = [
-        i
-        for i, line in enumerate(lines[:table_start])
-        if line.split("=", 1)[0].strip() == "cli_auth_credentials_store"
-    ]
-    if len(key_indexes) > 1:
-        raise ValueError(
-            "generated Codex config has duplicate top-level cli_auth_credentials_store keys"
-        )
-    if key_indexes:
-        del lines[key_indexes[0]]
-        table_start -= 1
-    lines.insert(table_start, 'cli_auth_credentials_store = "file"')
-    updated = "\n".join(lines) + "\n"
-    if tomllib.loads(updated).get("cli_auth_credentials_store") != "file":
-        raise ValueError("generated Codex config did not retain the file credential store")
-    return updated
-
-
-def _materialize_profile_skills(
-    session_dir: Path,
-    *,
-    source_codex_home: Path | None = None,
-) -> int:
-    """Symlink source-home profile skills into a generated Codex home.
-
-    Scans the selected Codex home's ``skills`` for subdirectories containing
-    SKILL.md. Each is symlinked into session_dir/skills/<name>. Falls back
-    to shutil.copytree if symlink creation fails. Subdirectories without
-    SKILL.md are skipped. Returns the number of skills materialized.
-    """
-    source_home = Path.home() / ".codex" if source_codex_home is None else Path(source_codex_home)
-    profile_skills_root = source_home / "skills"
-    if not profile_skills_root.is_dir():
-        return 0
-    count = 0
-    skills_base = session_dir / "skills"
-    skills_base.mkdir(parents=True, exist_ok=True)
-    entries = list(profile_skills_root.iterdir())
-    for entry in entries:
-        if not entry.is_dir() or not (entry / "SKILL.md").is_file():
-            continue
-        target = skills_base / entry.name
-        if target.exists() or target.is_symlink():
-            continue
-        try:
-            target.symlink_to(entry.resolve())
-        except OSError:
-            logger.debug(
-                "codex_profile_skill_symlink_failed_using_copytree",
-                skill=entry.name,
-                exc_info=True,
-            )
-            shutil.copytree(entry, target)
-        count += 1
-    return count
 
 
 @dataclass(frozen=True, slots=True)
@@ -2339,7 +1110,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 fragments.append(
                     f"Call spawn_agent {spawn.count} time{'s' if spawn.count != 1 else ''} "
                     f"with agent_type={native_role!r}, fork_turns='none'{policy_text}; "
-                    "retain every returned child ID."
+                    "retain every returned child terminal result before parent synthesis."
                 )
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Spawn all independent children before awaiting any result.")

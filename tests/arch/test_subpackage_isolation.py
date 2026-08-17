@@ -1331,9 +1331,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "adds execution-role protocol parity while preserving Claude behavior (+3 net lines).",
     ),
     "execution/headless/_headless_result.py": (
-        1033,
-        "REQ-CNST-010-E25: #4233 keeps the async-obligation success gate adjacent to "
-        "the existing stale, idle, timeout, and content adjudication order it must preempt",
+        900,
+        "REQ-CNST-010-E25-narrowed: #4233 keeps the async-obligation success gate adjacent to "
+        "the existing stale, idle, timeout, and content adjudication order it must preempt. "
+        "After #4664 decomposition, adjudication helpers live in _headless_adjudication.py; "
+        "_build_skill_result remains as the headless orchestration authority. The 846-line "
+        "residual is the single function that owns the success-gate adjacency rule.",
     ),
     "workspace/skill_capabilities.py": (
         1120,

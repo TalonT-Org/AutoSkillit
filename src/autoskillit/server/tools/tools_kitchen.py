@@ -2285,7 +2285,7 @@ def _derive_artifact_digest(binding: dict[str, object]) -> str:
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen"},
+    tags={"autoskillit"},
     annotations={"readOnlyHint": False},
     meta={"anthropic/alwaysLoad": False},
 )
@@ -2303,6 +2303,8 @@ async def declare_join_batch(
     Validates that the loaded skill, the session flag binding, and the
     artifact identity are all consistent. Returns the new ``join_batch_id``
     on success; a structured refusal on conflict.
+
+    Never raises.
     """
     try:
         from autoskillit.server import _get_ctx  # circular-break

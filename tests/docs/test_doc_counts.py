@@ -235,9 +235,9 @@ def test_kitchen_tagged_tool_count_is_51() -> None:
     assert count == 51, f"Expected 51 kitchen-tagged tools; found {count}"
 
 
-def test_free_range_tool_count_is_21() -> None:
-    assert _count_free_range_tools() == 21, (
-        f"Expected 21 free-range tools; found {_count_free_range_tools()}"
+def test_free_range_tool_count_is_22() -> None:
+    assert _count_free_range_tools() == 22, (
+        f"Expected 22 free-range tools; found {_count_free_range_tools()}"
     )
 
 

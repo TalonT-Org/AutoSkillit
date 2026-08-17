@@ -32,7 +32,8 @@ _PARENT_ROUTING_INSTRUCTIONS = (
     "contract, named Agent calls without name/team_name/run_in_background, and release "
     "follow-up effects only after every expected direct tool_use_id is settled. Preserve "
     "conflicts and unresolved frontiers, then merge evidence. Retain final synthesis and "
-    "every artifact or repository write in the parent session."
+    "every artifact or repository write in the parent session.\n"
+    "6. Join every dispatched leaf through the same declared batch gateway before synthesis."
 )
 
 

@@ -2326,16 +2326,16 @@ class CodexBackend(BackendCmdBuilderBase):
                     "honestly realized on this backend and must be refused at admission."
                 ),
             )
-        role_mapping = {
-            role.name: (
-                role.name.removeprefix("autoskillit:")
-                if role.name.startswith("autoskillit:")
-                else "worker"
-                if role.name == "delegated-worker"
-                else role.name
-            )
-            for role in plan.logical_roles
-        }
+        role_mapping: dict[str, str] = {}
+        for role in plan.logical_roles:
+            if role.name.startswith("autoskillit:"):
+                native = role.name.removeprefix("autoskillit:")
+            elif role.name == "delegated-worker":
+                native = "worker"
+            else:
+                native = role.name
+            role_mapping[role.name] = native
+            role_mapping[native] = native
         sibling_targets = {sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills}
         model_policy: dict[str, tuple[str, str | None]] = {}
         fragments = [

@@ -38,6 +38,10 @@ semantic_requirements:
   - name: make-arch-diag
   - name: mermaid
   - name: verify-diag
+  child_spawns:
+  - role: delegated-worker
+  join:
+    required: true
 ---
 
 # Experimental Design Diagram Selection

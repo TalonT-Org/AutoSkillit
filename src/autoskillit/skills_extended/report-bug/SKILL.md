@@ -11,6 +11,12 @@ hooks:
     - type: command
       command: 'echo ''[SKILL: report-bug] Investigating bug...'''
       once: true
+semantic_version: 1
+semantic_requirements:
+  child_spawns:
+  - role: delegated-worker
+  join:
+    required: true
 ---
 
 # Report Bug Skill

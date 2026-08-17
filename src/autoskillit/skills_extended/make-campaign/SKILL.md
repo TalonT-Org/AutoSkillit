@@ -11,6 +11,12 @@ hooks:
         - type: command
           command: "echo '[SKILL: make-campaign] Authoring campaign recipe...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  child_spawns:
+  - role: delegated-worker
+  join:
+    required: true
 ---
 
 # Campaign Recipe Authoring Skill

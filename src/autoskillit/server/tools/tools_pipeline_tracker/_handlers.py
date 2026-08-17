@@ -26,10 +26,8 @@ from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_orchestrator_exact
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._recipe_segment_delivery import (
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
+from autoskillit.server._recipe_segment_delivery import attach_recipe_segment
+from autoskillit.server.tools import tools_pipeline_tracker  # noqa: F401 — late-binding for monkeypatch reach
 from autoskillit.server._run_skill_completion import _request_session_identity
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._types import deny_envelope
@@ -516,7 +514,9 @@ async def complete_run_skill_result(
             kitchen_id=tool_ctx.kitchen_id,
             request_session_id=request_session_id,
         )
-        prepared_segment = prepare_recipe_segment_delivery(tool_ctx, receipt.step_name)
+        prepared_segment = tools_pipeline_tracker.prepare_recipe_segment_delivery(
+    tool_ctx, receipt.step_name
+)
 
         def _apply_tracker_outcome() -> Mapping[str, object]:
             if not receipt.tracker_incarnation_id:

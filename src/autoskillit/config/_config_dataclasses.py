@@ -128,9 +128,15 @@ class RunSkillConfig:
             raise ValueError(
                 f"max_suppression_seconds={self.max_suppression_seconds} must be >= 0."
             )
-        if not math.isfinite(self.mcp_tool_timeout_sec) or self.mcp_tool_timeout_sec <= 0:
+        mcp_timeout = self.mcp_tool_timeout_sec
+        if (
+            not isinstance(mcp_timeout, (int, float))
+            or isinstance(mcp_timeout, bool)
+            or not math.isfinite(mcp_timeout)
+            or mcp_timeout <= 0
+        ):
             raise ValueError(
-                f"mcp_tool_timeout_sec={self.mcp_tool_timeout_sec} must be a finite "
+                f"mcp_tool_timeout_sec={mcp_timeout} must be a finite "
                 f"positive number of seconds."
             )
         if self.stream_idle_timeout_ms < 0:

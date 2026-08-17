@@ -15,7 +15,10 @@ import pytest
 
 from autoskillit.hooks._join_ledger import (
     OUTCOME_SUCCESS,
+    WAVE_COMPLETE,
+    WAVE_PENDING,
     JoinLedgerError,
+    active_batch,
     claim_assignment,
     declare_batch,
     settle_assignment,
@@ -72,10 +75,8 @@ def test_spawn_before_await_with_declaration_must_still_settle_all(
         tool_use_id="t1",
         outcome=OUTCOME_SUCCESS,
     )
-    from autoskillit.hooks._join_ledger import active_batch
-
     batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
-    assert batch["wave_outcome"] == "pending"
+    assert batch["wave_outcome"] == WAVE_PENDING
 
 
 def test_spawn_before_await_with_full_settlement_completes(tmp_path: Path) -> None:
@@ -105,10 +106,8 @@ def test_spawn_before_await_with_full_settlement_completes(tmp_path: Path) -> No
         tool_use_id="t2",
         outcome=OUTCOME_SUCCESS,
     )
-    from autoskillit.hooks._join_ledger import active_batch
-
     batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
-    assert batch["wave_outcome"] == "complete"
+    assert batch["wave_outcome"] == WAVE_COMPLETE
 
 
 def test_spawn_before_await_with_too_few_settlements_fail_closed(
@@ -134,10 +133,8 @@ def test_spawn_before_await_with_too_few_settlements_fail_closed(
         tool_use_id="t1",
         outcome=OUTCOME_SUCCESS,
     )
-    from autoskillit.hooks._join_ledger import active_batch
-
     batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
-    assert batch["wave_outcome"] != "complete"
+    assert batch["wave_outcome"] != WAVE_COMPLETE
 
 
 def test_spawn_before_await_excess_calls_refused(tmp_path: Path) -> None:

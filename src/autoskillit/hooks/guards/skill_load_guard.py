@@ -85,11 +85,10 @@ def _atomic_write_flag(path: Path, content: str) -> None:
 def _write_auto_exempt(path: Path) -> None:
     """Mark a session as auto-exempted after repeated denials.
 
-    The flag is now a JSON envelope (see ``skill_load_post_hook.py``); the
-    auto-exempt marker composes with an existing JSON binding by setting the
-    ``auto_exempt`` boolean rather than overwriting the file. If the flag is
-    unreadable as JSON, it is replaced with a minimal exempt-only envelope
-    so the guard fails open for that session.
+    Composes with an existing JSON binding by setting the ``auto_exempt``
+    boolean rather than overwriting the file. If the flag is unreadable as
+    JSON, it is replaced with a minimal exempt-only envelope so the guard
+    fails open for that session.
     """
     try:
         existing_raw = path.read_text(encoding="utf-8")
@@ -149,10 +148,9 @@ def main() -> None:
     temp_dir = project_root / ".autoskillit" / "temp"
     flag_path = temp_dir / f"skill_guard_{session_id}.flag"
     if flag_path.exists():
-        # Existing flag content may be a raw skill-name string from a prior
-        # hook version, the new JSON envelope, or malformed garbage. The guard
-        # only needs to know that Skill was loaded; treat any non-empty file
-        # as evidence. The companion join enforcement reads the flag as JSON.
+        # The guard only needs to know that Skill was loaded; treat any
+        # non-empty file as evidence. The companion join enforcement reads
+        # the flag as JSON.
         try:
             content = flag_path.read_text(encoding="utf-8")
         except OSError:

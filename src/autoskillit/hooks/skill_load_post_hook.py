@@ -47,12 +47,7 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 def _read_existing_flag(path: Path) -> dict[str, object] | None:
-    """Return the existing flag content as a parsed JSON dict, or None if absent/invalid.
-
-    Existing single-skill flags written by the previous version of this hook
-    (raw skill name strings) are migrated in place to the new JSON envelope
-    so older skill loads remain visible after an upgrade.
-    """
+    """Return the existing flag content as a parsed JSON dict, or None if absent/invalid."""
     try:
         raw = path.read_text(encoding="utf-8")
     except (FileNotFoundError, OSError):

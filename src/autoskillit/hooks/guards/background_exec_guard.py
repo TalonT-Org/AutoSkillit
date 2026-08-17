@@ -26,6 +26,14 @@ import json
 import os
 import sys
 
+_HOOKS_DIR = str(__file__).rsplit("/", 1)[0].rsplit("/", 1)[0]
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    read_session_binding,
+)
+
 BACKGROUND_EXEC_DENY_TRIGGER: str = "run_in_background=true is prohibited in skill sessions"
 SCHEDULE_WAKEUP_DENY_TRIGGER: str = "ScheduleWakeup is prohibited in skill sessions"
 JOIN_DENY_TRIGGER: str = (
@@ -34,33 +42,11 @@ JOIN_DENY_TRIGGER: str = (
 )
 
 
-def _read_session_binding() -> dict[str, object] | None:
-    """Read the session flag as JSON. Returns None when absent or unreadable."""
-    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
-    if not flag_path:
-        return None
-    try:
-        with open(flag_path, encoding="utf-8") as handle:
-            raw = handle.read()
-    except OSError:
-        return None
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    return parsed
-
-
 def _governed_skill_session() -> bool:
     """Whether this hook is acting in a governed Claude skill session.
 
-    The guard is now active in interactive Claude sessions too (the previous
-    headless-only early-exit was removed because it left an interactive escape
-    hatch for the #4575 class of lost teammate results). It is still inert in
-    orchestrator/fleet tiers and in clean interactive sessions that have not
-    loaded a join-bearing skill.
+    Active for Claude-code sessions outside the orchestrator/fleet tiers, so
+    orchestrator, fleet, and Codex sessions are excluded from governance.
     """
     backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
     if backend == "codex":
@@ -102,7 +88,7 @@ def main() -> None:
     # Inside a claimed child's own subagent context, exempt join re-evaluation:
     # blocking them would self-lock every join.
     if is_governed and not in_subagent_context:
-        binding = _read_session_binding()
+        binding = read_session_binding()
         join_required = bool(binding.get("join_required", False)) if binding is not None else False
         if not join_required and os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1":
             join_required = True

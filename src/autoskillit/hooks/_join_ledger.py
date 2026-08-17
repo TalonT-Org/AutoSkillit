@@ -19,10 +19,8 @@ treated as "no active wave" — that would let children run unobserved.
 from __future__ import annotations
 
 import contextlib
-import errno
 import fcntl
 import json
-import logging
 import os
 import secrets
 import string
@@ -31,8 +29,6 @@ import time
 from collections.abc import Generator, Iterable
 from pathlib import Path
 from typing import Any
-
-_logger = logging.getLogger(__name__)
 
 LEDGER_FILENAME = "join_ledger.json"
 LOCK_FILENAME = "join_ledger.lock"
@@ -120,17 +116,12 @@ def _read_locked(ledger_path: Path) -> dict[str, Any]:
     return parsed
 
 
-def _atomic_write_locked(fd: int, ledger_path: Path, payload: dict[str, Any]) -> None:
+def _atomic_write_locked(ledger_path: Path, payload: dict[str, Any]) -> None:
     """Write the ledger content via an atomic tempfile + ``os.replace``."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    fd_dir = os.dup(fd)
-    try:
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            prefix=".join_ledger.", suffix=".tmp", dir=str(ledger_path.parent)
-        )
-    except OSError:
-        os.close(fd_dir)
-        raise
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".join_ledger.", suffix=".tmp", dir=str(ledger_path.parent)
+    )
     try:
         with os.fdopen(tmp_fd, "wb") as f:
             f.write(encoded)
@@ -143,8 +134,6 @@ def _atomic_write_locked(fd: int, ledger_path: Path, payload: dict[str, Any]) ->
         except OSError:
             pass
         raise
-    finally:
-        os.close(fd_dir)
 
 
 class _CorruptedLedger(Exception):
@@ -186,7 +175,7 @@ def declare_batch(
 
     ledger_path, lock_path = ledger_paths(flag_dir)
     ts = now if now is not None else time.time()
-    with _flock(lock_path) as fd:
+    with _flock(lock_path):
         payload = _read_locked(ledger_path)
         sessions = payload["sessions"]
         session_record = sessions.get(session_id)
@@ -225,7 +214,7 @@ def declare_batch(
             "settled_at": None,
         }
         parents[top_level_parent] = {"active_batch": batch_record}
-        _atomic_write_locked(fd, ledger_path, payload)
+        _atomic_write_locked(ledger_path, payload)
     return batch_record
 
 
@@ -254,7 +243,7 @@ def claim_assignment(
 
     ledger_path, lock_path = ledger_paths(flag_dir)
     try:
-        with _flock(lock_path) as fd:
+        with _flock(lock_path):
             payload = _read_locked(ledger_path)
             sessions = payload["sessions"]
             session_record = sessions.get(session_id)
@@ -285,7 +274,7 @@ def claim_assignment(
                     entry["tool_use_id"] = tool_use_id
                     entry["outcome"] = OUTCOME_PENDING
                     entry["ts"] = time.time()
-                    _atomic_write_locked(fd, ledger_path, payload)
+                    _atomic_write_locked(ledger_path, payload)
                     return entry
             raise JoinLedgerError(
                 f"no unclaimed assignment available for tool_use_id {tool_use_id!r}"
@@ -322,7 +311,7 @@ def settle_assignment(
     ledger_path, lock_path = ledger_paths(flag_dir)
     ts = now if now is not None else time.time()
     try:
-        with _flock(lock_path) as fd:
+        with _flock(lock_path):
             payload = _read_locked(ledger_path)
             sessions = payload["sessions"]
             session_record = sessions.get(session_id)
@@ -362,7 +351,7 @@ def settle_assignment(
             if aggregate != WAVE_PENDING:
                 batch["wave_outcome"] = aggregate
                 batch["settled_at"] = ts
-            _atomic_write_locked(fd, ledger_path, payload)
+            _atomic_write_locked(ledger_path, payload)
     except _CorruptedLedger as exc:
         raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
     except OSError as exc:
@@ -380,9 +369,7 @@ def _aggregate_wave_outcome(assignments: list[object]) -> str:
             outcomes.append(str(entry.get("outcome", OUTCOME_PENDING)))
     if any(o == OUTCOME_PENDING for o in outcomes):
         return WAVE_PENDING
-    if any(o == OUTCOME_SUCCESS for o in outcomes) and all(
-        o in (OUTCOME_SUCCESS,) for o in outcomes
-    ):
+    if all(o == OUTCOME_SUCCESS for o in outcomes):
         return WAVE_COMPLETE
     if any(o == OUTCOME_INTERRUPTION for o in outcomes):
         return WAVE_INTERRUPTION
@@ -486,7 +473,3 @@ __all__ = [
     "ledger_paths",
     "settle_assignment",
 ]
-
-
-# Surface the errno re-export so callers can distinguish lock contention.
-__all__ += ["errno"]

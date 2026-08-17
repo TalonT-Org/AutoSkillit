@@ -1,11 +1,4 @@
-"""Tests for terminal-explorer (terminal MCP allowlist) visibility behavior.
-
-The class-level `_reset_mcp_visibility` autouse fixture from the original
-file is dropped here: the directory `tests/server/conftest.py`'s
-`_reset_mcp_tags` autouse fixture already truncates `mcp._transforms` and
-disables every gated tag (functionally identical to the dropped class-level
-fixture).
-"""
+"""Tests for terminal-explorer (terminal MCP allowlist) visibility behavior."""
 
 from __future__ import annotations
 

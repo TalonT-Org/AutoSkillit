@@ -1,12 +1,6 @@
 """Tests for the `_apply_session_type_visibility` session-type dispatch
 contract — that it is the sole calling convention (no `feature_gates` parameter)
 and that it activates fleet tag visibility for FLEET sessions.
-
-The class-level `_reset_mcp_visibility` autouse fixture from the original
-file is dropped here: the directory `tests/server/conftest.py`'s
-`_reset_mcp_tags` autouse fixture already truncates `mcp._transforms` and
-disables every gated tag (functionally identical to the dropped class-level
-fixture).
 """
 
 from __future__ import annotations

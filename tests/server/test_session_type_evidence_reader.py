@@ -1,8 +1,4 @@
-"""Evidence-reader startup-identity visibility tests.
-
-The original `TestEvidenceReaderBindingVisibility` did not define a
-`_reset_mcp_visibility` class-level fixture; this file follows that pattern.
-"""
+"""Evidence-reader startup-identity visibility tests."""
 
 from __future__ import annotations
 

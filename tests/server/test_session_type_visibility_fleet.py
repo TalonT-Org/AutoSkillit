@@ -1,16 +1,9 @@
 """Fleet session-type visibility tests.
 
-Carries the fleet + FLEET_DISPATCH integration tests and the regression
-guards asserting fleet tools are hidden for non-fleet session types. Companion
-orchestrator / skill / food-truck / cook session-type tests live in
-`test_session_type_visibility_orchestrator.py`.
-
-The four "fleet-hides" regression guards (`test_orchestrator_headless_hides_fleet_tools`,
-`test_orchestrator_interactive_hides_fleet_tools`, `test_skill_headless_hides_fleet_tools`,
-`test_skill_interactive_hides_fleet_tools`) are co-located here because they
-assert the *fleet* tools are hidden for non-fleet session types — they require
-the `@pytest.mark.feature("fleet")` marker that the conftest's
-`_reset_mcp_tags` fixture does not gate.
+Asserts fleet + FLEET_DISPATCH tools are visible for fleet sessions and hidden
+for orchestrator / skill / food-truck / cook sessions. Co-locates the
+"fleet-hides" regression guards because they require the
+`@pytest.mark.feature("fleet")` marker that the conftest fixture does not gate.
 """
 
 from __future__ import annotations

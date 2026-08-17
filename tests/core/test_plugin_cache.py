@@ -134,11 +134,11 @@ def test_pid_alive_no_such_process_with_create_time_reports_dead(
     assert _pid_alive(42, stored_create_time=1.0) is False
 
 
-def test_pid_alive_no_such_process_without_create_time_assumes_alive(
+def test_pid_alive_no_such_process_without_create_time_reports_dead(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without stored_create_time, a NoSuchProcess cannot be disambiguated from a
-    transient psutil failure — fall back to the documented 'assume alive' contract."""
+    """NoSuchProcess is definitive even without stored_create_time — the process
+    is gone regardless of whether we have a stored identity to compare against."""
     from autoskillit.core import _plugin_cache
 
     monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
@@ -148,7 +148,7 @@ def test_pid_alive_no_such_process_without_create_time_assumes_alive(
 
     monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
 
-    assert _pid_alive(42, stored_create_time=None) is True
+    assert _pid_alive(42, stored_create_time=None) is False
 
 
 def test_pid_alive_access_denied_with_create_time_assumes_alive(

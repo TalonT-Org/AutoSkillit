@@ -886,6 +886,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",
             "server/test_tools_kitchen_gate_features.py",
+            "server/test_tools_load_recipe.py",
             "server/test_tools_recipe_pull.py",
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",
@@ -1158,6 +1159,14 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "recipe/test_rules_contracts.py",
             "recipe/test_contracts.py",
             "recipe/test_planner_recipe.py",
+        }
+    ),
+    "recipe": frozenset(
+        {
+            # kept test_tools_load_recipe.py uses autoskillit.recipe.* only as
+            # patch-string literals (no module-level AST import); the import-guard
+            # AST scan would otherwise flag the entry.
+            "server/test_tools_load_recipe.py",
         }
     ),
 }

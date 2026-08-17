@@ -29,10 +29,12 @@ from autoskillit.hooks._join_ledger import (
     WAVE_COMPLETE,
     WAVE_INTERRUPTION,
     WAVE_MISSING_CHILD,
+    WAVE_PARTIAL,
     WAVE_PARTIAL_TIMEOUT,
     WAVE_PENDING,
     JoinLedgerError,
     active_batch,
+    claim_assignment,
     declare_batch,
     ledger_paths,
     settle_assignment,
@@ -518,6 +520,68 @@ def test_negative_trace_partial_evidence_does_not_complete(tmp_path: Path) -> No
     )
     batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
     assert batch["wave_outcome"] != WAVE_COMPLETE
+
+
+def test_mixed_terminal_success_and_missing_settles_as_wave_partial(tmp_path: Path) -> None:
+    """C7: a wave with mixed terminal outcomes (some SUCCESS, some MISSING)
+    settles as WAVE_PARTIAL rather than silently stalling at WAVE_PENDING.
+    Both outcomes are terminal, the priority chain above the fallthrough
+    does not match, so the trailing return must surface the partial state
+    instead of leaving consumers to wait forever."""
+    flag_dir = tmp_path
+    declare_batch(
+        flag_dir,
+        session_id="s1",
+        top_level_parent="p1",
+        skill_name="skill",
+        artifact_digest="abc",
+        assignments=("a1", "a2"),
+    )
+    claim_assignment(flag_dir, session_id="s1", top_level_parent="p1", tool_use_id="t1")
+    claim_assignment(flag_dir, session_id="s1", top_level_parent="p1", tool_use_id="t2")
+    settle_assignment(
+        flag_dir,
+        session_id="s1",
+        top_level_parent="p1",
+        tool_use_id="t1",
+        outcome=OUTCOME_SUCCESS,
+    )
+    settle_assignment(
+        flag_dir,
+        session_id="s1",
+        top_level_parent="p1",
+        tool_use_id="t2",
+        outcome=OUTCOME_MISSING,
+    )
+    batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
+    assert batch["wave_outcome"] == WAVE_PARTIAL
+    # WAVE_PARTIAL must not be WAVE_COMPLETE — the wave did not fully
+    # succeed and downstream consumers (Stop guard, follow-up guard)
+    # must continue to refuse further progression.
+    assert batch["wave_outcome"] != WAVE_COMPLETE
+
+
+def test_duplicate_tool_use_id_while_pending_raises(tmp_path: Path) -> None:
+    """C8: emitting the same tool_use_id twice — even while the prior
+    claim is still PENDING — must raise JoinLedgerError. Two assignments
+    sharing a tool_use_id would corrupt downstream settle bookkeeping,
+    so the guard is unconditional on the prior entry's pending state.
+    """
+    flag_dir = tmp_path
+    declare_batch(
+        flag_dir,
+        session_id="s1",
+        top_level_parent="p1",
+        skill_name="skill",
+        artifact_digest="abc",
+        assignments=("a1", "a2"),
+    )
+    # First claim succeeds and leaves the entry PENDING.
+    claim_assignment(flag_dir, session_id="s1", top_level_parent="p1", tool_use_id="t1")
+    # Second claim with the SAME tool_use_id must raise even though the
+    # first entry is still pending (not yet settled).
+    with pytest.raises(JoinLedgerError, match="already claimed"):
+        claim_assignment(flag_dir, session_id="s1", top_level_parent="p1", tool_use_id="t1")
 
 
 def test_negative_trace_ledger_path_creates_correct_files(tmp_path: Path) -> None:

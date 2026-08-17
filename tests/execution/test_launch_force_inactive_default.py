@@ -11,6 +11,8 @@ the same builder invoked with force_inactive_agent_teams=False.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
@@ -94,4 +96,41 @@ def test_force_inactive_without_project_root_refuses() -> None:
             "hello",
             force_inactive_agent_teams=True,
             env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
+        )
+
+
+def test_force_inactive_interactive_without_project_root_refuses() -> None:
+    """REQ-B28 (build_interactive_cmd): the same fail-closed guard must
+    apply on the interactive corridor — the settings file scan cannot
+    confirm inactivity without a project_root."""
+    backend = ClaudeCodeBackend()
+    with pytest.raises(RuntimeError, match="project_root"):
+        backend.build_interactive_cmd(
+            initial_prompt="hello",
+            force_inactive_agent_teams=True,
+            env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
+        )
+
+
+def test_force_inactive_interactive_with_executable_refuses() -> None:
+    """C6: refuse force_inactive_agent_teams=True combined with an
+    executable binding — the executable's launch_environment was
+    captured before neutralization, so combining the two makes the
+    binding stale."""
+    from autoskillit.core.runtime.executable_binding import (
+        resolve_executable_launch_binding,
+    )
+
+    backend = ClaudeCodeBackend()
+    binding = resolve_executable_launch_binding(
+        binary_name="claude",
+        environment={},
+        cwd=Path("/tmp"),
+    )
+    with pytest.raises(ValueError, match="cannot be combined with executable binding"):
+        backend.build_interactive_cmd(
+            initial_prompt="hello",
+            executable=binding,
+            force_inactive_agent_teams=True,
+            project_root="/tmp",
         )

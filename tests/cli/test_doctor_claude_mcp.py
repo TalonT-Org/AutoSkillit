@@ -48,10 +48,8 @@ class TestCheckClaudeMcpTimeouts:
     ) -> None:
         rs = RunSkillConfig()
         expected_ms = int(rs.mcp_tool_timeout_sec * 1000)
-        # Use a value 1ms below expected. The check returns OK when
-        # observed >= expected; an always-OK bug would still pass here, so
-        # we ALSO verify the WARNING path closes the trivial-pass gap via
-        # the parameterized companion below.
+        # observed == expected must return OK (the check uses strict `<`,
+        # so the inclusive boundary is the highest-value point to pin).
         self._write_claude_json(
             tmp_path,
             monkeypatch,
@@ -59,9 +57,9 @@ class TestCheckClaudeMcpTimeouts:
         )
         result = _check_claude_mcp_timeouts(backend=self._claude_backend(), run_skill=rs)
         assert result.severity == Severity.OK
-        # Companion check: observed BELOW expected MUST return WARNING.
+        # Inline companion: observed below expected must return WARNING.
         # A buggy always-OK comparison would silently return OK here and
-        # fail this assertion, closing the trivial-pass gap.
+        # fail this assertion, exposing the bug.
         self._write_claude_json(
             tmp_path,
             monkeypatch,

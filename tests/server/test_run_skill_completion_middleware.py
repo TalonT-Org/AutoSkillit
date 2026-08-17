@@ -161,6 +161,7 @@ def test_compact_fallback_preserves_failure_projection() -> None:
 @pytest.mark.anyio
 async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatch) -> None:
     authority = _finalized().authority
+    time.sleep(0.02)
     monkeypatch.setattr(
         "autoskillit.server._state._get_ctx_or_none",
         lambda: SimpleNamespace(run_skill_completion=authority),
@@ -180,7 +181,7 @@ async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatc
     assert denial["user_visible_message"]
     assert denial["guidance"]
     assert denial["step_name"] == "investigate"
-    assert denial["elapsed_seconds"] >= 0
+    assert denial["elapsed_seconds"] >= 0.02
     call_next.assert_not_awaited()
     assert current_request_session_id() == ""
 

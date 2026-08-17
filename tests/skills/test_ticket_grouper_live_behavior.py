@@ -90,22 +90,29 @@ _LIVE_ENV = "CLAUDE_CODE_SMOKE_TEST"
 _SOURCE_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 
 
-# skipif is evaluated once at decoration time. CI sets ``CLAUDE_CODE_SMOKE_TEST``
-# and the credentials file path at the job level before pytest is invoked, so
-# module-import-time evaluation is the correct semantics — late env mutations
-# after import are not a realistic concern for this opt-in probe.
-_skip_unless_live_gate = pytest.mark.skipif(
-    os.environ.get(_LIVE_ENV) != "1"
-    or shutil.which("claude") is None
-    or not (
-        os.environ.get("ANTHROPIC_API_KEY")
-        or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-        or _SOURCE_CREDENTIALS.is_file()
-    ),
-    reason=(
-        "Ticket Grouper self-check live gate requires its opt-in, executable, and isolated auth"
-    ),
-)
+# Runtime live-gate predicate. A pytest fixture is used instead of a
+# module-level ``pytest.mark.skipif`` so the env-var check re-runs at test
+# collection time rather than at module-import time, picking up any late
+# ``os.environ`` mutation made by a session-level fixture or conftest.
+def _live_gate_active() -> bool:
+    return (
+        os.environ.get(_LIVE_ENV) == "1"
+        and shutil.which("claude") is not None
+        and (
+            os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+            or _SOURCE_CREDENTIALS.is_file()
+        )
+    )
+
+
+@pytest.fixture(autouse=True)
+def _require_live_gate() -> None:
+    if not _live_gate_active():
+        pytest.skip(
+            "Ticket Grouper self-check live gate requires its opt-in, "
+            "executable, and isolated auth"
+        )
 
 
 def _initialize_repository(project: Path) -> None:
@@ -231,7 +238,6 @@ def _extract_result_text(output: str) -> str:
         )
 
 
-@_skip_unless_live_gate
 @pytest.mark.timeout(150)
 def test_step7_self_check_splits_the_real_broken_manifest(tmp_path: Path) -> None:
     project = tmp_path / "project"

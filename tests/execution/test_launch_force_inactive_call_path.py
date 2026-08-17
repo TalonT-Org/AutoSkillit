@@ -66,6 +66,7 @@ def _interactive_stripped(force: bool) -> bool:
         initial_prompt="hello",
         env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
         force_inactive_agent_teams=force,
+        project_root="/tmp",
     )
     return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
 

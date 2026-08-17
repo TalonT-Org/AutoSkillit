@@ -183,12 +183,13 @@ def _run_claude(project: Path, home: Path, prompt: str, timeout: float) -> str:
             start_new_session=True,
         )
         try:
-            process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                tail = output_path.read_text()[-4000:]
+                pytest.fail(f"Ticket Grouper self-check live gate timed out: {tail}")
+        finally:
             _cleanup_owned_process_group(process, timeout=10)
-            pytest.fail(
-                f"Ticket Grouper self-check live gate timed out: {output_path.read_text()[-4000:]}"
-            )
     output = output_path.read_text()
     assert process.returncode == 0, output[-4000:]
     return output

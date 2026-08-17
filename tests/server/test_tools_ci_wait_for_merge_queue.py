@@ -166,15 +166,26 @@ async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inferenc
     )
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
-    # provide a file:// remote_url — should fall through, eventually fail gracefully
-    result = json.loads(
-        await wait_for_merge_queue(
-            pr_number=1,
-            target_branch="main",
-            remote_url="file:///tmp/clone",
-            cwd=str(tmp_path),  # real dir, no GitHub remotes
+    # Stub the git remote-resolution subprocess: tmp_path may sit under a repo with a
+    # GitHub origin in some environments (e.g. TMPDIR=$HOME), which would otherwise leak
+    # into resolve_remote_repo and break the "repo is None" assertion below.
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(return_value=(b"", b""))
+        proc_inst.returncode = 1
+        mock_proc.return_value = proc_inst
+        # provide a file:// remote_url — should fall through, eventually fail gracefully
+        result = json.loads(
+            await wait_for_merge_queue(
+                pr_number=1,
+                target_branch="main",
+                remote_url="file:///tmp/clone",
+                cwd=str(tmp_path),  # real dir, no GitHub remotes
+            )
         )
-    )
     assert result["pr_state"] == "error"
     # The file:// URL must not resolve to a GitHub repo, so watcher receives repo=None
     assert watcher.wait_calls[-1].get("repo") is None

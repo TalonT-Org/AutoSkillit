@@ -2,7 +2,7 @@
 
 Decomposition of the legacy ``server.tools.tools_kitchen`` 2147-line module
 into sibling submodules. The facade re-exports the six MCP tool/resource
-entry points plus the 12 internal helpers that tests pin via
+entry points plus the internal helpers that tests pin via
 ``mock.patch("autoskillit.server.tools.tools_kitchen._name")`` so that the
 patch reaches the call site regardless of which submodule actually
 defines the function.
@@ -21,6 +21,13 @@ Submodule layout:
 """
 
 from __future__ import annotations
+
+# Re-exports for tests that patch symbols via the package facade.
+from autoskillit.fleet import discover_campaign_state_files, execute_dispatch
+from autoskillit.hook_registry import iter_all_scope_paths
+from autoskillit.pipeline import create_background_task
+from autoskillit.server._recipe_execution import clear_recipe_execution
+from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
 
 # Tool entry points — each lives in its own submodule and is re-exported
 # here so ``from autoskillit.server.tools.tools_kitchen import open_kitchen``
@@ -55,6 +62,7 @@ from autoskillit.server.tools.tools_kitchen._lock_ingredients import (
     lock_ingredients,
 )
 from autoskillit.server.tools.tools_kitchen._open_kitchen import (
+    _collect_disabled_feature_tags,
     _open_kitchen_handler,
     _prime_quota_cache,
     _redisable_subsets,
@@ -86,6 +94,7 @@ from autoskillit.server.tools.tools_kitchen._reload_session import (
     _find_session_id_for_reload,
     _reload_session_handler,
     _write_reload_sentinel,
+    find_latest_session_id,
     reload_session,
 )
 from autoskillit.server.tools.tools_kitchen._tracker_authority import (
@@ -96,6 +105,16 @@ from autoskillit.server.tools.tools_kitchen._tracker_authority import (
     _retain_kitchen_tracker_authority,
     prune_stale_kitchen_state,
 )
+
+
+def __getattr__(name: str):  # pragma: no cover — late-binding shim
+    """Late-bind ``mcp`` from ``autoskillit.server`` for test patches."""
+    if name == "mcp":
+        import autoskillit.server as _server_pkg  # circular-break
+
+        return _server_pkg.mcp
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Public MCP entry points
@@ -123,6 +142,7 @@ __all__ = [
     "_apply_unlock_keys",
     "_attach_transition_fields",
     "_bind_open_kitchen_transition",
+    "_collect_disabled_feature_tags",
     "_ensure_kitchen_transition",
     "_find_session_id_for_reload",
     "_read_open_kitchen_request_ctx",
@@ -145,4 +165,8 @@ __all__ = [
     "_render_ingredients_only_response",
     "OutputBudgetPolicyHookPayload",
     "QuotaGuardHookPayload",
+    "clear_recipe_execution",
+    "create_background_task",
+    "find_latest_session_id",
+    "mcp",
 ]

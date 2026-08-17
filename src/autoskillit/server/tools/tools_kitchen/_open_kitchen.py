@@ -278,7 +278,9 @@ async def _redisable_subsets(
 def _collect_disabled_feature_tags(
     features: dict[str, bool] | None = None, *, experimental_enabled: bool = False
 ) -> frozenset[str]:
-    return _collect_disabled_feature_tags(features or {}, experimental_enabled=experimental_enabled)
+    return _collect_disabled_feature_tags(
+        features or {}, experimental_enabled=experimental_enabled
+    )
 
 
 @mcp.tool(

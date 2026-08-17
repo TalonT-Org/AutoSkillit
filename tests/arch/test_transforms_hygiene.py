@@ -431,7 +431,7 @@ def test_tool_decorators_enforce_tag_partition():
     tools_dir = _SRC_ROOT / "server" / "tools"
     violations = []
 
-    for path in sorted((_iter_tool_modules(tools_dir))):
+    for path in sorted(_iter_tool_modules(tools_dir)):
         source = path.read_text()
         tree = ast.parse(source, filename=str(path))
 
@@ -481,7 +481,7 @@ def test_tool_tags_are_literal_sets():
     tools_dir = _SRC_ROOT / "server" / "tools"
     non_literals = []
 
-    for path in sorted((_iter_tool_modules(tools_dir))):
+    for path in sorted(_iter_tool_modules(tools_dir)):
         source = path.read_text()
         tree = ast.parse(source, filename=str(path))
 
@@ -520,7 +520,7 @@ def test_fleet_tools_carry_required_subset_tag():
     tools_dir = _SRC_ROOT / "server" / "tools"
     name_to_tags: dict[str, set[str]] = {}
 
-    for path in sorted((_iter_tool_modules(tools_dir))):
+    for path in sorted(_iter_tool_modules(tools_dir)):
         source = path.read_text()
         tree = ast.parse(source, filename=str(path))
 

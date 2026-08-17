@@ -713,7 +713,7 @@ async def run_managed_async(
                 child_deferral_ceiling=child_deferral_ceiling,
                 process_observation_snapshot=signals.process_observation_snapshot,
             )
-            _confirmed_returncode = _coalesce_returncode(final_returncode)
+            _coalesced_returncode = _coalesce_returncode(final_returncode)
 
             # Flush and close before reading
             stdout_file.close()
@@ -730,7 +730,7 @@ async def run_managed_async(
                 _stderr_path = None
 
             sub_result = SubprocessResult(
-                returncode=_confirmed_returncode,
+                returncode=_coalesced_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
@@ -843,7 +843,7 @@ def run_managed_sync(
                     timeout,
                 )
             final_returncode, cleanup_result = owner.settle_evidence()
-            _confirmed_returncode = _coalesce_returncode(final_returncode)
+            _coalesced_returncode = _coalesce_returncode(final_returncode)
 
             # Flush and close before reading
             stdout_file.close()
@@ -860,7 +860,7 @@ def run_managed_sync(
                 _stderr_path = None
 
             return SubprocessResult(
-                returncode=_confirmed_returncode,
+                returncode=_coalesced_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,

@@ -13,8 +13,11 @@ Join-bound sessions additionally reject:
   * ``run_in_background=true`` (the original ADR-0001 prohibition);
   * ``ScheduleWakeup`` (deferral/stall escape hatch).
 The guard reads the session flag as JSON; ``join_required=true`` activates the
-join-bound deny set. A missing, malformed, or absent binding fails closed for
-governed skill sessions.
+join-bound deny set. When the binding flag is configured but unreadable
+or malformed, the guard defaults to non-join semantics rather than promoting
+to ``join_required=true`` — the launch policy and active session binding are
+authoritative, and a transient file-system error during hook invocation must
+not lock the agent out of legitimate work.
 """
 
 from __future__ import annotations

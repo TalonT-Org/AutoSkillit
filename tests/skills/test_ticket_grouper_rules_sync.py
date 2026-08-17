@@ -27,4 +27,9 @@ pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 def test_ticket_grouper_step7_block_matches_canonical(skill_name: str) -> None:
     canonical = extract_step7_grouper_block(resolve_skill_text(CANONICAL_TICKET_GROUPER_SKILL))
     assert canonical, "canonical Step 7 From Ticket Grouper block was empty"
+    assert "Rationale self-consistency check" in canonical, (
+        "canonical Step 7 block must contain the Rationale self-consistency "
+        "bullet — if this fires, the bullet was dropped and the sync test "
+        "is only checking the wrong artefact"
+    )
     assert extract_step7_grouper_block(resolve_skill_text(skill_name)) == canonical

@@ -36,7 +36,13 @@ def _read_kitchens() -> list[dict]:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Check if a PID is running and not a zombie (stdlib-only)."""
+    """Check if a PID is running and not a zombie (stdlib-only).
+
+    Excludes both 'Z' (zombie) and 'X' (dead, transient reaping per
+    proc_pid_stat(5)) to match the shared is_pid_alive primitive in
+    core/runtime/_linux_proc.py — prevents a split-brain liveness answer
+    with the psutil-based check in core/_plugin_cache._check_pid_with_psutil.
+    """
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -60,7 +66,7 @@ def _pid_alive(pid: int) -> bool:
         if rpar == -1:
             return True
         fields = stat[rpar + 2 :].split()
-        return fields[0] != "Z"
+        return fields[0] not in ("Z", "X")
     except (FileNotFoundError, PermissionError, OSError, ValueError, IndexError):
         # /proc unavailable (macOS, hidepid=2 on foreign PIDs); trust the
         # os.kill(pid, 0) answer above.

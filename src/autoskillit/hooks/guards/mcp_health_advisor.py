@@ -42,14 +42,15 @@ def _pid_alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        # PID belongs to another user — assume alive when unverifiable (matches
-        # the prior portable contract).
+        # PID belongs to another user — assume alive when unverifiable.
         return True
     except OSError:
         return False
     try:
+        # Cannot import autoskillit.core.runtime._linux_proc here (stdlib-only
+        # hook script); duplicate the rfind(')') /proc parsing rather than
+        # route through an autoskillit import.
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — rfind locates the last ")" as the field boundary
         rpar = stat.rfind(")")
         if rpar == -1:
             return True

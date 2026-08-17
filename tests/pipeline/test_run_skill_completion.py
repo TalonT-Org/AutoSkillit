@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
@@ -547,3 +548,80 @@ def test_clear_is_denied_while_active_and_removes_idle_credit() -> None:
             step_name="investigate",
             effect=lambda: {"success": True, "status": "complete"},
         )
+
+
+def test_begin_records_started_at() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    before = time.monotonic()
+    invocation_id = _begin(authority)
+    after = time.monotonic()
+
+    invocation = authority._in_flight[invocation_id]
+    assert before <= invocation.started_at <= after
+
+
+def test_started_at_survives_onto_receipt_via_draft() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    invocation_id = _begin(authority)
+    recorded = authority._in_flight[invocation_id].started_at
+
+    receipt = authority.draft(
+        invocation_id,
+        classification="success",
+        success=True,
+        result_digest="digest",
+    )
+    assert receipt.started_at == recorded
+
+
+class TestPendingInfo:
+    """pending_info() sources from whichever collection is authoritative."""
+
+    def test_returns_none_when_idle(self) -> None:
+        authority = DefaultRunSkillCompletionAuthority()
+        assert authority.pending_info("run_skill") is None
+
+    def test_in_flight_only(self) -> None:
+        authority = DefaultRunSkillCompletionAuthority()
+        _begin(authority)
+        time.sleep(0.02)
+
+        info = authority.pending_info("run_skill")
+
+        assert info is not None
+        assert info["step_name"] == "investigate"
+        assert info["elapsed_seconds"] >= 0.02
+
+    def test_delivered_only(self) -> None:
+        """The actual shape of the 88-minute incident: _drafts is empty, _delivered holds it."""
+        authority = DefaultRunSkillCompletionAuthority()
+        _publish(authority)
+        time.sleep(0.02)
+
+        info = authority.pending_info("run_skill")
+
+        assert info is not None
+        assert info["step_name"] == "investigate"
+        assert info["elapsed_seconds"] >= 0.02
+
+    def test_oldest_entry_wins_when_multiple_in_flight(self) -> None:
+        """begin() only refuses new work while drafts/delivered are non-empty — a second
+        begin() before the first is drafted leaves two entries in _in_flight."""
+        authority = DefaultRunSkillCompletionAuthority()
+        _begin(authority, session="older")
+        time.sleep(0.02)
+        authority.begin(
+            kitchen_id="kitchen",
+            request_session_id="newer",
+            tracker_order_id="order",
+            tracker_path="/tracker.json",
+            tracker_kitchen_id="kitchen",
+            tracker_incarnation_id="incarnation",
+            step_name="second-step",
+        )
+
+        info = authority.pending_info("run_skill")
+
+        assert info is not None
+        assert info["step_name"] == "investigate"
+        assert info["elapsed_seconds"] >= 0.02

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -30,6 +31,7 @@ class RunSkillCompletionReceipt:
     classification: str
     success: bool
     result_digest: str
+    started_at: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +44,7 @@ class _Invocation:
     tracker_kitchen_id: str
     tracker_incarnation_id: str
     step_name: str
+    started_at: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +82,35 @@ class DefaultRunSkillCompletionAuthority:
                 }, "run_skill invocation in flight"
             return True, "idle"
 
+    def pending_info(self, tool_name: str) -> dict[str, object] | None:
+        """Return elapsed-time/step-name info for the oldest pending record, if any.
+
+        Consults the same three collections ``admission()`` checks, in the same
+        priority (drafts/delivered "awaiting acknowledgement" first, then an
+        in-flight invocation) — so a ``run_skill_completion_pending`` denial and
+        this method's output always describe the same underlying state. Not
+        filtered by ``tool_name``: none of ``_in_flight``/``_drafts``/``_delivered``
+        are keyed by it, and ``begin()`` refuses new work while drafts/delivered
+        are non-empty, so at most one record is active at a time.
+        """
+        del tool_name
+        with self._lock:
+            candidates: list[tuple[float, str]] = []
+            if self._drafts or self._delivered:
+                candidates = [
+                    (receipt.started_at, receipt.step_name)
+                    for receipt in (*self._drafts.values(), *self._delivered.values())
+                ]
+            elif self._in_flight:
+                candidates = [
+                    (invocation.started_at, invocation.step_name)
+                    for invocation in self._in_flight.values()
+                ]
+            if not candidates:
+                return None
+            started_at, step_name = min(candidates, key=lambda candidate: candidate[0])
+            return {"step_name": step_name, "elapsed_seconds": time.monotonic() - started_at}
+
     def begin(
         self,
         *,
@@ -104,6 +136,7 @@ class DefaultRunSkillCompletionAuthority:
                 tracker_kitchen_id=tracker_kitchen_id,
                 tracker_incarnation_id=tracker_incarnation_id,
                 step_name=canonical_step_name(step_name),
+                started_at=time.monotonic(),
             )
             return invocation_id
 
@@ -135,6 +168,7 @@ class DefaultRunSkillCompletionAuthority:
                 classification=classification,
                 success=success,
                 result_digest=result_digest,
+                started_at=invocation.started_at,
             )
             self._drafts[receipt.receipt_id] = receipt
             return receipt

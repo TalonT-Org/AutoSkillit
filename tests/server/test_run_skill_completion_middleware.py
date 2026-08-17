@@ -177,8 +177,41 @@ async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatc
     assert denial["stage"] == "preflight:run_skill_completion"
     assert denial["retriable"] is False
     assert denial["user_visible_message"]
+    assert denial["guidance"]
+    assert denial["step_name"] == "investigate"
+    assert denial["elapsed_seconds"] >= 0
     call_next.assert_not_awaited()
     assert current_request_session_id() == ""
+
+
+@pytest.mark.anyio
+async def test_middleware_denial_payload_when_delivered_only(monkeypatch) -> None:
+    """The actual shape of the 88-minute incident: a completed-but-unpolled receipt.
+
+    _finalized() only drafts (begin() + draft()) — publish it too, so the record
+    lives in _delivered rather than _drafts, matching the incident's steady state.
+    """
+    finalized = _finalized()
+    authority = finalized.authority
+    authority.publish(finalized.receipt.receipt_id)
+    monkeypatch.setattr(
+        "autoskillit.server._state._get_ctx_or_none",
+        lambda: SimpleNamespace(run_skill_completion=authority),
+    )
+    call_next = AsyncMock()
+    registered = _registered_tool()
+    fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
+
+    result = await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+        _context(), call_next
+    )
+
+    denial = json.loads(_result_text(result))
+    assert denial["error"] == "run_skill_completion_pending"
+    assert denial["guidance"]
+    assert denial["step_name"] == "investigate"
+    assert denial["elapsed_seconds"] >= 0
+    call_next.assert_not_awaited()
 
 
 @pytest.mark.anyio

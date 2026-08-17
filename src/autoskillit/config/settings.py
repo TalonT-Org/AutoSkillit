@@ -164,25 +164,27 @@ def _codex_mcp_timeout_coherence_gate(
         )
 
 
-def _claude_mcp_timeout_coherence_gate(run_skill: RunSkillConfig, fleet: FleetConfig) -> None:
+def _claude_mcp_timeout_coherence_gate(
+    run_skill: RunSkillConfig, fleet: FleetConfig, *, tool_timeout: float | None = None
+) -> None:
     """Warn when Claude's MCP idle-abort timeout is below the maximum session duration.
 
-    Unlike the Codex gate, ``mcp_tool_timeout_sec`` is a non-nullable field with no
-    "unset" state to check here — the deployed/on-disk unset case (Claude Code
-    installs predating the env-var-injection fix, or ``~/.claude.json`` entries
-    written before this field existed) is a distinct condition covered by the
-    ``autoskillit doctor`` check, not this in-memory config gate.
+    ``tool_timeout`` mirrors the Codex gate's signature; when omitted it defaults
+    to ``run_skill.mcp_tool_timeout_sec``. Deployed/on-disk unset cases are
+    covered by ``autoskillit doctor``, not this gate.
     """
+    if tool_timeout is None:
+        tool_timeout = run_skill.mcp_tool_timeout_sec
     max_fleet = fleet.default_timeout_sec + fleet.max_extension_seconds
     max_skill = run_skill.timeout
     max_session = max(max_fleet, max_skill)
-    if run_skill.mcp_tool_timeout_sec < max_session:
+    if tool_timeout < max_session:
         logger.warning(
             "claude_mcp_tool_timeout_coherence",
-            tool_timeout_sec=run_skill.mcp_tool_timeout_sec,
+            tool_timeout_sec=tool_timeout,
             max_session_duration=max_session,
             message=(
-                f"Claude MCP mcp_tool_timeout_sec ({run_skill.mcp_tool_timeout_sec}s) is below "
+                f"Claude MCP mcp_tool_timeout_sec ({tool_timeout}s) is below "
                 f"the maximum possible session duration ({max_session}s). This will cause "
                 f"Claude Code to idle-abort long-running MCP tool calls before autoskillit's "
                 f"own session management."

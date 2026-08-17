@@ -28,6 +28,7 @@ from autoskillit.core import (
     EffectiveSkillInvocationAuthority,
     PluginArtifactValidationError,
     PluginLaunchBinding,
+    SkillAuthority,
     SkillContractError,
     SkillExecutionRole,
     SkillProjectionBinding,
@@ -112,10 +113,22 @@ def build_skill_projection_binding(
     backend = projection_context.backend
     if backend is None:
         raise SkillContractError("skill projection binding requires an effective backend")
-    documents = {
-        skill.name: project_agent_skill_document(skill, projection_context)
-        for skill in projection_context.skills
-    }
+    # The backend fails closed (raises SkillContractError) directly from
+    # adapt_skill_semantics() when it cannot honestly realize a declared
+    # operation (e.g. Codex + join.required=true) — project_agent_skill_document()
+    # surfaces that raise. Exclude such skills from this binding instead of
+    # failing the whole projection: catalogs reaching this point (e.g. the
+    # ORCHESTRATOR-role catalog used by food-truck/kitchen dispatch) are
+    # prepared before a backend is selected, so they have not necessarily
+    # already passed through compile_session_skill_catalog()'s exclusion.
+    documents: dict[str, AgentSkillDocument] = {}
+    skills: list[SkillAuthority] = []
+    for skill in projection_context.skills:
+        try:
+            documents[skill.name] = project_agent_skill_document(skill, projection_context)
+        except SkillContractError:
+            continue
+        skills.append(skill)
     invocation = projection_context.invocation
     catalog = projection_context.catalog
     if invocation is not None:
@@ -123,12 +136,10 @@ def build_skill_projection_binding(
     else:
         assert catalog is not None
         execution_role = catalog.execution_role
-    capability_union = frozenset().union(
-        *(skill.uses_capabilities for skill in projection_context.skills)
-    )
+    capability_union = frozenset().union(*(skill.uses_capabilities for skill in skills))
     return SkillProjectionBinding(
         root_name=invocation.root.name if invocation is not None else None,
-        member_names=tuple(skill.name for skill in projection_context.skills),
+        member_names=tuple(skill.name for skill in skills),
         execution_role=execution_role.value,
         capability_union=capability_union,
         source_identities={

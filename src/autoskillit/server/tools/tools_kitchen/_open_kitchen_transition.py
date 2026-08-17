@@ -33,9 +33,6 @@ from autoskillit.pipeline import (
     release_kitchen_request,
     start_kitchen_effect,
 )
-from autoskillit.server import (
-    mcp,  # noqa: F401  (imported for parity with original; decorator-free file)
-)
 
 _OPEN_KITCHEN_REQUEST_CTX: ContextVar[ToolContext] = ContextVar("open_kitchen_request_context")
 

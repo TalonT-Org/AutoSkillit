@@ -55,14 +55,8 @@ def _close_kitchen_handler() -> None:
     hook_cfg_path = _hook_config_path(ctx.project_dir)
     with locked_overlay(ctx.project_dir) as (overlay_path, _):
         ctx.gate.disable()
-        try:
-            hook_cfg_path.unlink(missing_ok=True)
-        except OSError:
-            logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
-        try:
-            overlay_path.unlink(missing_ok=True)
-        except OSError:
-            logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
+        hook_cfg_path.unlink(missing_ok=True)
+        overlay_path.unlink(missing_ok=True)
         ctx._session_config_overrides.clear()
         ctx.config = baseline_config
         ctx.fleet_lock = baseline_lock

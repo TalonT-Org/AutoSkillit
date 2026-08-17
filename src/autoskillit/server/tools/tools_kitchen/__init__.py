@@ -48,6 +48,7 @@ from autoskillit.server.tools.tools_kitchen._hook_config import (
     _write_hook_config,
 )
 from autoskillit.server.tools.tools_kitchen._lock_ingredients import (
+    _apply_unlock_keys,
     _build_ingredient_key_suggestions,
     _compute_unlocked_steps,
     _write_ingredient_locks,
@@ -55,6 +56,7 @@ from autoskillit.server.tools.tools_kitchen._lock_ingredients import (
 )
 from autoskillit.server.tools.tools_kitchen._open_kitchen import (
     _open_kitchen_handler,
+    _prime_quota_cache,
     _redisable_subsets,
     open_kitchen,
 )
@@ -75,12 +77,15 @@ from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (
     _bind_open_kitchen_transition,
     _ensure_kitchen_transition,
     _open_kitchen_cancellation_response,
+    _open_kitchen_conflict_response,
     _read_open_kitchen_request_ctx,
     _transition_fields,
     _transition_start,
 )
 from autoskillit.server.tools.tools_kitchen._reload_session import (
+    _find_session_id_for_reload,
     _reload_session_handler,
+    _write_reload_sentinel,
     reload_session,
 )
 from autoskillit.server.tools.tools_kitchen._tracker_authority import (
@@ -103,6 +108,7 @@ __all__ = [
     # 12 internal helpers pinned by tests
     "_open_kitchen_handler",
     "_close_kitchen_handler",
+    "_prime_quota_cache",
     "_redisable_subsets",
     "_write_hook_config",
     "_recipe_validation_error_response",
@@ -114,11 +120,14 @@ __all__ = [
     "prune_stale_kitchen_state",
     "_OPEN_KITCHEN_REQUEST_CTX",
     # Additional internal helpers preserved for completeness
+    "_apply_unlock_keys",
     "_attach_transition_fields",
     "_bind_open_kitchen_transition",
     "_ensure_kitchen_transition",
+    "_find_session_id_for_reload",
     "_read_open_kitchen_request_ctx",
     "_open_kitchen_cancellation_response",
+    "_open_kitchen_conflict_response",
     "_transition_start",
     "_transition_fields",
     "_update_hook_config_with_recipe",
@@ -128,6 +137,7 @@ __all__ = [
     "_register_active_recipe_kitchen",
     "_pipeline_tracker_auto_init_failure",
     "_write_ingredient_locks",
+    "_write_reload_sentinel",
     "_compute_unlocked_steps",
     "_build_ingredient_key_suggestions",
     "_build_tool_category_listing",

@@ -2,15 +2,36 @@
 
 from __future__ import annotations
 
-# Import sibling submodules for side-effect registration so the @mcp.tool()
-# decorators fire and the tools become visible to FastMCP.
-from autoskillit.server.tools.tools_fleet_dispatch import (
-    _campaign_state,  # noqa: F401
-    _provenance,  # noqa: F401
+from autoskillit.server.tools.tools_fleet_dispatch._campaign_state import (
+    _confirm_campaign_state_write,
+    _dispatch_effect_identities,
+    _get_food_truck_prompt_builder,
+    _project_food_truck_sous_chef,
+    _write_dispatch_to_campaign_state,
 )
 from autoskillit.server.tools.tools_fleet_dispatch._handlers import (
     dispatch_food_truck,
     record_gate_dispatch,
 )
+from autoskillit.server.tools.tools_fleet_dispatch._provenance import (
+    _attach_dispatch_provenance,
+    _bind_dispatch_provenance,
+    _bound_dispatch_provenance,
+    _dispatch_cancellation_response,
+    _read_health_report,
+)
 
-__all__ = ["dispatch_food_truck", "record_gate_dispatch"]
+__all__ = [
+    "dispatch_food_truck",
+    "record_gate_dispatch",
+    "_attach_dispatch_provenance",
+    "_bind_dispatch_provenance",
+    "_bound_dispatch_provenance",
+    "_confirm_campaign_state_write",
+    "_dispatch_cancellation_response",
+    "_dispatch_effect_identities",
+    "_get_food_truck_prompt_builder",
+    "_project_food_truck_sous_chef",
+    "_read_health_report",
+    "_write_dispatch_to_campaign_state",
+]

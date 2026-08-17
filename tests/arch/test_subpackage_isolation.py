@@ -648,7 +648,7 @@ def test_server_file_count_under_limit() -> None:
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
     Limit updated from 16 to 17 after _editable_guard.py was added as
     the pre-deletion editable install guard for perform_merge().
-    Limit updated from 17 to 18 after _lifespan.py was added for
+    Limit updated from 17 to 18 after _lifespan/_lifespan.py was added for
     FastMCP server lifespan teardown (#745).
     Limit updated from 18 to 19 after _wire_compat.py was added for
     Claude Code wire-format sanitization middleware.
@@ -1006,7 +1006,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         # +_update_obligation (persisted "republication owed" journal; must be writable
-        # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
+        # by cli/update/ and readable by server/_lifespan/_startup_checks.py without a server->cli edge,
         # so it lives at this IL-1 layer rather than splitting further — its 176 lines
         # are one cohesive read/write/clear API with no internal seam to extract)
         "hooks": 24,  # +_capture_process owned shell process-group boundary;

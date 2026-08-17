@@ -99,10 +99,7 @@ def _process_capture_stream(
 ) -> None:
     if capture.inline_text is not None:
         result[stream_name] = capture.inline_text
-        try:
-            capture.path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        capture.path.unlink(missing_ok=True)
     else:
         promoted_name = f"{stream_name}_{_uuid8()}.log"
         promoted = capture.path.parent / promoted_name
@@ -115,14 +112,11 @@ def _process_capture_stream(
                 f"{capture.path} -> {promoted}: {exc}"
             )
             return
+        fd = os.open(str(promoted.parent), os.O_RDONLY)
         try:
-            fd = os.open(str(promoted.parent), os.O_RDONLY)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
-        except OSError:
-            pass
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         complete_str = "true" if capture.complete else "false"
         marker = (
             f"\n[spilled {capture.total_bytes} bytes -> {promoted}"
@@ -157,10 +151,7 @@ def _summarize_streams(
                     stderr_capture = cap
             except CaptureReadError as exc:
                 capture_error = f"{exc} [orphan={stream_path}]"
-                try:
-                    stream_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
+                stream_path.unlink(missing_ok=True)
     return stdout_capture, stderr_capture, capture_error
 
 

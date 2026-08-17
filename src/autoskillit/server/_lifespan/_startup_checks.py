@@ -9,7 +9,7 @@ diagnostics find problems.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
@@ -37,9 +37,6 @@ from autoskillit.workspace import (
     repair_broken_projection_hooks,
     verify_install_state,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 

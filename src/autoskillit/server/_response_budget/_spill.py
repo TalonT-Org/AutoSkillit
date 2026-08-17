@@ -1,3 +1,5 @@
+"""Bounded-failure envelope + artifact-path machinery for response budget spillover."""
+
 import json
 import uuid
 from pathlib import Path

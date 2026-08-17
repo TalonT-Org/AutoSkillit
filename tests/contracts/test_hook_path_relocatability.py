@@ -180,7 +180,7 @@ def test_startup_drift_check_leaves_hooks_json_untouched_on_render_failure(
     import structlog
 
     import autoskillit.core.paths as _paths
-    import autoskillit.server._lifespan as _lifespan_mod
+    import autoskillit.server._lifespan._startup_checks as _startup_checks_mod
     from autoskillit.server._lifespan import run_startup_drift_check
     from tests._helpers import _flush_structlog_proxy_caches
 
@@ -195,7 +195,7 @@ def test_startup_drift_check_leaves_hooks_json_untouched_on_render_failure(
     def _raise_render_failure() -> str:
         raise RuntimeError("renderer regression")
 
-    monkeypatch.setattr(_lifespan_mod, "render_hooks_json_text", _raise_render_failure)
+    monkeypatch.setattr(_startup_checks_mod, "render_hooks_json_text", _raise_render_failure)
 
     _flush_structlog_proxy_caches()
     try:

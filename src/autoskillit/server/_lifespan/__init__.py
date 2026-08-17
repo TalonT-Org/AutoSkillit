@@ -17,35 +17,59 @@ plus this facade:
 
 from __future__ import annotations
 
-# Side-effect imports: each submodule registers its own public names on import.
-# The facade re-exports a curated subset for the rest of the server.
-from autoskillit.server._lifespan import _lifespan as _lifespan_mod  # noqa: F401
-from autoskillit.server._lifespan import _session_boots as _session_boots_mod  # noqa: F401
-from autoskillit.server._lifespan import _startup_checks as _startup_checks_mod  # noqa: F401
 from autoskillit.server._lifespan._lifespan import (
     _autoskillit_lifespan,
+    _run_backend_mcp_registration_async,
+    _run_deferred_init,
+    _run_drift_check_async,
+    _run_hook_health_check_async,
+    _run_install_state_check_async,
+    _run_lifespan_session_boot,
     _run_retiring_sweep_async,
 )
 from autoskillit.server._lifespan._session_boots import (
     _LIFESPAN_BOOT_REGISTRY,
     _cleanup_stale_loop,
+    _evidence_reader_auto_gate_boot,
+    _explorer_auto_gate_boot,
     _fleet_auto_gate_boot,
     _food_truck_auto_gate_boot,
+    _pre_reveal_kitchen,
     _skill_auto_gate_boot,
 )
 from autoskillit.server._lifespan._startup_checks import (
+    _activate_recipe_kitchen,
+    _finalize_recorder,
+    _retain_context_tracker_authority,
+    render_hooks_json_text,
     run_startup_drift_check,
+    run_startup_fix_required_coverage_check,
     run_startup_hook_health_check,
+    run_startup_install_state_check,
 )
 
 __all__ = [
-    "run_startup_drift_check",
-    "run_startup_hook_health_check",
+    "_LIFESPAN_BOOT_REGISTRY",
+    "_activate_recipe_kitchen",
     "_autoskillit_lifespan",
+    "_cleanup_stale_loop",
+    "_evidence_reader_auto_gate_boot",
+    "_explorer_auto_gate_boot",
+    "_finalize_recorder",
     "_fleet_auto_gate_boot",
     "_food_truck_auto_gate_boot",
-    "_skill_auto_gate_boot",
-    "_LIFESPAN_BOOT_REGISTRY",
-    "_cleanup_stale_loop",
+    "_pre_reveal_kitchen",
+    "_retain_context_tracker_authority",
+    "_run_backend_mcp_registration_async",
+    "_run_deferred_init",
+    "_run_drift_check_async",
+    "_run_hook_health_check_async",
+    "_run_install_state_check_async",
+    "_run_lifespan_session_boot",
     "_run_retiring_sweep_async",
+    "_skill_auto_gate_boot",
+    "run_startup_drift_check",
+    "run_startup_fix_required_coverage_check",
+    "run_startup_hook_health_check",
+    "run_startup_install_state_check",
 ]

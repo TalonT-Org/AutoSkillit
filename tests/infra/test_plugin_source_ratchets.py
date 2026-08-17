@@ -50,18 +50,18 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("server/tools/tools_kitchen.py", "_close_kitchen_handler", "hook_cfg_path.unlink"): (
+    ("server/tools/tools_kitchen/_close_kitchen.py", "_close_kitchen_handler", "hook_cfg_path.unlink"): (
         1,
         "Closing the kitchen removes the project-owned generated hook configuration; "
         "the next kitchen activation regenerates it.",
     ),
-    ("server/tools/tools_kitchen.py", "_close_kitchen_handler", "overlay_path.unlink"): (
+    ("server/tools/tools_kitchen/_close_kitchen.py", "_close_kitchen_handler", "overlay_path.unlink"): (
         1,
         "Closing the kitchen removes the project-owned session overlay while preserving "
         "its durable synchronization sidecar.",
     ),
     (
-        "server/tools/tools_kitchen.py",
+        "server/tools/tools_kitchen/_close_kitchen.py",
         "_close_kitchen_handler",
         "review_gate_path.unlink",
     ): (

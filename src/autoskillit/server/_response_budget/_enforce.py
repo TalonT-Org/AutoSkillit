@@ -1,3 +1,5 @@
+"""enforce_response_budget + checkpoint-segmented response shaping."""
+
 from __future__ import annotations
 
 import hashlib

@@ -34,36 +34,36 @@ def test_kitchen_id_only_assigned_via_transition_bootstrap():
             file_path_rel = str(py_path.relative_to(Path(__file__).parent.parent.parent))
             tree = ast.parse(py_path.read_text(), filename=file_path_rel)
 
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if not (isinstance(target, ast.Attribute) and target.attr == "kitchen_id"):
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Assign):
                     continue
-                if isinstance(node.value, ast.Call):
-                    if getattr(node.value.func, "id", None) == "resolve_kitchen_id":
-                        canonical_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
+                for target in node.targets:
+                    if not (isinstance(target, ast.Attribute) and target.attr == "kitchen_id"):
                         continue
-                    rhs = ast.unparse(node.value)
+                    if isinstance(node.value, ast.Call):
+                        if getattr(node.value.func, "id", None) == "resolve_kitchen_id":
+                            canonical_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
+                            continue
+                        rhs = ast.unparse(node.value)
+                        pytest.fail(
+                            f"{file_path_rel}:{node.lineno}: "
+                            f"ctx.kitchen_id assignment uses "
+                            f"{rhs}, not resolve_kitchen_id()"
+                        )
+                    if (
+                        isinstance(node.value, ast.Attribute)
+                        and node.value.attr == "kitchen_id"
+                        and isinstance(node.value.value, ast.Name)
+                        and node.value.value.id == "state"
+                    ):
+                        stored_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
+                        continue
+                    if isinstance(node.value, ast.Constant) and node.value.value == "":
+                        continue
                     pytest.fail(
-                        f"{file_path_rel}:{node.lineno}: "
-                        f"ctx.kitchen_id assignment uses "
-                        f"{rhs}, not resolve_kitchen_id()"
+                        f"{file_path_rel}:{node.lineno}: ctx.kitchen_id assignment must mint via "
+                        "resolve_kitchen_id(), consume transition_state.kitchen_id, or reset empty"
                     )
-                if (
-                    isinstance(node.value, ast.Attribute)
-                    and node.value.attr == "kitchen_id"
-                    and isinstance(node.value.value, ast.Name)
-                    and node.value.value.id == "state"
-                ):
-                    stored_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
-                    continue
-                if isinstance(node.value, ast.Constant) and node.value.value == "":
-                    continue
-                pytest.fail(
-                    f"{file_path_rel}:{node.lineno}: ctx.kitchen_id assignment must mint via "
-                    "resolve_kitchen_id(), consume transition_state.kitchen_id, or reset empty"
-                )
 
     assert canonical_assign_linenos, (
         "No ctx.kitchen_id = resolve_kitchen_id() assignments found in scanned files — "

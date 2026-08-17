@@ -1,10 +1,9 @@
 """open_kitchen tool and the gate-enablement/transition handler.
 
-Imports the heavily monkey-patched internal helpers via the
-``autoskillit.server.tools.tools_kitchen`` facade so that tests using
-``mock.patch("autoskillit.server.tools.tools_kitchen._foo")`` reach the
-calling site, regardless of which submodule actually defines the
-function body.
+Cross-submodule helpers are imported directly from their submodules
+(``._open_kitchen_transition``, ``._open_kitchen_errors``,
+``._tracker_authority``, ``._hook_config``, ``._get_recipe``) to avoid a
+circular-import hazard through the package facade.
 """
 
 from __future__ import annotations

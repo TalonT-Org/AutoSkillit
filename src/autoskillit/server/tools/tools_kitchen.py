@@ -144,6 +144,15 @@ from autoskillit.server.tools._serve_helpers import (
 )
 from autoskillit.server.tools._types import _validate_result
 
+# REQ-ARCH-001: the declare_join_batch tool handler must be importable from
+# server/tools without circular imports. The hooks layer is intentionally
+# package-flat (no package-level __init__ re-exporting the join ledger or
+# diagnostic writer), so these symbols are pulled into the module top-level
+# rather than re-deferred inside the handler.
+from autoskillit.execution import get_backend
+from autoskillit.hooks._hook_settings import write_join_diagnostic
+from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch, resolve_flag_dir
+
 logger = get_logger(__name__)
 
 _PR_CREATE_RECIPES: frozenset[str] = frozenset(
@@ -2146,8 +2155,7 @@ def _declare_join_batch_handler(
     top_level_parent: str | None = None,
 ) -> dict[str, object]:
     """Core logic for the declare_join_batch tool — testable without FastMCP."""
-    from autoskillit.execution.backends import get_backend
-    from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch, resolve_flag_dir
+    # Imports are hoisted to module level (see top of file).
 
     flag_dir = resolve_flag_dir(project_root)
     flag_dir.mkdir(parents=True, exist_ok=True)
@@ -2261,8 +2269,6 @@ def _emit_join_diagnostic(record: dict[str, object]) -> None:
     caller passes the raw record and lets the canonical filter run.
     """
     try:
-        from autoskillit.hooks._hook_settings import write_join_diagnostic
-
         write_join_diagnostic(record, caller="declare_join_batch")
     except (ImportError, AttributeError, ValueError, RuntimeError, OSError) as exc:
         logger.warning(

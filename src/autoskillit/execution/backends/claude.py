@@ -77,8 +77,8 @@ from autoskillit.core import (
     pkg_root,
     read_registry,
     truncate_text,
+    atomic_write,
 )
-from autoskillit.core.io import atomic_write
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,

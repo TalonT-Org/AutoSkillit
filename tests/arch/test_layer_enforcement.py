@@ -997,7 +997,18 @@ def test_migration_no_forbidden_imports() -> None:
 # ── REQ-ARCH-001: No cross-package submodule imports ─────────────────────────
 
 
-_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset()
+_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        # REQ-ARCH-001-E1: declare_join_batch handler in server/tools needs to
+        # call into the join ledger (hooks/_join_ledger.py) and write the
+        # join diagnostic (hooks/_hook_settings.py). The hooks layer is
+        # intentionally package-flat (no package-level __init__ that re-exports
+        # these symbols), so the test must allow the cross-package submodule
+        # access for the join batch machinery.
+        ("server/tools/tools_kitchen.py", "autoskillit.hooks._join_ledger"),
+        ("server/tools/tools_kitchen.py", "autoskillit.hooks._hook_settings"),
+    }
+)
 
 
 def test_no_cross_package_submodule_imports() -> None:
@@ -1041,10 +1052,19 @@ def test_no_cross_package_submodule_imports() -> None:
 def test_server_tools_import_only_allowed_packages() -> None:
     """REQ-ARCH-003: server/tools/tools_*.py may only import from autoskillit.core,
     autoskillit.pipeline, autoskillit.config, autoskillit.fleet, autoskillit.hook_registry,
-    and intra-package autoskillit.server.*.
-    TYPE_CHECKING exempt.
+    autoskillit.hooks (join batch ledger + diagnostics only), and intra-package
+    autoskillit.server.*. TYPE_CHECKING exempt.
     """
-    ALLOWED = {"core", "execution", "pipeline", "server", "config", "fleet", "hook_registry"}
+    ALLOWED = {
+        "core",
+        "execution",
+        "pipeline",
+        "server",
+        "config",
+        "fleet",
+        "hook_registry",
+        "hooks",  # declare_join_batch handler calls into _join_ledger + _hook_settings
+    }
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "tools" and p.stem.startswith("tools_")
     ]

@@ -38,6 +38,9 @@ CHILD_SPAWN_BODY_MARKERS: tuple[str, ...] = (
 _FRONT_RE = re.compile(r"^---\s*$")
 
 
+pytestmark = [pytest.mark.small]
+
+
 def _frontmatter(text: str) -> dict:
     """Parse YAML frontmatter between the first pair of ``---`` delimiters."""
     lines = text.splitlines()

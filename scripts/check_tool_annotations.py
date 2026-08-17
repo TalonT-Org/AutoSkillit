@@ -12,7 +12,10 @@ import sys
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "server" / "tools"
-READ_ONLY_EXCEPTIONS = {"open_kitchen": False}
+# REQ-ARCH-ANNOTATION-E1: open_kitchen and declare_join_batch are the only
+# effectful tools; the former opens the kitchen session and the latter opens
+# a join batch ledger entry. Every other tool must remain readOnlyHint=True.
+READ_ONLY_EXCEPTIONS = {"open_kitchen": False, "declare_join_batch": False}
 
 
 def check() -> list[str]:

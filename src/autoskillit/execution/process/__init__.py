@@ -164,6 +164,12 @@ def _normalize_pass_fds(pass_fds: tuple[int, ...]) -> tuple[int, ...]:
     return normalize_inherited_fds(pass_fds)
 
 
+def _coalesce_returncode(returncode: int | None) -> int:
+    # -1 signals "leader returncode could not be confirmed despite full escalation —
+    # see cleanup_evidence for diagnostic detail."
+    return returncode if returncode is not None else -1
+
+
 def decide_termination_action(
     termination: TerminationReason,
     *,
@@ -233,11 +239,7 @@ async def execute_termination_action(
     the subagent is still doing active work — mirroring the stale-kill
     suppression pattern in _session_log_monitor.
 
-    Returns the kill reason, final return code, and cleanup evidence. The return
-    code may be None when the leader itself could not be confirmed reaped even
-    after full SIGTERM/SIGKILL escalation — settlement never raises
-    OwnedProcessCleanupError from here; callers must coalesce a None returncode
-    before assigning it into a non-Optional field.
+    Returns the kill reason, final return code, and cleanup evidence.
     """
     if process_observation_snapshot is not None:
         owner.merge_snapshot(process_observation_snapshot)
@@ -711,10 +713,7 @@ async def run_managed_async(
                 child_deferral_ceiling=child_deferral_ceiling,
                 process_observation_snapshot=signals.process_observation_snapshot,
             )
-            # -1 signals "leader returncode could not be confirmed despite full
-            # escalation — see cleanup_evidence for diagnostic detail." Mirrors the
-            # established coalescing convention in execution/headless/_headless_result.py.
-            _confirmed_returncode = final_returncode if final_returncode is not None else -1
+            _confirmed_returncode = _coalesce_returncode(final_returncode)
 
             # Flush and close before reading
             stdout_file.close()
@@ -844,10 +843,7 @@ def run_managed_sync(
                     timeout,
                 )
             final_returncode, cleanup_result = owner.settle_evidence()
-            # -1 signals "leader returncode could not be confirmed despite full
-            # escalation — see cleanup_evidence for diagnostic detail." Mirrors the
-            # established coalescing convention in execution/headless/_headless_result.py.
-            _confirmed_returncode = final_returncode if final_returncode is not None else -1
+            _confirmed_returncode = _coalesce_returncode(final_returncode)
 
             # Flush and close before reading
             stdout_file.close()

@@ -451,15 +451,9 @@ class OwnedProcessGroup:
     def _identity_is_alive(self, identity: tuple[int, float]) -> bool:
         """Return whether the identified PID is still a live, non-zombie process.
 
-        A matching create_time() alone is insufficient: a zombie (exited but not
-        yet reaped) retains a readable /proc entry with an unchanged create_time(),
-        so create_time() equality alone reports "alive" for a process that has
-        already exited. The status() read below excludes that false positive.
-
-        This is a point-in-time snapshot — a small TOCTOU window exists between
-        this check and any subsequent reap. That is acceptable here because
-        callers re-check on their own polling cadence (_wait_group_members) rather
-        than relying on a single read.
+        Callers re-check on their own polling cadence (_wait_group_members), so a
+        small point-in-time TOCTOU between this read and a subsequent reap is
+        acceptable.
         """
         pid, create_time = identity
         try:
@@ -606,16 +600,8 @@ class OwnedProcessGroup:
     def settle_evidence(self, timeout: float = 2.0) -> tuple[int | None, ProcessCleanupResult]:
         """Settle the owned group and return cleanup evidence without raising.
 
-        Unlike settle(), this never raises OwnedProcessCleanupError — callers that
-        already have their own success signal (e.g. a captured completion marker)
-        use this to retrieve diagnostic cleanup evidence instead of having a
-        successful workload outcome destroyed by an incomplete-teardown exception.
-
-        Callers MUST NOT assume the returned returncode is an int: it is None when
-        the leader itself was never confirmed reaped even after full SIGTERM/SIGKILL
-        escalation. Coalesce with the established `returncode if returncode is not
-        None else -1` convention (see execution/headless/_headless_result.py) before
-        assigning into a non-Optional field.
+        Callers MUST coalesce a None returncode (returncode if returncode is not
+        None else -1) before assigning into a non-Optional field.
         """
         returncode, result = self.cleanup(timeout)
         if not result.complete or returncode is None:

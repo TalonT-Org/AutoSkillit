@@ -1,16 +1,10 @@
 """Step 1 declared-batch cases and non-success outcomes.
 
-Per Plan § Step 1.3 / 1.4 / 1.6:
-
-- 8 declared-batch cases: fixed count, runtime for_each, duplicate
-  assignment labels, zero assignments, excess Agent calls, too few calls,
-  a second declaration while the first is open, two valid sequential
-  declarations.
-- 5 deterministic non-success outcomes: partial timeout, failure,
-  cancellation, user interruption, missing child.
-- 5 negative traces: parent synthesizes, reports success, sends interrupt,
-  asks for partial evidence, invokes another side-effecting tool before
-  the wave closes.
+Covers ``declare_batch`` validation (fixed count, runtime for_each,
+duplicate labels, zero assignments, excess/insufficient Agent calls,
+overlapping declarations, sequential waves) plus the wave-outcome
+aggregation for partial-timeout, failure, cancellation, interruption,
+missing-child, and parent-misuse negative traces.
 """
 
 from __future__ import annotations
@@ -414,8 +408,8 @@ def test_conflicting_settlement_fails_closed(tmp_path: Path) -> None:
 def test_negative_trace_parent_synthesizes_before_results(tmp_path: Path) -> None:
     """A parent that synthesizes before every child terminal is not allowed.
 
-    The parent text result is found before the children terminate, and
-    the healthcheck refuses to declare success.
+    Only one of the two declared assignments has been claimed; the wave
+    must remain pending until every handle has a terminal outcome.
     """
     flag_dir = tmp_path
     declare_batch(
@@ -429,7 +423,6 @@ def test_negative_trace_parent_synthesizes_before_results(tmp_path: Path) -> Non
     from autoskillit.hooks._join_ledger import claim_assignment
 
     claim_assignment(flag_dir, session_id="s1", top_level_parent="p1", tool_use_id="t1")
-    # The parent flags success even though a2 hasn't been claimed.
     batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
     assert batch["wave_outcome"] == WAVE_PENDING
 

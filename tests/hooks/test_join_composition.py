@@ -290,7 +290,7 @@ def test_denied_pre_tool_use_creates_no_result_record(tmp_path: Path) -> None:
     assert allowed is False, (
         "Stop must remain blocked while join_required=true and the wave is unresolved"
     )
-    assert "no declared wave" in reason or "unresolved" in reason
+    assert "no declared wave" in reason
 
     # Now declare a wave but do NOT claim anything — the denial path
     # does not feed the ledger even when a wave is open.

@@ -814,7 +814,8 @@ class TestDeclaredArtifactAdjudication:
 
         monkeypatch.setattr(Path, "stat", _raise)
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_result.logger.warning", warning
+            "autoskillit.execution.headless._headless_adjudication.logger.warning",
+            warning,
         )
         result = _apply_post_session_adjudication(
             sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)

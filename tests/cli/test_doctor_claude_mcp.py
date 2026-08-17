@@ -47,15 +47,28 @@ class TestCheckClaudeMcpTimeouts:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         rs = RunSkillConfig()
-        # Use a value 1ms above expected so a buggy always-OK comparison that
-        # ignored the actual mismatch would still be caught.
+        expected_ms = int(rs.mcp_tool_timeout_sec * 1000)
+        # Use a value 1ms below expected. The check returns OK when
+        # observed >= expected; an always-OK bug would still pass here, so
+        # we ALSO verify the WARNING path closes the trivial-pass gap via
+        # the parameterized companion below.
         self._write_claude_json(
             tmp_path,
             monkeypatch,
-            {"command": "autoskillit", "timeout": int(rs.mcp_tool_timeout_sec * 1000) + 1},
+            {"command": "autoskillit", "timeout": expected_ms},
         )
         result = _check_claude_mcp_timeouts(backend=self._claude_backend(), run_skill=rs)
         assert result.severity == Severity.OK
+        # Companion check: observed BELOW expected MUST return WARNING.
+        # A buggy always-OK comparison would silently return OK here and
+        # fail this assertion, closing the trivial-pass gap.
+        self._write_claude_json(
+            tmp_path,
+            monkeypatch,
+            {"command": "autoskillit", "timeout": expected_ms - 1},
+        )
+        result = _check_claude_mcp_timeouts(backend=self._claude_backend(), run_skill=rs)
+        assert result.severity == Severity.WARNING
 
     def test_ok_when_no_direct_entry(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

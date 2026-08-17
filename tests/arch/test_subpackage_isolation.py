@@ -1360,12 +1360,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "skill-invalidity threading and the completed explorer sidecar migration.",
     ),
     "execution/backends/_codex_session_storage.py": (
-        1650,
-        "REQ-CNST-010-E13: Codex interactive rollout storage is one transaction boundary "
-        "covering inode-preserving staging, process/thread/view leases, promotion, index "
-        "publication, manifest validation, crash recovery, and explicit legacy-view "
-        "reconciliation; splitting those lock-coupled state transitions would duplicate "
-        "invariants across independently mutable modules",
+        1500,
+        "REQ-CNST-010-E13-narrowed: CodexSessionStore + CodexInteractiveSessionLease + "
+        "_FileLease transaction-boundary core only; stateless FS primitives extracted to "
+        "_codex_fs_atomic.py (RE: #4664). The transaction-boundary core remains one "
+        "lock-coupled module — splitting _FileLease / CodexInteractiveSessionLease / "
+        "CodexSessionStore across multiple files would duplicate the inode-preserving "
+        "staging, process/thread/view leases, promotion, index publication, manifest "
+        "validation, crash recovery, and explicit legacy-view reconciliation invariants. "
+        "Cap raised to 1500 lines to accommodate the core without the stateless helpers.",
     ),
     "workspace/session_skills.py": (
         1400,

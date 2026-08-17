@@ -559,7 +559,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     ),
     DurableArtifactWriterDef(
         writer=(
-            "autoskillit.execution.backends._codex_session_storage:_write_reconciliation_audit"
+            "autoskillit.execution.backends._codex_fs_atomic:_write_reconciliation_audit"
         ),
         artifact=(
             "immutable operator authorization records for explicit Codex attempt-view "

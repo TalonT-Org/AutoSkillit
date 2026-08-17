@@ -222,7 +222,7 @@ def test_registered_writers_have_a_matching_call_site() -> None:
 
 def test_codex_reconciliation_audit_no_clobber_writer_is_registered() -> None:
     """The immutable audit hard-link publisher remains a registered durable writer."""
-    rel = "execution/backends/_codex_session_storage.py"
+    rel = "execution/backends/_codex_fs_atomic.py"
     path = SRC_ROOT / rel
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     writer = next(
@@ -238,5 +238,5 @@ def test_codex_reconciliation_audit_no_clobber_writer_is_registered() -> None:
 
     assert {"link", "fsync", "unlink"} <= calls
     assert (
-        "autoskillit.execution.backends._codex_session_storage:_write_reconciliation_audit"
+        "autoskillit.execution.backends._codex_fs_atomic:_write_reconciliation_audit"
     ) in _REGISTERED_WRITERS

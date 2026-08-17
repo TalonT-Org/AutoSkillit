@@ -56,7 +56,7 @@ def _resolve_outcome(event_type: str, payload: dict[str, object]) -> str | None:
         tool_input = payload.get("tool_input")
         if not isinstance(tool_input, dict):
             return OUTCOME_MISSING
-        if bool(payload.get("is_error")) or bool(payload.get("error")):
+        if payload.get("is_error") is True or payload.get("error") is True:
             return OUTCOME_FAILURE
         tool_response = payload.get("tool_response")
         if not tool_response:

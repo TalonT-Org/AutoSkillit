@@ -59,6 +59,8 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
+    if not isinstance(data, dict):
+        sys.exit(0)
     if data.get("agent_id"):
         # Inside a claimed child's own subagent context — exempt.
         sys.exit(0)

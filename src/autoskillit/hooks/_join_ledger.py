@@ -127,7 +127,6 @@ def _read_locked(ledger_path: Path) -> dict[str, Any]:
     sessions = parsed.get("sessions")
     if not isinstance(sessions, dict):
         raise _CorruptedLedger("join ledger sessions must be an object")
-    parsed["sessions"] = sessions
     parsed.setdefault("schema_version", 1)
     return parsed
 

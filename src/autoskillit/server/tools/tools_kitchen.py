@@ -2292,7 +2292,7 @@ def _derive_artifact_digest(binding: dict[str, object]) -> str:
 
 @mcp.tool(
     tags={"autoskillit"},
-    annotations={"readOnlyHint": True},
+    annotations={"readOnlyHint": False},
     meta={"anthropic/alwaysLoad": False},
 )
 @_cancellation_shield()

@@ -72,7 +72,8 @@ class TestPostMiddlewareAnnotations:
 
     @pytest.mark.anyio
     async def test_all_tools_match_readonly_hint_contract(self, kitchen_enabled):
-        """Layer 4 — open_kitchen is effectful; all other tools stay read-only."""
+        """Layer 4 — open_kitchen and declare_join_batch are effectful; all
+        other tools stay read-only (REQ-ARCH-ANNOTATION-E1)."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
@@ -84,7 +85,7 @@ class TestPostMiddlewareAnnotations:
         for tool in tools:
             if tool.annotations is None:
                 continue
-            expected = tool.name != "open_kitchen"
+            expected = tool.name not in {"open_kitchen", "declare_join_batch"}
             if tool.annotations.readOnlyHint is not expected:
                 violations.append(
                     f"  {tool.name!r}: readOnlyHint={tool.annotations.readOnlyHint!r} "

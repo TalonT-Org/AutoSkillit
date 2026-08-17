@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import math
 import os
 from dataclasses import dataclass, field
 from typing import ClassVar
@@ -127,8 +128,11 @@ class RunSkillConfig:
             raise ValueError(
                 f"max_suppression_seconds={self.max_suppression_seconds} must be >= 0."
             )
-        if self.mcp_tool_timeout_sec <= 0:
-            raise ValueError(f"mcp_tool_timeout_sec={self.mcp_tool_timeout_sec} must be > 0.")
+        if not math.isfinite(self.mcp_tool_timeout_sec) or self.mcp_tool_timeout_sec <= 0:
+            raise ValueError(
+                f"mcp_tool_timeout_sec={self.mcp_tool_timeout_sec} must be a finite "
+                f"positive number of seconds."
+            )
         if self.stream_idle_timeout_ms < 0:
             raise ValueError(
                 f"stream_idle_timeout_ms={self.stream_idle_timeout_ms} must be >= 0 "

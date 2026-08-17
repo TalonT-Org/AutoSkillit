@@ -173,7 +173,10 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_STATE_TYPES"),
-        ("src/autoskillit/server/tools/tools_kitchen.py", "_OPEN_KITCHEN_REQUEST_CTX"),
+        (
+            "src/autoskillit/server/tools/tools_kitchen/_open_kitchen_transition.py",
+            "_OPEN_KITCHEN_REQUEST_CTX",
+        ),
     }
 )
 
@@ -1215,61 +1218,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "identity cannot drift across separate serialization authorities. "
         "#4557 decomposes pagination into sibling modules (_recipe_section_planning, "
         "_recipe_section_rendering) with char-ceiling plumbing and dual-domain page fitting.",
-    ),
-    "tools_kitchen.py": (
-        2400,
-        "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
-        "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
-        "and the request-scoped replay binder journals operation/effect provenance; "
-        "for ingredient key validation; splitting would cross import-layer boundaries; "
-        "backend capability promotion delegated to _promote_capability_keys in _auto_overrides; "
-        "fail-closed validity gate on both deferred-recall and normal paths adds structural "
-        "error propagation from LoadRecipeResult; get_recipe validity guard adds 9 lines; "
-        "dispatch-feasibility preflight wiring on both paths with gate-close on failure; "
-        "gate_infrastructure_ready guard restructuring adds 22 lines for handler-skip path, "
-        "quota_refresh_loop deferred start, and all four gate.disable() rollback resets; "
-        "_dispatch_infeasible_response helper for DOA pipeline refusal"
-        "; capability admission control dispatch_feasible gating on deferred-recall and "
-        "get_recipe paths (+22 net lines)"
-        "; supports_quota_check bool at call sites replaces resolve_provider (+3 net lines)"
-        "; reap_stale_dispatches_async call in _open_kitchen_handler for interactive session "
-        "dispatch recovery (+8 net lines)"
-        "; provider-aware capability override bridge: try/except around early find for "
-        "graceful degradation when recipes.find raises (+10 net lines)"
-        "; config-default ingredient layer: build_config_default_layer call and "
-        "docstring update for pipeline_health demotion (+10 net lines)"
-        "; get_recipe session_serve_overrides replay via serve_recipe; "
-        "deferred-recall snapshot update guard (+3 net lines)"
-        "; per-step backend override config_backend kwarg threading (+5 net lines)"
-        "; _auto_init_pipeline_tracker helper + call sites on both deferred-recall and "
-        "normal open_kitchen paths for self-arming pipeline dependency tracker init "
-        "(+53 net lines)"
-        "; _auto_init_pipeline_tracker tool_ctx param typed as ToolContext under "
-        "TYPE_CHECKING instead of Any, matching _active_order_ids_for_kitchen's "
-        "established pattern (+1 net line)"
-        "; serve_recipe backend_capabilities_map threading at get_recipe + deferred-recall + "
-        "normal open_kitchen paths with safe _distinct_backends extraction from "
-        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)"
-        "; output-budget hook payload type, serializer, and hook-config bridge "
-        "(+21 net lines); response artifact temp-root bridge (+2 net lines)"
-        "; prune_stale_kitchen_state liveness-gated tracker pruning wired into both "
-        "fresh-open and deferred-recall open_kitchen paths, plus overlay lock sidecar "
-        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)"
-        "; envelope integration on both deferred-recall and normal open_kitchen paths: "
-        "resolve_general_output_token_limit + BackendCapabilities isinstance guard + "
-        "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)"
-        "; compiled recipe binding publication and execution-lifecycle cleanup across "
-        "recipe load, kitchen open, and kitchen close (+13 net lines)"
-        "; #4399 close→open visibility restore: mcp.enable() refresh in open_kitchen's "
-        "_use_global_enable branch to override prior global mcp.disable() from close_kitchen "
-        "(+2 lines), plus ToolListChangedNotification send through ctx.send_notification so "
-        "connected Clients refresh their stale tool cache; rename of _skip_notify → "
-        "_use_global_enable clarifies the branch is about the enable mechanism, not "
-        "notification suppression; scope-placement invariant comment at the "
-        "`if not _skip_handler:` guard (+10 net lines)"
-        "; finalized projection/flow generation and explicit activating-surface delivery "
-        "are threaded through normal, deferred, and resource paths while named-open "
-        "replacement clears stale readiness before every early return",
     ),
     "tools_recipe.py": (
         750,

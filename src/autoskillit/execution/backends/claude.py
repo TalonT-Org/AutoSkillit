@@ -78,6 +78,7 @@ from autoskillit.core import (
     read_registry,
     truncate_text,
 )
+from autoskillit.core.io import atomic_write
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
@@ -151,9 +152,7 @@ def detect_repository_agent_teams_setting(
         except (FileNotFoundError, OSError):
             continue
         try:
-            import json as _json
-
-            parsed = _json.loads(content)
+            parsed = json.loads(content)
         except (ValueError, TypeError):
             continue
         if not isinstance(parsed, dict):
@@ -165,6 +164,44 @@ def detect_repository_agent_teams_setting(
         if isinstance(value, str):
             return (value, str(candidate))
     return (None, "")
+
+
+def find_malformed_agent_teams_settings(
+    project_root: Path | str | None,
+) -> list[str]:
+    """Return paths of settings files that exist but cannot be parsed.
+
+    When ``force_inactive_agent_teams=True`` is requested, a malformed
+    settings file is a fail-closed condition: Claude Code may still parse
+    the file permissively and re-enable teams. Returns an empty list when
+    the project_root is None or no settings files are malformed.
+    """
+    if project_root is None:
+        return []
+    root = Path(project_root).expanduser().resolve()
+    candidates = (root / ".claude" / "settings.json", root / ".claude" / "settings.local.json")
+    malformed: list[str] = []
+    for candidate in candidates:
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # Unreadable file: treat as malformed for fail-closed purposes.
+            malformed.append(str(candidate))
+            continue
+        try:
+            parsed = json.loads(content)
+        except (ValueError, TypeError):
+            malformed.append(str(candidate))
+            continue
+        if not isinstance(parsed, dict):
+            malformed.append(str(candidate))
+            continue
+        env = parsed.get("env")
+        if env is not None and not isinstance(env, dict):
+            malformed.append(str(candidate))
+    return malformed
 
 
 #: Truthy values that re-enable Claude agent teams if present in the env.
@@ -194,9 +231,7 @@ def neutralize_repository_agent_teams_settings(project_root: Path | str | None) 
         except (FileNotFoundError, OSError):
             continue
         try:
-            import json as _json
-
-            parsed = _json.loads(content)
+            parsed = json.loads(content)
         except (ValueError, TypeError):
             continue
         if not isinstance(parsed, dict):
@@ -208,18 +243,16 @@ def neutralize_repository_agent_teams_settings(project_root: Path | str | None) 
             continue
         del env[CLAUDE_AGENT_TEAMS_ENV_VAR]
         try:
-            new_content = _json.dumps(parsed, indent=2, sort_keys=True)
+            new_content = json.dumps(parsed, indent=2, sort_keys=True)
         except (ValueError, TypeError):
             continue
-        from autoskillit.core.io import atomic_write
-
         atomic_write(candidate, new_content)
         modified += 1
     return modified
 
 
 def _resolve_project_root_for_inactive_check(project_root: Path | str | None) -> None:
-    """Refuse a headless launch when ``force_inactive_agent_teams=True`` but no project_root was provided.
+    """Refuse a launch when force_inactive is requested without project_root.
 
     Without ``project_root``, ``assert_agent_teams_inactive`` cannot read
     the target repo's ``.claude/settings*.json`` files, so the only path
@@ -279,6 +312,9 @@ def assert_agent_teams_inactive(
     Raises ``RuntimeError`` when ``force_inactive`` is True but neither the
     process env nor the target repository's settings files positively
     confirm an inactive policy. This is the pre-spawn refusal surface.
+
+    A malformed settings file is also a fail-closed condition: Claude Code
+    may still parse the file permissively and re-enable teams.
     """
     if not force_inactive:
         return
@@ -286,6 +322,13 @@ def assert_agent_teams_inactive(
         raise RuntimeError(
             f"force_inactive_agent_teams requested but {CLAUDE_AGENT_TEAMS_ENV_VAR} "
             f"is set to {env[CLAUDE_AGENT_TEAMS_ENV_VAR]!r} in the launch env"
+        )
+    malformed = find_malformed_agent_teams_settings(project_root)
+    if malformed:
+        raise RuntimeError(
+            f"force_inactive_agent_teams requested but settings file(s) could not "
+            f"be parsed and may re-enable teams: {', '.join(malformed)}. "
+            "Repair or remove the malformed file before launching."
         )
     file_value, file_path = detect_repository_agent_teams_setting(project_root)
     if file_value is not None and _active_agent_teams(file_value):

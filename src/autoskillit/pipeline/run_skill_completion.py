@@ -83,15 +83,11 @@ class DefaultRunSkillCompletionAuthority:
             return True, "idle"
 
     def pending_info(self, tool_name: str) -> dict[str, object] | None:
-        """Return elapsed-time/step-name info for the oldest pending record, if any.
+        """Return ``{step_name, elapsed_seconds}`` for the oldest pending record.
 
-        Consults the same three collections ``admission()`` checks, in the same
-        priority (drafts/delivered "awaiting acknowledgement" first, then an
-        in-flight invocation) — so a ``run_skill_completion_pending`` denial and
-        this method's output always describe the same underlying state. Not
-        filtered by ``tool_name``: none of ``_in_flight``/``_drafts``/``_delivered``
-        are keyed by it, and ``begin()`` refuses new work while drafts/delivered
-        are non-empty, so at most one record is active at a time.
+        ``tool_name`` is accepted for call-site parity but ignored; at most one
+        record is active at a time, so the priority order across drafts/delivered
+        and in-flight resolves deterministically.
         """
         del tool_name
         with self._lock:

@@ -45,7 +45,7 @@ def extract_step7_grouper_block(text: str) -> str:
     the empty string if either anchor is missing.
     """
     start = text.find("**From Ticket Grouper:**")
-    end = text.find("### Step 8")
+    end = text.find("### Step 8 ")
     if start == -1 or end == -1:
         return ""
     return text[start:end]

@@ -104,8 +104,13 @@ async def test_verified_explorer_authority_reveals_only_broker_tools(
 
     def _discard_background(coroutine, *, label):
         del label
+        # Close the coroutine so its frame is released without ever being driven,
+        # then return an already-completed future so the test never owns a live
+        # task that could resurface `Task was destroyed but it is pending` warnings.
         coroutine.close()
-        return asyncio.create_task(asyncio.sleep(0))
+        future: asyncio.Future[None] = asyncio.get_event_loop().create_future()
+        future.set_result(None)
+        return future
 
     monkeypatch.setattr(_lifespan, "create_background_task", _discard_background)
 

@@ -12,6 +12,7 @@ from autoskillit.core.types import (
     ChannelConfirmation,
     ChildExecutionIdentity,
     ExecutionIdentity,
+    ProcessCleanupResult,
     RetryReason,
     SkillResult,
     SubprocessResult,
@@ -889,6 +890,51 @@ class TestRunHeadlessCore:
         assert cmd[fmt_idx + 1] == "stream-json"
 
     @pytest.mark.anyio
+    async def test_success_not_destroyed_by_incomplete_cleanup_evidence(self, tool_ctx, tmp_path):
+        """A genuinely successful run must not be destroyed by incomplete cleanup evidence.
+
+        Regression for #4641: OwnedProcessGroup.settle() previously raised
+        OwnedProcessCleanupError on incomplete teardown evidence even when the
+        workload itself completed successfully; _headless_execute.py's blanket
+        except Exception converted that into SkillResult.crashed(), discarding
+        the real success. settle_evidence() now returns non-raising, so this
+        scenario produces a successful SkillResult carrying a diagnostic flag
+        instead.
+        """
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"Task completed. {marker}",
+                "session_id": "sess-cleanup-evidence",
+            }
+        )
+        incomplete_evidence = ProcessCleanupResult(
+            root_pid=1, access_denied_pids=(999,), observation_complete=True
+        )
+        tool_ctx.runner.push(
+            SubprocessResult(
+                0,
+                payload,
+                "",
+                TerminationReason.NATURAL_EXIT,
+                pid=1,
+                cleanup_evidence=incomplete_evidence,
+            )
+        )
+
+        result = await run_headless_core("/investigate foo", cwd=str(tmp_path), ctx=tool_ctx)
+
+        assert result.success is True
+        assert result.subtype != "crashed"
+        assert result.needs_retry is False
+        assert result.infra.cleanup_incomplete is True
+
+    @pytest.mark.anyio
     async def test_assembled_cmd_contains_format_required_flags(self, tool_ctx, tmp_path):
         """Assembled command must include all flags required by the output format."""
         from autoskillit.execution.headless import run_headless_core
@@ -1136,6 +1182,7 @@ class TestBuildSkillResultCrossValidation:
         "audit_cycle_path",
         "audit_attempt_id",
         "infra_exit_category",
+        "infra_cleanup_incomplete",
         "api_retry_count",
         "api_retry_last_error",
         "api_retry_last_status",

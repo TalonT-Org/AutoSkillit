@@ -22,7 +22,9 @@ def test_pretty_output_below_budget() -> None:
     budgets = {
         "pretty_output_hook.py": 353,  # #4585 registers two generic reader envelopes
         "_fmt_primitives.py": 200,
-        "_fmt_execution.py": 355,  # #4457 renders completion receipts verbatim
+        # #4457 renders completion receipts verbatim; #4641/#4644 rectify adds
+        # infra_cleanup_incomplete to the run_skill SUPPRESSED coverage set (+1 line)
+        "_fmt_execution.py": 356,
         "_fmt_dispatch.py": 200,
         "_fmt_status.py": 250,
         "_fmt_recipe.py": 350,  # replay/effect provenance remains visible after compaction

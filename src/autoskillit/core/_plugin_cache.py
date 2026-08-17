@@ -845,25 +845,37 @@ def read_active_kitchens_registry() -> list[dict]:
 
 
 def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
+    # Allowlisted in test_no_raw_zombie_blind_liveness_check_outside_shared_primitive.
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
+        return _check_pid_with_psutil(pid, stored_create_time)
+    return _check_pid_with_psutil(pid, stored_create_time)
+
+
+def _check_pid_with_psutil(pid: int, stored_create_time: float | None) -> bool:
+    """Post-probe liveness check via psutil — assumes os.kill(pid, 0) already succeeded.
+
+    Reports False only when psutil definitively confirms the process is gone (NoSuchProcess)
+    or in a terminal zombie/dead state. Foreign-user PIDs (AccessDenied) are unverifiable,
+    so we assume alive to avoid retiring a live kitchen on a transient psutil failure.
+    """
+    try:
+        proc = psutil.Process(pid)
         if stored_create_time is not None:
-            try:
-                actual = psutil.Process(pid).create_time()
-                return abs(actual - stored_create_time) < 1.0
-            except psutil.NoSuchProcess:
-                return False
+            identity_match = abs(proc.create_time() - stored_create_time) < 1.0
+        else:
+            identity_match = True
+        return identity_match and proc.status() not in (
+            psutil.STATUS_ZOMBIE,
+            psutil.STATUS_DEAD,
+        )
+    except psutil.NoSuchProcess:
+        return False
+    except psutil.AccessDenied:
         return True
-    if stored_create_time is not None:
-        try:
-            actual = psutil.Process(pid).create_time()
-            return abs(actual - stored_create_time) < 1.0
-        except psutil.NoSuchProcess:
-            return False
-    return True
 
 
 def register_active_kitchen(identity: KitchenProcessIdentity) -> None:

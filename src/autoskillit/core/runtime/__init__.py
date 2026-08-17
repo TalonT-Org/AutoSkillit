@@ -6,7 +6,14 @@ and _linux_proc so callers can use ``from autoskillit.core.runtime import X``.
 
 from __future__ import annotations
 
-from ._linux_proc import is_session_alive, read_boot_id, read_starttime_ticks
+from ._linux_proc import (
+    is_pid_alive,
+    is_pid_zombie,
+    is_session_alive,
+    read_boot_id,
+    read_process_state,
+    read_starttime_ticks,
+)
 from .artifact_lease import ArtifactLease, ArtifactLeaseContention
 from .executable_binding import (
     executable_binding_matches_current_file,
@@ -62,6 +69,8 @@ __all__ = [
     "executable_binding_matches_current_file",
     "fsync_directory",
     "fsync_file",
+    "is_pid_alive",
+    "is_pid_zombie",
     "is_session_alive",
     "KitchenMarker",
     "bind_session_owner",
@@ -78,6 +87,7 @@ __all__ = [
     "read_boot_id",
     "read_kitchen_id_from_marker",
     "read_marker",
+    "read_process_state",
     "resolve_kitchen_id",
     "read_provenance_for_session",
     "read_registry",

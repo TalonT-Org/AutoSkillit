@@ -1297,7 +1297,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2444,
+        2454,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1349,7 +1349,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "child cardinality rendering and protects the live-web bundled role (+12 net lines)"
         "; #4566 pins ORCHESTRATOR file auth, durable auth linkage, and role-exact profile "
         "materialization at the backend-owned generated-home setup boundary (+42 net lines); "
-        "launch/state MCP forwarding defaults remain in the Codex env policy (+2 net lines)",
+        "launch/state MCP forwarding defaults remain in the Codex env policy (+2 net lines)"
+        "; #4641/#4644 rectify: settle_evidence() swap plus cleanup_incomplete diagnostic "
+        "threading in _run_bounded_codex_probe/_terminate_probe/_validate_mcp_probe stays "
+        "adjacent to the bounded probe it must not misclassify as a validation failure "
+        "(+10 net lines)",
     ),
     "execution/backends/claude.py": (
         1250,
@@ -1370,9 +1374,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "adds execution-role protocol parity while preserving Claude behavior (+3 net lines).",
     ),
     "execution/headless/_headless_result.py": (
-        1033,
+        1053,
         "REQ-CNST-010-E25: #4233 keeps the async-obligation success gate adjacent to "
-        "the existing stale, idle, timeout, and content adjudication order it must preempt",
+        "the existing stale, idle, timeout, and content adjudication order it must preempt. "
+        "#4641/#4644 rectify adds the _should_flag_cleanup_incomplete diagnostic helper shared by "
+        "both SkillResult construction seams it must not silently drop evidence at.",
     ),
     "workspace/skill_capabilities.py": (
         1120,

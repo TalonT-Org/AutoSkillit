@@ -147,6 +147,13 @@ def test_owner_probe_distinguishes_live_dead_and_unknown(monkeypatch: pytest.Mon
     assert subject._owner_is_dead(333, _BOOT, 22) is None
 
 
+def test_owner_probe_treats_matching_ticks_zombie_as_dead(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(subject, "read_boot_id", lambda: _BOOT)
+    monkeypatch.setattr(subject, "read_starttime_ticks", lambda _pid: 22)
+    monkeypatch.setattr(subject, "is_pid_zombie", lambda _pid: True)
+    assert subject._owner_is_dead(333, _BOOT, 22) is True
+
+
 @pytest.mark.parametrize(
     ("stat", "expected"),
     [

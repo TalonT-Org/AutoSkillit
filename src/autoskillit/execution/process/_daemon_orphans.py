@@ -20,6 +20,7 @@ from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
     get_logger,
+    is_pid_zombie,
     read_boot_id,
     read_registry,
     read_starttime_ticks,
@@ -129,7 +130,9 @@ def _owner_is_dead(owner_pid: int, boot_id: str, starttime_ticks: int) -> bool |
         return True
     current_ticks = read_starttime_ticks(owner_pid)
     if current_ticks is not None:
-        return current_ticks != starttime_ticks
+        if current_ticks != starttime_ticks:
+            return True
+        return is_pid_zombie(owner_pid)
     try:
         os.kill(owner_pid, 0)
     except ProcessLookupError:

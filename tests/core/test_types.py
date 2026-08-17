@@ -764,6 +764,19 @@ class TestSkillResultExtensionBundles:
         assert data["provider_fallback"] is False
         assert data["infra_exit_category"] == ""
 
+    def test_infra_outcome_surfaces_cleanup_incomplete_flag(self):
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            infra=InfraOutcome(cleanup_incomplete=True),
+        )
+        data = json.loads(sr.to_json())
+        assert data["infra_cleanup_incomplete"] is True
+
+    def test_infra_outcome_cleanup_incomplete_absent_by_default(self):
+        sr = SkillResult(**self._BASE_KWARGS)
+        data = json.loads(sr.to_json())
+        assert data["infra_cleanup_incomplete"] is False
+
     def test_replace_infra_bundle(self):
         sr = SkillResult(**self._BASE_KWARGS)
         sr2 = dataclasses.replace(sr, infra=InfraOutcome(exit_category="api_error"))

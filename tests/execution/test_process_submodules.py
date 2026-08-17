@@ -35,7 +35,6 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "_jsonl_last_record_type",
         "_marker_is_standalone",
         "_session_log_monitor",
-        "_wait_process_dead",
         "_watch_heartbeat",
         "_watch_process",
         "_watch_session_log",

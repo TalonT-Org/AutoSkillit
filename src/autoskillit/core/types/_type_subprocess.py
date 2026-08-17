@@ -123,6 +123,8 @@ class SubprocessResult:
     """Result from a managed subprocess execution."""
 
     returncode: int
+    """Final process return code (-1 may indicate either SIGHUP-killed or
+    unconfirmed leader — see ``cleanup_evidence`` for teardown status)."""
     stdout: str
     stderr: str
     termination: TerminationReason
@@ -188,6 +190,11 @@ class SubprocessResult:
     """
     stdout_path: Path | None = None
     stderr_path: Path | None = None
+    cleanup_evidence: ProcessCleanupResult | None = None
+    """Owned-process-group teardown evidence (set by run_managed_async/run_managed_sync
+    via execute_termination_action's settle_evidence() call). Diagnostic only; see
+    ``_should_flag_cleanup_incomplete`` in execution.headless._headless_result for
+    the canonical contract."""
 
 
 @runtime_checkable

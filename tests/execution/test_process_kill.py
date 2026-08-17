@@ -181,7 +181,16 @@ class TestProcessTreeKill:
             for line in result.stdout.splitlines()
             if '"type": "child_pid"' in line
         )
-        assert not psutil.pid_exists(child_record["pid"])
+        # The cleanup is synchronous within `run_managed_async`, but the assertion
+        # is a point-in-time check against a kernel PID that may briefly outlive
+        # the kill while the kernel reaps it. Poll briefly so the test isn't
+        # sensitive to kernel-scheduling jitter under parallel xdist execution.
+        child_pid = child_record["pid"]
+        for _ in range(50):
+            if not psutil.pid_exists(child_pid):
+                break
+            await anyio.sleep(0.1)
+        assert not psutil.pid_exists(child_pid)
 
 
 class TestKillProcessTreeUnit:

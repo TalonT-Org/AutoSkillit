@@ -17,7 +17,7 @@ from autoskillit.core.types._type_results_execution import (
     SessionTelemetry,
 )
 from autoskillit.execution._session_log_recovery import recover_crashed_sessions
-from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
+from autoskillit.execution.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import flush_session_log
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
 from tests.execution.conftest import _flush, _snap
@@ -355,6 +355,57 @@ def test_recover_crashed_sessions_skips_live_pid(tmp_path):
     assert count == 0
     assert trace.exists(), "Trace file for alive PID must not be deleted"
     assert enrollment.exists(), "Enrollment sidecar for alive PID must not be deleted"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: uses /proc and boot_id")
+def test_recover_crashed_sessions_recovers_zombie_pid_with_matching_ticks(tmp_path):
+    """A trace file whose enrolled PID is now a zombie with matching starttime_ticks
+    must be recovered — a zombie has already exited and is no longer being monitored
+    by its parent, so the crash trace is not live evidence and must not be skipped."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    child_pid = os.fork()
+    if child_pid == 0:
+        os._exit(0)
+    try:
+        starttime_ticks = read_starttime_ticks(child_pid)
+        deadline = time.time() + 2.0
+        while not is_pid_zombie(child_pid) and time.time() < deadline:
+            time.sleep(0.01)
+        assert is_pid_zombie(child_pid)
+
+        trace = tmpfs / f"autoskillit_trace_{child_pid}.jsonl"
+        enrollment = tmpfs / f"autoskillit_enrollment_{child_pid}.json"
+        trace.write_text(
+            json.dumps({"vm_rss_kb": 500, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n"
+        )
+        enrollment.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "pid": child_pid,
+                    "boot_id": read_boot_id() or "",
+                    "starttime_ticks": starttime_ticks,
+                    "session_id": "",
+                    "enrolled_at": datetime.now(UTC).isoformat(),
+                    "kitchen_id": "",
+                    "order_id": "",
+                }
+            )
+        )
+        os.utime(trace, (time.time() - 60,) * 2)
+
+        count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
+
+        assert count == 1
+        assert not trace.exists(), "Trace file for zombie PID must be recovered and removed"
+        assert not enrollment.exists(), "Enrollment sidecar for zombie PID must be removed"
+        sessions = list((tmp_path / "logs" / "sessions").iterdir())
+        assert len(sessions) == 1
+        summary = json.loads((sessions[0] / "summary.json").read_text())
+        assert summary["termination_reason"] == "CRASHED"
+    finally:
+        os.waitpid(child_pid, 0)
 
 
 def test_recover_crashed_sessions_skips_file_without_enrollment(tmp_path):

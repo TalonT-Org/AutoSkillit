@@ -11,6 +11,7 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import math
 import types
 import warnings
 from collections.abc import Callable, Mapping
@@ -175,6 +176,17 @@ def _claude_mcp_timeout_coherence_gate(
     """
     if tool_timeout is None:
         tool_timeout = run_skill.mcp_tool_timeout_sec
+    if (
+        not isinstance(tool_timeout, (int, float))
+        or isinstance(tool_timeout, bool)
+        or not math.isfinite(tool_timeout)
+        or tool_timeout <= 0
+    ):
+        # Reject NaN/Inf/boolean/zero/negative: NaN comparison silently returns
+        # False, so the gate would otherwise pass an unsound value through.
+        raise ValueError(
+            f"mcp_tool_timeout_sec must be a positive number of seconds, got {tool_timeout!r}."
+        )
     max_fleet = fleet.default_timeout_sec + fleet.max_extension_seconds
     max_skill = run_skill.timeout
     max_session = max(max_fleet, max_skill)

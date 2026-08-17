@@ -223,21 +223,31 @@ async def test_child_deferral_stops_when_children_become_inactive(
 
 
 @pytest.mark.anyio
-async def test_execute_termination_action_returns_result_on_incomplete_cleanup_evidence(
+@pytest.mark.parametrize(
+    ("returncode", "complete", "expected_complete"),
+    [
+        (0, False, False),
+        (None, True, True),
+    ],
+)
+async def test_execute_termination_action_returns_cleanup_without_raising(
     monkeypatch: pytest.MonkeyPatch,
+    returncode: int | None,
+    complete: bool,
+    expected_complete: bool,
 ) -> None:
-    """A general (non-zombie) incomplete-evidence scenario must not raise."""
+    """Both the incomplete-evidence and the leader-unconfirmed paths must not raise."""
     owner = await _spawn(0.05)
     while await anyio.to_thread.run_sync(owner.observe_exit) is None:
         await anyio.sleep(0.01)
-    incomplete_result = ProcessCleanupResult(
+    result = ProcessCleanupResult(
         root_pid=owner.pid,
-        access_denied_pids=(999,),
-        observation_complete=True,
+        access_denied_pids=(999,) if not complete else (),
+        observation_complete=complete,
     )
-    monkeypatch.setattr(owner, "cleanup", lambda timeout: (0, incomplete_result))
+    monkeypatch.setattr(owner, "cleanup", lambda timeout: (returncode, result))
 
-    kill_reason, returncode, cleanup = await execute_termination_action(
+    kill_reason, actual_returncode, cleanup = await execute_termination_action(
         TerminationAction.NO_KILL,
         owner=owner,
         process_exited_event=anyio.Event(),
@@ -247,34 +257,9 @@ async def test_execute_termination_action_returns_result_on_incomplete_cleanup_e
     )
 
     assert kill_reason is KillReason.NATURAL_EXIT
-    assert returncode == 0
-    assert cleanup is incomplete_result
-    assert cleanup.complete is False
-
-
-@pytest.mark.anyio
-async def test_execute_termination_action_returns_none_returncode_without_raising(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The leader-unconfirmed case widens the return type to int | None honestly."""
-    owner = await _spawn(0.05)
-    while await anyio.to_thread.run_sync(owner.observe_exit) is None:
-        await anyio.sleep(0.01)
-    complete_result = ProcessCleanupResult(root_pid=owner.pid, observation_complete=True)
-    monkeypatch.setattr(owner, "cleanup", lambda timeout: (None, complete_result))
-
-    kill_reason, returncode, cleanup = await execute_termination_action(
-        TerminationAction.NO_KILL,
-        owner=owner,
-        process_exited_event=anyio.Event(),
-        grace_seconds=0,
-        proc_log=structlog.get_logger().bind(pid=owner.pid),
-        process_observation_snapshot=owner.snapshot,
-    )
-
-    assert kill_reason is KillReason.NATURAL_EXIT
-    assert returncode is None
-    assert cleanup is complete_result
+    assert actual_returncode == returncode
+    assert cleanup is result
+    assert cleanup.complete is expected_complete
 
 
 def test_run_managed_sync_survives_incomplete_cleanup_evidence(

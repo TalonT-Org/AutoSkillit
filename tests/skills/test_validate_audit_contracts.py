@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
-from tests.skills.conftest import (
+from tests.skills._skill_text_helpers import (
     assert_ticket_grouper_has_effort_based_splitting,
     assert_ticket_grouper_has_minimum_group_floor,
     resolve_skill_text,

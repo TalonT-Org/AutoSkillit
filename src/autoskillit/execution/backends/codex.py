@@ -1937,6 +1937,7 @@ class CodexBackend(BackendCmdBuilderBase):
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
         force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         if tools:
             logger.warning(

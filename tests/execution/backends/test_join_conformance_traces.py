@@ -558,6 +558,6 @@ def test_claude_required_join_emits_keep_batch_first_directive() -> None:
     # before spawning, and require unnamed foreground calls.
     assert "declare_join_batch" in text or "join_batch" in text
     # No named/team/teammate dispatch is permitted.
-    assert "name=" not in text or "name@" not in text
+    assert "name=" not in text and "name@" not in text
     assert "team_name" not in text
     assert "run_in_background" not in text

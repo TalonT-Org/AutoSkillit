@@ -398,15 +398,16 @@ def test_clean_session_allows_named_teammate_dispatch(tmp_path):
     )
 
 
-def test_missing_binding_fails_closed_for_join_required():
-    """REQ-054: missing flag path + AUTOSKILLIT_JOIN_REQUIRED=1 → fail-closed.
+def test_missing_binding_defaults_to_permissive():
+    """REQ-054: missing binding flag → non-join (permissive) semantics.
 
-    Without a binding file but with the AUTOSKILLIT_JOIN_REQUIRED=1
-    ambient signal, a named Agent call must still be denied. The
-    guard defaults to permissive-but-monitored when no binding is
-    available and no ambient signal is present.
+    When the binding flag file is absent, the guard treats the session
+    as non-join (no join-bound denial). The ambient
+    ``AUTOSKILLIT_JOIN_REQUIRED=1`` escalation path is asserted by a
+    separate test that bypasses the helper's env snapshot.
     """
-    # No flag file. AUTOSKILLIT_JOIN_REQUIRED=1 forces join_required=True.
+    # No flag file. The guard falls back to non-join semantics and the
+    # named Agent call passes through (no deny payload emitted).
     response = _run_guard_join_bound(
         {
             "tool_name": "Agent",
@@ -415,8 +416,7 @@ def test_missing_binding_fails_closed_for_join_required():
         },
         flag_path=None,
     )
-    # The guard treats absence of the binding flag as a non-join session,
-    # so the named Agent call passes through (no deny payload emitted).
+    # Without a binding flag the guard must default to non-join semantics.
     assert "permissionDecision" not in response, (
         "Without a binding flag the guard must default to non-join semantics; "
         "the ambient signal is the production escalation path, asserted separately."

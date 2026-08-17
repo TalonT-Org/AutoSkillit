@@ -304,6 +304,7 @@ class CodingAgentBackend(Protocol):
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
         force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec: ...
 
     def validate_session_layout(

@@ -851,6 +851,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
         force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         """Build a Claude interactive session command.
 
@@ -930,12 +931,23 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             required=required_env,
         )
         if force_inactive_agent_teams:
+            if executable is not None:
+                # The executable binding captures its launch_environment at
+                # probe time, before any neutralization. Combining the two
+                # makes the binding stale; callers must resolve a fresh
+                # executable from the neutralized env instead.
+                raise ValueError(
+                    "force_inactive_agent_teams=True cannot be combined with "
+                    "executable binding; resolve a fresh executable from the "
+                    "neutralized env first"
+                )
             # ``build_agent_env`` returns a read-only ``MappingProxyType``;
             # neutralize on a single mutable copy and re-derive both the
             # assertion and the launch env from it.
             neutralized_env = dict(effective_env)
             _neutralize_agent_teams_env(neutralized_env)
-            settings_root = str(executable.cwd) if executable is not None else None
+            settings_root = str(project_root) if project_root is not None else None
+            _resolve_project_root_for_inactive_check(settings_root)
             assert_agent_teams_inactive(
                 neutralized_env,
                 settings_root,

@@ -50,6 +50,11 @@ WAVE_FAILURE = "failure"
 WAVE_CANCELLED = "cancelled"
 WAVE_INTERRUPTION = "interruption"
 WAVE_MISSING_CHILD = "missing_child"
+#: Some entries succeeded and some settled non-success in a terminal way
+#: that is not captured by any single priority outcome above (e.g. some
+#: ``success`` and some ``missing``). The wave did not fully complete, so
+#: downstream consumers must treat this as non-success.
+WAVE_PARTIAL = "partial"
 
 _NON_SUCCESS_WAVE_OUTCOMES: frozenset[str] = frozenset(
     {
@@ -58,6 +63,7 @@ _NON_SUCCESS_WAVE_OUTCOMES: frozenset[str] = frozenset(
         WAVE_CANCELLED,
         WAVE_INTERRUPTION,
         WAVE_MISSING_CHILD,
+        WAVE_PARTIAL,
     }
 )
 
@@ -259,15 +265,14 @@ def claim_assignment(
             assignments = batch.get("assignments")
             if not isinstance(assignments, list):
                 return None
-            # Detect duplicate claims before taking a new slot.
+            # Detect duplicate claims before taking a new slot. A
+            # duplicate tool_use_id is invalid regardless of whether the
+            # prior entry is still pending or already settled — emitting
+            # the same id twice would corrupt downstream join bookkeeping.
             for entry in assignments:
-                if (
-                    isinstance(entry, dict)
-                    and entry.get("tool_use_id") == tool_use_id
-                    and entry.get("outcome") not in (OUTCOME_PENDING,)
-                ):
+                if isinstance(entry, dict) and entry.get("tool_use_id") == tool_use_id:
                     raise JoinLedgerError(
-                        f"tool_use_id {tool_use_id!r} already settled for this wave"
+                        f"tool_use_id {tool_use_id!r} already claimed for this wave"
                     )
             for entry in assignments:
                 if isinstance(entry, dict) and entry.get("tool_use_id") is None:
@@ -381,7 +386,10 @@ def _aggregate_wave_outcome(assignments: list[object]) -> str:
         return WAVE_FAILURE
     if all(o == OUTCOME_MISSING for o in outcomes):
         return WAVE_MISSING_CHILD
-    return WAVE_PENDING
+    # All entries are in a terminal state, but the outcomes are mixed in
+    # a way no priority rule above captures (e.g. some SUCCESS alongside
+    # MISSING or FAILURE). The wave did not fully complete; report partial.
+    return WAVE_PARTIAL
 
 
 def active_batch(
@@ -466,6 +474,7 @@ __all__ = [
     "WAVE_CANCELLED",
     "WAVE_INTERRUPTION",
     "WAVE_MISSING_CHILD",
+    "WAVE_PARTIAL",
     "active_batch",
     "can_release_stop",
     "claim_assignment",

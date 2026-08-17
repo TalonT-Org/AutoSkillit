@@ -253,6 +253,15 @@ def test_hooks_json_matches_hook_registry_after_generate():
             f"Expected exactly 1 {hook_def.event_type} entry for matcher "
             f"{hook_def.matcher!r}, got {len(matching)}"
         )
+        # Each registered script under this matcher must appear in the rendered
+        # command list — otherwise the registry silently drops scripts.
+        entry_commands = [h["command"] for h in matching[0].get("hooks", [])]
+        for script in hook_def.scripts:
+            logical_name = script.removesuffix(".py")
+            assert any(logical_name in c for c in entry_commands), (
+                f"Script {script!r} missing from matcher {hook_def.matcher!r} "
+                f"in {hook_def.event_type} section of hooks.json"
+            )
 
 
 def test_render_shape_for_matcherless_events() -> None:

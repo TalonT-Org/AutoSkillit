@@ -84,17 +84,6 @@ class SkillProjectionBinding:
     worktree_identity: Mapping[str, str] = field(default_factory=dict)
     executable_identity: Mapping[str, str] = field(default_factory=dict)
     plugin_identity: Mapping[str, str] = field(default_factory=dict)
-    # Join contract metadata — keyed by skill name. Defaulted so existing
-    # construction sites keep working without changes; the launch
-    # adapter threads the populated mapping through ``bind_launch``.
-    join_required_by_member: Mapping[str, bool] = field(default_factory=dict)
-    child_spawn_cardinality_by_member: Mapping[str, Mapping[str, object]] = field(
-        default_factory=dict
-    )
-    artifact_digest_by_member: Mapping[str, str] = field(default_factory=dict)
-    artifact_incarnation_by_member: Mapping[str, str] = field(default_factory=dict)
-    semantic_digests_by_member: Mapping[str, str] = field(default_factory=dict)
-    adaptation_digests_by_member: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "member_names", tuple(self.member_names))

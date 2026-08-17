@@ -243,9 +243,10 @@ def test_step7_self_check_splits_the_real_broken_manifest(tmp_path: Path) -> Non
     result_text = _extract_result_text(output)
 
     blocks = [b for b in _GROUP_SPLIT_RE.split(result_text) if b.strip()]
-    assert blocks, (
+    assert len(blocks) >= 2, (
         "Ticket Grouper self-check returned no parseable ticket groups — "
-        f"the Step 7 instructions may not be honoured.\nResponse tail:\n{result_text[-4000:]}"
+        "expected at least 2 (Group 12 + Group 13) but the response "
+        f"split into {len(blocks)} block(s).\nResponse tail:\n{result_text[-4000:]}"
     )
     # Group 12 (HIGH) names "Pair A/B/C" — each ticket should pair at most one
     # other file, so max files per block must be <= len / 3 (i.e. at most 2 of

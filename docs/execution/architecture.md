@@ -4,7 +4,7 @@ How AutoSkillit runs a recipe end to end: orchestrator, kitchen gating, clone an
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 74 MCP tools and 141 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 76 MCP tools and 142 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 
@@ -110,7 +110,7 @@ AutoSkillit supports four session modes with different tool and skill visibility
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
 - **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup.
-  The authenticated evidence-reader brokers remain hidden among the 74 registered MCP tools
+  The authenticated evidence-reader brokers remain hidden among the 76 registered MCP tools
   because only a separately launched reader child receives their binding. All skill tiers are
   accessible. The orchestrator delegates work through `run_skill` (headless sessions) and
   `run_cmd` (shell commands).

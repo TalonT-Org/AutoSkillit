@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -434,7 +435,11 @@ def _register_mcp_server(
         "args": [],
     }
     if mcp_tool_timeout_sec is not None:
-        if not isinstance(mcp_tool_timeout_sec, (int, float)) or mcp_tool_timeout_sec <= 0:
+        if (
+            not isinstance(mcp_tool_timeout_sec, (int, float))
+            or not math.isfinite(mcp_tool_timeout_sec)
+            or mcp_tool_timeout_sec <= 0
+        ):
             raise ValueError(
                 f"mcp_tool_timeout_sec must be a positive number of seconds, got "
                 f"{mcp_tool_timeout_sec!r}"

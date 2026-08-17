@@ -1426,18 +1426,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
     ),
-    "_response_budget.py": (
-        1500,
-        "REQ-CNST-010-E12: lossless response spill — atomic_write, projection "
-        "(uniform and tiered), exact canonical projection finalization, "
-        "measured exemptions, both exempted and non-exempted spill paths, "
-        "spill metadata schema, bounded-failure rendering, and shared "
-        "_tiered_projection helper for the exempted (recipe/load_recipe) and "
-        "non-exempted (run_skill) spill paths (issue #4304 priority-tier "
-        "delivery-bound summary); splitting would scatter the priority-tier "
-        "algorithm across modules that must remain the single source of "
-        "truth for the bound-vs-deprioritized budget allocation order.",
-    ),
     "core/types/_type_constants_registries.py": (
         1100,
         "REQ-CNST-010-E16: canonical immutable registries and their measured digests remain "
@@ -1488,14 +1476,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection and execution-identity persistence remain at the same admission boundary. "
         "#4457 keeps receipt drafting beside exhaustive run_skill terminal projection so "
         "every post-launch classification passes through one finalization path.",
-    ),
-    "server/tools/_execution_helpers.py": (
-        1075,
-        "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
-        "remain one server-tool support authority; the managed session metadata additions "
-        "must stay beside contract rehydration and persistence to prevent resume drift. #4443 "
-        "also keeps parent sandbox authority, resolved backend/profile applicability, vector "
-        "projection, and execution identity in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
         1200,

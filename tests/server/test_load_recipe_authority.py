@@ -25,10 +25,6 @@ def _default_recipe_names_do_not_resolve_as_skills(tool_ctx) -> None:
 class TestLoadRecipeReadOnly:
     """P4: load_recipe is strictly read-only — no migration, no contract card generation."""
 
-    @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx_kitchen_open):
-        """Ensure server context is initialized with gate open."""
-
     @pytest.mark.anyio
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
         """load_recipe must not trigger headless migration even when migrations are applicable."""

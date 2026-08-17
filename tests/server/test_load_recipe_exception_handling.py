@@ -25,10 +25,6 @@ def _default_recipe_names_do_not_resolve_as_skills(tool_ctx) -> None:
 class TestLoadRecipeExceptionHandling:
     """CC-1: Outer except in load_recipe must catch anticipated exceptions only."""
 
-    @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx_kitchen_open):
-        """Initialize ToolContext with gate open so load_recipe can call _get_config()."""
-
     @pytest.mark.anyio
     async def test_yaml_error_surfaces_as_suggestion(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

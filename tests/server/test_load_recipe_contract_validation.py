@@ -70,10 +70,6 @@ class TestLoadRecipeSurfacesValidationFailure:
     a field indicating the recipe failed validation.
     """
 
-    @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx_kitchen_open):
-        """Ensure server context is initialized with gate open."""
-
     @pytest.mark.anyio
     async def test_load_recipe_surfaces_validation_failure(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

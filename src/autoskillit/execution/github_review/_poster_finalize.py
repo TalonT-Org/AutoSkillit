@@ -11,7 +11,7 @@ only these helpers consume them.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from autoskillit.core import (
@@ -23,6 +23,9 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
 )
+from autoskillit.core.types._type_github_review import ReviewResponseClass
+from autoskillit.execution.github_review.gateway import DefaultGitHubReviewGateway
+from autoskillit.execution.github_review.ledger import GitHubReviewLedger
 
 from . import _poster_support
 
@@ -36,7 +39,7 @@ _FINAL_STATES = frozenset({ReviewOperationState.SUCCEEDED, ReviewOperationState.
 
 async def reconcile_payload(
     *,
-    gateway,
+    gateway: DefaultGitHubReviewGateway,
     request: GitHubReviewRequest,
     operation_key: str,
     payload: Mapping[str, Any],
@@ -139,15 +142,15 @@ async def reconcile_payload(
 
 def finalize(
     *,
-    ledger,
-    wall_clock,
+    ledger: GitHubReviewLedger,
+    wall_clock: Callable[[], float],
     request: GitHubReviewRequest,
     operation_key: str,
     findings: tuple[_poster_support.CanonicalFinding, ...],
     omitted: tuple[GitHubReviewFindingDisposition, ...],
     effective_event: str,
     attempt_digest: str,
-    response_class,
+    response_class: ReviewResponseClass,
     state: ReviewOperationState,
     reconciliation: _poster_support.Reconciliation,
     executed_mutations: int,

@@ -330,10 +330,11 @@ def assert_agent_teams_inactive(
     """
     if not force_inactive:
         return
-    if CLAUDE_AGENT_TEAMS_ENV_VAR in env and _active_agent_teams(env[CLAUDE_AGENT_TEAMS_ENV_VAR]):
+    env_value = env.get(CLAUDE_AGENT_TEAMS_ENV_VAR)
+    if isinstance(env_value, str) and _active_agent_teams(env_value):
         raise RuntimeError(
             f"force_inactive_agent_teams requested but {CLAUDE_AGENT_TEAMS_ENV_VAR} "
-            f"is set to {env[CLAUDE_AGENT_TEAMS_ENV_VAR]!r} in the launch env"
+            f"is set to {env_value!r} in the launch env"
         )
     malformed = find_malformed_agent_teams_settings(project_root)
     if malformed:

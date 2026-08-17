@@ -31,7 +31,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    read_session_binding,
+    session_join_required,
 )
 
 BACKGROUND_EXEC_DENY_TRIGGER: str = "run_in_background=true is prohibited in skill sessions"
@@ -82,43 +82,37 @@ def main() -> None:
 
     tool_name = data.get("tool_name")
 
-    join_required = False  # default; tightened below when the binding is consulted
-
     # --- Join-bound session enforcement (Claude, all session types) ---
     # Inside a claimed child's own subagent context, exempt join re-evaluation:
     # blocking them would self-lock every join.
-    if is_governed and not in_subagent_context:
-        binding = read_session_binding()
-        join_required = bool(binding.get("join_required", False)) if binding is not None else False
-        if not join_required and os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1":
-            join_required = True
+    join_required = is_governed and not in_subagent_context and session_join_required()
 
-        if join_required and tool_name == "Agent":
-            selector = []
-            if tool_input.get("name"):
-                selector.append("name")
-            if tool_input.get("team_name"):
-                selector.append("team_name")
-            if tool_input.get("run_in_background"):
-                selector.append("run_in_background")
-            if selector:
-                denial_reason = (
-                    f"{JOIN_DENY_TRIGGER} (selectors rejected: {', '.join(selector)}; "
-                    "background execution and teammate routing are prohibited in a "
-                    "join-bound session — declare a wave via declare_join_batch and "
-                    "issue every member as one ordinary unnamed foreground Agent call)."
-                )
-                payload = json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": "PreToolUse",
-                            "permissionDecision": "deny",
-                            "permissionDecisionReason": denial_reason,
-                        }
+    if join_required and tool_name == "Agent":
+        selector = []
+        if tool_input.get("name"):
+            selector.append("name")
+        if tool_input.get("team_name"):
+            selector.append("team_name")
+        if tool_input.get("run_in_background"):
+            selector.append("run_in_background")
+        if selector:
+            denial_reason = (
+                f"{JOIN_DENY_TRIGGER} (selectors rejected: {', '.join(selector)}; "
+                "background execution and teammate routing are prohibited in a "
+                "join-bound session — declare a wave via declare_join_batch and "
+                "issue every member as one ordinary unnamed foreground Agent call)."
+            )
+            payload = json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": denial_reason,
                     }
-                )
-                sys.stdout.write(payload + "\n")
-                sys.exit(0)
+                }
+            )
+            sys.stdout.write(payload + "\n")
+            sys.exit(0)
 
     # --- Join-bound ScheduleWakeup rejection (independent of headless state) ---
     # Deferral/stall is an escape hatch that could let a wave close with an

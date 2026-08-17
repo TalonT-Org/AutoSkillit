@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
@@ -121,15 +122,33 @@ def main() -> None:
 
     flag_dir = resolve_flag_dir(find_project_root())
     top_level_parent = "top_level"
-    try:
-        batch = settle_assignment(
-            flag_dir,
-            session_id=sid,
-            top_level_parent=top_level_parent,
-            tool_use_id=tool_use_id,
-            outcome=outcome,
-        )
-    except (JoinLedgerError, OSError) as exc:
+    batch = None
+    # Retry transient OSError up to 3 attempts with brief backoff. The
+    # ledger acquires an exclusive fcntl.flock; contention surfaces as
+    # OSError and is normally resolved on a follow-up attempt. A contract
+    # error (JoinLedgerError) is NOT retried — the ledger is the authority
+    # for wave state and retrying would only re-surface the same refusal.
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            batch = settle_assignment(
+                flag_dir,
+                session_id=sid,
+                top_level_parent=top_level_parent,
+                tool_use_id=tool_use_id,
+                outcome=outcome,
+            )
+            last_exc = None
+            break
+        except JoinLedgerError as exc:
+            last_exc = exc
+            break
+        except OSError as exc:
+            last_exc = exc
+            if attempt < 2:
+                time.sleep(0.05 * (attempt + 1))
+                continue
+    if batch is None:
         write_join_diagnostic(
             {
                 "gate": "join_settle_guard",
@@ -141,11 +160,11 @@ def main() -> None:
             },
             caller="join_settle_guard",
         )
-        sys.stderr.write(f"join_settle_guard: settlement refused: {exc}\n")
-        # Fail closed: a transient IO or contract error must not silently
-        # drop the settlement. Returning exit 2 surfaces the refusal to the
-        # hook harness so the PostToolUse can be replayed rather than
-        # leaving the wave permanently pending.
+        sys.stderr.write(f"join_settle_guard: settlement refused: {last_exc}\n")
+        # Fail closed: after retries the ledger write still failed. PostToolUse
+        # exit 2 does NOT replay (per Claude Code hooks contract), so the
+        # wave remains pending. The diagnostic record makes the failure
+        # observable to operators via join_diagnostics.jsonl.
         sys.exit(2)
 
     write_join_diagnostic(

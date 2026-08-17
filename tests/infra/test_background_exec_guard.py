@@ -402,9 +402,9 @@ def test_missing_binding_defaults_to_permissive():
     """REQ-054: missing binding flag → non-join (permissive) semantics.
 
     When the binding flag file is absent, the guard treats the session
-    as non-join (no join-bound denial). The ambient
-    ``AUTOSKILLIT_JOIN_REQUIRED=1`` escalation path is asserted by a
-    separate test that bypasses the helper's env snapshot.
+    as non-join (no join-bound denial). Without a binding flag and
+    without the ``AUTOSKILLIT_JOIN_REQUIRED`` env mirror, the guard
+    has no join signal to operate on.
     """
     # No flag file. The guard falls back to non-join semantics and the
     # named Agent call passes through (no deny payload emitted).
@@ -419,7 +419,8 @@ def test_missing_binding_defaults_to_permissive():
     # Without a binding flag the guard must default to non-join semantics.
     assert "permissionDecision" not in response, (
         "Without a binding flag the guard must default to non-join semantics; "
-        "the ambient signal is the production escalation path, asserted separately."
+        "the guard only enters join-bound posture when the binding or env "
+        "mirror explicitly signals join_required."
     )
 
 
@@ -441,7 +442,7 @@ def test_malformed_binding_does_not_admit_join_required(tmp_path):
         },
         flag_path=flag_path,
     )
-    # Malformed JSON → _read_session_binding returns None → join_required
+    # Malformed JSON → read_session_binding returns None → join_required
     # stays False → no join-bound denial. The named Agent call passes
     # through; we explicitly assert the hook does not emit a deny.
     assert "permissionDecision" not in response, (

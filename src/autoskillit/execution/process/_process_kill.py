@@ -595,8 +595,12 @@ class OwnedProcessGroup:
     def settle_evidence(self, timeout: float = 2.0) -> tuple[int | None, ProcessCleanupResult]:
         """Settle the owned group and return cleanup evidence without raising.
 
-        Callers MUST coalesce a None returncode (returncode if returncode is not
-        None else -1) before assigning into a non-Optional field.
+        Unlike ``settle`` (raises ``OwnedProcessCleanupError`` on incomplete
+        cleanup), this variant logs an ``owned_group_cleanup_incomplete`` event
+        and returns the partial result so callers can record evidence without
+        propagating the failure. Callers MUST coalesce a None returncode
+        (``returncode if returncode is not None else -1``) before assigning into
+        a non-Optional field.
         """
         returncode, result = self.cleanup(timeout)
         if not result.complete or returncode is None:
@@ -610,6 +614,14 @@ class OwnedProcessGroup:
     def settle_preserving(
         self, error: BaseException, timeout: float = 2.0
     ) -> ProcessCleanupResult:
+        """Settle the owned group while preserving a caller-supplied exception.
+
+        Unlike ``settle_evidence`` (which logs and returns silently), this
+        variant attaches the cleanup result to ``error`` via ``add_note`` so
+        the caller's BaseException chains through to its handler with cleanup
+        context intact. The caller is expected to re-raise ``error`` after
+        calling this method.
+        """
         try:
             _, result = self.cleanup(timeout)
         except BaseException as cleanup_error:

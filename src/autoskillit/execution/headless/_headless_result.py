@@ -132,8 +132,10 @@ def _should_flag_cleanup_incomplete(result: SubprocessResult, *, subtype: str) -
     evidence = result.cleanup_evidence
     if evidence is None or evidence.complete:
         return False
-    logger.warning(
-        "headless_cleanup_evidence_incomplete", subtype=subtype, evidence=evidence.to_dict()
+    logger.error(
+        "owned_group_cleanup_incomplete",
+        subtype=subtype,
+        evidence=evidence.to_dict(),
     )
     return True
 

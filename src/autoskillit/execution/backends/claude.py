@@ -928,7 +928,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             merged.update(env_extras)
         merged["MCP_CONNECTION_NONBLOCKING"] = CLAUDE_MCP_CONNECTION_NONBLOCKING
         merged[CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR] = str(CLAUDE_MCP_CONNECT_TIMEOUT_MS)
-        if mcp_tool_timeout_sec:
+        if mcp_tool_timeout_sec is not None and mcp_tool_timeout_sec > 0:
             merged[CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR] = str(mcp_tool_timeout_sec)
         interactive_base = {
             k: v for k, v in os.environ.items() if k not in _INTERACTIVE_ENV_EXCLUSIONS
@@ -1014,7 +1014,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             for key, value in env_extras.items():
                 if key not in _PROVIDER_EXTRAS_BASE_DENYLIST:
                     merged[key] = value
-        if mcp_tool_timeout_sec:
+        if mcp_tool_timeout_sec is not None and mcp_tool_timeout_sec > 0:
             merged[CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR] = str(mcp_tool_timeout_sec)
         env = dict(build_agent_env(base={}, extras=merged))
         env.update(_HEADLESS_ENV_HARDENING)
@@ -1244,7 +1244,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:
             extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        if mcp_tool_timeout_sec:
+        if mcp_tool_timeout_sec is not None and mcp_tool_timeout_sec > 0:
             extras[CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR] = str(mcp_tool_timeout_sec)
         extras.pop(CAMPAIGN_ID_ENV_VAR, None)  # food truck does not propagate campaign ID
         if env_extras:

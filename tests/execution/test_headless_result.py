@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import unittest.mock
 from pathlib import Path
@@ -17,6 +18,7 @@ from autoskillit.core.types import (
     CliSubtype,
     InfraExitCategory,
     KillReason,
+    ProcessCleanupResult,
     RetryReason,
     SkillResult,
     SubprocessResult,
@@ -1667,6 +1669,61 @@ class TestStaleApiRetryExhaustion:
         assert sr.subtype == "recovered_from_stale"
         assert sr.infra.exit_category == ""
         assert sr.api_retry.exhausted is True
+
+    def test_stale_recovery_success_surfaces_cleanup_incomplete(self):
+        """A genuinely successful STALE recovery must still surface incomplete cleanup evidence.
+
+        Regression for foundation-auditor-4641's finding: _make_terminated_result's
+        shared helper (behind both the STALE- and IDLE_STALL-recovery success
+        branches) did not receive infra= and silently dropped this diagnostic.
+        """
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        incomplete_evidence = ProcessCleanupResult(
+            root_pid=12345, access_denied_pids=(999,), observation_complete=True
+        )
+        result = dataclasses.replace(
+            _sr(0, ndjson, "", TerminationReason.STALE),
+            cleanup_evidence=incomplete_evidence,
+        )
+
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+
+        assert sr.success is True
+        assert sr.subtype == "recovered_from_stale"
+        assert sr.infra.cleanup_incomplete is True
+
+    def test_idle_stall_recovery_success_surfaces_cleanup_incomplete(self):
+        """Analogous to the STALE case above, for the IDLE_STALL-recovery success branch."""
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        incomplete_evidence = ProcessCleanupResult(
+            root_pid=12345, access_denied_pids=(999,), observation_complete=True
+        )
+        result = dataclasses.replace(
+            _sr(0, ndjson, "", TerminationReason.IDLE_STALL),
+            cleanup_evidence=incomplete_evidence,
+        )
+
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+
+        assert sr.success is True
+        assert sr.subtype == "recovered_from_idle_stall"
+        assert sr.infra.cleanup_incomplete is True
 
     def test_idle_stall_with_api_retry_exhaustion_sets_infra(self):
         """Idle_stall + exhausted api_retry → infra_exit_category='api_error'."""

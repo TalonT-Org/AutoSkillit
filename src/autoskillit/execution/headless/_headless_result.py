@@ -119,6 +119,17 @@ def _build_api_retry_outcome(session: ClaudeSessionResult) -> ApiRetryOutcome:
     )
 
 
+def _log_cleanup_incomplete(result: SubprocessResult, *, subtype: str) -> bool:
+    """Log incomplete owned-process cleanup evidence; return whether infra should flag it."""
+    evidence = result.cleanup_evidence
+    if evidence is None or evidence.complete:
+        return False
+    logger.warning(
+        "headless_cleanup_evidence_incomplete", subtype=subtype, evidence=evidence.to_dict()
+    )
+    return True
+
+
 def _make_terminated_result(
     *,
     result: SubprocessResult,
@@ -134,6 +145,8 @@ def _make_terminated_result(
     api_retry: ApiRetryOutcome = ApiRetryOutcome(),
 ) -> SkillResult:
     """Construct SkillResult for infrastructure-terminated sessions (stale/idle_stall)."""
+    if _log_cleanup_incomplete(result, subtype=subtype):
+        infra = dataclasses.replace(infra, cleanup_incomplete=True)
     return SkillResult(
         success=success,
         result=result_text,
@@ -900,6 +913,8 @@ def _build_skill_result(
             codex_boundary_proof=codex_boundary_proof,
         )
 
+    _cleanup_incomplete = _log_cleanup_incomplete(result, subtype=normalized_subtype)
+
     sr = SkillResult(
         success=success,
         result=result_text,
@@ -920,7 +935,9 @@ def _build_skill_result(
         last_stop_reason=session.last_stop_reason,
         lifespan_started=session.lifespan_started,
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
-        infra=InfraOutcome(exit_category=infra_category.value),
+        infra=InfraOutcome(
+            exit_category=infra_category.value, cleanup_incomplete=_cleanup_incomplete
+        ),
         api_retry=api_retry,
         ndjson_drift=NdjsonDriftOutcome(
             unknown_event_count=session.seen_ndjson_unknown_event_count,

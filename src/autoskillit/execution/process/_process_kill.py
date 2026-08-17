@@ -449,9 +449,22 @@ class OwnedProcessGroup:
                 )
 
     def _identity_is_alive(self, identity: tuple[int, float]) -> bool:
+        """Return whether the identified PID is still a live, non-zombie process.
+
+        A matching create_time() alone is insufficient: a zombie (exited but not
+        yet reaped) retains a readable /proc entry with an unchanged create_time(),
+        so create_time() equality alone reports "alive" for a process that has
+        already exited. The status() read below excludes that false positive.
+
+        This is a point-in-time snapshot — a small TOCTOU window exists between
+        this check and any subsequent reap. That is acceptable here because
+        callers re-check on their own polling cadence (_wait_group_members) rather
+        than relying on a single read.
+        """
         pid, create_time = identity
         try:
-            return psutil.Process(pid).create_time() == create_time
+            proc = psutil.Process(pid)
+            return proc.create_time() == create_time and proc.status() != psutil.STATUS_ZOMBIE
         except (psutil.Error, OSError) as exc:
             if _is_disappearance(exc):
                 return False
@@ -590,6 +603,29 @@ class OwnedProcessGroup:
             raise OwnedProcessCleanupError(self.pid, result)
         return returncode, result
 
+    def settle_evidence(self, timeout: float = 2.0) -> tuple[int | None, ProcessCleanupResult]:
+        """Settle the owned group and return cleanup evidence without raising.
+
+        Unlike settle(), this never raises OwnedProcessCleanupError — callers that
+        already have their own success signal (e.g. a captured completion marker)
+        use this to retrieve diagnostic cleanup evidence instead of having a
+        successful workload outcome destroyed by an incomplete-teardown exception.
+
+        Callers MUST NOT assume the returned returncode is an int: it is None when
+        the leader itself was never confirmed reaped even after full SIGTERM/SIGKILL
+        escalation. Coalesce with the established `returncode if returncode is not
+        None else -1` convention (see execution/headless/_headless_result.py) before
+        assigning into a non-Optional field.
+        """
+        returncode, result = self.cleanup(timeout)
+        if not result.complete or returncode is None:
+            logger.error(
+                "owned_group_cleanup_incomplete",
+                evidence=result.to_dict(),
+                returncode_confirmed=returncode is not None,
+            )
+        return returncode, result
+
     def settle_preserving(
         self, error: BaseException, timeout: float = 2.0
     ) -> ProcessCleanupResult:
@@ -665,24 +701,3 @@ def spawn_owned_process(
         _cleanup_failed_owned_spawn(process)
         raise RuntimeError("spawned child did not establish owned group leadership")
     return OwnedProcessGroup(process, pgid, _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN)
-
-
-async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool:
-    """Wait until proc is dead and its zombie is reaped. Returns True if dead within timeout.
-
-    Uses psutil.Process.wait() rather than polling pid_exists():
-    - For child processes: calls os.waitpid(), reaping the zombie. Only then is the PID
-      truly gone from the process table.
-    - For non-child processes (grandchildren adopted by init): psutil polls internally,
-      which is equivalent to pid_exists() but still handles the NoSuchProcess case correctly.
-
-    pid_exists() returns True for zombies (killed but not reaped), so wait() is required
-    for reliable dead confirmation.
-    """
-    try:
-        await anyio.to_thread.run_sync(proc.wait, timeout)
-        return True
-    except psutil.TimeoutExpired:
-        return False
-    except psutil.NoSuchProcess:
-        return True

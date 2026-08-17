@@ -509,3 +509,139 @@ def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
 
     with pytest.raises(TypeError, match="spawn_owned_process"):
         _process_kill.OwnedProcessGroup(process, process.pid)
+
+
+def _spawn_owner(monkeypatch: pytest.MonkeyPatch) -> _process_kill.OwnedProcessGroup:
+    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(
+        _process_kill,
+        "_snapshot_process_tree",
+        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+    )
+    return _process_kill.spawn_owned_process(["command"], start_new_session=True)
+
+
+def test_identity_is_alive_returns_false_for_zombie(monkeypatch: pytest.MonkeyPatch) -> None:
+    class ZombieProcess:
+        def __init__(self, pid: int) -> None:
+            self.pid = pid
+
+        def create_time(self) -> float:
+            return 123.0
+
+        def status(self) -> str:
+            return psutil.STATUS_ZOMBIE
+
+    owner = _spawn_owner(monkeypatch)
+    monkeypatch.setattr(_process_kill.psutil, "Process", lambda pid: ZombieProcess(pid))
+
+    assert owner._identity_is_alive((101, 123.0)) is False
+
+
+def test_cleanup_completes_when_only_survivor_is_zombie(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A zombie descendant must not land in survivor_pids — cleanup() reports complete."""
+
+    class ZombieProcess:
+        def __init__(self, pid: int, create_time: float) -> None:
+            self.pid = pid
+            self._create_time = create_time
+
+        def create_time(self) -> float:
+            return self._create_time
+
+        def status(self) -> str:
+            return psutil.STATUS_ZOMBIE
+
+    zombie_identity = (99999, 111.0)
+    owner = _spawn_owner(monkeypatch)
+    owner.merge_snapshot(
+        _process_kill.ProcessObservationSnapshot(
+            process_identities=(zombie_identity,), observation_complete=True
+        )
+    )
+    monkeypatch.setattr(owner, "_scan_group", lambda: (zombie_identity,))
+    monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
+    monkeypatch.setattr(
+        _process_kill.psutil,
+        "Process",
+        lambda pid: ZombieProcess(pid, zombie_identity[1]),
+    )
+    owner.process.returncode = 0
+
+    returncode, result = owner.cleanup(timeout=0.05)
+
+    assert returncode == 0
+    assert result.survivor_pids == ()
+    assert result.complete is True
+
+
+def test_settle_still_raises_on_genuinely_incomplete_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """settle() must keep raising for non-zombie incompleteness — cli/session depends on it."""
+    owner = _spawn_owner(monkeypatch)
+    incomplete_result = _process_kill.ProcessCleanupResult(
+        root_pid=owner.pid,
+        access_denied_pids=(1234,),
+        observation_complete=True,
+    )
+    monkeypatch.setattr(owner, "cleanup", lambda timeout: (0, incomplete_result))
+
+    with pytest.raises(_process_kill.OwnedProcessCleanupError):
+        owner.settle()
+
+
+def test_settle_evidence_returns_without_raising_on_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = _spawn_owner(monkeypatch)
+    incomplete_result = _process_kill.ProcessCleanupResult(
+        root_pid=owner.pid,
+        access_denied_pids=(1234,),
+        observation_complete=True,
+    )
+    monkeypatch.setattr(owner, "cleanup", lambda timeout: (0, incomplete_result))
+
+    with structlog.testing.capture_logs() as logs:
+        returncode, result = owner.settle_evidence()
+
+    assert returncode == 0
+    assert result is incomplete_result
+    assert any(entry.get("event") == "owned_group_cleanup_incomplete" for entry in logs)
+
+
+def test_settle_evidence_returns_none_returncode_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = _spawn_owner(monkeypatch)
+    complete_result = _process_kill.ProcessCleanupResult(
+        root_pid=owner.pid,
+        observation_complete=True,
+    )
+    monkeypatch.setattr(owner, "cleanup", lambda timeout: (None, complete_result))
+
+    with structlog.testing.capture_logs() as logs:
+        returncode, result = owner.settle_evidence()
+
+    assert returncode is None
+    assert result is complete_result
+    entry = next(e for e in logs if e.get("event") == "owned_group_cleanup_incomplete")
+    assert entry.get("returncode_confirmed") is False
+
+
+def test_subprocess_result_carries_cleanup_evidence_field() -> None:
+    from autoskillit.core import SubprocessResult, TerminationReason
+
+    evidence = _process_kill.ProcessCleanupResult(root_pid=101, observation_complete=True)
+
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=101,
+        cleanup_evidence=evidence,
+    )
+
+    assert result.cleanup_evidence is evidence

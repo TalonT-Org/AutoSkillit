@@ -451,6 +451,11 @@ class InfraOutcome:
     """Infrastructure exit classification bundle."""
 
     exit_category: str = ""
+    cleanup_incomplete: bool = False
+    """True when owned-process-group teardown evidence was incomplete (e.g. a
+    survivor or access-denied PID) even though the workload's own outcome was
+    determined independently. Diagnostic only — does not affect needs_retry.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -606,6 +611,7 @@ class SkillResult:
             "provider_fallback": self.provider.fallback_activated,
             "provider_used": self.provider.provider_used,
             "infra_exit_category": self.infra.exit_category,
+            "infra_cleanup_incomplete": self.infra.cleanup_incomplete,
             "api_retry_count": self.api_retry.count,
             "api_retry_last_error": self.api_retry.last_error,
             "api_retry_last_status": self.api_retry.last_status,

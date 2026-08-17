@@ -26,7 +26,10 @@ HEADLESS_SIZE_BUDGETS = {
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,
     # #4233 and #4457 keep lifecycle and artifact gates at the final adjudication seam.
-    "headless/_headless_result.py": 1033,
+    # #4641/#4644 rectify: cleanup-evidence diagnostic threading (_log_cleanup_incomplete
+    # helper + two call sites) keeps the incomplete-teardown signal adjacent to the
+    # same success-path construction it must not destroy.
+    "headless/_headless_result.py": 1047,
     "headless/_headless_evidence.py": 310,
 }
 

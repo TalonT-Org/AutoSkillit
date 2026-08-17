@@ -96,6 +96,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     worktree_path: str
     order_id: str
     infra_exit_category: str
+    infra_cleanup_incomplete: bool
     has_progress_evidence: bool
     has_implementation_progress: bool
     completion_required: bool

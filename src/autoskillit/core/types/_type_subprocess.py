@@ -123,6 +123,11 @@ class SubprocessResult:
     """Result from a managed subprocess execution."""
 
     returncode: int
+    """Final process return code.
+
+    -1 means the leader's returncode could not be confirmed despite full
+    SIGTERM/SIGKILL escalation — see cleanup_evidence for diagnostic detail.
+    """
     stdout: str
     stderr: str
     termination: TerminationReason
@@ -188,6 +193,12 @@ class SubprocessResult:
     """
     stdout_path: Path | None = None
     stderr_path: Path | None = None
+    cleanup_evidence: ProcessCleanupResult | None = None
+    """Set by run_managed_async/run_managed_sync via execute_termination_action's
+    settle_evidence() call. Diagnostic only — does not itself affect termination
+    behavior or force a retry; see InfraOutcome.cleanup_incomplete for downstream
+    surfacing.
+    """
 
 
 @runtime_checkable

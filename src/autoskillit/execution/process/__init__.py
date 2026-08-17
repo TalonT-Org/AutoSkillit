@@ -65,7 +65,6 @@ from autoskillit.execution.process._process_jsonl import (
 from autoskillit.execution.process._process_kill import (
     OwnedProcessGroup,
     ProcessObservationSnapshot,
-    _wait_process_dead,
     async_kill_process_tree,
     kill_process_tree,
     spawn_owned_process,
@@ -128,7 +127,6 @@ __all__ = [
     "_jsonl_last_record_type",
     "_marker_is_standalone",
     "_session_log_monitor",
-    "_wait_process_dead",
     "_watch_heartbeat",
     "_watch_process",
     "_watch_session_log",
@@ -224,7 +222,7 @@ async def execute_termination_action(
     session_id: str | None = None,
     child_deferral_ceiling: float = 0.0,
     process_observation_snapshot: ProcessObservationSnapshot | None = None,
-) -> tuple[KillReason, int, ProcessCleanupResult]:
+) -> tuple[KillReason, int | None, ProcessCleanupResult]:
     """Single authorized executor for all kill decisions in run_managed_async.
 
     This is the sole managed-async authority for drain, signal, settlement, and reap.
@@ -235,7 +233,11 @@ async def execute_termination_action(
     the subagent is still doing active work — mirroring the stale-kill
     suppression pattern in _session_log_monitor.
 
-    Returns the kill reason, authoritative final return code, and cleanup evidence.
+    Returns the kill reason, final return code, and cleanup evidence. The return
+    code may be None when the leader itself could not be confirmed reaped even
+    after full SIGTERM/SIGKILL escalation — settlement never raises
+    OwnedProcessCleanupError from here; callers must coalesce a None returncode
+    before assigning it into a non-Optional field.
     """
     if process_observation_snapshot is not None:
         owner.merge_snapshot(process_observation_snapshot)
@@ -249,7 +251,7 @@ async def execute_termination_action(
                 proc_log.debug("natural_exit_after_drain", returncode=owner.returncode)
                 kill_reason = KillReason.NATURAL_EXIT
                 returncode, cleanup = await anyio.to_thread.run_sync(
-                    owner.settle, abandon_on_cancel=False
+                    owner.settle_evidence, abandon_on_cancel=False
                 )
                 return kill_reason, returncode, cleanup
             # Child-liveness deferral: same pattern as _session_log_monitor stale-kill suppression
@@ -261,7 +263,7 @@ async def execute_termination_action(
                         proc_log.debug("natural_exit_during_deferral", returncode=owner.returncode)
                         kill_reason = KillReason.NATURAL_EXIT
                         returncode, cleanup = await anyio.to_thread.run_sync(
-                            owner.settle, abandon_on_cancel=False
+                            owner.settle_evidence, abandon_on_cancel=False
                         )
                         return kill_reason, returncode, cleanup
                     active = (
@@ -292,7 +294,9 @@ async def execute_termination_action(
             kill_reason = KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
-    returncode, cleanup = await anyio.to_thread.run_sync(owner.settle, abandon_on_cancel=False)
+    returncode, cleanup = await anyio.to_thread.run_sync(
+        owner.settle_evidence, abandon_on_cancel=False
+    )
     return kill_reason, returncode, cleanup
 
 
@@ -707,6 +711,10 @@ async def run_managed_async(
                 child_deferral_ceiling=child_deferral_ceiling,
                 process_observation_snapshot=signals.process_observation_snapshot,
             )
+            # -1 signals "leader returncode could not be confirmed despite full
+            # escalation — see cleanup_evidence for diagnostic detail." Mirrors the
+            # established coalescing convention in execution/headless/_headless_result.py.
+            _confirmed_returncode = final_returncode if final_returncode is not None else -1
 
             # Flush and close before reading
             stdout_file.close()
@@ -723,7 +731,7 @@ async def run_managed_async(
                 _stderr_path = None
 
             sub_result = SubprocessResult(
-                returncode=final_returncode,
+                returncode=_confirmed_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
@@ -746,6 +754,7 @@ async def run_managed_async(
                 inspector_verdict=signals.inspector_verdict,
                 stdout_path=_stdout_path,
                 stderr_path=_stderr_path,
+                cleanup_evidence=cleanup_result,
             )
             proc_log.debug(
                 "run_managed_async_result",
@@ -834,7 +843,11 @@ def run_managed_sync(
                     process.pid,
                     timeout,
                 )
-            final_returncode, cleanup_result = owner.settle()
+            final_returncode, cleanup_result = owner.settle_evidence()
+            # -1 signals "leader returncode could not be confirmed despite full
+            # escalation — see cleanup_evidence for diagnostic detail." Mirrors the
+            # established coalescing convention in execution/headless/_headless_result.py.
+            _confirmed_returncode = final_returncode if final_returncode is not None else -1
 
             # Flush and close before reading
             stdout_file.close()
@@ -851,7 +864,7 @@ def run_managed_sync(
                 _stderr_path = None
 
             return SubprocessResult(
-                returncode=final_returncode,
+                returncode=_confirmed_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
@@ -860,6 +873,7 @@ def run_managed_sync(
                 channel_confirmation=ChannelConfirmation.UNMONITORED,
                 stdout_path=_stdout_path,
                 stderr_path=_stderr_path,
+                cleanup_evidence=cleanup_result,
             )
         except Exception as exc:
             if owner is not None and process is not None and process.returncode is None:

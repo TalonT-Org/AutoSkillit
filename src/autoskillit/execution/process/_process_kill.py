@@ -587,6 +587,15 @@ class OwnedProcessGroup:
         return returncode, result
 
     def settle(self, timeout: float = 2.0) -> tuple[int, ProcessCleanupResult]:
+        """Settle the owned group and raise on incomplete cleanup.
+
+        Unlike ``settle_evidence`` (logs and returns) or ``settle_preserving``
+        (attaches evidence to a caller-supplied BaseException), this variant
+        raises ``OwnedProcessCleanupError`` if cleanup produces an incomplete
+        result (a survivor or access-denied PID) or the leader's returncode
+        is unconfirmed. Returns the (returncode, ProcessCleanupResult) tuple
+        on success — both fields are non-Optional.
+        """
         returncode, result = self.cleanup(timeout)
         if returncode is None or not result.complete:
             raise OwnedProcessCleanupError(self.pid, result)

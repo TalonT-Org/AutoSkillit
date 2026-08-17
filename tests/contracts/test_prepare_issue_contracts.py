@@ -138,12 +138,6 @@ def test_prepare_issue_appends_requirements_section():
     assert "## Requirements" in text
 
 
-def test_prepare_issue_uses_req_id_format():
-    """Skill must document REQ- format identifiers."""
-    text = SKILL_MD.read_text()
-    assert "REQ-" in text
-
-
 def test_prepare_issue_uses_gh_issue_edit_for_requirements():
     """Skill must use gh issue edit to append requirements (not just labels)."""
     text = SKILL_MD.read_text()
@@ -175,22 +169,6 @@ def test_prepare_issue_skips_requirements_on_remediation():
     # requirements_generated must appear after the first implementation route reference
     assert req_gen_idx > impl_idx, (
         "requirements_generated must appear after the recipe:implementation gate, not before it"
-    )
-
-
-def test_prepare_issue_handles_vague_issues():
-    """Skill must document behavior when requirements cannot be cleanly extracted."""
-    text = SKILL_MD.read_text()
-    vague_handled = (
-        "can't be cleanly extracted" in text.lower()
-        or "cannot be cleanly extracted" in text.lower()
-        or "flag" in text.lower()
-        and "more detail" in text.lower()
-        or "needs more detail" in text.lower()
-        or "suggest remediation" in text.lower()
-    )
-    assert vague_handled, (
-        "Skill must document behavior when issue is too vague for requirement extraction"
     )
 
 

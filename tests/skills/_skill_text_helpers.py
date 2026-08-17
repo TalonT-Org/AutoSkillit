@@ -59,11 +59,13 @@ def _extract_pre_step7_grouper_section(text: str) -> str:
     cross-validation body so the effort-based-splitting assertions below scan
     only the planning section.
     """
-    start = text.find("Ticket Grouper")
+    start = text.find("**Subagent B — Ticket Grouper**")
     if start == -1:
         return ""
     end = text.find("### Step 7")
-    return text[start : end if end != -1 else None]
+    if end == -1:
+        return text[start:]
+    return text[start:end]
 
 
 def assert_ticket_grouper_has_minimum_group_floor(text: str) -> None:

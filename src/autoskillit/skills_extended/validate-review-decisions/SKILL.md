@@ -442,6 +442,7 @@ After both parallel subagents return:
 **From Ticket Grouper:**
 - Record the grouping manifest (it will be written to disk in Step 8).
 - If the grouper returned fewer than 1 group: treat the entire validated report as a single ticket.
+<!-- SKILL_BODY_SYNC: This Step 7 "From Ticket Grouper:" block (incl. the Rationale self-consistency bullet) is byte-equal across validate-test-audit, validate-audit, and validate-review-decisions; tests/skills/test_ticket_grouper_rules_sync.py enforces that. Edit all three together. -->
 - **Rationale self-consistency check**: For each returned ticket group, scan its Rationale for
   named or numbered sub-units (e.g. "Pair A/B/C", "3 pairs", "small batches") describing more
   file-level splits than that group has separate `### Ticket Group` entries for. If found, the

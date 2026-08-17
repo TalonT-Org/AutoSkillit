@@ -34,6 +34,7 @@ async def test_no_further_ticks_after_context_exits():
         await anyio.sleep(0.03)
 
     count_at_exit = ctx.report_progress.await_count
+    assert count_at_exit >= 1
     await anyio.sleep(0.05)
 
     assert ctx.report_progress.await_count == count_at_exit
@@ -49,6 +50,7 @@ async def test_ticker_exception_is_swallowed_without_affecting_body():
         body_ran = True
 
     assert body_ran is True
+    assert ctx.report_progress.await_count >= 1
 
 
 @pytest.mark.anyio

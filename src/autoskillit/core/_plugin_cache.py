@@ -858,11 +858,19 @@ def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
                     abs(proc.create_time() - stored_create_time) < 1.0
                     and proc.status() != psutil.STATUS_ZOMBIE
                 )
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except psutil.NoSuchProcess:
+                # Process is definitively gone between the os.kill probe and
+                # this psutil call — do not keep reporting it as alive.
+                return False
+            except psutil.AccessDenied:
+                # Foreign-user PID — unverifiable, fall back to the prior
+                # "assume alive" portable contract.
                 return True
         try:
             return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
         except (psutil.NoSuchProcess, psutil.AccessDenied):
+            # Non-create-time path has no zombie-protection rationale to
+            # override the prior "assume alive when unverifiable" behavior.
             return True
     if stored_create_time is not None:
         try:
@@ -871,11 +879,18 @@ def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
                 abs(proc.create_time() - stored_create_time) < 1.0
                 and proc.status() != psutil.STATUS_ZOMBIE
             )
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess:
+            # Same rationale as the PermissionError branch above — a
+            # definitively-gone process must not be reported alive.
+            return False
+        except psutil.AccessDenied:
             return True
     try:
         return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
     except (psutil.NoSuchProcess, psutil.AccessDenied):
+        # Non-create-time path, normal-error path — preserve the pre-8ebfde357
+        # "assume alive" behavior so a transient psutil failure (e.g. OS race)
+        # does not falsely retire a live kitchen.
         return True
 
 

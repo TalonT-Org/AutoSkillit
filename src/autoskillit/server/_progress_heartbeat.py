@@ -37,24 +37,9 @@ async def progress_heartbeat(
     """Emit periodic MCP progress notifications while the wrapped body runs.
 
     Guards long ``await``s inside MCP tool handlers (``run_skill``,
-    ``dispatch_food_truck``) against client-side idle-abort: an MCP client with
-    no liveness signal on a blocking call may hard-abort the connection well
-    before the server-side ``anyio.fail_after`` deadline fires.
-    ``Context.report_progress`` is a safe no-op when the client sent no
-    ``progressToken`` (no capability branching required).
-
-    ``anyio.create_task_group()`` wraps any exception escaping the ``async with``
-    body in a ``BaseExceptionGroup`` — even for a single exception — so this
-    unwraps a single-item group before re-raising, mirroring the existing pattern
-    at ``fleet/_api.py``'s ``execute_dispatch()``. Without this, callers that
-    inspect ``type(exception).__name__`` directly (``SkillResult.crashed()``,
-    ``dispatch_food_truck``'s ``fleet_error()``) would see ``ExceptionGroup``
-    instead of the wrapped body's real exception type. Catches
-    ``BaseExceptionGroup`` rather than the narrower ``ExceptionGroup``: a wrapped
-    body that raises a plain ``BaseException`` (not an ``Exception`` subclass —
-    e.g. a bespoke sentinel, or ``CancelledError`` propagating from an outer
-    ``anyio.fail_after``) is wrapped in a ``BaseExceptionGroup`` that
-    ``ExceptionGroup`` does not catch.
+    ``dispatch_food_truck``) against client-side idle-abort. ``report_progress``
+    is a no-op when no ``progressToken`` was supplied, so no capability branching
+    is needed.
     """
     try:
         async with anyio.create_task_group() as tg:
@@ -62,6 +47,9 @@ async def progress_heartbeat(
             yield
             tg.cancel_scope.cancel()
     except BaseExceptionGroup as exc:
+        # Unwrap single-item groups so callers inspecting the exception type see
+        # the wrapped body's exception, not BaseExceptionGroup. Catches the
+        # wider BaseExceptionGroup to cover bodies raising plain BaseException.
         if len(exc.exceptions) == 1:
             raise exc.exceptions[0] from None
         raise

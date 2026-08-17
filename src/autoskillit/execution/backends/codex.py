@@ -141,6 +141,11 @@ from autoskillit.execution.backends._explorer_dispatch import (
     CODEX_EXPLORATION_DISPATCH_RENDERER,
 )
 
+# Codex has its own timeout mechanism (``ensure_codex_mcp_registered`` /
+# ``CODEX_MCP_TOOL_TIMEOUT_FLOOR``). The ``mcp_tool_timeout_sec`` parameter on
+# Codex builder methods exists only to satisfy the shared
+# ``CodingAgentBackend`` Protocol signature and is intentionally ignored.
+
 
 def _codex_home_from_plugin_binding(
     plugin_binding: PluginLaunchBinding | None,
@@ -1817,9 +1822,8 @@ class CodexBackend(BackendCmdBuilderBase):
         project_root: Path | str | None = None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
-        # Codex has its own timeout mechanism (ensure_codex_mcp_registered /
-        # CODEX_MCP_TOOL_TIMEOUT_FLOOR) — this param exists only to satisfy the
-        # shared CodingAgentBackend Protocol signature.
+        # Codex has its own timeout mechanism (see comment above
+        # _codex_home_from_plugin_binding); param is intentionally ignored.
         del mcp_tool_timeout_sec
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.STREAM_JSON:
@@ -1940,9 +1944,8 @@ class CodexBackend(BackendCmdBuilderBase):
         project_root: Path | str | None = None,
         mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
-        # Codex has its own timeout mechanism (ensure_codex_mcp_registered /
-        # CODEX_MCP_TOOL_TIMEOUT_FLOOR) — this param exists only to satisfy the
-        # shared CodingAgentBackend Protocol signature.
+        # Codex has its own timeout mechanism (see comment above
+        # _codex_home_from_plugin_binding); param is intentionally ignored.
         del mcp_tool_timeout_sec
         if tools:
             logger.warning(
@@ -2062,9 +2065,8 @@ class CodexBackend(BackendCmdBuilderBase):
         project_root: Path | str | None = None,
         mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
-        # Codex has its own timeout mechanism (ensure_codex_mcp_registered /
-        # CODEX_MCP_TOOL_TIMEOUT_FLOOR) — this param exists only to satisfy the
-        # shared CodingAgentBackend Protocol signature.
+        # Codex has its own timeout mechanism (see comment above
+        # _codex_home_from_plugin_binding); param is intentionally ignored.
         del skill_session, mcp_tool_timeout_sec
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"

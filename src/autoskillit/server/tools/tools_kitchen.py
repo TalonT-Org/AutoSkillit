@@ -2142,13 +2142,14 @@ def _declare_join_batch_handler(
     skill_name: str,
     assignments: list[str],
     session_id: str,
+    project_root: Path,
     top_level_parent: str | None = None,
 ) -> dict[str, object]:
     """Core logic for the declare_join_batch tool — testable without FastMCP."""
     from autoskillit.execution.backends import get_backend
-    from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
+    from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch, resolve_flag_dir
 
-    flag_dir = Path.cwd() / ".autoskillit" / "temp"
+    flag_dir = resolve_flag_dir(project_root)
     flag_dir.mkdir(parents=True, exist_ok=True)
     flag_path = flag_dir / f"skill_guard_{session_id}.flag"
     binding: dict[str, object] = {}
@@ -2295,6 +2296,7 @@ async def declare_join_batch(
     assignments: list[str],
     session_id: str,
     top_level_parent: str | None = None,
+    ctx: Context = CurrentContext(),
 ) -> str:
     """Open one declared batch ledger for the next wave of direct children.
 
@@ -2303,10 +2305,14 @@ async def declare_join_batch(
     on success; a structured refusal on conflict.
     """
     try:
+        from autoskillit.server import _get_ctx  # circular-break
+
+        tool_ctx = _get_ctx()
         result = _declare_join_batch_handler(
             skill_name=skill_name,
             assignments=assignments,
             session_id=session_id,
+            project_root=tool_ctx.project_dir,
             top_level_parent=top_level_parent,
         )
     except Exception as exc:

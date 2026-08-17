@@ -183,6 +183,18 @@ def test_all_claude_session_builders_inject_mcp_tool_idle_timeout(builder_call) 
         lambda: ClaudeCodeBackend().build_resume_cmd(
             resume_session_id="abc", prompt="Emit", mcp_tool_timeout_sec=None
         ),
+        lambda: ClaudeCodeBackend().build_resume_cmd(
+            resume_session_id="abc", prompt="Emit", mcp_tool_timeout_sec=0.0
+        ),
+        lambda: _with_plugin_binding(
+            lambda binding: ClaudeCodeBackend().build_food_truck_cmd(
+                orchestrator_prompt="You are an L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+                mcp_tool_timeout_sec=None,
+            )
+        ),
         lambda: _with_plugin_binding(
             lambda binding: ClaudeCodeBackend().build_food_truck_cmd(
                 orchestrator_prompt="You are an L3 orchestrator",
@@ -198,12 +210,19 @@ def test_all_claude_session_builders_inject_mcp_tool_idle_timeout(builder_call) 
         "interactive_zero",
         "skill_headless_zero",
         "headless_resume_none",
+        "headless_resume_zero",
+        "food_truck_none",
         "food_truck_zero",
     ],
 )
 def test_claude_session_builders_omit_mcp_tool_idle_timeout_when_unset(builder_call) -> None:
     """Builders must omit CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT when mcp_tool_timeout_sec
     is None or 0.0 so Claude Code keeps its default idle-abort behavior.
+
+    Covers the full unset-table-builder matrix: 3 Protocol-style builders take
+    `float | None = None` so both None and 0.0 are exercised; 1 sentinel-form builder
+    (build_skill_session_cmd) only takes 0.0. Catches any guard-inversion bug in
+    any single builder's `is not None and > 0` check.
     """
     spec = builder_call()
     assert "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT" not in spec.env

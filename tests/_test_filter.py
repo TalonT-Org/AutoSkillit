@@ -409,7 +409,10 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "remote_resolver": frozenset(
         {
             "execution",
-            "server/test_tools_ci.py",
+            "server/test_tools_ci_gate.py",
+            "server/test_tools_ci_wait_for_ci.py",
+            "server/test_tools_ci_get_ci_status.py",
+            "server/test_tools_ci_wait_for_merge_queue.py",
             "workspace/test_clone_ci_contract.py",
         }
     ),
@@ -847,7 +850,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_issue_lifecycle.py",
             "server/test_tools_report_bug.py",
             "server/test_tools_kitchen_envelope.py",
-            "server/test_tools_kitchen_visibility.py",
+            "server/test_tools_kitchen_sous_chef.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_persistent_root.py",
             "server/test_tools_execution_provider.py",
@@ -893,12 +896,18 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_service_wrappers.py",
             "server/test_tools_list_recipes.py",
             "server/test_tools_bootstrap.py",
-            "server/test_tools_kitchen_visibility.py",
             "server/test_tools_execution_step_resolution.py",
-            "server/test_tools_execution_input_gates.py",
             "server/test_tools_execution_input_gates_file_path_list.py",
+            "server/test_tools_execution_input_gates_contracts.py",
             "server/test_pipeline_deps_derivation.py",
-            "server/test_pipeline_tracker.py",
+            "server/test_load_recipe_contract_validation.py",
+            "server/test_load_recipe_exception_handling.py",
+            "server/test_load_recipe_migration.py",
+            "server/test_load_recipe_authority.py",
+            "server/test_tools_kitchen_sous_chef.py",
+            "server/test_open_kitchen_auto_init_tracker.py",
+            "server/test_tools_execution_input_gates_cross_binding.py",
+            "server/test_tools_execution_input_gates_real_contracts.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
@@ -1152,6 +1161,18 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "recipe/test_rules_contracts.py",
             "recipe/test_contracts.py",
             "recipe/test_planner_recipe.py",
+        }
+    ),
+    "recipe": frozenset(
+        {
+            # These server tests reference autoskillit.recipe.* via patch-string
+            # literals or via test-internal helper modules that import recipe
+            # lazily (no module-level AST import); the import-guard AST scan
+            # would otherwise flag each entry. Same rationale as the original
+            # `server/test_tools_load_recipe.py` exemption.
+            "server/test_tools_load_recipe.py",
+            "server/test_load_recipe_authority.py",
+            "server/test_tools_execution_input_gates_contracts.py",
         }
     ),
 }

@@ -87,6 +87,10 @@ take_chars(Utf8ByteLimit(100))  # should be rejected: Utf8ByteLimit is not Seria
         [
             mypy_path,
             "--ignore-missing-imports",
+            # The assertions below match plain substrings. Without this, mypy
+            # honours FORCE_COLOR/COLORTERM from the inherited environment and
+            # interleaves ANSI escapes inside the quoted type names.
+            "--no-color-output",
             "--cache-dir",
             str(tmp_path / ".mypy_cache"),
             str(snippet_path),

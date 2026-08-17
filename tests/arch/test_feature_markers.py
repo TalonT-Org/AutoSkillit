@@ -38,6 +38,8 @@ _FLEET_CROSS_DIR_FILES: frozenset[Path] = frozenset(
         _TESTS_ROOT / "server" / "test_tools_dispatch_params.py",
         _TESTS_ROOT / "server" / "test_tools_config.py",
         _TESTS_ROOT / "server" / "test_claim_liveness.py",
+        _TESTS_ROOT / "server" / "test_session_type_visibility_fleet.py",
+        _TESTS_ROOT / "server" / "test_session_type_feature_gates.py",
         _TESTS_ROOT / "server" / "test_tools_dispatch_split.py",
         _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
         _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
@@ -54,10 +56,6 @@ _FLEET_CLASS_MARKERS: dict[str, set[str]] = {
     "server/test_lifespan_fleet_boot.py": {
         "TestFleetAutoGateBoot",
         "TestFleetAutoGateBootProjectDir",
-    },
-    "server/test_session_type_visibility.py": {
-        "TestSessionTypeVisibility",
-        "TestFeatureGateVisibility",
     },
     "server/test_tools_execution_results.py": {"TestTierAwareGateEnforcement"},
     "cli/test_doctor_fleet_checks.py": {

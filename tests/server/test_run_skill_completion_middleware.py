@@ -215,6 +215,46 @@ async def test_middleware_denial_payload_when_delivered_only(monkeypatch) -> Non
 
 
 @pytest.mark.anyio
+async def test_middleware_denial_payload_when_in_flight_only(monkeypatch) -> None:
+    """A run_skill invocation that has begun but not yet drafted a receipt.
+
+    Unlike _finalized() (begin() + draft(), landing in _drafts) this calls only
+    begin(), leaving the record in _in_flight — admission()'s other denial branch
+    ("run_skill invocation in flight" vs. "result awaiting acknowledgement") and
+    pending_info()'s corresponding _in_flight-only branch.
+    """
+    authority = DefaultRunSkillCompletionAuthority()
+    authority.begin(
+        kitchen_id="kitchen",
+        request_session_id="request",
+        tracker_order_id="order",
+        tracker_path="/tracker.json",
+        tracker_kitchen_id="kitchen",
+        tracker_incarnation_id="incarnation",
+        step_name="investigate",
+    )
+    monkeypatch.setattr(
+        "autoskillit.server._state._get_ctx_or_none",
+        lambda: SimpleNamespace(run_skill_completion=authority),
+    )
+    call_next = AsyncMock()
+    registered = _registered_tool()
+    fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
+
+    result = await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+        _context(), call_next
+    )
+
+    denial = json.loads(_result_text(result))
+    assert denial["error"] == "run_skill_completion_pending"
+    assert denial["user_visible_message"] == "run_skill invocation in flight"
+    assert denial["guidance"]
+    assert denial["step_name"] == "investigate"
+    assert denial["elapsed_seconds"] >= 0
+    call_next.assert_not_awaited()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("exact_delivery", [True, False])
 async def test_middleware_publishes_exact_and_compacted_deliveries(
     monkeypatch, exact_delivery: bool

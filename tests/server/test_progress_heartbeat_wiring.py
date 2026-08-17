@@ -1,10 +1,8 @@
-"""Behavioral regression tests: run_skill and dispatch_food_truck emit MCP
-progress notifications during their blocking span.
+"""Behavioral regression tests: ``run_skill`` and ``dispatch_food_truck`` emit
+MCP progress notifications during their blocking span.
 
-Proves the two real, currently-existing call sites are wired to
-`progress_heartbeat()` — fails immediately if either wrapping is later
-removed. Deliberately does not generalize to a hypothetical future third
-tool; that would need its own test when (if) it exists.
+Fails immediately if either wrapping is later removed. Wraps the two
+currently-existing call sites only.
 """
 
 from __future__ import annotations

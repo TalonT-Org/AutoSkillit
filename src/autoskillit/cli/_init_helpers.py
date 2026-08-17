@@ -437,6 +437,7 @@ def _register_mcp_server(
     if mcp_tool_timeout_sec is not None:
         if (
             not isinstance(mcp_tool_timeout_sec, (int, float))
+            or isinstance(mcp_tool_timeout_sec, bool)
             or not math.isfinite(mcp_tool_timeout_sec)
             or mcp_tool_timeout_sec <= 0
         ):
@@ -541,6 +542,14 @@ def _register_all(
         logger.warning("backend resolution failed, defaulting to claude-code", exc_info=True)
         if backend is None:
             backend = get_backend("claude-code")
+        if _cfg is None:
+            # Preserve the idle-abort ceiling even when config load failed:
+            # fall back to a freshly-constructed AutomationConfig (which carries
+            # the canonical mcp_tool_timeout_sec default) instead of passing
+            # None and silently omitting Claude Code's `timeout` field.
+            from autoskillit.config import AutomationConfig
+
+            _cfg = AutomationConfig()
 
     if backend.capabilities.mcp_config_capable:
         readiness = backend.ensure_pre_launch()
@@ -559,9 +568,7 @@ def _register_all(
         if not plugin_ok:
             _register_mcp_server(
                 _user_claude_json_path(),
-                mcp_tool_timeout_sec=(
-                    _cfg.run_skill.mcp_tool_timeout_sec if _cfg is not None else None
-                ),
+                mcp_tool_timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
             )
         else:
             evict_direct_mcp_entry(_user_claude_json_path())

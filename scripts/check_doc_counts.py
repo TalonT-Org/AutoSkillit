@@ -43,7 +43,7 @@ def count_tools() -> tuple[int, int]:
     """Parse types.py to extract kitchen-tagged and free-range tool counts.
 
     Returns (gated_count, ungated_count) where:
-    - gated_count = GATED_TOOLS + HEADLESS_TOOLS (all kitchen-tagged tools)
+    - gated_count = GATED_TOOLS | HEADLESS_TOOLS (all kitchen-tagged tools)
     - ungated_count = FREE_RANGE_TOOLS (always-visible tools)
     """
     content = TYPES_FILE.read_text(encoding="utf-8")
@@ -54,7 +54,7 @@ def count_tools() -> tuple[int, int]:
         content,
         re.DOTALL,
     )
-    gated_only = len(re.findall(r'"([^"]+)"', gated_match.group(1))) if gated_match else 0
+    gated_only = set(re.findall(r'"([^"]+)"', gated_match.group(1))) if gated_match else set()
 
     # HEADLESS_TOOLS carries both kitchen + headless tags — counts toward kitchen total
     headless_match = re.search(
@@ -62,7 +62,7 @@ def count_tools() -> tuple[int, int]:
         content,
         re.DOTALL,
     )
-    headless = len(re.findall(r'"([^"]+)"', headless_match.group(1))) if headless_match else 0
+    headless = set(re.findall(r'"([^"]+)"', headless_match.group(1))) if headless_match else set()
 
     # FREE_RANGE_TOOLS are always visible (ungated)
     free_range_match = re.search(
@@ -74,7 +74,7 @@ def count_tools() -> tuple[int, int]:
         len(re.findall(r'"([^"]+)"', free_range_match.group(1))) if free_range_match else 0
     )
 
-    gated = gated_only + headless  # all kitchen-tagged tools
+    gated = len(gated_only | headless)  # all unique kitchen-tagged tools
     ungated = free_range  # always-visible tools
     return gated, ungated
 

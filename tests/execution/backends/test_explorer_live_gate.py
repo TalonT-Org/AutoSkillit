@@ -26,13 +26,13 @@ from autoskillit.execution.backends._explorer_conformance import (
     EXPLORER_MODEL,
     EXPLORER_REASONING_EFFORT,
     EXPLORER_SANDBOX_MODE,
-    project_codex_luna_catalog,
 )
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 from autoskillit.server._exploration_service import DefaultExplorationService
 from tests.execution.backends._live_codex_parent import (
     prepare_live_codex_parent,
     run_live_codex_parent,
+    write_luna_direct_catalog,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.timeout(1200)]
@@ -208,25 +208,6 @@ def _append_live_runtime_config(config_path: Path) -> None:
         "[multi_agent_v2]\n"
         "max_concurrent_threads_per_session = 2\n\n" + text
     )
-    config_path.write_text(text, encoding="utf-8")
-
-
-def _write_luna_catalog(session_home: Path, env: dict[str, str]) -> None:
-    catalog = subprocess.run(  # noqa: S603
-        ["codex", "debug", "models", "--bundled"],
-        env=env,
-        capture_output=True,
-        timeout=30,
-        check=False,
-    )
-    assert catalog.returncode == 0, catalog.stderr[-4_000:].decode("utf-8", errors="replace")
-    projected = project_codex_luna_catalog(catalog.stdout)
-    catalog_path = session_home / "luna-direct-models.json"
-    catalog_path.write_bytes(projected.canonical_projected_bytes)
-    config_path = session_home / "config.toml"
-    text = config_path.read_text(encoding="utf-8")
-    text = f"model_catalog_json = {json.dumps(str(catalog_path.resolve()))}\n" + text
-    assert tomllib.loads(text)["model_catalog_json"] == str(catalog_path.resolve())
     config_path.write_text(text, encoding="utf-8")
 
 
@@ -816,7 +797,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
         assert not session_auth.exists() and not session_auth.is_symlink()
     _append_live_runtime_config(session / "config.toml")
     _assert_role_tomls(session, bindings, definitions)
-    _write_luna_catalog(session, env)
+    write_luna_direct_catalog(session, env)
     _assert_broker_probe(
         asyncio.run(
             _probe_real_server(

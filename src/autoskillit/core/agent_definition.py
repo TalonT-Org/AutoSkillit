@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, get_args
 
+from ._plugin_ids import DIRECT_PREFIX, validate_agent_tool_canonical
 from .io import load_yaml
 from .paths import pkg_root
 from .types import (
@@ -16,6 +17,7 @@ from .types import (
     CODEX_MODEL_ALIASES,
     CODEX_VALID_MODEL_IDS,
     CODEX_VALID_REASONING_EFFORTS,
+    EVIDENCE_READER_TOOLS,
     PARENT_SANDBOX_MODES,
 )
 
@@ -31,6 +33,7 @@ __all__ = [
     "AgentDefinitionError",
     "CodexAgentProjectionDef",
     "agent_definition_digest",
+    "canonical_reader_tools_to_bare",
     "load_agent_definition",
     "load_agent_definitions",
     "load_bundled_agent_definitions",
@@ -48,6 +51,7 @@ BUNDLED_EXPLORER_ROLES: frozenset[str] = frozenset(
     {SEMANTIC_CODE_NAVIGATOR_ROLE, REPOSITORY_IMPACT_PROFILER_ROLE}
 )
 _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+_DIRECT_TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _CODEX_CLI_VERSION_RE = re.compile(r"(?:codex-cli )?(?P<version>[0-9]+\.[0-9]+\.[0-9]+)")
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
 _CODEX_DISABLEABLE_FEATURES = (
@@ -83,6 +87,25 @@ _CODEX_WEB_SEARCH_MODES: frozenset[str] = frozenset(get_args(_CodexWebSearchMode
 
 class AgentDefinitionError(ValueError):
     """Raised when an agent definition cannot be validated canonically."""
+
+
+def canonical_reader_tools_to_bare(reader_tools: tuple[str, ...]) -> tuple[str, ...]:
+    """Validate the pilot reader allowlist and return its ordered bare tool names."""
+    if not isinstance(reader_tools, tuple):
+        raise AgentDefinitionError("reader tools must be an immutable tuple")
+    if any(not isinstance(tool, str) or not tool for tool in reader_tools):
+        raise AgentDefinitionError("reader tools must contain non-empty strings")
+    if len(reader_tools) != len(set(reader_tools)):
+        raise AgentDefinitionError("reader tools must be unique")
+    try:
+        bare_tools = tuple(validate_agent_tool_canonical(tool) for tool in reader_tools)
+    except ValueError as exc:
+        raise AgentDefinitionError(str(exc)) from exc
+    if frozenset(bare_tools) != EVIDENCE_READER_TOOLS:
+        raise AgentDefinitionError(
+            "reader tools must match the canonical evidence-reader tool set exactly"
+        )
+    return bare_tools
 
 
 def normalize_codex_cli_version(value: str) -> str:
@@ -144,7 +167,7 @@ class CodexAgentProjectionDef:
 
 @dataclass(frozen=True, slots=True)
 class AgentDef:
-    """Static, validated definition of one registered agent role."""
+    """Validated role with distinct Claude ``tools`` and Codex ``reader_tools``."""
 
     name: str
     description: str
@@ -153,6 +176,7 @@ class AgentDef:
     max_turns: int | None
     body: str
     codex: CodexAgentProjectionDef
+    reader_tools: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not _AGENT_NAME_RE.fullmatch(self.name):
@@ -169,6 +193,46 @@ class AgentDef:
             raise AgentDefinitionError("agent body must be non-empty")
         if "'''" in self.body:
             raise AgentDefinitionError("agent body cannot contain TOML triple single quotes")
+        if not isinstance(self.reader_tools, tuple):
+            raise AgentDefinitionError("agent reader_tools must be an immutable tuple")
+        if any(not isinstance(tool, str) or not tool for tool in self.reader_tools):
+            raise AgentDefinitionError("agent reader_tools must contain non-empty strings")
+        if len(set(self.reader_tools)) != len(self.reader_tools):
+            raise AgentDefinitionError("agent reader_tools must be unique")
+        for tool in self.reader_tools:
+            if not tool.startswith(DIRECT_PREFIX):
+                message = "agent reader_tools must use the direct-install canonical prefix"
+                raise AgentDefinitionError(message)
+            short_name = tool[len(DIRECT_PREFIX) :]
+            if not _DIRECT_TOOL_NAME_RE.fullmatch(short_name):
+                raise AgentDefinitionError(f"invalid canonical reader tool: {tool!r}")
+        if self.reader_tools:
+            # Reader-eligibility is structurally Codex-only: the read-only
+            # evidence reader is a Codex child surface (see
+            # execution/evidence_reader.py) and exposes only Codex
+            # projections. Codex knowledge is canonically at IL-0 because
+            # AgentDef is a unified Claude+Codex catalog and IL-0 cannot
+            # import the IL-1 backend capability layer that would otherwise
+            # host this policy. Keeping the check inline here preserves
+            # the "born valid" invariant: AgentDef rejects invalid reader
+            # eligibility at construction time, so consumers cannot
+            # forget to call a follow-up validation function.
+            if self.codex.model is None or self.codex.reasoning_effort is None:
+                raise AgentDefinitionError(
+                    "reader-eligible agents require a fixed Codex model and reasoning effort"
+                )
+            if self.codex.sandbox_mode != "read-only":
+                raise AgentDefinitionError("reader-eligible agents must use read-only sandbox")
+            if self.codex.agents_enabled:
+                raise AgentDefinitionError("reader-eligible agents must disable agents")
+            if self.codex.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
+                raise AgentDefinitionError("reader-eligible agents must disable web search")
+            missing_features = set(_CODEX_DISABLEABLE_FEATURES) - set(self.codex.disabled_features)
+            if missing_features:
+                raise AgentDefinitionError(
+                    "reader-eligible agents must disable terminal features: "
+                    f"{sorted(missing_features)}"
+                )
 
 
 def _required_text(meta: dict[str, Any], key: str) -> str:
@@ -178,10 +242,12 @@ def _required_text(meta: dict[str, Any], key: str) -> str:
     return value.strip()
 
 
-def _parse_tools(meta: dict[str, Any]) -> tuple[str, ...]:
-    raw = meta.get("tools")
+def _parse_tools(meta: dict[str, Any], key: str = "tools") -> tuple[str, ...]:
+    raw = meta.get(key)
+    if key == "reader_tools" and raw is None:
+        return ()
     if not isinstance(raw, list) or not raw or any(not isinstance(item, str) for item in raw):
-        raise AgentDefinitionError("agent frontmatter 'tools' must be a non-empty string list")
+        raise AgentDefinitionError(f"agent frontmatter {key!r} must be a non-empty string list")
     return tuple(raw)
 
 
@@ -261,6 +327,7 @@ def load_agent_definition(path: Path) -> AgentDef:
     name = _required_text(meta, "name")
     description = _required_text(meta, "description")
     tools = _parse_tools(meta)
+    reader_tools = _parse_tools(meta, "reader_tools")
     model = meta.get("model")
     if model is not None and not isinstance(model, str):
         raise AgentDefinitionError("agent frontmatter 'model' must be text")
@@ -275,6 +342,7 @@ def load_agent_definition(path: Path) -> AgentDef:
         max_turns=max_turns,
         body="".join(lines[closing_index + 1 :]).strip(),
         codex=_derived_codex_projection(meta, tools),
+        reader_tools=reader_tools,
     )
 
 
@@ -313,6 +381,7 @@ def agent_definition_digest(definition: AgentDef) -> str:
         "max_turns": definition.max_turns,
         "model": definition.model,
         "name": definition.name,
+        "reader_tools": list(definition.reader_tools),
         "tools": list(definition.tools),
     }
     canonical = json.dumps(

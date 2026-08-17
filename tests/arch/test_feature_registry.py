@@ -285,8 +285,8 @@ def test_config_dependency_validation(monkeypatch):
 def test_no_unregistered_feature_tag_on_tools():
     """No tool in TOOL_SUBSET_TAGS may carry a tag absent from all known registries.
 
-    Known registries: FEATURE_REGISTRY names, PACK_REGISTRY names, and known
-    non-feature structural tags (e.g. 'kitchen-core').
+    Known registries: FEATURE_REGISTRY names, PACK_REGISTRY names, authenticated
+    internal categories, and known non-feature structural tags (e.g. 'kitchen-core').
     """
     from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.core.types._type_constants_registries import (
@@ -294,12 +294,19 @@ def test_no_unregistered_feature_tag_on_tools():
         TOOL_SUBSET_TAGS,
     )
 
-    # Known structural (non-feature, non-pack) tags that are always valid
+    # Known non-feature, non-pack tags that are always valid.
     STRUCTURAL_TAGS: frozenset[str] = frozenset({"kitchen-core", "fleet-dispatch"})
+    AUTHENTICATED_INTERNAL_TAGS: frozenset[str] = frozenset({"evidence-reader"})
 
-    known = frozenset(FEATURE_REGISTRY.keys()) | frozenset(PACK_REGISTRY.keys()) | STRUCTURAL_TAGS
+    known = (
+        frozenset(FEATURE_REGISTRY.keys())
+        | frozenset(PACK_REGISTRY.keys())
+        | STRUCTURAL_TAGS
+        | AUTHENTICATED_INTERNAL_TAGS
+    )
     violations = [
-        f"Tool {tool!r} has tag {tag!r} not in FEATURE_REGISTRY, PACK_REGISTRY, or STRUCTURAL_TAGS"
+        f"Tool {tool!r} has tag {tag!r} outside the known feature, pack, structural, "
+        "and authenticated-internal categories"
         for tool, tags in TOOL_SUBSET_TAGS.items()
         for tag in tags
         if tag not in known

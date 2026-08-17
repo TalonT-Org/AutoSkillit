@@ -20,7 +20,7 @@ def test_pretty_output_below_budget() -> None:
     under its own budget."""
     src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks" / "formatters"
     budgets = {
-        "pretty_output_hook.py": 350,
+        "pretty_output_hook.py": 353,  # #4585 registers two generic reader envelopes
         "_fmt_primitives.py": 200,
         "_fmt_execution.py": 355,  # #4457 renders completion receipts verbatim
         "_fmt_dispatch.py": 200,

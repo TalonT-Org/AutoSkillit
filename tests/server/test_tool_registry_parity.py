@@ -184,6 +184,15 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
         },
         "open_kitchen": {"ingredients_only": ToolWireType.BOOLEAN},
         "load_recipe": {"ingredients_only": ToolWireType.BOOLEAN},
+        "delegate_evidence_reader": {
+            "role": ToolWireType.STRING,
+            "role_data": ToolWireType.OBJECT,
+        },
+        "read_authorized_artifact": {"page_size": ToolWireType.INTEGER},
+        "get_authorized_artifact_page": {
+            "continuation": ToolWireType.STRING,
+            "page_size": ToolWireType.INTEGER,
+        },
         "post_pr_review": {
             "cwd": ToolWireType.STRING,
             "receipt_path": ToolWireType.STRING,
@@ -203,6 +212,27 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             param = TOOL_REGISTRY[tool_name].param_def(param_name)
             assert param is not None
             assert param.wire_type is wire_type
+
+
+def test_evidence_reader_registry_parameter_contracts_are_exact() -> None:
+    expected = {
+        "delegate_evidence_reader": (("role", True), ("role_data", True)),
+        "read_authorized_artifact": (("page_size", False),),
+        "get_authorized_artifact_page": (
+            ("continuation", True),
+            ("page_size", False),
+        ),
+    }
+
+    actual = {
+        tool_name: tuple(
+            (param.name, param.required)
+            for param in TOOL_REGISTRY[tool_name].params
+            if param.handler_parameter
+        )
+        for tool_name in expected
+    }
+    assert actual == expected
 
 
 def test_managed_launch_tools_share_native_shell_capture_schema() -> None:
@@ -279,6 +309,8 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "list_recipes",
             "load_recipe",
             "read_db",
+            "read_authorized_artifact",
+            "get_authorized_artifact_page",
             "inspect_session_logs",
             "validate_recipe",
         }
@@ -288,6 +320,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "open_kitchen",
         },
         ToolInitializationOperation.EXECUTION: {
+            "delegate_evidence_reader",
             "run_cmd",
             "run_python",
             "run_skill",

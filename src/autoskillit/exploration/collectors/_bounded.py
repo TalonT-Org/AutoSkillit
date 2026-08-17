@@ -23,6 +23,30 @@ class CollectorSafetyError(ValueError):
     """Raised when a collector request cannot be performed safely."""
 
 
+class CollectorMutationError(CollectorSafetyError):
+    """Raised when a descriptor-backed observation changes while being read."""
+
+
+class CollectorNoFollowUnsupportedError(CollectorSafetyError):
+    """Raised when the platform lacks no-follow descriptor support."""
+
+
+class CollectorByteLimitError(CollectorSafetyError):
+    """Raised when an observed artifact exceeds the collector byte limit."""
+
+
+class CollectorNotRegularFileError(CollectorSafetyError):
+    """Raised when a requested path is not a non-symlink regular file."""
+
+
+class CollectorRootInvalidError(CollectorSafetyError):
+    """Raised when the collector root is missing, not a directory, or raced."""
+
+
+class CollectorPathInvalidError(CollectorSafetyError):
+    """Raised when a requested path escapes or escapes-validation against the root."""
+
+
 @dataclass(frozen=True, slots=True)
 class CollectorLimits:
     """Hard resource limits shared by all observational collectors."""
@@ -54,6 +78,15 @@ class BoundedCommandResult:
     failure: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class StableContainedFileRead:
+    """Bytes and metadata from one stable descriptor-relative file read."""
+
+    content: bytes
+    size: int
+    mode: int
+
+
 _READ_CHUNK_BYTES: Final = 64 * 1024
 _SAFE_RG_ENV: Final = {"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"}
 _OPEN_DIRECTORY_FLAGS: Final = (
@@ -78,6 +111,20 @@ _SUPPORTS_NOFOLLOW_DIRECTORY_OPEN: Final = (
 _SUPPORTS_DIRECTORY_FD_SCANDIR: Final = os.scandir in os.supports_fd
 
 
+def _open(
+    path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    flags: int,
+    mode: int = 0o777,
+    *,
+    dir_fd: int | None = None,
+) -> int:
+    return os.open(path, flags, mode, dir_fd=dir_fd)
+
+
+def _read(fd: int, size: int) -> bytes:
+    return os.read(fd, size)
+
+
 def _same_inode(first: os.stat_result, second: os.stat_result) -> bool:
     """Return whether two observations name the same inode and file type."""
 
@@ -88,12 +135,23 @@ def _same_inode(first: os.stat_result, second: os.stat_result) -> bool:
     )
 
 
+def _stable_file_metadata(observation: os.stat_result) -> tuple[int, int, int, int]:
+    return (
+        observation.st_size,
+        observation.st_mode,
+        observation.st_mtime_ns,
+        observation.st_ctime_ns,
+    )
+
+
 def _require_directory_descriptor_support(*, scanning: bool = False) -> None:
     supported = _SUPPORTS_NOFOLLOW_DIRECTORY_OPEN
     if scanning:
         supported = supported and _SUPPORTS_DIRECTORY_FD_SCANDIR
     if not supported:
-        raise CollectorSafetyError("collector platform lacks no-follow descriptor support")
+        raise CollectorNoFollowUnsupportedError(
+            "collector platform lacks no-follow descriptor support"
+        )
 
 
 def _open_verified_root_directory(root: Path, *, scanning: bool = False) -> int:
@@ -101,12 +159,12 @@ def _open_verified_root_directory(root: Path, *, scanning: bool = False) -> int:
     try:
         before = root.lstat()
         if not stat.S_ISDIR(before.st_mode):
-            raise CollectorSafetyError("collector root must be a real directory")
-        root_fd = os.open(root, _OPEN_DIRECTORY_FLAGS)
+            raise CollectorRootInvalidError("collector root must be a real directory")
+        root_fd = _open(root, _OPEN_DIRECTORY_FLAGS)
     except CollectorSafetyError:
         raise
     except OSError as exc:
-        raise CollectorSafetyError("collector root must be a real directory") from exc
+        raise CollectorRootInvalidError("collector root must be a real directory") from exc
 
     try:
         opened = os.fstat(root_fd)
@@ -116,13 +174,13 @@ def _open_verified_root_directory(root: Path, *, scanning: bool = False) -> int:
             or not _same_inode(before, opened)
             or not _same_inode(opened, after)
         ):
-            raise CollectorSafetyError("collector root changed while opening")
+            raise CollectorRootInvalidError("collector root changed while opening")
     except CollectorSafetyError:
         os.close(root_fd)
         raise
     except OSError as exc:
         os.close(root_fd)
-        raise CollectorSafetyError("collector root changed while opening") from exc
+        raise CollectorRootInvalidError("collector root changed while opening") from exc
     return root_fd
 
 
@@ -140,7 +198,7 @@ def _open_verified_directory_at(
     if expected is not None and not _same_inode(expected, before):
         raise CollectorSafetyError(changed_message)
 
-    child_fd = os.open(component, _OPEN_DIRECTORY_FLAGS, dir_fd=parent_fd)
+    child_fd = _open(component, _OPEN_DIRECTORY_FLAGS, dir_fd=parent_fd)
     try:
         opened = os.fstat(child_fd)
         after = os.stat(component, dir_fd=parent_fd, follow_symlinks=False)
@@ -157,10 +215,15 @@ def _open_verified_directory_at(
 
 
 def _contained_parts(relative_path: str) -> tuple[str, ...]:
-    if not isinstance(relative_path, str) or "\x00" in relative_path:
+    if not isinstance(relative_path, str) or "\x00" in relative_path or "\\" in relative_path:
         raise CollectorSafetyError("path must be a non-empty contained relative path")
     relative = PurePosixPath(relative_path)
-    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or ".." in relative.parts
+        or ".git" in relative.parts
+    ):
         raise CollectorSafetyError("path must be a non-empty contained relative path")
     return relative.parts
 
@@ -196,7 +259,7 @@ def open_contained_regular_file(root: Path, relative_path: str) -> int:
         before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if not stat.S_ISREG(before.st_mode):
             raise CollectorSafetyError("requested path must be a non-symlink regular file")
-        file_fd = os.open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
+        file_fd = _open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
         opened = os.fstat(file_fd)
         after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if (
@@ -230,13 +293,13 @@ def resolve_contained_path(root: Path, relative_path: str) -> Path:
     except OSError as exc:
         raise CollectorSafetyError("requested path is unavailable") from exc
     if resolved_root not in (resolved_candidate, *resolved_candidate.parents):
-        raise CollectorSafetyError("requested path escapes collector root")
+        raise CollectorPathInvalidError("requested path escapes collector root")
     try:
         file_stat = candidate.lstat()
     except OSError as exc:
         raise CollectorSafetyError("requested path is unavailable") from exc
     if not stat.S_ISREG(file_stat.st_mode) or candidate.is_symlink():
-        raise CollectorSafetyError("requested path must be a non-symlink regular file")
+        raise CollectorNotRegularFileError("requested path must be a non-symlink regular file")
     return candidate
 
 
@@ -255,23 +318,113 @@ def read_contained_file(root: Path, relative_path: str, limits: CollectorLimits)
         raise CollectorSafetyError("requested artifact is unavailable") from exc
     try:
         if size > limits.max_file_bytes:
-            raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+            raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
         payload = bytearray()
         while len(payload) <= limits.max_file_bytes:
-            chunk = os.read(
+            chunk = _read(
                 artifact_fd,
                 min(_READ_CHUNK_BYTES, limits.max_file_bytes + 1 - len(payload)),
             )
             if not chunk:
                 return bytes(payload)
             payload.extend(chunk)
-        raise CollectorSafetyError("requested artifact exceeds collector byte limit")
+        raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
     except CollectorSafetyError:
         raise
     except OSError as exc:
         raise CollectorSafetyError("requested artifact cannot be read") from exc
     finally:
         os.close(artifact_fd)
+
+
+def read_stable_contained_file(
+    root: Path,
+    relative_path: str,
+    *,
+    max_bytes: int,
+) -> StableContainedFileRead:
+    """Read one regular file and reject any path or metadata change during the read."""
+
+    if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes <= 0:
+        raise CollectorSafetyError("requested artifact byte limit must be positive")
+    parts = _contained_parts(relative_path)
+    parent_fd = _open_verified_root_directory(root)
+    file_fd: int | None = None
+    target_observed = False
+    try:
+        for component in parts[:-1]:
+            child_fd = _open_verified_directory_at(
+                parent_fd,
+                component,
+                expected=None,
+                invalid_message="requested path must stay within collector root",
+                changed_message="requested path changed while opening",
+            )
+            os.close(parent_fd)
+            parent_fd = child_fd
+
+        name = parts[-1]
+        before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        target_observed = True
+        if not stat.S_ISREG(before.st_mode):
+            raise CollectorSafetyError("requested path must be a non-symlink regular file")
+        file_fd = _open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
+        opened_before = os.fstat(file_fd)
+        path_opened = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(opened_before.st_mode)
+            or not _same_inode(before, opened_before)
+            or not _same_inode(opened_before, path_opened)
+        ):
+            raise CollectorMutationError("requested artifact changed while opening")
+        if opened_before.st_size > max_bytes:
+            raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
+
+        payload = bytearray()
+        while len(payload) <= max_bytes:
+            chunk = _read(file_fd, min(_READ_CHUNK_BYTES, max_bytes + 1 - len(payload)))
+            if not chunk:
+                break
+            payload.extend(chunk)
+        if len(payload) > max_bytes:
+            raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
+
+        opened_after = os.fstat(file_fd)
+        path_after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            not _same_inode(opened_before, opened_after)
+            or not _same_inode(opened_after, path_after)
+            or not (
+                _stable_file_metadata(before)
+                == _stable_file_metadata(opened_before)
+                == _stable_file_metadata(path_opened)
+                == _stable_file_metadata(opened_after)
+                == _stable_file_metadata(path_after)
+            )
+            or len(payload) != opened_after.st_size
+        ):
+            raise CollectorMutationError("requested artifact changed while reading")
+        return StableContainedFileRead(
+            content=bytes(payload),
+            size=opened_after.st_size,
+            mode=stat.S_IMODE(opened_after.st_mode),
+        )
+    except CollectorMutationError:
+        raise
+    except CollectorSafetyError as exc:
+        if "changed while" in str(exc):
+            raise CollectorMutationError(str(exc)) from exc
+        raise
+    except FileNotFoundError as exc:
+        if target_observed:
+            raise CollectorMutationError("requested artifact changed while reading") from exc
+        raise CollectorSafetyError("requested artifact is unavailable") from exc
+    except OSError as exc:
+        raise CollectorSafetyError("requested artifact cannot be read safely") from exc
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        os.close(parent_fd)
 
 
 def list_contained_files(root: Path, limits: CollectorLimits) -> tuple[str, ...]:
@@ -416,7 +569,7 @@ def _drain_bounded_process(
             for key, _ in selector.select(remaining):
                 fileobj = key.fileobj
                 file_descriptor = fileobj if isinstance(fileobj, int) else fileobj.fileno()
-                chunk = os.read(file_descriptor, _READ_CHUNK_BYTES)
+                chunk = _read(file_descriptor, _READ_CHUNK_BYTES)
                 if not chunk:
                     selector.unregister(key.fileobj)
                     continue

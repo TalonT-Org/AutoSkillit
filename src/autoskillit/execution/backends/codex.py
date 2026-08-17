@@ -445,13 +445,14 @@ class CodexEnvPolicy:
             and not any(k.startswith(p) for p in self.denylist_prefixes)
         }
         if extras is not None:
+            filtered_extras = _filter_protected_native_shell_env(extras)
+            filtered_extras.setdefault("AUTOSKILLIT_SKILL_NAME", "")
             out.update(
                 (key, value)
-                for key, value in _filter_protected_native_shell_env(extras).items()
+                for key, value in filtered_extras.items()
                 if key != CODEX_STARTUP_TRACE_ENV_VAR
             )
-        out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")
-        # This is an outer-cook control signal, never child or nested-session state.
+        out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")  # Outer-cook control only.
         out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
         if required is not None:
             missing = required - frozenset(out)
@@ -985,6 +986,7 @@ def _eligible_agent_definitions(
     *,
     exact: bool,
 ) -> tuple[AgentDef, ...]:
+    definitions = tuple(d for d in definitions if not d.reader_tools)
     if exact:
         return definitions
     return tuple(

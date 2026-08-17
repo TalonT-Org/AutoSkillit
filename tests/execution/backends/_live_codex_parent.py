@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
+import sys
+import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +19,7 @@ from autoskillit.core import PreLaunchReadiness
 from autoskillit.core.agent_definition import AgentDef
 from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
+from autoskillit.execution.backends._explorer_conformance import project_codex_luna_catalog
 from autoskillit.execution.backends.codex import CodexBackend
 
 CODEX_LIVE_PROCESS_ENV_ALLOWLIST = frozenset(
@@ -53,6 +58,29 @@ class LiveCodexParentSession:
     explorer_binding_env: dict[str, dict[str, str]] | None
 
 
+def write_luna_direct_catalog(session_home: Path, env: dict[str, str]) -> None:
+    """Install the validated Luna direct-tool catalog used by live Codex parents."""
+    catalog = subprocess.run(  # noqa: S603
+        ["codex", "debug", "models", "--bundled"],
+        env=env,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert catalog.returncode == 0, catalog.stderr[-4_000:].decode("utf-8", errors="replace")
+    projected = project_codex_luna_catalog(catalog.stdout)
+    catalog_path = session_home / "luna-direct-models.json"
+    catalog_path.write_bytes(projected.canonical_projected_bytes)
+    config_path = session_home / "config.toml"
+    text = (
+        f"model_catalog_json = {json.dumps(str(catalog_path.resolve()))}\n"
+        + config_path.read_text(encoding="utf-8")
+    )
+    config_path.write_text(text, encoding="utf-8")
+    parsed = tomllib.loads(text)
+    assert parsed.get("model_catalog_json") == str(catalog_path.resolve())
+
+
 def prepare_live_codex_parent(
     *,
     tmp_path: Path,
@@ -65,6 +93,8 @@ def prepare_live_codex_parent(
     ) = None,
     profile_home_name: str = "profile-home",
     session_home_name: str = "session-home",
+    parent_sandbox_mode: str = "read-only",
+    copy_source_auth: bool = False,
 ) -> LiveCodexParentSession:
     """Build the exact isolated Codex home/session used by credentialed probes."""
     if explorer_binding_env is not None and explorer_binding_env_factory is not None:
@@ -75,7 +105,12 @@ def prepare_live_codex_parent(
     for directory in (profile_codex_home, session_home):
         directory.mkdir(parents=True)
     if source_auth.is_file():
-        (profile_codex_home / "auth.json").symlink_to(source_auth.resolve())
+        auth_destination = profile_codex_home / "auth.json"
+        if copy_source_auth:
+            shutil.copyfile(source_auth, auth_destination)
+            auth_destination.chmod(0o600)
+        else:
+            auth_destination.symlink_to(source_auth.resolve())
 
     monkeypatch.setenv("HOME", str(profile_home))
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: profile_home))
@@ -98,7 +133,7 @@ def prepare_live_codex_parent(
     )
     backend.setup_session_dir(
         session_home,
-        parent_sandbox_mode="read-only",
+        parent_sandbox_mode=parent_sandbox_mode,
         agent_defs=agent_defs,
         explorer_binding_env=copied_binding_env,
     )
@@ -111,6 +146,7 @@ def prepare_live_codex_parent(
             "CODEX_HOME": str(session_home),
             "XDG_CONFIG_HOME": str(profile_home / ".config"),
             "XDG_DATA_HOME": str(profile_home / ".local" / "share"),
+            "PATH": f"{Path(sys.executable).parent}:{env['PATH']}",
         }
     )
     return LiveCodexParentSession(
@@ -134,6 +170,7 @@ def run_live_codex_parent(
     text: bool,
     resume_thread_id: str | None = None,
     extra_overrides: tuple[str, ...] = (),
+    sandbox: str = "read-only",
 ) -> subprocess.CompletedProcess[Any]:
     """Execute or resume the common real-Codex parent used by both live gates."""
     invocation = [
@@ -141,7 +178,7 @@ def run_live_codex_parent(
         "exec",
         "--json",
         "--sandbox",
-        "read-only",
+        sandbox,
         "--model",
         model,
     ]

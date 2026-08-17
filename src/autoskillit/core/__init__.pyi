@@ -110,6 +110,7 @@ from .agent_definition import AgentDef as AgentDef
 from .agent_definition import AgentDefinitionError as AgentDefinitionError
 from .agent_definition import CodexAgentProjectionDef as CodexAgentProjectionDef
 from .agent_definition import agent_definition_digest as agent_definition_digest
+from .agent_definition import canonical_reader_tools_to_bare as canonical_reader_tools_to_bare
 from .agent_definition import load_agent_definition as load_agent_definition
 from .agent_definition import load_agent_definitions as load_agent_definitions
 from .agent_definition import load_bundled_agent_definitions as load_bundled_agent_definitions
@@ -432,6 +433,17 @@ from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
 from .types import DURABLE_ARTIFACT_WRITERS as DURABLE_ARTIFACT_WRITERS
 from .types import DYNAMIC_RECIPE_SECTION_DEF as DYNAMIC_RECIPE_SECTION_DEF
+from .types import (
+    EVIDENCE_READER_AUTHORITY_ENV_VAR as EVIDENCE_READER_AUTHORITY_ENV_VAR,
+)
+from .types import (
+    EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR as EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
+)
+from .types import (
+    EVIDENCE_READER_CAPABILITY_ENV_VAR as EVIDENCE_READER_CAPABILITY_ENV_VAR,
+)
+from .types import EVIDENCE_READER_ENV_FORWARD_VARS as EVIDENCE_READER_ENV_FORWARD_VARS
+from .types import EVIDENCE_READER_TOOLS as EVIDENCE_READER_TOOLS
 from .types import EXPLORATION_TOOLS as EXPLORATION_TOOLS
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE

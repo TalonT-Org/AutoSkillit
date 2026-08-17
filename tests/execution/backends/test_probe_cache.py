@@ -37,6 +37,7 @@ def _make_result(
     passed: bool = True,
     failure_detail: str | None = None,
     ts: datetime | None = None,
+    cache_key: str = "",
 ) -> ProbeResult:
     if ts is None:
         ts = datetime.now(UTC)
@@ -46,7 +47,21 @@ def _make_result(
         passed=passed,
         failure_detail=failure_detail,
         probe_timestamp=ts.isoformat(),
+        cache_key=cache_key,
     )
+
+
+def test_cache_keys_distinguish_conformance_tuples(tmp_path: Path) -> None:
+    path = tmp_path / "cache.json"
+    timestamp = datetime.now(UTC)
+    first = _make_result(cache_key="reader-a", ts=timestamp)
+    second = _make_result(cache_key="reader-b", ts=timestamp)
+    write_probe_cache(path, first)
+    write_probe_cache(path, second)
+
+    assert read_probe_cache(path, "1.0.0", _POLICY_IDENTITY, cache_key="reader-a") == first
+    assert read_probe_cache(path, "1.0.0", _POLICY_IDENTITY, cache_key="reader-b") == second
+    assert read_probe_cache(path, "1.0.0", _POLICY_IDENTITY) is None
 
 
 def _write_raw_cache(path: Path, entries: dict, *, schema_version: int = _SCHEMA_VERSION) -> None:
@@ -216,8 +231,8 @@ def test_recipe_probe_policy_identity_covers_every_invalidation_domain() -> None
     }
 
 
-def test_probe_cache_schema_is_version_five() -> None:
-    assert _SCHEMA_VERSION == 5
+def test_probe_cache_schema_is_version_six() -> None:
+    assert _SCHEMA_VERSION == 6
 
 
 class TestWriteProbeCache:

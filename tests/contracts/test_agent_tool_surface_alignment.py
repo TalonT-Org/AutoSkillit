@@ -14,6 +14,7 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillSource,
     ToolInitializationOperation,
+    canonical_reader_tools_to_bare,
     get_tool_def,
     load_agent_definitions,
     load_bundled_agent_definitions,
@@ -113,6 +114,36 @@ def test_session_log_reader_has_one_inspection_tool_and_terminal_codex_policy() 
     assert {"shell_tool", "standalone_web_search", "multi_agent", "multi_agent_v2"} <= set(
         definition.codex.disabled_features
     )
+
+
+def test_pr_source_reader_tools_convert_from_canonical_to_exact_bare_subset() -> None:
+    from autoskillit.core import EVIDENCE_READER_TOOLS
+
+    definition = next(
+        item for item in load_bundled_agent_definitions() if item.name == "pr-source-reader"
+    )
+
+    assert canonical_reader_tools_to_bare(definition.reader_tools) == (
+        "get_authorized_artifact_page",
+        "read_authorized_artifact",
+    )
+    assert frozenset(canonical_reader_tools_to_bare(definition.reader_tools)) == (
+        EVIDENCE_READER_TOOLS
+    )
+
+
+@pytest.mark.parametrize(
+    "reader_tools",
+    [
+        (f"{MARKETPLACE_PREFIX}read_authorized_artifact",),
+        (f"{DIRECT_PREFIX}read_authorized_artifact",),
+    ],
+)
+def test_reader_tool_conversion_rejects_noncanonical_or_incomplete_subsets(
+    reader_tools: tuple[str, ...],
+) -> None:
+    with pytest.raises(ValueError):
+        canonical_reader_tools_to_bare(reader_tools)
 
 
 def test_session_log_reader_covers_application_level_error_results() -> None:

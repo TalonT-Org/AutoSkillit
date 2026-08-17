@@ -67,6 +67,8 @@ def test_gated_tools_contains_expected_names():
         "get_exploration_page",
         "resume_exploration_context",
         "inspect_session_logs",
+        "read_authorized_artifact",
+        "get_authorized_artifact_page",
     }
     assert GATED_TOOLS == expected
 
@@ -190,7 +192,7 @@ def test_gate_imports_only_from_core():
                     )
 
 
-def test_all_tool_sets_disjoint_and_complete():
+def test_tool_sets_keep_headless_tools_outside_the_application_gate():
     from autoskillit.core.types import HEADLESS_TOOLS
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 

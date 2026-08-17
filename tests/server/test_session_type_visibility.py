@@ -84,7 +84,12 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_fleet_enables_fleet_tag(self, monkeypatch):
-        from autoskillit.core import FLEET_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
+        from autoskillit.core import (
+            EVIDENCE_READER_TOOLS,
+            FLEET_TOOLS,
+            GATED_TOOLS,
+            HEADLESS_TOOLS,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
@@ -100,6 +105,7 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} should be hidden for fleet session"
         for name in HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} should be hidden for fleet session"
+        assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
     @pytest.mark.anyio
     async def test_fleet_tools_do_not_carry_kitchen_tag(self, monkeypatch):
@@ -137,7 +143,12 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_orchestrator_headless_enables_kitchen_tag(self, monkeypatch):
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+        from autoskillit.core import (
+            EVIDENCE_READER_TOOLS,
+            FLEET_DISPATCH_TOOLS,
+            FLEET_TOOLS,
+            GATED_TOOLS,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -146,8 +157,10 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
+        kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+        for name in kitchen_tools:
             assert name in tool_names, f"{name} should be visible for orchestrator+headless"
+        assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
     @pytest.mark.anyio
     async def test_orchestrator_interactive_no_pre_reveal(self, monkeypatch):
@@ -167,7 +180,7 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_skill_headless_enables_headless_tag(self, monkeypatch):
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -178,7 +191,8 @@ class TestSessionTypeVisibility:
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for skill+headless"
         assert "post_pr_review" in tool_names
-        for name in GATED_TOOLS:
+        assert "delegate_evidence_reader" in tool_names
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 
     @pytest.mark.anyio
@@ -206,7 +220,7 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_skill_headless_without_auto_gate_only_headless(self, monkeypatch):
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -217,12 +231,12 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for skill+headless"
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 
     @pytest.mark.anyio
     async def test_skill_headless_auto_gate_zero_only_headless(self, monkeypatch):
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -233,7 +247,7 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for skill+headless+gate=0"
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, (
                 f"{name} (kitchen) should be hidden for skill+headless+gate=0"
             )
@@ -278,7 +292,12 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_food_truck_without_tool_tags_sees_full_kitchen(self, monkeypatch):
         """ORCHESTRATOR+HEADLESS without FOOD_TRUCK_TOOL_TAGS falls back to full kitchen."""
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+        from autoskillit.core import (
+            EVIDENCE_READER_TOOLS,
+            FLEET_DISPATCH_TOOLS,
+            FLEET_TOOLS,
+            GATED_TOOLS,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -289,8 +308,10 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
 
-        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
+        kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+        for name in kitchen_tools:
             assert name in tool_names
+        assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
     @pytest.mark.anyio
     async def test_cook_interactive_unaffected_by_tool_tags(self, monkeypatch):
@@ -329,7 +350,7 @@ class TestSessionTypeVisibility:
     async def test_transitional_bridge_enables_headless(self, monkeypatch):
         import warnings
 
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import EVIDENCE_READER_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -341,7 +362,9 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for bridge HEADLESS=1"
-        for name in GATED_TOOLS:
+        assert "delegate_evidence_reader" in tool_names
+        assert EVIDENCE_READER_TOOLS.isdisjoint(tool_names)
+        for name in GATED_TOOLS - HEADLESS_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for bridge"
 
     @pytest.mark.anyio
@@ -757,3 +780,215 @@ class TestExplorerBindingVisibility:
         _apply_session_type_visibility()
 
         assert FREE_RANGE_TOOLS <= {tool.name for tool in await mcp.list_tools()}
+
+
+class TestEvidenceReaderBindingVisibility:
+    """Evidence-reader startup identity grants only its two broker tools."""
+
+    @staticmethod
+    def _set_complete_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+        from autoskillit.core import (
+            EVIDENCE_READER_AUTHORITY_ENV_VAR,
+            EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
+            EVIDENCE_READER_CAPABILITY_ENV_VAR,
+        )
+
+        monkeypatch.setenv(EVIDENCE_READER_AUTHORITY_ENV_VAR, "sha256:" + ("a" * 64))
+        monkeypatch.setenv(EVIDENCE_READER_CAPABILITY_ENV_VAR, "reader-capability")
+        monkeypatch.setenv(EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR, "/sealed/authority.json")
+
+    @pytest.mark.anyio
+    async def test_complete_startup_identity_reveals_exact_reader_surface(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, Mock
+
+        from autoskillit.core import EVIDENCE_READER_TOOLS, SessionType
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan, mcp
+        from autoskillit.server.tools import _evidence_reader
+
+        self._set_complete_identity(monkeypatch)
+        validate = Mock()
+        monkeypatch.setattr(_evidence_reader, "validate_evidence_reader_startup", validate)
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        ordinary_boot = AsyncMock()
+        monkeypatch.setitem(_lifespan._LIFESPAN_BOOT_REGISTRY, SessionType.SKILL, ordinary_boot)
+        gate = DefaultGateState()
+
+        await _lifespan._run_lifespan_session_boot(SimpleNamespace(gate=gate))
+
+        visible = {tool.name for tool in await mcp.list_tools()}
+        assert (
+            visible
+            == EVIDENCE_READER_TOOLS
+            == {
+                "read_authorized_artifact",
+                "get_authorized_artifact_page",
+            }
+        )
+        assert visible.isdisjoint(
+            {
+                "delegate_evidence_reader",
+                "open_kitchen",
+                "close_kitchen",
+                "run_cmd",
+                "run_python",
+                "run_skill",
+                "fetch_github_issue",
+                "submit_exploration_query",
+            }
+        )
+        assert list(await mcp.list_resources()) == []
+        assert list(await mcp.list_resource_templates()) == []
+        assert gate.enabled is True
+        ordinary_boot.assert_not_awaited()
+        validate.assert_called_once()
+
+    @pytest.mark.anyio
+    async def test_complete_but_unauthenticated_identity_aborts_startup(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan
+        from autoskillit.server.tools import _evidence_reader
+
+        self._set_complete_identity(monkeypatch)
+        monkeypatch.setattr(
+            _evidence_reader,
+            "validate_evidence_reader_startup",
+            Mock(side_effect=_evidence_reader.EvidenceReaderError("authority_tampered")),
+        )
+        gate = DefaultGateState()
+
+        with pytest.raises(_evidence_reader.EvidenceReaderError, match="authority_tampered"):
+            await _lifespan._run_lifespan_session_boot(SimpleNamespace(gate=gate))
+
+        assert gate.enabled is False
+
+    @pytest.mark.anyio
+    async def test_complete_identity_with_zero_matching_tools_aborts_startup(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan, mcp
+        from autoskillit.server.tools import _evidence_reader
+
+        self._set_complete_identity(monkeypatch)
+        monkeypatch.setattr(
+            _evidence_reader,
+            "validate_evidence_reader_startup",
+            Mock(),
+        )
+
+        async def no_visible_tools():
+            return []
+
+        monkeypatch.setattr(mcp, "list_tools", no_visible_tools)
+        gate = DefaultGateState()
+
+        with pytest.raises(RuntimeError, match="tool projection is incomplete"):
+            await _lifespan._run_lifespan_session_boot(SimpleNamespace(gate=gate))
+
+        assert gate.enabled is False
+
+    @pytest.mark.anyio
+    async def test_complete_ambient_identity_does_not_reveal_brokers_before_boot(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import EVIDENCE_READER_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        self._set_complete_identity(monkeypatch)
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+        _apply_session_type_visibility()
+
+        visible = {tool.name for tool in await mcp.list_tools()}
+        assert visible.isdisjoint(EVIDENCE_READER_TOOLS)
+
+    @pytest.mark.parametrize("identity", ["partial", "empty"])
+    @pytest.mark.anyio
+    async def test_malformed_startup_identity_fails_closed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        identity: str,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from autoskillit.core import (
+            EVIDENCE_READER_AUTHORITY_ENV_VAR,
+            EVIDENCE_READER_CAPABILITY_ENV_VAR,
+            EVIDENCE_READER_ENV_FORWARD_VARS,
+            EVIDENCE_READER_TOOLS,
+            SessionType,
+        )
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan, mcp
+
+        for name in EVIDENCE_READER_ENV_FORWARD_VARS:
+            monkeypatch.delenv(name, raising=False)
+        if identity == "partial":
+            monkeypatch.setenv(EVIDENCE_READER_AUTHORITY_ENV_VAR, "sha256:" + ("a" * 64))
+        else:
+            self._set_complete_identity(monkeypatch)
+            monkeypatch.setenv(EVIDENCE_READER_CAPABILITY_ENV_VAR, "")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        ordinary_boot = AsyncMock()
+        monkeypatch.setitem(_lifespan._LIFESPAN_BOOT_REGISTRY, SessionType.SKILL, ordinary_boot)
+        gate = DefaultGateState()
+
+        with pytest.raises(RuntimeError, match="startup identity is malformed"):
+            await _lifespan._run_lifespan_session_boot(SimpleNamespace(gate=gate))
+
+        assert gate.enabled is False
+        ordinary_boot.assert_not_awaited()
+        assert {tool.name for tool in await mcp.list_tools()}.isdisjoint(EVIDENCE_READER_TOOLS)
+
+    @pytest.mark.parametrize("gate_enabled", [False, True])
+    @pytest.mark.anyio
+    async def test_absent_reader_identity_preserves_ordinary_kitchen_boot(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        gate_enabled: bool,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from autoskillit.core import (
+            EVIDENCE_READER_ENV_FORWARD_VARS,
+            EVIDENCE_READER_TOOLS,
+            SessionType,
+        )
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan, mcp
+
+        for name in EVIDENCE_READER_ENV_FORWARD_VARS:
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        gate = DefaultGateState()
+        if gate_enabled:
+            gate.enable()
+        ordinary_boot = AsyncMock()
+        monkeypatch.setitem(_lifespan._LIFESPAN_BOOT_REGISTRY, SessionType.SKILL, ordinary_boot)
+
+        await _lifespan._run_lifespan_session_boot(
+            SimpleNamespace(gate=gate, exploration_context_store=None)
+        )
+
+        ordinary_boot.assert_awaited_once()
+        assert gate.enabled is gate_enabled
+        assert {tool.name for tool in await mcp.list_tools()}.isdisjoint(EVIDENCE_READER_TOOLS)

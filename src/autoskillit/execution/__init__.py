@@ -78,6 +78,15 @@ from autoskillit.execution.diff_annotator import (
     parse_hunk_ranges,
     select_review_agents,
 )
+from autoskillit.execution.evidence_reader import (
+    EvidenceReaderConformanceEvidence,
+    EvidenceReaderLaunchError,
+    EvidenceReaderLaunchResult,
+    EvidenceReaderResultStatus,
+    evidence_reader_mcp_transport,
+    evidence_reader_provider_environment,
+    launch_evidence_reader,
+)
 from autoskillit.execution.github import (
     DefaultGitHubFetcher,
     github_headers,
@@ -279,6 +288,14 @@ __all__ = [
     "filter_findings",
     "parse_hunk_ranges",
     "select_review_agents",
+    # evidence_reader
+    "EvidenceReaderConformanceEvidence",
+    "EvidenceReaderLaunchError",
+    "EvidenceReaderLaunchResult",
+    "EvidenceReaderResultStatus",
+    "evidence_reader_mcp_transport",
+    "evidence_reader_provider_environment",
+    "launch_evidence_reader",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",

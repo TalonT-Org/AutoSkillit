@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import pytest
@@ -28,6 +28,38 @@ from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
+
+_PR_SOURCE_READER_TOOLS = (
+    f"{DIRECT_PREFIX}get_authorized_artifact_page",
+    f"{DIRECT_PREFIX}read_authorized_artifact",
+)
+
+_READER_DISABLED_FEATURES = (
+    "apps",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "code_mode",
+    "code_mode_buffered_exec",
+    "code_mode_host",
+    "code_mode_only",
+    "computer_use",
+    "enable_mcp_apps",
+    "goals",
+    "image_generation",
+    "in_app_browser",
+    "multi_agent",
+    "multi_agent_v2",
+    "plugin_sharing",
+    "plugins",
+    "remote_plugin",
+    "request_permissions_tool",
+    "shell_tool",
+    "standalone_web_search",
+    "tool_suggest",
+    "unified_exec",
+    "unified_exec_zsh_fork",
+)
 
 _SKILL_CHILD_ROLE_EXPECTATIONS = {
     "pr-source-reader": (("Read",), "sonnet", 80, "gpt-5.6-luna", "xhigh"),
@@ -154,6 +186,143 @@ def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
         assert definition.description.startswith("Use when ")
         assert definition.description not in definition.body
         assert not ({"Bash", "Write", "Edit"} & set(definition.tools))
+
+
+def test_pr_source_reader_separates_claude_and_restricted_codex_tool_surfaces() -> None:
+    definition = load_agent_definition(pkg_root() / "agents" / "pr-source-reader.md")
+
+    assert definition.tools == ("Read",)
+    assert definition.reader_tools == _PR_SOURCE_READER_TOOLS
+    assert definition.codex == CodexAgentProjectionDef(
+        model="gpt-5.6-luna",
+        reasoning_effort="xhigh",
+        sandbox_mode="read-only",
+        disabled_features=_READER_DISABLED_FEATURES,
+        agents_enabled=False,
+        web_search="disabled",
+    )
+
+
+@pytest.mark.parametrize(
+    "reader_tools_yaml",
+    [
+        'reader_tools: "Read"\n',
+        "reader_tools: []\n",
+        "reader_tools:\n  - valid\n  - 1\n",
+    ],
+)
+def test_reader_tools_frontmatter_requires_a_non_empty_string_list(
+    tmp_path: Path, reader_tools_yaml: str
+) -> None:
+    path = tmp_path / "reader.md"
+    path.write_text(
+        "---\n"
+        "name: reader\n"
+        "description: Bounded reader\n"
+        "tools: [Read]\n"
+        f"{reader_tools_yaml}"
+        "model: sonnet\n"
+        "---\n\n"
+        "Return bounded evidence.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        AgentDefinitionError,
+        match="reader_tools.*non-empty string list",
+    ):
+        load_agent_definition(path)
+
+
+@pytest.mark.parametrize(
+    ("reader_tools", "error"),
+    [
+        (("mcp__plugin_autoskillit_autoskillit__read_authorized_artifact",), "canonical prefix"),
+        ((f"{DIRECT_PREFIX}Read",), "invalid canonical reader tool"),
+        ((f"{DIRECT_PREFIX}read_authorized_artifact",) * 2, "must be unique"),
+    ],
+)
+def test_reader_tools_reject_noncanonical_or_duplicate_names(
+    reader_tools: tuple[str, ...], error: str
+) -> None:
+    with pytest.raises(AgentDefinitionError, match=error):
+        replace(
+            load_agent_definition(pkg_root() / "agents" / "pr-source-reader.md"),
+            reader_tools=reader_tools,
+        )
+
+
+def test_reader_tools_definition_requires_an_immutable_tuple() -> None:
+    with pytest.raises(AgentDefinitionError, match="immutable tuple"):
+        replace(
+            load_agent_definition(pkg_root() / "agents" / "pr-source-reader.md"),
+            reader_tools=[f"{DIRECT_PREFIX}read_authorized_artifact"],  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("projection", "error"),
+    [
+        (
+            CodexAgentProjectionDef(
+                None, None, "read-only", _READER_DISABLED_FEATURES, False, "disabled"
+            ),
+            "fixed Codex model and reasoning effort",
+        ),
+        (
+            CodexAgentProjectionDef(
+                "gpt-5.6-luna",
+                "xhigh",
+                "workspace-write",
+                _READER_DISABLED_FEATURES,
+                False,
+                "disabled",
+            ),
+            "read-only sandbox",
+        ),
+        (
+            CodexAgentProjectionDef(
+                "gpt-5.6-luna",
+                "xhigh",
+                "read-only",
+                _READER_DISABLED_FEATURES,
+                True,
+                "disabled",
+            ),
+            "disable agents",
+        ),
+        (
+            CodexAgentProjectionDef(
+                "gpt-5.6-luna",
+                "xhigh",
+                "read-only",
+                _READER_DISABLED_FEATURES,
+                False,
+                "live",
+            ),
+            "disable web search",
+        ),
+        (
+            CodexAgentProjectionDef(
+                "gpt-5.6-luna",
+                "xhigh",
+                "read-only",
+                _READER_DISABLED_FEATURES[1:],
+                False,
+                "disabled",
+            ),
+            "disable terminal features",
+        ),
+    ],
+)
+def test_reader_eligible_agent_requires_restrictive_codex_projection(
+    projection: CodexAgentProjectionDef, error: str
+) -> None:
+    with pytest.raises(AgentDefinitionError, match=error):
+        replace(
+            load_agent_definition(pkg_root() / "agents" / "pr-source-reader.md"),
+            codex=projection,
+        )
 
 
 @pytest.mark.parametrize(
@@ -501,11 +670,24 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
             web_search="live",
         ),
     )
+    changed_reader_tools = replace(
+        definition,
+        reader_tools=(f"{DIRECT_PREFIX}read_authorized_artifact",),
+        codex=CodexAgentProjectionDef(
+            "gpt-5.6-luna",
+            "max",
+            "read-only",
+            _READER_DISABLED_FEATURES,
+            False,
+            "disabled",
+        ),
+    )
     assert digest.startswith("sha256:")
     assert digest != agent_definition_digest(changed)
     assert digest != agent_definition_digest(changed_features)
     assert digest != agent_definition_digest(changed_agents_enabled)
     assert digest != agent_definition_digest(changed_web_search)
+    assert digest != agent_definition_digest(changed_reader_tools)
     assert agent_definition_digest(changed_web_search) != agent_definition_digest(
         changed_live_web_search
     )

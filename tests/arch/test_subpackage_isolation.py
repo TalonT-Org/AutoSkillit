@@ -78,6 +78,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         "_probe_cache",  # execution/backends/_probe_cache.py: PROBE_CACHE_TTL = timedelta(...)
+        # Typed cancellation state is required for the authenticated broker boundary (#4585).
+        "tools_evidence_reader",
         # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
         "_generation_publication",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
@@ -982,7 +984,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
         "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
-        "execution": 20,  # +session_index strict byte-bounded retained-index reads (#4514)
+        "execution": 21,  # +session_index strict byte-bounded retained-index reads (#4514)
+        # +evidence_reader sterile reader lifecycle (#4585)
         # +agent_definition native-role authority (#4443).
         "core": 32,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
         # +GitHub review types, portable launch authority, stable contract,
@@ -1011,7 +1014,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
-        "server/tools": 37,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
+        "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
@@ -1026,7 +1029,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         # +_explorer_conformance version-bound live attestation authority (#4443)
-        "execution/backends": 19,  # +execution identity parser and explorer dispatch adapter
+        "execution/backends": 20,  # +execution identity parser and explorer dispatch adapter
+        # +_codex_catalog shared validated catalog projection (#4585)
         "smoke_utils": 12,  # +_review_design split from _review
     }
     violations: list[str] = []
@@ -1084,6 +1088,11 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    "execution/evidence_reader.py": (
+        1500,
+        "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
+        "lifecycle, and strict result validation behind one evidence-reader launch interface",
+    ),
     # REQ-CNST-010-E1: core/types.py is the canonical type registry for the entire
     # package. It defines all StrEnums, protocols, constants, and shared type aliases
     # in one place to prevent circular imports across sub-packages. Exempt at 1200 lines.
@@ -1292,7 +1301,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2443,
+        2444,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1309,6 +1318,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "AGENT_BACKEND_ENV_VAR injection in build_interactive_cmd merged_extras (+1 net line) "
         "and build_resume_cmd _codex_exec_extras call expansion to multi-line (+2 net lines) "
         "for T5-P4-A3-WP3 guard-hook backend dispatch"
+        "; #4585 excludes reader-only roles from ordinary Codex agent materialization (+1 line)"
         "; _materialize_profile_skills function (~43 lines) for T5-P4-A4-WP2 profile skill "
         "materialization into Codex session directories; registered-daemon launch identity "
         "forwarding adds both required environment keys to all Codex command shapes (+8 net lines)"

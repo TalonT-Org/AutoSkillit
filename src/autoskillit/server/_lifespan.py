@@ -28,6 +28,8 @@ import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
+    EVIDENCE_READER_ENV_FORWARD_VARS,
+    EVIDENCE_READER_TOOLS,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
@@ -726,8 +728,35 @@ async def _explorer_auto_gate_boot(ctx: Any) -> bool:
     return True
 
 
+async def _evidence_reader_auto_gate_boot(ctx: Any) -> bool:
+    """Reveal exactly the reader brokers for one complete startup identity."""
+    from autoskillit.server import mcp  # circular-break
+    from autoskillit.server._session_type import (  # circular-break
+        _evidence_reader_binding_state,
+    )
+
+    binding_state = _evidence_reader_binding_state()
+    if binding_state == "absent":
+        return False
+    if binding_state == "malformed" or ctx.gate is None:
+        raise RuntimeError("evidence reader startup identity is malformed")
+    from autoskillit.server.tools._evidence_reader import (  # circular-break
+        validate_evidence_reader_startup,
+    )
+
+    environment = {name: os.environ[name] for name in EVIDENCE_READER_ENV_FORWARD_VARS}
+    validate_evidence_reader_startup(ctx, environment)
+    mcp.enable(tags={"evidence-reader"}, components={"tool"}, only=True)
+    if {tool.name for tool in await mcp.list_tools()} != EVIDENCE_READER_TOOLS:
+        raise RuntimeError("evidence reader startup tool projection is incomplete")
+    ctx.gate.enable()
+    return True
+
+
 async def _run_lifespan_session_boot(ctx: Any) -> None:
-    """Apply exactly one authenticated explorer or ordinary session boot path."""
+    """Apply exactly one restricted-child or ordinary session boot path."""
+    if await _evidence_reader_auto_gate_boot(ctx):
+        return
     if await _explorer_auto_gate_boot(ctx):
         return
     boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())

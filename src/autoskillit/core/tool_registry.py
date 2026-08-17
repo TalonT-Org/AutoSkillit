@@ -37,6 +37,7 @@ _INSPECTION_TOOLS = frozenset(
         "check_pr_mergeable",
         "check_repo_merge_state",
         "fetch_github_issue",
+        "get_authorized_artifact_page",
         "get_ci_status",
         "get_exploration_page",
         "get_issue_title",
@@ -49,6 +50,7 @@ _INSPECTION_TOOLS = frozenset(
         "kitchen_status",
         "list_recipes",
         "load_recipe",
+        "read_authorized_artifact",
         "read_db",
         "resume_exploration_context",
         "submit_exploration_query",
@@ -64,7 +66,9 @@ _RECOVERY_TOOLS = frozenset(
         "recover_run_skill_result",
     }
 )
-_EXECUTION_TOOLS = frozenset({"run_cmd", "run_python", "run_skill", "test_check"})
+_EXECUTION_TOOLS = frozenset(
+    {"delegate_evidence_reader", "run_cmd", "run_python", "run_skill", "test_check"}
+)
 _MUTATION_TOOLS = frozenset(
     {
         "batch_cleanup_clones",
@@ -262,6 +266,29 @@ def _run_skill() -> ToolDef:
 
 
 _TOOL_DEFS = (
+    _tool(
+        "delegate_evidence_reader",
+        ("role", "role_data"),
+        required=("role", "role_data"),
+        wire_types={
+            "role": ToolWireType.STRING,
+            "role_data": ToolWireType.OBJECT,
+        },
+    ),
+    _tool(
+        "read_authorized_artifact",
+        ("page_size",),
+        wire_types={"page_size": ToolWireType.INTEGER},
+    ),
+    _tool(
+        "get_authorized_artifact_page",
+        ("continuation", "page_size"),
+        required=("continuation",),
+        wire_types={
+            "continuation": ToolWireType.STRING,
+            "page_size": ToolWireType.INTEGER,
+        },
+    ),
     _tool("unlock_agent_pack", ("pack_name",), required=("pack_name",)),
     _tool(
         "set_commit_status",

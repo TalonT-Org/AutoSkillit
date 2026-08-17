@@ -26,6 +26,7 @@ __all__ = [
     "SKILL_TOOLS",
     "GATED_TOOLS",
     "HEADLESS_TOOLS",
+    "EVIDENCE_READER_TOOLS",
     "FLEET_TOOLS",
     "FLEET_DISPATCH_TOOLS",
     "FLEET_MENU_TOOLS",
@@ -149,11 +150,14 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "get_exploration_page",
         "resume_exploration_context",
         "inspect_session_logs",
+        "read_authorized_artifact",
+        "get_authorized_artifact_page",
     }
 )
 
 HEADLESS_TOOLS: frozenset[str] = frozenset(
     {
+        "delegate_evidence_reader",
         "test_check",
         "unlock_agent_pack",
         "commit_files",
@@ -162,6 +166,10 @@ HEADLESS_TOOLS: frozenset[str] = frozenset(
         "write_standalone_audit_evidence",
         "write_audit_disposition_bundle",
     }
+)
+
+EVIDENCE_READER_TOOLS: frozenset[str] = frozenset(
+    {"read_authorized_artifact", "get_authorized_artifact_page"}
 )
 
 FLEET_TOOLS: frozenset[str] = frozenset(
@@ -850,6 +858,9 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "write_audit_semantic_result": frozenset({"kitchen-core"}),
     "write_standalone_audit_evidence": frozenset({"kitchen-core"}),
     "write_audit_disposition_bundle": frozenset({"kitchen-core"}),
+    "delegate_evidence_reader": frozenset({"kitchen-core"}),
+    "read_authorized_artifact": frozenset({"evidence-reader"}),
+    "get_authorized_artifact_page": frozenset({"evidence-reader"}),
     "list_recipes": frozenset({"kitchen-core", "fleet-dispatch"}),
     "load_recipe": frozenset({"kitchen-core", "fleet-dispatch"}),
     "validate_recipe": frozenset({"kitchen-core"}),
@@ -875,7 +886,7 @@ EXPLORATION_TOOLS: frozenset[str] = frozenset(
     name for name, tags in TOOL_SUBSET_TAGS.items() if "exploration" in tags
 )
 KITCHEN_GATED_TOOLS: frozenset[str] = (
-    GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
+    GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
 )
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
@@ -887,6 +898,7 @@ ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
         "kitchen-core",
         "plan-review",
         "exploration",
+        "evidence-reader",
     }
 )
 

@@ -32,7 +32,11 @@ class TestExplorerRegistrationDerivesFromBindings:
         )
         all_defs = load_bundled_agent_definitions()
         definitions = {definition.name: definition for definition in all_defs}
-        non_explorer_count = sum(1 for d in all_defs if d.name not in BUNDLED_EXPLORER_ROLES)
+        non_explorer_count = sum(
+            1
+            for definition in all_defs
+            if definition.name not in BUNDLED_EXPLORER_ROLES and not definition.reader_tools
+        )
         assert count == non_explorer_count
         for path in (tmp_path / "agents").glob("*.toml"):
             data = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -61,7 +65,7 @@ class TestExplorerRegistrationDerivesFromBindings:
             f"missing: {BUNDLED_EXPLORER_ROLES - toml_names}"
         )
         all_defs = load_bundled_agent_definitions()
-        assert count == len(all_defs)
+        assert count == sum(1 for definition in all_defs if not definition.reader_tools)
 
     def test_bound_explorer_toml_has_correct_sandbox(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex.explorer_projection import (

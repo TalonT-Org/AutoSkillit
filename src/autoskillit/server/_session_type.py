@@ -7,10 +7,11 @@ sub-package __init__ files.
 from __future__ import annotations
 
 import os
-from typing import assert_never
+from typing import Literal, assert_never
 
 from autoskillit.core import (
     CATEGORY_TAGS,
+    EVIDENCE_READER_ENV_FORWARD_VARS,
     FEATURE_REGISTRY,
     FLEET_DISPATCH_MODE,
     FLEET_MODE_ENV_VAR,
@@ -40,6 +41,19 @@ _EXPLORER_BINDING_ENV_KEYS = frozenset(
         EXPLORATION_AUTHORITY_PATH_ENV,
     }
 )
+_EvidenceReaderBindingState = Literal["absent", "candidate", "malformed"]
+
+
+def _evidence_reader_binding_state() -> _EvidenceReaderBindingState:
+    """Classify the reader identity environment without opening its authority."""
+    present = {key for key in EVIDENCE_READER_ENV_FORWARD_VARS if key in os.environ}
+    if not present:
+        return "absent"
+    if present != EVIDENCE_READER_ENV_FORWARD_VARS:
+        return "malformed"
+    if any(not os.environ[key] for key in EVIDENCE_READER_ENV_FORWARD_VARS):
+        return "malformed"
+    return "candidate"
 
 
 def _has_explorer_binding_env() -> bool:
@@ -69,6 +83,12 @@ def _apply_session_type_visibility() -> None:
 
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
+
+    if _evidence_reader_binding_state() != "absent":
+        # Reader identity is classified again at lifespan. Complete candidates
+        # receive an exact tool-only projection there; malformed candidates
+        # abort startup. Environment variables never reveal broker tools here.
+        return
 
     if _has_explorer_binding_env():
         # Explorer bindings are a shared session principal.  They must

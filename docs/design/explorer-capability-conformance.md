@@ -55,6 +55,18 @@ MCP calls: `bounded_literal_search`, `parse_python_ast`, `optional_capability_st
 `deny_operations`. Their server configuration requires explicit `approve`; this is evidence about
 the observed calls, not a claim about Codex's total tool inventory.
 
+Behavioral evidence readers use the same deliberately bounded observation standard, but not the
+Explorer role or authority. Their separate top-level Codex process binds an exact generated
+configuration, projected catalog, installed CLI/authentication shape, structured-output canary,
+and the observed successful calls to the two authenticated one-artifact brokers. Unknown,
+failed, or forbidden observed calls reject the result. This proves the behavior exercised by the
+reader; it does not claim that Codex exposes a complete inventory of every built-in tool it may
+have offered.
+
+Issue #4563 separately owns the audit-reader role, Git-handler and ref-validation
+surfaces, and ready-wave scheduling; this evidence-reader corridor does not implement
+or authorize those capabilities.
+
 ## Security matrix
 
 The direct native-shell spike is not an acceptable boundary. Codex 0.146 permission profiles

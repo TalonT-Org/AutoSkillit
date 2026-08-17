@@ -1385,6 +1385,17 @@ def test_display_categories_sync() -> None:
     )
 
 
+def test_evidence_reader_display_category_is_exact() -> None:
+    from autoskillit.config.ingredient_defaults import _DISPLAY_CATEGORIES
+
+    categories = dict(_DISPLAY_CATEGORIES)
+    assert categories["Evidence Readers"] == (
+        "read_authorized_artifact",
+        "get_authorized_artifact_page",
+    )
+    assert "delegate_evidence_reader" in categories["Execution"]
+
+
 def test_tool_categories_not_in_core() -> None:
     """TOOL_CATEGORIES must not be exported from the IL-0 core layer."""
     import autoskillit.core

@@ -45,6 +45,30 @@ def test_audit_admission_authority_path_is_private_and_codex_forwarded() -> None
     assert AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR in CODEX_MCP_ENV_FORWARD_VARS
 
 
+def test_evidence_reader_env_is_exact_private_positive_forwarding_set() -> None:
+    from autoskillit.core import (
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_MCP_ENV_FORWARD_VARS,
+        EVIDENCE_READER_AUTHORITY_ENV_VAR,
+        EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
+        EVIDENCE_READER_CAPABILITY_ENV_VAR,
+        EVIDENCE_READER_ENV_FORWARD_VARS,
+    )
+
+    assert EVIDENCE_READER_AUTHORITY_ENV_VAR == "AUTOSKILLIT_EVIDENCE_READER_AUTHORITY"
+    assert EVIDENCE_READER_CAPABILITY_ENV_VAR == "AUTOSKILLIT_EVIDENCE_READER_CAPABILITY"
+    assert EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR == "AUTOSKILLIT_EVIDENCE_READER_AUTHORITY_PATH"
+    assert EVIDENCE_READER_ENV_FORWARD_VARS == frozenset(
+        {
+            EVIDENCE_READER_AUTHORITY_ENV_VAR,
+            EVIDENCE_READER_CAPABILITY_ENV_VAR,
+            EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR,
+        }
+    )
+    assert EVIDENCE_READER_ENV_FORWARD_VARS <= AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert EVIDENCE_READER_ENV_FORWARD_VARS.isdisjoint(CODEX_MCP_ENV_FORWARD_VARS)
+
+
 def test_managed_native_shell_controls_are_scrubbed_and_never_mcp_forwarded() -> None:
     """Protected launch authority is local to managed child construction."""
     from autoskillit.core import (
@@ -93,6 +117,7 @@ def test_codex_forward_vars_cover_server_consumed() -> None:
             SESSION_TYPE_ENV_VAR,
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
             AGENT_BACKEND_DYNACONF_ENV_VAR,
+            "AUTOSKILLIT_SKILL_NAME",
         }
     )
     missing = server_consumed_forward_vars - CODEX_MCP_ENV_FORWARD_VARS

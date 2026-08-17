@@ -22,12 +22,13 @@ async def test_mcp_enable_kitchen_reveals_gated_tools(kitchen_enabled) -> None:
 
     async with Client(mcp) as client:
         tool_names = {t.name for t in await client.list_tools()}
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+    from autoskillit.core import EVIDENCE_READER_TOOLS, FLEET_DISPATCH_TOOLS, FLEET_TOOLS
 
-    non_fleet_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    non_fleet_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
     assert non_fleet_gated.issubset(tool_names), (
         f"Missing gated tools: {non_fleet_gated - tool_names}"
     )
+    assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
 
 @pytest.mark.anyio

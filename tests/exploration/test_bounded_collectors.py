@@ -59,7 +59,8 @@ def test_read_contained_file_rejects_parent_escape_and_symlink(tmp_path: Path) -
 
 
 @pytest.mark.parametrize(
-    "relative_path", ["", "/absolute", "../escape", "safe/../escape", "bad\0path"]
+    "relative_path",
+    ["", "/absolute", "../escape", "safe/../escape", "bad\0path", "bad\\path", ".git/config"],
 )
 def test_contained_path_entrypoints_share_lexical_rejection(
     tmp_path: Path,
@@ -83,6 +84,118 @@ def test_read_contained_file_enforces_byte_limit(tmp_path: Path) -> None:
 
     with pytest.raises(CollectorSafetyError, match="byte limit"):
         read_contained_file(root, "large.txt", CollectorLimits(max_file_bytes=8))
+
+
+def test_stable_contained_read_returns_current_bytes_and_metadata(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    artifact = root / "artifact.txt"
+    artifact.write_bytes(b"current bytes")
+    artifact.chmod(0o640)
+
+    result = _bounded.read_stable_contained_file(
+        root,
+        artifact.name,
+        max_bytes=len(b"current bytes"),
+    )
+
+    assert result.content == b"current bytes"
+    assert result.size == len(result.content)
+    assert result.mode == 0o640
+
+
+def test_stable_contained_read_rejects_byte_overflow(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "large.txt").write_bytes(b"12345")
+
+    with pytest.raises(CollectorSafetyError, match="byte limit"):
+        _bounded.read_stable_contained_file(root, "large.txt", max_bytes=4)
+
+
+def test_stable_contained_read_fails_closed_without_nofollow_support(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "artifact.txt").write_text("content")
+    monkeypatch.setattr(_bounded, "_SUPPORTS_NOFOLLOW_DIRECTORY_OPEN", False)
+
+    with pytest.raises(CollectorSafetyError, match="lacks no-follow descriptor support"):
+        _bounded.read_stable_contained_file(root, "artifact.txt", max_bytes=100)
+
+
+def test_stable_contained_read_rejects_symlink_component_and_special_file(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+    (root / "linked").symlink_to(outside, target_is_directory=True)
+    os.mkfifo(root / "artifact.pipe")
+
+    for relative_path in ("linked/secret.txt", "artifact.pipe"):
+        with pytest.raises(CollectorSafetyError):
+            _bounded.read_stable_contained_file(root, relative_path, max_bytes=100)
+
+
+def test_stable_contained_read_rejects_post_open_inode_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    artifact = root / "artifact.txt"
+    artifact.write_text("approved")
+    replacement = root / "replacement.txt"
+    replacement.write_text("replacement")
+    original_open = _bounded._open
+
+    def replace_after_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        descriptor = original_open(path, flags, mode, dir_fd=dir_fd)
+        if path == artifact.name and dir_fd is not None:
+            os.replace(replacement, artifact)
+        return descriptor
+
+    monkeypatch.setattr(_bounded, "_open", replace_after_open)
+
+    with pytest.raises(_bounded.CollectorMutationError, match="changed while opening"):
+        _bounded.read_stable_contained_file(root, artifact.name, max_bytes=100)
+
+
+def test_stable_contained_read_rejects_mid_read_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    artifact = root / "artifact.txt"
+    artifact.write_bytes(b"a" * (_bounded._READ_CHUNK_BYTES + 1))
+    original_read = _bounded._read
+    mutated = False
+
+    def mutate_after_first_read(file_descriptor: int, size: int) -> bytes:
+        nonlocal mutated
+        chunk = original_read(file_descriptor, size)
+        if chunk and not mutated:
+            artifact.write_bytes(b"changed")
+            mutated = True
+        return chunk
+
+    monkeypatch.setattr(_bounded, "_read", mutate_after_first_read)
+
+    with pytest.raises(_bounded.CollectorMutationError, match="changed while reading"):
+        _bounded.read_stable_contained_file(
+            root,
+            artifact.name,
+            max_bytes=_bounded._READ_CHUNK_BYTES + 1,
+        )
 
 
 def test_bounded_rg_resolves_host_executable_before_sterile_env(
@@ -128,7 +241,7 @@ def test_read_contained_file_rejects_post_open_inode_swap(
     artifact.write_text("approved")
     replacement = root / "replacement.txt"
     replacement.write_text("replacement")
-    original_open = _bounded.os.open
+    original_open = _bounded._open
 
     def swap_after_open(
         path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
@@ -142,7 +255,7 @@ def test_read_contained_file_rejects_post_open_inode_swap(
             os.replace(replacement, artifact)
         return descriptor
 
-    monkeypatch.setattr(_bounded.os, "open", swap_after_open)
+    monkeypatch.setattr(_bounded, "_open", swap_after_open)
 
     with pytest.raises(CollectorSafetyError, match="changed while opening"):
         read_contained_file(root, "artifact.txt", CollectorLimits())

@@ -1,5 +1,6 @@
 """Read-only deterministic substrate for specialized repository exploration."""
 
+from ._digest import canonical_json, qualified_digest
 from .collectors import (
     COLLECTOR_PROFILES,
     CollectorInvocation,
@@ -25,14 +26,21 @@ from .profile import (
 )
 from .router import readiness_waves, reclassify_cross_leaf, route_frontier
 from .snapshot import (
+    ArtifactCaptureError,
+    ArtifactCaptureStatus,
     SnapshotCaptureLimits,
     SnapshotCaptureResult,
+    StableArtifactCapture,
     capture_repository_snapshot,
+    capture_stable_artifact,
     resolve_repository_path,
+    stable_artifact_matches,
 )
 
 __all__ = [
     "AUTOSKILLIT_REPOSITORY_IDENTITY",
+    "ArtifactCaptureError",
+    "ArtifactCaptureStatus",
     "COLLECTOR_PROFILES",
     "OFFLINE_DECLARATION_PATH",
     "IdentityEvidence",
@@ -43,8 +51,11 @@ __all__ = [
     "CollectorProfile",
     "SnapshotCaptureLimits",
     "SnapshotCaptureResult",
+    "StableArtifactCapture",
     "activate_repository_profiles",
     "capture_repository_snapshot",
+    "capture_stable_artifact",
+    "canonical_json",
     "build_canonical_evidence_graph",
     "collect_search",
     "collector_manifest_digest",
@@ -52,9 +63,11 @@ __all__ = [
     "normalize_query",
     "pagination_identity",
     "page_evidence",
+    "qualified_digest",
     "resolve_repository_identity",
     "resolve_repository_profile",
     "resolve_repository_path",
+    "stable_artifact_matches",
     "readiness_waves",
     "reclassify_cross_leaf",
     "route_frontier",

@@ -1840,10 +1840,16 @@ class TestSiblingWrappersDelegate:
         )
         from autoskillit.hooks._github_mutation_analysis import _tokenize_with_redirects
 
+        # _CommandSegment instances from the bare-name-loaded copy and the
+        # package-loaded copy do not share class identity, so compare token
+        # lists and redirect-syntax flags element-wise.
         command = "gh pr view --json state"
-        assert _tokenize_with_redirects(command) == _tokenize_command_segments_with_redirects(
-            command
-        )
+        wrapper_result = _tokenize_with_redirects(command)
+        direct_result = _tokenize_command_segments_with_redirects(command)
+        assert len(wrapper_result) == len(direct_result)
+        for wrapper_seg, direct_seg in zip(wrapper_result, direct_result, strict=True):
+            assert wrapper_seg.tokens == direct_seg.tokens
+            assert wrapper_seg.redirect_syntax == direct_seg.redirect_syntax
 
     def test_normalize_executable_call_delegates(self) -> None:
         from autoskillit.hooks._command_classification import _normalize_executable

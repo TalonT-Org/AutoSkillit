@@ -271,7 +271,24 @@ def compile_session_skill_catalog(
         if plan is None:
             supported.append(cast(SkillCatalogEntry, skill))
             continue
-        adaptation = backend.adapt_skill_semantics(plan)
+        try:
+            adaptation = backend.adapt_skill_semantics(plan)
+        except SkillContractError as exc:
+            # The backend fails closed (raises) directly from
+            # adapt_skill_semantics() when it cannot honestly realize a
+            # declared operation (e.g. Codex + join.required=true), rather
+            # than returning a gradable unsupported_operation result. Route
+            # that refusal through the same graceful-exclusion path as a
+            # normal unsupported-operation result.
+            unavailable.append(
+                SkillUnavailableMetadata(
+                    skill=skill.name,
+                    backend=backend.name,
+                    operation=SkillSemanticOperation.REQUIRED_JOIN,
+                    diagnostic=str(exc),
+                )
+            )
+            continue
         unsupported_operation = adaptation.validate_refusal_for(
             plan,
             backend=backend.name,

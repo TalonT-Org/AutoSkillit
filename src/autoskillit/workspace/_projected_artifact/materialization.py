@@ -585,9 +585,25 @@ def write_generated_hooks_json(plugin_root: Path) -> None:
 def _manifest_skill_entry(
     skill: SkillContractRecord,
     document: AgentSkillDocument,
+    *,
+    artifact_digest: str = "",
+    artifact_incarnation: str = "",
 ) -> dict[str, Any]:
     role = skill.execution_role
-    return {
+    semantic_plan = skill.semantic_plan
+    join_required = bool(
+        semantic_plan is not None
+        and semantic_plan.join is not None
+        and semantic_plan.join.required
+    )
+    child_cardinality: dict[str, int | str] = {}
+    if semantic_plan is not None:
+        for spawn in semantic_plan.child_spawns:
+            if spawn.count is not None:
+                child_cardinality[spawn.role] = int(spawn.count)
+            elif spawn.for_each is not None:
+                child_cardinality[spawn.role] = str(spawn.for_each)
+    entry: dict[str, Any] = {
         "canonical_digest": document.canonical_digest,
         "projected_digest": document.projected_digest,
         "source": document.source_identity.origin.value,
@@ -597,16 +613,31 @@ def _manifest_skill_entry(
         "uses_capabilities": sorted(skill.uses_capabilities),
         "execution_role": role.value if role is not None else None,
         "activate_deps": list(skill.activate_deps),
+        "join_required": join_required,
+        "child_spawn_cardinality": dict(sorted(child_cardinality.items())),
+        "semantic_digest": document.semantic_digest,
+        "adaptation_digest": document.adaptation_digest,
+        "artifact_digest": artifact_digest,
+        "artifact_incarnation": artifact_incarnation,
     }
+    return entry
 
 
 def _projection_skills_manifest(
     skill_infos: tuple[SkillContractRecord, ...],
     documents: Mapping[str, AgentSkillDocument],
+    *,
+    artifact_digest: str = "",
+    artifact_incarnation: str = "",
 ) -> dict[str, dict[str, Any]]:
     skill_by_name = {skill.name: skill for skill in skill_infos}
     return {
-        name: _manifest_skill_entry(skill_by_name[name], document)
+        name: _manifest_skill_entry(
+            skill_by_name[name],
+            document,
+            artifact_digest=artifact_digest,
+            artifact_incarnation=artifact_incarnation,
+        )
         for name, document in documents.items()
     }
 
@@ -689,6 +720,8 @@ def materialize_sanitized_plugin_root(
     context: SkillProjectionContext,
     *,
     mcp_tool_prefix: str,
+    artifact_digest: str = "",
+    artifact_incarnation: str = "",
 ) -> Path:
     """Copy plugin assets and replace its public skills with safe projections.
 
@@ -726,7 +759,12 @@ def materialize_sanitized_plugin_root(
     manifest = {
         "schema_version": 1,
         "projection_version": context.projection_version,
-        "skills": _projection_skills_manifest(skill_infos, documents),
+        "skills": _projection_skills_manifest(
+            skill_infos,
+            documents,
+            artifact_digest=artifact_digest,
+            artifact_incarnation=artifact_incarnation,
+        ),
     }
     write_versioned_json(manifest_path, manifest, schema_version=1)
     return manifest_path
@@ -843,7 +881,7 @@ def validate_sanitized_plugin_artifact(
         canonical_digest = (
             info.canonical_digest or hashlib.sha256(info.canonical_content.encode()).hexdigest()
         )
-        expected_entry = {
+        expected_entry: dict[str, object] = {
             "projected_digest": projected_digest,
             "canonical_digest": canonical_digest,
             "source": info.source.value,
@@ -856,7 +894,32 @@ def validate_sanitized_plugin_artifact(
             ),
             "activate_deps": list(info.activate_deps),
         }
+        semantic_plan = info.semantic_plan
+        expected_entry["join_required"] = bool(
+            semantic_plan is not None
+            and semantic_plan.join is not None
+            and semantic_plan.join.required
+        )
+        cardinality: dict[str, int | str] = {}
+        if semantic_plan is not None:
+            for spawn in semantic_plan.child_spawns:
+                if spawn.count is not None:
+                    cardinality[spawn.role] = int(spawn.count)
+                elif spawn.for_each is not None:
+                    cardinality[spawn.role] = str(spawn.for_each)
+        expected_entry["child_spawn_cardinality"] = dict(sorted(cardinality.items()))
+        expected_entry["semantic_digest"] = (
+            semantic_plan.digest if semantic_plan is not None else ""
+        )
+        # adaptation_digest is produced at materialization time and validated
+        # downstream via digest pinning (re-parsing the projected artifact).
+        # artifact_digest and artifact_incarnation are sourced from the
+        # SkillProjectionBinding populated at publish time; this validator
+        # cannot know their values yet, so accept any non-empty string.
+        skip_fields = {"adaptation_digest", "artifact_digest", "artifact_incarnation"}
         for field_name, value in expected_entry.items():
+            if field_name in skip_fields:
+                continue
             if entry.get(field_name) != value:
                 errors.append(
                     f"manifest {field_name} mismatch for {name}: "

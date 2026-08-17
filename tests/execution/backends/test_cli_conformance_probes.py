@@ -1828,7 +1828,7 @@ def test_shell_capture_assertion_requires_completed_rewritten_command(
         _assert_shell_capture_round_trip(_output(status="completed", include_marker=False))
 
     for noncompleted_status in ("denied", "failed"):
-        with pytest.raises(AssertionError, match="No completed command_execution"):
+        with pytest.raises(AssertionError, match="No completed rewritten command"):
             _assert_shell_capture_round_trip(_output(status=noncompleted_status))
 
     command_without_runner = rewritten_command.replace("_capture_artifacts.py", "other.py")

@@ -137,6 +137,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "configure_fleet",
             "configure_order",
             "lock_ingredients",
+            "declare_join_batch",
         ),
     ),
 )

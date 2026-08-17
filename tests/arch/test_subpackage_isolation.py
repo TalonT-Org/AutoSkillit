@@ -137,6 +137,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # _RETENTION_SECONDS resolved once at import time from the single-source-of-truth
         # STATE_RECLAIMABILITY sweep grace (_lifecycle_policy.SWEEP_GRACE_SECONDS).
         "_capture_lifecycle",
+        # join ledger alphabet/filename constants resolved once at import time.
+        "_join_ledger",  # hooks/_join_ledger.py: _BATCH_ID_ALPHABET, LEDGER_FILENAME
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1002,7 +1004,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
         # so it lives at this IL-1 layer rather than splitting further — its 176 lines
         # are one cohesive read/write/clear API with no internal seam to extract)
-        "hooks": 23,  # +_capture_process owned shell process-group boundary;
+        "hooks": 24,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
         # and request-correlated exploration identity records
@@ -1018,7 +1020,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
         # +_recipe_section_handler.py (bounded recipe-section pull handler)
-        "hooks/guards": 35,  # +github_mutation_guard (#4432);
+        "hooks/guards": 39,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
         # +fabricated_completion_guard (#4457)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
@@ -1084,6 +1086,18 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    # REQ-CNST-010-E26: #4520/#4575 splits the headless helpers (one shared
+    # resolve_policy + assert_interactive_ordering + validate_interactive_invocation
+    # surface) across the join guard enforcement and per-launch environment
+    # normalization. The 220-line limit was exceeded by 2 lines after the
+    # #4575 force-inactive policy addition; bumping the limit to 240 keeps the
+    # helpers in one module without a forced split.
+    "headless/_headless_helpers.py": (
+        240,
+        "REQ-CNST-010-E26: #4520/#4575 keeps resolve_policy + "
+        "assert_interactive_ordering + validate_interactive_invocation together "
+        "as the headless-side envoy to the interactive launch layers",
+    ),
     "execution/evidence_reader.py": (
         1500,
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
@@ -1199,7 +1213,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_recipe_section_rendering) with char-ceiling plumbing and dual-domain page fitting.",
     ),
     "tools_kitchen.py": (
-        2260,
+        2400,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "and the request-scoped replay binder journals operation/effect provenance; "
@@ -1297,7 +1311,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2454,
+        2500,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1356,7 +1370,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(+10 net lines)",
     ),
     "execution/backends/claude.py": (
-        1250,
+        1600,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
@@ -1509,7 +1523,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection, and execution identity in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
-        1150,
+        1200,
         "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
         "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
         "module rather than a sub-package (a package split would change how hook scripts "

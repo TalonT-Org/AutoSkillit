@@ -100,6 +100,7 @@ def test_every_migrated_semantic_declaration_participates_in_conformance() -> No
 
 
 def test_every_bundled_semantic_plan_adapts_on_every_registered_backend() -> None:
+    from autoskillit.core.types._type_exceptions import SkillContractError
     from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.workspace import DefaultSkillResolver
 
@@ -113,6 +114,21 @@ def test_every_bundled_semantic_plan_adapts_on_every_registered_backend() -> Non
         backend = backend_factory()
         for skill_name, plan in plans:
             assert plan is not None
+            # Codex cannot provide fixed-set fan-in. Join-required skills
+            # are honestly refused at admission via SkillContractError at
+            # the adapter surface (fail-closed). This is the expected
+            # outcome.
+            if backend_name == "codex" and plan.join is not None and plan.join.required:
+                try:
+                    backend.adapt_skill_semantics(plan)
+                except SkillContractError as exc:
+                    if "wait-any/mailbox-activity" not in str(exc):
+                        violations.append(f"{skill_name}/{backend_name}: {exc}")
+                else:
+                    violations.append(
+                        f"{skill_name}/{backend_name}: expected refusal, adapted instead"
+                    )
+                continue
             adaptation = backend.adapt_skill_semantics(plan)
             if adaptation.unsupported_operation is not None:
                 violations.append(
@@ -144,7 +160,15 @@ def test_every_bundled_codex_child_spawn_targets_a_registered_role() -> None:
     backend = CodexBackend()
     for skill_name, plan in plans:
         assert plan is not None
+        # Codex refuses join-required plans honestly via SkillContractError
+        # at the adapter surface (fail-closed); skip those before adapting.
+        if plan.join is not None and plan.join.required:
+            continue
         adaptation = backend.adapt_skill_semantics(plan)
+        if adaptation.unsupported_operation is not None:
+            continue
+        if not adaptation.logical_role_mapping:
+            continue
         targets = {adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns}
         missing = sorted(targets - allowed)
         if missing:

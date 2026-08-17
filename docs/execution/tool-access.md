@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 74 MCP tools across overlapping visibility surfaces that control which
+AutoSkillit provides 75 MCP tools across overlapping visibility surfaces that control which
 session types can see each tool. Visibility determines addressability; each tool still enforces
 its own authority contract.
 
@@ -140,7 +140,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 74 tools with their access level, tags, source file, and functional category.
+All 75 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 ER = `evidence-reader`, GH = `github`, CI = `ci`, CL = `clone`,
@@ -159,7 +159,8 @@ TL = `telemetry`, FL = `fleet`
 | `reload_session` | AS | `server/tools_kitchen.py` |
 | `configure_fleet` | AS | `server/tools_config.py` |
 | `configure_order` | AS | `server/tools_config.py` |
-| `lock_ingredients` | AS | `server/tools_config.py` |
+| `lock_ingredients` | AS | `server/tools_kitchen.py` |
+| `declare_join_batch` | AS, K | `server/tools_kitchen.py` | Opens one declared-batch JoinLedger for the next wave; see `JoinLedger` lifecycle. Claude-only when `fixed_set_join_capable`. |
 
 ---
 
@@ -299,7 +300,7 @@ dynamically gated until opening completes. The bounded client snapshot and
 fresh/resume behavior are documented in
 [Claude startup readiness](claude-startup-readiness.md).
 
-**Total: 74 registered tools**. The 51 kitchen-tagged tools include seven of the eight
+**Total: 75 registered tools**. The 51 kitchen-tagged tools include seven of the eight
 headless tools. The two authenticated evidence-reader brokers are excluded from the
 kitchen, free-range, and fleet counts.
 

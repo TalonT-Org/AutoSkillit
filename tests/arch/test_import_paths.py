@@ -138,7 +138,8 @@ TOOLS_FILES = list((SRC / "server" / "tools").glob("tools_*.py"))
 
 @pytest.mark.parametrize("path", TOOLS_FILES, ids=lambda p: p.name)
 def test_req_imp_003_tools_import_namespace(path: Path) -> None:
-    """tools_*.py may import from core, pipeline, config, hook_registry, and server."""
+    """tools_*.py may import from core, pipeline, config, hook_registry, hooks
+    (join batch ledger + diagnostics only), and server."""
     allowed = frozenset(
         {
             "autoskillit.core",
@@ -148,6 +149,7 @@ def test_req_imp_003_tools_import_namespace(path: Path) -> None:
             "autoskillit.config",
             "autoskillit.fleet",
             "autoskillit.hook_registry",
+            "autoskillit.hooks",  # declare_join_batch handler calls into the join ledger
         }
     )
     violations: list[str] = []

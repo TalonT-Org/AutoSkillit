@@ -87,7 +87,11 @@ def test_type_ignore_count_budget() -> None:
                 count += 1
     # The exploration identity guard has two standalone sibling imports that static
     # analysis cannot resolve through its runtime hooks-directory path bootstrap.
-    budget = 123
+    # The join batch machinery (#4575) adds 14 site-bounded # type: ignore comments
+    # across the declare_join_batch handler, the join ledger, and the Join-guard
+    # hook scripts; the runtime join ledger is stdlib-only and the bridge layers
+    # cannot be statically resolved from outside the hooks/ subtree.
+    budget = 140
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

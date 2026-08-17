@@ -82,6 +82,28 @@ def _atomic_write_flag(path: Path, content: str) -> None:
         raise
 
 
+def _write_auto_exempt(path: Path) -> None:
+    """Mark a session as auto-exempted after repeated denials.
+
+    Composes with an existing JSON binding by setting the ``auto_exempt``
+    boolean rather than overwriting the file. If the flag is unreadable as
+    JSON, it is replaced with a minimal exempt-only envelope so the guard
+    fails open for that session.
+    """
+    try:
+        existing_raw = path.read_text(encoding="utf-8")
+        existing = json.loads(existing_raw)
+    except (FileNotFoundError, OSError, json.JSONDecodeError, ValueError):
+        existing = None
+    if isinstance(existing, dict):
+        merged = dict(existing)
+        merged["auto_exempt"] = True
+        payload = json.dumps(merged, sort_keys=True)
+    else:
+        payload = json.dumps({"schema_version": 1, "auto_exempt": True}, sort_keys=True)
+    _atomic_write_flag(path, payload)
+
+
 _DENY_MESSAGE: str = (
     "SKILL LOADING REQUIRED. You MUST call the Skill tool to load the skill "
     "instructions before using any other tools. Call ToolSearch with query "
@@ -126,11 +148,19 @@ def main() -> None:
     temp_dir = project_root / ".autoskillit" / "temp"
     flag_path = temp_dir / f"skill_guard_{session_id}.flag"
     if flag_path.exists():
-        sys.exit(0)
+        # The guard only needs to know that Skill was loaded; treat any
+        # non-empty file as evidence. The companion join enforcement reads
+        # the flag as JSON.
+        try:
+            content = flag_path.read_text(encoding="utf-8")
+        except OSError:
+            content = ""
+        if content.strip():
+            sys.exit(0)
 
     if _check_deny_count(temp_dir, session_id):
         try:
-            _atomic_write_flag(flag_path, "__auto_exempt__")
+            _write_auto_exempt(flag_path)
             sys.stderr.write(
                 f"skill_load_guard: auto-exempted session {session_id} after "
                 f"{DENY_THRESHOLD} denials (possible deadlock)\n"

@@ -22,6 +22,19 @@ semantic_requirements:
   - name: vis-lens-chart-select
   - name: vis-lens-multi-compare
   - name: vis-lens-reproducibility
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Domain Norms Visualization Lens
@@ -216,7 +229,11 @@ when a tradition is loaded (either via `tradition_slug` or via `classify_methodo
 - Import or execute target code, tests, experiments, models, plotting pipelines, or benchmarks
 - Let a migrated exploration vector select a methodology tradition, assign coverage status, recommend figures, or create the diagram
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Identify the ML sub-area from the experiment plan or context before checking mandatory figures
 - For each mandatory figure type, assign one of three statuses: **present**, **partial**, **absent**
 - Sort the gap list absent-first, then partial

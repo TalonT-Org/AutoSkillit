@@ -31,6 +31,7 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
     SkillAuthority,
+    SkillContractError,
     SkillExecutionRole,
     SkillSource,
     SkillSourceRef,
@@ -396,20 +397,54 @@ class ProjectedPluginArtifactAuthority:
             raise PluginArtifactPublicationError(
                 f"direct plugin has no bundled skills: {source_root}"
             )
+        # Backends fail closed (raise SkillContractError) directly from
+        # adapt_skill_semantics() when a plan declares an operation they
+        # cannot honestly realize (e.g. Codex + join.required=true), rather
+        # than returning a gradable unsupported_operation result. Treat that
+        # refusal the same way compile_session_skill_catalog() does: exclude
+        # the skill from this catalog instead of failing the whole plan.
+        adaptation_digests: dict[str, str] = {}
+        excluded_skill_names: set[str] = set()
+        for skill in catalog.skills:
+            plan = skill.semantic_plan
+            if plan is None:
+                continue
+            try:
+                adaptation = backend.adapt_skill_semantics(plan)
+            except SkillContractError:
+                excluded_skill_names.add(skill.name)
+                continue
+            adaptation.validate_for(plan, backend=backend.name)
+            adaptation_digests[skill.name] = adaptation.digest
+        if excluded_skill_names:
+            catalog = EffectiveSkillCatalog(
+                skills=cast(
+                    tuple[SkillCatalogEntry, ...],
+                    tuple(
+                        skill for skill in catalog.skills if skill.name not in excluded_skill_names
+                    ),
+                ),
+                execution_role=catalog.execution_role,
+                namespace_sources={
+                    name: source
+                    for name, source in catalog.namespace_sources.items()
+                    if name not in excluded_skill_names
+                },
+                exclusions=cast(tuple[SkillExclusion, ...], tuple(catalog.exclusions)),
+            )
+            if not catalog.skills:
+                raise PluginArtifactPublicationError(
+                    "direct plugin has no bundled skills supported by backend "
+                    f"{backend.name!r}: {source_root}"
+                )
         skill_identity = "\n".join(
             f"{info.name}:{info.canonical_digest}:{info.exploration_sidecar_digest}"
             for info in sorted(catalog.skills, key=lambda skill: skill.name)
         )
-        adaptation_identity_parts: list[str] = []
-        for skill in sorted(catalog.skills, key=lambda item: item.name):
-            plan = skill.semantic_plan
-            if plan is None:
-                adaptation_identity_parts.append(f"{skill.name}:")
-                continue
-            adaptation = backend.adapt_skill_semantics(plan)
-            adaptation.validate_for(plan, backend=backend.name)
-            adaptation_identity_parts.append(f"{skill.name}:{adaptation.digest}")
-        adaptation_identity = "\n".join(adaptation_identity_parts)
+        adaptation_identity = "\n".join(
+            f"{skill.name}:{adaptation_digests.get(skill.name, '')}"
+            for skill in sorted(catalog.skills, key=lambda item: item.name)
+        )
         namespace_identity = "\n".join(
             f"{name}:{source.value}" for name, source in sorted(catalog.namespace_sources.items())
         )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -120,11 +119,12 @@ def _managed(
     session_id: str,
     *,
     backend,
+    names: frozenset[str] | None = None,
     role: SkillExecutionRole = SkillExecutionRole.SESSION,
 ):
     from autoskillit.workspace import compile_session_skill_catalog
 
-    catalog, context = _catalog_context(manager, backend=backend, role=role)
+    catalog, context = _catalog_context(manager, backend=backend, names=names, role=role)
     compilation = compile_session_skill_catalog(catalog, backend)
     return manager.managed_session(session_id, compilation, context)
 
@@ -145,7 +145,9 @@ def codex_env():
 
 def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, codex_env) -> None:
     mgr = make_session_skill_manager()
-    session_path = _materialize(mgr, "sid", backend=codex_env.backend)
+    session_path = _materialize(
+        mgr, "sid", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+    )
     skill_files = list(
         (session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR).glob("*/SKILL.md")
     )
@@ -156,6 +158,7 @@ def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, co
 def test_codex_materializes_exact_guarded_investigate_document(
     make_session_skill_manager,
 ) -> None:
+    """Codex must refuse to project the join-bearing 'investigate' skill (rectify-join)."""
     from autoskillit.core import ExplorationVectorApplicabilityId
     from autoskillit.workspace import (
         DefaultSkillResolver,
@@ -178,33 +181,9 @@ def test_codex_materializes_exact_guarded_investigate_document(
         active_exploration_applicabilities=frozenset(ExplorationVectorApplicabilityId),
         parent_sandbox_mode="read-only",
     )
-    expected = project_agent_skill_document(invocation.root, context)
 
-    add_dir = manager.materialize_invocation("investigate-materialized", invocation, context)
-    written = (
-        add_dir / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR / "investigate" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-
-    assert written == expected.content
-    assert expected.semantic_payload["child_spawns"] == (
-        {
-            "role": "delegated-worker",
-            "for_each": "selected_reasoning_responsibilities",
-        },
-        {
-            "role": "autoskillit:web-evidence-researcher",
-            "for_each": "selected_web_research_topics",
-        },
-    )
-    fragments = expected.adaptation_payload["instruction_fragments"]
-    assert any("selected_reasoning_responsibilities" in item for item in fragments)
-    assert any("selected_web_research_topics" in item for item in fragments)
-    assert expected.semantic_digest in written
-    assert expected.adaptation_digest in written
-    assert hashlib.sha256(written.encode()).hexdigest() == expected.projected_digest
-    assert "Candidate exploration task" in written
-    assert "selected_exploration_task_ids" in written
-    assert "Call spawn_agent 1 time" not in written
+    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+        project_agent_skill_document(invocation.root, context)
 
 
 def test_materialization_forwards_only_server_explorer_binding_env(
@@ -215,7 +194,7 @@ def test_materialization_forwards_only_server_explorer_binding_env(
     catalog, context = _catalog_context(
         manager,
         backend=codex_env.backend,
-        names=frozenset({"investigate"}),
+        names=frozenset({"make-arch-diag"}),
     )
     binding_env = {
         "semantic-code-navigator": {
@@ -245,7 +224,7 @@ def test_materialization_mints_explorer_binding_between_prelaunch_and_setup(
     catalog, context = _catalog_context(
         manager,
         backend=codex_env.backend,
-        names=frozenset({"investigate"}),
+        names=frozenset({"make-arch-diag"}),
     )
     events: list[str] = []
     binding_env = {
@@ -314,12 +293,12 @@ def test_codex_generated_home_links_projected_catalog_into_discovery_root(
         mgr,
         "sid",
         backend=codex_env.backend,
-        names=frozenset({"investigate"}),
+        names=frozenset({"make-arch-diag"}),
     )
 
     add_dir_path = Path(str(add_dir))
-    projected = add_dir_path / "skills" / "investigate"
-    discoverable = add_dir_path.parent / "skills" / "investigate"
+    projected = add_dir_path / "skills" / "make-arch-diag"
+    discoverable = add_dir_path.parent / "skills" / "make-arch-diag"
 
     assert discoverable.is_symlink()
     assert not discoverable.readlink().is_absolute()
@@ -330,7 +309,7 @@ def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
     make_session_skill_manager,
     codex_env,
 ) -> None:
-    profile_content = "---\nname: investigate\ndescription: profile copy\n---\n"
+    profile_content = "---\nname: make-arch-diag\ndescription: profile copy\n---\n"
 
     def setup_session_dir(
         session_dir: Path,
@@ -339,7 +318,7 @@ def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> None:
         del parent_sandbox_mode, execution_role
-        profile_skill = session_dir / "skills" / "investigate"
+        profile_skill = session_dir / "skills" / "make-arch-diag"
         profile_skill.mkdir(parents=True)
         (profile_skill / "SKILL.md").write_text(profile_content)
 
@@ -349,22 +328,24 @@ def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
         mgr,
         "sid",
         backend=codex_env.backend,
-        names=frozenset({"investigate"}),
+        names=frozenset({"make-arch-diag"}),
     )
 
     add_dir_path = Path(str(add_dir))
-    discoverable = add_dir_path.parent / "skills" / "investigate"
+    discoverable = add_dir_path.parent / "skills" / "make-arch-diag"
 
     assert not discoverable.is_symlink()
     assert (discoverable / "SKILL.md").read_text() == profile_content
-    assert (add_dir_path / "skills" / "investigate" / "SKILL.md").is_file()
+    assert (add_dir_path / "skills" / "make-arch-diag" / "SKILL.md").is_file()
 
 
 def test_codex_init_session_delegates_to_setup_session_dir(
     make_session_skill_manager, codex_env
 ) -> None:
     mgr = make_session_skill_manager()
-    session_path = _materialize(mgr, "sid", backend=codex_env.backend)
+    session_path = _materialize(
+        mgr, "sid", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+    )
     codex_env.backend.setup_session_dir.assert_called_once_with(
         Path(str(session_path)).parent,
         parent_sandbox_mode="workspace-write",
@@ -380,6 +361,7 @@ def test_codex_managed_orchestrator_materializes_exact_catalog(
     catalog, _ = _catalog_context(
         mgr,
         backend=codex_env.backend,
+        names=frozenset({"sous-chef"}),
         role=SkillExecutionRole.ORCHESTRATOR,
     )
 
@@ -387,6 +369,7 @@ def test_codex_managed_orchestrator_materializes_exact_catalog(
         mgr,
         "orchestrator",
         backend=codex_env.backend,
+        names=frozenset({"sous-chef"}),
         role=SkillExecutionRole.ORCHESTRATOR,
     ) as managed:
         projected_root = Path(managed.skills_dir.path) / "skills"
@@ -409,6 +392,7 @@ def test_codex_managed_orchestrator_rejects_discovery_collision(
     catalog, _ = _catalog_context(
         mgr,
         backend=codex_env.backend,
+        names=frozenset({"sous-chef"}),
         role=SkillExecutionRole.ORCHESTRATOR,
     )
     collision_name = catalog.skills[0].name
@@ -430,6 +414,7 @@ def test_codex_managed_orchestrator_rejects_discovery_collision(
             mgr,
             "orchestrator",
             backend=codex_env.backend,
+            names=frozenset({"sous-chef"}),
             role=SkillExecutionRole.ORCHESTRATOR,
         ):
             pass
@@ -445,7 +430,9 @@ def test_codex_init_session_returns_validated_add_dir(
     make_session_skill_manager, codex_env
 ) -> None:
     mgr = make_session_skill_manager()
-    result = _materialize(mgr, "sid", backend=codex_env.backend)
+    result = _materialize(
+        mgr, "sid", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+    )
     assert isinstance(result, ValidatedAddDir)
     assert str(result).endswith("/sid/add-dir")
 
@@ -466,7 +453,9 @@ def test_codex_init_session_calls_ensure_pre_launch(make_session_skill_manager, 
     codex_env.backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
 
     mgr = make_session_skill_manager()
-    skills_dir = _materialize(mgr, "sid", backend=codex_env.backend)
+    skills_dir = _materialize(
+        mgr, "sid", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+    )
     codex_env.backend.ensure_pre_launch.assert_called_once_with(
         session_dir=Path(str(skills_dir)).parent
     )
@@ -482,7 +471,7 @@ def test_codex_init_session_raises_when_pre_launch_fails(
 
     mgr = make_session_skill_manager()
     with pytest.raises(RuntimeError, match="Pre-launch check failed"):
-        _materialize(mgr, "sid", backend=codex_env.backend)
+        _materialize(mgr, "sid", backend=codex_env.backend, names=frozenset({"make-arch-diag"}))
 
 
 def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) -> None:
@@ -702,7 +691,9 @@ def test_managed_codex_home_uses_private_empty_inert_rollout_links(
         ephemeral_root=tmp_path / "ephemeral",
         codex_root=codex_root,
     )
-    with _managed(mgr, "0123456789abcdef", backend=codex_env.backend) as managed:
+    with _managed(
+        mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+    ) as managed:
         assert isinstance(managed, ManagedSessionHome)
         assert managed.generated_home == codex_root / "0123456789abcdef"
         assert managed.skills_dir == ValidatedAddDir(path=str(managed.generated_home / "add-dir"))
@@ -742,7 +733,9 @@ def test_persistent_backend_declares_its_own_inert_paths(
     )
     persistent_root = tmp_path / "persistent" / "custom-sessions"
     mgr = make_session_skill_manager(codex_root=persistent_root)
-    with _managed(mgr, "0123456789abcdef", backend=backend) as managed:
+    with _managed(
+        mgr, "0123456789abcdef", backend=backend, names=frozenset({"make-arch-diag"})
+    ) as managed:
         records = managed.generated_home / "records"
         assert records.is_symlink()
         assert records.resolve(strict=True).is_dir()
@@ -778,7 +771,9 @@ def test_managed_codex_home_rolls_back_every_published_owner_on_initialization_f
         codex_env.backend.validate_session_layout.return_value = [expected]
 
     with pytest.raises(RuntimeError, match=expected):
-        with _managed(mgr, "0123456789abcdef", backend=codex_env.backend):
+        with _managed(
+            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+        ):
             pytest.fail("initialization failure must occur before managed_session yields")
 
     assert not (codex_root / "0123456789abcdef").exists()
@@ -806,7 +801,9 @@ def test_managed_codex_home_cleans_up_once_when_body_raises(
     monkeypatch.setattr(session_skills.shutil, "rmtree", recording_rmtree)
 
     with pytest.raises(KeyboardInterrupt, match="stop"):
-        with _managed(mgr, "0123456789abcdef", backend=codex_env.backend) as managed:
+        with _managed(
+            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+        ) as managed:
             assert managed.generated_home.exists()
             raise KeyboardInterrupt("stop")
 
@@ -867,7 +864,9 @@ def test_managed_codex_home_lease_acquisition_failure_precedes_home_mutation(
     )
 
     with pytest.raises(OSError, match="lease open failed"):
-        with _managed(mgr, "0123456789abcdef", backend=codex_env.backend):
+        with _managed(
+            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+        ):
             pytest.fail("lease failure must precede yield")
 
     assert not (codex_root / "0123456789abcdef").exists()
@@ -904,7 +903,9 @@ def test_managed_codex_home_never_reacquires_its_lease_after_initialization(
         classmethod(recording_acquire),
     )
 
-    with _managed(mgr, "0123456789abcdef", backend=codex_env.backend):
+    with _managed(
+        mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+    ):
         pass
 
     assert len(calls) == 1
@@ -918,7 +919,9 @@ def test_unowned_cleanup_refuses_a_contended_generated_home(
     codex_root = tmp_path / "persistent" / "codex-sessions"
     owner = make_session_skill_manager(codex_root=codex_root)
     contender = make_session_skill_manager(codex_root=codex_root)
-    _materialize(owner, "0123456789abcdef", backend=codex_env.backend)
+    _materialize(
+        owner, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+    )
 
     assert contender.cleanup_session("0123456789abcdef") is False
     assert (codex_root / "0123456789abcdef").is_dir()
@@ -1012,7 +1015,9 @@ def test_managed_cleanup_preserves_a_lone_deletion_failure(
         raise _DeletionFailure("delete failed")
 
     with pytest.raises(_DeletionFailure, match="delete failed"):
-        with _managed(mgr, "0123456789abcdef", backend=codex_env.backend):
+        with _managed(
+            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+        ):
             monkeypatch.setattr(
                 session_skills,
                 "_remove_and_verify",
@@ -1037,7 +1042,9 @@ def test_managed_cleanup_preserves_a_lone_release_failure(
         raise _ReleaseFailure("release failed")
 
     with pytest.raises(_ReleaseFailure, match="release failed"):
-        with _managed(mgr, "0123456789abcdef", backend=codex_env.backend):
+        with _managed(
+            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+        ):
             monkeypatch.setattr(
                 session_skills._SessionLease,
                 "release",
@@ -1066,7 +1073,9 @@ def test_managed_cleanup_groups_body_deletion_and_release_failures_in_order(
         raise _ReleaseFailure("release failed")
 
     with pytest.raises(BaseExceptionGroup) as caught:
-        with _managed(mgr, "0123456789abcdef", backend=codex_env.backend):
+        with _managed(
+            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+        ):
             monkeypatch.setattr(session_skills, "_remove_and_verify", fail_delete)
             monkeypatch.setattr(
                 session_skills._SessionLease,

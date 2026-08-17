@@ -178,7 +178,7 @@ def test_generated_hooks_json_includes_ask_user_question_gate() -> None:
 
     h = generate_hooks_json()
     pretool = h["hooks"].get("PreToolUse", [])
-    matchers = [entry["matcher"] for entry in pretool]
+    matchers = [entry.get("matcher", "") for entry in pretool]
     assert "AskUserQuestion" in matchers
 
 

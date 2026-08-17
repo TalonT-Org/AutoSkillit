@@ -586,21 +586,28 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    warning_threshold = active_dimensions * WARNING_BUDGET_PER_DIM
 
    # L1 fail-fast path: only STRUCTURAL defects trigger STOP
-   l1_criticals = [f for f in critical_findings if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
+   l1_criticals = [
+       f
+       for f in critical_findings
+       if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}
+   ]
    # Tag ADDRESSABLE L1 criticals as REQUIRED (scope: hypothesis_falsifiability only)
    for f in l1_criticals:
        if f.fixability == "ADDRESSABLE":
            f.priority = "REQUIRED"
    # Scope guard: only STRUCTURAL/None fixability triggers STOP (see _STRUCTURAL_FIXABILITY_VALUES)
    structural_stop_triggers = [
-       f for f in l1_criticals
+       f
+       for f in l1_criticals
        if f.fixability in _STRUCTURAL_FIXABILITY_VALUES  # {"STRUCTURAL", None}
    ]
 
    # Red-team STOP path: red_team has no fixability concept — dimension-only match is
    # intentional here (unlike L1 criticals which gate on fixability via
    # _STRUCTURAL_FIXABILITY_VALUES). The severity cap is applied upstream.
-   stop_triggers = structural_stop_triggers + [f for f in critical_findings if f.dimension == "red_team"]
+   stop_triggers = structural_stop_triggers + [
+       f for f in critical_findings if f.dimension == "red_team"
+   ]
 
    if stop_triggers:
        verdict = "STOP"

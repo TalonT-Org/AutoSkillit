@@ -427,6 +427,7 @@ def test_skill_session_config_fields_exhaustive():
         "resume_session_id",
         "resume_checkpoint",
         "resume_message",
+        "force_inactive_agent_teams",
         "sandbox_mode",
         "network_access",
         "include_scope_discipline",

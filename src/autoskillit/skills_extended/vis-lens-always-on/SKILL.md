@@ -23,6 +23,19 @@ semantic_requirements:
   - name: vis-lens-antipattern
   - name: vis-lens-caption-annot
   - name: vis-lens-color-access
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Always-On Visualization Triage Lens
@@ -62,7 +75,11 @@ semantic_requirements:
 - Emit PASS if any critical finding exists — any single critical = FAIL_N
 - Run exploration leaves in the background
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Run all three passes in sequence; do not skip any pass
 - Tally critical_count and warning_count across all three passes
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY

@@ -541,6 +541,7 @@ def test_free_range_tools_contains_expected_names():
         "configure_fleet",
         "configure_order",
         "lock_ingredients",
+        "declare_join_batch",
     }
 
 

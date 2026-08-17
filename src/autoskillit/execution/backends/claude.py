@@ -62,10 +62,12 @@ from autoskillit.core import (
     SessionSummary,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
     YAMLError,
+    atomic_write,
     build_agent_env,
     claude_code_log_path,
     claude_code_project_dir,
@@ -111,6 +113,242 @@ _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer bin
 # launch. Used by _claude_host_attestation_env() to determine whether the
 # installed Claude Code CLI supports ``anthropic/maxResultSizeChars``.
 _ANNOTATION_SUPPORT_MIN = Version(CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION)
+
+
+#: Documented Claude Code env-var that enables/disables the agent-teams
+#: surface. Confirmed via code.claude.com/docs/en/agent-teams as the only
+#: public toggle. The repository-scoped force-inactive setting removes or
+#: overrides this env var before every Claude launch and any conflicting
+#: entry in the target repo's .claude/settings*.json files.
+CLAUDE_AGENT_TEAMS_ENV_VAR: str = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
+
+
+def _neutralize_agent_teams_env(env: dict[str, str]) -> None:
+    """Remove ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` from ``env`` in place."""
+    env.pop(CLAUDE_AGENT_TEAMS_ENV_VAR, None)
+
+
+#: Repository-local settings files consulted for env-based team re-enable.
+_AGENT_TEAMS_SETTINGS_CANDIDATE_NAMES = (".claude/settings.json", ".claude/settings.local.json")
+
+
+def _agent_teams_settings_candidates(root: Path) -> tuple[Path, ...]:
+    """Return the absolute candidate settings paths under ``root``."""
+    return tuple(root / name for name in _AGENT_TEAMS_SETTINGS_CANDIDATE_NAMES)
+
+
+def detect_repository_agent_teams_setting(
+    project_root: Path | str | None,
+) -> tuple[str | None, str]:
+    """Return (effective_value, source_path) for any conflicting settings file.
+
+    Per Claude Code's documented settings precedence, ``env.<var>`` entries
+    in ``.claude/settings.json`` or ``.claude/settings.local.json`` apply
+    after user-level settings and can re-enable teams even when the
+    launcher process env has the var unset.
+
+    Returns ``(None, "")`` when no conflicting entry is found. The caller
+    must combine the launcher-env scan with this file scan and refuse the
+    launch when neither confirms an inactive effective state.
+    """
+    if project_root is None:
+        return (None, "")
+    root = Path(project_root).expanduser().resolve()
+    for candidate in _agent_teams_settings_candidates(root):
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError):
+            continue
+        try:
+            parsed = json.loads(content)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        env = parsed.get("env")
+        if not isinstance(env, dict):
+            continue
+        value = env.get(CLAUDE_AGENT_TEAMS_ENV_VAR)
+        if isinstance(value, str):
+            return (value, str(candidate))
+    return (None, "")
+
+
+def find_malformed_agent_teams_settings(
+    project_root: Path | str | None,
+) -> list[str]:
+    """Return paths of settings files that exist but cannot be parsed.
+
+    When ``force_inactive_agent_teams=True`` is requested, a malformed
+    settings file is a fail-closed condition: Claude Code may still parse
+    the file permissively and re-enable teams. Returns an empty list when
+    the project_root is None or no settings files are malformed.
+    """
+    if project_root is None:
+        return []
+    root = Path(project_root).expanduser().resolve()
+    malformed: list[str] = []
+    for candidate in _agent_teams_settings_candidates(root):
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # Unreadable file: treat as malformed for fail-closed purposes.
+            malformed.append(str(candidate))
+            continue
+        try:
+            parsed = json.loads(content)
+        except (ValueError, TypeError):
+            malformed.append(str(candidate))
+            continue
+        if not isinstance(parsed, dict):
+            malformed.append(str(candidate))
+            continue
+        env = parsed.get("env")
+        if env is not None and not isinstance(env, dict):
+            malformed.append(str(candidate))
+    return malformed
+
+
+#: Truthy values that re-enable Claude agent teams if present in the env.
+_AGENT_TEAMS_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _active_agent_teams(value: str) -> bool:
+    """Return True if the string value would re-enable agent teams."""
+    return value.strip().lower() in _AGENT_TEAMS_TRUTHY
+
+
+def neutralize_repository_agent_teams_settings(project_root: Path | str | None) -> int:
+    """Strip conflicting ``env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` entries.
+
+    Returns the number of settings files modified. Each file is rewritten
+    after the offending key is removed. Refuses to rewrite when the file
+    is malformed or unreadable.
+    """
+    if project_root is None:
+        return 0
+    root = Path(project_root).expanduser().resolve()
+    modified = 0
+    for candidate in _agent_teams_settings_candidates(root):
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError):
+            continue
+        try:
+            parsed = json.loads(content)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        env = parsed.get("env")
+        if not isinstance(env, dict):
+            continue
+        if CLAUDE_AGENT_TEAMS_ENV_VAR not in env:
+            continue
+        del env[CLAUDE_AGENT_TEAMS_ENV_VAR]
+        try:
+            new_content = json.dumps(parsed, indent=2, sort_keys=True)
+        except (ValueError, TypeError):
+            continue
+        atomic_write(candidate, new_content)
+        modified += 1
+    return modified
+
+
+def _resolve_project_root_for_inactive_check(project_root: Path | str | None) -> None:
+    """Refuse a launch when force_inactive is requested without project_root.
+
+    Without ``project_root``, ``assert_agent_teams_inactive`` cannot read
+    the target repo's ``.claude/settings*.json`` files, so the only path
+    it can confirm is the resolved launcher env. The plan's Step 5 (3)
+    requires a positive confirmation of BOTH the env and the settings
+    files; passing ``None`` is a fail-open bypass.
+    """
+    if project_root is None:
+        raise RuntimeError(
+            "force_inactive_agent_teams=True requires project_root so the "
+            "settings file scan can confirm inactivity"
+        )
+
+
+def _interactive_invocation_environment_policy(
+    env: Mapping[str, str],
+    project_root: Path | str | None,
+) -> list[str]:
+    """Content-policy errors for an interactive Claude launch.
+
+    The interactive cook/order checkpoint must positively confirm that the
+    effective environment will leave Claude agent teams inactive. Returns
+    a list of human-readable error strings (empty list when no violation
+    is detected). The launch layer surfaces these as pre-spawn failures.
+
+    The policy matches what the per-builder assertions check — the launch
+    env must not carry a truthy ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS``
+    value, and any conflicting entry in the target repository's
+    ``.claude/settings*.json`` files would re-enable teams under Claude's
+    documented settings precedence.
+    """
+    errors: list[str] = []
+    env_value = env.get(CLAUDE_AGENT_TEAMS_ENV_VAR)
+    if isinstance(env_value, str) and _active_agent_teams(env_value):
+        errors.append(
+            f"{CLAUDE_AGENT_TEAMS_ENV_VAR}={env_value!r} is set in the launch "
+            f"environment; Claude agent teams would be active at launch"
+        )
+    malformed = find_malformed_agent_teams_settings(project_root)
+    if malformed:
+        errors.append(
+            f"settings file(s) could not be parsed and may re-enable teams: "
+            f"{', '.join(malformed)}; repair or remove the malformed file before launching"
+        )
+    file_value, file_path = detect_repository_agent_teams_setting(project_root)
+    if file_value is not None and _active_agent_teams(file_value):
+        errors.append(
+            f"{CLAUDE_AGENT_TEAMS_ENV_VAR}={file_value!r} is set in "
+            f"{file_path}; Claude agent teams would be re-enabled by "
+            "repository settings precedence"
+        )
+    return errors
+
+
+def assert_agent_teams_inactive(
+    env: Mapping[str, str],
+    project_root: Path | str | None,
+    *,
+    force_inactive: bool,
+) -> None:
+    """Verify that the effective environment will result in inactive agent teams.
+
+    Raises ``RuntimeError`` when ``force_inactive`` is True but neither the
+    process env nor the target repository's settings files positively
+    confirm an inactive policy. This is the pre-spawn refusal surface.
+
+    A malformed settings file is also a fail-closed condition: Claude Code
+    may still parse the file permissively and re-enable teams.
+    """
+    if not force_inactive:
+        return
+    env_value = env.get(CLAUDE_AGENT_TEAMS_ENV_VAR)
+    if isinstance(env_value, str) and _active_agent_teams(env_value):
+        raise RuntimeError(
+            f"force_inactive_agent_teams requested but {CLAUDE_AGENT_TEAMS_ENV_VAR} "
+            f"is set to {env_value!r} in the launch env"
+        )
+    malformed = find_malformed_agent_teams_settings(project_root)
+    if malformed:
+        raise RuntimeError(
+            f"force_inactive_agent_teams requested but settings file(s) could not "
+            f"be parsed and may re-enable teams: {', '.join(malformed)}. "
+            "Repair or remove the malformed file before launching."
+        )
+    file_value, file_path = detect_repository_agent_teams_setting(project_root)
+    if file_value is not None and _active_agent_teams(file_value):
+        raise RuntimeError(
+            f"force_inactive_agent_teams requested but {CLAUDE_AGENT_TEAMS_ENV_VAR} "
+            f"is set to {file_value!r} in {file_path}"
+        )
 
 
 def _claude_host_attestation_env(
@@ -585,12 +823,18 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         env_extras: Mapping[str, str] | None = None,
         base: Mapping[str, str] | None = None,
         required: frozenset[str] | None = None,
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
         if model:
             cmd += [ClaudeFlags.MODEL, self.translate_model(model)]
         env = dict(build_agent_env(base=base, extras=env_extras, required=required))
         env.update(_HEADLESS_ENV_HARDENING)
+        if force_inactive_agent_teams:
+            _neutralize_agent_teams_env(env)
+            _resolve_project_root_for_inactive_check(project_root)
+            assert_agent_teams_inactive(env, project_root, force_inactive=True)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_interactive_cmd(
@@ -607,6 +851,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         """Build a Claude interactive session command.
 
@@ -685,6 +931,31 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             extras=merged,
             required=required_env,
         )
+        if force_inactive_agent_teams:
+            if executable is not None:
+                # The executable binding captures its launch_environment at
+                # probe time, before any neutralization. Combining the two
+                # makes the binding stale; callers must resolve a fresh
+                # executable from the neutralized env instead.
+                raise ValueError(
+                    "force_inactive_agent_teams=True cannot be combined with "
+                    "executable binding; resolve a fresh executable from the "
+                    "neutralized env first"
+                )
+            # ``build_agent_env`` returns a read-only ``MappingProxyType``;
+            # neutralize on a single mutable copy and re-derive both the
+            # assertion and the launch env from it.
+            neutralized_env = dict(effective_env)
+            _neutralize_agent_teams_env(neutralized_env)
+            settings_root = str(project_root) if project_root is not None else None
+            _resolve_project_root_for_inactive_check(settings_root)
+            assert_agent_teams_inactive(
+                neutralized_env,
+                settings_root,
+                force_inactive=True,
+            )
+            neutralize_repository_agent_teams_settings(settings_root)
+            effective_env = neutralized_env
         if executable is not None and dict(effective_env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
@@ -709,6 +980,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
         skill_session: bool = False,
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -738,6 +1011,10 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         env.update(_HEADLESS_ENV_HARDENING)
         if skill_session:
             env.update(_CLAUDE_SKILL_SESSION_HARDENING)
+        if force_inactive_agent_teams:
+            _neutralize_agent_teams_env(env)
+            _resolve_project_root_for_inactive_check(project_root)
+            assert_agent_teams_inactive(env, project_root, force_inactive=True)
         return CmdSpec(
             cmd=tuple(cmd),
             env=env,
@@ -767,6 +1044,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         if config is not None:
             cfg = self._apply_config(config)
@@ -787,6 +1066,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             resume_checkpoint = cfg["resume_checkpoint"]
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]  # noqa: F841
+            force_inactive_agent_teams = cfg["force_inactive_agent_teams"]
 
         _has_prefix = (
             bool(profile_name)
@@ -857,6 +1137,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env_extras=extras,
             base=filtered_base,
             required=SKILL_SESSION_REQUIRED_ENV | _CLAUDE_SKILL_SESSION_HARDENING.keys(),
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=cwd,
         )
         cmd: list[str] = [*spec.cmd]
         if plugin_binding is not None:
@@ -898,6 +1180,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -957,6 +1241,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env_extras=extras,
             base=filtered_base,
             required=ORCHESTRATOR_SESSION_REQUIRED_ENV,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=project_root,
         )
 
         cmd: list[str] = [*spec.cmd]
@@ -1029,6 +1315,20 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Claude Code instructions."""
+        if (
+            plan.join is not None
+            and plan.join.required
+            and not self.capabilities.fixed_set_join_capable
+        ):
+            return SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic=(
+                    "Claude Code cannot support join.required=true: the runtime "
+                    "does not have the declared-batch, claim guard, success/failure "
+                    "settlers, unresolved-follow-up gate, and Stop completion gate "
+                    "all capability-attested. Refuse the skill at admission."
+                ),
+            )
         role_mapping = {role.name: role.name for role in plan.logical_roles}
         sibling_targets = {
             sibling.name: f"/autoskillit:{sibling.name}" for sibling in plan.sibling_skills
@@ -1071,7 +1371,13 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Issue all independent child calls in one message so they overlap.")
         if plan.join is not None and plan.join.required:
-            fragments.append("Join every spawned child before parent synthesis.")
+            fragments.append(
+                "Before this wave, call declare_join_batch with the loaded skill "
+                "name and one assignment label per direct child. Then issue every "
+                "member as one ordinary unnamed foreground Agent(subagent_type=...) "
+                "call in a single message. Retain every direct result. Only after "
+                "the ledger reports complete do you synthesize or allow Stop."
+            )
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""
             fragments.append(f"Require {boundary}evidence from each child result.")
@@ -1132,8 +1438,21 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             return []
 
     def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-        del spec
-        return []
+        """Verify the interactive launch spec's effective environment policy.
+
+        When the spec carries a request to keep Claude agent teams inactive,
+        this checkpoint positively confirms that neither the resolved env
+        nor the target repository's ``.claude/settings*.json`` files
+        re-enable ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS``. The plan's
+        Step 5.4 mandates this content-policy surface here in addition to
+        the per-builder enforcement.
+        """
+        env = dict(spec.env) if spec is not None else {}
+        project_root: Path | str | None = None
+        cwd = spec.cwd if spec is not None else None
+        if cwd is not None:
+            project_root = cwd
+        return _interactive_invocation_environment_policy(env, project_root)
 
     def ensure_pre_launch(
         self,

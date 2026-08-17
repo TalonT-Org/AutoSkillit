@@ -24,6 +24,19 @@ semantic_requirements:
   - name: vis-lens-reproducibility
   - name: vis-lens-story-arc
   - name: vis-lens-temporal
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Compositional Layout Visualization Lens
@@ -66,7 +79,11 @@ semantic_requirements:
 - Import or execute target code, tests, experiments, models, plotting pipelines, or benchmarks
 - Let a migrated exploration vector assess visual overlap, choose a layout, assign facets, design the figure, or create the diagram
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Prefer small multiples over overlays when: num_conditions ≥ 5, OR data series overlap
   heavily, OR the comparison requires individual-panel annotation
 - Apply consistent shared-axis limits across all panels in a small-multiples layout

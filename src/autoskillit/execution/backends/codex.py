@@ -81,6 +81,7 @@ from autoskillit.core import (
     SessionSummary,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
@@ -1509,6 +1510,7 @@ class CodexBackend(BackendCmdBuilderBase):
             protected_recipe_delivery_capable=False,
             recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
+            fixed_set_join_capable=False,
         )
 
     @property
@@ -1598,7 +1600,9 @@ class CodexBackend(BackendCmdBuilderBase):
         *,
         model: str | None = None,
         add_dirs: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         env_extras: Mapping[str, str] | None = None,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         cmd = _codex_exec_base(sandbox="workspace-write")
         if model:
@@ -1625,8 +1629,10 @@ class CodexBackend(BackendCmdBuilderBase):
         plugin_binding: PluginLaunchBinding | None = None,
         output_format: OutputFormat = OutputFormat.JSON,
         add_dirs: Sequence[ValidatedAddDir] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
+        project_root: Path | str | None = None,
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
@@ -1807,10 +1813,12 @@ class CodexBackend(BackendCmdBuilderBase):
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         sentinel_contract: str = "",
         resume_message: str | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        project_root: Path | str | None = None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
@@ -1928,6 +1936,8 @@ class CodexBackend(BackendCmdBuilderBase):
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         if tools:
             logger.warning(
@@ -2043,6 +2053,8 @@ class CodexBackend(BackendCmdBuilderBase):
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
         skill_session: bool = False,
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         del skill_session
         if not resume_session_id.strip():
@@ -2305,16 +2317,26 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Codex collaboration instructions."""
-        role_mapping = {
-            role.name: (
-                role.name.removeprefix("autoskillit:")
-                if role.name.startswith("autoskillit:")
-                else "worker"
-                if role.name == "delegated-worker"
-                else role.name
+        if plan.join is not None and plan.join.required:
+            result = SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic=(
+                    "Codex exposes wait-any/mailbox-activity semantics rather than "
+                    "fixed-set fan-in. Skills declaring join.required=true cannot be "
+                    "honestly realized on this backend and must be refused at admission."
+                ),
             )
-            for role in plan.logical_roles
-        }
+            result.validate_for(plan, backend=self.name)
+            raise AssertionError("unreachable")  # validate_for raises unconditionally
+        role_mapping: dict[str, str] = {}
+        for role in plan.logical_roles:
+            if role.name.startswith("autoskillit:"):
+                native = role.name.removeprefix("autoskillit:")
+            elif role.name == "delegated-worker":
+                native = "worker"
+            else:
+                native = role.name
+            role_mapping[role.name] = native
         sibling_targets = {sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills}
         model_policy: dict[str, tuple[str, str | None]] = {}
         fragments = [
@@ -2351,11 +2373,8 @@ class CodexBackend(BackendCmdBuilderBase):
                 )
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Spawn all independent children before awaiting any result.")
-        if plan.join is not None and plan.join.required:
-            fragments.append(
-                "Use wait_agent with the exact returned child IDs; deliver every independent "
-                "successful child terminal result before parent synthesis."
-            )
+        # NOTE: plan.join.required is refused at admission above via the
+        # unsupported_operation path; this fragment is unreachable by design.
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""
             fragments.append(f"Require {boundary}evidence from each child result.")

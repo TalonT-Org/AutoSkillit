@@ -293,7 +293,9 @@ for thread in all_thread_nodes:
     for reply in comments_in_thread[1:]:
         if RESOLVED_MARKER_RE.search(reply.get("body", "")):
             already_replied_ids.add(first_comment_id)
-            log(f"Skipping comment {first_comment_id} — already resolved by prior resolve-review run")
+            log(
+                f"Skipping comment {first_comment_id} — already resolved by prior resolve-review run"
+            )
             break
 ```
 

@@ -28,9 +28,12 @@ _PARENT_ROUTING_INSTRUCTIONS = (
     "leaves spawn peers.\n"
     "4. Run only selected, scope-disjoint, dependency-ready tasks concurrently and keep "
     "dependency chains sequential.\n"
-    "5. Join every dispatched leaf, preserve conflicts and unresolved frontiers, then merge "
-    "evidence. Retain final synthesis and every artifact or repository write in the parent "
-    "session."
+    "5. For each join-required wave, declare one batch through the same gateway as the join "
+    "contract, named Agent calls without name/team_name/run_in_background, and release "
+    "follow-up effects only after every expected direct tool_use_id is settled. Preserve "
+    "conflicts and unresolved frontiers, then merge evidence. Retain final synthesis and "
+    "every artifact or repository write in the parent session.\n"
+    "6. Join every dispatched leaf through the same declared batch gateway before synthesis."
 )
 
 
@@ -83,7 +86,11 @@ def _task_prompt(
 class _NativeExplorationDispatchRenderer:
     conventions: ExplorationDispatchConventions
 
-    def _native_call(self, definition: AgentDef, prompt: str) -> str:
+    def _native_call(
+        self,
+        definition: AgentDef,
+        prompt: str,
+    ) -> str:
         role = f"{self.conventions.role_prefix}{definition.name}"
         arguments = [f"{self.conventions.role_argument}={json.dumps(role)}"]
         if self.conventions.description_argument is not None:
@@ -117,20 +124,26 @@ class _NativeExplorationDispatchRenderer:
         definitions = _canonical_definitions(migrated)
         replacements: dict[str, str] = {}
         definition_digests: dict[str, str] = {}
-        for vector in migrated:
+        assignment_labels: dict[str, str] = {}
+        for index, vector in enumerate(migrated):
             assert vector.role is not None
             definition = definitions[vector.role]
             definition_digest = agent_definition_digest(definition)
+            assignment_label = f"explorer-{vector.task.task_id}"
             prompt = _task_prompt(
                 vector,
                 router_plan_digest=plan.digest,
                 role_definition_digest=definition_digest,
                 launch_context_ref=launch_context_ref,
             )
-            native_call = self._native_call(definition, prompt)
+            native_call = self._native_call(
+                definition,
+                prompt,
+            )
             task_id = vector.task.task_id
             replacements[vector.id] = (
                 f"Candidate exploration task {task_id!r}:\n"
+                f"Resolved vector assignment label: {assignment_label!r} (index {index}).\n"
                 f"Execute if and only if {task_id!r} is in "
                 "selected_exploration_task_ids:\n"
                 f"{native_call}\n"
@@ -138,6 +151,7 @@ class _NativeExplorationDispatchRenderer:
                 "is not a failure."
             )
             definition_digests[vector.id] = definition_digest
+            assignment_labels[vector.id] = assignment_label
         context_ref = launch_context_ref or "runtime-bound"
         provisioning = (
             f"\n\n{self.conventions.provisioning_preamble}"
@@ -150,7 +164,8 @@ class _NativeExplorationDispatchRenderer:
             f"profile: {migrated[0].profile.value}\n"
             f"depends_on: none\n"
             f"scope: {','.join(migrated[0].task.scope) or 'repository'}\n"
-            f"launch_context_ref: {context_ref}"
+            f"launch_context_ref: {context_ref}\n"
+            f"resolved_assignment_labels: {sorted(assignment_labels.values())}"
         )
         return ExplorationDispatchMaterialization(
             replacements=replacements,

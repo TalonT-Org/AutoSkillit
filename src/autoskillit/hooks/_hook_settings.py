@@ -425,3 +425,92 @@ def write_quota_log_event(event: dict, log_dir: Path | None, *, caller: str = ""
     except Exception as exc:
         if caller:
             print(f"{caller}: failed to write quota log event: {exc}", file=sys.stderr)
+
+
+#: Bounded set of allowed join-diagnostic record keys. Anything else is
+#: stripped before write so child bodies, prompts, secrets, and private
+#: task IDs never land in the diagnostic sink.
+DIAGNOSTIC_KEYS: frozenset[str] = frozenset(
+    {
+        "ts",
+        "session_id",
+        "top_level_parent",
+        "join_batch_id",
+        "assignment",
+        "tool_use_id",
+        "skill_name",
+        "semantic_digest",
+        "adaptation_digest",
+        "artifact_digest",
+        "artifact_incarnation",
+        "selector_presence",
+        "activation_source",
+        "launch_policy_state",
+        "status",
+        "public_child_id",
+        "team_name",
+        "execution_mode",
+        "wave_outcome",
+        "gate",
+        "binding_valid",
+    }
+)
+
+
+def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
+    """Append one bounded join-gate diagnostic record to ``join_diagnostics.jsonl``.
+
+    The record is redacted to ``DIAGNOSTIC_KEYS`` before write.
+    Child bodies, prompts, secrets, and private task IDs are never persisted.
+    No-ops when the resolved log dir is None.
+    """
+    bounded = {key: value for key, value in record.items() if key in DIAGNOSTIC_KEYS}
+    bounded.setdefault("ts", datetime.now(UTC).isoformat())
+    log_dir = resolve_quota_log_dir(caller=caller or "join_diagnostic")
+    if log_dir is None:
+        return
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(bounded, sort_keys=True) + "\n"
+        with open(log_dir / "join_diagnostics.jsonl", "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as exc:
+        if caller:
+            print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)
+
+
+def read_session_binding() -> dict[str, object] | None:
+    """Read the ``AUTOSKILLIT_JOIN_FLAG_PATH`` flag file as JSON.
+
+    Returns the parsed dict on success, or ``None`` when the path is unset,
+    the file is unreadable, the JSON is malformed, or the top-level value
+    is not a dict. OSError on read is treated as 'no binding present' so
+    callers can fall through to the env-mirror ``AUTOSKILLIT_JOIN_REQUIRED``.
+    """
+    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
+    if not flag_path:
+        return None
+    try:
+        with open(flag_path, encoding="utf-8") as handle:
+            raw = handle.read()
+    except OSError:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def session_join_required() -> bool:
+    """True when the session flag reports ``join_required=true`` or the
+    ``AUTOSKILLIT_JOIN_REQUIRED=1`` env mirror is set.
+
+    The flag is consulted first; the env mirror is the documented fallback
+    for hooks that lose access to the binding file (e.g. when the
+    filesystem error is transient). Either signal alone is sufficient.
+    """
+    binding = read_session_binding()
+    if binding is not None and bool(binding.get("join_required", False)):
+        return True
+    return os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1"

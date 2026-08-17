@@ -10,6 +10,7 @@
 # This is the forcing function: removing a key from the schema without
 # registering it in RETIRED_CONFIG_KEYS fails this test at development time.
 agent_backend.backend
+agent_backend.force_claude_agent_teams_inactive
 agent_backend.recipe_overrides
 agent_backend.step_overrides
 branching.default_base_branch

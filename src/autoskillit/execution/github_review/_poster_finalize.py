@@ -1,12 +1,9 @@
 """Module-level `_reconcile_payload` and `_finalize` helpers for the poster.
 
-Extracted from `poster.py`. These are post-attempt helpers that finalize
+These are post-attempt helpers that finalize
 attempt + receipt publication; they are NOT mutation authorities (the
-ledger retains all mutation authority). Moving them to module-level
-functions keeps `poster.py` focused on the state machine.
-
-`_EXPECTED_REMOTE_STATES` and `_FINAL_STATES` also live here because
-only these helpers consume them.
+ledger retains all mutation authority). `_EXPECTED_REMOTE_STATES` and
+`_FINAL_STATES` also live here because only these helpers consume them.
 """
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# Adjudication helpers extracted from _headless_result.py
 """Adjudication helpers for headless Claude session SkillResult construction.
 
 Extracted from `_headless_result.py`. This module owns the post-session

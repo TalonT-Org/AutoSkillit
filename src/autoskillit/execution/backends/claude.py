@@ -1,4 +1,9 @@
-"""Claude Code backend implementation."""
+"""Backend orchestration for the Claude Code CLI session runner.
+
+This module owns the Claude Code-specific env policy, flag vocabulary,
+session locator, and result parsers alongside the ClaudeCodeBackend
+implementation.
+"""
 
 from __future__ import annotations
 

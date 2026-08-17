@@ -558,7 +558,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
     ),
     DurableArtifactWriterDef(
-        writer=("autoskillit.execution.backends._codex_fs_atomic:_write_reconciliation_audit"),
+        writer="autoskillit.execution.backends._codex_fs_atomic:_write_reconciliation_audit",
         artifact=(
             "immutable operator authorization records for explicit Codex attempt-view "
             "reconciliation"

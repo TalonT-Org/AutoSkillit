@@ -1308,7 +1308,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "instance state (capabilities, env policy, flag vocabulary, session locator) "
         "and the cmd-spec grammar is the backend's authority boundary — splitting these "
         "would force a separate mutable state object and break the protocol. The "
-        "remaining slimmed CodexBackend is 1211 lines; cap raised to 1300 to acknowledge "
+        "remaining slimmed CodexBackend is 1211 lines; cap lowered to 1300 to acknowledge "
         "the architectural seam that the decomposition could not cross without breaking "
         "the backend dataclass invariant.",
     ),

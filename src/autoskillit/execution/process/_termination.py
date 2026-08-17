@@ -1,15 +1,12 @@
 """Termination decision and execution helpers for managed subprocesses.
 
-Extracted from `process/__init__.py`. This module owns:
+This module owns:
 
 - `decide_termination_action` — the pure decision function that maps race
   signals to a `TerminationAction` (deliberately free of anyio and I/O
   so it can be tested as a pure decision table).
 - `execute_termination_action` — the sole authorized caller of
   `async_kill_process_tree` for `run_managed_async`. Test-enforced.
-
-`_EXPECTED_PROCESS_SYMBOLS` keeps the public facade re-exports in
-`process/__init__.py` so existing callers keep working.
 """
 
 from __future__ import annotations

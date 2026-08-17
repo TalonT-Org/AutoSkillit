@@ -3,8 +3,8 @@
 Extracted from `codex.py` so the backend file can stay focused on the cmd/cmd-spec
 grammar. These helpers run a small Codex subprocess to verify MCP server inventory
 and confirm the generated home is wired correctly. Every helper is either
-stateless or guarded by a module-level lock; the lock is the only module-level
-state.
+stateless or guarded by the shared module-level lock; the cache and the lock
+are the module-level state.
 """
 
 from __future__ import annotations

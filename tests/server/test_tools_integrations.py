@@ -583,12 +583,11 @@ _REQUIRED_FAILURE_KEYS = frozenset(
     {"success", "error", "session_id", "stderr", "subtype", "exit_code"}
 )
 
-# Intentional scope: only prepare_issue calls
-# _build_headless_error_response. claim_issue, release_issue, and report_bug
+# prepare_issue is the only headless session tool that calls
+# _build_headless_error_response; claim_issue, release_issue, and report_bug
 # use separate error-response paths and are covered by their own tests.
-_HEADLESS_FAILURE_SCENARIOS = [
+_PREPARE_FAILURE_SCENARIOS = [
     pytest.param(
-        "prepare_issue",
         dict(
             success=False,
             result="",
@@ -603,7 +602,6 @@ _HEADLESS_FAILURE_SCENARIOS = [
         id="prepare_issue-session_failed",
     ),
     pytest.param(
-        "prepare_issue",
         dict(
             success=True,
             result="",
@@ -621,26 +619,20 @@ _HEADLESS_FAILURE_SCENARIOS = [
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("tool_name,skill_result_kwargs", _HEADLESS_FAILURE_SCENARIOS)
+@pytest.mark.parametrize("skill_result_kwargs", _PREPARE_FAILURE_SCENARIOS)
 async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
-    tool_name, skill_result_kwargs, tool_ctx_kitchen_open
+    skill_result_kwargs, tool_ctx_kitchen_open
 ):
-    """Contract test: every failure path of every headless session tool
-    must surface the full diagnostic set: success, error, session_id,
-    stderr, subtype, exit_code.
+    """Contract test: every failure path of prepare_issue must surface the
+    full diagnostic set: success, error, session_id, stderr, subtype, exit_code.
     """
-    tool_fn = {"prepare_issue": prepare_issue}[tool_name]
     mock_executor = AsyncMock()
     mock_executor.run.return_value = SkillResult(**skill_result_kwargs)
     tool_ctx_kitchen_open.executor = mock_executor
 
-    kwargs: dict = {}
-    if tool_name == "prepare_issue":
-        kwargs = {"title": "Test Issue", "body": ""}
-
-    response = json.loads(await tool_fn(**kwargs))
+    response = json.loads(await prepare_issue(title="Test Issue", body=""))
     missing = _REQUIRED_FAILURE_KEYS - set(response.keys())
-    assert not missing, f"tool={tool_name!r} missing failure response keys: {missing}"
+    assert not missing, f"prepare_issue missing failure response keys: {missing}"
     assert response["success"] is False
     assert response["stderr"] == skill_result_kwargs["stderr"]
     assert response["session_id"] == skill_result_kwargs["session_id"]

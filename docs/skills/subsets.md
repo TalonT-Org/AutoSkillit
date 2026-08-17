@@ -14,7 +14,7 @@ manually reclassifying each of its tools and skills one by one. A project withou
 
 | Category | MCP Tools | Skills |
 |----------|-----------|--------|
-| `github` | `fetch_github_issue`, `get_issue_title`, `prepare_issue`, `enrich_issues`, `claim_issue`, `release_issue`, `report_bug`, `get_pr_reviews`, `bulk_close_issues`, `check_pr_mergeable`, `push_to_remote`, `create_unique_branch`, `set_commit_status` | `open-pr`, `open-integration-pr`, `merge-pr`, `review-pr`, `resolve-review`, `analyze-prs`, `prepare-issue`, `enrich-issues`, `process-issues`, `triage-issues`, `collapse-issues`, `issue-splitter`, `report-bug`, `pipeline-summary` |
+| `github` | `fetch_github_issue`, `get_issue_title`, `prepare_issue`, `claim_issue`, `release_issue`, `report_bug`, `get_pr_reviews`, `bulk_close_issues`, `check_pr_mergeable`, `push_to_remote`, `create_unique_branch`, `set_commit_status` | `open-pr`, `open-integration-pr`, `merge-pr`, `review-pr`, `resolve-review`, `analyze-prs`, `prepare-issue`, `process-issues`, `triage-issues`, `collapse-issues`, `issue-splitter`, `report-bug`, `pipeline-summary` |
 | `ci` | `wait_for_ci`, `get_ci_status`, `wait_for_merge_queue`, `toggle_auto_merge` | `diagnose-ci` |
 | `clone` | `clone_repo`, `remove_clone`, `register_clone_status`, `batch_cleanup_clones` | — |
 | `telemetry` | `get_token_summary`, `get_timing_summary`, `write_telemetry_files`, `get_quota_events` | — |

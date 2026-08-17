@@ -617,7 +617,7 @@ def test_real_planner_workflows_project_their_runtime_collections(
         assert " 1 " not in rendered
 
 
-@pytest.mark.parametrize("skill_name", ["review-pr", "enrich-issues"])
+@pytest.mark.parametrize("skill_name", ["review-pr"])
 def test_real_semantic_skill_materializes_through_codex_adapter(skill_name: str) -> None:
     skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
     info = _skill_info_from_frontmatter(skill_name, SkillSource.BUNDLED, skill_md)

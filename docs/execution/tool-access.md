@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 75 MCP tools across overlapping visibility surfaces that control which
+AutoSkillit provides 74 MCP tools across overlapping visibility surfaces that control which
 session types can see each tool. Visibility determines addressability; each tool still enforces
 its own authority contract.
 
@@ -17,8 +17,8 @@ its own authority contract.
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Seven also carry kitchen; one is headless-only         │
 ├─────────────────────────────────────────────────────────┤
-│  KITCHEN  (45 kitchen-only tools)                       │
-│  52 total when the seven headless overlaps are included │
+│  KITCHEN  (44 kitchen-only tools)                       │
+│  51 total when the seven headless overlaps are included │
 │  Hidden at startup; revealed when open_kitchen is called│
 ├─────────────────────────────────────────────────────────┤
 │  EVIDENCE READER  (2 authenticated broker tools)        │
@@ -91,7 +91,7 @@ offer.
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 52 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 51 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Most also carry `kitchen`; `post_pr_review` is headless-only and deliberately ungated. |
 | `evidence-reader` | Authenticated artifact brokers enabled only by a verified reader binding. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
@@ -140,7 +140,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 75 tools with their access level, tags, source file, and functional category.
+All 74 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 ER = `evidence-reader`, GH = `github`, CI = `ci`, CL = `clone`,
@@ -248,7 +248,6 @@ TL = `telemetry`, FL = `fleet`
 | `get_issue_title` | AS, K, GH | `server/tools_github.py` |
 | `report_bug` | AS, K, GH | `server/tools_github.py` |
 | `prepare_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
-| `enrich_issues` | AS, K, GH | `server/tools_issue_lifecycle.py` |
 | `claim_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
 | `release_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
 | `claim_and_resolve_issue` | AS, K, GH | `server/tools_issue_composite.py` |
@@ -300,7 +299,7 @@ dynamically gated until opening completes. The bounded client snapshot and
 fresh/resume behavior are documented in
 [Claude startup readiness](claude-startup-readiness.md).
 
-**Total: 75 registered tools**. The 52 kitchen-tagged tools include seven of the eight
+**Total: 74 registered tools**. The 51 kitchen-tagged tools include seven of the eight
 headless tools. The two authenticated evidence-reader brokers are excluded from the
 kitchen, free-range, and fleet counts.
 

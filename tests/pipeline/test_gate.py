@@ -23,7 +23,6 @@ def test_gated_tools_contains_expected_names():
         "push_to_remote",
         "report_bug",
         "prepare_issue",
-        "enrich_issues",
         "claim_issue",
         "release_issue",
         "wait_for_ci",

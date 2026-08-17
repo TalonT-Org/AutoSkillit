@@ -39,11 +39,6 @@ def test_skill_contracts_yaml_includes_prepare_issue(skills):
     _assert_skill_has_patterns(skills, "prepare-issue", "---prepare-issue-result---")
 
 
-def test_skill_contracts_yaml_includes_enrich_issues(skills):
-    """enrich-issues must be registered with its ---enrich-issues-result--- delimiter."""
-    _assert_skill_has_patterns(skills, "enrich-issues", "---enrich-issues-result---")
-
-
 def test_skill_contracts_yaml_includes_report_bug(skills):
     """report-bug must be registered with its ---bug-fingerprint--- delimiter."""
     _assert_skill_has_patterns(skills, "report-bug", "---bug-fingerprint---")

@@ -87,7 +87,6 @@ _MUTATION_TOOLS = frozenset(
         "dispatch_food_truck",
         "enable_exploration",
         "enqueue_pr",
-        "enrich_issues",
         "lock_ingredients",
         "merge_worktree",
         "migrate_recipe",
@@ -647,7 +646,6 @@ _TOOL_DEFS = (
         ("title", "body", "repo", "labels", "dry_run", "split"),
         required=("title", "body"),
     ),
-    _tool("enrich_issues", ("issue_number", "batch", "dry_run", "repo")),
     _tool("claim_issue", ("issue_url", "label", "allow_reentry"), required=("issue_url",)),
     _tool(
         "release_issue",

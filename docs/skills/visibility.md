@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoSkillit has 142 bundled skill sources. Session-role skills are organized into three
+AutoSkillit has 141 bundled skill sources. Session-role skills are organized into three
 configurable tiers that control when and where they appear as slash commands. Exact-role
 orchestration skills are exposed through role-derived catalogs instead of a user tier. The
 tier system is orthogonal to subset categories — you can disable a subset across all tiers
@@ -24,7 +24,7 @@ simultaneously or reclassify session-role skills between tiers. See
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (106 total):
+- **Default members** (105 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
   `make-experiment-diag`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`, `phoropter-null-synthesis`, `phoropter-priority-synthesis`,
@@ -35,7 +35,7 @@ simultaneously or reclassify session-role skills between tiers. See
   `audit-docs`, `audit-feature-gates`, `audit-review-decisions`,
   `make-req`, `elaborate-phase`, `write-recipe`, `migrate-recipes`, `setup-project`,
   `design-guards`, `triage-issues`, `collapse-issues`,
-  `issue-splitter`, `enrich-issues`, `prepare-issue`, `make-campaign`,
+  `issue-splitter`, `prepare-issue`, `make-campaign`,
   `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`,
   `generate-report`, `validate-test-audit`, `validate-review-decisions`,
   `stage-data`, `setup-environment`, `bundle-local-report`, `reload-session`

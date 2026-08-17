@@ -14,7 +14,6 @@ from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_issue_headless import (
     _PREPARE_RESULT_END,
     _PREPARE_RESULT_START,
-    enrich_issues,
     prepare_issue,
 )
 from autoskillit.server.tools.tools_issue_labels import (
@@ -41,7 +40,7 @@ def tool_ctx_kitchen_open(tool_ctx):
 
 
 # ---------------------------------------------------------------------------
-# claim_issue / release_issue / prepare_issue / enrich_issues — gated tools
+# claim_issue / release_issue / prepare_issue — gated tools
 # ---------------------------------------------------------------------------
 
 
@@ -580,171 +579,11 @@ class TestPrepareIssueTool:
         assert response["subtype"] == "stale"
 
 
-class TestEnrichIssuesTool:
-    def test_enrich_issues_is_gated(self):
-        from autoskillit.pipeline.gate import GATED_TOOLS
-
-        assert "enrich_issues" in GATED_TOOLS
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_success_empty_result_includes_diagnostics(
-        self, tool_ctx_kitchen_open
-    ):
-        """Drain race for enrich_issues: success=True with empty result must yield failure."""
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=True,
-            result="",
-            session_id="sid789",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-        tool_ctx_kitchen_open.executor = mock_executor
-
-        result = json.loads(await enrich_issues())
-
-        assert result["success"] is False
-        assert result["session_id"] == "sid789"
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_failure_includes_session_id_and_stderr(
-        self, tool_ctx_kitchen_open
-    ):
-        """Executor failure: response includes session_id and stderr for diagnosis."""
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=False,
-            result="",
-            session_id="sid-fail",
-            subtype="missing_completion_marker",
-            is_error=True,
-            exit_code=2,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="Session timed out",
-        )
-        tool_ctx_kitchen_open.executor = mock_executor
-
-        result = json.loads(await enrich_issues())
-
-        assert result["success"] is False
-        assert result["session_id"] == "sid-fail"
-        assert result["stderr"] == "Session timed out"
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_passes_expected_output_patterns_to_executor(
-        self, tool_ctx_kitchen_open
-    ):
-        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=False,
-            result="",
-            session_id="sid",
-            subtype="error",
-            is_error=True,
-            exit_code=1,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-        tool_ctx_kitchen_open.executor = mock_executor
-        tool_ctx_kitchen_open.output_pattern_resolver = lambda cmd: ["---enrich-issues-result---"]
-
-        await enrich_issues()
-
-        call_kwargs = mock_executor.run.call_args.kwargs
-        assert call_kwargs.get("expected_output_patterns") == ["---enrich-issues-result---"]
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_no_result_block_includes_stderr(self, tool_ctx_kitchen_open):
-        """success=True + non-empty result + no delimiters → stderr surfaced."""
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=True,
-            result="All issues enriched. Workflow complete.",
-            session_id="enrich-123",
-            stderr="Warning: contract stale",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-        )
-        tool_ctx_kitchen_open.executor = mock_executor
-        response = json.loads(await enrich_issues())
-        assert response["success"] is True
-        assert response["status"] == "degraded"
-        assert response["warning"] == "no result block found"
-        assert "stderr" in response, "stderr must be in degraded-success response"
-        assert response["stderr"] == "Warning: contract stale"
-        assert response["session_id"] == "enrich-123"
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_invalid_result_block_returns_degraded_success(
-        self, tool_ctx_kitchen_open
-    ):
-        """success=True + malformed block preserves success and partial diagnostics."""
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=True,
-            result=(
-                "Enriched issue #42.\n"
-                "---enrich-issues-result---\n"
-                "{bad json\n"
-                "---/enrich-issues-result---"
-            ),
-            session_id="enrich-invalid",
-            stderr="Warning: malformed result",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-        )
-        tool_ctx_kitchen_open.executor = mock_executor
-        response = json.loads(await enrich_issues())
-        assert response["success"] is True
-        assert response["status"] == "degraded"
-        assert "invalid JSON" in response["warning"]
-        assert response["partial_issues_enriched"] == [42]
-        assert response["session_id"] == "enrich-invalid"
-        assert response["stderr"] == "Warning: malformed result"
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_contract_recovery_includes_partial_enriched(
-        self, tool_ctx_kitchen_open
-    ):
-        """CONTRACT_RECOVERY with enriched issue numbers → partial_issues_enriched propagated."""
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=False,
-            result=(
-                "Enriched issue #100.\nEnriched issue #101.\nFailed on issue #102 (timeout)..."
-            ),
-            session_id="enrich-partial",
-            subtype="contract_recovery",
-            is_error=True,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.CONTRACT_RECOVERY,
-            stderr="",
-        )
-        tool_ctx_kitchen_open.executor = mock_executor
-        response = json.loads(await enrich_issues())
-        assert response["success"] is False
-        assert response["partial_issues_enriched"] == [100, 101]
-
-
 _REQUIRED_FAILURE_KEYS = frozenset(
     {"success", "error", "session_id", "stderr", "subtype", "exit_code"}
 )
 
-# Intentional scope: only prepare_issue and enrich_issues call
+# Intentional scope: only prepare_issue calls
 # _build_headless_error_response. claim_issue, release_issue, and report_bug
 # use separate error-response paths and are covered by their own tests.
 _HEADLESS_FAILURE_SCENARIOS = [
@@ -778,36 +617,6 @@ _HEADLESS_FAILURE_SCENARIOS = [
         ),
         id="prepare_issue-drain_race",
     ),
-    pytest.param(
-        "enrich_issues",
-        dict(
-            success=False,
-            result="",
-            session_id="s4",
-            stderr="e4",
-            subtype="stale",
-            exit_code=-1,
-            needs_retry=True,
-            is_error=True,
-            retry_reason=RetryReason.RESUME,
-        ),
-        id="enrich_issues-session_failed",
-    ),
-    pytest.param(
-        "enrich_issues",
-        dict(
-            success=True,
-            result="",
-            session_id="s5",
-            stderr="e5",
-            subtype="success",
-            exit_code=0,
-            needs_retry=False,
-            is_error=False,
-            retry_reason=RetryReason.NONE,
-        ),
-        id="enrich_issues-drain_race",
-    ),
 ]
 
 
@@ -820,7 +629,7 @@ async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
     must surface the full diagnostic set: success, error, session_id,
     stderr, subtype, exit_code.
     """
-    tool_fn = {"prepare_issue": prepare_issue, "enrich_issues": enrich_issues}[tool_name]
+    tool_fn = {"prepare_issue": prepare_issue}[tool_name]
     mock_executor = AsyncMock()
     mock_executor.run.return_value = SkillResult(**skill_result_kwargs)
     tool_ctx_kitchen_open.executor = mock_executor

@@ -1,4 +1,4 @@
-"""MCP tool handlers: prepare_issue, enrich_issues (headless session tools)."""
+"""MCP tool handler: prepare_issue (headless session tool)."""
 
 from __future__ import annotations
 
@@ -28,12 +28,8 @@ logger = get_logger(__name__)
 _PREPARE_RESULT_START = "---prepare-issue-result---"
 _PREPARE_RESULT_END = "---/prepare-issue-result---"
 
-# Result block delimiters written by the enrich-issues skill in its response.
-_ENRICH_RESULT_START = "---enrich-issues-result---"
-_ENRICH_RESULT_END = "---/enrich-issues-result---"
-
 # Sentinel error strings returned by _parse_*_result when block extraction fails.
-# Shared by prepare_issue and enrich_issues to distinguish parse failures from
+# Shared by prepare_issue to distinguish parse failures from
 # skill-internal errors embedded in a valid block.
 _BLOCK_PARSE_ERRORS: frozenset[str] = frozenset(
     {"no result block found", "result block contained invalid JSON"}
@@ -52,10 +48,6 @@ _CANONICAL_KEYS: frozenset[str] = frozenset(
 _ISSUE_URL_RE: re.Pattern[str] = re.compile(
     r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/(\d+)"
 )
-
-# Regex for partial-enrich-data extraction: matches "Enriched issue #NNN" prose
-# emitted by the enrich-issues skill before its structured output block.
-_ENRICHED_ISSUE_RE: re.Pattern[str] = re.compile(r"Enriched issue #(\d+)")
 
 
 def _build_headless_error_response(
@@ -147,40 +139,6 @@ def _extract_partial_issue_data(result_text: str) -> dict[str, Any]:
     return {}
 
 
-def _extract_partial_enrich_data(result_text: str) -> dict[str, Any]:
-    """Mine a failed session's full text output for evidence of enriched issues.
-
-    The enrich-issues skill edits issues in batches; if it fails mid-batch
-    (CONTRACT_RECOVERY, drain race, malformed block), the caller needs to know
-    which issues were already enriched so it does not re-edit them.
-
-    Strategy:
-      1. Try _parse_enrich_result; if the block parsed, return its 'enriched'
-         list as partial_issues_enriched.
-      2. If the block is absent or malformed, search the full text for
-         "Enriched issue #NNN" patterns and return the matched issue numbers
-         (in document order, deduplicated).
-      3. If no matches, return an empty dict (no partial data).
-    """
-    if not result_text:
-        return {}
-
-    parsed = _parse_enrich_result(result_text)
-    if "error" not in parsed and parsed.get("enriched"):
-        return {"partial_issues_enriched": list(parsed["enriched"])}
-
-    seen: set[int] = set()
-    ordered: list[int] = []
-    for m in _ENRICHED_ISSUE_RE.finditer(result_text):
-        n = int(m.group(1))
-        if n not in seen:
-            seen.add(n)
-            ordered.append(n)
-    if ordered:
-        return {"partial_issues_enriched": ordered}
-    return {}
-
-
 def _without_success_key(d: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of d with the 'success' key removed.
 
@@ -246,36 +204,6 @@ def _merge_applied_labels(existing: object, additions: list[str]) -> list[str]:
         else []
     )
     return list(dict.fromkeys([*ordered, *additions]))
-
-
-def _build_enrich_skill_command(
-    issue_number: int | None,
-    batch: int | None,
-    dry_run: bool,
-    repo: str | None,
-) -> str:
-    """Assemble the skill_command string for /enrich-issues."""
-    parts = ["/enrich-issues"]
-    if issue_number is not None:
-        parts.append(f"--issue {issue_number}")
-    if batch is not None:
-        parts.append(f"--batch {batch}")
-    if dry_run:
-        parts.append("--dry-run")
-    if repo:
-        parts.append(f"--repo {repo}")
-    return "\n".join(parts)
-
-
-def _parse_enrich_result(response_text: str) -> dict[str, Any]:
-    """Extract and JSON-parse the enrich-issues result block from a skill response."""
-    block_lines = _extract_block(response_text, _ENRICH_RESULT_START, _ENRICH_RESULT_END)
-    if not block_lines:
-        return {"success": False, "error": "no result block found"}
-    try:
-        return json.loads("\n".join(block_lines))
-    except json.JSONDecodeError:
-        return {"success": False, "error": "result block contained invalid JSON"}
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -462,134 +390,4 @@ async def prepare_issue(
             )
     except Exception as exc:
         logger.error("prepare_issue unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
-
-
-@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
-@_cancellation_shield()
-@track_response_size("enrich_issues")
-async def enrich_issues(
-    issue_number: int | None = None,
-    batch: int | None = None,
-    dry_run: bool = False,
-    repo: str | None = None,
-    ctx: Context = CurrentContext(),
-) -> str:
-    """Backfill structured requirements on existing recipe:implementation issues.
-
-    Launches /enrich-issues in a headless session to scan candidate
-    issues, filter out already-enriched ones, perform codebase-grounded analysis,
-    and append a Requirements section in REQ-{GRP}-NNN format via gh issue edit.
-
-    Complements prepare_issue (which enriches at creation time) by handling the
-    pre-existing backlog.
-
-    Returns JSON with: enriched[], skipped_already_enriched[], skipped_too_vague[],
-    skipped_mixed_concerns[], dry_run.
-    On gate closed or skill failure: {success: false, status: "failed", error: "...",
-    session_id, stderr, subtype, exit_code} (unified contract via _build_headless_error_response).
-
-    Args:
-        issue_number: Enrich a single issue by number (optional).
-        batch: Filter candidates by batch:N label in addition to recipe:implementation.
-        dry_run: When True, previews generated requirements without editing issues.
-        repo: Target repository as owner/repo. Falls back to gh default repo if None.
-
-    Never raises.
-    """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    try:
-        with structlog.contextvars.bound_contextvars(
-            tool="enrich_issues",
-            issue_number=issue_number,
-            batch=batch,
-            dry_run=dry_run,
-        ):
-            logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
-            await _notify(
-                ctx,
-                "info",
-                "enrich_issues: backfilling requirements on recipe:implementation issues",
-                "autoskillit.enrich_issues",
-                extra={"dry_run": dry_run},
-            )
-
-            from autoskillit.server import (  # circular-break
-                _get_ctx,
-            )  # circular-break: server-internal circular dependency
-
-            tool_ctx = _get_ctx()
-            if tool_ctx.executor is None:
-                return json.dumps({"success": False, "error": "Executor not configured"})
-
-            skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
-
-            expected_output_patterns: list[str] = []
-            if tool_ctx.output_pattern_resolver:
-                expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-            write_spec: WriteBehaviorSpec | None = None
-            if tool_ctx.write_expected_resolver:
-                write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-            dispatch, dispatch_error = _prepare_direct_skill_dispatch(
-                skill_command,
-                tool_ctx.project_dir,
-                tool_ctx,
-            )
-            if dispatch_error is not None or dispatch is None:
-                return dispatch_error or json.dumps(
-                    {"success": False, "error": "Direct skill dispatch preparation failed"}
-                )
-            try:
-                result = await tool_ctx.executor.run(
-                    dispatch.resolved_command,
-                    str(dispatch.projection_context.cwd),
-                    add_dirs=dispatch.add_dirs,
-                    expected_output_patterns=expected_output_patterns,
-                    write_behavior=write_spec,
-                    capability_contract=dispatch.capability_contract,
-                )
-            finally:
-                dispatch.cleanup(tool_ctx)
-
-            if not result.success:
-                extra = _extract_partial_enrich_data(result.result) if result.result else {}
-                return json.dumps(
-                    _build_headless_error_response(
-                        result, error=_retry_reason_to_error(result), extra_fields=extra
-                    )
-                )
-
-            if result.result is None or not result.result.strip():
-                return json.dumps(
-                    _build_headless_error_response(
-                        result,
-                        error="session completed but output was empty (drain race)",
-                    )
-                )
-
-            parsed = _parse_enrich_result(result.result)
-            if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-                extra = _extract_partial_enrich_data(result.result)
-                return json.dumps(
-                    _build_headless_error_response(
-                        result,
-                        warning=parsed["error"],
-                        status="degraded",
-                        success=True,
-                        extra_fields=extra,
-                    )
-                )
-
-            return json.dumps(
-                {
-                    "success": True,
-                    "status": "complete",
-                    **_without_success_key(parsed),
-                }
-            )
-    except Exception as exc:
-        logger.error("enrich_issues unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

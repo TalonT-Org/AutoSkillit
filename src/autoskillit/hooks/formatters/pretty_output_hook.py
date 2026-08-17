@@ -160,7 +160,6 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "push_to_remote",  # simple ack
         "report_bug",  # simple result
         "prepare_issue",  # simple result
-        "enrich_issues",  # simple result
         "claim_issue",  # simple result
         "release_issue",  # simple result
         "wait_for_ci",  # ci status dict, generic renders correctly

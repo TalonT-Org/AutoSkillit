@@ -92,7 +92,6 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_issue_title",
             "report_bug",
             "prepare_issue",
-            "enrich_issues",
             "claim_issue",
             "release_issue",
             "get_pr_reviews",

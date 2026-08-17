@@ -13,7 +13,7 @@ from types import ModuleType
 import pytest
 
 from autoskillit.core import atomic_write
-from tests.process_group_helpers import _cleanup_owned_process_group
+from tests._process_group_helpers import _cleanup_owned_process_group
 
 pty: ModuleType | None
 if os.name == "posix":

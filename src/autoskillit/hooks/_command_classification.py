@@ -1232,24 +1232,3 @@ __all__ = [
     "GitHubMutationAnalysis",
     "analyze_github_mutations",
 ]
-
-# Module-level binding so tests can monkeypatch this dict directly on
-# `command_classification._GH_READ_ONLY_SUBCOMMANDS`. The constant lives in
-# the decomposed sibling; this binding re-aliases the same dict object so
-# `monkeypatch.delitem(command_classification._GH_READ_ONLY_SUBCOMMANDS, "pr")`
-# continues to mutate the source-of-truth dict in `_github_mutation_analysis`.
-if TYPE_CHECKING:
-    from autoskillit.hooks._github_mutation_analysis import (  # noqa: E402
-        _GH_READ_ONLY_SUBCOMMANDS as _gh_read_only_alias,
-    )
-elif __package__:
-    from ._github_mutation_analysis import (  # noqa: E402
-        _GH_READ_ONLY_SUBCOMMANDS as _gh_read_only_alias,
-    )
-else:
-    from _github_mutation_analysis import (  # noqa: E402
-        _GH_READ_ONLY_SUBCOMMANDS as _gh_read_only_alias,
-    )
-
-_GH_READ_ONLY_SUBCOMMANDS = _gh_read_only_alias
-del _gh_read_only_alias

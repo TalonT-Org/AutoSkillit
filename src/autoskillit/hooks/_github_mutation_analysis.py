@@ -1,10 +1,10 @@
 """GitHub-mutation analysis extracted from _command_classification.
 
 This module is the consumer of tokenization primitives defined in
-_command_classification. It does not import from
-autoskillit.hooks._command_classification at module load to avoid a
-circular import — the bare-name _command_classification reference is
-resolved lazily, after the source module is fully populated.
+_command_classification. Tokenization primitives are imported lazily
+inside each wrapper to avoid a circular import — the bare-name
+_command_classification reference is resolved after the source module
+is fully populated.
 """
 
 from __future__ import annotations
@@ -16,31 +16,26 @@ import stat
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urlsplit
-
-if TYPE_CHECKING:
-    pass
 
 
 def _command_verb_and_args(segment: Sequence[str]) -> tuple[str, list[str]]:
-    from _command_classification import command_verb_and_args as _impl
+    from _command_classification import command_verb_and_args
 
-    return _impl(list(segment))
+    return command_verb_and_args(list(segment))
 
 
 def _tokenize_with_redirects(command: str) -> list[Any]:
-    from _command_classification import (
-        _tokenize_command_segments_with_redirects as _impl,
-    )
+    from _command_classification import _tokenize_command_segments_with_redirects
 
-    return _impl(command)
+    return _tokenize_command_segments_with_redirects(command)
 
 
 def _normalize_executable_call(token: str) -> str:
-    from _command_classification import _normalize_executable as _impl
+    from _command_classification import _normalize_executable
 
-    return _impl(token)
+    return _normalize_executable(token)
 
 
 def _partition_output_redirects_call(
@@ -49,29 +44,29 @@ def _partition_output_redirects_call(
     cwd: str,
     redirect_syntax: Sequence[bool] | None = None,
 ) -> tuple[list[str], list[str], int]:
-    from _command_classification import _partition_output_redirects as _impl
+    from _command_classification import _partition_output_redirects
 
-    return _impl(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
+    return _partition_output_redirects(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
 
 
 def _extract_interpreter_segment_specs_call(
     segment: Sequence[str],
 ) -> tuple[list[Any], bool]:
-    from _command_classification import _extract_interpreter_segment_specs as _impl
+    from _command_classification import _extract_interpreter_segment_specs
 
-    return _impl(segment)
+    return _extract_interpreter_segment_specs(segment)
 
 
 def _segment_evaluates_shell_payload_call(tokens: list[str], payload: str) -> bool:
-    from _command_classification import _segment_evaluates_shell_payload as _impl
+    from _command_classification import _segment_evaluates_shell_payload
 
-    return _impl(tokens, payload)
+    return _segment_evaluates_shell_payload(tokens, payload)
 
 
-def extract_shell_command_payloads_call(command: str) -> list[str]:
-    from _command_classification import extract_shell_command_payloads as _impl
+def _extract_shell_command_payloads_call(command: str) -> list[str]:
+    from _command_classification import extract_shell_command_payloads
 
-    return _impl(command)
+    return extract_shell_command_payloads(command)
 
 
 class GitHubMutationStatus(StrEnum):
@@ -1004,7 +999,7 @@ def analyze_github_mutations(
             outer_redirect_targets,
             outer_file_redirect_count,
         ) = queue.pop(0)
-        if depth > 32:
+        if depth >= 32:
             reasons.append(
                 ("shell_structure_unresolved", "nested mutation command depth is unresolved")
             )
@@ -1121,7 +1116,7 @@ def analyze_github_mutations(
             )
 
         remaining_nested_contexts = list(nested_contexts)
-        for nested in extract_shell_command_payloads_call(payload):
+        for nested in _extract_shell_command_payloads_call(payload):
             matching_index = next(
                 (
                     index

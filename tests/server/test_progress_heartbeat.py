@@ -66,24 +66,6 @@ async def test_non_timeout_exception_from_body_propagates_with_original_type():
 
 
 @pytest.mark.anyio
-async def test_body_exception_is_not_wrapped_in_exception_group():
-    ctx = _fake_ctx()
-
-    class _DistinctiveError(RuntimeError):
-        pass
-
-    caught: Exception | None = None
-    try:
-        async with progress_heartbeat(ctx, interval=30.0):
-            raise _DistinctiveError("boom")
-    except Exception as exc:  # noqa: BLE001 - intentionally broad to inspect the type
-        caught = exc
-
-    assert type(caught) is _DistinctiveError
-    assert not isinstance(caught, ExceptionGroup)
-
-
-@pytest.mark.anyio
 async def test_base_exception_from_body_propagates_with_original_type():
     """A bare BaseException (not an Exception subclass) is wrapped by anyio in a
     BaseExceptionGroup, not an ExceptionGroup — the narrower except clause would

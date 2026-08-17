@@ -1368,10 +1368,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; #4641/#4644 rectify: settle_evidence() swap plus cleanup_incomplete diagnostic "
         "threading in _run_bounded_codex_probe/_terminate_probe/_validate_mcp_probe stays "
         "adjacent to the bounded probe it must not misclassify as a validation failure "
-        "(+10 net lines)"
-        "; accept-and-ignore mcp_tool_timeout_sec params to build_interactive_cmd/"
-        "build_resume_cmd/build_food_truck_cmd for CodingAgentBackend Protocol parity with "
-        "Claude's MCP idle-abort timeout injection (+14 net lines)",
+        "(+10 net lines)",
     ),
     "execution/backends/claude.py": (
         1600,

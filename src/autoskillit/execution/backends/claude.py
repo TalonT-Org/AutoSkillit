@@ -1,3 +1,5 @@
+"""Claude Code backend implementation."""
+
 from __future__ import annotations
 
 import json
@@ -26,7 +28,6 @@ from autoskillit.core import (
     CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR,
     CLAUDE_MCP_CONNECT_TIMEOUT_MS,
     CLAUDE_MCP_CONNECTION_NONBLOCKING,
-    CONTEXT_EXHAUSTION_MARKER,
     NON_VARIADIC_CLAUDE_FLAGS,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     PROVIDER_PROFILE_ENV_VAR,
@@ -35,14 +36,11 @@ from autoskillit.core import (
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
     VARIADIC_CLAUDE_FLAGS,
-    AgentSessionResult,
     BackendCapabilities,
     BackendConventions,
-    BackendEventKind,
     BareResume,
     CapabilityNotSupportedError,
     ClaudeDirectoryConventions,
-    ClaudeEventData,
     ClaudeFlags,
     CmdSpec,
     CookSessionHandle,
@@ -57,9 +55,6 @@ from autoskillit.core import (
     PreLaunchReadiness,
     ResumeSpec,
     SessionCheckpoint,
-    SessionEvent,
-    SessionLocator,
-    SessionSummary,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
@@ -67,20 +62,20 @@ from autoskillit.core import (
     ValidatedAddDir,
     YAMLError,
     build_agent_env,
-    claude_code_log_path,
-    claude_code_project_dir,
     executable_binding_matches_current_file,
     extract_skill_name,
-    fast_loads,
     load_yaml,
     pkg_root,
-    read_registry,
     truncate_text,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
     FlagVocabulary,
+)
+from autoskillit.execution.backends._claude_parse import (
+    ClaudeResultParser,
+    ClaudeStreamParser,
 )
 from autoskillit.execution.backends._claude_prompt import (
     _CLAUDE_SKILL_SESSION_HARDENING,
@@ -93,15 +88,13 @@ from autoskillit.execution.backends._claude_prompt import (
     _apply_output_format,
     _compose_resume_prompt,
     _ensure_skill_prefix,
-    _extract_write_artifacts,
     apply_prompt_injector_chain,
 )
+from autoskillit.execution.backends._claude_session_locator import ClaudeSessionLocator
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._explorer_dispatch import (
     CLAUDE_EXPLORATION_DISPATCH_RENDERER,
 )
-from autoskillit.execution.process import _marker_is_standalone
-from autoskillit.execution.session import parse_session_result
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
@@ -145,25 +138,6 @@ def _claude_host_attestation_env(
     }
 
 
-_ORDER_GREETING_PREFIXES = (
-    "Today's special:",
-    "Order up! Today's special:",
-    "Order up! The kitchen",
-    "Kitchen's open!",
-    "Table for one!",
-    "Fresh off the menu",
-    "Welcome to Good Burger, home of the Good Burger, can I take your order?",
-)
-
-__all__ = [
-    "ClaudeCodeBackend",
-    "ClaudeEnvPolicy",
-    "ClaudeResultParser",
-    "ClaudeSessionLocator",
-    "ClaudeStreamParser",
-]
-
-
 @dataclass(frozen=True, slots=True)
 class ClaudeEnvPolicy:
     def build_env(
@@ -176,289 +150,13 @@ class ClaudeEnvPolicy:
         return dict(build_agent_env(base=base_env, extras=extras, required=required))
 
 
-@dataclass(frozen=True, slots=True)
-class ClaudeSessionLocator(SessionLocator):
-    def locate_session(self, session_id: str) -> Path | None:
-        if not session_id or session_id.startswith(("no_session_", "crashed_")):
-            return None
-        base = Path.home() / ".claude" / "projects"
-        if not base.exists():
-            return None
-        for project_dir in base.iterdir():
-            if not project_dir.is_dir():
-                continue
-            candidate = project_dir / f"{session_id}.jsonl"
-            if candidate.exists():
-                return candidate
-        return None
-
-    def project_log_dir(self, cwd: str) -> Path:
-        return claude_code_project_dir(cwd)
-
-    def session_log_path(self, cwd: str, session_id: str) -> Path | None:
-        return claude_code_log_path(cwd, session_id)
-
-    def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
-        normalized_cwd = str(Path(cwd).expanduser().resolve(strict=False))
-        index_path = self.project_log_dir(normalized_cwd) / "sessions-index.json"
-        try:
-            entries = json.loads(index_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return ()
-        if not isinstance(entries, list):
-            return ()
-
-        launch_ids_by_session_id = {
-            claude_session_id: launch_id
-            for launch_id, registry_entry in read_registry(Path(normalized_cwd)).items()
-            if isinstance(registry_entry, Mapping)
-            and isinstance(
-                claude_session_id := registry_entry.get("claude_session_id"),
-                str,
-            )
-        }
-        summaries: list[SessionSummary] = []
-        for entry in entries:
-            if not isinstance(entry, dict) or entry.get("isSidechain"):
-                continue
-            entry_cwd = entry.get("cwd")
-            if not isinstance(entry_cwd, str):
-                continue
-            resolved_entry_cwd = str(Path(entry_cwd).expanduser().resolve(strict=False))
-            if resolved_entry_cwd != normalized_cwd:
-                continue
-
-            session_id = entry.get("sessionId")
-            if not isinstance(session_id, str) or not session_id:
-                continue
-            first_prompt = entry.get("firstPrompt")
-            normalized_prompt = first_prompt if isinstance(first_prompt, str) else ""
-            summary = entry.get("summary")
-            git_branch = entry.get("gitBranch")
-            modified = entry.get("modified")
-            summaries.append(
-                SessionSummary(
-                    backend_name=AGENT_BACKEND_CLAUDE_CODE,
-                    session_id=session_id,
-                    launch_id=launch_ids_by_session_id.get(session_id),
-                    cwd=resolved_entry_cwd,
-                    first_prompt=normalized_prompt,
-                    summary=summary if isinstance(summary, str) else "",
-                    git_branch=git_branch if isinstance(git_branch, str) else None,
-                    modified=modified if isinstance(modified, str) else None,
-                    is_sidechain=False,
-                    session_type_hint=(
-                        "order"
-                        if normalized_prompt.startswith(_ORDER_GREETING_PREFIXES)
-                        else "cook"
-                    ),
-                )
-            )
-        return tuple(summaries)
-
-
-@dataclass(frozen=True, slots=True)
-class ClaudeStreamParser:
-    completion_marker: str = ""
-
-    def parse_line(self, line: str) -> SessionEvent | None:
-        line = line.strip()
-        if not line:
-            return None
-        try:
-            obj = fast_loads(line)
-        except (ValueError, TypeError):
-            return None
-        if not isinstance(obj, dict):
-            return None
-
-        record_type = obj.get("type", "")
-
-        if record_type in {"task_started", "task_progress", "task_notification", "task_updated"}:
-            task_id = obj.get("task_id")
-            if not isinstance(task_id, str) or not task_id.strip():
-                return SessionEvent(
-                    kind=BackendEventKind.IGNORED,
-                    is_terminal=False,
-                    has_marker=False,
-                )
-            status: object = obj.get("status")
-            if record_type == "task_updated":
-                patch = obj.get("patch")
-                if not isinstance(patch, dict):
-                    return SessionEvent(
-                        kind=BackendEventKind.IGNORED,
-                        is_terminal=False,
-                        has_marker=False,
-                    )
-                status = patch.get("status")
-            active_statuses = {"pending", "running", "paused"}
-            terminal_statuses = {"completed", "failed", "stopped", "killed"}
-            if record_type in {"task_started", "task_progress"}:
-                task_active = True
-            elif status in active_statuses:
-                task_active = True
-            elif status in terminal_statuses:
-                task_active = False
-            else:
-                return SessionEvent(
-                    kind=BackendEventKind.IGNORED,
-                    is_terminal=False,
-                    has_marker=False,
-                )
-            return SessionEvent(
-                kind=BackendEventKind.TASK_LIFECYCLE,
-                is_terminal=False,
-                has_marker=False,
-                task_id=task_id.strip(),
-                task_active=task_active,
-            )
-
-        if record_type == "system":
-            subtype = obj.get("subtype", "")
-            session_id = obj.get("session_id", "")
-            if subtype == "api_retry":
-                return SessionEvent(
-                    kind=BackendEventKind.API_RETRY,
-                    is_terminal=False,
-                    has_marker=False,
-                    backend_data=ClaudeEventData(
-                        record_type="system",
-                        subtype="api_retry",
-                        session_id=session_id,
-                        raw=obj,
-                    ),
-                )
-            return SessionEvent(
-                kind=BackendEventKind.SESSION_META,
-                is_terminal=False,
-                has_marker=False,
-                session_id=session_id if subtype == "init" else None,
-            )
-
-        if record_type == "result":
-            result_field = obj.get("result", "")
-            if not (isinstance(result_field, str) and result_field.strip()):
-                return SessionEvent(
-                    kind=BackendEventKind.IGNORED,
-                    is_terminal=False,
-                    has_marker=False,
-                )
-            has_marker = bool(
-                self.completion_marker
-                and _marker_is_standalone(result_field, self.completion_marker)
-            )
-            return SessionEvent(
-                kind=BackendEventKind.COMPLETION,
-                is_terminal=True,
-                has_marker=has_marker,
-                backend_data=ClaudeEventData(
-                    record_type="result",
-                    subtype=obj.get("subtype", ""),
-                    session_id=obj.get("session_id", ""),
-                    raw=obj,
-                ),
-            )
-
-        if record_type == "assistant":
-            if "message" not in obj and obj.get("output_tokens", -1) == 0:
-                flat_content = obj.get("content", [])
-                if isinstance(flat_content, list) and any(
-                    isinstance(block, dict)
-                    and block.get("type") == "text"
-                    and CONTEXT_EXHAUSTION_MARKER in block.get("text", "").lower()
-                    for block in flat_content
-                ):
-                    return SessionEvent(
-                        kind=BackendEventKind.TOOL_OUTPUT,
-                        is_terminal=False,
-                        has_marker=False,
-                        backend_data=ClaudeEventData(
-                            record_type="assistant",
-                            subtype="context_exhaustion",
-                            session_id="",
-                            raw=obj,
-                        ),
-                    )
-            message = obj.get("message")
-            content = message.get("content") if isinstance(message, dict) else None
-            if isinstance(content, list) and any(
-                isinstance(block, dict)
-                and block.get("type") == "tool_use"
-                and block.get("name") == "ScheduleWakeup"
-                for block in content
-            ):
-                return SessionEvent(
-                    kind=BackendEventKind.SCHEDULE_WAKEUP,
-                    is_terminal=False,
-                    has_marker=False,
-                )
-            return SessionEvent(
-                kind=BackendEventKind.IGNORED,
-                is_terminal=False,
-                has_marker=False,
-            )
-
-        return SessionEvent(
-            kind=BackendEventKind.IGNORED,
-            is_terminal=False,
-            has_marker=False,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class ClaudeResultParser:
-    def parse_result(self, events: Sequence[SessionEvent]) -> AgentSessionResult:
-        session_id: str | None = None
-        has_completion = False
-        has_marker = False
-        last_backend_data: ClaudeEventData | None = None
-        for event in events:
-            if event.kind == BackendEventKind.SESSION_META and event.session_id:
-                session_id = event.session_id
-            if event.kind == BackendEventKind.COMPLETION:
-                has_completion = True
-                if event.has_marker:
-                    has_marker = True
-                if isinstance(event.backend_data, ClaudeEventData):
-                    last_backend_data = event.backend_data
-        output = ""
-        if last_backend_data and last_backend_data.raw:
-            output = last_backend_data.raw.get("result", "")
-        success = has_completion and has_marker
-        return AgentSessionResult(
-            success=success,
-            exit_code=0 if success else 1,
-            backend_name=AGENT_BACKEND_CLAUDE_CODE,
-            elapsed_seconds=0.0,
-            session_id=session_id,
-            output=output if isinstance(output, str) else "",
-        )
-
-    def parse_stdout(self, stdout: str, *, exit_code: int = 0) -> AgentSessionResult:
-        result = parse_session_result(stdout)
-        write_artifacts = _extract_write_artifacts(result.tool_uses)
-        return AgentSessionResult(
-            success=result.session_complete,
-            exit_code=0 if result.session_complete else 1,
-            backend_name=AGENT_BACKEND_CLAUDE_CODE,
-            elapsed_seconds=0.0,
-            session_id=result.session_id or None,
-            output=result.result,
-            error="\n".join(result.errors) if result.errors else "",
-            raw={
-                "subtype": result.subtype.value,
-                "is_error": result.is_error,
-                "token_usage": result.token_usage,
-                "write_artifacts": write_artifacts,
-                "tool_uses": result.tool_uses,
-                "assistant_messages": result.assistant_messages,
-                "jsonl_context_exhausted": result.jsonl_context_exhausted,
-                "stop_reasons": result.stop_reasons,
-                "has_thinking_only_turn": result.has_thinking_only_turn,
-                "seen_block_types": list(result.seen_block_types),
-            },
-        )
+__all__ = [
+    "ClaudeCodeBackend",
+    "ClaudeEnvPolicy",
+    "ClaudeResultParser",
+    "ClaudeSessionLocator",
+    "ClaudeStreamParser",
+]
 
 
 @dataclass(frozen=True, slots=True)

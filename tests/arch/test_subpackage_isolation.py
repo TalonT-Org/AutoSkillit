@@ -1390,7 +1390,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "Threads mcp_tool_timeout_sec through build_interactive_cmd, "
         "build_skill_session_cmd, build_food_truck_cmd, and build_resume_cmd to give Claude "
         "Code's client-side idle-abort timeout parity with the server-side anyio.fail_after "
-        "ceiling (+2 net lines).",
+        "ceiling (+2 net lines). REQ-017 (resolve-failures iteration 1) also adds an "
+        "explicit mcp_tool_timeout_sec parameter to build_headless_cmd and injects the "
+        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT env var when given, plus hardens all four "
+        "existing boundary checks with isinstance(mcp_tool_timeout_sec, (int, float)) "
+        "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
     ),
     "execution/headless/_headless_result.py": (
         1053,

@@ -1,11 +1,8 @@
 """Pytest fixtures and pre-existing skill-section helpers for tests/skills/.
 
-Skill-text assertion helpers, the ``resolve_skill_text`` cache, and the
-canonical Ticket Grouper skill name now live in ``_skill_text_helpers.py`` so
-test modules can import them without triggering pytest's plugin registration
-for this conftest. The pre-existing ``extract_step_section`` helper (used by
-the investigate-skill contract tests) is kept here because it has always been
-a conftest fixture/utility and is unrelated to the Ticket Grouper work.
+Ticket Grouper helpers live in ``_skill_text_helpers.py``; the pre-existing
+``extract_step_section`` investigate-skill helper stays here because it has
+always been a conftest utility.
 """
 
 from __future__ import annotations

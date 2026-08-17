@@ -485,8 +485,10 @@ class TestRegisterAllBackendBranching:
             "autoskillit.cli._init_helpers._is_plugin_installed",
             lambda **kwargs: False,
         )
+        mcp_calls: list[dict] = []
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._register_mcp_server", lambda p, **_kwargs: None
+            "autoskillit.cli._init_helpers._register_mcp_server",
+            lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
         )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._user_claude_json_path",

@@ -449,12 +449,7 @@ class OwnedProcessGroup:
                 )
 
     def _identity_is_alive(self, identity: tuple[int, float]) -> bool:
-        """Return whether the identified PID is still a live, non-zombie process.
-
-        Callers re-check on their own polling cadence (_wait_group_members), so a
-        small point-in-time TOCTOU between this read and a subsequent reap is
-        acceptable.
-        """
+        """Return whether the identified PID is still a live, non-zombie process."""
         pid, create_time = identity
         try:
             proc = psutil.Process(pid)

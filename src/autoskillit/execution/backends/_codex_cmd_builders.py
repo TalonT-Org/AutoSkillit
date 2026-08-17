@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from pathlib import Path
+from typing import Any
 
 import zstandard
 
@@ -359,7 +360,7 @@ class CodexSessionLocator(SessionLocator):
             return None
         return self._store().locate_session(session_id)
 
-    def read_session(self, path: Path) -> list[dict]:
+    def read_session(self, path: Path) -> list[dict[str, Any]]:
         """Read and parse a Codex session log file.
 
         Handles both plain .jsonl (current Codex v0.133.0+) and
@@ -372,7 +373,7 @@ class CodexSessionLocator(SessionLocator):
                 text = decompressed.decode("utf-8")
             else:
                 text = path.read_text(encoding="utf-8")
-        except Exception:
+        except (OSError, UnicodeDecodeError, zstandard.ZstdError):
             logger.warning("read_session: failed to read", path=str(path), exc_info=True)
             return []
         result: list[dict] = []

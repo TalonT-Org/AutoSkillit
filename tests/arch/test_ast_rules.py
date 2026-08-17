@@ -812,6 +812,9 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
       predating this guard; not yet migrated — tracked as a known follow-up, not
       addressed here because doing so would require rewriting the file's extensive
       existing psutil.pid_exists-mocked test suite, which is out of this guard's scope)
+    - src/autoskillit/hooks/guards/mcp_health_advisor.py (stdlib-only hook with no
+      autoskillit import path; uses os.kill(pid, 0) as the portable primary liveness
+      probe and /proc/{pid}/stat only as a zombie refinement)
     """
     allowed_files = {
         SRC_ROOT / "core" / "runtime" / "_linux_proc.py",
@@ -819,6 +822,7 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
         SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",
         SRC_ROOT / "execution" / "process" / "_process_kill.py",
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",
+        SRC_ROOT / "hooks" / "guards" / "mcp_health_advisor.py",
     }
     violations: list[str] = []
 

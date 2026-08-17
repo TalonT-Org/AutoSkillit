@@ -13,7 +13,7 @@ from anyio import ClosedResourceError as _ClosedResource
 
 from autoskillit.core import get_logger
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from fastmcp import Context
@@ -40,7 +40,7 @@ async def _tick(ctx: Context, interval: float, message: str) -> None:
         except _SWALLOWED_EXCEPTIONS as exc:
             if not _tick_failure_logged:
                 _tick_failure_logged = True
-                _logger.debug(
+                logger.debug(
                     "progress_heartbeat: report_progress swallowed %r; "
                     "further failures are silenced until process restart.",
                     exc,

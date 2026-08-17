@@ -1381,7 +1381,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1047,
         "REQ-CNST-010-E25: #4233 keeps the async-obligation success gate adjacent to "
         "the existing stale, idle, timeout, and content adjudication order it must preempt. "
-        "#4641/#4644 rectify adds the _log_cleanup_incomplete diagnostic helper shared by "
+        "#4641/#4644 rectify adds the _should_flag_cleanup_incomplete diagnostic helper shared by "
         "both SkillResult construction seams it must not silently drop evidence at.",
     ),
     "workspace/skill_capabilities.py": (

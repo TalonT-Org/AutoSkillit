@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.server._guards import _check_dry_walkthrough
 from autoskillit.server._state import _get_config
+from autoskillit.server.tools.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -181,8 +182,3 @@ class TestDryWalkthroughGateWithPrefix:
         assert result["success"] is False
         assert result["is_error"] is True
         assert "dry-walked" in result["result"].lower()
-
-
-# Local import to satisfy in-method reference inside the class above without
-# scattering inline imports across every test method.
-from autoskillit.server.tools.tools_execution import run_skill  # noqa: E402

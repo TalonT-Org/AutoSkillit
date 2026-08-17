@@ -105,9 +105,10 @@ def test_pid_alive_returns_false_for_zombie() -> None:
         os._exit(0)
     try:
         create_time = psutil.Process(child_pid).create_time()
-        deadline = time.time() + 2.0
+        deadline = time.monotonic() + 2.0
         while (
-            psutil.Process(child_pid).status() != psutil.STATUS_ZOMBIE and time.time() < deadline
+            psutil.Process(child_pid).status() != psutil.STATUS_ZOMBIE
+            and time.monotonic() < deadline
         ):
             time.sleep(0.01)
         assert psutil.Process(child_pid).status() == psutil.STATUS_ZOMBIE
@@ -116,8 +117,11 @@ def test_pid_alive_returns_false_for_zombie() -> None:
         os.waitpid(child_pid, 0)
 
 
-def test_pid_alive_returns_false_on_no_such_process(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A PID that vanished between os.kill and psutil.Process must be reported dead."""
+def test_pid_alive_no_such_process_with_create_time_reports_dead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A PID that vanished between os.kill and psutil.Process must be reported dead
+    when the caller supplied a stored_create_time (identity check possible)."""
     from autoskillit.core import _plugin_cache
 
     monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
@@ -128,11 +132,30 @@ def test_pid_alive_returns_false_on_no_such_process(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
 
     assert _pid_alive(42, stored_create_time=1.0) is False
+
+
+def test_pid_alive_no_such_process_without_create_time_assumes_alive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without stored_create_time, a NoSuchProcess cannot be disambiguated from a
+    transient psutil failure — fall back to the documented 'assume alive' contract."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_no_such_process(*_args: object, **_kwargs: object) -> object:
+        raise psutil.NoSuchProcess(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
+
     assert _pid_alive(42, stored_create_time=None) is True
 
 
-def test_pid_alive_returns_true_on_access_denied(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A foreign-user PID (psutil.AccessDenied) must remain 'assume alive'."""
+def test_pid_alive_access_denied_with_create_time_assumes_alive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive
+    even when the caller has a stored_create_time to compare against."""
     from autoskillit.core import _plugin_cache
 
     monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
@@ -143,6 +166,21 @@ def test_pid_alive_returns_true_on_access_denied(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_access_denied)
 
     assert _pid_alive(42, stored_create_time=1.0) is True
+
+
+def test_pid_alive_access_denied_without_create_time_assumes_alive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_access_denied(*_args: object, **_kwargs: object) -> object:
+        raise psutil.AccessDenied(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_access_denied)
+
     assert _pid_alive(42, stored_create_time=None) is True
 
 

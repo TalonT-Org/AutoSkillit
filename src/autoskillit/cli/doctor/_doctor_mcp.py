@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -391,11 +392,15 @@ def _check_claude_mcp_timeouts(
             "No direct autoskillit mcpServers entry — timeout check skipped",
         )
     observed = entry.get("timeout")
-    if observed is not None and not isinstance(observed, (int, float)):
+    if observed is not None and (
+        not isinstance(observed, (int, float))
+        or isinstance(observed, bool)
+        or not math.isfinite(observed)
+    ):
         return DoctorResult(
             Severity.WARNING,
             "claude_mcp_timeouts",
-            f"timeout in ~/.claude.json is not numeric ({observed!r}). "
+            f"timeout in ~/.claude.json is not a finite number ({observed!r}). "
             f"Run 'autoskillit init' to repair it.",
         )
     expected = int((run_skill or _RunSkillConfig()).mcp_tool_timeout_sec * 1000)

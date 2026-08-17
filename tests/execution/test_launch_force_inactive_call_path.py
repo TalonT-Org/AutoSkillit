@@ -29,6 +29,7 @@ def _skill_session_stripped(force: bool) -> bool:
     backend = ClaudeCodeBackend()
     spec = backend.build_skill_session_cmd(
         "/test",
+        provider_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
         force_inactive_agent_teams=force,
         project_root="/tmp",
     )
@@ -42,6 +43,7 @@ def _food_truck_stripped(force: bool) -> bool:
         plugin_binding=None,
         cwd="/tmp",
         completion_marker="DONE",
+        env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
         force_inactive_agent_teams=force,
         project_root="/tmp",
     )

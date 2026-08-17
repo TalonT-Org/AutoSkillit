@@ -1,10 +1,13 @@
-"""Tests for idle_output_timeout and Codex MCP config coherence validation."""
+"""Tests for idle_output_timeout and Codex/Claude MCP config coherence validation."""
 
 import pytest
 import structlog.testing
 
 from autoskillit.config import load_config
-from autoskillit.config.settings import _codex_mcp_timeout_coherence_gate
+from autoskillit.config.settings import (
+    _claude_mcp_timeout_coherence_gate,
+    _codex_mcp_timeout_coherence_gate,
+)
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
@@ -119,4 +122,50 @@ class TestCodexMcpTimeoutCoherenceGate:
             )
         assert not any(
             "codex_mcp_tool_timeout_coherence" in entry.get("event", "") for entry in cap_logs
+        )
+
+
+class TestClaudeMcpTimeoutCoherenceGate:
+    """Tests for _claude_mcp_timeout_coherence_gate warning behavior.
+
+    This is the gate that would have caught #4620: RunSkillConfig.mcp_tool_timeout_sec
+    already encoded the right invariant (via the Codex gate) but was never checked
+    against the Claude backend, which had no consumer of the field at all.
+    """
+
+    def test_no_warning_with_default_configs(self):
+        from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig
+
+        with structlog.testing.capture_logs() as cap_logs:
+            _claude_mcp_timeout_coherence_gate(RunSkillConfig(), FleetConfig())
+        assert not any(
+            "claude_mcp_tool_timeout_coherence" in entry.get("event", "") for entry in cap_logs
+        )
+
+    def test_warns_when_tool_timeout_below_max_session(self):
+        from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig
+
+        fc = FleetConfig()
+        max_session = max(
+            fc.default_timeout_sec + fc.max_extension_seconds, RunSkillConfig().timeout
+        )
+        rs = RunSkillConfig(mcp_tool_timeout_sec=float(max_session - 1))
+        with structlog.testing.capture_logs() as cap_logs:
+            _claude_mcp_timeout_coherence_gate(rs, fc)
+        assert any(
+            "claude_mcp_tool_timeout_coherence" in entry.get("event", "") for entry in cap_logs
+        )
+
+    def test_mcp_tool_timeout_field_at_max_passes_cleanly(self):
+        from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig
+
+        fc = FleetConfig()
+        max_session = max(
+            fc.default_timeout_sec + fc.max_extension_seconds, RunSkillConfig().timeout
+        )
+        rs_at_max = RunSkillConfig(mcp_tool_timeout_sec=float(max_session))
+        with structlog.testing.capture_logs() as cap_logs:
+            _claude_mcp_timeout_coherence_gate(rs_at_max, fc)
+        assert not any(
+            "claude_mcp_tool_timeout_coherence" in entry.get("event", "") for entry in cap_logs
         )

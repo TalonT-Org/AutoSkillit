@@ -91,6 +91,7 @@ def prepare_interactive_launch(
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
     force_inactive_agent_teams: bool = False,
+    mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
     """Probe an exact executable before sealing the capability-complete session env."""
 
@@ -125,6 +126,7 @@ def prepare_interactive_launch(
         tools=tools,
         force_inactive_agent_teams=force_inactive_agent_teams,
         project_root=project_dir,
+        mcp_tool_timeout_sec=mcp_tool_timeout_sec,
     )
     final = resolve_executable_launch_binding(
         binary_name=backend.binary_name(),
@@ -149,6 +151,7 @@ def prepare_interactive_launch(
         tools=tools,
         force_inactive_agent_teams=force_inactive_agent_teams,
         project_root=project_dir,
+        mcp_tool_timeout_sec=mcp_tool_timeout_sec,
     )
     return PreparedInteractiveLaunch(spec=spec, executable=final)
 
@@ -176,6 +179,7 @@ def _run_interactive_session(
     startup_trace: StartupTrace | None = None,
     attempt: int | None = None,
     force_inactive_agent_teams: bool = False,
+    mcp_tool_timeout_sec: float | None = None,
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -195,6 +199,8 @@ def _run_interactive_session(
         configured_base_branch = config.branching.default_base_branch
         if isinstance(configured_base_branch, str):
             default_base_branch = configured_base_branch
+        if mcp_tool_timeout_sec is None:
+            mcp_tool_timeout_sec = config.run_skill.mcp_tool_timeout_sec
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.core import InfraExitCategory, bind_session_owner
@@ -248,6 +254,7 @@ def _run_interactive_session(
                     generated_home=managed_home.generated_home,
                     tools=tools_arg,
                     force_inactive_agent_teams=force_inactive_agent_teams,
+                    mcp_tool_timeout_sec=mcp_tool_timeout_sec,
                 )
             except ValueError as exc:
                 _exit_launch_preparation_error(exc)
@@ -266,6 +273,7 @@ def _run_interactive_session(
                 tools=tools_arg,
                 force_inactive_agent_teams=force_inactive_agent_teams,
                 project_root=_project_dir,
+                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             )
             selector = backend.capabilities.explicit_path_env_var
             try:
@@ -290,6 +298,7 @@ def _run_interactive_session(
                 tools=tools_arg,
                 force_inactive_agent_teams=force_inactive_agent_teams,
                 project_root=_project_dir,
+                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             )
         spec = replace(built_spec, cwd=str(_project_dir))
         assert_interactive_ordering(spec=spec)
@@ -373,6 +382,7 @@ def _run_interactive_session(
                     initial_prompt=initial_message,
                     tools=tools_arg,
                     force_inactive_agent_teams=force_inactive_agent_teams,
+                    mcp_tool_timeout_sec=mcp_tool_timeout_sec,
                 )
             except ValueError as exc:
                 _exit_launch_preparation_error(exc)
@@ -463,6 +473,7 @@ def _launch_cook_session(
     default_base_branch: str,
     workspace_temp_dir: str | None,
     force_inactive_agent_teams: bool = False,
+    mcp_tool_timeout_sec: float | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
     _max_reloads = 10
@@ -513,6 +524,7 @@ def _launch_cook_session(
                 startup_trace=trace,
                 attempt=attempt if managed_home is not None else None,
                 force_inactive_agent_teams=force_inactive_agent_teams,
+                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             )
             if session_signal is None:
                 return

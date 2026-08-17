@@ -244,6 +244,7 @@ class CodingAgentBackend(Protocol):
         skill_session: bool = False,
         force_inactive_agent_teams: bool = False,
         project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec: ...
 
     def build_skill_session_cmd(
@@ -270,6 +271,7 @@ class CodingAgentBackend(Protocol):
         output_format: OutputFormat = OutputFormat.STREAM_JSON,
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
+        mcp_tool_timeout_sec: float | None = None,
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
@@ -299,6 +301,7 @@ class CodingAgentBackend(Protocol):
         tools: Sequence[str] = (),
         force_inactive_agent_teams: bool = False,
         project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec: ...
 
     def validate_session_layout(

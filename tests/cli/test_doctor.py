@@ -455,6 +455,29 @@ class TestCLIDoctor:
         assert len(mcp_checks) == 1
         assert mcp_checks[0]["severity"] == "warning"
 
+    def test_doctor_claude_mcp_timeouts_warns_when_stale(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """claude_mcp_timeouts is actually appended to run_doctor()'s output, not just defined.
+
+        A defined-but-never-results.append()-ed check would pass a bare
+        `"claude_mcp_timeouts" in check_names` assertion trivially if that
+        assertion were the only guard — so this forces the check into a
+        non-OK state and asserts on severity, proving it actually ran.
+        """
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(
+            json.dumps({"mcpServers": {"autoskillit": {"command": "autoskillit", "timeout": 1}}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor_cmd(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        claude_checks = [r for r in data["results"] if r["check"] == "claude_mcp_timeouts"]
+        assert len(claude_checks) == 1
+        assert claude_checks[0]["severity"] == "warning"
+
     # DOC-REG-7
     def test_doctor_hook_registration_warns_when_scripts_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

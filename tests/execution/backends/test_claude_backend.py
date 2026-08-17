@@ -301,6 +301,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
+            mcp_tool_timeout_sec=14364.0,
             scenario_step_name="step1",
             temp_dir_relpath=".autoskillit/temp",
             allowed_write_prefix="/tmp/test",
@@ -321,6 +322,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
+            mcp_tool_timeout_sec=14364.0,
             scenario_step_name="step1",
             temp_dir_relpath=".autoskillit/temp",
             allowed_write_prefix="/tmp/test",
@@ -333,6 +335,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
         )
         assert via_config.cmd == via_flat.cmd
         assert via_config.env == via_flat.env
+        assert via_config.env["CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"] == "14364.0"
 
     def test_legacy_flat_params_still_work(self) -> None:
         backend = ClaudeCodeBackend()

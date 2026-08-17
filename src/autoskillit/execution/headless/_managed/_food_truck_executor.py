@@ -252,6 +252,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             output_format=cfg.run_skill.output_format,
             exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
             stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
+            mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
             step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,

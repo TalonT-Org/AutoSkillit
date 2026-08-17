@@ -1804,6 +1804,7 @@ class CodexBackend(BackendCmdBuilderBase):
         output_format: OutputFormat = OutputFormat.STREAM_JSON,
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
+        mcp_tool_timeout_sec: float | None = None,
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
@@ -1816,6 +1817,10 @@ class CodexBackend(BackendCmdBuilderBase):
         project_root: Path | str | None = None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
+        # Codex has its own timeout mechanism (ensure_codex_mcp_registered /
+        # CODEX_MCP_TOOL_TIMEOUT_FLOOR) — this param exists only to satisfy the
+        # shared CodingAgentBackend Protocol signature.
+        del mcp_tool_timeout_sec
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.STREAM_JSON:
             logger.warning("codex_output_format_coerced")
@@ -1933,7 +1938,12 @@ class CodexBackend(BackendCmdBuilderBase):
         tools: Sequence[str] = (),
         force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
+        # Codex has its own timeout mechanism (ensure_codex_mcp_registered /
+        # CODEX_MCP_TOOL_TIMEOUT_FLOOR) — this param exists only to satisfy the
+        # shared CodingAgentBackend Protocol signature.
+        del mcp_tool_timeout_sec
         if tools:
             logger.warning(
                 "codex_tools_ignored",
@@ -2050,8 +2060,12 @@ class CodexBackend(BackendCmdBuilderBase):
         skill_session: bool = False,
         force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
-        del skill_session
+        # Codex has its own timeout mechanism (ensure_codex_mcp_registered /
+        # CODEX_MCP_TOOL_TIMEOUT_FLOOR) — this param exists only to satisfy the
+        # shared CodingAgentBackend Protocol signature.
+        del skill_session, mcp_tool_timeout_sec
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)

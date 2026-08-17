@@ -393,6 +393,7 @@ def cook(
                             add_dirs=[managed_home.skills_dir],
                             generated_home=managed_home.generated_home,
                             force_inactive_agent_teams=force_inactive_agent_teams,
+                            mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
                         )
                     except ValueError as exc:
                         _exit_launch_preparation_error(exc)
@@ -408,6 +409,7 @@ def cook(
                         env_extras=cook_env_extras,
                         force_inactive_agent_teams=force_inactive_agent_teams,
                         project_root=project_dir,
+                        mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
                     )
                 final_cmd = built_spec.cmd
                 final_origin = built_spec.origin

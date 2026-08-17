@@ -16,6 +16,7 @@ __all__ = [
     "AUTOSKILLIT_STATE_ROOT_ENV_VAR",
     "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES",
     "AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR",
+    "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR",
     "CLAUDE_MCP_CONNECTION_NONBLOCKING",
     "CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR",
     "CLAUDE_MCP_CONNECT_TIMEOUT_MS",
@@ -69,6 +70,13 @@ CODEX_SCHEMA_VERSION: int = 2
 CLAUDE_MCP_CONNECTION_NONBLOCKING: str = "0"
 CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR: str = "MCP_CONNECT_TIMEOUT_MS"
 CLAUDE_MCP_CONNECT_TIMEOUT_MS: int = 30_000
+
+# Claude Code's per-MCP-server-tool-call idle-abort timeout (seconds, as a string
+# env var). Requires Claude Code v2.1.187+; stdio MCP servers (autoskillit's
+# transport) were exempt entirely before v2.1.203. Gives Claude parity with the
+# equivalent Codex-side computed timeout (see settings.py's
+# compute_codex_mcp_tool_timeout / _codex_mcp_timeout_coherence_gate).
+CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR: str = "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"
 
 # Session type environment variable and valid values.
 SESSION_TYPE_ENV_VAR: str = "AUTOSKILLIT_SESSION_TYPE"

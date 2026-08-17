@@ -128,6 +128,44 @@ def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) ->
     assert spec.env["MCP_CONNECTION_NONBLOCKING"] == "0"
 
 
+@pytest.mark.parametrize(
+    "builder_call",
+    [
+        lambda: ClaudeCodeBackend().build_interactive_cmd(mcp_tool_timeout_sec=14364.0),
+        lambda: ClaudeCodeBackend().build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_binding=None,
+            output_format=OutputFormat.STREAM_JSON,
+            mcp_tool_timeout_sec=14364.0,
+        ),
+        lambda: ClaudeCodeBackend().build_resume_cmd(
+            resume_session_id="abc", prompt="Emit", mcp_tool_timeout_sec=14364.0
+        ),
+        lambda: _with_plugin_binding(
+            lambda binding: ClaudeCodeBackend().build_food_truck_cmd(
+                orchestrator_prompt="You are an L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+                mcp_tool_timeout_sec=14364.0,
+            )
+        ),
+    ],
+    ids=["interactive", "skill_headless", "headless_resume", "food_truck"],
+)
+def test_all_claude_session_builders_inject_mcp_tool_idle_timeout(builder_call) -> None:
+    """Every Claude session command builder injects CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT.
+
+    Gives Claude Code's client-side idle-abort timeout parity with the
+    server-side anyio.fail_after ceiling (RunSkillConfig.mcp_tool_timeout_sec).
+    """
+    spec = builder_call()
+    assert spec.env["CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"] == "14364.0"
+
+
 def test_launch_id_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_LAUNCH_ID" in _HEADLESS_EXCLUSIVE_VARS
 

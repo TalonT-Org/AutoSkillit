@@ -71,6 +71,15 @@ _MEDIUM_EFFORT_FILES = (
 )
 _GROUP_SPLIT_RE = re.compile(r"(?=^### Ticket Group)", re.MULTILINE)
 
+# Cross-check that every tier-file name actually appears in the fixture
+# manifest. If ``broken_ticket_grouper_manifest.md`` drifts (file rename,
+# removal, re-tiering), this fails fast instead of silently degrading the
+# tier-bound assertions below.
+for _name in _HIGH_EFFORT_FILES + _MEDIUM_EFFORT_FILES:
+    assert _name in broken_ticket_grouper_manifest.BROKEN_MANIFEST, (
+        f"Tier file {_name!r} missing from broken_ticket_grouper_manifest fixture"
+    )
+
 
 # Shared opt-in env var for live-behavior probes. The weekly conformance
 # claude-probe job sets ``CLAUDE_CODE_SMOKE_TEST=1`` for every smoke-gated

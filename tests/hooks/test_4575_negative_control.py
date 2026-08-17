@@ -40,7 +40,6 @@ def _run_guard(
     hook_module: str,
     headless: bool = False,
     session_type: str | None = "skill",
-    raw_stdin: str | None = None,
     flag_path: str | None = None,
 ) -> str:
     """Run a guard's main() with the given PreToolUse event envelope."""
@@ -49,7 +48,7 @@ def _run_guard(
     module = importlib.import_module(hook_module)
     main = module.main
 
-    stdin_content = raw_stdin if raw_stdin is not None else json.dumps(event)
+    stdin_content = json.dumps(event)
     env_snapshot = {
         k: v
         for k, v in os.environ.items()
@@ -98,7 +97,6 @@ def _set_session_join_required(tmp_path: Path, join_required: bool) -> str:
         "loaded_skills": [],
     }
     flag_path.write_text(json.dumps(payload), encoding="utf-8")
-    os.environ["AUTOSKILLIT_JOIN_FLAG_PATH"] = str(flag_path)
     return str(flag_path)
 
 

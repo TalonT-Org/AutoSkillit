@@ -25,7 +25,7 @@ from autoskillit.execution._github_http import (
     retry_after_seconds,
 )
 
-from . import _poster_boundary, _poster_finalize, _poster_retry, _poster_support
+from . import _poster_boundary, _poster_post_attempt, _poster_retry, _poster_support
 from ._mutation_coordinator import GitHubReviewMutationCoordinator
 from .canonical import (
     canonicalize_review_request,
@@ -763,7 +763,7 @@ class DefaultGitHubReviewPoster:
         findings: tuple[_poster_support.CanonicalFinding, ...],
         authenticated_login: str,
     ) -> _poster_support.Reconciliation:
-        return await _poster_finalize.reconcile_payload(
+        return await _poster_post_attempt.reconcile_payload(
             gateway=self.gateway,
             request=request,
             operation_key=operation_key,
@@ -836,7 +836,7 @@ class DefaultGitHubReviewPoster:
         reconciliation: _poster_support.Reconciliation,
         executed_mutations: int,
     ) -> GitHubReviewPostResult:
-        return _poster_finalize.finalize(
+        return _poster_post_attempt.finalize(
             ledger=self.ledger,
             wall_clock=self.wall_clock,
             request=request,

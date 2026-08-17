@@ -1106,7 +1106,8 @@ class CodexBackend(BackendCmdBuilderBase):
                 fragments.append(
                     "Call spawn_agent once per runtime item in "
                     f"{spawn.for_each!r} with agent_type={native_role!r}, "
-                    f"fork_turns='none'{policy_text}; retain every returned child ID."
+                    f"fork_turns='none'{policy_text}; retain every returned child terminal "
+                    "result before parent synthesis."
                 )
             else:
                 assert spawn.count is not None

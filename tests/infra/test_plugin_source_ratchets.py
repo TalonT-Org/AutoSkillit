@@ -534,6 +534,14 @@ def _is_plugin_lifecycle_tree(tree: ast.AST) -> bool:
     return not _referenced_symbols(tree).isdisjoint(_PLUGIN_LIFECYCLE_SYMBOLS)
 
 
+# Files that are decomposed submodules of a plugin-lifecycle package but no
+# longer import the lifecycle symbols directly (those live in sibling
+# submodules). The package collectively is plugin lifecycle.
+_PLUGIN_LIFECYCLE_PACKAGES: frozenset[str] = frozenset(
+    {"server/tools/tools_kitchen"},
+)
+
+
 def _strict_plugin_write_scopes(tree: ast.AST) -> frozenset[str]:
     return frozenset(
         node.name
@@ -581,9 +589,13 @@ def _scan_plugin_mutation_trees(
         # it out; it references no plugin-lifecycle symbol of its own, so it is named
         # explicitly to keep its staged session-root swaps under the ratchet.
         is_codex_projection_module = rel == "execution/backends/_codex_explorer_projection.py"
+        in_plugin_pkg = any(
+            rel.startswith(f"{pkg}/") for pkg in _PLUGIN_LIFECYCLE_PACKAGES
+        )
         if (
             not is_projected_artifact_module
             and not is_codex_projection_module
+            and not in_plugin_pkg
             and not _is_plugin_lifecycle_tree(tree)
         ):
             continue

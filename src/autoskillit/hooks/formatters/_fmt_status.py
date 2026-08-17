@@ -6,7 +6,7 @@ Hosts the per-tool formatters for ``get_token_summary``, ``get_timing_summary``,
 
 from __future__ import annotations
 
-from ._fmt_primitives import (  # type: ignore[import-not-found]
+from _fmt_primitives import (  # type: ignore[import-not-found]
     _CHECK_MARK,
     _CROSS_MARK,
     _WARN_MARK,

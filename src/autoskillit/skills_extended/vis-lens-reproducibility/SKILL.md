@@ -79,7 +79,11 @@ semantic_requirements:
 - Omit random seed documentation for any figure derived from stochastic processes
 - Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Check data availability status for every figure (public/restricted/embargoed)
 - Document bin widths for histograms, smoothing windows for time-series, normalization parameters for heatmaps
 - Pin plotting library name and version (matplotlib 3.8.2, seaborn 0.13.0, etc.)

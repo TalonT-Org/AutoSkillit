@@ -78,7 +78,11 @@ semantic_requirements:
 - Include a figure that presents the same data and conclusion as another figure already in the plan
 - Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Build a global color→entity mapping table across all figures; flag any inconsistency
 - Number all figures and write a one-sentence narrative role for each
 - Flag any figure whose narrative role duplicates another (same question, same data)

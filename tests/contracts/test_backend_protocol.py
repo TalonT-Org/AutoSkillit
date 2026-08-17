@@ -99,14 +99,17 @@ def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
         git_metadata_writes=(GitMetadataWriteSpec(purpose="create a commit"),),
     )
 
+    from autoskillit.core.types._type_exceptions import SkillContractError
+
     for backend_name, backend_cls in BACKEND_REGISTRY.items():
-        result = backend_cls().adapt_skill_semantics(plan)
-        # Codex cannot provide fixed-set fan-in, so it honestly refuses
-        # the join-required plan. Other backends must realize it.
+        # Codex cannot provide fixed-set fan-in, so it honestly refuses the
+        # join-required plan via SkillContractError at the adapter surface
+        # (fail-closed). Other backends must realize it.
         if backend_name == "codex":
-            assert result.unsupported_operation is not None, backend_name
-            assert result.diagnostic is not None, backend_name
+            with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+                backend_cls().adapt_skill_semantics(plan)
         else:
+            result = backend_cls().adapt_skill_semantics(plan)
             assert result.diagnostic is None, backend_name
             assert result.unsupported_operation is None, backend_name
             assert result.instruction_fragments, backend_name

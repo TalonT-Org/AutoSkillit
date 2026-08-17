@@ -112,20 +112,25 @@ def test_force_inactive_interactive_without_project_root_refuses() -> None:
         )
 
 
-def test_force_inactive_interactive_with_executable_refuses() -> None:
+def test_force_inactive_interactive_with_executable_refuses(tmp_path: Path) -> None:
     """C6: refuse force_inactive_agent_teams=True combined with an
     executable binding — the executable's launch_environment was
     captured before neutralization, so combining the two makes the
     binding stale."""
+    from autoskillit.core import atomic_write
     from autoskillit.core.runtime.executable_binding import (
         resolve_executable_launch_binding,
     )
 
+    executable = tmp_path / "claude"
+    atomic_write(executable, "#!/bin/sh\nexit 0\n")
+    executable.chmod(0o755)
+
     backend = ClaudeCodeBackend()
     binding = resolve_executable_launch_binding(
         binary_name="claude",
-        environment={},
-        cwd=Path("/tmp"),
+        environment={"PATH": str(tmp_path)},
+        cwd=tmp_path,
     )
     with pytest.raises(ValueError, match="cannot be combined with executable binding"):
         backend.build_interactive_cmd(

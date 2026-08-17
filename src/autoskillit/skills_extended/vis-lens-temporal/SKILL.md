@@ -79,7 +79,11 @@ semantic_requirements:
 - Mix epoch-count and step-count x-axes on the same multi-run comparison without alignment
 - Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - CRITICAL: if `n_seeds == 1` for any training curve, flag as **CRITICAL** — single-seed training curves cannot demonstrate stability or convergence robustness
 - Disclose smoothing: state the EMA α or window size in the figure caption or axis label
 - When comparing runs with different batch sizes or learning rate schedules, align on

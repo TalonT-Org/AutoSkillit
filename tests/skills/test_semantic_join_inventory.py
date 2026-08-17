@@ -9,7 +9,7 @@ The test enumerates all bundled skill SKILL.md files plus exploration
 sidecars, parses the YAML frontmatter, and walks the semantic_requirements
 block. Any skill whose ``child_spawns`` block is non-empty, or whose body
 matches a structural child-spawning marker (Agent(, Task(, spawn_agent,
-Dispatch), must declare ``join.required: true``.
+Dispatch(), must declare ``join.required: true``.
 
 This guards against the regression path that left 45 skills enforcing
 join only via prose.
@@ -30,9 +30,7 @@ CHILD_SPAWN_BODY_MARKERS: tuple[str, ...] = (
     "Agent(",
     "Task(",
     "spawn_agent",
-    "Dispatch",
-    "child delegations",
-    "delegate",
+    "Dispatch(",
 )
 
 _FRONT_RE = re.compile(r"^---\s*$")

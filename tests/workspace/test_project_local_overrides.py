@@ -685,7 +685,7 @@ def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    backend = get_backend("codex")
+    backend = get_backend("claude-code")
     plugin_authority, preparation = prepare_skill_projection(
         project_root=project_root,
         cwd=cwd,

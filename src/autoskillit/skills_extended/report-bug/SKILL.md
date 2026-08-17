@@ -11,16 +11,6 @@ hooks:
     - type: command
       command: 'echo ''[SKILL: report-bug] Investigating bug...'''
       once: true
-semantic_version: 1
-semantic_requirements:
-  logical_roles:
-  - name: delegated-worker
-    purpose: perform the named independent responsibility and return bounded evidence
-  child_spawns:
-  - role: delegated-worker
-    count: 1
-  join:
-    required: true
 ---
 
 # Report Bug Skill

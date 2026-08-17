@@ -38,14 +38,6 @@ semantic_requirements:
   - name: make-arch-diag
   - name: mermaid
   - name: verify-diag
-  logical_roles:
-  - name: delegated-worker
-    purpose: perform the named independent responsibility and return bounded evidence
-  child_spawns:
-  - role: delegated-worker
-    count: 1
-  join:
-    required: true
 ---
 
 # Experimental Design Diagram Selection

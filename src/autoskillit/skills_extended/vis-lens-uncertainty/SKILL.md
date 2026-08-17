@@ -76,7 +76,11 @@ semantic_requirements:
 - Omit the CRITICAL flag when n_seeds == 1; single-seed variance is unquantifiable
 - Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - CRITICAL: if `n_seeds == 1`, flag the figure as **CRITICAL** — single-seed variance is unquantifiable and must be reported
 - If `n_seeds >= 10`, prefer violin/box/strip over error bars to show the full distribution shape
 - Label every uncertainty overlay with its exact measure (SD, SE, CI95, PI95) and n in the figure caption

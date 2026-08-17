@@ -79,7 +79,11 @@ semantic_requirements:
 - Import or execute target code, tests, experiments, models, or benchmarks
 - Let a migrated exploration vector classify result slots, choose TABLE/FIGURE/BOTH, design the figure, or create the diagram
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Apply the decision rule below to every result slot in the experiment plan
 - When the verdict is BOTH, recommend the table in the main paper and the figure in the appendix (or vice versa depending on the primary audience)
 - Justify borderline decisions with explicit reference to the decision rule criteria

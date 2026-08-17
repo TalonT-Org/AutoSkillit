@@ -79,7 +79,11 @@ semantic_requirements:
 - Import or execute target code, tests, plotting pipelines, models, or benchmarks
 - Let an exploration vector decide accessibility, assign PASS/FAIL/WARNING, design the figure, or create the diagram
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Use Okabe-Ito (8 colors) or Paul Tol palettes for categorical nominal data
 - Use viridis, cividis, or mako for sequential/diverging quantitative data
 - Add a redundant non-color encoding (shape marker AND/OR line-style dash pattern) for every color-distinguished series in line and scatter plots

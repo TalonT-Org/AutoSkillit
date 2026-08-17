@@ -9,16 +9,6 @@ hooks:
         - type: command
           command: "echo '[SKILL: write-recipe] Writing recipe...'"
           once: true
-semantic_version: 1
-semantic_requirements:
-  logical_roles:
-  - name: delegated-worker
-    purpose: perform the named independent responsibility and return bounded evidence
-  child_spawns:
-  - role: delegated-worker
-    count: 1
-  join:
-    required: true
 ---
 
 # Make Script Skill

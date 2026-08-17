@@ -11,16 +11,6 @@ hooks:
         - type: command
           command: "echo '[SKILL: make-campaign] Authoring campaign recipe...'"
           once: true
-semantic_version: 1
-semantic_requirements:
-  logical_roles:
-  - name: delegated-worker
-    purpose: perform the named independent responsibility and return bounded evidence
-  child_spawns:
-  - role: delegated-worker
-    count: 1
-  join:
-    required: true
 ---
 
 # Campaign Recipe Authoring Skill

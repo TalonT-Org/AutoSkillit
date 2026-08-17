@@ -79,7 +79,11 @@ semantic_requirements:
 - Omit units from axis labels (e.g., write "Latency (ms)", not "Latency")
 - Run exploration leaves in the background
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Check every figure title for declarative language
 - Verify every axis label carries a unit or categorical scale description
 - Confirm error bars / shaded regions are defined (CI95, ±1 std, IQR, etc.) in the legend or caption

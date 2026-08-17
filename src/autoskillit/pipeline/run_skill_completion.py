@@ -31,7 +31,7 @@ class RunSkillCompletionReceipt:
     classification: str
     success: bool
     result_digest: str
-    started_at: float = 0.0
+    started_at: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +44,7 @@ class _Invocation:
     tracker_kitchen_id: str
     tracker_incarnation_id: str
     step_name: str
-    started_at: float = 0.0
+    started_at: float
 
 
 @dataclass(frozen=True, slots=True)

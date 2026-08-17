@@ -6,10 +6,12 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
+from autoskillit.core import is_pid_zombie
 from autoskillit.core.paths import pkg_root
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -85,6 +87,38 @@ def test_mcp_health_advisor_dead_pid_injects_message(tmp_path: Path) -> None:
     assert "/MCP" in hook_out.get("message", ""), (
         f"Expected /MCP reconnect hint in message, got: {hook_out}"
     )
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: uses os.fork and /proc")
+def test_mcp_health_advisor_zombie_pid_injects_message(tmp_path: Path) -> None:
+    """Kitchen entry whose PID is a zombie → treated as dead, message injected."""
+    child_pid = os.fork()
+    if child_pid == 0:
+        os._exit(0)
+    try:
+        deadline = time.time() + 2.0
+        while not is_pid_zombie(child_pid) and time.time() < deadline:
+            time.sleep(0.01)
+        assert is_pid_zombie(child_pid)
+
+        kitchens = [
+            {
+                "kitchen_id": "k-zombie",
+                "pid": child_pid,
+                "project_path": str(tmp_path),
+                "opened_at": "2026-01-01T00:00:00+00:00",
+            }
+        ]
+        returncode, payload = _run_guard(
+            tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path, headless=False
+        )
+        assert returncode == 0
+        hook_out = payload.get("hookSpecificOutput", {})
+        assert "/MCP" in hook_out.get("message", ""), (
+            f"Expected /MCP reconnect hint for zombie PID, got: {hook_out}"
+        )
+    finally:
+        os.waitpid(child_pid, 0)
 
 
 def test_mcp_health_advisor_no_kitchens_silent(tmp_path: Path) -> None:

@@ -722,6 +722,128 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     )
 
 
+def test_no_direct_settle_call_outside_allowlist() -> None:
+    """No src file may call .settle() outside the designated allowlist.
+
+    .settle() raises OwnedProcessCleanupError on incomplete teardown. Callers that
+    do not need that raising behavior must use .settle_evidence() or
+    .settle_preserving() instead — a bare .settle() call is deliberately narrow.
+
+    Allowed call sites:
+    - src/autoskillit/execution/process/_process_kill.py (defines settle())
+    - src/autoskillit/cli/session/_session_process.py (requires settle()'s raising
+      semantics)
+    - src/autoskillit/execution/evidence_reader.py (pre-existing, already-correct
+      catch-and-convert usage via owner.settle(...) in _run_bounded)
+    - src/autoskillit/hooks/_capture_process.py (hosts a structurally unrelated,
+      stdlib-only OwnedProcessGroup reimplementation with its own .settle() calls)
+    """
+    allowed_files = {
+        SRC_ROOT / "execution" / "process" / "_process_kill.py",
+        SRC_ROOT / "cli" / "session" / "_session_process.py",
+        SRC_ROOT / "execution" / "evidence_reader.py",
+        SRC_ROOT / "hooks" / "_capture_process.py",
+    }
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file in allowed_files:
+            continue
+        try:
+            tree = ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "settle"
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to .settle() outside allowed files"
+                )
+
+    assert not violations, (
+        "Direct .settle() calls found outside allowed files.\n"
+        "Use .settle_evidence() or .settle_preserving() unless the raising semantics "
+        "are genuinely required, then add the file to the allowlist:\n" + "\n".join(violations)
+    )
+
+
+def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
+    """No src file may call psutil.pid_exists() or the bare os.kill(pid, 0) existence
+    probe outside the shared zombie-aware primitive.
+
+    Both checks are zombie-blind: a zombie process (exited but not yet reaped by its
+    parent) retains a readable /proc entry and reports as alive under an exact-PID-
+    existence check alone.
+
+    Allowed files:
+    - src/autoskillit/core/runtime/_linux_proc.py (defines the shared primitive:
+      is_pid_alive() / is_pid_zombie())
+    - src/autoskillit/core/_plugin_cache.py (keeps its own psutil-based zombie check
+      by design — its cross-boot stored_create_time verification cannot be reproduced
+      by the stdlib-only tick-count primitive without an out-of-scope boot-time/schema
+      migration)
+    - src/autoskillit/execution/process/_daemon_orphans.py (_owner_is_dead's
+      os.kill(owner_pid, 0) branch is a last-resort fallback reached only when
+      /proc/{pid}/stat is unreadable — in that degraded state zombie detection is
+      equally impossible, so this is not a new zombie-blind gap, and PermissionError/
+      OSError already fail closed to "unknown")
+    - src/autoskillit/fleet/_dispatch_reaper.py (pre-existing psutil.pid_exists() use
+      predating this guard; not yet migrated — tracked as a known follow-up, not
+      addressed here because doing so would require rewriting the file's extensive
+      existing psutil.pid_exists-mocked test suite, which is out of this guard's scope)
+    """
+    allowed_files = {
+        SRC_ROOT / "core" / "runtime" / "_linux_proc.py",
+        SRC_ROOT / "core" / "_plugin_cache.py",
+        SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",
+        SRC_ROOT / "fleet" / "_dispatch_reaper.py",
+    }
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file in allowed_files:
+            continue
+        try:
+            tree = ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+                continue
+            if (
+                node.func.attr == "pid_exists"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "psutil"
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to psutil.pid_exists() outside allowed files"
+                )
+            elif (
+                node.func.attr == "kill"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "os"
+                and len(node.args) == 2
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value == 0
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to os.kill(pid, 0) outside allowed files"
+                )
+
+    assert not violations, (
+        "Direct zombie-blind liveness checks found outside allowed files.\n"
+        "Use core.is_pid_alive()/is_pid_zombie() (or core._plugin_cache._pid_alive() "
+        "when cross-boot stored_create_time verification is needed) instead:\n"
+        + "\n".join(violations)
+    )
+
+
 def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
     """run_managed_async must not contain an if/elif chain that inspects
     TerminationReason.* or signals.process_exited directly.

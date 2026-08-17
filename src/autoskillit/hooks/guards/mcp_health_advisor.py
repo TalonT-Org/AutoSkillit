@@ -36,15 +36,22 @@ def _read_kitchens() -> list[dict]:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Check if a PID is still running (stdlib-only, no create_time validation)."""
+    """Check if a PID is running and not a zombie (stdlib-only, no create_time validation).
+
+    Duplicates the /proc/{pid}/stat state-char parse from
+    autoskillit.core.runtime._linux_proc.read_process_state by design: hook scripts
+    are stdlib-only and cannot import from autoskillit.*.
+    """
     try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
+        rpar = stat.rfind(")")
+        if rpar == -1:
+            return False
+        fields = stat[rpar + 2 :].split()
+        return fields[0] != "Z"
+    except (FileNotFoundError, PermissionError, OSError, ValueError, IndexError):
         return False
-    except (PermissionError, OSError):
-        # PermissionError means the process exists but we lack permission to signal it.
-        return True
 
 
 def main() -> None:

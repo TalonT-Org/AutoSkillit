@@ -845,6 +845,10 @@ def read_active_kitchens_registry() -> list[dict]:
 
 
 def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
+    # Intentionally excluded from the core.runtime.is_pid_alive consolidation: this
+    # function's cross-boot stored_create_time verification cannot be reproduced by
+    # the stdlib-only tick-count primitive without an out-of-scope boot-time/schema
+    # migration, so it keeps its own psutil-based zombie check.
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -852,18 +856,30 @@ def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
     except PermissionError:
         if stored_create_time is not None:
             try:
-                actual = psutil.Process(pid).create_time()
-                return abs(actual - stored_create_time) < 1.0
+                proc = psutil.Process(pid)
+                return (
+                    abs(proc.create_time() - stored_create_time) < 1.0
+                    and proc.status() != psutil.STATUS_ZOMBIE
+                )
             except psutil.NoSuchProcess:
                 return False
-        return True
-    if stored_create_time is not None:
         try:
-            actual = psutil.Process(pid).create_time()
-            return abs(actual - stored_create_time) < 1.0
+            return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
         except psutil.NoSuchProcess:
             return False
-    return True
+    if stored_create_time is not None:
+        try:
+            proc = psutil.Process(pid)
+            return (
+                abs(proc.create_time() - stored_create_time) < 1.0
+                and proc.status() != psutil.STATUS_ZOMBIE
+            )
+        except psutil.NoSuchProcess:
+            return False
+    try:
+        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
 
 
 def register_active_kitchen(identity: KitchenProcessIdentity) -> None:

@@ -242,8 +242,11 @@ from .pipeline_tracker import release_tracker_lease as release_tracker_lease
 from .pipeline_tracker import retain_tracker_lease as retain_tracker_lease
 from .pipeline_tracker import tracker_lease_path as tracker_lease_path
 from .pipeline_tracker import try_retire_tracker as try_retire_tracker
+from .runtime._linux_proc import is_pid_alive as is_pid_alive
+from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
+from .runtime._linux_proc import read_process_state as read_process_state
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention

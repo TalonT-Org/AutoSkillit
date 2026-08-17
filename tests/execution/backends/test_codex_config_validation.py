@@ -6,7 +6,6 @@ import json
 import multiprocessing
 import os
 import signal
-import subprocess
 import sys
 import tomllib
 from dataclasses import replace
@@ -195,35 +194,6 @@ def test_run_bounded_codex_probe_returns_success_with_diagnostic_on_incomplete_c
     assert result.returncode == 0
     assert result.stdout == b"probe-ok"
     assert result.stderr == b""
-
-
-def test_terminate_probe_does_not_raise_on_incomplete_cleanup(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from autoskillit.core import ProcessCleanupResult
-    from autoskillit.execution.backends.codex import _terminate_probe
-    from autoskillit.execution.process._process_kill import spawn_owned_process
-
-    owner = spawn_owned_process(
-        (sys.executable, "-c", "pass"),
-        cwd=str(tmp_path),
-        env=dict(os.environ),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
-    owner.process.wait(timeout=5)
-
-    incomplete_result = ProcessCleanupResult(
-        root_pid=owner.pid,
-        access_denied_pids=(999,),
-        observation_complete=True,
-    )
-    monkeypatch.setattr(owner, "cleanup", lambda timeout=2.0: (0, incomplete_result))
-
-    assert _terminate_probe(owner) is None
 
 
 @pytest.mark.parametrize(

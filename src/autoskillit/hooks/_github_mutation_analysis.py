@@ -999,7 +999,7 @@ def analyze_github_mutations(
             outer_redirect_targets,
             outer_file_redirect_count,
         ) = queue.pop(0)
-        if depth >= 32:
+        if depth > 32:
             reasons.append(
                 ("shell_structure_unresolved", "nested mutation command depth is unresolved")
             )

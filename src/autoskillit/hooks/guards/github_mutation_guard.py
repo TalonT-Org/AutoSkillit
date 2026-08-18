@@ -5,6 +5,11 @@ The structured ``post_pr_review`` tool is the sole pull-request review
 publication authority. Other raw GitHub writes are allowed only when this
 guard can prove that the command issues exactly one non-review mutation.
 
+Bash command classification is delegated to ``_command_classification``
+primitives (re-exposed by ``_github_mutation_analysis``); this guard
+consumes ``analyze_github_mutations`` and the ``GitHubMutationKind`` /
+``GitHubMutationStatus`` enums without re-implementing any shell tokenization.
+
 stdlib-only; no autoskillit imports.
 """
 

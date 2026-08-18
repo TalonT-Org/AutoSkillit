@@ -13,17 +13,15 @@ from autoskillit.core import (
     RUN_PYTHON_PATH_LIKE_ARGS,
     RUN_PYTHON_SENTINEL_KEYS,
     BackendCapabilities,
-    get_logger,
     resolve_general_output_token_limit,
     resolve_temp_dir,
 )
 from autoskillit.server._response_budget import shape_json_response
+from autoskillit.server.tools import _execution_helpers
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
-
-logger = get_logger(__name__)
 
 _VERIFY_PLAN_ARTIFACTS_CALLABLE = "autoskillit.recipe._cmd_rpc.verify_plan_artifacts"
 _SERVER_INJECTED_RUN_PYTHON_PARAMS: dict[str, frozenset[str]] = {
@@ -214,7 +212,7 @@ async def _import_and_call(
     valid_keys = set(sig.parameters.keys())
     for key in list(args.keys()):
         if key in RUN_PYTHON_SENTINEL_KEYS and key not in valid_keys:
-            logger.warning(
+            _execution_helpers.logger.warning(
                 "run_python stripped sentinel key from args",
                 callable=dotted_path,
                 arg_name=key,
@@ -227,7 +225,7 @@ async def _import_and_call(
     if not accepts_var_keyword:
         for key in list(args.keys()):
             if key not in valid_keys:
-                logger.warning(
+                _execution_helpers.logger.warning(
                     "run_python dropped unrecognized arg",
                     callable=dotted_path,
                     arg_name=key,
@@ -238,7 +236,7 @@ async def _import_and_call(
     try:
         type_hints = typing.get_type_hints(func)
     except (NameError, TypeError, AttributeError):
-        logger.warning(
+        _execution_helpers.logger.warning(
             "get_type_hints failed, skipping coercion", callable=dotted_path, exc_info=True
         )
         type_hints = {}
@@ -247,7 +245,7 @@ async def _import_and_call(
         if val is None and key in sig.parameters:
             param = sig.parameters[key]
             if param.default is not inspect.Parameter.empty and param.default is not None:
-                logger.warning(
+                _execution_helpers.logger.warning(
                     "run_python null-arg coerced to default",
                     callable=dotted_path,
                     arg=key,
@@ -259,7 +257,7 @@ async def _import_and_call(
             annotation = type_hints[key]
             coerced_val = _coerce_scalar(val, annotation)
             if coerced_val is not val:
-                logger.warning(
+                _execution_helpers.logger.warning(
                     "run_python type coerced",
                     callable=dotted_path,
                     arg=key,
@@ -277,14 +275,14 @@ async def _import_and_call(
         else:
             result = await asyncio.wait_for(asyncio.to_thread(func, **args), timeout=timeout)
     except TimeoutError:
-        logger.warning(
+        _execution_helpers.logger.warning(
             "run_python timed out; sync thread may continue running",
             dotted_path=dotted_path,
             timeout=timeout,
         )
         return {"success": False, "error": f"Timeout after {timeout}s calling {dotted_path}"}
     except Exception as exc:
-        logger.warning(
+        _execution_helpers.logger.warning(
             "run_python execution failed",
             dotted_path=dotted_path,
             error=type(exc).__name__,

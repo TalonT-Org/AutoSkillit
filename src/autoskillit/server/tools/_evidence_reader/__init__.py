@@ -7,6 +7,8 @@ and its tests can bind the canonical symbols through this package surface.
 
 from __future__ import annotations
 
+import time  # noqa: F401  (mock.patch reachability: reader_module.time.time)
+
 from autoskillit.exploration import (
     ArtifactCaptureError,
     ArtifactCaptureStatus,

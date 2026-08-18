@@ -15,7 +15,8 @@ from autoskillit.core import (
     select_child_session_deadline,
     spill_output,
 )
-from autoskillit.execution import CaptureReadError, summarize_capture
+from autoskillit.execution import CaptureReadError
+from autoskillit.server.tools import _execution_helpers
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -58,7 +59,7 @@ def spill_run_cmd_result(
         }
         for stream_name, capture in [("stdout", stdout_capture), ("stderr", stderr_capture)]:
             if capture is not None:
-                _process_capture_stream(result, stream_name, capture)
+                _execution_helpers._process_capture_stream(result, stream_name, capture)
         return result
 
     if stdout_capture is not None or stderr_capture is not None:
@@ -72,7 +73,7 @@ def spill_run_cmd_result(
             result["error"] = execution_error
         for stream_name, capture in [("stdout", stdout_capture), ("stderr", stderr_capture)]:
             if capture is not None:
-                _process_capture_stream(result, stream_name, capture)
+                _execution_helpers._process_capture_stream(result, stream_name, capture)
         return result
 
     artifact_root = run_cmd_artifact_root(tool_ctx, cwd)
@@ -144,7 +145,7 @@ def _summarize_streams(
         stream_path = getattr(sub_result, f"{stream_name}_path")
         if stream_path is not None:
             try:
-                cap = summarize_capture(stream_path, spec, complete=complete)
+                cap = _execution_helpers.summarize_capture(stream_path, spec, complete=complete)
                 if stream_name == "stdout":
                     stdout_capture = cap
                 else:

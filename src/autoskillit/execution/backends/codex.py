@@ -131,12 +131,7 @@ from autoskillit.execution.backends._codex_explorer_projection import (
 )
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
-
-# Re-export probe helpers so existing consumers (e.g. evidence_reader, tests)
-# can keep importing them from the canonical codex module path.
-from autoskillit.execution.backends._codex_probes import (  # noqa: F401
-    _BoundedProbeResult,
-    _validate_codex_mcp_inventory,
+from autoskillit.execution.backends._codex_probes import (
     _validate_global_codex_home,
     _validate_inert_rollout_paths,
     _validate_mcp_probe,

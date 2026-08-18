@@ -39,12 +39,12 @@ from autoskillit.execution.backends._codex.explorer_projection import (
 from autoskillit.execution.backends._codex_catalog import project_codex_catalog
 from autoskillit.execution.backends._codex_config import _format_toml_value
 from autoskillit.execution.backends._codex_parse import CodexStreamParser
+from autoskillit.execution.backends._codex_probes import _validate_codex_mcp_inventory
 from autoskillit.execution.backends._probe_cache import (
     ProbeResult,
     read_probe_cache,
     write_probe_cache,
 )
-from autoskillit.execution.backends.codex import _validate_codex_mcp_inventory
 from autoskillit.execution.process._process_kill import spawn_owned_process
 
 _EVIDENCE_ENV = EVIDENCE_READER_ENV_FORWARD_VARS

@@ -52,7 +52,7 @@ def test_mcp_inventory_rejects_non_string_array_fields(
     field: str,
     value: object,
 ) -> None:
-    from autoskillit.execution.backends.codex import _validate_codex_mcp_inventory
+    from autoskillit.execution.backends._codex_probes import _validate_codex_mcp_inventory
 
     transport: dict[str, object] = {
         "type": "stdio",

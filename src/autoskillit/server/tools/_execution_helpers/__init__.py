@@ -1,4 +1,4 @@
-"""Helpers shared by the MCP ``run_cmd`` and ``run_python`` tool surfaces.
+"""Helpers shared by the MCP ``run_cmd``, ``run_python``, and ``run_skill`` tool surfaces.
 
 Re-exports dispatch metadata, capture-stream plumbing, scalar coercion,
 skill-contract lifecycle helpers, and the path-anchoring utilities that

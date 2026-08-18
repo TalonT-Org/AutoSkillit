@@ -29,9 +29,9 @@ from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_missing_token_hints,
-    _parse_stdout,
     _synthesize_from_write_artifacts,
 )
+from autoskillit.execution.headless._headless_adjudication import _parse_stdout
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _compute_write_evidence,

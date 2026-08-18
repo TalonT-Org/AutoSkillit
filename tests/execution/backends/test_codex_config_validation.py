@@ -105,14 +105,12 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
-
-    original_popen = codex.subprocess.Popen
-    original_killpg = codex.os.killpg
-    processes: list[codex.subprocess.Popen[bytes]] = []
+    original_popen = probes.subprocess.Popen
+    original_killpg = probes.os.killpg
+    processes: list[probes.subprocess.Popen[bytes]] = []
     group_signals: list[tuple[int, signal.Signals]] = []
 
-    def recording_popen(*args: object, **kwargs: Any) -> codex.subprocess.Popen[bytes]:
+    def recording_popen(*args: object, **kwargs: Any) -> probes.subprocess.Popen[bytes]:
         assert kwargs["start_new_session"] is True
         process = original_popen(*args, **kwargs)
         processes.append(process)
@@ -123,8 +121,8 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
         original_killpg(pgid, sig)
 
     monkeypatch.setattr(probes, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
-    monkeypatch.setattr(codex.subprocess, "Popen", recording_popen)
-    monkeypatch.setattr(codex.os, "killpg", recording_killpg)
+    monkeypatch.setattr(probes.subprocess, "Popen", recording_popen)
+    monkeypatch.setattr(probes.os, "killpg", recording_killpg)
 
     result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import time; time.sleep(60)"),

@@ -300,10 +300,7 @@ def is_reclaimable_artifact_path(path: Path, managed_root: Path) -> bool:
     Only a direct, non-hidden child of *managed_root* qualifies. Dot-prefixed
     entries are managed infrastructure, never artifacts — most importantly
     ``plugin-projections/.artifact-leases``, the directory holding the lock
-    files every live session's inherited reader lease is held on. An earlier
-    ``prune_stale_projections`` enumerated that root without a dot-prefix filter
-    and queued the lease directory alongside real projections, so persisted
-    evidence recording it as a ``projection`` already exists on disk. Reclaiming
+    files every live session's inherited reader lease is held on. Reclaiming
     it would delete the lease infrastructure out from under every running
     session.
 
@@ -739,9 +736,8 @@ class PluginArtifactRetirementEngine:
         record. Nothing is deleted here.
 
         Eligibility is re-derived from scratch rather than trusting the stored
-        ``recognized_kind``: that field is exactly what a past classification
-        bug got wrong for ``.artifact-leases``, and evidence already persisted
-        with a wrong kind must not become authority now.
+        ``recognized_kind`` — evidence already persisted with a wrong kind
+        must not become authority now.
         """
         if evidence.recognized_kind is not self.artifact_kind:
             return RetirementOutcome.LEGACY_EVIDENCE

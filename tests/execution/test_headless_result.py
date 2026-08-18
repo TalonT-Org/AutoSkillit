@@ -30,9 +30,9 @@ from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_missing_token_hints,
-    _parse_stdout,
     _synthesize_from_write_artifacts,
 )
+from autoskillit.execution.headless._headless_adjudication import _parse_stdout
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _compute_write_evidence,
@@ -575,7 +575,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         mock_backend.write_tool_names.return_value = frozenset({"CustomWrite"})
         stdout = (
             _make_tool_use_line("CustomWrite", {"file_path": "/a/b.py", "content": "x"})
@@ -670,7 +673,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         _build_skill_result(result, backend=mock_backend)
@@ -693,7 +699,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.STALE)
         _build_skill_result(result, backend=mock_backend)
@@ -716,7 +725,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
         _build_skill_result(result, backend=mock_backend)
@@ -739,7 +751,10 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
-        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
+        mock_backend.capabilities = BackendCapabilities(
+            write_detection_strategy="tool_names",
+            supports_claude_format_stdout=True,
+        )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
         _build_skill_result(result, backend=mock_backend)
@@ -954,6 +969,7 @@ class TestParseStdout:
 
         mock_backend = Mock()
         mock_backend.name = "not-claude-code"
+        mock_backend.capabilities.supports_claude_format_stdout = False
         parser = mock_backend.result_parser.return_value
         parser.parse_stdout.return_value = AgentSessionResult(
             success=True,
@@ -973,15 +989,25 @@ class TestParseStdout:
         assert result.result == "adapter output"
 
     def test_parse_stdout_codex_backend_dispatches_through_adapter(self, monkeypatch):
-        """CodexBackend dispatches through _adapt_agent_result (non-Claude path)."""
-        from autoskillit.execution.headless import _headless_result
-        from autoskillit.execution.headless._headless_result import _parse_stdout
+        """CodexBackend dispatches through _adapt_agent_result (non-Claude path).
 
-        spy = Mock(wraps=_headless_result._adapt_agent_result)
-        monkeypatch.setattr(_headless_result, "_adapt_agent_result", spy)
+        CodexBackend's default ``supports_claude_format_stdout`` capability is
+        False (per BackendCapabilities dataclass), so the non-Claude dispatch
+        branch fires without further capability setup. This test pins that
+        contract — if a future change flips the default, the dispatch path
+        here will silently route through the Claude parser and the spy will
+        not be invoked.
+        """
+        from autoskillit.execution.headless import _headless_adjudication
+        from autoskillit.execution.headless._headless_adjudication import _parse_stdout
+
+        spy = Mock(wraps=_headless_adjudication._adapt_agent_result)
+        monkeypatch.setattr(_headless_adjudication, "_adapt_agent_result", spy)
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=CodexBackend())
+        codex_backend = CodexBackend()
+        assert codex_backend.capabilities.supports_claude_format_stdout is False
+        result = _parse_stdout(stdout, backend=codex_backend)
         spy.assert_called_once()
         (agent_result,), _ = spy.call_args
         assert isinstance(agent_result, AgentSessionResult)

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution import GitHubReviewLedger, GitHubReviewMutationCoordinator
-from autoskillit.execution.github_review.ledger import MutationSlot
+from autoskillit.execution.github_review._ledger_schema import MutationSlot
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

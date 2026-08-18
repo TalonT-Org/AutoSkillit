@@ -142,10 +142,10 @@ async def test_active_child_deferral_runs_until_ceiling(
 
     owner = await _spawn(30)
     monkeypatch.setattr(
-        "autoskillit.execution.process._has_active_child_processes", has_active_child
+        "autoskillit.execution.process._termination._has_active_child_processes", has_active_child
     )
     monkeypatch.setattr(
-        "autoskillit.execution.process._has_active_api_connection", lambda _pid: False
+        "autoskillit.execution.process._termination._has_active_api_connection", lambda _pid: False
     )
 
     kill_reason, _returncode, cleanup = await execute_termination_action(
@@ -174,7 +174,7 @@ async def test_zero_child_deferral_ceiling_skips_liveness_check(
         pytest.fail("zero child deferral ceiling must skip liveness checks")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._has_active_child_processes",
+        "autoskillit.execution.process._termination._has_active_child_processes",
         unexpected_liveness_check,
     )
 
@@ -200,11 +200,11 @@ async def test_child_deferral_stops_when_children_become_inactive(
     activity = iter((True, False))
     owner = await _spawn(30)
     monkeypatch.setattr(
-        "autoskillit.execution.process._has_active_child_processes",
+        "autoskillit.execution.process._termination._has_active_child_processes",
         lambda _pid: next(activity),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.process._has_active_api_connection", lambda _pid: False
+        "autoskillit.execution.process._termination._has_active_api_connection", lambda _pid: False
     )
 
     kill_reason, _returncode, cleanup = await execute_termination_action(

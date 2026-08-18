@@ -14,6 +14,7 @@ import structlog
 import zstandard
 
 from autoskillit.core import NamedResume, NoResume
+from autoskillit.execution.backends import _codex_fs_atomic as atomic
 from autoskillit.execution.backends import _codex_session_storage as storage
 from autoskillit.execution.backends._codex_session_storage import (
     CodexInteractiveSessionLease,
@@ -787,7 +788,7 @@ def test_darwin_filesystem_classification_uses_diskutil(
 ) -> None:
     calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
     mount_root = tmp_path / "volume-root"
-    result = storage.subprocess.CompletedProcess(
+    result = atomic.subprocess.CompletedProcess(
         args=(),
         returncode=0,
         stdout=plistlib.dumps({"FilesystemType": "apfs"}),
@@ -798,9 +799,9 @@ def test_darwin_filesystem_classification_uses_diskutil(
         calls.append((command, kwargs))
         return result
 
-    monkeypatch.setattr(storage.sys, "platform", "darwin")
-    monkeypatch.setattr(storage.subprocess, "run", run)
-    monkeypatch.setattr(storage, "_filesystem_mount_root", lambda _path: mount_root)
+    monkeypatch.setattr(atomic.sys, "platform", "darwin")
+    monkeypatch.setattr(atomic.subprocess, "run", run)
+    monkeypatch.setattr(atomic, "_filesystem_mount_root", lambda _path: mount_root)
 
     assert storage._filesystem_type(tmp_path) == "apfs"
     assert calls == [
@@ -840,7 +841,7 @@ def test_filesystem_mount_root_resolves_and_stops_at_device_boundary(
 
     monkeypatch.setattr(Path, "stat", controlled_stat)
 
-    assert storage._filesystem_mount_root(alias) == volume_root.resolve()
+    assert atomic._filesystem_mount_root(alias) == volume_root.resolve()
 
 
 def test_filesystem_mount_root_terminates_at_filesystem_root(
@@ -851,7 +852,7 @@ def test_filesystem_mount_root_terminates_at_filesystem_root(
     monkeypatch.setattr(Path, "resolve", lambda _path, *, strict: root)
     monkeypatch.setattr(Path, "stat", lambda _path: type("Stat", (), {"st_dev": 17})())
 
-    assert storage._filesystem_mount_root(tmp_path) == root
+    assert atomic._filesystem_mount_root(tmp_path) == root
 
 
 def test_cross_device_layout_fails_before_view_mutation(

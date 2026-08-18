@@ -129,6 +129,7 @@ class TestExecutionSubpackages:
 
     def test_headless_has_expected_modules(self):
         expected = {
+            "_headless_adjudication",
             "_headless_evidence",
             "_headless_execute",
             "_headless_git",
@@ -161,10 +162,14 @@ class TestExecutionSubpackages:
             "_session_outcome",
             "_session_state",
             "_skill_session_contract_store",
+            "_skill_session_contract_codec",
             "_retry_fsm",
             "_exit_classification",
             "_managed_headless_session_lineage",
             "_managed_headless_session_lineage_codec",
+            "_managed_headless_session_lineage_indexes",
+            "_managed_headless_session_lineage_records",
+            "_managed_headless_session_lineage_runner",
         }
         actual = {
             p.stem for p in (SRC / "execution" / "session").glob("*.py") if p.stem != "__init__"

@@ -313,7 +313,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Removes the manifest and lease sidecars for the exact unpublished generation.",
     ),
     (
-        "execution/backends/codex.py",
+        "execution/backends/_codex_explorer_projection.py",
         "_atomically_replace_explorer_projection",
         "os.replace",
     ): (
@@ -322,7 +322,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "session-root transaction with rollback.",
     ),
     (
-        "execution/backends/codex.py",
+        "execution/backends/_codex_explorer_projection.py",
         "_atomically_replace_explorer_projection",
         "shutil.rmtree",
     ): (
@@ -569,7 +569,15 @@ def _scan_plugin_mutation_trees(
     hits: Counter[tuple[str, str, str]] = Counter()
     for rel, tree in sources:
         is_projected_artifact_module = rel.startswith("workspace/_projected_artifact/")
-        if not is_projected_artifact_module and not _is_plugin_lifecycle_tree(tree):
+        # The Codex explorer projection was scanned as part of codex.py until #4664 split
+        # it out; it references no plugin-lifecycle symbol of its own, so it is named
+        # explicitly to keep its staged session-root swaps under the ratchet.
+        is_codex_projection_module = rel == "execution/backends/_codex_explorer_projection.py"
+        if (
+            not is_projected_artifact_module
+            and not is_codex_projection_module
+            and not _is_plugin_lifecycle_tree(tree)
+        ):
             continue
         hits.update(_scan_plugin_mutations_in_tree(rel, tree))
     return hits

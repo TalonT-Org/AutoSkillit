@@ -15,7 +15,8 @@ from autoskillit.core import (
 )
 
 from . import _poster_support
-from .ledger import MutationSlot, ReviewAttemptRecord
+from ._ledger_schema import MutationSlot
+from .ledger import ReviewAttemptRecord
 
 if TYPE_CHECKING:
     from .poster import DefaultGitHubReviewPoster

@@ -61,8 +61,15 @@ CODEX_OBSERVED_PROVIDER_FAILURE_CASES: tuple[
 
 
 def _mock_backend(**kw: Any) -> Mock:
-    """Build a mock backend with all-False/empty capability baseline."""
+    """Build a mock backend with all-False/empty capability baseline.
+
+    Defaults the Claude-format-parse capability to True so the mock is
+    consistent with the hardcoded ``name="claude-code"`` value. Override
+    ``supports_claude_format_stdout=False`` when the test wants the
+    non-Claude parse path.
+    """
     kw.setdefault("write_detection_strategy", "tool_names")
+    kw.setdefault("supports_claude_format_stdout", True)
     caps = BackendCapabilities(**kw)
     backend = Mock()
     backend.name = "claude-code"

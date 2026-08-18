@@ -136,8 +136,7 @@ class RunSkillConfig:
             or mcp_timeout <= 0
         ):
             raise ValueError(
-                f"mcp_tool_timeout_sec={mcp_timeout} must be a finite "
-                f"positive number of seconds."
+                f"mcp_tool_timeout_sec={mcp_timeout} must be a finite positive number of seconds."
             )
         if self.stream_idle_timeout_ms < 0:
             raise ValueError(

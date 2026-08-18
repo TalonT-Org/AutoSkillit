@@ -238,6 +238,8 @@ After reading the agent's findings, apply all valid findings. The plan is now fu
 
 If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b`, etc.). Each part must be a **self-contained, independently implementable plan** executed sequentially. Split by functional scope (e.g., Part A = "fix core bug + tests", Part B = "add guards + enforcement"), NOT by document structure. Each file must have its own failing tests, implementation steps, and verification.
 
+Split per layer when the plan's "Affected Components"/"Components and connections" section touches more than 3 distinct import layers (IL-0 through IL-3, per `tests/arch/test_rectify_blast_radius_guard.py`) — even when the plan is under 500 lines. A plan touching more than 5 layers must be decomposed before implementation begins; one touching 4–5 layers requires an explicit reviewer sign-off note in the plan itself before `/implement-worktree-no-merge` runs. Line count and layer count are independent triggers — either alone is sufficient to require a split.
+
 **Multi-part plan rules:**
 - Never include file paths or guessable names for other parts.
 - Include only a brief plain-text note about what subsequent parts cover (e.g., "Part B will cover X — implement as a separate task").

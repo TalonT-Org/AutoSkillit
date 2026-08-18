@@ -1,12 +1,11 @@
 """Codec helpers for the skill session contract store.
 
-Extracted from `_skill_session_contract_store.py`. These helpers own
-the validation, source/exploration-vector/execution-identity serialization,
+Owns validation, source/exploration-vector/execution-identity serialization,
 contract to/from dict, manifest construction, and digest computation.
 
-The parent module re-exports `_digest_json` so existing callers using
-`from autoskillit.execution.session._skill_session_contract_store import
-_digest_json` continue to resolve.
+The parent store module imports these helpers at the bottom of its file
+to break the circular dependency this module creates by importing
+`_SHA256_RE` and `_STORE_MANIFEST_SCHEMA_VERSION` from the store.
 """
 
 from __future__ import annotations

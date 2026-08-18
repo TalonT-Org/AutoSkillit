@@ -102,7 +102,6 @@ def run_cli_launch(
     prompt_seen = False
     deadline = time.monotonic() + timeout_seconds
     slave_open = True
-    master_open = True
     try:
         process = subprocess.Popen(
             [sys.executable, "-c", "from autoskillit.cli import main; main()", *args],
@@ -143,9 +142,7 @@ def run_cli_launch(
                 if process is not None:
                     _cleanup_owned_process_group(process, timeout=5)
             finally:
-                if master_open:
-                    os.close(master_fd)
-                    master_open = False
+                os.close(master_fd)
 
     return LaunchOutcome(
         returncode=process.returncode if process is not None else None,

@@ -1,11 +1,11 @@
 """Every registered CLI command must at least start.
 
-The cheap tier of the corridor net. Five consecutive incidents shipped a
-pre-spawn check that fired on legitimate state; each one broke the CLI at
-startup, and none of them broke a test. This will not catch a policy that
-fires only at spawn — that is what the unstubbed corridor tests are for — but
-it does catch anything that breaks import, registration, or argument parsing,
-for every command, without anyone remembering to add a test.
+The cheap tier of the corridor net: a pre-spawn check that fires on
+legitimate state breaks the CLI at startup without breaking a test. This
+will not catch a policy that fires only at spawn — that is what the
+unstubbed corridor tests are for — but it does catch anything that breaks
+import, registration, or argument parsing, for every command, without
+anyone remembering to add a test.
 
 Commands are enumerated from the live cyclopts app, so a newly registered
 command is covered the moment it is added.

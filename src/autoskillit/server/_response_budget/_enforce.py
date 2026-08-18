@@ -108,7 +108,10 @@ def enforce_response_budget(
                 original_utf8_bytes=original_size,
             )
         if over_delivery_bound:
-            assert selected_result_token_limit is not None
+            if selected_result_token_limit is None:
+                raise RuntimeError(
+                    "over_delivery_bound requires a non-None selected_result_token_limit"
+                )
             return _spill_for_delivery_bound(
                 result,
                 tool_name=tool_name,

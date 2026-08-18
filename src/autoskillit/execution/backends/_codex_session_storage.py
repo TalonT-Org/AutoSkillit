@@ -34,11 +34,9 @@ from autoskillit.core import (
     default_log_dir,
     get_logger,
 )
-from autoskillit.execution.backends._codex_fs_atomic import (  # noqa: F401 — re-exported
+from autoskillit.execution.backends._codex_fs_atomic import (
     _atomic_json,
-    _decode_mount_path,
     _ensure_directory_chain,
-    _filesystem_mount_root,
     _filesystem_type,
     _fsync_directory,
     _lexists,

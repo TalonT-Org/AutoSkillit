@@ -142,5 +142,4 @@ def test_build_cmd_preserves_every_headless_field_except_cwd() -> None:
     headless = backend.build_headless_cmd("/test")
     wrapped = backend.build_cmd("/test", "/work/repo")
 
-    assert wrapped.cwd == "/work/repo"
     assert wrapped == replace(headless, cwd="/work/repo")

@@ -225,7 +225,7 @@ def test_launch_fleet_session_adhoc_forwards_force_inactive_agent_teams(
     tmp_path: Path,
     force_inactive: bool,
 ) -> None:
-    """The ad-hoc branch (~line 89) must forward the value it read off cfg.agent_backend."""
+    """The ad-hoc branch of _launch_fleet_session must forward the config-read value."""
     captured: dict[str, object] = {}
 
     def _fake_run(*_args: object, **kwargs: object) -> None:
@@ -255,7 +255,7 @@ def test_launch_fleet_session_campaign_forwards_force_inactive_agent_teams(
     tmp_path: Path,
     force_inactive: bool,
 ) -> None:
-    """The campaign branch (~line 199) must forward the same config-read value."""
+    """The campaign branch of _launch_fleet_session must forward the config-read value."""
     captured: dict[str, object] = {}
 
     def _fake_run(*_args: object, **kwargs: object) -> None:

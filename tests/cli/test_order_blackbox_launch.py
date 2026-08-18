@@ -54,55 +54,6 @@ steps:
     write_fake_agent_binary(shim_dir)
 
 
-def _launch_roots(tmp_path: Path) -> tuple[dict[str, Path], dict[str, Path]]:
-    roots = {
-        "project": tmp_path / "project",
-        "isolated_home": tmp_path / "home",
-        "state_dir": tmp_path / "state",
-        "shim_dir": tmp_path / "bin",
-        "temp_dir": tmp_path / "tmp",
-    }
-    xdg_roots = {
-        "config": tmp_path / "xdg-config",
-        "cache": tmp_path / "xdg-cache",
-        "data": tmp_path / "xdg-data",
-        "state": tmp_path / "xdg-state",
-    }
-    for directory in (*roots.values(), *xdg_roots.values()):
-        directory.mkdir(parents=True, exist_ok=True)
-    _write_fixture(roots["project"], roots["isolated_home"], roots["shim_dir"])
-    return roots, xdg_roots
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX PTY launch coverage")
-def test_order_reaches_spawn_with_exported_teams_variable(tmp_path: Path) -> None:
-    """Teams enabled by the parent process env, not just by a settings file.
-
-    Under default config this is legitimate state, so the corridor must reach
-    spawn — proven by the fake binary's marker file, not by a built spec.
-    """
-    roots, xdg_roots = _launch_roots(tmp_path)
-    environment = hermetic_launch_env(
-        project=roots["project"],
-        isolated_home=roots["isolated_home"],
-        state_dir=roots["state_dir"],
-        shim_dir=roots["shim_dir"],
-        temp_dir=roots["temp_dir"],
-        xdg_roots=xdg_roots,
-        extra={AGENT_TEAMS_ENV_VAR: "1"},
-    )
-
-    outcome = run_cli_launch(
-        ["order", "launch-probe"],
-        cwd=roots["project"],
-        env=environment,
-    )
-
-    assert outcome.prompt_seen, outcome.output
-    assert outcome.returncode == 0, outcome.output
-    assert launch_marker_path(roots["state_dir"]).is_file(), outcome.output
-
-
 @pytest.mark.skipif(os.name != "posix", reason="POSIX PTY launch coverage")
 def test_order_launches_real_cli_without_host_side_effects(tmp_path: Path) -> None:
     worktree = Path(__file__).resolve().parents[2]

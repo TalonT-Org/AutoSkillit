@@ -589,9 +589,7 @@ def _scan_plugin_mutation_trees(
         # it out; it references no plugin-lifecycle symbol of its own, so it is named
         # explicitly to keep its staged session-root swaps under the ratchet.
         is_codex_projection_module = rel == "execution/backends/_codex_explorer_projection.py"
-        in_plugin_pkg = any(
-            rel.startswith(f"{pkg}/") for pkg in _PLUGIN_LIFECYCLE_PACKAGES
-        )
+        in_plugin_pkg = any(rel.startswith(f"{pkg}/") for pkg in _PLUGIN_LIFECYCLE_PACKAGES)
         if (
             not is_projected_artifact_module
             and not is_codex_projection_module

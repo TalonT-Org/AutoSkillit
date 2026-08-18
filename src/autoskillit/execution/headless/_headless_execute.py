@@ -154,7 +154,7 @@ async def _execute_claude_headless(
 
     cfg = ctx.config.run_skill
     # Read from the same authority the spec builders use, so adapter_digest and
-    # CmdSpec.force_inactive_agent_teams cannot disagree. `cfg` is RunSkillConfig.
+    # CmdSpec.force_inactive_agent_teams cannot disagree.
     force_inactive_teams = ctx.config.agent_backend.force_claude_agent_teams_inactive
     if idle_output_timeout is not None:
         _raw_idle = idle_output_timeout

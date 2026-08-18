@@ -7,10 +7,12 @@ pre-spawn check that fires on legitimate state fails here and nowhere else.
 
 from __future__ import annotations
 
+import fcntl
 import os
 import select
 import subprocess
 import sys
+import termios
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +30,19 @@ else:  # pragma: no cover - the module's tests are skipped on non-POSIX hosts
 
 _MAX_DIAGNOSTIC_BYTES = 256 * 1024
 LAUNCH_PROMPT = b"Launch session?"
+
+
+def _acquire_controlling_terminal() -> None:  # pragma: no cover - runs post-fork
+    """Make the child a session leader that owns the PTY as its controlling terminal.
+
+    ``start_new_session=True`` alone detaches the child from the parent's terminal
+    without giving it a new one, so any foreground-process-group management in the
+    CLI fails with ``ENOTTY`` on ``tcgetpgrp``. That is a harness artifact — a real
+    shell always supplies a controlling terminal — and masking it would mean these
+    tests never exercise the code path that runs for actual users.
+    """
+    os.setsid()
+    fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
 
 @dataclass(frozen=True)
@@ -97,7 +112,7 @@ def run_cli_launch(
             cwd=cwd,
             env=env,
             close_fds=True,
-            start_new_session=True,
+            preexec_fn=_acquire_controlling_terminal,
         )
         os.close(slave_fd)
         slave_open = False

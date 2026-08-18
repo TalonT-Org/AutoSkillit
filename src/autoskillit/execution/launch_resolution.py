@@ -406,6 +406,7 @@ class DefaultLaunchResolver:
             env=MappingProxyType(raw_env),
             is_resume=False,
             inherited_fds=(),
+            force_inactive_agent_teams=result.cmd_spec.force_inactive_agent_teams,
         )
         skill_projection_binding = (
             result.skill_projection_binding.bind_launch(
@@ -542,4 +543,5 @@ class DefaultLaunchResolver:
             contract.cmd_spec,
             env=env,
             inherited_fds=inherited_fds,
+            force_inactive_agent_teams=contract.cmd_spec.force_inactive_agent_teams,
         )

@@ -582,6 +582,7 @@ class ResolvedLaunchContract:
                 "pty_required": self.pty_required,
                 "fd_policy": self.inherited_fd_policy,
                 "inherited_fd_count": self.inherited_fd_count,
+                "force_inactive_agent_teams": self.cmd_spec.force_inactive_agent_teams,
             },
             "executable_identity": self.executable_identity,
             "plugin_identity": self.plugin_identity,

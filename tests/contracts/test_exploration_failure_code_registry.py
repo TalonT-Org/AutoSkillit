@@ -19,7 +19,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core import EXPLORATION_FAILURE_CODES
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 _SRC = (
     Path(__file__).resolve().parents[2]

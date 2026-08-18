@@ -230,7 +230,10 @@ class TestSessionScopedAuthority:
             service=exploration_snapshot_service,
         )
         (tmp_path / "real-root").mkdir()
-        with pytest.raises(ValueError, match="does not match the trusted project root"):
+        with pytest.raises(
+            OwnerBoundExplorationContextStore.TrustedRootMismatch,
+            match="does not match the trusted root",
+        ):
             store.bind_session_scoped(
                 owner_id="uid:1000",
                 session_id="test-session",

@@ -11,36 +11,36 @@ from autoskillit.core import (
     CLIENT_CHARS_PER_TOKEN_POLICY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     TokenLimit,
-    atomic_write,
-    get_logger,
 )
+
+# Late-binding for monkeypatch reach: tests patch several symbols via the
+# "autoskillit.server._response_budget" package facade (e.g. `logger`,
+# `atomic_write`, `_artifact_path`, `_project_json_object`,
+# `_emit_response_budget_event`, `build_post_effect_segment_failure`), so
+# they must be resolved via attribute access on the package at call time
+# rather than imported by name into this submodule.
+from autoskillit.server import _response_budget as _response_budget_pkg
 from autoskillit.server._recipe_segment_delivery import (
     RECIPE_SEGMENT_MAX_BYTES,
     RecipeSegmentDeliveryError,
-    build_post_effect_segment_failure,
 )
 from autoskillit.server._response_budget._primitives import (
     _bounded_tool_name,
     _canonical_json,
-    _emit_response_budget_event,
     _estimated_tokens,
     _ProjectionNonconvergentError,
     _serialized,
 )
 from autoskillit.server._response_budget._projection import (
-    _project_json_object,
     _spill_for_delivery_bound,
 )
 from autoskillit.server._response_budget._spill import (
-    _artifact_path,
     _plain_spill_envelope,
     bounded_response_budget_failure,
 )
 
 if TYPE_CHECKING:
     from autoskillit.config import OutputBudgetConfig
-
-logger = get_logger(__name__)
 
 
 def enforce_response_budget(
@@ -121,7 +121,7 @@ def enforce_response_budget(
                 original_size=original_size,
                 selected_result_token_limit=selected_result_token_limit,
             )
-        _emit_response_budget_event(
+        _response_budget_pkg._emit_response_budget_event(
             "response_budget_exemption",
             tool_name=_bounded_tool_name(tool_name),
             measurement_id=exemption.measurement_id,
@@ -146,9 +146,9 @@ def enforce_response_budget(
             original_utf8_bytes=original_size,
         )
 
-    path = _artifact_path(artifact_dir, tool_name)
+    path = _response_budget_pkg._artifact_path(artifact_dir, tool_name)
     try:
-        atomic_write(path, original)
+        _response_budget_pkg.atomic_write(path, original)
     except OSError:
         return bounded_response_budget_failure(
             result,
@@ -189,7 +189,7 @@ def enforce_response_budget(
     rendered: str | None = None
     try:
         if isinstance(parsed, dict):
-            rendered = _project_json_object(
+            rendered = _response_budget_pkg._project_json_object(
                 parsed,
                 metadata=metadata,
                 max_bytes=projection_max_bytes,
@@ -204,7 +204,7 @@ def enforce_response_budget(
                 inline_chars=projection_inline_chars,
             )
     except _ProjectionNonconvergentError as exc:
-        _emit_response_budget_event(
+        _response_budget_pkg._emit_response_budget_event(
             "response_budget_projection_nonconvergent",
             tool_name=_bounded_tool_name(tool_name),
             detail=str(exc),
@@ -239,7 +239,7 @@ def enforce_response_budget(
         )
 
     assert isinstance(rendered, str)
-    _emit_response_budget_event(
+    _response_budget_pkg._emit_response_budget_event(
         "response_budget_spill",
         tool_name=_bounded_tool_name(tool_name),
         original_utf8_bytes=original_size,
@@ -279,10 +279,12 @@ def _segment_failure_like(
     tool_name: str,
 ) -> Any:
     try:
-        failure = build_post_effect_segment_failure(carrier, tool_name=tool_name)
+        failure = _response_budget_pkg.build_post_effect_segment_failure(
+            carrier, tool_name=tool_name
+        )
     except RecipeSegmentDeliveryError as exc:
         source_step = carrier.get("source_step", "")
-        logger.warning(
+        _response_budget_pkg.logger.warning(
             "recipe_segment_post_effect_carrier_dropped",
             tool_name=tool_name,
             source_step=source_step,

@@ -1,8 +1,9 @@
 """Stateless filesystem primitives used by the Codex session storage layer.
 
-Owns the file lease, atomic write, and macOS quarantine helpers consumed
-by the Codex session-storage core. These helpers are pure with respect
-to module-level state — they only wrap the stdlib (`os`, `pathlib`,
+Owns the atomic-write, bounded-read, directory-sync, mount/filesystem-type
+detection, symlink replacement, and directory-chain helpers consumed by
+the Codex session-storage core. These helpers are pure with respect to
+module-level state — they only wrap the stdlib (`os`, `pathlib`,
 `subprocess`) and the parsed `_codex_parse` helpers.
 """
 

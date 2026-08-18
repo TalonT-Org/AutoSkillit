@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import unittest.mock
 from pathlib import Path
@@ -988,7 +987,15 @@ class TestParseStdout:
         assert result.result == "adapter output"
 
     def test_parse_stdout_codex_backend_dispatches_through_adapter(self, monkeypatch):
-        """CodexBackend dispatches through _adapt_agent_result (non-Claude path)."""
+        """CodexBackend dispatches through _adapt_agent_result (non-Claude path).
+
+        CodexBackend's default ``supports_claude_format_stdout`` capability is
+        False (per BackendCapabilities dataclass), so the non-Claude dispatch
+        branch fires without further capability setup. This test pins that
+        contract — if a future change flips the default, the dispatch path
+        here will silently route through the Claude parser and the spy will
+        not be invoked.
+        """
         from autoskillit.execution.headless import _headless_adjudication
         from autoskillit.execution.headless._headless_adjudication import _parse_stdout
 
@@ -997,10 +1004,7 @@ class TestParseStdout:
 
         stdout = _success_session_json("test result")
         codex_backend = CodexBackend()
-        codex_backend.capabilities = dataclasses.replace(
-            codex_backend.capabilities,
-            supports_claude_format_stdout=False,
-        )
+        assert codex_backend.capabilities.supports_claude_format_stdout is False
         result = _parse_stdout(stdout, backend=codex_backend)
         spy.assert_called_once()
         (agent_result,), _ = spy.call_args

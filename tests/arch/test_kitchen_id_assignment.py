@@ -41,7 +41,14 @@ def test_kitchen_id_only_assigned_via_transition_bootstrap():
                     if not (isinstance(target, ast.Attribute) and target.attr == "kitchen_id"):
                         continue
                     if isinstance(node.value, ast.Call):
-                        if getattr(node.value.func, "id", None) == "resolve_kitchen_id":
+                        # Accept both a bare resolve_kitchen_id() call and the
+                        # pkg.resolve_kitchen_id() attribute form used by
+                        # submodules that self-import their package facade for
+                        # monkeypatch reachability.
+                        func_name = getattr(node.value.func, "id", None) or getattr(
+                            node.value.func, "attr", None
+                        )
+                        if func_name == "resolve_kitchen_id":
                             canonical_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
                             continue
                         rhs = ast.unparse(node.value)

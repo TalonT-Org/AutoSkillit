@@ -115,6 +115,7 @@ def write_fake_agent_binary(shim_dir: Path, name: str = "claude") -> Path:
     atomic_write(
         shim,
         """#!/bin/sh
+set -e
 if [ "${1-}" = "--version" ]; then
   printf '%s\n' '2.1.220 (Claude Code)'
   exit 0

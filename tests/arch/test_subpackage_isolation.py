@@ -1025,7 +1025,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         # +_explorer_conformance version-bound live attestation authority (#4443)
-        "execution/backends": 20,  # +execution identity parser and explorer dispatch adapter
+        "execution/backends": 30,  # +decomposed _codex_* and _claude_* siblings (#4664)
+        "execution/github_review": 15,  # +_ledger_schema and _poster_post_attempt siblings (#4664)
+        "execution/headless": 15,  # +_headless_adjudication from _headless_result (#4664)
+        "execution/session": 20,  # +codec and lineage siblings decomposed out (#4664)
         # +_codex_catalog shared validated catalog projection (#4585)
         "smoke_utils": 12,  # +_review_design split from _review
     }

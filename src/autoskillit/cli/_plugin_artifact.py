@@ -438,6 +438,11 @@ class InstalledPluginArtifactRetirementOwner:
 
     def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
         """Validate and return the exact current identity at a managed path."""
+        managed_path = Path(managed_path)
+        if not self._contains(managed_path):
+            raise PluginArtifactValidationError(
+                f"installed plugin is outside managed root: {managed_path}"
+            )
         return _read_and_validate_identity(
             managed_path,
             expected_semantic_key=installed_plugin_semantic_key(

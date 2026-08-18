@@ -74,6 +74,13 @@ repos:
         files: __init__\.pyi$
         pass_filenames: false
 
+      - id: check-single-enforcement-point
+        name: Check policy functions have a single enforcement point
+        language: system
+        entry: python scripts/check_single_enforcement_point.py
+        files: ^src/autoskillit/.*\.py$
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

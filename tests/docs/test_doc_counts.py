@@ -67,14 +67,14 @@ def _extract_tool_decorators(text: str) -> list[str]:
 
 def _count_mcp_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").rglob("tools_*.py"):
         total += len(_extract_tool_decorators(_read(f)))
     return total
 
 
 def _count_kitchen_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").glob("*.py"):
+    for f in (SRC_DIR / "server" / "tools").rglob("*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' in dec:
                 total += 1
@@ -83,7 +83,7 @@ def _count_kitchen_tools() -> int:
 
 def _count_free_range_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").rglob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' not in dec and '"evidence-reader"' not in dec:
                 total += 1
@@ -92,7 +92,7 @@ def _count_free_range_tools() -> int:
 
 def _count_headless_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").rglob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"headless"' in dec:
                 total += 1

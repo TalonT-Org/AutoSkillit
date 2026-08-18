@@ -2,10 +2,8 @@
 
 Owns validation, source/exploration-vector/execution-identity serialization,
 contract to/from dict, manifest construction, and digest computation.
-
-The parent store module imports these helpers at the bottom of its file
-to break the circular dependency this module creates by importing
-`_SHA256_RE` and `_STORE_MANIFEST_SCHEMA_VERSION` from the store.
+Imports the regex and schema-version constants from the parent store
+module.
 """
 
 from __future__ import annotations

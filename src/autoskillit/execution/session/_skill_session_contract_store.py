@@ -351,9 +351,8 @@ def delete_skill_session_contracts(
             _delete_finalized_contract(sessions_root, session_id)
 
 
-# Codec helpers live in _skill_session_contract_codec.py. Imports placed
-# after class definitions because the codec imports constants from this
-# module, creating a circular dependency that this order resolves.
+# Codec module imports constants from this module, so its imports are
+# deferred past the class definitions to break the cycle.
 from autoskillit.execution.session._skill_session_contract_codec import (  # noqa: E402
     _build_manifest,
     _contract_from_dict,

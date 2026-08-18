@@ -524,9 +524,8 @@ class DefaultManagedHeadlessSessionLineageStore:
             return updated
 
 
-# Index/runner/records helpers live in sibling modules. Imports placed
-# after class definitions because the siblings import constants from
-# this module, creating a circular dependency that this order resolves.
+# Sibling modules import constants from this module, so their imports
+# are deferred past the class definitions to break the cycle.
 from autoskillit.execution.session._managed_headless_session_lineage_indexes import (  # noqa: E402
     _assert_index_available,
     _read_index,

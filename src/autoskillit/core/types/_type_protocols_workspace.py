@@ -12,6 +12,7 @@ from ._type_backend import BackendConventions
 from ._type_enums import SkillExecutionRole, SkillInvalidityKind, SkillSource
 from ._type_exploration import RepositoryProfileId
 from ._type_plugin_source import (
+    LegacyRetiringEvidence,
     PluginArtifactIdentity,
     PluginLaunchBinding,
     PluginLoadMode,
@@ -84,6 +85,12 @@ class PluginArtifactRetirementOwner(Protocol):
     def try_reclaim(
         self,
         record: RetiringArtifactRecord,
+        now: datetime,
+    ) -> RetirementOutcome: ...
+
+    def try_promote_legacy_evidence(
+        self,
+        evidence: LegacyRetiringEvidence,
         now: datetime,
     ) -> RetirementOutcome: ...
 

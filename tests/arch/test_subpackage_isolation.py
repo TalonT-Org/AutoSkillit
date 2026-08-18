@@ -1086,6 +1086,17 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    "core/_plugin_cache.py": (
+        1100,
+        "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "
+        "Both mutate the retiring cache under the install lock and must stay adjacent to "
+        "the append/remove/read primitives they call, for the same reason "
+        "_projected_artifact/AGENTS.md keeps publication beside lease handoff: splitting "
+        "them puts lock ordering across a module boundary, which is how destructive "
+        "repair bypasses the lifecycle lock. tests/infra/test_plugin_source_ratchets.py "
+        "also pins this module's raw-mutation call sites by (file, function, expression), "
+        "so the reclaim path's location is a checked invariant, not an accident.",
+    ),
     "execution/evidence_reader.py": (
         1500,
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "

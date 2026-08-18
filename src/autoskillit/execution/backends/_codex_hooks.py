@@ -87,6 +87,17 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
     short-lived resolve→validate of the current generation selector is
     performed through the same generation-store authority as launch binding.
 
+    The bindingless path prefers the *version-independent* selector. Codex
+    bakes this absolute path into ``~/.codex/config.toml`` and re-reads it at
+    every launch without re-resolving, and a per-session snapshot of that
+    config may outlive the version it was written against. A path pinned to one
+    version's incarnation therefore dangles as soon as that generation is
+    retired, taking every safety guard with it. The plugin-level selector is
+    re-pointed on each publish, so the same absolute path stays valid across
+    version bumps. ``trusted_hash`` is unaffected: it hashes the dispatcher's
+    bytes through the symlink, and ``_dispatch.py`` is byte-identical across
+    versions by design.
+
     If neither the generation store nor the legacy installed cache supplies a
     dispatcher, the dev-checkout ``HOOKS_DIR`` is used as the terminal fallback.
     """
@@ -98,16 +109,25 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
 
     # Bindingless path: resolve from generation store with short-lived lease
     from autoskillit import __version__
-    from autoskillit.core import resolve_current_generation
+    from autoskillit.core import (
+        generation_plugin_selector_path,
+        resolve_current_generation,
+        resolve_current_generation_for_plugin,
+    )
 
-    generation_dir = resolve_current_generation(Path.home(), "autoskillit", __version__)
+    if resolve_current_generation_for_plugin(Path.home(), _AUTOSKILLIT_PLUGIN_KEY) is not None:
+        candidate = generation_plugin_selector_path(Path.home(), _AUTOSKILLIT_PLUGIN_KEY) / "hooks"
+        if (candidate / "_dispatch.py").is_file():
+            return candidate
+
+    generation_dir = resolve_current_generation(Path.home(), _AUTOSKILLIT_PLUGIN_KEY, __version__)
     if generation_dir is not None:
         candidate = generation_dir / "hooks"
         if (candidate / "_dispatch.py").is_file():
             return candidate
 
     # Fall back to legacy installed cache
-    cache_root = installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
+    cache_root = installed_plugin_artifact_root(Path.home(), _AUTOSKILLIT_PLUGIN_KEY, __version__)
     try:
         identity = read_installed_plugin_artifact_identity(
             cache_root,

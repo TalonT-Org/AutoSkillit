@@ -45,6 +45,8 @@ from autoskillit.workspace._projected_artifact import (
     validate_staged_plugin_hooks,
 )
 from autoskillit.workspace._projected_artifact._generation_publication import (
+    GenerationArtifactRetirementOwner,
+    prune_stale_generations,
     publish_generation,
 )
 from autoskillit.workspace._update_obligation import (
@@ -204,6 +206,8 @@ __all__ = [
     "SkillProjectionContext",
     "iter_public_plugin_asset_files",
     "marketplace_plugin_root",
+    "GenerationArtifactRetirementOwner",
+    "prune_stale_generations",
     "prune_stale_projections",
     "public_plugin_asset_digest",
     "reconcile_install_artifacts",

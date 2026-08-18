@@ -85,7 +85,7 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution import CaptureSetupError
+from autoskillit.execution import CaptureSetupError, build_sanitized_env
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
@@ -695,9 +695,9 @@ async def run_cmd(
                     return json.dumps(
                         {"success": True, "exit_code": 0, "stdout": "", "stderr": ""}
                     )
-                _env: dict[str, str] | None = (
-                    {**os.environ, SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
-                )
+                _env = build_sanitized_env()
+                if step_name:
+                    _env[SCENARIO_STEP_NAME_ENV] = step_name
                 artifact_root = run_cmd_artifact_root(tool_ctx, cwd)
                 _timeout_f = float(timeout)
                 try:

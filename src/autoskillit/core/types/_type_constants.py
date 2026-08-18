@@ -576,6 +576,27 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         machine_local=False,
         detection=None,
     ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.pipeline.exploration_context:OwnerBoundExplorationContextStore.bind_launch",
+        artifact=(
+            ".autoskillit-exploration-authority.json (0600, HMAC-signed) for the "
+            "launch-environment explorer binding path — recoverable across a server "
+            "restart within the lease TTL"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.pipeline.exploration_context_durable:bind_session_scoped_durable",
+        artifact=(
+            ".autoskillit-exploration-authority.json (0600, HMAC-signed) for the "
+            "session-scoped Claude-native explorer binding path — symmetric to "
+            "bind_launch, so this path also survives a server restart within the "
+            "lease TTL"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
 )
 
 _validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)

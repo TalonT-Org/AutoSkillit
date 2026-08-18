@@ -27,6 +27,7 @@ from autoskillit.pipeline import (
     EXPLORER_INELIGIBLE_SESSION_TYPES,
     CapabilityResolutionStatus,
     OwnerBoundExplorationContextStore,
+    bind_session_scoped_durable,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -452,8 +453,18 @@ async def enable_exploration(
         if session_id is None:
             return _failure(ExplorationFailureCode.NO_SESSION_ID)
         repository_root = store.trusted_root
+        # Durable, symmetric to bind_launch (which always writes a signed
+        # authority file): bind_session_scoped alone is in-process-memory
+        # only, lost on a server crash within the lease TTL. authority_home
+        # is a per-session subdirectory under the project's temp dir — real,
+        # writable, and unique per session_id so concurrent sessions never
+        # collide on the fixed authority filename (#4684 Fix E).
+        authority_home = _get_ctx().temp_dir / "exploration-session-authority" / session_id
+        authority_home.mkdir(parents=True, exist_ok=True)
         try:
-            store.bind_session_scoped(
+            bind_session_scoped_durable(
+                store,
+                authority_home=authority_home,
                 owner_id=f"uid:{os.getuid()}",
                 session_id=session_id,
                 cwd=cwd,
@@ -478,8 +489,14 @@ async def enable_exploration(
                 raise EnableComponentsFailed(str(exc)) from exc
             exploration_enabled = True
         finally:
+            # Symmetric grant/revoke: if the tag never became visible, undo
+            # the lease too — a bound-but-invisible session is an orphan
+            # authority; disable_components is the mirror of enable_components,
+            # so a partial-success enable_components call never leaves the tag
+            # visible without a live lease behind it (#4684 Fix E).
             if not exploration_enabled:
                 store.cleanup_session(session_id)
+                await ctx.disable_components(tags={"exploration"})
         return json.dumps(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),

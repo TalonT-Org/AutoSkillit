@@ -188,6 +188,7 @@ async def test_enable_components_failed_returns_own_code(
     monkeypatch.setattr(store, "cleanup_session", cleanup)
     request_ctx = MagicMock()
     request_ctx.enable_components = AsyncMock(side_effect=RuntimeError("enable failed"))
+    request_ctx.disable_components = AsyncMock()
 
     result = json.loads(
         await enable_exploration(
@@ -199,6 +200,7 @@ async def test_enable_components_failed_returns_own_code(
     assert result == {"status": "error", "code": "enable_components_failed"}
     assert store.session_scoped_capability("test-session") is None
     cleanup.assert_called_once_with("test-session")
+    request_ctx.disable_components.assert_awaited_once_with(tags={"exploration"})
 
 
 @pytest.mark.asyncio

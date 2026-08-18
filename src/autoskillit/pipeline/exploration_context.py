@@ -10,13 +10,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import os
 import secrets
-import stat
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, Protocol, TypeVar, cast, runtime_checkable
 
@@ -34,9 +32,16 @@ from autoskillit.core import (
     SessionType,
     canonical_json_bytes,
     get_logger,
-    read_versioned_json,
-    truncate_text,
-    write_versioned_json,
+)
+from autoskillit.pipeline.exploration_context_durable import (
+    EXPLORATION_AUTHORITY_PATH_ENV,
+    EXPLORATION_CAPABILITY_ENV,
+    EXPLORATION_PRINCIPAL_ROLE,
+    EXPLORATION_ROLE_ENV,
+    EXPLORATION_SESSION_ENV,
+    _ExplorationLaunchAuthorityStore,
+    _ReopenedLaunchAuthority,
+    _safe_submit_failure_reason,
 )
 
 __all__ = [
@@ -63,11 +68,7 @@ _MAX_CAPABILITY_LENGTH = 128
 _MAX_TTL_SECONDS = 300.0
 _MAX_ACTIVE_LEASES = 256
 _MAX_SOURCE_IDENTITY_LENGTH = 1_024
-_AUTHORITY_SCHEMA_VERSION = 1
-_AUTHORITY_FILENAME = ".autoskillit-exploration-authority.json"
-_AUTHORITY_SIGNATURE_DOMAIN = b"autoskillit.exploration.launch-authority.v1\x00"
 _SHARED_SOURCE_IDENTITY_DOMAIN = b"autoskillit.exploration.shared-source.v1\x00"
-_MAX_SUBMIT_FAILURE_REASON_LENGTH = 512
 
 logger = get_logger(__name__)
 
@@ -76,11 +77,6 @@ logger = get_logger(__name__)
 # their authority.
 EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
 EXPLORER_INELIGIBLE_SESSION_TYPES = frozenset({SessionType.ORCHESTRATOR, SessionType.FLEET})
-EXPLORATION_CAPABILITY_ENV = "AUTOSKILLIT_EXPLORATION_CAPABILITY"
-EXPLORATION_ROLE_ENV = "AUTOSKILLIT_EXPLORATION_ROLE"
-EXPLORATION_SESSION_ENV = "AUTOSKILLIT_EXPLORATION_SESSION_ID"
-EXPLORATION_AUTHORITY_PATH_ENV = "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"
-EXPLORATION_PRINCIPAL_ROLE = "shared-explorer-session"
 
 
 def is_explorer_binding_eligible(
@@ -127,216 +123,6 @@ class ExplorationLaunchBinding:
             EXPLORATION_SESSION_ENV: self.session_id,
             EXPLORATION_AUTHORITY_PATH_ENV: str(self.authority_path),
         }
-
-
-@dataclass(frozen=True, slots=True)
-class _ReopenedLaunchAuthority:
-    """Validated durable authority with no raw capability retained on disk."""
-
-    authority_path: Path
-    session_id: str
-    cwd: Path
-    repository_root: Path
-    source_identity: str
-    snapshot_digest: str
-    generation: str
-    expires_at: float
-
-
-def _safe_submit_failure_reason(
-    exc: RuntimeError | ValueError,
-    *,
-    capability: str,
-    authority: _ReopenedLaunchAuthority,
-) -> str:
-    """Return a bounded diagnostic with all launch-authority material removed."""
-    reason = str(exc)
-    sensitive_values = (capability,) + tuple(
-        str(getattr(authority, field.name)) for field in fields(authority)
-    )
-    for value in sensitive_values:
-        if value:
-            reason = reason.replace(value, "[redacted]")
-    return truncate_text(reason, _MAX_SUBMIT_FAILURE_REASON_LENGTH)
-
-
-class _ExplorationLaunchAuthorityStore:
-    """Read/write the one 0600 authority record owned by a generated session."""
-
-    def write(
-        self,
-        *,
-        authority_home: Path,
-        session_id: str,
-        cwd: Path,
-        repository_root: Path,
-        capability: str,
-        source_identity: str,
-        snapshot_digest: str,
-        expires_at: int,
-    ) -> Path:
-        home = authority_home.resolve()
-        if not home.is_dir():
-            raise ValueError("authority_home must be an existing generated session directory")
-        authority_path = home / _AUTHORITY_FILENAME
-        principal = {
-            "session_home": str(home),
-            "session_id": session_id,
-            "cwd": str(cwd.resolve()),
-            "repository_root": str(repository_root.resolve()),
-            "source_identity": source_identity,
-            "snapshot_digest": snapshot_digest,
-            "capability_sha256": hashlib.sha256(capability.encode("utf-8")).hexdigest(),
-            "expires_at": expires_at,
-            "generation": secrets.token_hex(16),
-        }
-        signature = hmac.new(
-            capability.encode("utf-8"),
-            _AUTHORITY_SIGNATURE_DOMAIN + canonical_json_bytes(principal),
-            hashlib.sha256,
-        ).hexdigest()
-        write_versioned_json(
-            authority_path,
-            {
-                "principal": principal,
-                "signature": signature,
-            },
-            _AUTHORITY_SCHEMA_VERSION,
-        )
-        os.chmod(authority_path, 0o600)
-        return authority_path
-
-    def load_from_environment(self) -> tuple[str, _ReopenedLaunchAuthority] | None:
-        capability = os.environ.get(EXPLORATION_CAPABILITY_ENV)
-        role = os.environ.get(EXPLORATION_ROLE_ENV)
-        session_id = os.environ.get(EXPLORATION_SESSION_ENV)
-        raw_path = os.environ.get(EXPLORATION_AUTHORITY_PATH_ENV)
-        if (
-            not isinstance(capability, str)
-            or not OwnerBoundExplorationContextStore._is_capability_shape(capability)
-            or role != EXPLORATION_PRINCIPAL_ROLE
-            or not isinstance(session_id, str)
-            or not session_id
-            or not isinstance(raw_path, str)
-            or not raw_path
-        ):
-            return None
-        authority_path = Path(raw_path)
-        if not authority_path.is_absolute():
-            return None
-        reopened = self._load(
-            authority_path=authority_path,
-            capability=capability,
-            role=role,
-            session_id=session_id,
-        )
-        if reopened is None:
-            return None
-        return capability, reopened
-
-    def delete(self, authority_path: Path) -> None:
-        resolved = authority_path.resolve(strict=False)
-        if resolved.name != _AUTHORITY_FILENAME:
-            return
-        if authority_path.is_symlink():
-            return
-        authority_path.unlink(missing_ok=True)
-
-    @staticmethod
-    def _load(
-        *,
-        authority_path: Path,
-        capability: str,
-        role: str,
-        session_id: str,
-    ) -> _ReopenedLaunchAuthority | None:
-        try:
-            metadata = authority_path.lstat()
-            if (
-                authority_path.name != _AUTHORITY_FILENAME
-                or not stat.S_ISREG(metadata.st_mode)
-                or metadata.st_mode & 0o077
-            ):
-                return None
-            payload = read_versioned_json(authority_path, _AUTHORITY_SCHEMA_VERSION)
-        except OSError:
-            return None
-        if not isinstance(payload, dict) or set(payload) != {
-            "principal",
-            "schema_version",
-            "signature",
-        }:
-            return None
-        try:
-            principal = payload["principal"]
-            signature = payload["signature"]
-            if not isinstance(principal, dict) or set(principal) != {
-                "capability_sha256",
-                "cwd",
-                "expires_at",
-                "generation",
-                "repository_root",
-                "session_home",
-                "session_id",
-                "snapshot_digest",
-                "source_identity",
-            }:
-                return None
-            session_home = Path(str(principal["session_home"])).resolve()
-            resolved_path = authority_path.resolve()
-            if resolved_path != session_home / _AUTHORITY_FILENAME:
-                return None
-            if principal["session_id"] != session_id:
-                return None
-            expected_digest = principal["capability_sha256"]
-            source_identity = principal["source_identity"]
-            snapshot_digest = principal["snapshot_digest"]
-            expires_at_ns = principal["expires_at"]
-            generation = principal["generation"]
-            cwd = Path(str(principal["cwd"])).resolve()
-            repository_root = Path(str(principal["repository_root"])).resolve()
-            process_cwd = Path.cwd().resolve()
-        except (KeyError, TypeError, ValueError, OSError):
-            return None
-        if (
-            not isinstance(expected_digest, str)
-            or len(expected_digest) != 64
-            or not isinstance(source_identity, str)
-            or not source_identity
-            or not isinstance(snapshot_digest, str)
-            or len(snapshot_digest) != 64
-            or any(character not in "0123456789abcdef" for character in snapshot_digest)
-            or not isinstance(generation, str)
-            or len(generation) != 32
-            or isinstance(expires_at_ns, bool)
-            or not isinstance(expires_at_ns, int)
-            or not isinstance(signature, str)
-            or len(signature) != 64
-            or expires_at_ns <= time.time_ns()
-            or cwd != process_cwd
-            or not hmac.compare_digest(
-                expected_digest,
-                hashlib.sha256(capability.encode("utf-8")).hexdigest(),
-            )
-        ):
-            return None
-        expected_signature = hmac.new(
-            capability.encode("utf-8"),
-            _AUTHORITY_SIGNATURE_DOMAIN + canonical_json_bytes(principal),
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(signature, expected_signature):
-            return None
-        return _ReopenedLaunchAuthority(
-            authority_path=resolved_path,
-            session_id=session_id,
-            cwd=cwd,
-            repository_root=repository_root,
-            source_identity=source_identity,
-            snapshot_digest=snapshot_digest,
-            generation=generation,
-            expires_at=expires_at_ns / 1_000_000_000,
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -674,6 +460,18 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 if lease is not None and lease.expires_at > self._clock():
                     return cap
             return None
+
+    def lease_for_capability(self, capability: str) -> _CapabilityLease[_T] | None:
+        """Return the active lease for an already-minted capability, else None.
+
+        Used by exploration_context_durable.bind_session_scoped_durable to
+        read back the snapshot_digest/expires_at bind_session_scoped just
+        minted, so the durable authority file records the same values as
+        the in-memory lease rather than independently recomputed ones.
+        """
+        with self._lock:
+            lease = self._leases.get(capability)
+            return lease if lease is not None and lease.expires_at > self._clock() else None
 
     def resolve(
         self,

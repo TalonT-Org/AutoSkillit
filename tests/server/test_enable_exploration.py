@@ -115,6 +115,7 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_is_ca
     )
     request_ctx = MagicMock()
     request_ctx.enable_components = AsyncMock(side_effect=asyncio.CancelledError())
+    request_ctx.disable_components = AsyncMock()
 
     result = json.loads(
         await enable_exploration(
@@ -126,6 +127,7 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_is_ca
     assert result == {"success": False, "error": "cancelled", "subtype": "cancelled"}
     assert store.session_scoped_capability("test-session") is None
     cleanup.assert_called_once_with("test-session")
+    request_ctx.disable_components.assert_awaited_once_with(tags={"exploration"})
 
 
 @pytest.mark.asyncio

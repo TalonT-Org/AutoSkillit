@@ -46,6 +46,7 @@ from autoskillit.pipeline.exploration_context import (
     OwnerBoundExplorationContextStore,
     is_explorer_binding_eligible,
 )
+from autoskillit.pipeline.exploration_context_durable import bind_session_scoped_durable
 from autoskillit.pipeline.gate import (
     DefaultGateState,
     gate_error_result,
@@ -156,6 +157,7 @@ __all__ = [
     "ExplorationContextStoreProtocol",
     "ExplorationLaunchBinding",
     "OwnerBoundExplorationContextStore",
+    "bind_session_scoped_durable",
     "is_explorer_binding_eligible",
     "DefaultAuditAdmissionLedger",
     "DefaultContextAdmissionLedger",

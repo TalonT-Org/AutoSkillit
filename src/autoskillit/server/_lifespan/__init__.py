@@ -1,7 +1,9 @@
 """FastMCP lifespan package for the AutoSkillit server.
 
-Provides the async context manager wired into FastMCP via ``lifespan=`` and
-the per-session auto-gate boot dispatch used after the transport opens.
+Provides the async context manager wired into FastMCP via ``lifespan=``, the
+per-session auto-gate boot dispatch that runs before the lifespan yields (so
+gate state is set before the first tool call arrives), and the one-shot
+startup checks:
 
 - :mod:`_startup_checks` — one-shot synchronous startup checks
   (``run_startup_drift_check``, ``run_startup_hook_health_check``,

@@ -19,6 +19,9 @@ from autoskillit.core import (
     retain_tracker_lease,
 )
 from autoskillit.pipeline import get_kitchen_process_identity
+from autoskillit.server.tools import (
+    tools_pipeline_tracker,  # noqa: F401 — late-binding for monkeypatch reach
+)
 from autoskillit.server.tools._overlay_state import read_overlay
 from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 
@@ -118,7 +121,7 @@ def _select_tracker_authority(
         owner_id=f"selection:{uuid.uuid4().hex}",
     )
     try:
-        authority = read_tracker_authority(target, lease)
+        authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
     except Exception:
         _release_context_tracker(tool_ctx, key)
         raise
@@ -152,7 +155,7 @@ def _restore_reserved_tracker_authority(
         owner_id=tool_ctx.kitchen_id or target_order_id,
     )
     try:
-        authority = read_tracker_authority(target, lease)
+        authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
     except Exception:
         if key != current_key:
             _release_context_tracker(tool_ctx, key)

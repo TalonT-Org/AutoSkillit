@@ -20,7 +20,6 @@ from autoskillit.core import (
     get_logger,
     initialize_manual_tracker,
     mutate_tracker,
-    read_tracker_authority,
 )
 from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
@@ -113,7 +112,7 @@ async def record_pipeline_step(
 
         if op == "init":
             try:
-                result = _handle_init(ctx, target, lease, dependencies)
+                result = tools_pipeline_tracker._handle_init(ctx, target, lease, dependencies)
             except Exception:
                 _release_context_tracker(ctx, key)
                 raise
@@ -123,7 +122,7 @@ async def record_pipeline_step(
 
         if op == "status":
             try:
-                result = _handle_status(target, lease)
+                result = tools_pipeline_tracker._handle_status(target, lease)
             except Exception:
                 _release_context_tracker(ctx, key)
                 raise
@@ -206,7 +205,7 @@ def _handle_init(
 
 
 def _handle_status(target: TrackerAuthorityTarget, lease: ArtifactLease) -> str:
-    authority = read_tracker_authority(target, lease)
+    authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
     if authority.data is None:
         return json.dumps(
             {
@@ -258,7 +257,7 @@ def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: st
         owner_id=target.target_order_id,
     )
     try:
-        tracker_authority = read_tracker_authority(target, lease)
+        tracker_authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
     except Exception:
         _release_context_tracker(ctx, key)
         raise
@@ -300,7 +299,7 @@ def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: st
             tracker_kitchen_id=tracker_kitchen_id,
             tracker_incarnation_id=tracker_incarnation_id,
             step_name=step_name,
-            effect=lambda: mark_step_complete(
+            effect=lambda: tools_pipeline_tracker.mark_step_complete(
                 target,
                 lease,
                 step_name,
@@ -549,7 +548,7 @@ async def complete_run_skill_result(
                         tracker_incarnation_id=receipt.tracker_incarnation_id,
                         step_name=receipt.step_name,
                         receipt_id=receipt.receipt_id,
-                        effect=lambda: mark_step_complete(
+                        effect=lambda: tools_pipeline_tracker.mark_step_complete(
                             target,
                             lease,
                             receipt.step_name,

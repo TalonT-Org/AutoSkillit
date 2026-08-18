@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 # Internal helpers re-exported for tools_execution.py and other sibling callers.
-from autoskillit.core.pipeline_tracker import read_tracker_authority  # noqa: F401
+from autoskillit.core import read_tracker_authority  # noqa: F401
 
 # Re-exports for tests that patch symbols via the package facade.
 from autoskillit.server._recipe_segment_delivery import (

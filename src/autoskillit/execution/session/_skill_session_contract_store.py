@@ -26,19 +26,6 @@ from autoskillit.core import (
     read_versioned_json,
     write_versioned_json,
 )
-from autoskillit.execution.session._skill_session_contract_codec import (
-    _build_manifest,
-    _contract_from_dict,
-    _contract_to_dict,
-    _delete_finalized_contract,
-    _digest_json,
-    _finalized_contract_path,
-    _managed_lineage_ref_from_manifest,
-    _validate_contract,
-    _validate_raw_session_id,
-    _validate_relative_path,
-    _validate_snapshot_mapping,
-)
 
 __all__ = [
     "DefaultSkillSessionContractStore",
@@ -362,3 +349,21 @@ def delete_skill_session_contracts(
     for session_id in session_ids:
         if session_id:
             _delete_finalized_contract(sessions_root, session_id)
+
+
+# Codec helpers live in _skill_session_contract_codec.py. Imports placed
+# after class definitions because the codec imports constants from this
+# module, creating a circular dependency that this order resolves.
+from autoskillit.execution.session._skill_session_contract_codec import (  # noqa: E402
+    _build_manifest,
+    _contract_from_dict,
+    _contract_to_dict,
+    _delete_finalized_contract,
+    _digest_json,
+    _finalized_contract_path,
+    _managed_lineage_ref_from_manifest,
+    _validate_contract,
+    _validate_raw_session_id,
+    _validate_relative_path,
+    _validate_snapshot_mapping,
+)

@@ -23,7 +23,11 @@ Submodule layout:
 from __future__ import annotations
 
 # Re-exports for tests that patch symbols via the package facade.
-from autoskillit.fleet import discover_campaign_state_files, execute_dispatch
+from autoskillit.fleet import (
+    discover_campaign_state_files,
+    execute_dispatch,
+    reap_stale_dispatches_async,
+)
 from autoskillit.hook_registry import iter_all_scope_paths
 from autoskillit.pipeline import create_background_task
 from autoskillit.server._recipe_execution import clear_recipe_execution
@@ -167,4 +171,5 @@ __all__ = [
     "create_background_task",
     "find_latest_session_id",
     "mcp",
+    "reap_stale_dispatches_async",
 ]

@@ -16,7 +16,7 @@ _LONG_LIVED_CAPTURE_AUTHORITY_FILES = (
     _SRC_ROOT / "pipeline" / "context.py",
     _SRC_ROOT / "server" / "_factory.py",
     _SRC_ROOT / "server" / "tools" / "tools_execution.py",
-    _SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch.py",
+    _SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch" / "_handlers.py",
     _SRC_ROOT / "fleet" / "_api.py",
 )
 _MODE_ENV_NAMES = frozenset(

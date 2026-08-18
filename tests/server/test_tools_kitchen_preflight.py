@@ -540,26 +540,28 @@ class TestPreflightWiring:
         assert callable(_check_dispatch_feasibility)
 
     def test_open_kitchen_module_imports_preflight(self) -> None:
-        """tools_kitchen module references _check_dispatch_feasibility."""
-        # The module should have a reference to the preflight function
+        """tools_kitchen package references _check_dispatch_feasibility."""
+        # The decomposed package routes _check_dispatch_feasibility via the
+        # _open_kitchen submodule; the facade itself is a thin re-export
+        # shell that does not need to mention preflight directly.
         import inspect
 
-        from autoskillit.server.tools import tools_kitchen
+        from autoskillit.server.tools.tools_kitchen import _open_kitchen
 
-        source = inspect.getsource(tools_kitchen)
+        source = inspect.getsource(_open_kitchen)
         assert "_check_dispatch_feasibility" in source, (
-            "tools_kitchen.py must reference _check_dispatch_feasibility"
+            "tools_kitchen/_open_kitchen.py must reference _check_dispatch_feasibility"
         )
 
     def test_fleet_dispatch_module_imports_preflight(self) -> None:
-        """tools_fleet_dispatch module references _check_dispatch_feasibility."""
+        """tools_fleet_dispatch package references _check_dispatch_feasibility."""
         import inspect
 
-        from autoskillit.server.tools import tools_fleet_dispatch
+        from autoskillit.server.tools.tools_fleet_dispatch import _handlers
 
-        source = inspect.getsource(tools_fleet_dispatch)
+        source = inspect.getsource(_handlers)
         assert "_check_dispatch_feasibility" in source, (
-            "tools_fleet_dispatch.py must reference _check_dispatch_feasibility"
+            "tools_fleet_dispatch/_handlers.py must reference _check_dispatch_feasibility"
         )
 
 

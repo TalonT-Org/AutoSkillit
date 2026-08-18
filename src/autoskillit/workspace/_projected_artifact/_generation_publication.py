@@ -289,12 +289,7 @@ def _select_plugin_generation(home: Path, plugin_ref: str, generation_root: Path
 def _is_selected_generation(home: Path, plugin_ref: str, path: Path) -> bool:
     """Return whether *path* is still selected and therefore must not be retired.
 
-    Every superseded *version* keeps its own per-version ``current`` symlink
-    pointing at its own incarnation forever — nothing rewrites it when a newer
-    version is published. Treating that as protection is precisely why no
-    generation was ever reclaimable: each version vouched for itself.
-
-    So once the plugin-level selector exists it is authoritative. It names the
+    Once the plugin-level selector exists it is authoritative. It names the
     live generation, and only that generation's version keeps its per-version
     selector honored (a consumer that resolved through the per-version path
     just before the plugin-level flip may still be using it).
@@ -401,11 +396,10 @@ def prune_stale_generations(home: Path, plugin_ref: str) -> int:
     ``publish_generation`` itself — the lock is a non-reentrant ``flock``, so
     re-acquiring it from inside a publish would deadlock against the caller.
 
-    Called at publish time only. Enqueueing recomputes a full content-tree
-    digest per candidate, so wiring this into the session-launch path would
-    re-hash the entire backlog on every launch until each entry is reclaimed.
-    Publication is the only event that can create staleness, so a machine that
-    stops updating never grows a new backlog either.
+    Called at publish time only — wiring this into the session-launch path
+    would re-hash the entire backlog (a full content-tree digest per
+    candidate) on every launch, since publication is the only event that can
+    create staleness.
     """
     store_root = generation_store_root(home, plugin_ref)
     if not store_root.is_dir():

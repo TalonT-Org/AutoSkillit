@@ -1,7 +1,7 @@
 """FastMCP lifespan package for the AutoSkillit server.
 
-Decomposed from a single ``_lifespan.py`` (869 lines) into four submodules
-plus this facade:
+Provides the async context manager wired into FastMCP via ``lifespan=`` and
+the per-session auto-gate boot dispatch used after the transport opens.
 
 - :mod:`_startup_checks` — one-shot synchronous startup checks
   (``run_startup_drift_check``, ``run_startup_hook_health_check``,
@@ -17,15 +17,16 @@ plus this facade:
 
 from __future__ import annotations
 
-import asyncio as _asyncio
-import autoskillit.core.paths as _core_paths
-from autoskillit.core import (
+import asyncio as _asyncio  # noqa: F401  (mock.patch reachability)
+
+import autoskillit.core.paths as _core_paths  # noqa: F401  (mock.patch reachability)
+from autoskillit.core import (  # noqa: F401  (mock.patch reachability)
     _collect_disabled_feature_tags,
     register_active_kitchen,
     resolve_kitchen_id,
 )
-from autoskillit.fleet import reap_stale_dispatches_async
-from autoskillit.pipeline import create_background_task
+from autoskillit.fleet import reap_stale_dispatches_async  # noqa: F401  (mock.patch reachability)
+from autoskillit.pipeline import create_background_task  # noqa: F401  (mock.patch reachability)
 from autoskillit.server._lifespan._lifespan import (
     _autoskillit_lifespan,
     _run_backend_mcp_registration_async,
@@ -45,19 +46,19 @@ from autoskillit.server._lifespan._session_boots import (
     _food_truck_auto_gate_boot,
     _pre_reveal_kitchen,
     _skill_auto_gate_boot,
-    discover_campaign_state_files,
+    discover_campaign_state_files,  # noqa: F401  (mock.patch reachability)
 )
 from autoskillit.server._lifespan._startup_checks import (
     _activate_recipe_kitchen,
     _finalize_recorder,
     _retain_context_tracker_authority,
-    iter_all_scope_paths,
+    iter_all_scope_paths,  # noqa: F401  (mock.patch reachability)
     run_startup_drift_check,
     run_startup_fix_required_coverage_check,
     run_startup_hook_health_check,
     run_startup_install_state_check,
 )
-from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server._state import _get_ctx_or_none  # noqa: F401  (mock.patch reachability)
 
 __all__ = [
     "_LIFESPAN_BOOT_REGISTRY",

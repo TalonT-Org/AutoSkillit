@@ -33,6 +33,11 @@ from autoskillit.core import (
     SessionSummary,
     default_log_dir,
     get_logger,
+    is_pid_alive,
+    is_session_alive,
+    read_boot_id,
+    read_pid_namespace_inode,
+    read_starttime_ticks,
 )
 from autoskillit.execution.backends._codex_fs_atomic import (
     _atomic_json,
@@ -54,6 +59,7 @@ from autoskillit.execution.backends._codex_parse import (
     _safe_relative_value,
     _thread_id,
 )
+from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS, kill_process_tree
 
 _VIEW_ID_RE = re.compile(r"^[0-9a-f]{16}-[1-9][0-9]*$")
 _LAUNCH_ID_RE = re.compile(r"^[0-9a-f]{16}$")
@@ -160,6 +166,7 @@ class CodexInteractiveSessionLease(AbstractContextManager[CookSessionHandle]):
     view_lease: _FileLease
     inert_targets: dict[str, Path]
     thread_lease: _FileLease | None = None
+    ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS
     _entered: bool = False
     _closed: bool = False
 
@@ -199,11 +206,22 @@ class CodexInteractiveSessionLease(AbstractContextManager[CookSessionHandle]):
             raise RuntimeError("Codex attempt spawn was already recorded")
         if pid <= 0 or pgid <= 0:
             raise ValueError("Child pid and pgid must be positive")
+        spawner_pid = os.getpid()
         self.manifest.update(
             state="running",
             child_pid=pid,
             child_pgid=pgid,
             reaped=False,
+            # Optional additions (schema_version stays 1) — make the manifest
+            # self-sufficient for recover()'s own verify-before-mark decision,
+            # independent of the Phase-1 tether. None off-Linux, matching the
+            # underlying /proc readers' own platform gating.
+            spawner_pid=spawner_pid,
+            spawner_starttime_ticks=read_starttime_ticks(spawner_pid),
+            boot_id=read_boot_id(),
+            child_starttime_ticks=read_starttime_ticks(pid),
+            pidns_inode=read_pid_namespace_inode(pid),
+            not_after=time.time() + self.ceiling_seconds,
         )
         self.store._write_manifest(self)
 
@@ -333,6 +351,7 @@ class CodexSessionStore:
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
+        ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
     ) -> CodexInteractiveSessionLease:
         self._ensure_roots()
         view_id = f"{launch_id}-{attempt}"
@@ -415,6 +434,7 @@ class CodexSessionStore:
                 view_lease=view_lease,
                 inert_targets=inert_targets,
                 thread_lease=thread_lease,
+                ceiling_seconds=ceiling_seconds,
             )
             self._write_manifest(lease)
             return lease
@@ -1344,9 +1364,68 @@ class CodexSessionStore:
                         _fsync_directory(self.views_root)
                     elif state in {"running", "finalizing", "failed"}:
                         if manifest.get("reaped") is not True:
-                            manifest["reaped"] = True
-                            manifest["reaped_ns"] = time.time_ns()
-                            _atomic_json(manifest_path, manifest)
+                            child_pid = manifest.get("child_pid")
+                            boot_id = manifest.get("boot_id")
+                            child_starttime_ticks = manifest.get("child_starttime_ticks")
+                            pidns_inode = manifest.get("pidns_inode")
+                            has_identity = (
+                                isinstance(child_pid, int)
+                                and isinstance(boot_id, str)
+                                and isinstance(child_starttime_ticks, int)
+                            )
+                            if has_identity:
+                                assert isinstance(child_pid, int)
+                                assert isinstance(boot_id, str)
+                                assert isinstance(child_starttime_ticks, int)
+                                identity_verified = is_session_alive(
+                                    child_pid, boot_id, child_starttime_ticks
+                                )
+                                if identity_verified and isinstance(pidns_inode, int):
+                                    actual_inode = read_pid_namespace_inode(child_pid)
+                                    if actual_inode is not None and actual_inode != pidns_inode:
+                                        identity_verified = False
+                                if identity_verified:
+                                    cleanup_result = kill_process_tree(
+                                        child_pid,
+                                        expected_boot_id=boot_id,
+                                        expected_starttime_ticks=child_starttime_ticks,
+                                    )
+                                    if not cleanup_result.complete:
+                                        # Fail-closed per view, fail-open at the call site —
+                                        # not appended to `failures`, so an unresolvable view
+                                        # never blocks cook/order startup at the two unguarded
+                                        # call sites. The next recovery/chokepoint retries.
+                                        logger.warning(
+                                            "codex_recover_kill_incomplete",
+                                            view_id=view_path.name,
+                                            child_pid=child_pid,
+                                        )
+                                        continue
+                                    manifest["reaped"] = True
+                                    manifest["reaped_ns"] = time.time_ns()
+                                    _atomic_json(manifest_path, manifest)
+                                else:
+                                    # Dead, or identity mismatch (PID recycled) — the
+                                    # original child is provably gone either way.
+                                    manifest["reaped"] = True
+                                    manifest["reaped_ns"] = time.time_ns()
+                                    _atomic_json(manifest_path, manifest)
+                            elif child_pid is not None and is_pid_alive(child_pid):
+                                # Legacy manifest, no identity fields: cannot verify —
+                                # never kill, never lie. Operator remediation path:
+                                # doctor / process-orphans --reap.
+                                logger.warning(
+                                    "codex_recover_legacy_manifest_live_pid",
+                                    view_id=view_path.name,
+                                    child_pid=child_pid,
+                                )
+                                manifest["state"] = "failed"
+                                _atomic_json(manifest_path, manifest)
+                                continue
+                            else:
+                                manifest["reaped"] = True
+                                manifest["reaped_ns"] = time.time_ns()
+                                _atomic_json(manifest_path, manifest)
                         attempt_lease = CodexInteractiveSessionLease(
                             store=self,
                             session_home=Path("/"),

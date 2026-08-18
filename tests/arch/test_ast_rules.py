@@ -675,6 +675,7 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     - reap_orphaned_codex_processes in _codex_orphans.py (orphan reaper)
     - reap_orphaned_autoskillit_daemons in _daemon_orphans.py (registered daemon reaper)
     - sweep_orphaned_tethers in _process_tether.py (generic spawner-death sweep)
+    - CodexSessionStore.recover() in _codex_session_storage.py (verify-before-mark)
     """
     allowed_files = {
         SRC_ROOT / "execution" / "process" / "_process_kill.py",
@@ -682,6 +683,7 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
         SRC_ROOT / "execution" / "process" / "_codex_orphans.py",
         SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",
         SRC_ROOT / "execution" / "process" / "_process_tether.py",
+        SRC_ROOT / "execution" / "backends" / "_codex_session_storage.py",
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",
         # _api.py's _write_pid callback (fail-closed layer IL-2) kills the spawned
         # child via the canonical sync primitive when mark_dispatch_running

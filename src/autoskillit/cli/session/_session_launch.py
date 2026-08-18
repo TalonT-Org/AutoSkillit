@@ -325,6 +325,7 @@ def _run_interactive_session(
             launch_id=managed_home.launch_id,
             attempt=attempt,
             current_resume_spec=final_resume_spec,
+            ceiling_seconds=cook_ceiling_seconds,
         ) as attempt_handle:
             startup_trace.record_attempt_anchor(
                 attempt=attempt,

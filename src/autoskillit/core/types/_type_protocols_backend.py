@@ -350,6 +350,10 @@ class CodingAgentBackend(Protocol):
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
+        # Literal default, not an import of
+        # execution.process.INTERACTIVE_TETHER_CEILING_SECONDS — core (IL-0)
+        # cannot import execution (IL-1). Kept equal by a parity test.
+        ceiling_seconds: float = 172800.0,
     ) -> AbstractContextManager[CookSessionHandle]: ...
 
     def translate_model(self, model: str) -> str: ...

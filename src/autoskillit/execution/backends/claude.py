@@ -104,6 +104,7 @@ from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._explorer_dispatch import (
     CLAUDE_EXPLORATION_DISPATCH_RENDERER,
 )
+from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
@@ -1273,8 +1274,9 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
+        ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
     ) -> AbstractContextManager[CookSessionHandle]:
-        del session_home, project_dir, launch_id, attempt, current_resume_spec
+        del session_home, project_dir, launch_id, attempt, current_resume_spec, ceiling_seconds
         return nullcontext(
             CookSessionHandle(
                 view_id="",

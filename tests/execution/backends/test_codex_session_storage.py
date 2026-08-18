@@ -2,18 +2,30 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import multiprocessing
 import os
 import plistlib
+import subprocess
+import sys
 import threading
+import time
 from pathlib import Path
 
+import psutil
 import pytest
 import structlog
+import structlog.testing
 import zstandard
 
-from autoskillit.core import NamedResume, NoResume
+from autoskillit.core import (
+    NamedResume,
+    NoResume,
+    ProcessCleanupResult,
+    read_boot_id,
+    read_starttime_ticks,
+)
 from autoskillit.execution.backends import _codex_fs_atomic as atomic
 from autoskillit.execution.backends import _codex_session_storage as storage
 from autoskillit.execution.backends._codex_session_storage import (
@@ -1047,3 +1059,239 @@ def test_named_resume_hard_links_only_selected_rollout_into_matching_view(
     assert unrelated.is_file()
     assert (home / "sessions").resolve() == inert_targets["sessions"]
     assert (home / "archived_sessions").resolve() == inert_targets["archived_sessions"]
+
+
+# ── Phase 2: spawn-identity capture and recover() verify-before-mark ─────────
+
+
+def _prepared_lease(
+    store: CodexSessionStore, home: Path, tmp_path: Path
+) -> CodexInteractiveSessionLease:
+    return store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NoResume(),
+    )
+
+
+def _wait_for_death(pid: int, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while psutil.pid_exists(pid) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert not psutil.pid_exists(pid), f"pid {pid} should be dead"
+
+
+def test_record_spawn_captures_spawn_identity(tmp_path: Path) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-identity.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-identity")
+
+    before = time.time()
+    handle.record_spawn(os.getpid(), os.getpgrp())
+    after = time.time()
+
+    manifest = lease.manifest
+    assert manifest["spawner_pid"] == os.getpid()
+    assert manifest["spawner_starttime_ticks"] == read_starttime_ticks(os.getpid())
+    assert manifest["boot_id"] == read_boot_id()
+    assert manifest["child_starttime_ticks"] == read_starttime_ticks(os.getpid())
+    assert "pidns_inode" in manifest
+    assert before + lease.ceiling_seconds <= manifest["not_after"] <= after + lease.ceiling_seconds
+    assert manifest["schema_version"] == 1
+
+    handle.record_reaped(os.getpid(), os.getpgrp())
+    lease.__exit__(None, None, None)
+
+
+def test_recover_kills_live_child_before_marking_reaped(tmp_path: Path) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-kills-live.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-kills-live")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        # Simulate the spawner dying before it could reap: release the view
+        # lease directly (the same shape recovery's own tests already use for
+        # "spawner died mid-attempt"), leaving reaped=False on disk.
+        lease.view_lease.release()
+
+        store.recover()
+
+        _wait_for_death(child.pid)
+        assert not lease.view_path.exists()
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+
+
+def test_recover_marks_dead_child_reaped_without_kill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-dead-child.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-dead-child")
+    child = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
+    child.wait(timeout=5)
+    _wait_for_death(child.pid)
+
+    handle.record_spawn(child.pid, child.pid)
+    lease.view_lease.release()
+
+    kill_calls: list[object] = []
+    monkeypatch.setattr(storage, "kill_process_tree", lambda *a, **kw: kill_calls.append((a, kw)))
+
+    store.recover()
+
+    assert kill_calls == []
+    assert not lease.view_path.exists()
+
+
+def test_recover_identity_mismatch_marks_recycled(tmp_path: Path) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-identity-mismatch.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-identity-mismatch")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        lease.manifest["child_starttime_ticks"] = 999_999_999
+        store._write_manifest(lease)
+        lease.view_lease.release()
+
+        store.recover()
+
+        assert psutil.pid_exists(child.pid), "PID recycled — original child must not be killed"
+        assert not lease.view_path.exists(), "provably-gone original is still marked reaped"
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+
+
+def test_recover_legacy_manifest_live_pid_fails_closed(tmp_path: Path) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        for key in (
+            "spawner_pid",
+            "spawner_starttime_ticks",
+            "boot_id",
+            "child_starttime_ticks",
+            "pidns_inode",
+            "not_after",
+        ):
+            lease.manifest.pop(key, None)
+        store._write_manifest(lease)
+        lease.view_lease.release()
+
+        with structlog.testing.capture_logs() as logs:
+            store.recover()  # must return normally, not raise
+
+        assert psutil.pid_exists(child.pid), "cannot verify identity — must never kill"
+        assert lease.view_path.is_dir(), "view retained, not promoted"
+        on_disk = json.loads((lease.view_path / "manifest.json").read_text())
+        assert on_disk["reaped"] is False
+        assert on_disk["state"] == "failed"
+        assert any(
+            entry.get("event") == "codex_recover_legacy_manifest_live_pid" for entry in logs
+        )
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+
+
+def test_recover_kill_failure_leaves_view(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        lease.view_lease.release()
+
+        monkeypatch.setattr(
+            storage,
+            "kill_process_tree",
+            lambda *a, **kw: ProcessCleanupResult(
+                root_pid=child.pid, survivor_pids=(child.pid,), observation_complete=False
+            ),
+        )
+
+        store.recover()  # must return normally, not raise
+
+        assert lease.view_path.is_dir(), "view retained on kill failure"
+        on_disk = json.loads((lease.view_path / "manifest.json").read_text())
+        assert on_disk["reaped"] is False
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+
+
+def test_cook_startup_survives_unresolvable_view(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two unguarded recover_cook_history() call sites (_session_cook.py,
+    _session_order.py) must never see an exception from an unresolvable view —
+    the leave-unreaped outcomes warn-and-continue rather than propagating."""
+    from autoskillit.execution.backends import codex as codex_module
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    monkeypatch.setattr(codex_module, "default_log_dir", lambda: tmp_path / "log-root")
+
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        for key in ("boot_id", "child_starttime_ticks"):
+            lease.manifest.pop(key, None)
+        store._write_manifest(lease)
+        lease.view_lease.release()
+
+        backend = CodexBackend()
+        backend.recover_cook_history()  # must not raise
+
+        assert lease.view_path.is_dir()
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)

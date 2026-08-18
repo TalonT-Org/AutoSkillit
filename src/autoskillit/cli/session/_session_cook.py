@@ -435,6 +435,7 @@ def cook(
                     launch_id=launch_id,
                     attempt=attempt,
                     current_resume_spec=current_resume_spec,
+                    ceiling_seconds=config.process_tether.cook_ceiling_seconds,
                 ) as attempt_handle:
                     trace.record_attempt_anchor(
                         attempt=attempt,

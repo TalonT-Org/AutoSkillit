@@ -25,8 +25,6 @@ class DispatchDescriptor(NamedTuple):
 
 def _stub_guards(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub all fleet_run guard conditions to pass."""
-    monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
 
 

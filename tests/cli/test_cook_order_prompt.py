@@ -45,7 +45,6 @@ def test_order_rejects_orchestrator_skill_in_l1_tier_before_launch(
     before_launch): the pin moves from `pytest.raises(SkillContractError)`
     to `pytest.raises(SystemExit)` plus an output assertion.
     """
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.chdir(tmp_path)
     cfg = AutomationConfig()
     cfg.skills.tier1 = ["process-issues"]
@@ -97,7 +96,6 @@ class TestCLIOrderPrompt:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order injects recipe name and behavioral instructions into system prompt."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -129,7 +127,6 @@ class TestCLIOrderPrompt:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Orchestrator prompt must instruct routing to on_context_limit when needs_retry=true."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -154,7 +151,6 @@ class TestCLIOrderPrompt:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order only fires confirmation prompt (no picker)."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -179,7 +175,6 @@ class TestCLIOrderPrompt:
         """The order command must pass a greeting as a positional argument."""
         from autoskillit.cli._prompts import _COOK_GREETINGS
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -206,7 +201,6 @@ class TestCLIOrderPrompt:
         """Open-kitchen order sessions also pass a greeting as positional arg."""
         from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -236,7 +230,6 @@ class TestOrderDisplayOwnership:
 
     def _setup_recipe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """Write test recipe to scripts_dir and chdir."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -328,7 +321,6 @@ class TestOrderMcpPrefixSelection:
         """order() builds a prompt with the direct prefix when installed_plugins.json lacks key."""
         from autoskillit.cli._mcp_names import DIRECT_PREFIX
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -357,7 +349,6 @@ class TestOrderMcpPrefixSelection:
         """order() uses marketplace prefix when autoskillit is plugin-installed."""
         from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -396,7 +387,6 @@ class TestOrderMcpPrefixSelection:
             captured.append({"ingredients_table": ingredients_table})
             return "ROUTING RULES\nFIRST ACTION\nopenKitchen\nDuring pipeline execution"
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)

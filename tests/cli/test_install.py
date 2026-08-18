@@ -224,7 +224,6 @@ class TestCLIInstall:
     ) -> None:
         """install() stages and publishes the plugin content into the generation store."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
@@ -286,7 +285,6 @@ class TestCLIInstall:
 
         monkeypatch.setattr(Path, "home", lambda: home)
         monkeypatch.setattr(Path, "cwd", lambda: project)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         from autoskillit.cli._marketplace import install
 
@@ -309,7 +307,6 @@ class TestCLIInstall:
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         from autoskillit.cli._marketplace import install
 
@@ -358,7 +355,6 @@ class TestCLIInstall:
         monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
-        monkeypatch.delenv("CLAUDECODE", raising=False)
 
         _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
@@ -417,7 +413,6 @@ class TestCLIInstall:
             )
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         from autoskillit.cli._marketplace import install
 
@@ -1151,7 +1146,6 @@ def test_install_creates_autoskillit_gitignore(
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",
@@ -1183,7 +1177,6 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",

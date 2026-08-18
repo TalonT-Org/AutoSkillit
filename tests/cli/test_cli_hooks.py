@@ -471,7 +471,6 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
             findings=(),
         ),
     )
-    monkeypatch.delenv("CLAUDECODE", raising=False)
 
     _app_mod = importlib.import_module("autoskillit.cli._marketplace")
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)

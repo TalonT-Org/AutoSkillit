@@ -224,7 +224,6 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-    monkeypatch.delenv("CLAUDECODE", raising=False)
 
     from autoskillit import __version__
     from autoskillit.core import PluginArtifactIdentity, new_plugin_artifact_incarnation_id

@@ -55,7 +55,6 @@ class TestCLIOrderPicker:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order prompts for recipe name when none is provided."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -77,7 +76,6 @@ class TestCLIOrderPicker:
         """order exits 1 when no recipe is given and no recipes are available."""
         import autoskillit.recipe as _recipe_mod
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         mock_result = MagicMock()
@@ -97,7 +95,6 @@ class TestCLIOrderPicker:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """Picker output includes '0. Open kitchen' line."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -119,7 +116,6 @@ class TestCLIOrderPicker:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Typing '0' launches a session without a recipe YAML in the system prompt."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -144,7 +140,6 @@ class TestCLIOrderPicker:
         """Out-of-range numeric input exits 1 with an error message."""
         import autoskillit.recipe as _recipe_mod
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         fake_recipe = MagicMock()
@@ -168,7 +163,6 @@ class TestCLIOrderPicker:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order(resume=True) passes bare --resume; find_latest_session_id must not be called."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -204,7 +198,6 @@ class TestCLIOrderPicker:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order(resume=True, session_id='explicit-abc') uses explicit id; discovery not called."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -236,7 +229,6 @@ class TestCLIOrderPicker:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order(resume=True) always emits bare --resume; Claude Code handles empty history."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -266,7 +258,6 @@ class TestCLIOrderPicker:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order(resume=True) with no recipe invokes pick_session for order sessions."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
@@ -303,7 +294,6 @@ class TestCLIOrderPicker:
         )
         monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit):
@@ -333,7 +323,6 @@ class TestCLIOrderPicker:
         )
         monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit):
@@ -362,7 +351,6 @@ class TestCLIOrderPicker:
         )
         monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit):
@@ -391,7 +379,6 @@ class TestCLIOrderPicker:
         )
         monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit):
@@ -421,7 +408,6 @@ class TestCLIOrderPicker:
         )
         monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit):
@@ -465,7 +451,6 @@ class TestCLIOrderPicker:
         )
         monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit):
@@ -501,7 +486,6 @@ class TestOrderResumeParsing:
         from autoskillit.cli.app import app
         from autoskillit.core import NamedResume, NoResume
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
@@ -558,7 +542,6 @@ class TestOrderResumeParsing:
         from autoskillit.cli.app import app
         from autoskillit.core import NamedResume, NoResume
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
@@ -605,7 +588,6 @@ class TestOrderResumeParsing:
         from autoskillit.cli.app import app
         from autoskillit.core import NoResume
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
@@ -654,7 +636,6 @@ class TestOrderResumeParsing:
         """order --resume <uuid> bypasses find_recipe_by_name — UUID is not a recipe name."""
         from autoskillit.cli.app import app
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         find_called = []

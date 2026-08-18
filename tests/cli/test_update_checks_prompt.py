@@ -46,11 +46,7 @@ def _setup_run_checks(
 
     from autoskillit.cli.update._update_checks import Signal
 
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
     fake_stdin = MagicMock()
     fake_stdin.isatty.return_value = True

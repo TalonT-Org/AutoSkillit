@@ -50,7 +50,6 @@ class TestOrderSubsetGate:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """T-VAL-008: order exits 1 non-interactively when recipe references a disabled subset."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -77,7 +76,6 @@ class TestOrderSubsetGate:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """T-VAL-009: order injects AUTOSKILLIT_SUBSETS__DISABLED env override for temp enable."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -110,7 +108,6 @@ class TestOrderSubsetGate:
         import importlib
         import sys as _sys
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)

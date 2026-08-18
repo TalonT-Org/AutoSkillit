@@ -115,19 +115,19 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
         resolve_current_generation_for_plugin,
     )
 
-    if resolve_current_generation_for_plugin(Path.home(), "autoskillit") is not None:
-        candidate = generation_plugin_selector_path(Path.home(), "autoskillit") / "hooks"
+    if resolve_current_generation_for_plugin(Path.home(), _AUTOSKILLIT_PLUGIN_KEY) is not None:
+        candidate = generation_plugin_selector_path(Path.home(), _AUTOSKILLIT_PLUGIN_KEY) / "hooks"
         if (candidate / "_dispatch.py").is_file():
             return candidate
 
-    generation_dir = resolve_current_generation(Path.home(), "autoskillit", __version__)
+    generation_dir = resolve_current_generation(Path.home(), _AUTOSKILLIT_PLUGIN_KEY, __version__)
     if generation_dir is not None:
         candidate = generation_dir / "hooks"
         if (candidate / "_dispatch.py").is_file():
             return candidate
 
     # Fall back to legacy installed cache
-    cache_root = installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
+    cache_root = installed_plugin_artifact_root(Path.home(), _AUTOSKILLIT_PLUGIN_KEY, __version__)
     try:
         identity = read_installed_plugin_artifact_identity(
             cache_root,

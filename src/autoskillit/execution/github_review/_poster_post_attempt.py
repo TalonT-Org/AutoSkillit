@@ -1,9 +1,9 @@
-"""Module-level `_reconcile_payload` and `_finalize` helpers for the poster.
+"""Module-level `reconcile_payload` and `finalize` helpers for the poster.
 
-These are post-attempt helpers that finalize
-attempt + receipt publication; they are NOT mutation authorities (the
-ledger retains all mutation authority). `_EXPECTED_REMOTE_STATES` and
-`_FINAL_STATES` also live here because only these helpers consume them.
+Owns post-attempt helpers that reconcile remote payload state and
+finalize attempt + receipt publication; they are NOT mutation authorities
+(the ledger retains all mutation authority). `_EXPECTED_REMOTE_STATES`
+and `_FINAL_STATES` also live here because only these helpers consume them.
 """
 
 from __future__ import annotations

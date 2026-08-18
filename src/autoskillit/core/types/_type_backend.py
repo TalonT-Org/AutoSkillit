@@ -498,6 +498,7 @@ class SkillSessionConfig:
     add_dirs: tuple[ValidatedAddDir, ...] = ()
     exit_after_stop_delay_ms: int = 0
     stream_idle_timeout_ms: int = 0
+    mcp_tool_timeout_sec: float = 0.0
     scenario_step_name: str = ""
     temp_dir_relpath: str | None = None
     allowed_write_prefix: str = ""

@@ -787,6 +787,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
             tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
             routing layer. Exempt at 16 files.
+            _progress_heartbeat.py adds the MCP progress-notification context manager,
+            bringing the count to 28.
           recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
             (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
             Adding rules_cmd.py for run_cmd echo-capture alignment validation and
@@ -974,7 +976,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 27,  # +_run_skill_completion exact receipt delivery boundary (#4457)
+        "server": 28,  # +_progress_heartbeat MCP idle-abort immunity boundary
         # +_recipe_segment_delivery plan-mandated progressive delivery boundary
         # +_recipe_artifact.py (persistence), +_recipe_delivery_helpers.py (attestation,
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
@@ -1384,7 +1386,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "async hardening beside the backend parser and command builder that own them. "
         "#4557 adds Claude-only host-attestation env, version-derived annotation support, "
         "and frozen attestation env at all 4 launch sites; #4566 "
-        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines).",
+        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines). "
+        "Threads mcp_tool_timeout_sec through build_interactive_cmd, "
+        "build_skill_session_cmd, build_food_truck_cmd, and build_resume_cmd to give Claude "
+        "Code's client-side idle-abort timeout parity with the server-side anyio.fail_after "
+        "ceiling (+2 net lines). REQ-017 (resolve-failures iteration 1) also adds an "
+        "explicit mcp_tool_timeout_sec parameter to build_headless_cmd and injects the "
+        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT env var when given, plus hardens all four "
+        "existing boundary checks with isinstance(mcp_tool_timeout_sec, (int, float)) "
+        "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
     ),
     "execution/headless/_headless_result.py": (
         1053,

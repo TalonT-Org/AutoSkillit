@@ -76,7 +76,7 @@ async def _notify(
     logger_name: str,
     extra: dict[str, Any] | None = None,
 ) -> None:
-    """Send an MCP progress notification via FastMCP's Context.
+    """Send an MCP logging notification via FastMCP's Context.
 
     Validates extra dict keys against RESERVED_LOG_RECORD_KEYS before
     dispatching. Raises ValueError if any reserved key is found — this

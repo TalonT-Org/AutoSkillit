@@ -64,7 +64,11 @@ class TestRegisterAllBackendKwarg:
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         # _is_plugin_installed and is_git_worktree are already auto-patched by conftest.py
-        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
+        mcp_calls: list[dict] = []
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._register_mcp_server",
+            lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
+        )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._user_claude_json_path",
             lambda: tmp_path / ".claude.json",
@@ -154,7 +158,7 @@ class TestRegisterAllBackendDispatch:
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._register_mcp_server",
-            lambda p: mcp_calls.append("register_mcp"),
+            lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
         )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._user_claude_json_path",
@@ -217,6 +221,7 @@ class TestRegisterAllBackendDispatch:
         codex_calls, mcp_calls = self._setup_register_all(monkeypatch, tmp_path, "claude-code")
         _register_all("user", tmp_path)
         assert mcp_calls, "_register_mcp_server must be called for claude-code backend"
+        assert "mcp_tool_timeout_sec" in mcp_calls[0]
         assert codex_calls == ["ensure_codex"]
 
     def test_codex_backend_does_not_write_claude_json(
@@ -303,7 +308,11 @@ class TestRegisterAllCodexConfigTransaction:
             _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
-        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
+        mcp_calls: list[dict] = []
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._register_mcp_server",
+            lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
+        )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._user_claude_json_path",
             lambda: tmp_path / ".claude.json",
@@ -476,7 +485,11 @@ class TestRegisterAllBackendBranching:
             "autoskillit.cli._init_helpers._is_plugin_installed",
             lambda **kwargs: False,
         )
-        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
+        mcp_calls: list[dict] = []
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._register_mcp_server",
+            lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
+        )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._user_claude_json_path",
             lambda: tmp_path / ".claude.json",
@@ -517,7 +530,11 @@ class TestRegisterAllCodexMcpRegistration:
             _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
-        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
+        mcp_calls: list[dict] = []
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._register_mcp_server",
+            lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
+        )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._user_claude_json_path",
             lambda: tmp_path / ".claude.json",

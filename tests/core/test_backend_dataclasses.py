@@ -419,6 +419,7 @@ def test_skill_session_config_fields_exhaustive():
         "add_dirs",
         "exit_after_stop_delay_ms",
         "stream_idle_timeout_ms",
+        "mcp_tool_timeout_sec",
         "scenario_step_name",
         "temp_dir_relpath",
         "allowed_write_prefix",

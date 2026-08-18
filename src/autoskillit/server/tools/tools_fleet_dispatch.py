@@ -6,6 +6,7 @@ import asyncio
 import functools
 import inspect
 import json
+import math
 import os
 from collections.abc import Callable
 from contextvars import ContextVar
@@ -66,6 +67,7 @@ from autoskillit.server._misc import (
     resolve_log_dir,
 )
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._progress_heartbeat import progress_heartbeat
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
@@ -666,43 +668,56 @@ async def dispatch_food_truck(
             )
         cancel_scope: anyio.CancelScope | None = None
         try:
-            with anyio.fail_after(tool_ctx.config.run_skill.mcp_tool_timeout_sec) as cancel_scope:
-                result = await execute_dispatch(
-                    tool_ctx=tool_ctx,
-                    recipe=recipe,
-                    task=task,
-                    ingredients=ingredients,
-                    dispatch_name=dispatch_name,
-                    timeout_sec=timeout_sec,
-                    prompt_builder=_get_food_truck_prompt_builder(
-                        effective_dispatch_backend,
-                        has_unguarded_filesystem_access=(
-                            effective_dispatch_backend.capabilities.has_unguarded_filesystem_access
-                        ),
-                        projected_sous_chef=_project_food_truck_sous_chef(
-                            tool_ctx,
-                            effective_dispatch_backend,
-                        ),
-                    ),
-                    quota_checker=lambda cfg: check_and_sleep_if_needed(
-                        cfg,
-                        provider="anthropic" if _supports_quota else "",
-                    ),
-                    quota_refresher=_refresh_quota_cache,
-                    cache_invalidator=invalidate_cache,
-                    capture=capture,
-                    resume_session_id=resume_session_id,
-                    resume_checkpoint=parsed_checkpoint,
-                    idle_output_timeout=idle_output_timeout,
-                    caller_session_id=caller_session_id,
-                    prior_dispatch_id=prior_dispatch_id,
-                    resume_message=resume_message,
-                    caller_instructions=caller_instructions,
-                    dispatch_backend=dispatch_backend,
-                    effective_backend_map=_effective_backend_map,
-                    provenance=provenance,
-                    native_shell_capture_mode=native_shell_capture_mode,
+            tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec
+            if (
+                not isinstance(tool_timeout_sec, (int, float))
+                or isinstance(tool_timeout_sec, bool)
+                or not math.isfinite(tool_timeout_sec)
+                or tool_timeout_sec <= 0
+            ):
+                return fleet_error(
+                    FleetErrorCode.FLEET_INVALID_BACKEND,
+                    f"run_skill.mcp_tool_timeout_sec must be a positive number of "
+                    f"seconds, got {tool_timeout_sec!r}.",
                 )
+            with anyio.fail_after(tool_timeout_sec) as cancel_scope:
+                async with progress_heartbeat(ctx):
+                    result = await execute_dispatch(
+                        tool_ctx=tool_ctx,
+                        recipe=recipe,
+                        task=task,
+                        ingredients=ingredients,
+                        dispatch_name=dispatch_name,
+                        timeout_sec=timeout_sec,
+                        prompt_builder=_get_food_truck_prompt_builder(
+                            effective_dispatch_backend,
+                            has_unguarded_filesystem_access=(
+                                effective_dispatch_backend.capabilities.has_unguarded_filesystem_access
+                            ),
+                            projected_sous_chef=_project_food_truck_sous_chef(
+                                tool_ctx,
+                                effective_dispatch_backend,
+                            ),
+                        ),
+                        quota_checker=lambda cfg: check_and_sleep_if_needed(
+                            cfg,
+                            provider="anthropic" if _supports_quota else "",
+                        ),
+                        quota_refresher=_refresh_quota_cache,
+                        cache_invalidator=invalidate_cache,
+                        capture=capture,
+                        resume_session_id=resume_session_id,
+                        resume_checkpoint=parsed_checkpoint,
+                        idle_output_timeout=idle_output_timeout,
+                        caller_session_id=caller_session_id,
+                        prior_dispatch_id=prior_dispatch_id,
+                        resume_message=resume_message,
+                        caller_instructions=caller_instructions,
+                        dispatch_backend=dispatch_backend,
+                        effective_backend_map=_effective_backend_map,
+                        provenance=provenance,
+                        native_shell_capture_mode=native_shell_capture_mode,
+                    )
         except TimeoutError:
             if cancel_scope is None or not cancel_scope.cancel_called:
                 raise

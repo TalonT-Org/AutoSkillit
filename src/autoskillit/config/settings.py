@@ -11,6 +11,7 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import math
 import types
 import warnings
 from collections.abc import Callable, Mapping
@@ -160,6 +161,45 @@ def _codex_mcp_timeout_coherence_gate(
                 f"Codex MCP tool_timeout_sec ({tool_timeout}s) is below the maximum "
                 f"possible session duration ({max_session}s). This will cause Codex to kill "
                 f"long-running MCP tool calls before autoskillit's own session management."
+            ),
+        )
+
+
+def _claude_mcp_timeout_coherence_gate(
+    run_skill: RunSkillConfig, fleet: FleetConfig, *, tool_timeout: float | None = None
+) -> None:
+    """Warn when Claude's MCP idle-abort timeout is below the maximum session duration.
+
+    ``tool_timeout`` mirrors the Codex gate's signature; when omitted it defaults
+    to ``run_skill.mcp_tool_timeout_sec``. Deployed/on-disk unset cases are
+    covered by ``autoskillit doctor``, not this gate.
+    """
+    if tool_timeout is None:
+        tool_timeout = run_skill.mcp_tool_timeout_sec
+    if (
+        not isinstance(tool_timeout, (int, float))
+        or isinstance(tool_timeout, bool)
+        or not math.isfinite(tool_timeout)
+        or tool_timeout <= 0
+    ):
+        # Reject NaN/Inf/boolean/zero/negative: NaN comparison silently returns
+        # False, so the gate would otherwise pass an unsound value through.
+        raise ValueError(
+            f"mcp_tool_timeout_sec must be a positive number of seconds, got {tool_timeout!r}."
+        )
+    max_fleet = fleet.default_timeout_sec + fleet.max_extension_seconds
+    max_skill = run_skill.timeout
+    max_session = max(max_fleet, max_skill)
+    if tool_timeout < max_session:
+        logger.warning(
+            "claude_mcp_tool_timeout_coherence",
+            tool_timeout_sec=tool_timeout,
+            max_session_duration=max_session,
+            message=(
+                f"Claude MCP mcp_tool_timeout_sec ({tool_timeout}s) is below "
+                f"the maximum possible session duration ({max_session}s). This will cause "
+                f"Claude Code to idle-abort long-running MCP tool calls before autoskillit's "
+                f"own session management."
             ),
         )
 
@@ -645,6 +685,7 @@ class AutomationConfig:
         _codex_mcp_timeout_coherence_gate(
             result.run_skill, result.fleet, tool_timeout=result.run_skill.mcp_tool_timeout_sec
         )
+        _claude_mcp_timeout_coherence_gate(result.run_skill, result.fleet)
         return result
 
 

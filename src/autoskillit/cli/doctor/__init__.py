@@ -53,6 +53,7 @@ from ._doctor_install import (
     _check_update_dismissal_state,
 )
 from ._doctor_mcp import (
+    _check_claude_mcp_timeouts,
     _check_codex_mcp_timeouts,
     _check_dual_mcp_registration,
     _check_install_state_consistency,
@@ -217,6 +218,11 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 32: Codex MCP tool_timeout_sec coherence
     results.append(
         _check_codex_mcp_timeouts(backend=_backend, run_skill=cfg.run_skill, fleet=cfg.fleet)
+    )
+
+    # Check 32b: Claude MCP timeout coherence (~/.claude.json deployed-vs-configured drift)
+    results.append(
+        _check_claude_mcp_timeouts(backend=_backend, run_skill=cfg.run_skill, fleet=cfg.fleet)
     )
 
     # Check 33: Codex graduation criteria

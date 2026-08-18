@@ -520,6 +520,7 @@ class TestOrderResumeParsing:
             workspace_temp_dir=None,
             backend=None,
             force_inactive_agent_teams=False,
+            mcp_tool_timeout_sec=None,
         ):
             captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec
@@ -576,6 +577,7 @@ class TestOrderResumeParsing:
             workspace_temp_dir=None,
             backend=None,
             force_inactive_agent_teams=False,
+            mcp_tool_timeout_sec=None,
         ):
             captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec
@@ -622,6 +624,7 @@ class TestOrderResumeParsing:
             workspace_temp_dir=None,
             backend=None,
             force_inactive_agent_teams=False,
+            mcp_tool_timeout_sec=None,
         ):
             captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec

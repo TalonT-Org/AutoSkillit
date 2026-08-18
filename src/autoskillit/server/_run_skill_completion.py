@@ -23,6 +23,11 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_PENDING_GUIDANCE = (
+    "A previous run_skill invocation is still completing or awaiting acknowledgement. "
+    "Keep polling complete_run_skill_result with backoff — this is not a hang."
+)
+
 __all__ = [
     "FinalizedRunSkillCompletionResponse",
     "RunSkillCompletionMiddleware",
@@ -141,17 +146,19 @@ class RunSkillCompletionMiddleware(Middleware):
             if authority is not None:
                 allowed, reason = authority.admission(context.message.name)
                 if not allowed and isinstance(registered_tool, FunctionTool):
-                    denial = json.dumps(
-                        {
-                            "success": False,
-                            "is_error": True,
-                            "error": "run_skill_completion_pending",
-                            "stage": "preflight:run_skill_completion",
-                            "retriable": False,
-                            "user_visible_message": reason,
-                        },
-                        separators=(",", ":"),
-                    )
+                    envelope: dict[str, object] = {
+                        "success": False,
+                        "is_error": True,
+                        "error": "run_skill_completion_pending",
+                        "stage": "preflight:run_skill_completion",
+                        "retriable": False,
+                        "user_visible_message": reason,
+                        "guidance": _PENDING_GUIDANCE,
+                    }
+                    pending = authority.pending_info(context.message.name)
+                    if pending is not None:
+                        envelope.update(pending)
+                    denial = json.dumps(envelope, separators=(",", ":"))
                     return registered_tool.convert_result(denial)
 
             try:

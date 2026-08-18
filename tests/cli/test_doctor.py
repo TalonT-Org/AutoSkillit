@@ -455,6 +455,27 @@ class TestCLIDoctor:
         assert len(mcp_checks) == 1
         assert mcp_checks[0]["severity"] == "warning"
 
+    def test_doctor_claude_mcp_timeouts_warns_when_stale(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """The claude_mcp_timeouts check actually runs and reaches run_doctor()'s output.
+
+        Asserts on severity (not just check-name presence) to prove the check
+        executed, not just that it's defined.
+        """
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(
+            json.dumps({"mcpServers": {"autoskillit": {"command": "autoskillit", "timeout": 1}}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor_cmd(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        claude_checks = [r for r in data["results"] if r["check"] == "claude_mcp_timeouts"]
+        assert len(claude_checks) == 1
+        assert claude_checks[0]["severity"] == "warning"
+
     # DOC-REG-7
     def test_doctor_hook_registration_warns_when_scripts_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

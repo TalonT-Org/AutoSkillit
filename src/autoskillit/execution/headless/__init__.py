@@ -381,6 +381,7 @@ async def run_headless_core(
             add_dirs=add_dirs_tuple,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
+            mcp_tool_timeout_sec=cfg.mcp_tool_timeout_sec,
             step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,

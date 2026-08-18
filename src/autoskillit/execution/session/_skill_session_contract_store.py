@@ -26,6 +26,19 @@ from autoskillit.core import (
     read_versioned_json,
     write_versioned_json,
 )
+from autoskillit.execution.session._skill_session_contract_codec import (
+    _build_manifest,
+    _contract_from_dict,
+    _contract_to_dict,
+    _delete_finalized_contract,
+    _digest_json,
+    _finalized_contract_path,
+    _managed_lineage_ref_from_manifest,
+    _validate_contract,
+    _validate_raw_session_id,
+    _validate_relative_path,
+    _validate_snapshot_mapping,
+)
 
 __all__ = [
     "DefaultSkillSessionContractStore",
@@ -349,28 +362,3 @@ def delete_skill_session_contracts(
     for session_id in session_ids:
         if session_id:
             _delete_finalized_contract(sessions_root, session_id)
-
-
-# Codec helpers live in _skill_session_contract_codec.py; re-exported for
-# existing callers using the canonical _skill_session_contract_store path
-# (notably tests at tests/execution/test_skill_session_contract_store.py and
-# tests/server/test_run_skill_resume.py that import _digest_json).
-from autoskillit.execution.session._skill_session_contract_codec import (  # noqa: F401
-    _build_manifest,
-    _contract_from_dict,
-    _contract_to_dict,
-    _delete_finalized_contract,
-    _digest_json,
-    _execution_identity_from_dict,
-    _exploration_vector_from_dict,
-    _exploration_vector_to_dict,
-    _finalized_contract_path,
-    _managed_lineage_ref_from_manifest,
-    _source_ref_from_dict,
-    _source_ref_to_dict,
-    _validate_contract,
-    _validate_digest_map,
-    _validate_raw_session_id,
-    _validate_relative_path,
-    _validate_snapshot_mapping,
-)

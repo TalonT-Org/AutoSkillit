@@ -374,7 +374,7 @@ def test_store_rejects_malformed_serialized_contract_authority(
     invalid_value: object,
 ) -> None:
     from autoskillit.execution.session import DefaultSkillSessionContractStore
-    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+    from autoskillit.execution.session._skill_session_contract_codec import _digest_json
 
     text = "projected\n"
     store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
@@ -395,7 +395,7 @@ def test_store_rejects_malformed_serialized_contract_authority(
 
 def test_store_rejects_exploration_vector_body_digest_tampering(tmp_path: Path) -> None:
     from autoskillit.execution.session import DefaultSkillSessionContractStore
-    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+    from autoskillit.execution.session._skill_session_contract_codec import _digest_json
 
     text = "projected\n"
     store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
@@ -419,7 +419,7 @@ def test_stale_projection_version_rejected_before_enum_construction(tmp_path: Pa
     ``_contract_from_dict`` attempts to construct enum members that no longer
     exist (here, the retired ``investigate-standard`` applicability id)."""
     from autoskillit.execution.session import DefaultSkillSessionContractStore
-    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+    from autoskillit.execution.session._skill_session_contract_codec import _digest_json
 
     text = "projected\n"
     store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")

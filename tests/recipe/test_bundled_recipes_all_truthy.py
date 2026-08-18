@@ -15,7 +15,8 @@ from typing import Any
 
 import pytest
 
-from autoskillit.recipe import all_validated_recipe_names, load_and_validate
+from autoskillit.recipe import load_and_validate
+from tests._tracked_recipes import tracked_recipe_names
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -49,7 +50,7 @@ def _default_overrides() -> dict[str, Any]:
 
 
 def _recipe_names() -> list[str]:
-    return sorted(all_validated_recipe_names(_PROJECT_ROOT))
+    return sorted(tracked_recipe_names(_PROJECT_ROOT))
 
 
 def _parametrize_recipes() -> list:

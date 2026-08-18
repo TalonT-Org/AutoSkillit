@@ -9,8 +9,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import PRState
-from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
+from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.schema import Recipe
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -39,7 +40,7 @@ def _discover_queue_recipe_fixtures() -> list[str]:
         "merge-prs": "pmp_recipe",
     }
     result = []
-    for yaml_path in all_validated_recipe_paths(_PROJECT_ROOT):
+    for yaml_path in tracked_recipe_paths(_PROJECT_ROOT):
         name = yaml_path.stem
         recipe = load_recipe(yaml_path)
         for step in recipe.steps.values():

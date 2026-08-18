@@ -7,16 +7,17 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types import Severity
-from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
+from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.recipe.validator import run_semantic_rules
+from tests._tracked_recipes import tracked_recipe_paths
 from tests.recipe.conftest import _build_merge_worktree_recipe, _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _BUNDLED_ONLY = [
-    p for p in all_validated_recipe_paths(_PROJECT_ROOT) if "src/autoskillit/recipes" in str(p)
+    p for p in tracked_recipe_paths(_PROJECT_ROOT) if "src/autoskillit/recipes" in str(p)
 ]
 
 

@@ -15,14 +15,14 @@ import pytest
 from autoskillit.core import Severity
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.recipe._api import load_and_validate
-from autoskillit.recipe.io import all_validated_recipe_names
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests._tracked_recipes import tracked_recipe_names
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-_ALL_RECIPE_NAMES = sorted(all_validated_recipe_names(_PROJECT_ROOT))
+_ALL_RECIPE_NAMES = sorted(tracked_recipe_names(_PROJECT_ROOT))
 _BACKEND_NAMES = sorted(BACKEND_REGISTRY.keys())
 
 

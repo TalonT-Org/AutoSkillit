@@ -12,16 +12,17 @@ from autoskillit.recipe._analysis import build_recipe_graph
 from autoskillit.recipe._rule_helpers import _MAX_HOPS
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
-from autoskillit.recipe.io import all_validated_recipe_paths, builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules.rules_merge import _is_commit_guard
 from autoskillit.recipe.validator import run_semantic_rules
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SMOKE_RECIPE = _PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 
-_ALL_RECIPE_PATHS = all_validated_recipe_paths(_PROJECT_ROOT)
+_ALL_RECIPE_PATHS = tracked_recipe_paths(_PROJECT_ROOT)
 _BUNDLED_ONLY = [p for p in _ALL_RECIPE_PATHS if "src/autoskillit/recipes" in str(p)]
 _BUNDLED_ROOT_ONLY = [p for p in _BUNDLED_ONLY if p.parent == builtin_recipes_dir()]
 

@@ -1819,3 +1819,89 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.NONE
         assert analysis.request_count == 0
         assert analysis.mutations == ()
+
+
+class TestSiblingWrappersDelegate:
+    """Smoke tests for the 7 sibling wrappers in _github_mutation_analysis.
+
+    Each wrapper should produce the same result as its _command_classification
+    counterpart, since the wrappers exist only to defer the import past the
+    module-load circular boundary.
+    """
+
+    def test_command_verb_and_args_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._github_mutation_analysis import _command_verb_and_args
+
+        seg = ["env", "FOO=bar", "gh", "pr", "view"]
+        assert _command_verb_and_args(seg) == command_verb_and_args(list(seg))
+
+    def test_tokenize_with_redirects_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _tokenize_command_segments_with_redirects,
+        )
+        from autoskillit.hooks._github_mutation_analysis import _tokenize_with_redirects
+
+        # _CommandSegment instances from the bare-name-loaded copy and the
+        # package-loaded copy do not share class identity, so compare token
+        # lists and redirect-syntax flags element-wise.
+        command = "gh pr view --json state"
+        wrapper_result = _tokenize_with_redirects(command)
+        direct_result = _tokenize_command_segments_with_redirects(command)
+        assert len(wrapper_result) == len(direct_result)
+        for wrapper_seg, direct_seg in zip(wrapper_result, direct_result, strict=True):
+            assert wrapper_seg.tokens == direct_seg.tokens
+            assert wrapper_seg.redirect_syntax == direct_seg.redirect_syntax
+
+    def test_normalize_executable_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import _normalize_executable
+        from autoskillit.hooks._github_mutation_analysis import _normalize_executable_call
+
+        assert _normalize_executable_call("/usr/bin/gh") == _normalize_executable("/usr/bin/gh")
+
+    def test_partition_output_redirects_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import _partition_output_redirects
+        from autoskillit.hooks._github_mutation_analysis import _partition_output_redirects_call
+
+        tokens = ["gh", "pr", "view", ">", "/tmp/out"]
+        assert _partition_output_redirects_call(
+            tokens, cwd="/work"
+        ) == _partition_output_redirects(tokens, cwd="/work")
+
+    def test_extract_interpreter_segment_specs_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_interpreter_segment_specs,
+        )
+        from autoskillit.hooks._github_mutation_analysis import (
+            _extract_interpreter_segment_specs_call,
+        )
+
+        segment = ["python3", "-c", "print(1)"]
+        assert _extract_interpreter_segment_specs_call(
+            segment
+        ) == _extract_interpreter_segment_specs(segment)
+
+    def test_segment_evaluates_shell_payload_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _segment_evaluates_shell_payload,
+        )
+        from autoskillit.hooks._github_mutation_analysis import (
+            _segment_evaluates_shell_payload_call,
+        )
+
+        tokens = ["bash", "-c", "echo hi"]
+        payload = "echo hi"
+        assert _segment_evaluates_shell_payload_call(
+            tokens, payload
+        ) == _segment_evaluates_shell_payload(tokens, payload)
+
+    def test_extract_shell_command_payloads_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._github_mutation_analysis import (
+            _extract_shell_command_payloads_call,
+        )
+
+        command = 'bash -c "pip install -e ."'
+        assert _extract_shell_command_payloads_call(command) == extract_shell_command_payloads(
+            command
+        )

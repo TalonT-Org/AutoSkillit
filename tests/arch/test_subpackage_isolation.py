@@ -1086,18 +1086,6 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
-    # REQ-CNST-010-E26: #4520/#4575 splits the headless helpers (one shared
-    # resolve_policy + assert_interactive_ordering + validate_interactive_invocation
-    # surface) across the join guard enforcement and per-launch environment
-    # normalization. The 220-line limit was exceeded by 2 lines after the
-    # #4575 force-inactive policy addition; bumping the limit to 240 keeps the
-    # helpers in one module without a forced split.
-    "headless/_headless_helpers.py": (
-        240,
-        "REQ-CNST-010-E26: #4520/#4575 keeps resolve_policy + "
-        "assert_interactive_ordering + validate_interactive_invocation together "
-        "as the headless-side envoy to the interactive launch layers",
-    ),
     "execution/evidence_reader.py": (
         1500,
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "

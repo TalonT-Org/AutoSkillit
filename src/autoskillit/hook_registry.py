@@ -615,6 +615,7 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
         "github_mutation_guard.py",
         "exploration_request_identity_guard.py",
         "git_ops_guard.py",
+        "pr_create_guard.py",
     }
 )
 

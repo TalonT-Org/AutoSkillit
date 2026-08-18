@@ -31,6 +31,7 @@ def test_cmd_spec_fields():
         "is_resume",
         "process_idle_timeout_ms",
         "inherited_fds",
+        "force_inactive_agent_teams",
     }
 
 

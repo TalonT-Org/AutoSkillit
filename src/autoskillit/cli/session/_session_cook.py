@@ -128,6 +128,7 @@ def cook(
     )
 
     config = load_config()
+    force_inactive_agent_teams = config.agent_backend.force_inactive_agent_teams
     # Same derivation the MCP server uses (git toplevel -> cwd). Running `cook`
     # from a repository subdirectory used to yield a different project_dir than
     # the server derived on the same machine, and both values flow into the
@@ -391,6 +392,7 @@ def cook(
                             initial_prompt=current_initial_prompt,
                             add_dirs=[managed_home.skills_dir],
                             generated_home=managed_home.generated_home,
+                            force_inactive_agent_teams=force_inactive_agent_teams,
                         )
                     except ValueError as exc:
                         _exit_launch_preparation_error(exc)
@@ -404,6 +406,8 @@ def cook(
                         resume_spec=current_resume_spec,
                         system_prompt=cook_system_prompt,
                         env_extras=cook_env_extras,
+                        force_inactive_agent_teams=force_inactive_agent_teams,
+                        project_root=project_dir,
                     )
                 final_cmd = built_spec.cmd
                 final_origin = built_spec.origin

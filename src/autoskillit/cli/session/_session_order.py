@@ -217,6 +217,7 @@ def order(
             launch_id=launch_id,
             default_base_branch=config.branching.default_base_branch,
             workspace_temp_dir=config.workspace.temp_dir,
+            force_inactive_agent_teams=config.agent_backend.force_inactive_agent_teams,
         )
         return
 
@@ -272,6 +273,7 @@ def order(
                 launch_id=launch_id,
                 default_base_branch=config.branching.default_base_branch,
                 workspace_temp_dir=config.workspace.temp_dir,
+                force_inactive_agent_teams=(config.agent_backend.force_inactive_agent_teams),
             )
             return
         elif resolved is None:
@@ -413,4 +415,5 @@ def order(
         launch_id=launch_id,
         default_base_branch=config.branching.default_base_branch,
         workspace_temp_dir=config.workspace.temp_dir,
+        force_inactive_agent_teams=config.agent_backend.force_inactive_agent_teams,
     )

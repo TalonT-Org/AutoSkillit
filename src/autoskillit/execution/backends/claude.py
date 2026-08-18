@@ -6,7 +6,7 @@ import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -771,12 +771,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)
-        return CmdSpec(
-            cmd=spec.cmd,
-            env=spec.env,
-            cwd=cwd,
-            inherited_fds=spec.inherited_fds,
-        )
+        return replace(spec, cwd=cwd)
 
     def stream_parser(self, completion_marker: str = "") -> ClaudeStreamParser:
         return ClaudeStreamParser(completion_marker=completion_marker)
@@ -835,7 +830,11 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             _neutralize_agent_teams_env(env)
             _resolve_project_root_for_inactive_check(project_root)
             assert_agent_teams_inactive(env, project_root, force_inactive=True)
-        return CmdSpec(cmd=tuple(cmd), env=env)
+        return CmdSpec(
+            cmd=tuple(cmd),
+            env=env,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+        )
 
     def build_interactive_cmd(
         self,
@@ -932,16 +931,6 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             required=required_env,
         )
         if force_inactive_agent_teams:
-            if executable is not None:
-                # The executable binding captures its launch_environment at
-                # probe time, before any neutralization. Combining the two
-                # makes the binding stale; callers must resolve a fresh
-                # executable from the neutralized env instead.
-                raise ValueError(
-                    "force_inactive_agent_teams=True cannot be combined with "
-                    "executable binding; resolve a fresh executable from the "
-                    "neutralized env first"
-                )
             # ``build_agent_env`` returns a read-only ``MappingProxyType``;
             # neutralize on a single mutable copy and re-derive both the
             # assertion and the launch env from it.
@@ -949,13 +938,21 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             _neutralize_agent_teams_env(neutralized_env)
             settings_root = str(project_root) if project_root is not None else None
             _resolve_project_root_for_inactive_check(settings_root)
+            # Settings entries are stripped before the confirmation, not after:
+            # asserting first refuses every repository whose settings enable
+            # teams, which is precisely the population this opt-in serves. A
+            # malformed file is refused rather than rewritten, so the assertion
+            # below still fails closed on one.
+            neutralize_repository_agent_teams_settings(settings_root)
             assert_agent_teams_inactive(
                 neutralized_env,
                 settings_root,
                 force_inactive=True,
             )
-            neutralize_repository_agent_teams_settings(settings_root)
             effective_env = neutralized_env
+        # With an executable binding this equality is the proof that the
+        # binding was resolved from the neutralized env rather than captured
+        # before neutralization; a genuinely stale binding still fails here.
         if executable is not None and dict(effective_env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
@@ -965,6 +962,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def build_resume_cmd(
@@ -1020,6 +1018,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env=env,
             is_resume=True,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def build_skill_session_cmd(
@@ -1155,6 +1154,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             is_resume=bool(resume_session_id),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def build_food_truck_cmd(
@@ -1258,6 +1258,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env=spec.env,
             is_resume=bool(resume_session_id),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def validate_session_layout(
@@ -1443,15 +1444,15 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         When the spec carries a request to keep Claude agent teams inactive,
         this checkpoint positively confirms that neither the resolved env
         nor the target repository's ``.claude/settings*.json`` files
-        re-enable ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS``. The plan's
-        Step 5.4 mandates this content-policy surface here in addition to
-        the per-builder enforcement.
+        re-enable ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS``. A spec that
+        carries no such request is not subject to the policy: agent teams
+        enabled by a developer's own settings are legitimate state, not a
+        launch defect.
         """
-        env = dict(spec.env) if spec is not None else {}
-        project_root: Path | str | None = None
-        cwd = spec.cwd if spec is not None else None
-        if cwd is not None:
-            project_root = cwd
+        if not spec.force_inactive_agent_teams:
+            return []
+        env = dict(spec.env)
+        project_root: Path | str | None = spec.cwd if spec.cwd else None
         return _interactive_invocation_environment_policy(env, project_root)
 
     def ensure_pre_launch(

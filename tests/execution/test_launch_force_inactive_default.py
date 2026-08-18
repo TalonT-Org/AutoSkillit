@@ -112,30 +112,88 @@ def test_force_inactive_interactive_without_project_root_refuses() -> None:
         )
 
 
-def test_force_inactive_interactive_with_executable_refuses(tmp_path: Path) -> None:
-    """C6: refuse force_inactive_agent_teams=True combined with an
-    executable binding — the executable's launch_environment was
-    captured before neutralization, so combining the two makes the
-    binding stale."""
+def _neutralized_launch_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[ClaudeCodeBackend, Path]:
+    """A teams-enabled process env, a resolvable fake binary, and a project."""
     from autoskillit.core import atomic_write
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    executable = bin_dir / "claude"
+    atomic_write(executable, "#!/bin/sh\nexit 0\n")
+    executable.chmod(0o755)
+
+    project = tmp_path / "project"
+    project.mkdir()
+
+    monkeypatch.setenv("PATH", str(bin_dir))
+    monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
+    return ClaudeCodeBackend(), project
+
+
+def test_force_inactive_interactive_accepts_binding_from_neutralized_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Positive confirmation, not blanket refusal.
+
+    The constraint is that the binding be resolved *from* the neutralized env,
+    which is exactly what the equality check proves. A blanket refusal made the
+    opt-in unreachable through the probe flow, where the binding is derived
+    from the neutralized env by construction.
+    """
     from autoskillit.core.runtime.executable_binding import (
         resolve_executable_launch_binding,
     )
 
-    executable = tmp_path / "claude"
-    atomic_write(executable, "#!/bin/sh\nexit 0\n")
-    executable.chmod(0o755)
+    backend, project = _neutralized_launch_fixture(tmp_path, monkeypatch)
 
-    backend = ClaudeCodeBackend()
+    env_spec = backend.build_interactive_cmd(
+        initial_prompt="hello",
+        force_inactive_agent_teams=True,
+        project_root=str(project),
+    )
+    assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in env_spec.env
+
     binding = resolve_executable_launch_binding(
         binary_name="claude",
-        environment={"PATH": str(tmp_path)},
-        cwd=tmp_path,
+        environment=env_spec.env,
+        cwd=project,
     )
-    with pytest.raises(ValueError, match="cannot be combined with executable binding"):
+    spec = backend.build_interactive_cmd(
+        initial_prompt="hello",
+        executable=binding,
+        force_inactive_agent_teams=True,
+        project_root=str(project),
+    )
+
+    assert spec.force_inactive_agent_teams is True
+    assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in spec.env
+
+
+def test_force_inactive_interactive_rejects_stale_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A binding captured before neutralization must still be refused."""
+    import os
+
+    from autoskillit.core.runtime.executable_binding import (
+        resolve_executable_launch_binding,
+    )
+
+    backend, project = _neutralized_launch_fixture(tmp_path, monkeypatch)
+
+    stale = resolve_executable_launch_binding(
+        binary_name="claude",
+        environment=dict(os.environ),
+        cwd=project,
+    )
+    assert stale.launch_environment.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") == "1"
+
+    with pytest.raises(ValueError, match="environment changed after executable binding"):
         backend.build_interactive_cmd(
             initial_prompt="hello",
-            executable=binding,
+            executable=stale,
             force_inactive_agent_teams=True,
-            project_root="/tmp",
+            project_root=str(project),
         )

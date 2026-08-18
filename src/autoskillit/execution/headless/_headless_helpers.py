@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -79,24 +78,11 @@ def assert_interactive_ordering(
     Always scans the raw cmd tuple — never trusts origin metadata alone, since
     CmdOrigin is a public dataclass and callers could set it on a misordered cmd.
 
-    The cook/order pre-spawn checkpoint also verifies that the spec's effective
-    environment will leave Claude agent teams inactive. The plan's Step 5.4
-    bundles this content-policy check with the ordering validation so that
-    every interactive launch surfaces both shape and environment violations
-    from a single gate.
+    Shape only, and backend-agnostic: environment content is never inspected
+    here. Environment policy belongs to the backend's own
+    ``validate_interactive_invocation``, which can read the spec's declared
+    intent. See tests/execution/test_assert_interactive_ordering.py.
     """
-    if isinstance(getattr(spec, "env", None), Mapping):
-        from autoskillit.execution.backends.claude import (
-            _interactive_invocation_environment_policy,
-        )
-
-        policy_errors = _interactive_invocation_environment_policy(
-            spec.env, getattr(spec, "cwd", None)
-        )
-        if policy_errors:
-            raise ValueError(
-                "interactive launch environment policy violations: " + "; ".join(policy_errors)
-            )
     if value_bearing_flags is None:
         value_bearing_flags = _ALL_VALUE_BEARING_FLAGS
     cmd = spec.cmd

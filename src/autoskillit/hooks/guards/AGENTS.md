@@ -58,7 +58,7 @@ Each guard is a standalone Python script executed as a subprocess (not imported 
 All guards fail-**open** for malformed/unparseable input (JSON decode failure = exit 0 = approve).
 This prevents a broken hook from blocking the entire tool chain.
 
-Seven guards additionally fail-**closed** for valid input with unrecognized values, as a
+Eight guards additionally fail-**closed** for valid input with unrecognized values, as a
 defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -70,6 +70,7 @@ defense-in-depth measure against privilege escalation:
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
 | `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError) | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block |
+| `pr_create_guard.py` | Hook config unreadable or malformed while the kitchen is open (OSError, JSONDecodeError, AttributeError, TypeError) | An unresolvable `recipe_allows_pr_create` authorization must not be read as permission to bypass the prepare_pr → compose_pr pipeline |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier (valid input, unrecognized value) = fail-closed.
 

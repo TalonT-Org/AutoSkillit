@@ -260,6 +260,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             resume_message=resume_message,
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
+            force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
         )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec

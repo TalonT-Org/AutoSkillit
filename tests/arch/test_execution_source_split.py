@@ -19,11 +19,11 @@ NEW_HEADLESS_MODULES = [
 ]
 HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 550,
-    # #4520/#4575 adds the resolve_policy + validate_interactive_invocation seams
-    # for the join batch guards and force-inactive agent-teams repository policy.
-    "headless/_headless_helpers.py": 240,
+    "headless/_headless_helpers.py": 220,
     # #4233 threads backend resume identity and the skill-only lifecycle enable flag.
-    "headless/_headless_execute.py": 642,
+    # #4659 rectify: the agent-teams opt-in must be read here from the same config
+    # authority the spec builders use, or adapter_digest and the spec field diverge.
+    "headless/_headless_execute.py": 646,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

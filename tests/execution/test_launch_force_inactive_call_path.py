@@ -7,8 +7,11 @@ that the option is honored when set to True.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
+from autoskillit.core import CmdSpec
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -95,3 +98,48 @@ def test_force_inactive_true_strips_in_every_path() -> None:
     assert _food_truck_stripped(True) is True
     assert _resume_stripped(True) is True
     assert _interactive_stripped(True) is True
+
+
+def _build_all(force: bool) -> dict[str, CmdSpec]:
+    backend = ClaudeCodeBackend()
+    return {
+        "build_headless_cmd": backend.build_headless_cmd(
+            "hello", force_inactive_agent_teams=force, project_root="/tmp"
+        ),
+        "build_skill_session_cmd": backend.build_skill_session_cmd(
+            "/test", force_inactive_agent_teams=force, project_root="/tmp"
+        ),
+        "build_food_truck_cmd": backend.build_food_truck_cmd(
+            orchestrator_prompt="orchestrate",
+            plugin_binding=None,
+            cwd="/tmp",
+            completion_marker="DONE",
+            force_inactive_agent_teams=force,
+            project_root="/tmp",
+        ),
+        "build_resume_cmd": backend.build_resume_cmd(
+            resume_session_id="abc",
+            prompt="resume",
+            force_inactive_agent_teams=force,
+            project_root="/tmp",
+        ),
+        "build_interactive_cmd": backend.build_interactive_cmd(
+            initial_prompt="hello", force_inactive_agent_teams=force, project_root="/tmp"
+        ),
+    }
+
+
+@pytest.mark.parametrize("force", [True, False])
+def test_every_builder_stamps_intent_onto_the_spec(force: bool) -> None:
+    """The checkpoint reads intent off the spec, so every builder must record it."""
+    for builder_name, spec in _build_all(force).items():
+        assert spec.force_inactive_agent_teams is force, builder_name
+
+
+def test_build_cmd_preserves_every_headless_field_except_cwd() -> None:
+    """build_cmd rebuilds its own headless spec; it must not drop fields."""
+    backend = ClaudeCodeBackend()
+    headless = backend.build_headless_cmd("/test")
+    wrapped = backend.build_cmd("/test", "/work/repo")
+
+    assert wrapped == replace(headless, cwd="/work/repo")

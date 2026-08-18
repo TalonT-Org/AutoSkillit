@@ -401,13 +401,10 @@ class DefaultLaunchResolver:
             )
 
         inherited_fd_count = len(result.cmd_spec.inherited_fds)
-        sanitized_spec = CmdSpec(
-            cmd=result.cmd_spec.cmd,
+        sanitized_spec = replace(
+            result.cmd_spec,
             env=MappingProxyType(raw_env),
-            cwd=result.cmd_spec.cwd,
-            origin=result.cmd_spec.origin,
             is_resume=False,
-            process_idle_timeout_ms=result.cmd_spec.process_idle_timeout_ms,
             inherited_fds=(),
         )
         skill_projection_binding = (
@@ -541,12 +538,8 @@ class DefaultLaunchResolver:
             )
         env = dict(contract.nonsecret_env)
         env.update(secret_environment)
-        return CmdSpec(
-            cmd=contract.cmd_spec.cmd,
+        return replace(
+            contract.cmd_spec,
             env=env,
-            cwd=contract.cmd_spec.cwd,
-            origin=contract.cmd_spec.origin,
-            is_resume=contract.cmd_spec.is_resume,
-            process_idle_timeout_ms=contract.cmd_spec.process_idle_timeout_ms,
             inherited_fds=inherited_fds,
         )

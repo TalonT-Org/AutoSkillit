@@ -104,7 +104,7 @@ existing open issues by fingerprint.
 
 ### Does AutoSkillit force Claude agent teams off?
 
-No, not by default. The `agent_backend.force_claude_agent_teams_inactive`
+No, not by default. The `agent_backend.force_inactive_agent_teams`
 configuration option defaults to **false**, scoped per-repository (project
 configuration overrides user-level `.claude/settings.json`). When the
 operator sets it to **true** on a target repo, AutoSkillit strips

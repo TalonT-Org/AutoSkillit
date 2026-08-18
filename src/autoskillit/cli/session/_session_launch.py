@@ -124,6 +124,7 @@ def prepare_interactive_launch(
         generated_home=generated_home,
         tools=tools,
         force_inactive_agent_teams=force_inactive_agent_teams,
+        project_root=project_dir,
     )
     final = resolve_executable_launch_binding(
         binary_name=backend.binary_name(),
@@ -146,6 +147,8 @@ def prepare_interactive_launch(
         add_dirs=add_dirs,
         generated_home=generated_home,
         tools=tools,
+        force_inactive_agent_teams=force_inactive_agent_teams,
+        project_root=project_dir,
     )
     return PreparedInteractiveLaunch(spec=spec, executable=final)
 
@@ -172,6 +175,7 @@ def _run_interactive_session(
     retained_projection_binding: PluginLaunchBinding | None = None,
     startup_trace: StartupTrace | None = None,
     attempt: int | None = None,
+    force_inactive_agent_teams: bool = False,
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -243,6 +247,7 @@ def _run_interactive_session(
                     add_dirs=[managed_home.skills_dir],
                     generated_home=managed_home.generated_home,
                     tools=tools_arg,
+                    force_inactive_agent_teams=force_inactive_agent_teams,
                 )
             except ValueError as exc:
                 _exit_launch_preparation_error(exc)
@@ -259,6 +264,8 @@ def _run_interactive_session(
                 add_dirs=[managed_home.skills_dir],
                 generated_home=managed_home.generated_home,
                 tools=tools_arg,
+                force_inactive_agent_teams=force_inactive_agent_teams,
+                project_root=_project_dir,
             )
             selector = backend.capabilities.explicit_path_env_var
             try:
@@ -281,6 +288,8 @@ def _run_interactive_session(
                 add_dirs=[managed_home.skills_dir],
                 generated_home=managed_home.generated_home,
                 tools=tools_arg,
+                force_inactive_agent_teams=force_inactive_agent_teams,
+                project_root=_project_dir,
             )
         spec = replace(built_spec, cwd=str(_project_dir))
         assert_interactive_ordering(spec=spec)
@@ -363,6 +372,7 @@ def _run_interactive_session(
                     system_prompt=system_prompt,
                     initial_prompt=initial_message,
                     tools=tools_arg,
+                    force_inactive_agent_teams=force_inactive_agent_teams,
                 )
             except ValueError as exc:
                 _exit_launch_preparation_error(exc)
@@ -452,6 +462,7 @@ def _launch_cook_session(
     launch_id: str,
     default_base_branch: str,
     workspace_temp_dir: str | None,
+    force_inactive_agent_teams: bool = False,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
     _max_reloads = 10
@@ -501,6 +512,7 @@ def _launch_cook_session(
                 retained_projection_binding=retained_binding,
                 startup_trace=trace,
                 attempt=attempt if managed_home is not None else None,
+                force_inactive_agent_teams=force_inactive_agent_teams,
             )
             if session_signal is None:
                 return

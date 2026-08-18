@@ -613,3 +613,55 @@ def test_resolved_contract_strict_payload_round_trip_and_digest_verification() -
             contract.canonical_payload,
             expected_digest="0" * 64,
         )
+
+
+def _forced_adapter_result(preparation) -> LaunchAdapterResult:
+    base = _adapter_result(preparation)
+    return replace(
+        base,
+        cmd_spec=replace(base.cmd_spec, force_inactive_agent_teams=True),
+    )
+
+
+def test_force_inactive_intent_survives_every_cmd_spec_reconstruction() -> None:
+    """Reconstruction sites must carry spec intent, not silently drop it.
+
+    Each site below once rebuilt CmdSpec from an explicit keyword allowlist,
+    which zeroes any field the allowlist predates. They now rebuild with
+    ``replace``, so a new field cannot be dropped by omission.
+    """
+    resolver = DefaultLaunchResolver()
+    preparation = resolver.prepare(_request())
+    contract = resolver.finalize(preparation, _Adapter(_forced_adapter_result))
+
+    assert contract.cmd_spec.force_inactive_agent_teams is True
+
+    rehydrated = resolver.rehydrate_secret_environment(contract, {}, inherited_fds=(9, 11))
+    assert rehydrated.force_inactive_agent_teams is True
+
+    restored = ResolvedLaunchContract.from_payload(
+        contract.canonical_payload,
+        expected_digest=contract.digest,
+    )
+    assert restored.cmd_spec.force_inactive_agent_teams is True
+
+
+def test_force_inactive_intent_defaults_false_through_reconstruction() -> None:
+    resolver = DefaultLaunchResolver()
+    preparation = resolver.prepare(_request())
+    contract = resolver.finalize(preparation, _Adapter())
+
+    assert contract.cmd_spec.force_inactive_agent_teams is False
+    rehydrated = resolver.rehydrate_secret_environment(contract, {}, inherited_fds=(9, 11))
+    assert rehydrated.force_inactive_agent_teams is False
+
+
+def test_launch_digest_distinguishes_force_inactive_intent() -> None:
+    """Two launches differing only in intent must not hash identically."""
+    resolver = DefaultLaunchResolver()
+    default_contract = resolver.finalize(resolver.prepare(_request()), _Adapter())
+    forced_contract = resolver.finalize(
+        resolver.prepare(_request()), _Adapter(_forced_adapter_result)
+    )
+
+    assert default_contract.digest != forced_contract.digest

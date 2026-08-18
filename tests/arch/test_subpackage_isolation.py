@@ -1373,7 +1373,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "CodexSessionStore across multiple files would duplicate the inode-preserving "
         "staging, process/thread/view leases, promotion, index publication, manifest "
         "validation, crash recovery, and explicit legacy-view reconciliation invariants. "
-        "Cap raised to 1500 lines to accommodate the core without the stateless helpers.",
+        "Cap lowered to 1500 lines to accommodate the core without the stateless helpers.",
     ),
     "workspace/session_skills.py": (
         1400,

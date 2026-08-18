@@ -17,6 +17,27 @@ from autoskillit.core import (
 from autoskillit.execution.session._managed_headless_session_lineage_codec import (
     canonical_json as _canonical_json,
 )
+from autoskillit.execution.session._managed_headless_session_lineage_indexes import (
+    _assert_index_available,
+    _read_index,
+    _remove_index,
+    _write_index,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_records import (
+    _creation_projection,
+    _new_lineage,
+    _next_generation,
+    _prepare_root,
+    _read_record,
+    _record_path,
+    _resolve_anchor,
+    _store_lock,
+    _write_record,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_runner import (
+    _read_runner_markers,
+    _settle_runner_observation,
+)
 
 __all__ = [
     "DefaultManagedHeadlessSessionLineageStore",
@@ -522,32 +543,6 @@ class DefaultManagedHeadlessSessionLineageStore:
             updated = _next_generation(candidate)
             _write_record(record_path, updated)
             return updated
-
-
-# Index/runner/records helpers live in sibling modules; re-exported for
-# existing callers using the canonical _managed_headless_session_lineage path.
-from autoskillit.execution.session._managed_headless_session_lineage_indexes import (  # noqa: F401
-    _assert_index_available,
-    _index_path,
-    _read_index,
-    _remove_index,
-    _write_index,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_records import (  # noqa: F401
-    _creation_projection,
-    _new_lineage,
-    _next_generation,
-    _prepare_root,
-    _read_record,
-    _record_path,
-    _resolve_anchor,
-    _store_lock,
-    _write_record,
-)
-from autoskillit.execution.session._managed_headless_session_lineage_runner import (  # noqa: F401
-    _read_runner_markers,
-    _settle_runner_observation,
-)
 
 
 def _validate_anchor_identity(

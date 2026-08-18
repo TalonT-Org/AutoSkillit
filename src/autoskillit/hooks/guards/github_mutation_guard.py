@@ -22,7 +22,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_classification import (
+    from autoskillit.hooks._github_mutation_analysis import (
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
         parse_hook_command,
     )
 else:
-    from _command_classification import (  # noqa: E402
+    from _github_mutation_analysis import (  # noqa: E402
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,

@@ -23,6 +23,7 @@ Submodule layout:
 from __future__ import annotations
 
 # Re-exports for tests that patch symbols via the package facade.
+from autoskillit.core.feature_flags import _collect_disabled_feature_tags
 from autoskillit.fleet import (
     discover_campaign_state_files,
     execute_dispatch,
@@ -145,6 +146,7 @@ __all__ = [
     "_apply_unlock_keys",
     "_attach_transition_fields",
     "_bind_open_kitchen_transition",
+    "_collect_disabled_feature_tags",
     "_ensure_kitchen_transition",
     "_find_session_id_for_reload",
     "_read_open_kitchen_request_ctx",

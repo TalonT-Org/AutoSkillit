@@ -17,6 +17,7 @@ plus this facade:
 
 from __future__ import annotations
 
+import asyncio as _asyncio
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
     _collect_disabled_feature_tags,

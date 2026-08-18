@@ -1,9 +1,8 @@
 """Claude Code session locator.
 
-Extracted from `claude.py` to keep the backend file focused on cmd/cmd-spec
-grammar and parser concerns. This module owns the file-system walk that
-maps a Claude session id to its persisted JSONL path and the index reader
-that turns Claude's sessions-index.json into SessionSummary tuples.
+Owns the file-system walk that maps a Claude session id to its persisted
+JSONL path and the index reader that turns Claude's sessions-index.json
+into SessionSummary tuples.
 """
 
 from __future__ import annotations

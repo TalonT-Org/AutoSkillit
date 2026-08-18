@@ -1,10 +1,8 @@
 """Adjudication helpers for headless Claude session SkillResult construction.
 
-This module owns the post-session adjudication chain: parse-stdout,
+Owns the post-session adjudication chain: parse-stdout,
 build-api-retry-outcome, make-terminated-result, out-of-cwd-file-change
 detection, post-session-adjudication, and declared-artifact validation.
-The SkillResult constructor itself (`_build_skill_result`) remains in
-the parent module because it is the headless orchestration authority.
 """
 
 from __future__ import annotations

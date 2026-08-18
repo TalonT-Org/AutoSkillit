@@ -1,9 +1,8 @@
 """Record I/O helpers for the managed headless session lineage store.
 
-Extracted from `_managed_headless_session_lineage.py`. These helpers
-own the per-record creation-projection, anchor resolution, root
-preparation, file-locked store context, record path resolution, and
-read/write of one lineage record.
+These helpers own the per-record creation-projection, anchor resolution,
+root preparation, file-locked store context, record path resolution,
+and read/write of one lineage record.
 """
 
 from __future__ import annotations

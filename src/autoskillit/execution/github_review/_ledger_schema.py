@@ -1,9 +1,8 @@
 """Schema constants and dataclasses for the GitHub review ledger.
 
-Extracted from `ledger.py`. The schema (CREATE TABLE statements), the
-file modes, and the three dataclasses (`ReviewOperationRecord`,
-`ReviewAttemptRecord`, `MutationSlot`) live here. `GitHubReviewLedger`
-imports them via re-export from this module.
+The schema (CREATE TABLE statements), the file modes, and the three
+dataclasses (`ReviewOperationRecord`, `ReviewAttemptRecord`, `MutationSlot`)
+live here. `GitHubReviewLedger` imports them from this module.
 """
 
 from __future__ import annotations

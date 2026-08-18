@@ -1,7 +1,4 @@
-"""Runner observation helpers for the managed headless session lineage store.
-
-Extracted from `_managed_headless_session_lineage.py`.
-"""
+"""Runner observation helpers for the managed headless session lineage store."""
 
 from __future__ import annotations
 

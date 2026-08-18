@@ -1,9 +1,8 @@
 """Codex command builders, flag vocabulary, env policy, state probe, and session locator.
 
-These are the supporting types for the Codex backend (`codex.py`). The backend
-itself owns the cmd/cmd-spec grammar; this module holds the cross-cutting
-vocabulary, the env-builder dataclass, the state-readiness probe, and the
-session locator so the backend file can stay focused on command construction.
+Owns the Codex flag vocabulary (`CodexFlags`), env-policy dataclass, the
+state-readiness probe, the CodexSessionLocator, and shared cmd/extras
+helpers consumed by `codex.py`.
 """
 
 from __future__ import annotations
@@ -376,7 +375,7 @@ class CodexSessionLocator(SessionLocator):
         except (OSError, UnicodeDecodeError, zstandard.ZstdError):
             logger.warning("read_session: failed to read", path=str(path), exc_info=True)
             return []
-        result: list[dict] = []
+        result: list[dict[str, Any]] = []
         for line in text.splitlines():
             if not line:
                 continue

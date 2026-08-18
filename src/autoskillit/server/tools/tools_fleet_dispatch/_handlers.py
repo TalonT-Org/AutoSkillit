@@ -18,7 +18,6 @@ from autoskillit.core import (
     FleetErrorCode,
     NativeShellCaptureMode,
     SessionCheckpoint,
-    find_caller_session_id,
     fleet_error,
     get_logger,
     is_feature_enabled,
@@ -33,7 +32,6 @@ from autoskillit.fleet import (
     DispatchResult,
     DispatchStatus,
     evaluate_skip_when,
-    execute_dispatch,
     find_completed_dispatch,
     has_blocking_dispatch,
     prepare_resume,
@@ -42,10 +40,13 @@ from autoskillit.fleet import (
     upsert_dispatch_record_by_name,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled, _require_fleet
+from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._progress_heartbeat import progress_heartbeat
+from autoskillit.server.tools import (
+    tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
+)
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
@@ -148,7 +149,7 @@ async def dispatch_food_truck(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("dispatch_food_truck")) is not None:
+    if (fleet_gate := tools_fleet_dispatch._require_fleet("dispatch_food_truck")) is not None:
         return fleet_gate
 
     try:
@@ -244,7 +245,9 @@ async def dispatch_food_truck(
             DispatchEffectName.CALLER_IDENTITY,
             retry_relevant=False,
         )
-        caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
+        caller_session_id = tools_fleet_dispatch.find_caller_session_id(
+            project_dir=tool_ctx.project_dir
+        )
         provenance.confirm(
             DispatchEffectName.CALLER_IDENTITY,
             receipt="caller session identity resolved",
@@ -409,7 +412,7 @@ async def dispatch_food_truck(
                 )
             with anyio.fail_after(tool_timeout_sec) as cancel_scope:
                 async with progress_heartbeat(ctx):
-                    result = await execute_dispatch(
+                    result = await tools_fleet_dispatch.execute_dispatch(
                         tool_ctx=tool_ctx,
                         recipe=recipe,
                         task=task,
@@ -581,7 +584,7 @@ async def record_gate_dispatch(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("record_gate_dispatch")) is not None:
+    if (fleet_gate := tools_fleet_dispatch._require_fleet("record_gate_dispatch")) is not None:
         return fleet_gate
 
     try:

@@ -27,7 +27,12 @@ from autoskillit.core import (  # noqa: F401  (mock.patch reachability)
     register_active_kitchen,
     resolve_kitchen_id,
 )
-from autoskillit.fleet import reap_stale_dispatches_async  # noqa: F401  (mock.patch reachability)
+from autoskillit.core.runtime.readiness import write_readiness_sentinel  # noqa: F401
+from autoskillit.fleet import (  # noqa: F401  (mock.patch reachability)
+    reap_stale_dispatches_async,
+    sweep_stale_dispatch_labels,
+)
+from autoskillit.hook_registry import validate_plugin_cache_hooks  # noqa: F401
 from autoskillit.pipeline import create_background_task  # noqa: F401  (mock.patch reachability)
 from autoskillit.server._lifespan._lifespan import (
     _autoskillit_lifespan,
@@ -61,6 +66,9 @@ from autoskillit.server._lifespan._startup_checks import (
     run_startup_install_state_check,
 )
 from autoskillit.server._state import _get_ctx_or_none  # noqa: F401  (mock.patch reachability)
+from autoskillit.workspace._projected_artifact._hook_repair import (  # noqa: F401
+    repair_broken_plugin_cache_hooks,
+)
 
 __all__ = [
     "_LIFESPAN_BOOT_REGISTRY",

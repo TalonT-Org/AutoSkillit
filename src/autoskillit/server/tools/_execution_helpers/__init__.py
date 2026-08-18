@@ -7,6 +7,9 @@ skill-contract lifecycle helpers, and the path-anchoring utilities that
 
 from __future__ import annotations
 
+from autoskillit.core import get_logger as _get_logger
+from autoskillit.execution.process._process_io import summarize_capture  # noqa: F401
+from autoskillit.recipe._contracts_types import SkillContract  # noqa: F401
 from autoskillit.server.tools._execution_helpers._dispatch_metadata import (
     AuditOutputMode,
     aggregate_sandbox_overrides,
@@ -52,8 +55,11 @@ from autoskillit.server.tools._execution_helpers._skill_contract import (
     validate_resumed_skill_contract,
 )
 
+logger = _get_logger(__name__)
+
 __all__ = [
     "AuditOutputMode",
+    "SkillContract",
     "_RunSkillContractLifecycle",
     "_coerce_scalar",
     "_import_and_call",
@@ -72,6 +78,7 @@ __all__ = [
     "derive_run_cmd_write_prefixes",
     "deserialize_skill_contract",
     "invocation_member_names",
+    "logger",
     "make_project_skill_resolver",
     "maybe_promote_work_dir",
     "persist_run_skill_state",
@@ -87,6 +94,7 @@ __all__ = [
     "server_injected_run_python_args",
     "shape_execution_response",
     "spill_run_cmd_result",
+    "summarize_capture",
     "validate_path_arg_anchoring",
     "validate_resumed_skill_contract",
 ]

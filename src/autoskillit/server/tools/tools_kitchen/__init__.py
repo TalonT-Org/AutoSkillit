@@ -23,7 +23,13 @@ Submodule layout:
 from __future__ import annotations
 
 # Re-exports for tests that patch symbols via the package facade.
+from autoskillit import __version__
+from autoskillit.config import resolve_ingredient_defaults
+from autoskillit.core import get_logger as _get_logger
+from autoskillit.core._plugin_cache import unregister_active_kitchen
 from autoskillit.core.feature_flags import _collect_disabled_feature_tags
+from autoskillit.core.pipeline_tracker import initialize_kitchen_tracker
+from autoskillit.core.runtime.kitchen_state import resolve_kitchen_id
 from autoskillit.fleet import (
     discover_campaign_state_files,
     execute_dispatch,
@@ -31,8 +37,19 @@ from autoskillit.fleet import (
 )
 from autoskillit.hook_registry import iter_all_scope_paths
 from autoskillit.pipeline import create_background_task
+from autoskillit.pipeline.kitchen_transition import bind_kitchen_intent
+from autoskillit.server._guards import _require_orchestrator_exact
+from autoskillit.server._misc import (
+    _apply_triage_gate,
+    _hook_config_path,
+    _quota_refresh_loop,
+    resolve_log_dir,
+)
+from autoskillit.server._recipe_delivery import finalize_recipe_delivery
 from autoskillit.server._recipe_execution import clear_recipe_execution
 from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
+from autoskillit.server.tools._overlay_state import locked_overlay, update_overlay
+from autoskillit.server.tools._serve_helpers import serve_recipe
 
 # Tool entry points — each lives in its own submodule and is re-exported
 # here so ``from autoskillit.server.tools.tools_kitchen import open_kitchen``
@@ -110,6 +127,11 @@ from autoskillit.server.tools.tools_kitchen._tracker_authority import (
     prune_stale_kitchen_state,
 )
 
+# Module-level logger kept at the facade so tests that
+# ``monkeypatch.setattr("...tools_kitchen.logger", ...)`` rebind the same
+# name the submodules use (they import ``logger`` from this facade).
+logger = _get_logger(__name__)
+
 
 def __getattr__(name: str):  # pragma: no cover — late-binding shim
     """Late-bind ``mcp`` from ``autoskillit.server`` for test patches."""
@@ -143,12 +165,15 @@ __all__ = [
     "prune_stale_kitchen_state",
     "_OPEN_KITCHEN_REQUEST_CTX",
     # Additional internal helpers preserved for completeness
+    "_apply_triage_gate",
     "_apply_unlock_keys",
     "_attach_transition_fields",
     "_bind_open_kitchen_transition",
     "_collect_disabled_feature_tags",
     "_ensure_kitchen_transition",
     "_find_session_id_for_reload",
+    "_hook_config_path",
+    "_quota_refresh_loop",
     "_read_open_kitchen_request_ctx",
     "_open_kitchen_cancellation_response",
     "_open_kitchen_conflict_response",
@@ -160,8 +185,10 @@ __all__ = [
     "_retain_kitchen_tracker_authority",
     "_register_active_recipe_kitchen",
     "_pipeline_tracker_auto_init_failure",
+    "_require_orchestrator_exact",
     "_write_ingredient_locks",
     "_write_reload_sentinel",
+    "__version__",
     "_compute_unlocked_steps",
     "_build_ingredient_key_suggestions",
     "_build_tool_category_listing",
@@ -169,9 +196,24 @@ __all__ = [
     "_render_ingredients_only_response",
     "OutputBudgetPolicyHookPayload",
     "QuotaGuardHookPayload",
+    "bind_kitchen_intent",
     "clear_recipe_execution",
     "create_background_task",
+    "discover_campaign_state_files",
+    "execute_dispatch",
+    "finalize_recipe_delivery",
     "find_latest_session_id",
+    "initialize_kitchen_tracker",
+    "iter_all_scope_paths",
+    "locked_overlay",
+    "logger",
     "mcp",
+    "prepare_recipe_segment_delivery",
     "reap_stale_dispatches_async",
+    "resolve_ingredient_defaults",
+    "resolve_kitchen_id",
+    "resolve_log_dir",
+    "serve_recipe",
+    "unregister_active_kitchen",
+    "update_overlay",
 ]

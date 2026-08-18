@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+# Internal helpers re-exported for tools_execution.py and other sibling callers.
+from autoskillit.core.pipeline_tracker import read_tracker_authority  # noqa: F401
+
 # Re-exports for tests that patch symbols via the package facade.
-from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
+from autoskillit.server._recipe_segment_delivery import (
+    prepare_recipe_segment_delivery,  # noqa: F401
+)
 
 # Side-effect imports: register @mcp.tool() decorators on the FastMCP server.
 from autoskillit.server.tools.tools_pipeline_tracker import (  # noqa: F401
@@ -11,8 +16,6 @@ from autoskillit.server.tools.tools_pipeline_tracker import (  # noqa: F401
     _handlers,
     _status,
 )
-
-# Internal helpers re-exported for tools_execution.py and other sibling callers.
 from autoskillit.server.tools.tools_pipeline_tracker._authority import (
     _authority_blocks_dependency_check,
     _release_context_tracker,
@@ -55,6 +58,7 @@ __all__ = [
     "_retain_context_tracker",
     "_restore_reserved_tracker_authority",
     "_select_tracker_authority",
+    "read_tracker_authority",
     "read_tracker_identity",
     "select_tracker_target",
 ]

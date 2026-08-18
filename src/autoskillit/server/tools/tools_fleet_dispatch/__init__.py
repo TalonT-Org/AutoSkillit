@@ -15,6 +15,8 @@ from autoskillit.server.tools.tools_fleet_dispatch._handlers import (
     record_gate_dispatch,
 )
 from autoskillit.server.tools.tools_fleet_dispatch._provenance import (
+    _ACTIVE_DISPATCH_PROVENANCE,
+    _BOUND_DISPATCH_PROVENANCE,
     _attach_dispatch_provenance,
     _bind_dispatch_provenance,
     _bound_dispatch_provenance,
@@ -26,6 +28,8 @@ __all__ = [
     "dispatch_food_truck",
     "execute_dispatch",
     "record_gate_dispatch",
+    "_ACTIVE_DISPATCH_PROVENANCE",
+    "_BOUND_DISPATCH_PROVENANCE",
     "_attach_dispatch_provenance",
     "_bind_dispatch_provenance",
     "_bound_dispatch_provenance",

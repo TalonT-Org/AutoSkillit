@@ -186,7 +186,7 @@ def revoke_evidence_reader_invocation(
     lock_fd, lock_stat = _acquire_call_lock(opened.invocation_dir)
     try:
         shutil.rmtree(opened.invocation_dir)
-    except Exception as exc:
+    except BaseException as exc:
         tamper: EvidenceReaderError | None = None
         if opened.invocation_dir.exists():
             tamper = _release_call_lock(opened.invocation_dir, lock_fd, lock_stat)

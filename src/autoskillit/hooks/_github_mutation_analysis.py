@@ -1,11 +1,4 @@
-"""GitHub-mutation analysis extracted from _command_classification.
-
-This module is the consumer of tokenization primitives defined in
-_command_classification. Tokenization primitives are imported lazily
-inside each wrapper to avoid a circular import — the bare-name
-_command_classification reference is resolved after the source module
-is fully populated.
-"""
+"""GitHub-mutation analysis extracted from _command_classification."""
 
 from __future__ import annotations
 
@@ -19,54 +12,15 @@ from enum import StrEnum
 from typing import Any
 from urllib.parse import urlsplit
 
-
-def _command_verb_and_args(segment: Sequence[str]) -> tuple[str, list[str]]:
-    from _command_classification import command_verb_and_args
-
-    return command_verb_and_args(list(segment))
-
-
-def _tokenize_with_redirects(command: str) -> list[Any]:
-    from _command_classification import _tokenize_command_segments_with_redirects
-
-    return _tokenize_command_segments_with_redirects(command)
-
-
-def _normalize_executable_call(token: str) -> str:
-    from _command_classification import _normalize_executable
-
-    return _normalize_executable(token)
-
-
-def _partition_output_redirects_call(
-    tokens: Sequence[str],
-    *,
-    cwd: str,
-    redirect_syntax: Sequence[bool] | None = None,
-) -> tuple[list[str], list[str], int]:
-    from _command_classification import _partition_output_redirects
-
-    return _partition_output_redirects(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
-
-
-def _extract_interpreter_segment_specs_call(
-    segment: Sequence[str],
-) -> tuple[list[Any], bool]:
-    from _command_classification import _extract_interpreter_segment_specs
-
-    return _extract_interpreter_segment_specs(segment)
-
-
-def _segment_evaluates_shell_payload_call(tokens: list[str], payload: str) -> bool:
-    from _command_classification import _segment_evaluates_shell_payload
-
-    return _segment_evaluates_shell_payload(tokens, payload)
-
-
-def _extract_shell_command_payloads_call(command: str) -> list[str]:
-    from _command_classification import extract_shell_command_payloads
-
-    return extract_shell_command_payloads(command)
+from autoskillit.hooks._command_classification import (
+    _extract_interpreter_segment_specs,
+    _normalize_executable,
+    _partition_output_redirects,
+    _segment_evaluates_shell_payload,
+    _tokenize_command_segments_with_redirects,
+    command_verb_and_args,
+    extract_shell_command_payloads,
+)
 
 
 class GitHubMutationStatus(StrEnum):
@@ -163,8 +117,8 @@ def _segment_has_possible_github_exec_token(segment: Sequence[str]) -> bool:
     invisible to a verb-only check. When the segment's verb is such an
     opener, the check is re-applied to the token immediately following it.
     """
-    verb, args = _command_verb_and_args(list(segment))
-    if _normalize_executable_call(verb) in _POSSIBLE_GITHUB_EXEC_NAMES:
+    verb, args = command_verb_and_args(list(segment))
+    if _normalize_executable(verb) in _POSSIBLE_GITHUB_EXEC_NAMES:
         return True
     body: list[str] | None = None
     if verb == "{":
@@ -173,8 +127,8 @@ def _segment_has_possible_github_exec_token(segment: Sequence[str]) -> bool:
         body = args[1:]
     if body is None:
         return False
-    body_verb, _body_args = _command_verb_and_args(body)
-    return _normalize_executable_call(body_verb) in _POSSIBLE_GITHUB_EXEC_NAMES
+    body_verb, _body_args = command_verb_and_args(body)
+    return _normalize_executable(body_verb) in _POSSIBLE_GITHUB_EXEC_NAMES
 
 
 def _segments_have_possible_github_exec_token(segments: Sequence[Sequence[str]]) -> bool:
@@ -202,7 +156,7 @@ def _segments_have_dispatch_word_exec_risk(segments: Sequence[Sequence[str]]) ->
     argument token.
     """
     for segment in segments:
-        verb, _args = _command_verb_and_args(list(segment))
+        verb, _args = command_verb_and_args(list(segment))
         if verb not in _GH_DISPATCH_WORDS:
             continue
         if _POSSIBLE_GITHUB_EXEC_RE.search(" ".join(segment)):
@@ -358,8 +312,8 @@ _INPUT_SAFE_PRIOR_COMMANDS: frozenset[str] = frozenset(
 
 def _segment_is_safe_before_literal_input(segment: Sequence[str]) -> bool:
     """Return whether *segment* is proven unable to rewrite a later input file."""
-    verb, _ = _command_verb_and_args(list(segment))
-    executable = _normalize_executable_call(verb)
+    verb, _ = command_verb_and_args(list(segment))
+    executable = _normalize_executable(verb)
     return executable in _INPUT_SAFE_PRIOR_COMMANDS
 
 
@@ -958,8 +912,8 @@ def _analyze_github_segment(
     resolved_redirect_targets: Sequence[str] = (),
     file_redirect_count: int = 0,
 ) -> tuple[list[GitHubMutationRecord], str, str]:
-    verb, args = _command_verb_and_args(list(segment))
-    executable = _normalize_executable_call(verb)
+    verb, args = command_verb_and_args(list(segment))
+    executable = _normalize_executable(verb)
     if executable == "gh":
         record, reason_code, reason = _analyze_gh_segment(
             args,
@@ -999,12 +953,12 @@ def analyze_github_mutations(
             outer_redirect_targets,
             outer_file_redirect_count,
         ) = queue.pop(0)
-        if depth >= 32:
+        if depth > 32:
             reasons.append(
                 ("shell_structure_unresolved", "nested mutation command depth is unresolved")
             )
             continue
-        tokenized_segments = _tokenize_with_redirects(payload)
+        tokenized_segments = _tokenize_command_segments_with_redirects(payload)
         segments = [segment.tokens for segment in tokenized_segments]
         if not tokenized_segments and payload.strip():
             if _POSSIBLE_GITHUB_EXEC_RE.search(payload):
@@ -1021,12 +975,10 @@ def analyze_github_mutations(
         nested_contexts: list[tuple[list[str], str, bool, tuple[str, ...], int]] = []
         for command_segment in tokenized_segments:
             raw_segment = command_segment.tokens
-            executable_tokens, redirect_targets, file_redirect_count = (
-                _partition_output_redirects_call(
-                    raw_segment,
-                    cwd=current_cwd,
-                    redirect_syntax=command_segment.redirect_syntax,
-                )
+            executable_tokens, redirect_targets, file_redirect_count = _partition_output_redirects(
+                raw_segment,
+                cwd=current_cwd,
+                redirect_syntax=command_segment.redirect_syntax,
             )
             active_redirect_targets = outer_redirect_targets + tuple(redirect_targets)
             active_file_redirect_count = outer_file_redirect_count + file_redirect_count
@@ -1040,8 +992,8 @@ def analyze_github_mutations(
                     active_file_redirect_count,
                 )
             )
-            verb, args = _command_verb_and_args(executable_tokens)
-            if _normalize_executable_call(verb) == "cd":
+            verb, args = command_verb_and_args(executable_tokens)
+            if _normalize_executable(verb) == "cd":
                 input_context_safe = input_context_safe and file_redirect_count == 0
                 if len(args) != 1 or _is_dynamic_shell_value(args[0]):
                     reasons.append(("cwd_unresolved", "shell cwd transition is unresolved"))
@@ -1065,7 +1017,7 @@ def analyze_github_mutations(
             if reason:
                 reasons.append((reason_code, reason))
 
-            interpreter_specs, has_unresolved = _extract_interpreter_segment_specs_call(
+            interpreter_specs, has_unresolved = _extract_interpreter_segment_specs(
                 executable_tokens
             )
             if has_unresolved and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
@@ -1116,12 +1068,12 @@ def analyze_github_mutations(
             )
 
         remaining_nested_contexts = list(nested_contexts)
-        for nested in _extract_shell_command_payloads_call(payload):
+        for nested in extract_shell_command_payloads(payload):
             matching_index = next(
                 (
                     index
                     for index, context in enumerate(remaining_nested_contexts)
-                    if _segment_evaluates_shell_payload_call(context[0], nested)
+                    if _segment_evaluates_shell_payload(context[0], nested)
                 ),
                 None,
             )

@@ -15,6 +15,7 @@ from autoskillit.core import (
     ContinuationCursor,
     EvidencePage,
     ExplorationContextStoreProtocol,
+    ExplorationFailureCode,
     ExplorationQuerySpec,
     NodeKey,
     get_logger,
@@ -34,10 +35,18 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 _MAX_QUERY_LENGTH = 4_096
 _MAX_QUERY_RESULTS = 100
 _MAX_RESPONSE_PAGE_SIZE = 100
-_FAILURE_INVALID_REQUEST = "invalid_exploration_request"
-_FAILURE_CONTEXT_UNAVAILABLE = "exploration_context_unavailable"
-_FAILURE_BROKER_UNAVAILABLE = "exploration_broker_unavailable"
+_FAILURE_INVALID_REQUEST = ExplorationFailureCode.INVALID_REQUEST
+_FAILURE_CONTEXT_UNAVAILABLE = ExplorationFailureCode.CONTEXT_UNAVAILABLE
+_FAILURE_BROKER_UNAVAILABLE = ExplorationFailureCode.BROKER_UNAVAILABLE
 logger = get_logger(__name__)
+
+
+class BindSessionScopedFailed(Exception):
+    """store.bind_session_scoped raised for a reason the store doesn't already name."""
+
+
+class EnableComponentsFailed(Exception):
+    """ctx.enable_components raised while granting exploration visibility."""
 
 
 class _NodeKeyPayload(TypedDict):
@@ -427,17 +436,11 @@ async def enable_exploration(
     try:
         session_type = _resolve_session_type()
         if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
-            return json.dumps(
-                {"status": "error", "code": "session_type_ineligible"},
-                separators=(",", ":"),
-            )
+            return _failure(ExplorationFailureCode.SESSION_TYPE_INELIGIBLE)
 
         store = _get_store()
         if not isinstance(store, OwnerBoundExplorationContextStore):
-            return json.dumps(
-                {"status": "error", "code": "exploration_store_unavailable"},
-                separators=(",", ":"),
-            )
+            return _failure(ExplorationFailureCode.STORE_UNAVAILABLE)
         from autoskillit.server import _get_ctx  # circular-break: composition root
 
         cwd = Path(project_dir) if project_dir else _get_ctx().project_dir
@@ -447,21 +450,32 @@ async def enable_exploration(
             project_root=cwd,
         )
         if session_id is None:
-            return json.dumps(
-                {"status": "error", "code": "no_session_id"},
-                separators=(",", ":"),
-            )
+            return _failure(ExplorationFailureCode.NO_SESSION_ID)
         repository_root = store.trusted_root
-        store.bind_session_scoped(
-            owner_id=f"uid:{os.getuid()}",
-            session_id=session_id,
-            cwd=cwd,
-            repository_root=repository_root,
-            source_identity=f"interactive:{session_id}",
-        )
+        try:
+            store.bind_session_scoped(
+                owner_id=f"uid:{os.getuid()}",
+                session_id=session_id,
+                cwd=cwd,
+                repository_root=repository_root,
+                source_identity=f"interactive:{session_id}",
+            )
+        except (
+            OwnerBoundExplorationContextStore.TrustedRootMismatch,
+            OwnerBoundExplorationContextStore.ServiceNotConfigured,
+            OwnerBoundExplorationContextStore.SnapshotStale,
+            OwnerBoundExplorationContextStore.StoreClosed,
+            OwnerBoundExplorationContextStore.CapacityExceeded,
+        ):
+            raise
+        except Exception as exc:
+            raise BindSessionScopedFailed(str(exc)) from exc
         exploration_enabled = False
         try:
-            await ctx.enable_components(tags={"exploration"})
+            try:
+                await ctx.enable_components(tags={"exploration"})
+            except Exception as exc:
+                raise EnableComponentsFailed(str(exc)) from exc
             exploration_enabled = True
         finally:
             if not exploration_enabled:
@@ -470,9 +484,20 @@ async def enable_exploration(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),
         )
-    except Exception:
-        logger.warning("exploration provisioning failed", exc_info=True)
-        return json.dumps(
-            {"status": "error", "code": "exploration_provisioning_failed"},
-            separators=(",", ":"),
-        )
+    except OwnerBoundExplorationContextStore.TrustedRootMismatch:
+        return _failure(ExplorationFailureCode.TRUSTED_ROOT_MISMATCH)
+    except OwnerBoundExplorationContextStore.ServiceNotConfigured:
+        return _failure(ExplorationFailureCode.SERVICE_NOT_CONFIGURED)
+    except OwnerBoundExplorationContextStore.SnapshotStale:
+        return _failure(ExplorationFailureCode.SNAPSHOT_STALE)
+    except OwnerBoundExplorationContextStore.StoreClosed:
+        return _failure(ExplorationFailureCode.STORE_CLOSED)
+    except OwnerBoundExplorationContextStore.CapacityExceeded:
+        return _failure(ExplorationFailureCode.CAPACITY_EXCEEDED)
+    except BindSessionScopedFailed:
+        return _failure(ExplorationFailureCode.BIND_FAILED)
+    except EnableComponentsFailed:
+        return _failure(ExplorationFailureCode.ENABLE_COMPONENTS_FAILED)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("enable_exploration: unexpected", exc_info=True)
+        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)

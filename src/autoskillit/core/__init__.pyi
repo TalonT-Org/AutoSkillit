@@ -458,6 +458,7 @@ from .types import (
 )
 from .types import EVIDENCE_READER_ENV_FORWARD_VARS as EVIDENCE_READER_ENV_FORWARD_VARS
 from .types import EVIDENCE_READER_TOOLS as EVIDENCE_READER_TOOLS
+from .types import EXPLORATION_FAILURE_CODES as EXPLORATION_FAILURE_CODES
 from .types import EXPLORATION_TOOLS as EXPLORATION_TOOLS
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
@@ -819,6 +820,7 @@ from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
 from .types import ExplorationDispatchConventions as ExplorationDispatchConventions
 from .types import ExplorationDispatchMaterialization as ExplorationDispatchMaterialization
 from .types import ExplorationDispatchRenderer as ExplorationDispatchRenderer
+from .types import ExplorationFailureCode as ExplorationFailureCode
 from .types import ExplorationVectorApplicabilityId as ExplorationVectorApplicabilityId
 from .types import ExplorationVectorDef as ExplorationVectorDef
 from .types import ExplorationVectorDisposition as ExplorationVectorDisposition

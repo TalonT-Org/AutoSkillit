@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from types import MappingProxyType
 from typing import Literal, NamedTuple
 
-from ._type_enums import FleetErrorCode, SkillExecutionRole
+from ._type_enums import ExplorationFailureCode, FleetErrorCode, SkillExecutionRole
 from ._type_exceptions import SkillContractError
 
 __all__ = [
@@ -33,6 +33,7 @@ __all__ = [
     "EXPLORATION_TOOLS",
     "KITCHEN_GATED_TOOLS",
     "FLEET_ERROR_CODES",
+    "EXPLORATION_FAILURE_CODES",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
     "PackDef",
@@ -200,6 +201,8 @@ FLEET_MENU_TOOLS: tuple[str, ...] = (
 )
 
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
+
+EXPLORATION_FAILURE_CODES: frozenset[str] = frozenset(ExplorationFailureCode)
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
     {

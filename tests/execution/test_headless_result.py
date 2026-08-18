@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import unittest.mock
 from pathlib import Path
@@ -995,7 +996,12 @@ class TestParseStdout:
         monkeypatch.setattr(_headless_adjudication, "_adapt_agent_result", spy)
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=CodexBackend())
+        codex_backend = CodexBackend()
+        codex_backend.capabilities = dataclasses.replace(
+            codex_backend.capabilities,
+            supports_claude_format_stdout=False,
+        )
+        result = _parse_stdout(stdout, backend=codex_backend)
         spy.assert_called_once()
         (agent_result,), _ = spy.call_args
         assert isinstance(agent_result, AgentSessionResult)

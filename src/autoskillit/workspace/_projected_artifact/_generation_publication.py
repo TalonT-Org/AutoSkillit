@@ -19,12 +19,20 @@ from pathlib import Path
 
 from autoskillit.core import (
     ArtifactLease,
+    ArtifactLeaseContention,
+    LegacyRetiringEvidence,
     PluginArtifactIdentity,
     PluginArtifactKind,
+    PluginArtifactRetirementEngine,
     PluginArtifactValidationError,
+    RetirementOutcome,
+    RetiringAppendResult,
+    RetiringArtifactRecord,
     directory_tree_digest,
     generation_artifact_root,
+    generation_plugin_selector_path,
     generation_selector_path,
+    generation_store_root,
     generation_version_root,
     get_logger,
     installed_plugin_artifact_lease_path,
@@ -33,6 +41,7 @@ from autoskillit.core import (
     new_plugin_artifact_incarnation_id,
     read_installed_plugin_artifact_identity,
     resolve_current_generation,
+    resolve_current_generation_for_plugin,
 )
 from autoskillit.workspace._installed_artifact import (
     write_installed_plugin_artifact_manifest_locked,
@@ -41,6 +50,12 @@ from autoskillit.workspace._installed_artifact import (
 logger = get_logger(__name__)
 
 _STAGING_ORPHAN_GRACE = timedelta(hours=1)
+
+# Cross-version staleness needs a wider window than same-version churn: the
+# retirement sweep runs once per MCP server startup, not on a recurring timer
+# (server/_lifespan.py fires it once), so the grace must comfortably outlast the
+# gap between server restarts on a lightly-used machine.
+_GENERATION_GRACE = timedelta(hours=24)
 
 
 def _sweep_orphaned_staging(version_root: Path) -> None:
@@ -238,9 +253,8 @@ def publish_generation(
         incarnation=incarnation_id,
     )
 
-    # Enqueue prior generation for retirement (Phase 4.6)
-    if prior_target is not None:
-        _enqueue_prior_generation(prior_target, version_root, home, plugin_ref, version)
+    _select_plugin_generation(home, plugin_ref, generation_root)
+    prune_stale_generations(home, plugin_ref)
 
     return PluginArtifactIdentity(
         semantic_key=semantic_key,
@@ -252,49 +266,194 @@ def publish_generation(
     )
 
 
-def _enqueue_prior_generation(
-    prior_target: Path,
-    version_root: Path,
-    home: Path,
-    plugin_ref: str,
-    version: str,
-) -> None:
-    """Enqueue a superseded generation into the retirement engine.
+def _select_plugin_generation(home: Path, plugin_ref: str, generation_root: Path) -> None:
+    """Point the version-independent selector at the newly published generation.
 
-    Best-effort: failure to enqueue is logged but does not fail the
-    publication — an orphan sweep will catch it later.
+    Best-effort, mirroring the retirement enqueue below it: the per-version flip
+    is already durable and must not be rolled back if this one fails. A
+    persistent failure fails safe — the stale target stays protected by
+    ``_is_selected_generation`` and is over-retained rather than reclaimed.
     """
-    from autoskillit.core import PluginArtifactRetirementEngine
-
+    selector = generation_plugin_selector_path(home, plugin_ref)
     try:
-        prior_identity = read_installed_plugin_artifact_identity(
-            prior_target,
-            manifest_path=installed_plugin_artifact_manifest_path(prior_target),
-        )
-    except (PluginArtifactValidationError, OSError) as exc:
+        selector.parent.mkdir(parents=True, exist_ok=True)
+        _replace_symlink(selector, generation_root)
+    except OSError as exc:
         logger.warning(
-            "generation_retirement_enqueue_skipped: could not read prior generation identity: %s",
+            "generation_plugin_selector_flip_failed: %s: %s",
+            selector,
             exc,
         )
-        return
-    engine = PluginArtifactRetirementEngine(
-        managed_root=version_root,
-        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
-        manifest_path=installed_plugin_artifact_manifest_path,
-        lease_path=installed_plugin_artifact_lease_path,
-        current_identity=lambda record: read_installed_plugin_artifact_identity(
+
+
+def _is_selected_generation(home: Path, plugin_ref: str, path: Path) -> bool:
+    """Return whether *path* is still selected and therefore must not be retired.
+
+    Every superseded *version* keeps its own per-version ``current`` symlink
+    pointing at its own incarnation forever — nothing rewrites it when a newer
+    version is published. Treating that as protection is precisely why no
+    generation was ever reclaimable: each version vouched for itself.
+
+    So once the plugin-level selector exists it is authoritative. It names the
+    live generation, and only that generation's version keeps its per-version
+    selector honored (a consumer that resolved through the per-version path
+    just before the plugin-level flip may still be using it).
+
+    Before any plugin-level selector exists — a first publish, or a persistent
+    flip failure — fall back to per-version protection, which over-retains
+    rather than deleting something still in use.
+    """
+    plugin_selected = resolve_current_generation_for_plugin(home, plugin_ref)
+    if plugin_selected is None:
+        return path == resolve_current_generation(home, plugin_ref, path.parent.name)
+    if path == plugin_selected:
+        return True
+    return path == resolve_current_generation(home, plugin_ref, plugin_selected.parent.name)
+
+
+class GenerationArtifactRetirementOwner:
+    """Exact-identity retirement owner for the whole generation store.
+
+    Scoped to ``generation_store_root`` — every version, not one — because the
+    retirement coordinator dispatches by artifact kind to a single owner. An
+    owner rooted at one version directory cannot contain records from any other,
+    and ``try_reclaim`` rejects an uncontained record on every sweep forever
+    without ever removing it.
+    """
+
+    def __init__(self, managed_root: Path, *, home: Path, plugin_ref: str) -> None:
+        self._home = Path(home)
+        self._plugin_ref = plugin_ref
+        self._retirement = PluginArtifactRetirementEngine(
+            managed_root=managed_root,
+            artifact_kind=PluginArtifactKind.PLUGIN_GENERATION,
+            manifest_path=self.manifest_path,
+            lease_path=self.lease_path,
+            current_identity=self._current_identity,
+            logger=logger,
+            is_current=lambda path: _is_selected_generation(self._home, self._plugin_ref, path),
+        )
+
+    @property
+    def managed_root(self) -> Path:
+        return self._retirement.managed_root
+
+    @staticmethod
+    def manifest_path(managed_path: Path) -> Path:
+        return installed_plugin_artifact_manifest_path(managed_path)
+
+    @staticmethod
+    def lease_path(managed_path: Path) -> Path:
+        return installed_plugin_artifact_lease_path(managed_path)
+
+    def enqueue_retirement(
+        self,
+        identity: PluginArtifactIdentity,
+        not_before: datetime,
+    ) -> RetiringAppendResult:
+        return self._retirement.enqueue_retirement(identity, not_before)
+
+    def cancel_obsolete_retirements(self, identity: PluginArtifactIdentity) -> tuple[str, ...]:
+        return self._retirement.cancel_obsolete_retirements(identity)
+
+    def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
+        """Validate and return the exact current identity at a managed path."""
+        managed_path = Path(managed_path)
+        if not self._retirement.contains(managed_path):
+            raise PluginArtifactValidationError(
+                f"generation is outside managed root: {managed_path}"
+            )
+        return read_installed_plugin_artifact_identity(
+            managed_path,
+            manifest_path=self.manifest_path(managed_path),
+        )
+
+    def _current_identity(self, record: RetiringArtifactRecord) -> PluginArtifactIdentity:
+        return read_installed_plugin_artifact_identity(
             record.managed_path,
             expected_semantic_key=record.semantic_key,
-            manifest_path=installed_plugin_artifact_manifest_path(record.managed_path),
-        ),
-        logger=logger,
-        is_current=lambda path: path == resolve_current_generation(home, plugin_ref, version),
-    )
-    deadline = datetime.now(UTC) + timedelta(hours=6)
-    try:
-        engine.enqueue_retirement(prior_identity, deadline)
-    except Exception as exc:
-        logger.warning(
-            "generation_retirement_enqueue_failed: %s",
-            exc,
+            manifest_path=self.manifest_path(record.managed_path),
         )
+
+    def try_reclaim(self, record: RetiringArtifactRecord, now: datetime) -> RetirementOutcome:
+        return self._retirement.try_reclaim(record, now)
+
+    def try_promote_legacy_evidence(
+        self,
+        evidence: LegacyRetiringEvidence,
+        now: datetime,
+    ) -> RetirementOutcome:
+        return self._retirement.try_promote_legacy_evidence(
+            evidence,
+            now,
+            identity_for_path=self.identity_for_path,
+        )
+
+
+def prune_stale_generations(home: Path, plugin_ref: str) -> int:
+    """Queue every superseded generation across all versions for retirement.
+
+    Enqueue-only: nothing is deleted here. Actual removal flows through
+    ``try_reclaim``, which re-checks the lease and exact identity under its own
+    grace window.
+
+    Must be called under ``_InstallLock`` by the caller, like
+    ``publish_generation`` itself — the lock is a non-reentrant ``flock``, so
+    re-acquiring it from inside a publish would deadlock against the caller.
+
+    Called at publish time only. Enqueueing recomputes a full content-tree
+    digest per candidate, so wiring this into the session-launch path would
+    re-hash the entire backlog on every launch until each entry is reclaimed.
+    Publication is the only event that can create staleness, so a machine that
+    stops updating never grows a new backlog either.
+    """
+    store_root = generation_store_root(home, plugin_ref)
+    if not store_root.is_dir():
+        return 0
+    owner = GenerationArtifactRetirementOwner(store_root, home=home, plugin_ref=plugin_ref)
+    candidates: list[Path] = []
+    for version_dir in sorted(store_root.iterdir(), key=lambda item: item.name):
+        if version_dir.name.startswith(".") or version_dir.is_symlink():
+            continue
+        if not version_dir.is_dir():
+            continue
+        for incarnation in sorted(version_dir.iterdir(), key=lambda item: item.name):
+            if incarnation.name.startswith(".") or incarnation.is_symlink():
+                continue
+            if not incarnation.is_dir():
+                continue
+            if _is_selected_generation(home, plugin_ref, incarnation):
+                continue
+            candidates.append(incarnation)
+
+    created = 0
+    not_before = datetime.now(UTC) + _GENERATION_GRACE
+    for candidate in candidates:
+        try:
+            writer = ArtifactLease.acquire_exclusive(
+                owner.lease_path(candidate),
+                blocking=False,
+            )
+        except ArtifactLeaseContention:
+            continue
+        except (OSError, RuntimeError) as exc:
+            logger.warning(
+                "generation_prune_lease_failed: %s: %s",
+                candidate,
+                exc,
+            )
+            continue
+        try:
+            try:
+                identity = owner.identity_for_path(candidate)
+            except (PluginArtifactValidationError, OSError) as exc:
+                logger.warning(
+                    "generation_prune_validation_failed: %s: %s",
+                    candidate,
+                    exc,
+                )
+                continue
+            created += int(owner.enqueue_retirement(identity, not_before).created)
+        finally:
+            writer.close_preserving()
+    return created

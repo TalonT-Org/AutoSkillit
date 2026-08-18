@@ -34,6 +34,9 @@ from ._plugin_artifact_identity import (
     generation_artifact_root as generation_artifact_root,
 )
 from ._plugin_artifact_identity import (
+    generation_plugin_selector_path as generation_plugin_selector_path,
+)
+from ._plugin_artifact_identity import (
     generation_selector_path as generation_selector_path,
 )
 from ._plugin_artifact_identity import (
@@ -64,12 +67,16 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     resolve_current_generation as resolve_current_generation,
 )
+from ._plugin_artifact_identity import (
+    resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
+)
 from ._plugin_cache import KitchenProcessIdentity as KitchenProcessIdentity
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_record as append_retiring_record
 from ._plugin_cache import due_retiring_records as due_retiring_records
+from ._plugin_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
 from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry

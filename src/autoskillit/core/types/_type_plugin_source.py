@@ -59,10 +59,23 @@ class PluginLoadMode(StrEnum):
 
 
 class PluginArtifactKind(StrEnum):
-    """Managed plugin artifact families sharing the retirement queue."""
+    """Managed plugin artifact families sharing the retirement queue.
+
+    ``PLUGIN_GENERATION`` routes the generation store
+    (``~/.autoskillit/plugin-generations/``) to its own retirement owner.
+    ``INSTALLED_PLUGIN`` remains bound to the legacy Claude-cache tree, which
+    ``reconcile_install_artifacts()`` still enqueues. The two roots are
+    disjoint, so one owner cannot serve both: a record routed to an owner whose
+    ``managed_root`` does not contain it is rejected on every sweep forever.
+
+    This is a routing key for the retirement queue only. The on-disk manifest's
+    own ``artifact_kind`` stays ``INSTALLED_PLUGIN`` for both trees, since they
+    share one manifest format.
+    """
 
     PROJECTION = "projection"
     INSTALLED_PLUGIN = "installed_plugin"
+    PLUGIN_GENERATION = "plugin_generation"
 
 
 class RetiringCacheState(StrEnum):

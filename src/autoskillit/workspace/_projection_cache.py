@@ -21,6 +21,7 @@ from types import MappingProxyType
 from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
+    LegacyRetiringEvidence,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
@@ -411,6 +412,17 @@ class ProjectedPluginRetirementOwner:
         identity: PluginArtifactIdentity,
     ) -> tuple[str, ...]:
         return self._retirement.cancel_obsolete_retirements(identity)
+
+    def try_promote_legacy_evidence(
+        self,
+        evidence: LegacyRetiringEvidence,
+        now: datetime,
+    ) -> RetirementOutcome:
+        return self._retirement.try_promote_legacy_evidence(
+            evidence,
+            now,
+            identity_for_path=self.identity_for_path,
+        )
 
     def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
         """Validate and return the exact current identity at a managed path."""

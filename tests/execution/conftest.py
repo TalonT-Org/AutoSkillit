@@ -64,10 +64,7 @@ def _mock_backend(**kw: Any) -> Mock:
     """Build a mock backend with all-False/empty capability baseline.
 
     Defaults the Claude-format-parse capability to True so the mock is
-    consistent with the hardcoded ``name="claude-code"`` value — the
-    fixture name and capability must agree, otherwise downstream
-    capability-based dispatch (e.g. ``_parse_stdout``) routes the mock
-    through the wrong branch and tests fail. Override explicitly via
+    consistent with the hardcoded ``name="claude-code"`` value. Override
     ``supports_claude_format_stdout=False`` when the test wants the
     non-Claude parse path.
     """

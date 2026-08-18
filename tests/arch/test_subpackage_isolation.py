@@ -1306,16 +1306,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "build_food_truck_cmd/build_interactive_cmd/"
         "validate_interactive_invocation/setup_session_dir), "
         "with the four cmd-builder methods (≈465 lines) tightly coupled to CodexBackend "
-        "state. After #4664 decomposition, command vocabulary, env policy, state-readiness "
-        "probe, and session locator moved to _codex_cmd_builders.py; probes to "
-        "_codex_probes.py; explorer projection to _codex_explorer_projection.py. "
-        "CodexBackend retains all five cmd-builder methods because each touches "
-        "instance state (capabilities, env policy, flag vocabulary, session locator) "
-        "and the cmd-spec grammar is the backend's authority boundary — splitting these "
-        "would force a separate mutable state object and break the protocol. The "
-        "remaining slimmed CodexBackend is 1211 lines; cap lowered to 1300 to acknowledge "
-        "the architectural seam that the decomposition could not cross without breaking "
-        "the backend dataclass invariant.",
+        "state. CodexBackend retains all five cmd-builder methods because each "
+        "touches instance state (capabilities, env policy, flag vocabulary, "
+        "session locator) and the cmd-spec grammar is the backend's authority "
+        "boundary — splitting these would force a separate mutable state object "
+        "and break the protocol. The remaining slimmed CodexBackend is 1211 "
+        "lines; cap lowered to 1300 to acknowledge the architectural seam that "
+        "the decomposition could not cross without breaking the backend "
+        "dataclass invariant.",
     ),
     "execution/backends/claude.py": (
         1250,

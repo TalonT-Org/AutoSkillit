@@ -90,6 +90,7 @@ def _assert_unsupported_platform(tmp_path: Path) -> bool:
             on_reaped=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=None,
+            not_after=time.time() + 60,
         )
     return True
 
@@ -126,6 +127,7 @@ def test_direct_attempt_owns_new_group_and_reaps_before_callback(
         on_reaped=on_reaped,
         trace=Mock(),
         observer=None,
+        not_after=time.time() + 60,
     )
 
     assert popen_kwargs["cwd"] == str(tmp_path.resolve())
@@ -157,6 +159,7 @@ def test_pass_fds_are_inherited_and_callback_identity_is_stable(tmp_path: Path) 
             on_reaped=lambda pid, pgid: events.append(("reaped", pid, pgid)),
             trace=Mock(),
             observer=None,
+            not_after=time.time() + 60,
         )
     finally:
         os.close(write_fd)
@@ -192,6 +195,7 @@ def test_grandchild_cannot_outlive_group_empty_reaped_proof(tmp_path: Path) -> N
             ),
             trace=Mock(),
             observer=None,
+            not_after=time.time() + 60,
         )
         grandchild_pid = int(grandchild_path.read_text())
         assert result.returncode == 0
@@ -220,6 +224,7 @@ def test_spawn_failure_has_no_callbacks(monkeypatch: pytest.MonkeyPatch, tmp_pat
             on_reaped=lambda _pid, _pgid: events.append("reaped"),
             trace=Mock(),
             observer=None,
+            not_after=time.time() + 60,
         )
 
     assert events == []
@@ -242,6 +247,7 @@ def test_callback_failure_still_terminates_and_reaps_child(tmp_path: Path) -> No
             on_reaped=lambda pid, pgid: identity.append((pid, pgid)),
             trace=Mock(),
             observer=None,
+            not_after=time.time() + 60,
         )
 
     assert len(identity) == 2
@@ -273,6 +279,7 @@ def test_pty_attempt_retains_lease_fd_and_owns_controlling_slave(
             on_reaped=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=PtyObserver(readiness_probe=None),
+            not_after=time.time() + 60,
         )
     finally:
         os.close(write_fd)

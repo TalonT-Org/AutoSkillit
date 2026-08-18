@@ -30,8 +30,10 @@ from autoskillit.execution import (
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     QUOTA_CACHE_SCHEMA_VERSION,
     CodexBackend,
+    default_tether_dir,
     find_orphaned_autoskillit_daemons,
     find_orphaned_codex_processes,
+    find_orphaned_tethers,
     resolve_log_dir,
     session_index_lock_path,
 )
@@ -594,6 +596,45 @@ def _check_orphaned_autoskillit_daemons() -> list[DoctorResult]:
             " run: autoskillit daemon-orphans --reap",
         )
         for candidate in candidates
+    ]
+
+
+def _check_orphaned_process_tethers() -> list[DoctorResult]:
+    """Report tether-tracked children whose guardian is dead or ceiling has passed.
+
+    Warn-only, matching the codex/daemon orphan checks — the automatic sweep
+    wired into every boot/open chokepoint is the primary defense; this is the
+    diagnostic surface for a long-lived server between chokepoint runs.
+    """
+    check_name = "orphaned_process_tethers"
+    if sys.platform != "linux":
+        return [DoctorResult(Severity.OK, check_name, "Skipped (Linux only)")]
+
+    try:
+        orphaned = find_orphaned_tethers(default_tether_dir())
+    except Exception as exc:
+        logger.warning("Process tether scan failed", exc_info=True)
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                check_name,
+                f"scan failed: {type(exc).__name__}: {exc}",
+            )
+        ]
+
+    if not orphaned:
+        return [DoctorResult(Severity.OK, check_name, "no orphaned process tethers")]
+
+    return [
+        DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"orphaned tether pid={o.record.child_pid}"
+            f" origin={o.record.origin}"
+            f" reason={o.reason};"
+            f" run: autoskillit process-orphans --reap",
+        )
+        for o in orphaned
     ]
 
 

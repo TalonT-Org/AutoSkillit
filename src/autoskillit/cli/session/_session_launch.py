@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -180,6 +181,7 @@ def _run_interactive_session(
     attempt: int | None = None,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
+    cook_ceiling_seconds: float | None = None,
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -201,6 +203,13 @@ def _run_interactive_session(
             default_base_branch = configured_base_branch
         if mcp_tool_timeout_sec is None:
             mcp_tool_timeout_sec = config.run_skill.mcp_tool_timeout_sec
+        if cook_ceiling_seconds is None:
+            cook_ceiling_seconds = config.process_tether.cook_ceiling_seconds
+    if cook_ceiling_seconds is None:
+        # backend was pre-resolved by the caller without also supplying this —
+        # fall back to ProcessTetherConfig's own literal default rather than
+        # leaving run_cook_attempt's required not_after unresolvable.
+        cook_ceiling_seconds = 172800.0
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.core import InfraExitCategory, bind_session_owner
@@ -350,6 +359,7 @@ def _run_interactive_session(
                 on_reaped=attempt_handle.record_reaped,
                 trace=startup_trace,
                 observer=None,
+                not_after=time.time() + cook_ceiling_seconds,
             )
         returncode = managed_result.returncode
     else:

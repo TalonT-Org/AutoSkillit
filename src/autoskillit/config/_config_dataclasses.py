@@ -553,6 +553,31 @@ class FleetConfig:
             )
 
 
+@dataclass
+class ProcessTetherConfig:
+    """Absolute ceilings for the process-tether spawner-death sweep.
+
+    Literal defaults must equal ``execution.process._process_tether``'s
+    ``DEFAULT_TETHER_CEILING_SECONDS``/``INTERACTIVE_TETHER_CEILING_SECONDS``
+    module constants — config cannot import execution (IL-002), so a parity
+    test in ``tests/execution/test_process_tether.py`` ties the two literals
+    together instead of sharing them by import.
+    """
+
+    orphan_ceiling_seconds: float = 86400.0
+    cook_ceiling_seconds: float = 172800.0
+
+    def validate(self) -> None:
+        if self.orphan_ceiling_seconds <= 0:
+            raise ValueError(
+                f"orphan_ceiling_seconds must be positive, got {self.orphan_ceiling_seconds}"
+            )
+        if self.cook_ceiling_seconds <= 0:
+            raise ValueError(
+                f"cook_ceiling_seconds must be positive, got {self.cook_ceiling_seconds}"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderProfileDef:
     """Static definition of a named LLM provider profile.

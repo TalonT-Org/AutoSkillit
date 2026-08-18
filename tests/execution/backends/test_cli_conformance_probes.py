@@ -81,7 +81,12 @@ from autoskillit.execution.backends._probe_cache import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStreamParser
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.process import kill_process_tree, run_managed_async, spawn_owned_process
+from autoskillit.execution.process import (
+    TetherSpec,
+    kill_process_tree,
+    run_managed_async,
+    spawn_owned_process,
+)
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
@@ -2903,6 +2908,7 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
             stderr=stderr_stream,
             text=True,
             start_new_session=True,
+            tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
         )
         deadline = time.monotonic() + 150
         try:

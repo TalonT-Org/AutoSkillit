@@ -76,6 +76,7 @@ from autoskillit.execution.headless._managed import (
     _LineageCallbacks,
     _ManagedLineageObserver,
 )
+from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
@@ -127,6 +128,7 @@ async def _execute_claude_headless(
     provider_extras: Mapping[str, str] | None = None,
     enable_deadline_extension: bool = False,
     max_extension_seconds: float = 7200,
+    ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
     marker_dir: Path | None = None,
     session_id: str | None = None,
     launch_resolver: LaunchResolver,
@@ -326,6 +328,7 @@ async def _execute_claude_headless(
                 on_spawn=on_spawn,
                 enable_deadline_extension=enable_deadline_extension,
                 max_extension_seconds=max_extension_seconds,
+                ceiling_seconds=ceiling_seconds,
                 marker_dir=marker_dir,
                 session_id=session_id,
                 on_session_id_resolved=lineage_callbacks.on_candidate,

@@ -18,7 +18,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends import ClaudeStreamParser
-from autoskillit.execution.process import run_managed_async, spawn_owned_process
+from autoskillit.execution.process import TetherSpec, run_managed_async, spawn_owned_process
 from autoskillit.execution.process._process_jsonl import EventCursor
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
@@ -609,7 +609,7 @@ class TestExitSnapshot:
         assert signals.exit_snapshot["event"] == "exit_snapshot"
 
     @pytest.mark.anyio
-    async def test_watch_process_captures_exit_snapshot(self) -> None:
+    async def test_watch_process_captures_exit_snapshot(self, tmp_path: Path) -> None:
         """_watch_process populates acc.exit_snapshot after process exits."""
         import sys
 
@@ -621,6 +621,7 @@ class TestExitSnapshot:
             lambda: spawn_owned_process(
                 [sys.executable, "-c", "import time; time.sleep(0.2)"],
                 start_new_session=True,
+                tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
             )
         )
         async with anyio.create_task_group() as tg:
@@ -634,7 +635,7 @@ class TestExitSnapshot:
         assert hasattr(acc, "exit_snapshot")
 
     @pytest.mark.anyio
-    async def test_watch_process_exit_snapshot_has_event_marker(self) -> None:
+    async def test_watch_process_exit_snapshot_has_event_marker(self, tmp_path: Path) -> None:
         """If exit_snapshot was captured, it carries event='exit_snapshot'."""
         import sys
 
@@ -646,6 +647,7 @@ class TestExitSnapshot:
             lambda: spawn_owned_process(
                 [sys.executable, "-c", "pass"],
                 start_new_session=True,
+                tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
             )
         )
         async with anyio.create_task_group() as tg:
@@ -674,6 +676,7 @@ class TestProcessExitedEvent:
             lambda: spawn_owned_process(
                 [sys.executable, "-c", "import time; time.sleep(0.2)"],
                 start_new_session=True,
+                tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
             )
         )
 
@@ -700,6 +703,7 @@ class TestProcessExitedEvent:
             lambda: spawn_owned_process(
                 [sys.executable, "-c", "import time; time.sleep(0.1)"],
                 start_new_session=True,
+                tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
             )
         )
 

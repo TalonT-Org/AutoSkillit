@@ -208,6 +208,20 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         else:
             transition_confirm(ctx, "stale_dispatch_reap", receipt="dispatches:reaped")
 
+    if _transition_start(ctx, "tether_sweep"):
+        try:
+            from autoskillit.server._lifespan import (  # circular-break
+                _reap_self_excluded_codex_and_daemon_orphans,
+            )
+
+            await _tk_pkg.sweep_orphaned_tethers_async(_tk_pkg.default_tether_dir())
+            _reap_self_excluded_codex_and_daemon_orphans()
+        except Exception as exc:
+            transition_degraded(ctx, "tether_sweep", exc)
+            logger.warning("open_kitchen_tether_sweep_failed", exc_info=True)
+        else:
+            transition_confirm(ctx, "tether_sweep", receipt="tethers:swept")
+
     ctx.gate_infrastructure_ready = True
     return None
 

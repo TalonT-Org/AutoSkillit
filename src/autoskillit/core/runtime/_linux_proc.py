@@ -82,6 +82,21 @@ def is_pid_alive(pid: int) -> bool:
     return state is not None and state not in ("Z", "X")
 
 
+def read_pid_namespace_inode(pid: int) -> int | None:
+    """Read the inode of a process's PID namespace from /proc/pid/ns/pid.
+
+    Discriminates identity triples that are only unique within one PID
+    namespace (containers share the host boot_id, and a bind-mounted home
+    directory can share a tether directory across namespaces too). Returns
+    None on any failure — callers must treat that as "no discriminator
+    available", never as a mismatch.
+    """
+    try:
+        return Path(f"/proc/{pid}/ns/pid").stat().st_ino
+    except OSError:
+        return None
+
+
 def is_session_alive(pid: int, boot_id: str, starttime_ticks: int) -> bool:
     """True only when boot_id, PID, and starttime_ticks all match — False on non-Linux."""
     if not pid or not boot_id:

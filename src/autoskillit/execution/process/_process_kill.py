@@ -6,17 +6,32 @@ import errno
 import os
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
+from pathlib import Path
 from typing import Any
 
 import anyio
 import anyio.abc
 import psutil
 
-from autoskillit.core import ProcessCleanupResult, get_logger, read_boot_id, read_starttime_ticks
+from autoskillit.core import (
+    ProcessCleanupResult,
+    get_logger,
+    read_boot_id,
+    read_pid_namespace_inode,
+    read_starttime_ticks,
+)
+from autoskillit.execution.process._process_tether import (
+    TetherRecord,
+    TetherSpec,
+    default_tether_dir,
+    remove_tether,
+    write_tether,
+)
 
 logger = get_logger(__name__)
 
@@ -314,12 +329,14 @@ class OwnedProcessGroup:
         pgid: int,
         *,
         _spawn_token: object | None = None,
+        tether_path: Path | None = None,
     ) -> None:
         if _spawn_token is not _OWNED_PROCESS_SPAWN_TOKEN:
             raise TypeError("OwnedProcessGroup instances must come from spawn_owned_process()")
         self.process = process
         self.pgid = pgid
         self.pid = process.pid
+        self._tether_path = tether_path
         self._group_authority = True
         self._reaped = False
         self._observed_returncode: int | None = None
@@ -328,6 +345,10 @@ class OwnedProcessGroup:
     @property
     def snapshot(self) -> ProcessObservationSnapshot:
         return self._snapshot
+
+    @property
+    def tether_path(self) -> Path | None:
+        return self._tether_path
 
     @property
     def returncode(self) -> int | None:
@@ -584,6 +605,9 @@ class OwnedProcessGroup:
                 self._snapshot.observation_complete and not members and returncode is not None
             ),
         )
+        if result.complete and self._tether_path is not None:
+            # Best-effort — the sweep is the authoritative GC if this races or fails.
+            remove_tether(self._tether_path)
         return returncode, result
 
     def settle(self, timeout: float = 2.0) -> tuple[int, ProcessCleanupResult]:
@@ -679,9 +703,16 @@ def spawn_owned_process(
     start_new_session: bool = False,
     process_group: int | None = None,
     env: Mapping[str, str] | None = None,
+    tether: TetherSpec,
     **kwargs: Any,
 ) -> OwnedProcessGroup:
-    """Atomically spawn and validate a fresh owned POSIX process group."""
+    """Atomically spawn and validate a fresh owned POSIX process group.
+
+    Every spawn durably records a process tether (spawner identity, child
+    identity, absolute ``not_after`` ceiling) as a required, fail-closed side
+    effect — an untethered detached child must never exist. See
+    ``_process_tether.py`` for the sweep that consumes these records.
+    """
     creates_group = start_new_session is True or process_group == 0
     if not creates_group or (start_new_session and process_group == 0):
         raise ValueError("owned process spawn requires exactly one fresh-group mode")
@@ -702,4 +733,35 @@ def spawn_owned_process(
     if process.pid <= 0 or pgid != process.pid or process.returncode is not None:
         _cleanup_failed_owned_spawn(process)
         raise RuntimeError("spawned child did not establish owned group leadership")
-    return OwnedProcessGroup(process, pgid, _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN)
+
+    child_starttime_ticks = read_starttime_ticks(process.pid)
+    boot_id = read_boot_id()
+    if sys.platform == "linux" and (child_starttime_ticks is None or boot_id is None):
+        # returncode unpopulated on an unpolled Popen, so the leadership check
+        # above cannot see this: the child died between spawn and identity read.
+        _cleanup_failed_owned_spawn(process)
+        raise RuntimeError("owned process spawned but its identity could not be read")
+
+    spawner_pid = os.getpid()
+    tether_dir = tether.tether_dir if tether.tether_dir is not None else default_tether_dir()
+    record = TetherRecord(
+        child_pid=process.pid,
+        child_pgid=pgid,
+        child_starttime_ticks=child_starttime_ticks or 0,
+        boot_id=boot_id or "",
+        spawner_pid=spawner_pid,
+        spawner_starttime_ticks=read_starttime_ticks(spawner_pid) or 0,
+        spawned_at_ns=time.time_ns(),
+        not_after=time.time() + tether.ceiling_seconds,
+        origin=tether.origin,
+        pidns_inode=read_pid_namespace_inode(process.pid),
+    )
+    try:
+        tether_path = write_tether(record, tether_dir)
+    except OSError:
+        _cleanup_failed_owned_spawn(process)
+        raise
+
+    return OwnedProcessGroup(
+        process, pgid, _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN, tether_path=tether_path
+    )

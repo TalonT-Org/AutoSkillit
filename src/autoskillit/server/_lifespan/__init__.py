@@ -29,6 +29,10 @@ from autoskillit.core import (  # noqa: F401  (mock.patch reachability)
     resolve_kitchen_id,
     write_readiness_sentinel,
 )
+from autoskillit.execution import (  # noqa: F401  (mock.patch reachability)
+    default_tether_dir,
+    sweep_orphaned_tethers_async,
+)
 from autoskillit.fleet import (  # noqa: F401  (mock.patch reachability)
     discover_campaign_state_files,
     reap_stale_dispatches_async,
@@ -57,6 +61,7 @@ from autoskillit.server._lifespan._session_boots import (
     _fleet_auto_gate_boot,
     _food_truck_auto_gate_boot,
     _pre_reveal_kitchen,
+    _reap_self_excluded_codex_and_daemon_orphans,
     _skill_auto_gate_boot,
 )
 from autoskillit.server._lifespan._startup_checks import (
@@ -82,6 +87,7 @@ __all__ = [
     "_fleet_auto_gate_boot",
     "_food_truck_auto_gate_boot",
     "_pre_reveal_kitchen",
+    "_reap_self_excluded_codex_and_daemon_orphans",
     "_retain_context_tracker_authority",
     "_run_backend_mcp_registration_async",
     "_run_deferred_init",
@@ -91,8 +97,10 @@ __all__ = [
     "_run_lifespan_session_boot",
     "_run_retiring_sweep_async",
     "_skill_auto_gate_boot",
+    "default_tether_dir",
     "run_startup_drift_check",
     "run_startup_fix_required_coverage_check",
     "run_startup_hook_health_check",
     "run_startup_install_state_check",
+    "sweep_orphaned_tethers_async",
 ]

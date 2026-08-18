@@ -270,6 +270,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         )
         effective_deadline_ext = fleet_cfg.enable_deadline_extension
         effective_max_ext = float(fleet_cfg.max_extension_seconds)
+        effective_ceiling_seconds = float(cfg.process_tether.orphan_ceiling_seconds)
         effective_idle_out: float | None = (
             idle_output_timeout
             if idle_output_timeout is not None
@@ -311,6 +312,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 provider_fallback_name=provider_fallback_name,
                 enable_deadline_extension=effective_deadline_ext,
                 max_extension_seconds=effective_max_ext,
+                ceiling_seconds=effective_ceiling_seconds,
                 marker_dir=effective_marker_dir,
                 session_id=session_id,
                 model_identity=model_identity,

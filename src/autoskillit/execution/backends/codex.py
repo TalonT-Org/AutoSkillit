@@ -141,6 +141,7 @@ from autoskillit.execution.backends._codex_session_storage import CodexSessionSt
 from autoskillit.execution.backends._explorer_dispatch import (
     CODEX_EXPLORATION_DISPATCH_RENDERER,
 )
+from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
 
 # Codex has its own timeout mechanism (``ensure_codex_mcp_registered`` /
@@ -1226,12 +1227,14 @@ class CodexBackend(BackendCmdBuilderBase):
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
+        ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
     ) -> AbstractContextManager[CookSessionHandle]:
         return CodexSessionStore(log_dir=default_log_dir()).prepare_attempt(
             session_home=session_home,
             project_dir=project_dir,
             launch_id=launch_id,
             attempt=attempt,
+            ceiling_seconds=ceiling_seconds,
             current_resume_spec=current_resume_spec,
         )
 

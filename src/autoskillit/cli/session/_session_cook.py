@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import time
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -475,6 +476,7 @@ def cook(
                         on_reaped=attempt_handle.record_reaped,
                         trace=trace,
                         observer=observer,
+                        not_after=time.time() + config.process_tether.cook_ceiling_seconds,
                     )
                     reload_session_id = consume_reload_sentinel(project_dir)
                     _require_observer_ready(observer)

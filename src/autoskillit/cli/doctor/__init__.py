@@ -73,6 +73,7 @@ from ._doctor_runtime import (
     _check_codex_ndjson_drift,
     _check_orphaned_autoskillit_daemons,
     _check_orphaned_codex_processes,
+    _check_orphaned_process_tethers,
     _check_quota_cache_schema,
     _check_script_binary,
     _check_session_index_projection,
@@ -254,6 +255,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.extend(_check_orphaned_codex_processes())
     # Check 45: Registered-stdio AutoSkillit daemons with dead logical owners
     results.extend(_check_orphaned_autoskillit_daemons())
+    # Check 46: Process tethers whose spawner is dead or ceiling has passed
+    results.extend(_check_orphaned_process_tethers())
     # Output
     for line in _format_results(results, output_json=output_json):
         print(line)

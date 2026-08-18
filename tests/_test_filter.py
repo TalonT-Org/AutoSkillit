@@ -749,6 +749,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server",
             "cli",
             "fleet",
+            "exploration",
+            # exploration/collectors/_bounded.py imports execution.process (spawn_owned_process)
+            # under a documented IL-008 exception — the funnel migration for the tether plan.
             "infra/test_pretty_output_hook_infra.py",
             # file-level: Part C envelope-fit test imports execution.backends.BACKEND_REGISTRY
             "infra/test_pretty_output_recipe.py",

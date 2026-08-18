@@ -467,6 +467,7 @@ def test_fleet_reload_relaunches_without_resume(
         backend=None,
         force_inactive_agent_teams=False,
         mcp_tool_timeout_sec=None,
+        cook_ceiling_seconds=None,
     ):
         call_count[0] += 1
         captured_resume_specs.append(resume_spec)

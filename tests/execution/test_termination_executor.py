@@ -13,6 +13,7 @@ import structlog
 from autoskillit.core import KillReason, ProcessCleanupResult, TerminationAction
 from autoskillit.execution.process import (
     RaceAccumulator,
+    TetherSpec,
     _process_kill,
     _watch_process,
     execute_termination_action,
@@ -24,18 +25,19 @@ from autoskillit.execution.process import (
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
-async def _spawn(delay: float) -> object:
+async def _spawn(delay: float, tmp_path: Path) -> object:
     return await anyio.to_thread.run_sync(
         lambda: spawn_owned_process(
             [sys.executable, "-c", f"import time; time.sleep({delay})"],
             start_new_session=True,
+            tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
         )
     )
 
 
 @pytest.mark.anyio
-async def test_drain_allows_natural_exit_and_returns_cleanup_evidence() -> None:
-    owner = await _spawn(0.1)
+async def test_drain_allows_natural_exit_and_returns_cleanup_evidence(tmp_path: Path) -> None:
+    owner = await _spawn(0.1, tmp_path)
     acc = RaceAccumulator(process_observation_snapshot=owner.snapshot)
     trigger = anyio.Event()
     async with anyio.create_task_group() as tg:
@@ -58,8 +60,8 @@ async def test_drain_allows_natural_exit_and_returns_cleanup_evidence() -> None:
 
 
 @pytest.mark.anyio
-async def test_drain_escalates_through_owner_when_leader_stays_live() -> None:
-    owner = await _spawn(30)
+async def test_drain_escalates_through_owner_when_leader_stays_live(tmp_path: Path) -> None:
+    owner = await _spawn(30, tmp_path)
 
     kill_reason, returncode, cleanup = await execute_termination_action(
         TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
@@ -75,12 +77,12 @@ async def test_drain_escalates_through_owner_when_leader_stays_live() -> None:
 
 
 @pytest.mark.anyio
-async def test_immediate_kill_skips_drain() -> None:
+async def test_immediate_kill_skips_drain(tmp_path: Path) -> None:
     class UnexpectedDrain:
         async def wait(self) -> None:
             pytest.fail("IMMEDIATE_KILL must not wait for process exit")
 
-    owner = await _spawn(30)
+    owner = await _spawn(30, tmp_path)
 
     with anyio.fail_after(5):
         kill_reason, returncode, cleanup = await execute_termination_action(
@@ -97,8 +99,8 @@ async def test_immediate_kill_skips_drain() -> None:
 
 
 @pytest.mark.anyio
-async def test_no_kill_path_still_settles_and_reaps_natural_exit() -> None:
-    owner = await _spawn(0.05)
+async def test_no_kill_path_still_settles_and_reaps_natural_exit(tmp_path: Path) -> None:
+    owner = await _spawn(0.05, tmp_path)
     while await anyio.to_thread.run_sync(owner.observe_exit) is None:
         await anyio.sleep(0.01)
 
@@ -130,7 +132,7 @@ def _install_deferral_clock(
 
 @pytest.mark.anyio
 async def test_active_child_deferral_runs_until_ceiling(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     clock = _install_deferral_clock(monkeypatch)
     liveness_checks = 0
@@ -140,7 +142,7 @@ async def test_active_child_deferral_runs_until_ceiling(
         liveness_checks += 1
         return True
 
-    owner = await _spawn(30)
+    owner = await _spawn(30, tmp_path)
     monkeypatch.setattr(
         "autoskillit.execution.process._termination._has_active_child_processes", has_active_child
     )
@@ -166,9 +168,9 @@ async def test_active_child_deferral_runs_until_ceiling(
 
 @pytest.mark.anyio
 async def test_zero_child_deferral_ceiling_skips_liveness_check(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    owner = await _spawn(30)
+    owner = await _spawn(30, tmp_path)
 
     def unexpected_liveness_check(_pid: int) -> bool:
         pytest.fail("zero child deferral ceiling must skip liveness checks")
@@ -194,11 +196,11 @@ async def test_zero_child_deferral_ceiling_skips_liveness_check(
 
 @pytest.mark.anyio
 async def test_child_deferral_stops_when_children_become_inactive(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     clock = _install_deferral_clock(monkeypatch)
     activity = iter((True, False))
-    owner = await _spawn(30)
+    owner = await _spawn(30, tmp_path)
     monkeypatch.setattr(
         "autoskillit.execution.process._termination._has_active_child_processes",
         lambda _pid: next(activity),
@@ -236,9 +238,10 @@ async def test_execute_termination_action_returns_cleanup_without_raising(
     monkeypatch: pytest.MonkeyPatch,
     returncode: int | None,
     complete: bool,
+    tmp_path: Path,
 ) -> None:
     """All (returncode, complete) cross-products must not raise."""
-    owner = await _spawn(0.05)
+    owner = await _spawn(0.05, tmp_path)
     while await anyio.to_thread.run_sync(owner.observe_exit) is None:
         await anyio.sleep(0.01)
     result = ProcessCleanupResult(

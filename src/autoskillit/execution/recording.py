@@ -149,6 +149,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
+        ceiling_seconds: float = 86400.0,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -193,6 +194,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     capture_dir=capture_dir,
                     backend_resume_session_id=backend_resume_session_id,
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
+                    ceiling_seconds=ceiling_seconds,
                 )
 
             # Non-Codex, non-PTY with step_name: run inner + record summary.
@@ -224,6 +226,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 capture_dir=capture_dir,
                 backend_resume_session_id=backend_resume_session_id,
                 lifecycle_observation_enabled=lifecycle_observation_enabled,
+                ceiling_seconds=ceiling_seconds,
             )
             _head = (result.stdout or "")[:500] if not capture_dir else "(capture mode)"
             self.recorder.record_non_session_step(
@@ -265,6 +268,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             capture_dir=capture_dir,
             backend_resume_session_id=backend_resume_session_id,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
+            ceiling_seconds=ceiling_seconds,
         )
 
     async def _record_session(
@@ -369,6 +373,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
+        ceiling_seconds: float = 86400.0,
     ) -> SubprocessResult:
         """Record an FD-aware inner-runner session via cassette files."""
         result = await self._inner(
@@ -399,6 +404,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             capture_dir=capture_dir,
             backend_resume_session_id=backend_resume_session_id,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
+            ceiling_seconds=ceiling_seconds,
         )
 
         if self._scenario_dir is None:
@@ -512,8 +518,9 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
+        ceiling_seconds: float = 86400.0,
     ) -> SubprocessResult:
-        del pass_fds, backend_resume_session_id
+        del pass_fds, backend_resume_session_id, ceiling_seconds
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if not step_name:

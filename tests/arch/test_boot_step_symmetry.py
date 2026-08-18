@@ -30,6 +30,14 @@ _REQUIRED_BOOT_STEPS: list[tuple[str, tuple[str, ...]]] = [
         ("_fleet_auto_gate_boot", "_food_truck_auto_gate_boot", "_skill_auto_gate_boot"),
     ),
     ("DISPATCH_ID_ENV_VAR", ("_food_truck_auto_gate_boot",)),
+    (
+        "sweep_orphaned_tethers_async",
+        ("_fleet_auto_gate_boot", "_food_truck_auto_gate_boot", "_skill_auto_gate_boot"),
+    ),
+    (
+        "_reap_self_excluded_codex_and_daemon_orphans",
+        ("_fleet_auto_gate_boot", "_food_truck_auto_gate_boot"),
+    ),
 ]
 
 _BOOT_STEP_ORDERING: list[tuple[str, str, tuple[str, ...]]] = [
@@ -141,3 +149,19 @@ class TestBootStepSymmetry:
             "_open_kitchen_handler must call reap_stale_dispatches_async "
             "to provide dispatch recovery for interactive sessions"
         )
+
+    def test_open_kitchen_handler_calls_tether_sweep(self) -> None:
+        """AST guard: _open_kitchen_handler must sweep orphaned tethers.
+
+        Interactive sessions never go through the lifespan boot gates, so
+        open_kitchen is the only chokepoint they hit — same rationale as the
+        stale-dispatch reap requirement above.
+        """
+        assert KITCHEN_PKG.exists(), f"Production package not found: {KITCHEN_PKG}"
+        source = ""
+        for py in sorted(KITCHEN_PKG.rglob("*.py")):
+            source += py.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        assert _function_body_contains_symbol(
+            tree, "_open_kitchen_handler", "sweep_orphaned_tethers_async"
+        ), "_open_kitchen_handler must call sweep_orphaned_tethers_async"

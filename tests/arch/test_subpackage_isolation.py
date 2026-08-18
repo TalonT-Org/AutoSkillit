@@ -999,9 +999,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
-        "cli": 27,  # +_install_contract typed install process boundary (#4409);
+        "cli": 28,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim; +_codex_orphans (#4536);
-        # +_codex_attempts (#4361); +_daemon_orphans operator surface (#4544)
+        # +_codex_attempts (#4361); +_daemon_orphans operator surface (#4544);
+        # +_process_orphans tether-sweep operator surface (#4678)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -1112,6 +1113,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1500,
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
         "lifecycle, and strict result validation behind one evidence-reader launch interface",
+    ),
+    "execution/process/__init__.py": (
+        1050,
+        "REQ-CNST-010-E27: #4678 rectify threads ceiling_seconds through run_managed_async/"
+        "run_managed_sync/DefaultSubprocessRunner and adds the PTY-wrapper workload-identity "
+        "resolution for the process-tether spawner-death immunity mechanism — this facade is "
+        "the single composition point for both spawn paths and must stay adjacent to the "
+        "spawn call sites it wires the tether into.",
     ),
     # REQ-CNST-010-E1: core/types.py is the canonical type registry for the entire
     # package. It defines all StrEnums, protocols, constants, and shared type aliases

@@ -224,6 +224,12 @@ class TestCLIInit:
         assert data["mcpServers"]["autoskillit"]["command"] == "autoskillit"
         assert data["mcpServers"]["autoskillit"]["args"] == []
 
+        from autoskillit.config import RunSkillConfig
+
+        assert data["mcpServers"]["autoskillit"]["timeout"] == int(
+            RunSkillConfig().mcp_tool_timeout_sec * 1000
+        )
+
     # CI-SCOPE-2
     def test_init_registers_hooks_in_settings_json(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -252,6 +252,7 @@ class BackendCmdBuilderBase(ABC):
             "add_dirs": config.add_dirs,
             "exit_after_stop_delay_ms": config.exit_after_stop_delay_ms,
             "stream_idle_timeout_ms": config.stream_idle_timeout_ms,
+            "mcp_tool_timeout_sec": config.mcp_tool_timeout_sec,
             "scenario_step_name": config.scenario_step_name,
             "temp_dir_relpath": config.temp_dir_relpath,
             "allowed_write_prefix": config.allowed_write_prefix,
@@ -267,6 +268,7 @@ class BackendCmdBuilderBase(ABC):
             "native_shell_capture_decision": config.native_shell_capture_decision,
             "managed_lineage_ref": config.managed_lineage_ref,
             "managed_attempt_id": config.managed_attempt_id,
+            "force_inactive_agent_teams": config.force_inactive_agent_teams,
         }
 
 

@@ -31,6 +31,7 @@ def test_cmd_spec_fields():
         "is_resume",
         "process_idle_timeout_ms",
         "inherited_fds",
+        "force_inactive_agent_teams",
     }
 
 
@@ -418,6 +419,7 @@ def test_skill_session_config_fields_exhaustive():
         "add_dirs",
         "exit_after_stop_delay_ms",
         "stream_idle_timeout_ms",
+        "mcp_tool_timeout_sec",
         "scenario_step_name",
         "temp_dir_relpath",
         "allowed_write_prefix",
@@ -427,6 +429,7 @@ def test_skill_session_config_fields_exhaustive():
         "resume_session_id",
         "resume_checkpoint",
         "resume_message",
+        "force_inactive_agent_teams",
         "sandbox_mode",
         "network_access",
         "include_scope_discipline",

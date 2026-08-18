@@ -94,6 +94,8 @@ def _launch_fleet_session(
                 project_dir=project_dir,
                 required_env=FLEET_SESSION_REQUIRED_ENV,
                 backend=_backend,
+                force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
+                mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
             )
             if session_signal is None:
                 break
@@ -204,6 +206,8 @@ def _launch_fleet_session(
                 project_dir=project_dir,
                 required_env=FLEET_SESSION_REQUIRED_ENV,
                 backend=_backend,
+                force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
+                mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
             )
             if session_signal is None:
                 break

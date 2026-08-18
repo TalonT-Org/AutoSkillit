@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -339,4 +340,87 @@ def _check_codex_mcp_timeouts(
         Severity.OK,
         "codex_mcp_timeouts",
         f"tool_timeout_sec={observed}s is sufficient (expected={expected}s)",
+    )
+
+
+def _check_claude_mcp_timeouts(
+    *,
+    backend: CodingAgentBackend | None = None,
+    run_skill: RunSkillConfig | None = None,
+    fleet: FleetConfig | None = None,  # noqa: ARG001 - kept for call-site parity with Codex
+) -> DoctorResult:
+    """Check that ~/.claude.json's autoskillit entry has a correct timeout value.
+
+    Compares the deployed timeout against RunSkillConfig.mcp_tool_timeout_sec.
+    Session-duration coherence is enforced by _claude_mcp_timeout_coherence_gate.
+    """
+    if backend is None or backend.capabilities.mcp_config_capable:
+        return DoctorResult(
+            Severity.OK,
+            "claude_mcp_timeouts",
+            f"Skipped (backend={backend.name if backend else 'none'})",
+        )
+    from autoskillit.config import RunSkillConfig as _RunSkillConfig
+
+    claude_json_path = Path.home() / ".claude.json"
+    if not claude_json_path.is_file():
+        return DoctorResult(
+            Severity.OK,
+            "claude_mcp_timeouts",
+            "~/.claude.json not found — timeout check skipped",
+        )
+    try:
+        data = json.loads(claude_json_path.read_text())
+    except FileNotFoundError:
+        return DoctorResult(
+            Severity.OK,
+            "claude_mcp_timeouts",
+            "~/.claude.json not found — timeout check skipped",
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        return DoctorResult(
+            Severity.WARNING,
+            "claude_mcp_timeouts",
+            f"~/.claude.json could not be read or parsed ({exc!r}). "
+            f"Run 'autoskillit init' to repair it.",
+        )
+    entry = data.get("mcpServers", {}).get("autoskillit")
+    if not isinstance(entry, dict):
+        return DoctorResult(
+            Severity.OK,
+            "claude_mcp_timeouts",
+            "No direct autoskillit mcpServers entry — timeout check skipped",
+        )
+    observed = entry.get("timeout")
+    if observed is not None and (
+        not isinstance(observed, (int, float))
+        or isinstance(observed, bool)
+        or not math.isfinite(observed)
+    ):
+        return DoctorResult(
+            Severity.WARNING,
+            "claude_mcp_timeouts",
+            f"timeout in ~/.claude.json is not a finite number ({observed!r}). "
+            f"Run 'autoskillit init' to repair it.",
+        )
+    expected = int((run_skill or _RunSkillConfig()).mcp_tool_timeout_sec * 1000)
+    if observed is None:
+        return DoctorResult(
+            Severity.WARNING,
+            "claude_mcp_timeouts",
+            "timeout missing from ~/.claude.json's autoskillit entry. "
+            "Run 'autoskillit init' to set it.",
+        )
+    if observed < expected:
+        return DoctorResult(
+            Severity.WARNING,
+            "claude_mcp_timeouts",
+            f"timeout={observed}ms in ~/.claude.json is below the expected value "
+            f"({expected}ms). Claude Code may idle-abort long-running MCP tool calls "
+            f"before autoskillit's own session management. Run 'autoskillit init' to update.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "claude_mcp_timeouts",
+        f"timeout={observed}ms is sufficient (expected={expected}ms)",
     )

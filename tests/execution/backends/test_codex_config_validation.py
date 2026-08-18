@@ -155,6 +155,43 @@ def test_bounded_codex_probe_enforces_stream_limit(
     assert len(result.stdout) == 128
 
 
+def test_run_bounded_codex_probe_returns_success_with_diagnostic_on_incomplete_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import ProcessCleanupResult
+    from autoskillit.execution.process._process_kill import OwnedProcessGroup
+
+    original_cleanup = OwnedProcessGroup.cleanup
+
+    def incomplete_cleanup(
+        self: OwnedProcessGroup, timeout: float = 2.0
+    ) -> tuple[int | None, ProcessCleanupResult]:
+        returncode, result = original_cleanup(self, timeout)
+        return returncode, ProcessCleanupResult(
+            root_pid=result.root_pid,
+            process_identities=result.process_identities,
+            terminated_pids=result.terminated_pids,
+            survivor_pids=result.survivor_pids,
+            access_denied_pids=(999,),
+            observation_complete=result.observation_complete,
+        )
+
+    monkeypatch.setattr(OwnedProcessGroup, "cleanup", incomplete_cleanup)
+
+    result = probes._run_bounded_codex_probe(
+        (sys.executable, "-c", "import os; os.write(1, b'probe-ok')"),
+        env=os.environ,
+        cwd=str(tmp_path),
+    )
+
+    assert result.failure is None
+    assert result.cleanup_incomplete is True
+    assert result.returncode == 0
+    assert result.stdout == b"probe-ok"
+    assert result.stderr == b""
+
+
 @pytest.mark.parametrize(
     ("program", "expected_error"),
     [
@@ -221,6 +258,31 @@ def test_mcp_probe_caches_successful_validation(
         == []
     )
     assert calls == 1
+
+
+def test_validate_mcp_probe_returns_clean_result_when_cleanup_incomplete_but_probe_succeeded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def run_probe(*_args: object, **_kwargs: object) -> probes._BoundedProbeResult:
+        return probes._BoundedProbeResult(
+            returncode=0,
+            stdout=_VALID_INVENTORY_BYTES,
+            stderr=b"",
+            cleanup_incomplete=True,
+        )
+
+    monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
+
+    errors = probes._validate_mcp_probe(
+        ("codex", "mcp", "list", "--json"),
+        env=os.environ,
+        cwd=str(tmp_path),
+        config_bytes=_VALID_CONFIG_BYTES,
+    )
+
+    assert errors == []
 
 
 def test_real_interactive_validator_reaches_successful_native_probe(

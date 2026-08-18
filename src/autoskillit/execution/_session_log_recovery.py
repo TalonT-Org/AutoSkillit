@@ -7,10 +7,14 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-import psutil
-
-from autoskillit.core import CampaignProtector, get_logger
-from autoskillit.execution.linux_tracing import read_boot_id, read_enrollment, read_starttime_ticks
+from autoskillit.core import (
+    CampaignProtector,
+    get_logger,
+    is_pid_zombie,
+    read_boot_id,
+    read_starttime_ticks,
+)
+from autoskillit.execution.linux_tracing import read_enrollment
 from autoskillit.execution.session_log import flush_session_log
 
 logger = get_logger(__name__)
@@ -62,13 +66,17 @@ def recover_crashed_sessions(
             enrollment_path.unlink(missing_ok=True)
             continue
 
-        # Gate 3: PID liveness + starttime_ticks identity
-        if psutil.pid_exists(pid):
-            current_ticks = read_starttime_ticks(pid)
-            if current_ticks is not None and current_ticks == enrollment.starttime_ticks:
-                logger.debug("Skipping %s: PID %d still alive", trace_file.name, pid)
-                continue
-            # PID recycled — original process is gone, treat as crash
+        # Gate 3: PID liveness + starttime_ticks identity. A zombie with
+        # matching ticks is treated as dead so the crash trace is recovered.
+        current_ticks = read_starttime_ticks(pid)
+        if (
+            current_ticks is not None
+            and current_ticks == enrollment.starttime_ticks
+            and not is_pid_zombie(pid)
+        ):
+            logger.debug("Skipping %s: PID %d still alive", trace_file.name, pid)
+            continue
+        # PID recycled, dead, or zombie — original process is gone, treat as crash
 
         # All gates passed — read snapshots and emit crashed row
         snapshots: list[dict[str, object]] = []

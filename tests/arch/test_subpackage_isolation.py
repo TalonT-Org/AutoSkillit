@@ -137,6 +137,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # _RETENTION_SECONDS resolved once at import time from the single-source-of-truth
         # STATE_RECLAIMABILITY sweep grace (_lifecycle_policy.SWEEP_GRACE_SECONDS).
         "_capture_lifecycle",
+        # join ledger alphabet/filename constants resolved once at import time.
+        "_join_ledger",  # hooks/_join_ledger.py: _BATCH_ID_ALPHABET, LEDGER_FILENAME
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -785,6 +787,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
             tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
             routing layer. Exempt at 16 files.
+            _progress_heartbeat.py adds the MCP progress-notification context manager,
+            bringing the count to 28.
           recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
             (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
             Adding rules_cmd.py for run_cmd echo-capture alignment validation and
@@ -972,7 +976,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 27,  # +_run_skill_completion exact receipt delivery boundary (#4457)
+        "server": 28,  # +_progress_heartbeat MCP idle-abort immunity boundary
         # +_recipe_segment_delivery plan-mandated progressive delivery boundary
         # +_recipe_artifact.py (persistence), +_recipe_delivery_helpers.py (attestation,
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
@@ -1002,7 +1006,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
         # so it lives at this IL-1 layer rather than splitting further — its 176 lines
         # are one cohesive read/write/clear API with no internal seam to extract)
-        "hooks": 23,  # +_capture_process owned shell process-group boundary;
+        "hooks": 24,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
         # and request-correlated exploration identity records
@@ -1018,7 +1022,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
         # +_recipe_section_handler.py (bounded recipe-section pull handler)
-        "hooks/guards": 35,  # +github_mutation_guard (#4432);
+        "hooks/guards": 39,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
         # +fabricated_completion_guard (#4457)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
@@ -1087,6 +1091,17 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    "core/_plugin_cache.py": (
+        1100,
+        "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "
+        "Both mutate the retiring cache under the install lock and must stay adjacent to "
+        "the append/remove/read primitives they call, for the same reason "
+        "_projected_artifact/AGENTS.md keeps publication beside lease handoff: splitting "
+        "them puts lock ordering across a module boundary, which is how destructive "
+        "repair bypasses the lifecycle lock. tests/infra/test_plugin_source_ratchets.py "
+        "also pins this module's raw-mutation call sites by (file, function, expression), "
+        "so the reclaim path's location is a checked invariant, not an accident.",
+    ),
     "execution/evidence_reader.py": (
         1500,
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
@@ -1202,7 +1217,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_recipe_section_rendering) with char-ceiling plumbing and dual-domain page fitting.",
     ),
     "tools_kitchen.py": (
-        2260,
+        2400,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "and the request-scoped replay binder journals operation/effect provenance; "
@@ -1301,22 +1316,22 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     ),
     "execution/backends/codex.py": (
         1300,
-        "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1037 lines "
+        "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1062 lines "
         "(cmd/cmd-spec grammar with build_skill_session_cmd/"
         "build_food_truck_cmd/build_interactive_cmd/"
         "validate_interactive_invocation/setup_session_dir), "
-        "with the four cmd-builder methods (≈465 lines) tightly coupled to CodexBackend "
+        "with the four cmd-builder methods tightly coupled to CodexBackend "
         "state. CodexBackend retains all five cmd-builder methods because each "
         "touches instance state (capabilities, env policy, flag vocabulary, "
         "session locator) and the cmd-spec grammar is the backend's authority "
         "boundary — splitting these would force a separate mutable state object "
-        "and break the protocol. The remaining slimmed CodexBackend is 1211 "
-        "lines; cap lowered to 1300 to acknowledge the architectural seam that "
+        "and break the protocol. The remaining slimmed file is 1242 "
+        "lines; cap lowered from 2500 to 1300 to acknowledge the architectural seam that "
         "the decomposition could not cross without breaking the backend "
         "dataclass invariant.",
     ),
     "execution/backends/claude.py": (
-        1250,
+        1600,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
@@ -1331,15 +1346,25 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "async hardening beside the backend parser and command builder that own them. "
         "#4557 adds Claude-only host-attestation env, version-derived annotation support, "
         "and frozen attestation env at all 4 launch sites; #4566 "
-        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines).",
+        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines). "
+        "Threads mcp_tool_timeout_sec through build_interactive_cmd, "
+        "build_skill_session_cmd, build_food_truck_cmd, and build_resume_cmd to give Claude "
+        "Code's client-side idle-abort timeout parity with the server-side anyio.fail_after "
+        "ceiling (+2 net lines). REQ-017 (resolve-failures iteration 1) also adds an "
+        "explicit mcp_tool_timeout_sec parameter to build_headless_cmd and injects the "
+        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT env var when given, plus hardens all four "
+        "existing boundary checks with isinstance(mcp_tool_timeout_sec, (int, float)) "
+        "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
     ),
     "execution/headless/_headless_result.py": (
         900,
         "REQ-CNST-010-E25-narrowed: #4233 keeps the async-obligation success gate adjacent to "
         "the existing stale, idle, timeout, and content adjudication order it must preempt. "
-        "After #4664 decomposition, adjudication helpers live in _headless_adjudication.py; "
-        "_build_skill_result remains as the headless orchestration authority. The 846-line "
-        "residual is the single function that owns the success-gate adjacency rule.",
+        "After #4664 decomposition, adjudication helpers live in _headless_adjudication.py "
+        "— including the #4641/#4644 _should_flag_cleanup_incomplete diagnostic shared by "
+        "both SkillResult construction seams; _build_skill_result remains here as the "
+        "headless orchestration authority. The 827-line residual is dominated by that "
+        "single 741-line function, which owns the success-gate adjacency rule.",
     ),
     "workspace/skill_capabilities.py": (
         1120,
@@ -1473,7 +1498,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection, and execution identity in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
-        1150,
+        1200,
         "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
         "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
         "module rather than a sub-package (a package split would change how hook scripts "

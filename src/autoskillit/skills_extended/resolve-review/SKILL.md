@@ -293,7 +293,9 @@ for thread in all_thread_nodes:
     for reply in comments_in_thread[1:]:
         if RESOLVED_MARKER_RE.search(reply.get("body", "")):
             already_replied_ids.add(first_comment_id)
-            log(f"Skipping comment {first_comment_id} — already resolved by prior resolve-review run")
+            log(
+                f"Skipping comment {first_comment_id} — already resolved by prior resolve-review run"
+            )
             break
 ```
 
@@ -508,6 +510,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | ClaudeFlags isolation | `test_backend_flag_isolation.py` | `ClaudeFlags` referenced in `_session_launch.py` — backend flags belong in backend layer only |
 | Boot step symmetry | `test_boot_step_symmetry.py` | Both boot functions must call all required boot steps in the right order |
 | BackendCapabilities consumed | `test_capability_consumption.py` | Every `BackendCapabilities` field must have a production consumer — unused capability fields are prohibited |
+| Config fields consumed | `test_config_consumption.py` | Every config dataclass field must have a production read site — a key that only parses and validates itself is dead config |
 | BackendCapabilities documented | `test_capability_docstrings.py` | `BackendCapabilities` class and every field must have docstrings |
 | Env var symmetry | `test_env_symmetry.py` | `build_skill_session_cmd` and `build_food_truck_cmd` must both set required base env vars; `AGENT_BACKEND_ENV_VAR` must appear in food_truck |
 | No NotImplementedError in backends | `test_no_not_implemented.py` | Registered backend classes must not raise `NotImplementedError` — `CodingAgentBackend` is a Protocol, not an ABC |

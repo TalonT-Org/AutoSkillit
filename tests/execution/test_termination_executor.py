@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import cast
 
 import anyio
 import pytest
 import structlog
 
-from autoskillit.core import KillReason, TerminationAction
+from autoskillit.core import KillReason, ProcessCleanupResult, TerminationAction
 from autoskillit.execution.process import (
     RaceAccumulator,
+    _process_kill,
     _watch_process,
     execute_termination_action,
+    run_managed_async,
+    run_managed_sync,
     spawn_owned_process,
 )
 
@@ -216,3 +220,90 @@ async def test_child_deferral_stops_when_children_become_inactive(
     assert kill_reason is KillReason.KILL_AFTER_COMPLETION
     assert cleanup.complete is True
     assert clock == [2.0]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("returncode", "complete"),
+    [
+        (0, False),
+        (None, True),
+        (0, True),
+        (None, False),
+    ],
+)
+async def test_execute_termination_action_returns_cleanup_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+    returncode: int | None,
+    complete: bool,
+) -> None:
+    """All (returncode, complete) cross-products must not raise."""
+    owner = await _spawn(0.05)
+    while await anyio.to_thread.run_sync(owner.observe_exit) is None:
+        await anyio.sleep(0.01)
+    result = ProcessCleanupResult(
+        root_pid=owner.pid,
+        access_denied_pids=(999,) if not complete else (),
+        observation_complete=complete,
+    )
+    monkeypatch.setattr(owner, "cleanup", lambda timeout: (returncode, result))
+
+    kill_reason, actual_returncode, cleanup = await execute_termination_action(
+        TerminationAction.NO_KILL,
+        owner=owner,
+        process_exited_event=anyio.Event(),
+        grace_seconds=0,
+        proc_log=structlog.get_logger().bind(pid=owner.pid),
+        process_observation_snapshot=owner.snapshot,
+    )
+
+    assert kill_reason is KillReason.NATURAL_EXIT
+    assert actual_returncode == returncode
+    assert cleanup is result
+    assert cleanup.complete is complete
+
+
+def test_run_managed_sync_survives_incomplete_cleanup_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    incomplete_result = ProcessCleanupResult(
+        root_pid=1,
+        access_denied_pids=(999,),
+        observation_complete=True,
+    )
+    monkeypatch.setattr(
+        _process_kill.OwnedProcessGroup,
+        "cleanup",
+        lambda self, timeout: (0, incomplete_result),
+    )
+
+    result = run_managed_sync(
+        [sys.executable, "-c", "print('hi')"],
+        cwd=None,
+        timeout=5.0,
+    )
+
+    assert result.returncode == 0
+    assert result.cleanup_evidence is incomplete_result
+
+
+@pytest.mark.anyio
+async def test_run_managed_async_coalesces_none_returncode_to_sentinel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A None leader returncode never reaches SubprocessResult.returncode: int."""
+    complete_result = ProcessCleanupResult(root_pid=1, observation_complete=True)
+    monkeypatch.setattr(
+        _process_kill.OwnedProcessGroup,
+        "cleanup",
+        lambda self, timeout: (None, complete_result),
+    )
+
+    result = await run_managed_async(
+        [sys.executable, "-c", "print('hi')"],
+        cwd=tmp_path,
+        timeout=5.0,
+    )
+
+    assert result.returncode == -1
+    assert result.cleanup_evidence is complete_result

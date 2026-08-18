@@ -101,3 +101,63 @@ Open an issue in the GitHub repository. AutoSkillit also has a built-in
 `report_bug` MCP tool that the `pipeline-summary` skill calls automatically
 when an overnight pipeline surfaces a bug. The tool deduplicates against
 existing open issues by fingerprint.
+
+### Does AutoSkillit force Claude agent teams off?
+
+No, not by default. The `agent_backend.force_inactive_agent_teams`
+configuration option defaults to **false**, scoped per-repository (project
+configuration overrides user-level `.claude/settings.json`). When the
+operator sets it to **true** on a target repo, AutoSkillit strips
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` from the launch environment before
+every Claude launch (interactive, resume, skill-session, and food-truck
+builders) and rewrites any conflicting `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+entry in the target repo's `.claude/settings.json` or `.claude/settings.local.json`.
+The pre-spawn checkpoint fail-closes: when the effective environment still
+carries a truthy team value, the launch refuses with an explicit reason.
+
+### When do teams help, and when is the join contract required?
+
+The force-inactive policy is **not** a global rule — it exists because
+join-bearing skills need an unguarded, declared-batch surface that
+team-mode routing defeats. Legitimate team workflows (named teammate
+dispatch, team-name routing, background tasks) continue to work in any
+session that has not loaded a join-bearing skill. A session that loads a
+join-bearing skill is permanently bound for the rest of its lifetime: a
+later load of a non-join skill cannot downgrade the binding. To re-enable
+team workflows in a session, the operator must start a fresh session after
+the join-bearing load.
+
+### Can Codex run join-bearing skills?
+
+Not today. Codex's static capability attestation reports
+`fixed_set_join_capable=False`. When a skill declares
+`semantic_requirements.join.required: true`, the `declare_join_batch` MCP
+tool refuses with `unsupported_operation(REQUIRED_JOIN)` and the skill
+cannot be admitted. Codex support requires the harness to expose a
+fixed-set fan-in primitive; until then, the backend gate is the single
+honest source.
+
+### What happens when I try a named Claude dispatch in a join-bound session?
+
+It is denied before child creation. The `background_exec_guard`
+PreToolUse hook reads the session binding and rejects any Agent call with
+`name`, `team_name`, or `run_in_background` selectors while
+`join_required=true`. The denial names the rejected selectors and points
+the operator at the `declare_join_batch` gateway — declare a wave with
+resolved assignment labels and re-dispatch as ordinary unnamed foreground
+Agent calls. The `ScheduleWakeup` deferral hook is denied for the same
+reason: deferral cannot produce the declared-batch evidence the join
+contract requires.
+
+### What's the difference between `join_required` and `team_name`?
+
+`join_required` is the semantic authority over the **parent's** dispatch
+boundary: a parent that loads a join-bearing skill must use the
+declared-batch fan-in path; the join contract gates its child routing.
+`team_name` is a Claude-only runtime selector that names a teammate under
+agent teams. They are not interchangeable: a join-bearing parent cannot
+dispatch via `team_name` (the dispatch guard denies it), and a non-join
+parent that names a teammate under agent teams is not bound by the join
+contract at all — it is the legitimate team workflow path described
+above. The two surfaces never overlap in the same session.
+

@@ -325,7 +325,7 @@ def test_guard_auto_exempts_after_deny_count_threshold(tmp_path):
 
     flag_path = tmp_path / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
     assert flag_path.exists()
-    assert flag_path.read_text() == "__auto_exempt__"
+    assert json.loads(flag_path.read_text()) == {"schema_version": 1, "auto_exempt": True}
 
 
 def test_guard_records_denial_when_below_threshold(tmp_path):

@@ -1000,6 +1000,10 @@ If the delivered response was lost with its request session, call
 `recover_run_skill_result()` once from the replacement session, then acknowledge the exact
 `receipt_id` returned by recovery. Recovery refuses draft-only, already acknowledged,
 wrong-kitchen, ambiguous multi-receipt, and previously recovered states.
+Any other tool call made while a result is unacknowledged is denied with
+`run_skill_completion_pending` — read `elapsed_seconds`/`step_name`/`guidance` from that
+denial and keep calling `complete_run_skill_result` with backoff; it is not evidence the
+pipeline is wedged.
 
 ---
 

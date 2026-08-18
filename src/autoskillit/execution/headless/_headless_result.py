@@ -32,6 +32,7 @@ from autoskillit.execution.headless._headless_adjudication import (
     _make_terminated_result,
     _parse_stdout,
     _resolve_skill_session_id,
+    _should_flag_cleanup_incomplete,
 )
 from autoskillit.execution.headless._headless_evidence import (
     _apply_budget_guard,
@@ -692,6 +693,8 @@ def _build_skill_result(
             codex_boundary_proof=codex_boundary_proof,
         )
 
+    _cleanup_incomplete = _should_flag_cleanup_incomplete(result, subtype=normalized_subtype)
+
     sr = SkillResult(
         success=success,
         result=result_text,
@@ -712,7 +715,9 @@ def _build_skill_result(
         last_stop_reason=session.last_stop_reason,
         lifespan_started=session.lifespan_started,
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
-        infra=InfraOutcome(exit_category=infra_category.value),
+        infra=InfraOutcome(
+            exit_category=infra_category.value, cleanup_incomplete=_cleanup_incomplete
+        ),
         api_retry=api_retry,
         ndjson_drift=NdjsonDriftOutcome(
             unknown_event_count=session.seen_ndjson_unknown_event_count,

@@ -336,11 +336,12 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
     )
     compose_pr = next(member for member in catalog.skills if member.name == "compose-pr")
     assert compose_pr.semantic_plan is not None
-    adaptation = backend.adapt_skill_semantics(compose_pr.semantic_plan)
-    mapped_targets = {
-        adaptation.logical_role_mapping[spawn.role]
-        for spawn in compose_pr.semantic_plan.child_spawns
-    }
+    # compose-pr declares join.required=true, so Codex refuses it at
+    # admission (REQUIRED_JOIN) rather than returning a role mapping.
+    # Its native role names are unchanged by Codex's mapping rule (neither
+    # is 'autoskillit:'-prefixed nor equal to 'delegated-worker'), so the
+    # expected mapped targets are the declared role names themselves.
+    mapped_targets = {spawn.role for spawn in compose_pr.semantic_plan.child_spawns}
     captured: dict[str, object] = {}
 
     @contextmanager

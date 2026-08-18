@@ -42,6 +42,7 @@ class _BoundedProbeResult:
     stdout: bytes
     stderr: bytes
     failure: str | None = None
+    cleanup_incomplete: bool = False
 
 
 def _terminate_probe(owner: object) -> None:
@@ -50,7 +51,7 @@ def _terminate_probe(owner: object) -> None:
     if not isinstance(owner, OwnedProcessGroup):
         raise TypeError("Codex probe cleanup requires its spawn-bound owner")
     try:
-        owner.settle(timeout=2)
+        owner.settle_evidence(timeout=2)
     finally:
         for stream in (owner.process.stdout, owner.process.stderr):
             if stream is not None:
@@ -131,7 +132,10 @@ def _run_bounded_codex_probe(
                         stderr=bytes(output["stderr"]),
                         failure=f"{stream_name} exceeded {_CODEX_PROBE_STREAM_LIMIT} bytes",
                     )
-        returncode, _cleanup = owner.settle(timeout=max(0.0, deadline - time.monotonic()))
+        returncode, cleanup_result = owner.settle_evidence(
+            timeout=max(0.0, deadline - time.monotonic())
+        )
+        returncode = returncode if returncode is not None else -1
     except subprocess.TimeoutExpired:
         _terminate_probe(owner)
         return _BoundedProbeResult(
@@ -141,6 +145,7 @@ def _run_bounded_codex_probe(
             failure="timed out while reaping",
         )
     except BaseException as exc:
+        # settle_evidence() never raises, so any BaseException here is unrelated to cleanup.
         if process.returncode is None:
             try:
                 _terminate_probe(owner)
@@ -158,6 +163,7 @@ def _run_bounded_codex_probe(
         returncode=returncode,
         stdout=bytes(output["stdout"]),
         stderr=bytes(output["stderr"]),
+        cleanup_incomplete=not cleanup_result.complete,
     )
 
 
@@ -301,6 +307,8 @@ def _validate_mcp_probe(
     result = _run_bounded_codex_probe(command, env=env, cwd=cwd)
     if result.failure is not None:
         return [f"Codex MCP validation {result.failure}; {_probe_diagnostic(result)}"]
+    if result.cleanup_incomplete:
+        logger.warning("codex_probe_cleanup_incomplete", returncode=result.returncode)
     if result.returncode != 0:
         return [
             f"Codex MCP validation exited with status {result.returncode}; "

@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    _AUTOSKILLIT_PLUGIN_KEY,
     ArtifactLease,
+    LegacyRetiringEvidence,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactLifecycleLease,
@@ -25,6 +27,7 @@ from autoskillit.core import (
     RetiringCacheReadResult,
     RetiringCacheState,
     due_retiring_records,
+    generation_store_root,
     get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
@@ -422,6 +425,32 @@ class InstalledPluginArtifactRetirementOwner:
     ) -> RetirementOutcome:
         return self._retirement.try_reclaim(record, now)
 
+    def try_promote_legacy_evidence(
+        self,
+        evidence: LegacyRetiringEvidence,
+        now: datetime,
+    ) -> RetirementOutcome:
+        return self._retirement.try_promote_legacy_evidence(
+            evidence,
+            now,
+            identity_for_path=self.identity_for_path,
+        )
+
+    def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
+        """Validate and return the exact current identity at a managed path."""
+        managed_path = Path(managed_path)
+        if not self._contains(managed_path):
+            raise PluginArtifactValidationError(
+                f"installed plugin is outside managed root: {managed_path}"
+            )
+        return _read_and_validate_identity(
+            managed_path,
+            expected_semantic_key=installed_plugin_semantic_key(
+                _AUTOSKILLIT_PLUGIN_KEY,
+                Path(managed_path).name,
+            ),
+        )
+
 
 class DefaultPluginRetirementCoordinator:
     """Cross-kind retirement dispatcher used by startup and explicit sweeps."""
@@ -431,15 +460,14 @@ class DefaultPluginRetirementCoordinator:
         *,
         projection_owner: PluginArtifactRetirementOwner,
         installed_owner: PluginArtifactRetirementOwner,
+        generation_owner: PluginArtifactRetirementOwner,
     ) -> None:
-        self._owners = {
+        self._owners: dict[PluginArtifactKind, PluginArtifactRetirementOwner] = {
             PluginArtifactKind.PROJECTION: projection_owner,
             PluginArtifactKind.INSTALLED_PLUGIN: installed_owner,
+            PluginArtifactKind.PLUGIN_GENERATION: generation_owner,
         }
-        self._managed_roots = {
-            PluginArtifactKind.PROJECTION: projection_owner.managed_root,
-            PluginArtifactKind.INSTALLED_PLUGIN: installed_owner.managed_root,
-        }
+        self._managed_roots = {kind: owner.managed_root for kind, owner in self._owners.items()}
 
     def migrate_legacy_cache(self) -> RetiringCacheReadResult:
         """Upgrade path-only retirement evidence before exact-v2 mutations."""
@@ -466,24 +494,52 @@ class DefaultPluginRetirementCoordinator:
                     stacklevel=2,
                 )
             return ()
-        outcomes = [RetirementOutcome.LEGACY_EVIDENCE for _item in state.legacy_evidence]
+        outcomes: list[RetirementOutcome] = []
+        for evidence in state.legacy_evidence:
+            owner = (
+                self._owners.get(evidence.recognized_kind) if evidence.recognized_kind else None
+            )
+            if owner is None:
+                outcomes.append(RetirementOutcome.LEGACY_EVIDENCE)
+                continue
+            outcomes.append(owner.try_promote_legacy_evidence(evidence, now))
+        # Re-read after promotion so newly minted records reclaim in this pass.
         for record in due_retiring_records(now):
-            owner = self._owners[record.artifact_kind]
-            outcomes.append(owner.try_reclaim(record, now))
+            record_owner = self._owners.get(record.artifact_kind)
+            if record_owner is None:
+                outcomes.append(RetirementOutcome.REJECTED_IDENTITY)
+                continue
+            outcomes.append(record_owner.try_reclaim(record, now))
         return tuple(outcomes)
 
 
 def default_plugin_retirement_coordinator() -> DefaultPluginRetirementCoordinator:
-    """Compose installed and projected owners without leaking CLI into server lifespan."""
-    from autoskillit.workspace import ProjectedPluginRetirementOwner
+    """Compose every artifact-kind owner over its own disjoint managed root.
 
-    projection_root = Path.home() / ".autoskillit" / "plugin-projections"
+    The generation store and the legacy Claude plugin cache are separate trees.
+    A single owner cannot serve both: ``try_reclaim`` rejects any record outside
+    its ``managed_root`` and never removes it, so a misrouted record is
+    re-rejected on every sweep for the life of the install.
+    """
+    from autoskillit.workspace import (
+        GenerationArtifactRetirementOwner,
+        ProjectedPluginRetirementOwner,
+    )
+
+    home = Path.home()
+    projection_root = home / ".autoskillit" / "plugin-projections"
     installed_owner = InstalledPluginArtifactRetirementOwner(
         current_installed_plugin_root().parent
+    )
+    generation_owner = GenerationArtifactRetirementOwner(
+        generation_store_root(home, _AUTOSKILLIT_PLUGIN_KEY),
+        home=home,
+        plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
     )
     return DefaultPluginRetirementCoordinator(
         projection_owner=ProjectedPluginRetirementOwner(projection_root),
         installed_owner=installed_owner,
+        generation_owner=generation_owner,
     )
 
 

@@ -22,6 +22,19 @@ semantic_requirements:
   - name: vis-lens-always-on
   - name: vis-lens-chart-select
   - name: vis-lens-uncertainty
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: vis_checks
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Anti-Pattern Detection Visualization Lens
@@ -82,7 +95,11 @@ semantic_requirements:
 - Skip checking figures that appear only in planning documents — anti-patterns in planned figures must be caught before implementation
 - Run exploration leaves in the background
 
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
+
 **ALWAYS:**
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Check every identified figure against ALL 16 anti-patterns in the catalog
 - Sort findings critical-first, then warning, then info
 - Populate the `anti_patterns` field in each yaml:figure-spec with the IDs of matched patterns

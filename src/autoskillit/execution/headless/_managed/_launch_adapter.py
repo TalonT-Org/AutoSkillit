@@ -66,12 +66,14 @@ class _HeadlessLaunchAdapter:
         provider_extras: Mapping[str, str] | None,
         observer: _ManagedLineageObserver | None,
         managed_attempt_id: str | None,
+        force_inactive_agent_teams: bool = False,
     ) -> None:
         self._build_spec = build_spec
         self._binding = binding
         self._provider_extras = provider_extras
         self._observer = observer
         self._managed_attempt_id = managed_attempt_id
+        self._force_inactive_agent_teams = force_inactive_agent_teams
         self.secret_environment: Mapping[str, str] = {}
         self.inherited_fds: tuple[int, ...] = ()
 
@@ -104,6 +106,7 @@ class _HeadlessLaunchAdapter:
             "secret_keys": secret_keys,
             "process_idle_timeout_ms": spec.process_idle_timeout_ms,
             "inherited_fd_count": len(spec.inherited_fds),
+            "force_inactive_agent_teams": self._force_inactive_agent_teams,
         }
         adapter_digest = hashlib.sha256(
             json.dumps(adapter_payload, sort_keys=True, separators=(",", ":")).encode()
@@ -151,6 +154,7 @@ def _skill_launch_spec_builder(
     add_dirs: tuple[ValidatedAddDir, ...],
     exit_after_stop_delay_ms: int,
     stream_idle_timeout_ms: int,
+    mcp_tool_timeout_sec: float = 0.0,
     step_name: str,
     temp_dir_relpath: str,
     allowed_write_prefix: str,
@@ -164,6 +168,7 @@ def _skill_launch_spec_builder(
     network_access: bool,
     native_shell_capture_decision: NativeShellCaptureDecision | None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    force_inactive_agent_teams: bool = False,
 ) -> _BuildSpec:
     """Bind stable skill-command inputs while leaving attempt identity late-bound."""
 
@@ -180,6 +185,7 @@ def _skill_launch_spec_builder(
             add_dirs=add_dirs,
             exit_after_stop_delay_ms=exit_after_stop_delay_ms,
             stream_idle_timeout_ms=stream_idle_timeout_ms,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             scenario_step_name=step_name,
             temp_dir_relpath=temp_dir_relpath,
             allowed_write_prefix=allowed_write_prefix,
@@ -197,8 +203,15 @@ def _skill_launch_spec_builder(
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
             managed_attempt_id=managed_attempt_id,
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
-        return backend.build_skill_session_cmd(skill_command, cwd, config)
+        return backend.build_skill_session_cmd(
+            skill_command,
+            cwd,
+            config,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=cwd,
+        )
 
     return build
 
@@ -216,6 +229,7 @@ def _food_truck_launch_spec_builder(
     output_format: OutputFormat,
     exit_after_stop_delay_ms: int,
     stream_idle_timeout_ms: int,
+    mcp_tool_timeout_sec: float = 0.0,
     step_name: str,
     temp_dir_relpath: str,
     allowed_write_prefix: str,
@@ -224,6 +238,7 @@ def _food_truck_launch_spec_builder(
     resume_message: str | None,
     native_shell_capture_decision: NativeShellCaptureDecision | None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    force_inactive_agent_teams: bool = False,
 ) -> _BuildSpec:
     """Bind food-truck inputs while finalizing semantic capability per binding."""
 
@@ -257,6 +272,7 @@ def _food_truck_launch_spec_builder(
             output_format=output_format,
             exit_after_stop_delay_ms=exit_after_stop_delay_ms,
             stream_idle_timeout_ms=stream_idle_timeout_ms,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             scenario_step_name=step_name,
             temp_dir_relpath=temp_dir_relpath,
             allowed_write_prefix=allowed_write_prefix,
@@ -266,6 +282,8 @@ def _food_truck_launch_spec_builder(
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
             managed_attempt_id=managed_attempt_id,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=attempt_cwd,
         )
 
     return build

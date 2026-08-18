@@ -8,7 +8,7 @@ import subprocess
 import tomllib
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +60,7 @@ from autoskillit.core import (
     SessionCheckpoint,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
@@ -142,6 +143,9 @@ from autoskillit.execution.backends._explorer_dispatch import (
 )
 
 
+# Codex has its own timeout mechanism (``ensure_codex_mcp_registered`` /
+# ``CODEX_MCP_TOOL_TIMEOUT_FLOOR``); ``mcp_tool_timeout_sec`` on Codex builders
+# exists only to satisfy the shared Protocol and is intentionally ignored.
 def _codex_home_from_plugin_binding(
     plugin_binding: PluginLaunchBinding | None,
 ) -> str | None:
@@ -270,6 +274,7 @@ class CodexBackend(BackendCmdBuilderBase):
             protected_recipe_delivery_capable=False,
             recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
+            fixed_set_join_capable=False,
         )
 
     @property
@@ -287,12 +292,7 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)
-        return CmdSpec(
-            cmd=spec.cmd,
-            env=spec.env,
-            cwd=cwd,
-            inherited_fds=spec.inherited_fds,
-        )
+        return replace(spec, cwd=cwd)
 
     def stream_parser(self, completion_marker: str = "") -> CodexStreamParser:
         return CodexStreamParser(completion_marker=completion_marker)
@@ -359,7 +359,9 @@ class CodexBackend(BackendCmdBuilderBase):
         *,
         model: str | None = None,
         add_dirs: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         env_extras: Mapping[str, str] | None = None,
+        project_root: Path | str | None = None,
     ) -> CmdSpec:
         cmd = _codex_exec_base(sandbox="workspace-write")
         if model:
@@ -386,8 +388,10 @@ class CodexBackend(BackendCmdBuilderBase):
         plugin_binding: PluginLaunchBinding | None = None,
         output_format: OutputFormat = OutputFormat.JSON,
         add_dirs: Sequence[ValidatedAddDir] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
+        project_root: Path | str | None = None,
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
@@ -564,16 +568,22 @@ class CodexBackend(BackendCmdBuilderBase):
         output_format: OutputFormat = OutputFormat.STREAM_JSON,
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
+        mcp_tool_timeout_sec: float | None = None,
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         sentinel_contract: str = "",
         resume_message: str | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        project_root: Path | str | None = None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
+        # Codex has its own timeout mechanism (see comment above
+        # _codex_home_from_plugin_binding); param is intentionally ignored.
+        del mcp_tool_timeout_sec
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.STREAM_JSON:
             logger.warning("codex_output_format_coerced")
@@ -689,7 +699,13 @@ class CodexBackend(BackendCmdBuilderBase):
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
+        project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
+        # Codex has its own timeout mechanism (see comment above
+        # _codex_home_from_plugin_binding); param is intentionally ignored.
+        del mcp_tool_timeout_sec
         if tools:
             logger.warning(
                 "codex_tools_ignored",
@@ -804,8 +820,13 @@ class CodexBackend(BackendCmdBuilderBase):
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
         skill_session: bool = False,
+        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
+        project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
-        del skill_session
+        # Codex has its own timeout mechanism (see comment above
+        # _codex_home_from_plugin_binding); param is intentionally ignored.
+        del skill_session, mcp_tool_timeout_sec
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)
@@ -1066,16 +1087,26 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Codex collaboration instructions."""
-        role_mapping = {
-            role.name: (
-                role.name.removeprefix("autoskillit:")
-                if role.name.startswith("autoskillit:")
-                else "worker"
-                if role.name == "delegated-worker"
-                else role.name
+        if plan.join is not None and plan.join.required:
+            result = SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic=(
+                    "Codex exposes wait-any/mailbox-activity semantics rather than "
+                    "fixed-set fan-in. Skills declaring join.required=true cannot be "
+                    "honestly realized on this backend and must be refused at admission."
+                ),
             )
-            for role in plan.logical_roles
-        }
+            result.validate_for(plan, backend=self.name)
+            raise AssertionError("unreachable")  # validate_for raises unconditionally
+        role_mapping: dict[str, str] = {}
+        for role in plan.logical_roles:
+            if role.name.startswith("autoskillit:"):
+                native = role.name.removeprefix("autoskillit:")
+            elif role.name == "delegated-worker":
+                native = "worker"
+            else:
+                native = role.name
+            role_mapping[role.name] = native
         sibling_targets = {sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills}
         model_policy: dict[str, tuple[str, str | None]] = {}
         fragments = [
@@ -1113,11 +1144,8 @@ class CodexBackend(BackendCmdBuilderBase):
                 )
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Spawn all independent children before awaiting any result.")
-        if plan.join is not None and plan.join.required:
-            fragments.append(
-                "Use wait_agent with the exact returned child IDs; deliver every independent "
-                "successful child terminal result before parent synthesis."
-            )
+        # NOTE: plan.join.required is refused at admission above via the
+        # unsupported_operation path; this fragment is unreachable by design.
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""
             fragments.append(f"Require {boundary}evidence from each child result.")

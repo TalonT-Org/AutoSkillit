@@ -2,13 +2,42 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import CmdSpec
 from autoskillit.core.types._type_backend import CmdOrigin
 from autoskillit.execution.headless._headless_helpers import assert_interactive_ordering
+from tests._realistic_project import AGENT_TEAMS_ENV_VAR, make_realistic_project
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+@pytest.mark.parametrize("malformed_local", [False, True])
+def test_shape_validator_never_inspects_environment_content(
+    tmp_path: Path, malformed_local: bool
+) -> None:
+    """This gate validates argument order, and nothing else.
+
+    Behavioral pair for tests/arch/test_interactive_ordering_gate.py, which can
+    only prove the symbol is called. A content policy grafted in here fires on
+    every backend and every corridor, because a CmdSpec's shape carries no
+    record of which policy the caller asked for — re-introducing one fails here
+    immediately.
+    """
+    project = make_realistic_project(
+        tmp_path,
+        agent_teams=None if malformed_local else "1",
+        malformed_local=malformed_local,
+    )
+    spec = CmdSpec(
+        cmd=("claude", "--dangerously-skip-permissions", "prompt", "--add-dir", "/a"),
+        env={AGENT_TEAMS_ENV_VAR: "1"},
+        cwd=str(project),
+    )
+
+    assert_interactive_ordering(spec)
 
 
 def test_correctly_ordered_cmd_passes():

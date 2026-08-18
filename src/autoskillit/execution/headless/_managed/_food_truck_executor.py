@@ -252,6 +252,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             output_format=cfg.run_skill.output_format,
             exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
             stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
+            mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
             step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,
@@ -260,6 +261,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             resume_message=resume_message,
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
+            force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
         )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec

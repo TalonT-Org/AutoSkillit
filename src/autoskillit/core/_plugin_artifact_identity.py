@@ -78,6 +78,36 @@ def resolve_current_generation(home: Path, plugin_ref: str, version: str) -> Pat
     return target if target.is_dir() and target.parent == version_root else None
 
 
+def generation_plugin_selector_path(home: Path, plugin_ref: str) -> Path:
+    """Return the version-independent ``current`` symlink for a plugin.
+
+    Lives one level above the per-version selector, so a consumer that must
+    bake an absolute path into persisted config (the Codex hooks config) can
+    name a path that survives version bumps instead of pinning one exact
+    incarnation that retirement will later reclaim.
+    """
+    return generation_store_root(home, plugin_ref) / "current"
+
+
+def resolve_current_generation_for_plugin(home: Path, plugin_ref: str) -> Path | None:
+    """Resolve the version-independent selector to the active generation.
+
+    Returns ``None`` when no selector exists or the target is not a generation
+    directory directly beneath a version directory of this plugin's store.
+    """
+    selector = generation_plugin_selector_path(home, plugin_ref)
+    if not selector.is_symlink():
+        return None
+    try:
+        store_root = selector.parent.resolve(strict=True)
+        target = selector.resolve(strict=True)
+    except OSError:
+        return None
+    if not target.is_dir():
+        return None
+    return target if target.parent.parent == store_root else None
+
+
 def installed_plugin_artifact_manifest_path(managed_root: Path) -> Path:
     """Return the stable external manifest for one installed plugin root."""
     root = Path(managed_root)

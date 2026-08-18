@@ -242,6 +242,9 @@ class CodingAgentBackend(Protocol):
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
         skill_session: bool = False,
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec: ...
 
     def build_skill_session_cmd(
@@ -249,6 +252,9 @@ class CodingAgentBackend(Protocol):
         skill_command: str,
         cwd: str,
         config: SkillSessionConfig,
+        *,
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec: ...
 
     def build_food_truck_cmd(
@@ -265,6 +271,7 @@ class CodingAgentBackend(Protocol):
         output_format: OutputFormat = OutputFormat.STREAM_JSON,
         exit_after_stop_delay_ms: int = 0,
         stream_idle_timeout_ms: int = 0,
+        mcp_tool_timeout_sec: float | None = None,
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
@@ -274,6 +281,8 @@ class CodingAgentBackend(Protocol):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
     ) -> CmdSpec: ...
 
     def build_interactive_cmd(
@@ -290,6 +299,9 @@ class CodingAgentBackend(Protocol):
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
+        force_inactive_agent_teams: bool = False,
+        project_root: Path | str | None = None,
+        mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec: ...
 
     def validate_session_layout(

@@ -56,6 +56,8 @@ class RunSkillCompletionAuthority(Protocol):
 
     def admission(self, tool_name: str) -> tuple[bool, str]: ...
 
+    def pending_info(self, tool_name: str) -> dict[str, object] | None: ...
+
     def begin(
         self,
         *,

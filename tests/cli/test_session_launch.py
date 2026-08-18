@@ -835,6 +835,59 @@ def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatc
     assert build_calls, "Stub backend's build_interactive_cmd must be invoked via resolver DI"
 
 
+def test_run_interactive_session_default_backend_threads_mcp_tool_timeout_sec(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When backend= is absent, config.run_skill.mcp_tool_timeout_sec reaches the builder."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    build_calls: list[dict] = []
+
+    caps = BackendCapabilities(
+        channel_b_capable=True,
+        pty_required=True,
+        session_resume_capable=True,
+        skill_injection_capable=True,
+        supports_thinking_blocks=True,
+        supports_claude_format_stdout=True,
+        exit_code_is_terminal=False,
+        mcp_config_capable=False,
+        food_truck_capable=True,
+        completion_record_types=frozenset({"result"}),
+        session_record_types=frozenset({"assistant"}),
+        hook_trust_policy=HookTrustPolicy.AUTOMATED,
+    )
+
+    class _DIBackend(_BackendLifecycleStub):
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return caps
+
+        def build_interactive_cmd(self, **kwargs):
+            build_calls.append(kwargs)
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    mock_config = MagicMock()
+    mock_config.agent_backend.backend = "claude-code"
+    mock_config.run_skill.mcp_tool_timeout_sec = 7777.0
+
+    monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        lambda name: _DIBackend(),
+    )
+    _stub_plugin_installed(monkeypatch)
+    _capture_subprocess(monkeypatch)
+    _run_interactive_session(system_prompt="test")
+    assert build_calls
+    assert build_calls[-1]["mcp_tool_timeout_sec"] == 7777.0
+
+
 def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

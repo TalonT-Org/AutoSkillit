@@ -101,8 +101,11 @@ def test_fleet_dispatch_exits_when_claude_missing(
         (),
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
-    _agent_backend = type("AB", (), {"backend": "claude-code"})()
+    _agent_backend = type(
+        "AB", (), {"backend": "claude-code", "force_inactive_agent_teams": False}
+    )()
     _branching = type("Branching", (), {"default_base_branch": "main"})()
+    _run_skill = type("RunSkill", (), {"mcp_tool_timeout_sec": 14364.0})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -114,6 +117,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
                 "fleet": _fleet,
                 "agent_backend": _agent_backend,
                 "branching": _branching,
+                "run_skill": _run_skill,
             },
         )(),
     )
@@ -179,8 +183,11 @@ def test_fleet_dispatch_proceeds_when_enabled(
         (),
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
-    _agent_backend = type("AB", (), {"backend": "claude-code"})()
+    _agent_backend = type(
+        "AB", (), {"backend": "claude-code", "force_inactive_agent_teams": False}
+    )()
     _branching = type("Branching", (), {"default_base_branch": "main"})()
+    _run_skill = type("RunSkill", (), {"mcp_tool_timeout_sec": 14364.0})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -192,6 +199,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
                 "fleet": _fleet,
                 "agent_backend": _agent_backend,
                 "branching": _branching,
+                "run_skill": _run_skill,
             },
         )(),
     )

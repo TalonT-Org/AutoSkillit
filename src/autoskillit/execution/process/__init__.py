@@ -61,7 +61,6 @@ from autoskillit.execution.process._process_jsonl import (
 )
 from autoskillit.execution.process._process_kill import (
     OwnedProcessGroup,
-    _wait_process_dead,
     async_kill_process_tree,
     kill_process_tree,
     spawn_owned_process,
@@ -126,7 +125,6 @@ __all__ = [
     "_jsonl_last_record_type",
     "_marker_is_standalone",
     "_session_log_monitor",
-    "_wait_process_dead",
     "_watch_heartbeat",
     "_watch_process",
     "_watch_session_log",
@@ -162,6 +160,12 @@ def _resolve_session_id(
 def _normalize_pass_fds(pass_fds: tuple[int, ...]) -> tuple[int, ...]:
     """Validate and de-duplicate inherited descriptors without reordering them."""
     return normalize_inherited_fds(pass_fds)
+
+
+def _coalesce_returncode(returncode: int | None) -> int:
+    # -1 signals "leader returncode could not be confirmed despite full escalation —
+    # see cleanup_evidence for diagnostic detail."
+    return returncode if returncode is not None else -1
 
 
 async def run_managed_async(
@@ -575,6 +579,7 @@ async def run_managed_async(
                 child_deferral_ceiling=child_deferral_ceiling,
                 process_observation_snapshot=signals.process_observation_snapshot,
             )
+            _coalesced_returncode = _coalesce_returncode(final_returncode)
 
             # Flush and close before reading
             stdout_file.close()
@@ -591,7 +596,7 @@ async def run_managed_async(
                 _stderr_path = None
 
             sub_result = SubprocessResult(
-                returncode=final_returncode,
+                returncode=_coalesced_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
@@ -614,6 +619,7 @@ async def run_managed_async(
                 inspector_verdict=signals.inspector_verdict,
                 stdout_path=_stdout_path,
                 stderr_path=_stderr_path,
+                cleanup_evidence=cleanup_result,
             )
             proc_log.debug(
                 "run_managed_async_result",
@@ -702,7 +708,8 @@ def run_managed_sync(
                     process.pid,
                     timeout,
                 )
-            final_returncode, cleanup_result = owner.settle()
+            final_returncode, cleanup_result = owner.settle_evidence()
+            _coalesced_returncode = _coalesce_returncode(final_returncode)
 
             # Flush and close before reading
             stdout_file.close()
@@ -719,7 +726,7 @@ def run_managed_sync(
                 _stderr_path = None
 
             return SubprocessResult(
-                returncode=final_returncode,
+                returncode=_coalesced_returncode,
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
@@ -728,6 +735,7 @@ def run_managed_sync(
                 channel_confirmation=ChannelConfirmation.UNMONITORED,
                 stdout_path=_stdout_path,
                 stderr_path=_stderr_path,
+                cleanup_evidence=cleanup_result,
             )
         except Exception as exc:
             if owner is not None and process is not None and process.returncode is None:

@@ -20,6 +20,19 @@ semantic_version: 1
 semantic_requirements:
   sibling_skills:
   - name: mermaid
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: exploration_vectors
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Security Architecture Lens

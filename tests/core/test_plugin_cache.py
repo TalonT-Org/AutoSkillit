@@ -4,10 +4,14 @@ validation."""
 from __future__ import annotations
 
 import json
+import os
+import sys
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import psutil
 import pytest
 
 from autoskillit.core import (
@@ -20,6 +24,7 @@ from autoskillit.core import (
 )
 from autoskillit.core._plugin_cache import (
     KitchenProcessIdentity,
+    _pid_alive,
     any_kitchen_open,
     append_retiring_record,
     migrate_retiring_cache_v1,
@@ -86,6 +91,97 @@ def test_kitchen_identity_rejects_nonpositive_sampled_create_time(
 
     with pytest.raises(ValueError, match="create_time"):
         sample_kitchen_process_identity("kitchen", 42, tmp_path)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: uses os.fork and /proc")
+def test_pid_alive_returns_false_for_zombie() -> None:
+    """A zombie with a matching stored create_time must be reported dead.
+
+    Pre-fix, _pid_alive only compared create_time() and would have reported
+    this zombie as alive.
+    """
+    child_pid = os.fork()
+    if child_pid == 0:
+        os._exit(0)
+    try:
+        create_time = psutil.Process(child_pid).create_time()
+        deadline = time.monotonic() + 2.0
+        while (
+            psutil.Process(child_pid).status() != psutil.STATUS_ZOMBIE
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.01)
+        assert psutil.Process(child_pid).status() == psutil.STATUS_ZOMBIE
+        assert _pid_alive(child_pid, stored_create_time=create_time) is False
+    finally:
+        os.waitpid(child_pid, 0)
+
+
+def test_pid_alive_no_such_process_with_create_time_reports_dead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A PID that vanished between os.kill and psutil.Process must be reported dead
+    when the caller supplied a stored_create_time (identity check possible)."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_no_such_process(*_args: object, **_kwargs: object) -> object:
+        raise psutil.NoSuchProcess(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
+
+    assert _pid_alive(42, stored_create_time=1.0) is False
+
+
+def test_pid_alive_no_such_process_without_create_time_reports_dead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NoSuchProcess is definitive even without stored_create_time — the process
+    is gone regardless of whether we have a stored identity to compare against."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_no_such_process(*_args: object, **_kwargs: object) -> object:
+        raise psutil.NoSuchProcess(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
+
+    assert _pid_alive(42, stored_create_time=None) is False
+
+
+def test_pid_alive_access_denied_with_create_time_assumes_alive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive
+    even when the caller has a stored_create_time to compare against."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_access_denied(*_args: object, **_kwargs: object) -> object:
+        raise psutil.AccessDenied(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_access_denied)
+
+    assert _pid_alive(42, stored_create_time=1.0) is True
+
+
+def test_pid_alive_access_denied_without_create_time_assumes_alive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive."""
+    from autoskillit.core import _plugin_cache
+
+    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+
+    def raise_access_denied(*_args: object, **_kwargs: object) -> object:
+        raise psutil.AccessDenied(42)
+
+    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_access_denied)
+
+    assert _pid_alive(42, stored_create_time=None) is True
 
 
 def test_repeated_exact_registration_does_not_grow_registry(monkeypatch, tmp_path: Path) -> None:

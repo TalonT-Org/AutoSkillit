@@ -37,6 +37,7 @@ NOT_YET_LIVE: frozenset[str] = frozenset(
         "supports_model_invocation_gating",
         "supports_thinking_blocks",
         "github_api_callable",
+        "fixed_set_join_capable",
     }
 )
 
@@ -61,6 +62,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "hook_config_format": "REQUIRED",
     "hook_trust_policy": "REQUIRED",
     "inspector_capable": "OPTIONAL",
+    "fixed_set_join_capable": "OPTIONAL",
     "mcp_config_capable": "OPTIONAL",
     "mcp_env_forward_vars": "OPTIONAL",
     "min_version": "OPTIONAL",

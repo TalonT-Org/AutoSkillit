@@ -90,7 +90,7 @@ async def execute_termination_action(
     session_id: str | None = None,
     child_deferral_ceiling: float = 0.0,
     process_observation_snapshot: ProcessObservationSnapshot | None = None,
-) -> tuple[KillReason, int, ProcessCleanupResult]:
+) -> tuple[KillReason, int | None, ProcessCleanupResult]:
     """Single authorized executor for all kill decisions in run_managed_async.
 
     This is the sole managed-async authority for drain, signal, settlement, and reap.
@@ -101,7 +101,7 @@ async def execute_termination_action(
     the subagent is still doing active work — mirroring the stale-kill
     suppression pattern in _session_log_monitor.
 
-    Returns the kill reason, authoritative final return code, and cleanup evidence.
+    Returns the kill reason, final return code, and cleanup evidence.
     """
     if process_observation_snapshot is not None:
         owner.merge_snapshot(process_observation_snapshot)
@@ -115,7 +115,7 @@ async def execute_termination_action(
                 proc_log.debug("natural_exit_after_drain", returncode=owner.returncode)
                 kill_reason = KillReason.NATURAL_EXIT
                 returncode, cleanup = await anyio.to_thread.run_sync(
-                    owner.settle, abandon_on_cancel=False
+                    owner.settle_evidence, abandon_on_cancel=False
                 )
                 return kill_reason, returncode, cleanup
             # Child-liveness deferral: same pattern as _session_log_monitor stale-kill suppression
@@ -127,7 +127,7 @@ async def execute_termination_action(
                         proc_log.debug("natural_exit_during_deferral", returncode=owner.returncode)
                         kill_reason = KillReason.NATURAL_EXIT
                         returncode, cleanup = await anyio.to_thread.run_sync(
-                            owner.settle, abandon_on_cancel=False
+                            owner.settle_evidence, abandon_on_cancel=False
                         )
                         return kill_reason, returncode, cleanup
                     active = (
@@ -158,7 +158,9 @@ async def execute_termination_action(
             kill_reason = KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
-    returncode, cleanup = await anyio.to_thread.run_sync(owner.settle, abandon_on_cancel=False)
+    returncode, cleanup = await anyio.to_thread.run_sync(
+        owner.settle_evidence, abandon_on_cancel=False
+    )
     return kill_reason, returncode, cleanup
 
 

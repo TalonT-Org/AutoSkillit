@@ -223,10 +223,7 @@ Check for the marker using:
 ```python
 RESOLVED_MARKER_RE = re.compile(r"<!--\s*autoskillit:resolved\b")
 
-has_marker_reply = any(
-    RESOLVED_MARKER_RE.search(c.get("body", ""))
-    for c in thread_comments[1:]
-)
+has_marker_reply = any(RESOLVED_MARKER_RE.search(c.get("body", "")) for c in thread_comments[1:])
 
 if thread.get("isResolved") or has_marker_reply:
     prior_resolved_findings.append({"file": path, "line": line, "body": first_body})
@@ -706,8 +703,8 @@ Store as `deletion_context`:
 ```python
 deletion_context = {
     "merge_base": MERGE_BASE,
-    "deleted_files": DELETED_FILES.splitlines(),        # list of paths
-    "deleted_symbols": DELETED_SYMBOLS.splitlines(),    # list of "def foo", "class Bar"
+    "deleted_files": DELETED_FILES.splitlines(),  # list of paths
+    "deleted_symbols": DELETED_SYMBOLS.splitlines(),  # list of "def foo", "class Bar"
     "pr_base": PR_BASE,
 }
 ```
@@ -1235,9 +1232,7 @@ if SNAPSHOT_IS_FRESH:
         snapshot_is_fresh=True,
         handoff_metadata=HANDOFF_METADATA,
     )
-    REVIEW_GENERATION_ID = PUBLICATION_SEED["artifacts"]["raw_findings"][
-        "review_generation_id"
-    ]
+    REVIEW_GENERATION_ID = PUBLICATION_SEED["artifacts"]["raw_findings"]["review_generation_id"]
 else:
     PUBLICATION_SEED = None
     REVIEW_GENERATION_ID = ""
@@ -1452,11 +1447,7 @@ else:
         mode=MODE,
         snapshot_is_fresh=SNAPSHOT_IS_FRESH,
         handoff_metadata=HANDOFF_METADATA,
-        receipt=(
-            json.loads(RECEIPT_DOCUMENT)
-            if MODE == "github" and RECEIPT_DOCUMENT
-            else None
-        ),
+        receipt=(json.loads(RECEIPT_DOCUMENT) if MODE == "github" and RECEIPT_DOCUMENT else None),
     )
     if SNAPSHOT_IS_FRESH:
         publication_generation_id = PUBLICATION["artifacts"]["raw_findings"][

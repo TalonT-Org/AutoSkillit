@@ -19,6 +19,19 @@ semantic_requirements:
   - name: dry-walkthrough
   - name: implement-worktree
   - name: make-plan
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: assessment_vectors
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Phase Elaboration Skill

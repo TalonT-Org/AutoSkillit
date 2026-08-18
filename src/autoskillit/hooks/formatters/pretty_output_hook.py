@@ -202,6 +202,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "get_exploration_page",  # bounded evidence page JSON, generic renders correctly
         "resume_exploration_context",  # bounded evidence page JSON, generic renders correctly
         "delegate_evidence_reader",  # compact JSON delegation envelope (#4585)
+        "declare_join_batch",  # structured success/refusal result, generic renders correctly
         "read_authorized_artifact",
         "get_authorized_artifact_page",
     }

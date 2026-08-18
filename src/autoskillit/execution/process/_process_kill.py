@@ -449,9 +449,11 @@ class OwnedProcessGroup:
                 )
 
     def _identity_is_alive(self, identity: tuple[int, float]) -> bool:
+        """Return whether the identified PID is still a live, non-zombie process."""
         pid, create_time = identity
         try:
-            return psutil.Process(pid).create_time() == create_time
+            proc = psutil.Process(pid)
+            return proc.create_time() == create_time and proc.status() != psutil.STATUS_ZOMBIE
         except (psutil.Error, OSError) as exc:
             if _is_disappearance(exc):
                 return False
@@ -585,14 +587,50 @@ class OwnedProcessGroup:
         return returncode, result
 
     def settle(self, timeout: float = 2.0) -> tuple[int, ProcessCleanupResult]:
+        """Settle the owned group and raise on incomplete cleanup.
+
+        Unlike ``settle_evidence`` (logs and returns) or ``settle_preserving``
+        (attaches evidence to a caller-supplied BaseException), this variant
+        raises ``OwnedProcessCleanupError`` if cleanup produces an incomplete
+        result (a survivor or access-denied PID) or the leader's returncode
+        is unconfirmed. Returns the (returncode, ProcessCleanupResult) tuple
+        on success — both fields are non-Optional.
+        """
         returncode, result = self.cleanup(timeout)
         if returncode is None or not result.complete:
             raise OwnedProcessCleanupError(self.pid, result)
         return returncode, result
 
+    def settle_evidence(self, timeout: float = 2.0) -> tuple[int | None, ProcessCleanupResult]:
+        """Settle the owned group and return cleanup evidence without raising.
+
+        Unlike ``settle`` (raises ``OwnedProcessCleanupError`` on incomplete
+        cleanup), this variant logs an ``owned_group_cleanup_incomplete`` event
+        and returns the partial result so callers can record evidence without
+        propagating the failure. Callers MUST coalesce a None returncode
+        (``returncode if returncode is not None else -1``) before assigning into
+        a non-Optional field.
+        """
+        returncode, result = self.cleanup(timeout)
+        if not result.complete or returncode is None:
+            logger.error(
+                "owned_group_cleanup_incomplete",
+                evidence=result.to_dict(),
+                returncode_confirmed=returncode is not None,
+            )
+        return returncode, result
+
     def settle_preserving(
         self, error: BaseException, timeout: float = 2.0
     ) -> ProcessCleanupResult:
+        """Settle the owned group while preserving a caller-supplied exception.
+
+        Unlike ``settle_evidence`` (which logs and returns silently), this
+        variant attaches the cleanup result to ``error`` via ``add_note`` so
+        the caller's BaseException chains through to its handler with cleanup
+        context intact. The caller is expected to re-raise ``error`` after
+        calling this method.
+        """
         try:
             _, result = self.cleanup(timeout)
         except BaseException as cleanup_error:
@@ -665,24 +703,3 @@ def spawn_owned_process(
         _cleanup_failed_owned_spawn(process)
         raise RuntimeError("spawned child did not establish owned group leadership")
     return OwnedProcessGroup(process, pgid, _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN)
-
-
-async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool:
-    """Wait until proc is dead and its zombie is reaped. Returns True if dead within timeout.
-
-    Uses psutil.Process.wait() rather than polling pid_exists():
-    - For child processes: calls os.waitpid(), reaping the zombie. Only then is the PID
-      truly gone from the process table.
-    - For non-child processes (grandchildren adopted by init): psutil polls internally,
-      which is equivalent to pid_exists() but still handles the NoSuchProcess case correctly.
-
-    pid_exists() returns True for zombies (killed but not reaped), so wait() is required
-    for reliable dead confirmation.
-    """
-    try:
-        await anyio.to_thread.run_sync(proc.wait, timeout)
-        return True
-    except psutil.TimeoutExpired:
-        return False
-    except psutil.NoSuchProcess:
-        return True

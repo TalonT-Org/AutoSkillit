@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -407,8 +408,15 @@ def _user_claude_json_path() -> Path:
     return Path.home() / ".claude.json"
 
 
-def _register_mcp_server(claude_json_path: Path) -> None:
-    """Write autoskillit MCP server entry to claude.json (idempotent)."""
+def _register_mcp_server(
+    claude_json_path: Path, *, mcp_tool_timeout_sec: float | None = None
+) -> None:
+    """Write autoskillit MCP server entry to claude.json (idempotent).
+
+    When given, ``mcp_tool_timeout_sec`` is written as a millisecond ``timeout``
+    field — Claude Code floors its per-tool idle-abort against this server value,
+    aligning with the server-side ``anyio.fail_after`` ceiling.
+    """
     data: dict = {}
     if claude_json_path.exists():
         try:
@@ -421,11 +429,24 @@ def _register_mcp_server(claude_json_path: Path) -> None:
         except OSError as exc:
             raise OSError(f"{claude_json_path} could not be read: {exc}") from exc
     data.setdefault("mcpServers", {})
-    data["mcpServers"]["autoskillit"] = {
+    entry: dict[str, object] = {
         "type": "stdio",
         "command": "autoskillit",
         "args": [],
     }
+    if mcp_tool_timeout_sec is not None:
+        if (
+            not isinstance(mcp_tool_timeout_sec, (int, float))
+            or isinstance(mcp_tool_timeout_sec, bool)
+            or not math.isfinite(mcp_tool_timeout_sec)
+            or mcp_tool_timeout_sec <= 0
+        ):
+            raise ValueError(
+                f"mcp_tool_timeout_sec must be a positive number of seconds, got "
+                f"{mcp_tool_timeout_sec!r}"
+            )
+        entry["timeout"] = int(mcp_tool_timeout_sec * 1000)
+    data["mcpServers"]["autoskillit"] = entry
     atomic_write(claude_json_path, json.JSONEncoder(indent=2).encode(data))
 
 
@@ -512,6 +533,7 @@ def _register_all(
 
     ensure_project_temp(project_dir)
 
+    _cfg = None
     try:
         _cfg = load_config(project_dir)
         if backend is None:
@@ -520,6 +542,14 @@ def _register_all(
         logger.warning("backend resolution failed, defaulting to claude-code", exc_info=True)
         if backend is None:
             backend = get_backend("claude-code")
+        if _cfg is None:
+            # Preserve the idle-abort ceiling even when config load failed:
+            # fall back to a freshly-constructed AutomationConfig (which carries
+            # the canonical mcp_tool_timeout_sec default) instead of passing
+            # None and silently omitting Claude Code's `timeout` field.
+            from autoskillit.config import AutomationConfig
+
+            _cfg = AutomationConfig()
 
     if backend.capabilities.mcp_config_capable:
         readiness = backend.ensure_pre_launch()
@@ -536,7 +566,10 @@ def _register_all(
 
         plugin_ok = _is_plugin_installed(capabilities=backend.capabilities)
         if not plugin_ok:
-            _register_mcp_server(_user_claude_json_path())
+            _register_mcp_server(
+                _user_claude_json_path(),
+                mcp_tool_timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
+            )
         else:
             evict_direct_mcp_entry(_user_claude_json_path())
 

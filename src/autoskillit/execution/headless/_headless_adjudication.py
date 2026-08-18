@@ -70,6 +70,23 @@ def _build_api_retry_outcome(session: ClaudeSessionResult) -> ApiRetryOutcome:
     )
 
 
+def _should_flag_cleanup_incomplete(result: SubprocessResult, *, subtype: str) -> bool:
+    """Single canonical home for the cleanup-evidence contract:
+
+    Set ``cleanup_incomplete=True`` on InfraOutcome when an owned-process-group
+    teardown produced incomplete evidence (a survivor or access-denied PID)
+    even though the workload's own outcome was determined independently. This
+    is diagnostic only — does not affect needs_retry. ``SubprocessResult.cleanup_evidence``
+    and ``InfraOutcome.cleanup_incomplete`` both forward here so the contract
+    is documented exactly once.
+    """
+    evidence = result.cleanup_evidence
+    if evidence is None or evidence.complete:
+        return False
+    logger.error("owned_group_cleanup_incomplete", subtype=subtype, evidence=evidence.to_dict())
+    return True
+
+
 def _make_terminated_result(
     *,
     result: SubprocessResult,
@@ -85,6 +102,8 @@ def _make_terminated_result(
     api_retry: ApiRetryOutcome = ApiRetryOutcome(),
 ) -> SkillResult:
     """Construct SkillResult for infrastructure-terminated sessions (stale/idle_stall)."""
+    if _should_flag_cleanup_incomplete(result, subtype=subtype):
+        infra = dataclasses.replace(infra, cleanup_incomplete=True)
     return SkillResult(
         success=success,
         result=result_text,

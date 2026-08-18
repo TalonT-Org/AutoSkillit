@@ -77,6 +77,11 @@ def assert_interactive_ordering(
 
     Always scans the raw cmd tuple — never trusts origin metadata alone, since
     CmdOrigin is a public dataclass and callers could set it on a misordered cmd.
+
+    Shape only, and backend-agnostic: environment content is never inspected
+    here. Environment policy belongs to the backend's own
+    ``validate_interactive_invocation``, which can read the spec's declared
+    intent. See tests/execution/test_assert_interactive_ordering.py.
     """
     if value_bearing_flags is None:
         value_bearing_flags = _ALL_VALUE_BEARING_FLAGS

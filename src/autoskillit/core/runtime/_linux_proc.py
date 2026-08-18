@@ -26,7 +26,6 @@ def read_starttime_ticks(pid: int) -> int | None:
     """
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
         rpar = stat.rfind(")")
         if rpar == -1:
             return None
@@ -36,6 +35,51 @@ def read_starttime_ticks(pid: int) -> int | None:
     except (OSError, ValueError, IndexError):
         pass
     return None
+
+
+def read_process_state(pid: int) -> str | None:
+    """Read process state character from /proc/pid/stat.
+
+    Uses rfind(")") to correctly locate the field boundary even when the
+    process comm contains a ")" character. Matches psutil's own _parse_stat_file()
+    which uses rfind(b")") for the same reason.
+    """
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        rpar = stat.rfind(")")
+        if rpar == -1:
+            return None
+        fields = stat[rpar + 2 :].split()
+        # state is field 3 (1-indexed per man page), the first field after ")"
+        return fields[0]
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def is_pid_zombie(pid: int) -> bool:
+    """True when pid is a zombie or in the transient dead-reaping window.
+
+    Matches 'Z' (zombie) and 'X' (dead, transient reaping per proc_pid_stat(5),
+    available since Linux 2.6.0). An 'X'-state process is briefly observable
+    before the kernel reaps it; treating it as non-zombie here lets a caller
+    race the reaper and miss cleanup. For liveness checks that exclude both
+    states, prefer is_pid_alive.
+    """
+    state = read_process_state(pid)
+    return state in ("Z", "X")
+
+
+def is_pid_alive(pid: int) -> bool:
+    """True when pid exists and is not a dead or zombie state — False on non-Linux.
+
+    Excludes 'Z' (zombie) and 'X' (dead, transient reaping window, per
+    proc_pid_stat(5), available since Linux 2.6.0). A 'X'-state process is
+    brief but real: a downstream caller that treats it as alive can race
+    against the reaper and miss cleanup.
+    """
+    state = read_process_state(pid)
+    return state is not None and state not in ("Z", "X")
 
 
 def is_session_alive(pid: int, boot_id: str, starttime_ticks: int) -> bool:
@@ -48,4 +92,6 @@ def is_session_alive(pid: int, boot_id: str, starttime_ticks: int) -> bool:
     actual_ticks = read_starttime_ticks(pid)
     if actual_ticks is None:
         return False
-    return actual_ticks == starttime_ticks
+    if actual_ticks != starttime_ticks:
+        return False
+    return is_pid_alive(pid)

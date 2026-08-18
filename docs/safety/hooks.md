@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 46 Claude Code hook scripts: 35 PreToolUse, 9 PostToolUse,
-and 2 SessionStart. Every script is stdlib-only Python so it can run before the
+AutoSkillit registers 51 Claude Code hook scripts: 37 PreToolUse, 11 PostToolUse,
+2 SessionStart, and 1 Stop. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (35)
+## PreToolUse hooks (37)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -413,7 +413,7 @@ closed when their identity is malformed or the record cannot be written, while
 malformed JSON and unrelated tools remain fail-open. Codex and headless terminal
 authority do not use this bridge.
 
-## PostToolUse hooks (9)
+## PostToolUse hooks (10)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools
@@ -487,7 +487,7 @@ All guard scripts fail-**open** for malformed or unparseable input: a JSON decod
 failure produces exit 0 (approve). This prevents a broken hook from blocking the
 entire tool chain.
 
-Seven guards additionally fail-**closed** for valid input with unrecognized values,
+Eight guards additionally fail-**closed** for valid input with unrecognized values,
 as a defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -499,6 +499,7 @@ as a defense-in-depth measure against privilege escalation:
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command, or unexpected classifier error | Unknown mutation scope must not bypass the structured review publisher |
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
 | `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError) | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block |
+| `pr_create_guard.py` | Hook config unreadable or malformed while the kitchen is open (OSError, JSONDecodeError, AttributeError, TypeError) | An unresolvable `recipe_allows_pr_create` authorization must not be read as permission to bypass the prepare_pr → compose_pr pipeline |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
 (valid input, unrecognized value) = fail-closed.

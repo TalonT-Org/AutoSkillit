@@ -34,6 +34,9 @@ from ._plugin_artifact_identity import (
     generation_artifact_root as generation_artifact_root,
 )
 from ._plugin_artifact_identity import (
+    generation_plugin_selector_path as generation_plugin_selector_path,
+)
+from ._plugin_artifact_identity import (
     generation_selector_path as generation_selector_path,
 )
 from ._plugin_artifact_identity import (
@@ -64,12 +67,16 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     resolve_current_generation as resolve_current_generation,
 )
+from ._plugin_artifact_identity import (
+    resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
+)
 from ._plugin_cache import KitchenProcessIdentity as KitchenProcessIdentity
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_record as append_retiring_record
 from ._plugin_cache import due_retiring_records as due_retiring_records
+from ._plugin_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
 from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
@@ -242,8 +249,11 @@ from .pipeline_tracker import release_tracker_lease as release_tracker_lease
 from .pipeline_tracker import retain_tracker_lease as retain_tracker_lease
 from .pipeline_tracker import tracker_lease_path as tracker_lease_path
 from .pipeline_tracker import try_retire_tracker as try_retire_tracker
+from .runtime._linux_proc import is_pid_alive as is_pid_alive
+from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
+from .runtime._linux_proc import read_process_state as read_process_state
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
@@ -363,6 +373,9 @@ from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION as CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
+from .types import (
+    CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR as CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR,
+)
 from .types import CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS as CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS
 from .types import CLAUDE_INJECTED_CLIENT_RESULT_TOKENS as CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
 from .types import CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR as CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR

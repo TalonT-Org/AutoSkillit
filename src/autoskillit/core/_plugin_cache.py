@@ -294,6 +294,22 @@ def _legacy_record_id(version: str, path: str, retired_at: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def is_reclaimable_artifact_path(path: Path, managed_root: Path) -> bool:
+    """Return whether *path* may ever be treated as a retirable incarnation.
+
+    Only a direct, non-hidden child of *managed_root* qualifies. Dot-prefixed
+    entries are managed infrastructure, never artifacts — most importantly
+    ``plugin-projections/.artifact-leases``, the directory holding the lock
+    files every live session's inherited reader lease is held on. Reclaiming
+    it would delete the lease infrastructure out from under every running
+    session.
+
+    Nested descendants are excluded too: an artifact is exactly one level deep,
+    so anything deeper is a component of an artifact rather than an artifact.
+    """
+    return not path.name.startswith(".") and path.parent == managed_root
+
+
 def _classify_legacy_path(
     path: str,
     managed_roots: Mapping[PluginArtifactKind, Path],
@@ -313,6 +329,8 @@ def _classify_legacy_path(
         except OSError:
             continue
         if location != managed_root and location.is_relative_to(managed_root):
+            if not is_reclaimable_artifact_path(location, managed_root):
+                return None, "legacy path is managed infrastructure, not an artifact incarnation"
             return kind, None
     return None, "legacy path is outside known managed roots"
 
@@ -702,6 +720,70 @@ class PluginArtifactRetirementEngine:
         finally:
             writer.close_preserving()
 
+    def try_promote_legacy_evidence(
+        self,
+        evidence: LegacyRetiringEvidence,
+        now: datetime,
+        *,
+        identity_for_path: Callable[[Path], PluginArtifactIdentity],
+    ) -> RetirementOutcome:
+        """Promote path-only legacy evidence into an exact v2 record.
+
+        Migrated v1 evidence carries no incarnation or digest, so it can never
+        authorize deletion by itself. This re-derives an exact identity from
+        disk and hands it to the normal queue; the artifact is then removed by
+        ``try_reclaim`` under the same lease and identity checks as any other
+        record. Nothing is deleted here.
+
+        Eligibility is re-derived from scratch rather than trusting the stored
+        ``recognized_kind`` — evidence already persisted with a wrong kind
+        must not become authority now.
+        """
+        if evidence.recognized_kind is not self.artifact_kind:
+            return RetirementOutcome.LEGACY_EVIDENCE
+        try:
+            path = destination_location(Path(evidence.path))
+        except (OSError, TypeError, ValueError):
+            return RetirementOutcome.LEGACY_EVIDENCE
+        if not is_reclaimable_artifact_path(path, self.managed_root):
+            return RetirementOutcome.LEGACY_EVIDENCE
+        if not self.contains(path):
+            return RetirementOutcome.LEGACY_EVIDENCE
+        if not path.exists():
+            # Nothing left to protect (also covers a broken symlink: exists()
+            # follows the link and is False when the target is gone).
+            remove_retiring_records((evidence.record_id,))
+            return RetirementOutcome.RECORD_REMOVED
+        try:
+            writer = ArtifactLease.acquire_exclusive(self._lease_path(path), blocking=False)
+        except ArtifactLeaseContention:
+            return RetirementOutcome.DEFERRED_CONTENDED
+        except (OSError, RuntimeError) as exc:
+            self._logger.warning(
+                "plugin_artifact_legacy_promotion_lease_failed",
+                artifact_kind=self.artifact_kind.value,
+                path=str(path),
+                error=str(exc),
+            )
+            return RetirementOutcome.DEFERRED_IO_ERROR
+        try:
+            if self._is_current is not None and self._is_current(path):
+                return RetirementOutcome.DEFERRED_CONTENDED
+            try:
+                identity = identity_for_path(path)
+            except (
+                PluginArtifactValidationError,
+                PluginArtifactUnavailableError,
+                OSError,
+            ):
+                # Cannot positively identify it; never delete on ambiguity.
+                return RetirementOutcome.LEGACY_EVIDENCE
+            created = self.enqueue_retirement(identity, now).created
+            remove_retiring_records((evidence.record_id,))
+        finally:
+            writer.close_preserving()
+        return RetirementOutcome.RECLAIMED if created else RetirementOutcome.RECORD_REMOVED
+
     def _log_reclaim(
         self,
         record: RetiringArtifactRecord,
@@ -845,25 +927,37 @@ def read_active_kitchens_registry() -> list[dict]:
 
 
 def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
+    # Allowlisted in test_no_raw_zombie_blind_liveness_check_outside_shared_primitive.
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
+        return _check_pid_with_psutil(pid, stored_create_time)
+    return _check_pid_with_psutil(pid, stored_create_time)
+
+
+def _check_pid_with_psutil(pid: int, stored_create_time: float | None) -> bool:
+    """Post-probe liveness check via psutil — assumes os.kill(pid, 0) already succeeded.
+
+    Reports False only when psutil definitively confirms the process is gone (NoSuchProcess)
+    or in a terminal zombie/dead state. Foreign-user PIDs (AccessDenied) are unverifiable,
+    so we assume alive to avoid retiring a live kitchen on a transient psutil failure.
+    """
+    try:
+        proc = psutil.Process(pid)
         if stored_create_time is not None:
-            try:
-                actual = psutil.Process(pid).create_time()
-                return abs(actual - stored_create_time) < 1.0
-            except psutil.NoSuchProcess:
-                return False
+            identity_match = abs(proc.create_time() - stored_create_time) < 1.0
+        else:
+            identity_match = True
+        return identity_match and proc.status() not in (
+            psutil.STATUS_ZOMBIE,
+            psutil.STATUS_DEAD,
+        )
+    except psutil.NoSuchProcess:
+        return False
+    except psutil.AccessDenied:
         return True
-    if stored_create_time is not None:
-        try:
-            actual = psutil.Process(pid).create_time()
-            return abs(actual - stored_create_time) < 1.0
-        except psutil.NoSuchProcess:
-            return False
-    return True
 
 
 def register_active_kitchen(identity: KitchenProcessIdentity) -> None:

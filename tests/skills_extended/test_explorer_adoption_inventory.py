@@ -1529,13 +1529,18 @@ def test_migrated_phase_d_bodies_have_no_raw_agent_authoring_syntax(
     ("backend", "native_prefix"),
     [
         (ClaudeCodeBackend(), 'Agent(subagent_type="autoskillit:'),
-        (CodexBackend(), 'spawn_agent(agent_type="'),
     ],
 )
 def test_all_actual_migrated_phase_d_vectors_render_each_native_backend_form(
     backend: ClaudeCodeBackend | CodexBackend,
     native_prefix: str,
 ) -> None:
+    # The Codex parameterization was dropped here because every skill in
+    # _PHASE_D_INVENTORY declares join.required=true and Codex refuses
+    # join-bearing skills at admission (REQUIRED_JOIN —
+    # wait-any/mailbox-activity). This native-form contract is therefore
+    # only verified against Claude; Codex's refusal is covered by the
+    # backend semantic-authenticity contract tests.
     active = frozenset(ExplorationVectorApplicabilityId)
     migrated_count = 0
 
@@ -1582,27 +1587,38 @@ def test_investigate_projects_adaptive_semantic_collections_and_guarded_candidat
         "delegated-worker",
     )
 
-    for backend in (ClaudeCodeBackend(), CodexBackend()):
-        projected = _project_phase_d_skill(
+    projected = _project_phase_d_skill(
+        skill,
+        ClaudeCodeBackend(),
+        frozenset(ExplorationVectorApplicabilityId),
+    )
+    assert projected.count("Candidate exploration task") == 15
+    assert projected.count("selected_exploration_task_ids") >= 16
+    assert "rendered marker or call count is never a spawn obligation" in projected
+    assert projected.index("selected_reasoning_responsibilities") < projected.rindex(
+        "Backend-adapted semantic execution contract"
+    )
+    assert projected.index("selected_web_research_topics") < projected.rindex(
+        "Backend-adapted semantic execution contract"
+    )
+    assert "Call spawn_agent 1 time" not in projected
+    assert "Issue 1 Agent(" not in projected
+    assert "Minimum 2 batches" not in projected
+    assert "minimum of 5 parallel" not in projected
+    assert "Mandatory web research" not in projected
+    assert "spawn 2–3 independent validator" not in projected
+
+    # investigate declares join.required=true; Codex refuses join-bearing
+    # skills at admission (REQUIRED_JOIN — wait-any/mailbox-activity), so
+    # the projection must fail closed rather than render adapted content.
+    from autoskillit.core.types._type_exceptions import SkillContractError
+
+    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+        _project_phase_d_skill(
             skill,
-            backend,
+            CodexBackend(),
             frozenset(ExplorationVectorApplicabilityId),
         )
-        assert projected.count("Candidate exploration task") == 15
-        assert projected.count("selected_exploration_task_ids") >= 16
-        assert "rendered marker or call count is never a spawn obligation" in projected
-        assert projected.index("selected_reasoning_responsibilities") < projected.rindex(
-            "Backend-adapted semantic execution contract"
-        )
-        assert projected.index("selected_web_research_topics") < projected.rindex(
-            "Backend-adapted semantic execution contract"
-        )
-        assert "Call spawn_agent 1 time" not in projected
-        assert "Issue 1 Agent(" not in projected
-        assert "Minimum 2 batches" not in projected
-        assert "minimum of 5 parallel" not in projected
-        assert "Mandatory web research" not in projected
-        assert "spawn 2–3 independent validator" not in projected
 
 
 @pytest.mark.parametrize("skill_name", sorted(_PHASE_D_INVENTORY))
@@ -1617,27 +1633,18 @@ def test_actual_migrated_phase_d_applicability_controls_native_dispatch(
     )
     applicabilities = {vector.applicability for vector in migrated}
 
+    from autoskillit.core.types._type_exceptions import SkillContractError
+
     for selected in applicabilities:
         active = frozenset({ExplorationVectorApplicabilityId.ALWAYS, selected})
-        projected = _project_phase_d_skill(skill, CodexBackend(), active)
-        for vector in migrated:
-            body = _marker_body(projected, vector)
-            is_active = (
-                vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
-                or vector.applicability is selected
-            )
-            if is_active:
-                assert f'spawn_agent(agent_type="{vector.role}"' in body, (
-                    skill_name,
-                    vector.id,
-                    selected.value,
-                )
-            else:
-                assert "not applicable to the current invocation" in body, (
-                    skill_name,
-                    vector.id,
-                    selected.value,
-                )
+        # Every skill in this inventory with a non-empty `migrated` set
+        # declares join.required=true; Codex refuses join-bearing skills
+        # at admission (REQUIRED_JOIN — wait-any/mailbox-activity)
+        # regardless of which applicability profile is active, so
+        # per-vector active/inactive body content can no longer be
+        # observed on Codex here.
+        with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
+            _project_phase_d_skill(skill, CodexBackend(), active)
 
 
 def test_architecture_selectors_filesystem_inventory_and_native_matrix_are_exact() -> None:

@@ -236,6 +236,16 @@ class BackendCapabilities:
     # Interactive hook trust behavior. Automated builders retain their explicit
     # bypass policy; interactive launchers translate this policy into CLI flags.
     hook_trust_policy: HookTrustPolicy = HookTrustPolicy.AUTOMATED
+    # True only when the backend natively provides fixed-set join semantics:
+    # a declared batch declaration tool, an Agent PreToolUse claim guard,
+    # PostToolUse and PostToolUseFailure settlers, an unresolved-follow-up
+    # gate, and a Stop completion gate are all installed and capability-attested.
+    # This is a static declaration that must be paired with unconditional
+    # registration of every required hook in HOOK_REGISTRY in the same commit.
+    # Codex does NOT satisfy this contract — its wait-any/mailbox semantics
+    # cannot realize exact-set fixed membership, so its `fixed_set_join_capable`
+    # must remain False until the active harness exposes a real fixed-set primitive.
+    fixed_set_join_capable: bool = False
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -406,6 +416,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     protected_recipe_delivery_capable=False,
     recipe_delivery_budget=None,
     hook_trust_policy=HookTrustPolicy.AUTOMATED,
+    fixed_set_join_capable=True,
 )
 
 
@@ -463,6 +474,10 @@ class CmdSpec:
     is_resume: bool = False
     process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
+    # Records that the builder was asked to keep Claude agent teams inactive
+    # and honored that request at construction. Post-spawn checkpoints read
+    # this intent rather than inferring policy from environment content.
+    force_inactive_agent_teams: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -483,6 +498,7 @@ class SkillSessionConfig:
     add_dirs: tuple[ValidatedAddDir, ...] = ()
     exit_after_stop_delay_ms: int = 0
     stream_idle_timeout_ms: int = 0
+    mcp_tool_timeout_sec: float = 0.0
     scenario_step_name: str = ""
     temp_dir_relpath: str | None = None
     allowed_write_prefix: str = ""
@@ -498,6 +514,7 @@ class SkillSessionConfig:
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
     managed_attempt_id: str | None = None
+    force_inactive_agent_teams: bool = False
 
     def __post_init__(self) -> None:
         managed_values = (

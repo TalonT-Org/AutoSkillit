@@ -170,8 +170,11 @@ def _count_hooks_by_event() -> dict[str, int]:
     by_event: dict[str, set[str]] = {
         "PreToolUse": set(),
         "PostToolUse": set(),
+        "PostToolUseFailure": set(),
         "SessionStart": set(),
+        "Stop": set(),
     }
+    # join_followup_guard adds one PreToolUse script to the count.
     for hook_def in HOOK_REGISTRY:
         for script in hook_def.scripts:
             by_event[hook_def.event_type].add(script)
@@ -232,9 +235,9 @@ def test_kitchen_tagged_tool_count_is_51() -> None:
     assert count == 51, f"Expected 51 kitchen-tagged tools; found {count}"
 
 
-def test_free_range_tool_count_is_21() -> None:
-    assert _count_free_range_tools() == 21, (
-        f"Expected 21 free-range tools; found {_count_free_range_tools()}"
+def test_free_range_tool_count_is_22() -> None:
+    assert _count_free_range_tools() == 22, (
+        f"Expected 22 free-range tools; found {_count_free_range_tools()}"
     )
 
 
@@ -262,11 +265,11 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_53() -> None:
-    # Combined-tree canonical count: 44 numbered checks + 9 lettered sub-checks.
+def test_doctor_check_count_is_54() -> None:
+    # Combined-tree canonical count: 44 numbered checks + 10 lettered sub-checks.
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
-    assert count == 53, f"Expected 53 doctor checks; found {count}"
+    assert count == 54, f"Expected 54 doctor checks; found {count}"
 
 
 def test_bundled_recipe_count_is_15() -> None:
@@ -319,8 +322,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_74_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 74)
+def test_docs_state_75_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 75)
 
 
 @pytest.mark.parametrize(

@@ -15,6 +15,21 @@ hooks:
     - type: command
       command: 'echo ''[SKILL: audit-docs] Auditing documentation for staleness and drift...'''
       once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    for_each: audit_dimensions
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Documentation Audit Skill

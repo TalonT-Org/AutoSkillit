@@ -17,13 +17,23 @@ from typing import Literal, NamedTuple
 
 from autoskillit.core import installed_plugin_cache_dir, pkg_root
 
+# Events that do not require a tool-name matcher pattern (Stop fires once
+# per turn; SessionStart fires before any tool call).
+_MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset({"SessionStart", "Stop", "PreToolUse"})
+
 
 @dataclass(frozen=True, slots=True)
 class HookDef:
     """A single hook group: event type, matcher pattern, and ordered script list."""
 
     matcher: str = ""
-    event_type: Literal["PreToolUse", "PostToolUse", "SessionStart"] = "PreToolUse"
+    event_type: Literal[
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "SessionStart",
+        "Stop",
+    ] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
     session_scope: Literal["any", "headless_only", "interactive_only"] = "any"
@@ -45,7 +55,7 @@ class HookDef:
     self_reclaims_resources: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
-        if self.event_type != "SessionStart" and not self.matcher:
+        if self.event_type not in _MATCHERLESS_EVENT_TYPES and not self.matcher:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )
@@ -348,9 +358,52 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r"Bash|Agent|ScheduleWakeup",
         scripts=["guards/background_exec_guard.py"],
-        session_scope="headless_only",
+        session_scope="any",
         mechanism="deny",
         enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
+    ),
+    HookDef(
+        matcher="Agent",
+        scripts=["guards/join_claim_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
+        matcher="",
+        scripts=["guards/join_followup_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
+        matcher="Agent",
+        event_type="PostToolUse",
+        scripts=["guards/join_settle_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="side-effect",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
+        matcher="Agent",
+        event_type="PostToolUseFailure",
+        scripts=["guards/join_settle_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="side-effect",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+    ),
+    HookDef(
+        matcher="",
+        event_type="Stop",
+        scripts=["guards/join_stop_guard.py"],
+        session_scope="any",
+        codex_status="not-applicable",
+        mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
@@ -540,6 +593,10 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "github_mutation_guard.py",
         "fabricated_completion_guard.py",
         "exploration_request_identity_guard.py",
+        "join_claim_guard.py",  # NEW (#4575, #4520)
+        "join_settle_guard.py",  # NEW (#4575, #4520)
+        "join_stop_guard.py",  # NEW (#4575, #4520)
+        "join_followup_guard.py",  # NEW (#4575, #4520)
     }
 )
 
@@ -558,6 +615,7 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
         "github_mutation_guard.py",
         "exploration_request_identity_guard.py",
         "git_ops_guard.py",
+        "pr_create_guard.py",
     }
 )
 
@@ -803,11 +861,17 @@ HOOK_REGISTRY_HASH: str = compute_registry_hash(
 def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
     """Build the per-entry dict for a hook definition.
 
-    SessionStart entries omit the 'matcher' key; all others include it.
+    Always-matcherless events (``SessionStart``, ``Stop``) omit the
+    ``matcher`` key entirely — Claude Code's documented matcherless event
+    schema has no matcher field. ``PreToolUse`` is treated as matcherless
+    only when its ``matcher`` is empty (the matcherless PreToolUse entries
+    added with REQ-JOIN-005). All other events include ``matcher``.
     This is the single authoritative formatter for both hooks.json and
     settings.json generation.
     """
-    if hook_def.event_type == "SessionStart":
+    if hook_def.event_type in {"SessionStart", "Stop"}:
+        return {"hooks": hook_commands}
+    if hook_def.event_type == "PreToolUse" and not hook_def.matcher:
         return {"hooks": hook_commands}
     return {"matcher": hook_def.matcher, "hooks": hook_commands}
 

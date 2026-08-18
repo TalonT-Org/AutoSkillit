@@ -34,6 +34,7 @@ import psutil
 
 from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.core import get_logger
+from autoskillit.core import is_pid_zombie as is_pid_zombie
 from autoskillit.core import read_boot_id as read_boot_id
 from autoskillit.core import read_starttime_ticks as read_starttime_ticks
 

@@ -132,6 +132,7 @@ async def _run_headless_attempt(
     stream_parser: StreamParser,
     backend_resume_session_id: str,
     lifecycle_observation_enabled: bool,
+    force_inactive_agent_teams: bool = False,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
@@ -158,6 +159,7 @@ async def _run_headless_attempt(
             provider_extras=provider_extras,
             observer=managed_lineage_observer,
             managed_attempt_id=managed_attempt_id,
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
         launch_contract = launch_resolver.finalize(attempt_preparation, adapter)
         if expected_launch_contract is not None:
@@ -230,6 +232,7 @@ async def _attempt_contract_nudge(
     launch_preparation: LaunchPreparation | None = None,
     expected_launch_contract: ResolvedLaunchContract | None = None,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    force_inactive_agent_teams: bool = False,
 ) -> SkillResult | None:
     """Resume once to recover omitted structured tokens or the completion marker."""
     if backend is None or not backend.capabilities.session_resume_capable:
@@ -327,6 +330,8 @@ async def _attempt_contract_nudge(
                     ),
                     managed_attempt_id=attempt_id,
                     skill_session=True,
+                    force_inactive_agent_teams=force_inactive_agent_teams,
+                    project_root=cwd,
                 )
 
             plugin_identity = _binding_identity(binding)
@@ -351,6 +356,7 @@ async def _attempt_contract_nudge(
                 provider_extras=effective_extras or None,
                 observer=managed_lineage_observer,
                 managed_attempt_id=managed_attempt_id,
+                force_inactive_agent_teams=force_inactive_agent_teams,
             )
             launch_contract = launch_resolver.finalize(nudge_preparation, adapter)
             if expected_launch_contract is not None:

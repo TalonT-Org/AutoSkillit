@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import math
 import os
 from dataclasses import dataclass, field
 from typing import ClassVar
@@ -127,8 +128,16 @@ class RunSkillConfig:
             raise ValueError(
                 f"max_suppression_seconds={self.max_suppression_seconds} must be >= 0."
             )
-        if self.mcp_tool_timeout_sec <= 0:
-            raise ValueError(f"mcp_tool_timeout_sec={self.mcp_tool_timeout_sec} must be > 0.")
+        mcp_timeout = self.mcp_tool_timeout_sec
+        if (
+            not isinstance(mcp_timeout, (int, float))
+            or isinstance(mcp_timeout, bool)
+            or not math.isfinite(mcp_timeout)
+            or mcp_timeout <= 0
+        ):
+            raise ValueError(
+                f"mcp_tool_timeout_sec={mcp_timeout} must be a finite positive number of seconds."
+            )
         if self.stream_idle_timeout_ms < 0:
             raise ValueError(
                 f"stream_idle_timeout_ms={self.stream_idle_timeout_ms} must be >= 0 "
@@ -671,6 +680,12 @@ class AgentBackendConfig:
     backend: str = "claude-code"
     step_overrides: dict[str, str] = field(default_factory=dict)
     recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    # Repository-scoped toggle: when True, the Claude launcher neutralizes
+    # CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS in both the process env and the
+    # target repository's .claude/settings*.json files before spawn. Defaults
+    # to False — repositories with the option disabled remain byte-for-byte
+    # unchanged. Independent from join.required. Refs #4575.
+    force_inactive_agent_teams: bool = False
 
     def __post_init__(self) -> None:
         if not self.backend:

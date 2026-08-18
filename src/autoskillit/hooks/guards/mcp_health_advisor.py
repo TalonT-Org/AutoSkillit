@@ -36,14 +36,40 @@ def _read_kitchens() -> list[dict]:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Check if a PID is still running (stdlib-only, no create_time validation)."""
+    """Check if a PID is running and not a zombie (stdlib-only).
+
+    Excludes both 'Z' (zombie) and 'X' (dead, transient reaping per
+    proc_pid_stat(5)) to match the shared is_pid_alive primitive in
+    core/runtime/_linux_proc.py — prevents a split-brain liveness answer
+    with the psutil-based check in core/_plugin_cache._check_pid_with_psutil.
+    """
     try:
         os.kill(pid, 0)
-        return True
     except ProcessLookupError:
         return False
-    except (PermissionError, OSError):
-        # PermissionError means the process exists but we lack permission to signal it.
+    except PermissionError:
+        # PID belongs to another user — assume alive when unverifiable.
+        return True
+    except OSError:
+        # Any other probe failure (rare: EINVAL, transient resource
+        # exhaustion) is unverifiable rather than a confirmed disappearance —
+        # assume alive to match the contract used by every other liveness
+        # site. A spurious false positive here would inject a /MCP reconnect
+        # hint and force the user to re-open a possibly-functional kitchen.
+        return True
+    try:
+        # Cannot import autoskillit.core.runtime._linux_proc here (stdlib-only
+        # hook script); duplicate the rfind(')') /proc parsing rather than
+        # route through an autoskillit import.
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        rpar = stat.rfind(")")
+        if rpar == -1:
+            return True
+        fields = stat[rpar + 2 :].split()
+        return fields[0] not in ("Z", "X")
+    except (FileNotFoundError, PermissionError, OSError, ValueError, IndexError):
+        # /proc unavailable (macOS, hidepid=2 on foreign PIDs); trust the
+        # os.kill(pid, 0) answer above.
         return True
 
 

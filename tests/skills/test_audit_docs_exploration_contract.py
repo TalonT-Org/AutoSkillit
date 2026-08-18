@@ -23,7 +23,13 @@ def test_audit_docs_routes_exactly_ten_closed_world_evidence_vectors() -> None:
 
     assert len(vector_ids) == 10
     assert len(set(vector_ids)) == 10
-    assert "delegated-worker" not in text
+    # Strip the YAML frontmatter so the structural contract is checked against
+    # the prose body only — the rectified semantic_requirements block declares
+    # the authoritative logical role (`delegated-worker`) and the role-spawn
+    # mapping, but the "no prose 'delegated-worker' as a role" rule applies to
+    # the body, not the structured frontmatter.
+    body = text.split("---", 2)[-1] if text.startswith("---") else text
+    assert "delegated-worker" not in body
     for vector_id in vector_ids:
         body = text.split(f'<!-- autoskillit:exploration-vector id="{vector_id}" -->', maxsplit=1)[
             1

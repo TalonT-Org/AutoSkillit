@@ -339,6 +339,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "configure_order",
             "create_and_publish_branch",
             "create_unique_branch",
+            "declare_join_batch",
             "disable_quota_guard",
             "dispatch_food_truck",
             "enable_exploration",

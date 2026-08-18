@@ -1449,7 +1449,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         enabled by a developer's own settings are legitimate state, not a
         launch defect.
         """
-        if spec is None or not spec.force_inactive_agent_teams:
+        if not spec.force_inactive_agent_teams:
             return []
         env = dict(spec.env)
         project_root: Path | str | None = spec.cwd if spec.cwd else None

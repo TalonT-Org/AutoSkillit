@@ -120,7 +120,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
-        "_primitives",  # server/_response_budget/_primitives.py: SHA-256 hexdigests derived once at import time from the canonical spill schema
+        "_primitives",  # server/_response_budget/_primitives.py: SHA-256 hexdigests
+        # derived once at import time from the canonical spill schema
         "_explorer_projection",  # server-owned logger and immutable projection authority
         "_explorer_dispatch",  # immutable backend-specific native dispatch renderers
         "tools_recipe",  # request-scoped recipe pagination ContextVar (delegated)
@@ -1008,9 +1009,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         # +_update_obligation (persisted "republication owed" journal; must be writable
-        # by cli/update/ and readable by server/_lifespan/_startup_checks.py without a server->cli edge,
-        # so it lives at this IL-1 layer rather than splitting further — its 176 lines
-        # are one cohesive read/write/clear API with no internal seam to extract)
+        # by cli/update/ and readable by server/_lifespan/_startup_checks.py without a
+        # server->cli edge, so it lives at this IL-1 layer rather than splitting further —
+        # its 176 lines are one cohesive read/write/clear API with no internal seam to extract)
         "hooks": 24,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
@@ -2108,6 +2109,7 @@ def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
         "_get_recipe",
         "_hook_config",
         "_tracker_authority",
+        "_declare_join_batch",
     }
 
 

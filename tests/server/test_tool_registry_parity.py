@@ -29,10 +29,13 @@ def _handler_signatures(
         Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "server" / "tools"
     )
     handlers: dict[str, tuple[tuple[str, bool], ...]] = {}
-    # Scan both tools_*.py and the decomposed _recipe_section_handler.py
-    for path in sorted(
-        [*tools_dir.glob("tools_*.py"), *tools_dir.glob("_recipe_section_handler.py")]
-    ):
+    # Scan tools_*.py, every .py file inside a decomposed tools_*/ package
+    # (e.g. tools_kitchen/_open_kitchen.py), and _recipe_section_handler.py.
+    tool_files = [*tools_dir.glob("tools_*.py"), *tools_dir.glob("_recipe_section_handler.py")]
+    for pkg in tools_dir.glob("tools_*"):
+        if pkg.is_dir():
+            tool_files.extend(pkg.rglob("*.py"))
+    for path in sorted(tool_files):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

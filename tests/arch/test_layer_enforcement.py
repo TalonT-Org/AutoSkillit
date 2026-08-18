@@ -1017,8 +1017,14 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
         # intentionally package-flat (no package-level __init__ that re-exports
         # these symbols), so the test must allow the cross-package submodule
         # access for the join batch machinery.
-        ("server/tools/tools_kitchen.py", "autoskillit.hooks._join_ledger"),
-        ("server/tools/tools_kitchen.py", "autoskillit.hooks._hook_settings"),
+        (
+            "server/tools/tools_kitchen/_declare_join_batch.py",
+            "autoskillit.hooks._join_ledger",
+        ),
+        (
+            "server/tools/tools_kitchen/_declare_join_batch.py",
+            "autoskillit.hooks._hook_settings",
+        ),
     }
 )
 

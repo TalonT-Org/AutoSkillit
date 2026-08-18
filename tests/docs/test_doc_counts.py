@@ -65,9 +65,29 @@ def _extract_tool_decorators(text: str) -> list[str]:
     return decorators
 
 
+def _tools_entrypoint_files() -> list[Path]:
+    """Every source file that may define a tools_* MCP tool entry point.
+
+    ``tools_*.py`` used to be a flat-file-only naming convention, but several
+    entry-point modules (``tools_kitchen``, ``tools_fleet_dispatch``,
+    ``tools_pipeline_tracker``) are now directory packages whose siblings
+    (``_open_kitchen.py``, ``_handlers.py``, etc.) don't match the
+    ``tools_*.py`` filename pattern themselves. Walk every ``.py`` file inside
+    each ``tools_*`` package so decomposed tool handlers are still counted.
+    """
+    files: list[Path] = []
+    base = SRC_DIR / "server" / "tools"
+    for entry in sorted(base.iterdir()):
+        if entry.is_file() and entry.name.startswith("tools_") and entry.suffix == ".py":
+            files.append(entry)
+        elif entry.is_dir() and entry.name.startswith("tools_"):
+            files.extend(sorted(entry.rglob("*.py")))
+    return files
+
+
 def _count_mcp_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").rglob("tools_*.py"):
+    for f in _tools_entrypoint_files():
         total += len(_extract_tool_decorators(_read(f)))
     return total
 
@@ -83,7 +103,7 @@ def _count_kitchen_tools() -> int:
 
 def _count_free_range_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").rglob("tools_*.py"):
+    for f in _tools_entrypoint_files():
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' not in dec and '"evidence-reader"' not in dec:
                 total += 1
@@ -92,7 +112,7 @@ def _count_free_range_tools() -> int:
 
 def _count_headless_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server" / "tools").rglob("tools_*.py"):
+    for f in _tools_entrypoint_files():
         for dec in _extract_tool_decorators(_read(f)):
             if '"headless"' in dec:
                 total += 1

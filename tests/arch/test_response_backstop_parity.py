@@ -17,10 +17,15 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 def _iter_server_module_trees() -> list[ast.Module]:
-    """Parse every server module (top-level ``server/`` and ``server/tools/``)."""
+    """Parse every server module, including decomposed ``tools_*/``/``_*/`` packages.
+
+    Uses ``rglob`` (not a flat ``glob``) so tool handlers that moved into a
+    directory package during decomposition (e.g.
+    ``server/tools/tools_kitchen/_open_kitchen.py``) are still scanned.
+    """
     server_dir = SRC_ROOT / "server"
     trees = []
-    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
+    for py_file in list(server_dir.rglob("*.py")):
         trees.append(ast.parse(py_file.read_text(), filename=str(py_file)))
     return trees
 

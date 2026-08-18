@@ -363,6 +363,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/tools/tools_kitchen/_get_recipe.py"),
         Path("server/tools/tools_kitchen/_hook_config.py"),
         Path("server/tools/tools_kitchen/_tracker_authority.py"),
+        Path("server/tools/tools_kitchen/_declare_join_batch.py"),
         Path("server/tools/tools_execution.py"),  # capture-mode types from execution gateway
         Path("cli/app.py"),
         Path("cli/session/_session_cook.py"),  # REQ-IMP-011

@@ -37,6 +37,8 @@ semantic_requirements:
 
 # Module Dependency Architecture Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Structural
 **Primary Question:** "How are modules coupled?"
 **Focus:** Package Dependencies, Layering, Coupling Patterns, Fan-In/Fan-Out

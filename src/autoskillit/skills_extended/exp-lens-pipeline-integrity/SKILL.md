@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Pipeline Integrity Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Integrity
 **Primary Question:** "Could data handling create optimistic bias?"
 **Focus:** Data Splits, Leakage Points, Preprocessing Order, Label Contamination, Pipeline Invariants

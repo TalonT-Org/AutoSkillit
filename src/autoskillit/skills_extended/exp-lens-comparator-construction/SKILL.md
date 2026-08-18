@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Comparator Construction Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Counterfactual
 **Primary Question:** "Is the comparator fair and relevant?"
 **Focus:** Baseline Choice, Control Realism, Version Matching, Effort Symmetry, Baseline Drift

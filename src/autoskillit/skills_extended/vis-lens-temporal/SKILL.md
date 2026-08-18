@@ -40,6 +40,8 @@ semantic_requirements:
 
 # Temporal Dynamics Visualization Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Temporal
 **Primary Question:** "Are training dynamics shown clearly and honestly?"
 **Focus:** Axis Scaling (linear vs log), Smoothing Disclosure, Epoch/Step Alignment,

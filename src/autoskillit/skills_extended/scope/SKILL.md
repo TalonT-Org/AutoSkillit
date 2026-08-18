@@ -34,6 +34,8 @@ semantic_requirements:
 
 # Scope Research Skill
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 Explore a technical research question before experiment design. Produces a
 structured scope report covering what is known, what is unknown, prior art
 in the codebase, and proposed hypotheses. This is the first phase of the

@@ -37,6 +37,8 @@ semantic_requirements:
 
 # State Lifecycle Architecture Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Perspective (Quality Overlay)
 **Primary Question:** "How is state corruption prevented?"
 **Focus:** Field Contracts, Validation Gates, Resume Safety, State Mutation Control

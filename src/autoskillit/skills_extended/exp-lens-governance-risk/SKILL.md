@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Governance Risk Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Governance
 **Primary Question:** "What risks arise from acting on this result?"
 **Focus:** Deployment Risks, Subgroup Harms, Monitoring Plans, Limitation Disclosure, Responsible Decision-Making

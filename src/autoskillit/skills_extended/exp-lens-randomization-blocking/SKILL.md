@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Randomization & Blocking Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Design-Structural
 **Primary Question:** "Where does comparability come from?"
 **Focus:** Assignment Mechanisms, Blocking Factors, Stratification, Balanced Designs, Replication

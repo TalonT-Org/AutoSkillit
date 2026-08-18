@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Validity Threats Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Adversarial
 **Primary Question:** "What alternative explanations survive?"
 **Focus:** History Effects, Instrumentation Changes, Selection Effects, Co-interventions, Treatment Diffusion

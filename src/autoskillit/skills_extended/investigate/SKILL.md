@@ -37,6 +37,8 @@ semantic_requirements:
 
 # Investigation Skill
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 Perform deep codebase investigation without making any changes. This skill uses parallel subagents to explore multiple aspects simultaneously.
 
 ## When to Use

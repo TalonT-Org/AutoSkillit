@@ -13,7 +13,7 @@ import re
 import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 _INTERPRETER_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?|perl|ruby|node)\s+"
@@ -1198,37 +1198,3 @@ def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[
     """Return literal subprocess payloads and whether any were unresolved."""
     specs, has_unresolved = _extract_interpreter_command_specs(command)
     return ([spec.payload for spec in specs], has_unresolved)
-
-
-if TYPE_CHECKING:
-    from autoskillit.hooks._github_mutation_analysis import (  # noqa: E402
-        GitHubMutationAnalysis,
-        GitHubMutationKind,
-        GitHubMutationRecord,
-        GitHubMutationStatus,
-        analyze_github_mutations,
-    )
-elif __package__:
-    from ._github_mutation_analysis import (  # noqa: E402
-        GitHubMutationAnalysis,
-        GitHubMutationKind,
-        GitHubMutationRecord,
-        GitHubMutationStatus,
-        analyze_github_mutations,
-    )
-else:
-    from _github_mutation_analysis import (  # noqa: E402
-        GitHubMutationAnalysis,
-        GitHubMutationKind,
-        GitHubMutationRecord,
-        GitHubMutationStatus,
-        analyze_github_mutations,
-    )
-
-__all__ = [
-    "GitHubMutationStatus",
-    "GitHubMutationKind",
-    "GitHubMutationRecord",
-    "GitHubMutationAnalysis",
-    "analyze_github_mutations",
-]

@@ -145,7 +145,7 @@ class TestClaudeResultParser:
             seen_block_types=frozenset({"text", "tool_use"}),
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -175,7 +175,7 @@ class TestClaudeResultParser:
             errors=["empty output"],
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -200,7 +200,7 @@ class TestClaudeResultParser:
             ],
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -217,7 +217,7 @@ class TestClaudeResultParser:
             token_usage={"input_tokens": 10},
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ) as mock_parse:
             parser = ClaudeResultParser()
@@ -233,7 +233,7 @@ class TestClaudeResultParser:
             seen_block_types=frozenset({"text", "thinking"}),
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -274,7 +274,7 @@ class TestClaudeResultParser:
             errors=[],
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -293,7 +293,7 @@ class TestClaudeResultParserTokenExtraction:
             token_usage={"input_tokens": 500, "output_tokens": 200},
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -309,7 +309,7 @@ class TestClaudeResultParserTokenExtraction:
             errors=[],
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -326,7 +326,7 @@ class TestClaudeResultParserTokenExtraction:
             token_usage={},
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -347,7 +347,7 @@ class TestClaudeResultParserTokenExtraction:
             },
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -398,7 +398,7 @@ class TestCliSubtypeRoundTrip:
             errors=[],
         )
         with patch(
-            "autoskillit.execution.backends.claude.parse_session_result",
+            "autoskillit.execution.backends._claude_parse.parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()

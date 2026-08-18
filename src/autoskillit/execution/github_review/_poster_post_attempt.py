@@ -19,8 +19,8 @@ from autoskillit.core import (
     ReviewFindingDispositionKind,
     ReviewOperationState,
     ReviewReconciliationResult,
+    ReviewResponseClass,
 )
-from autoskillit.core.types._type_github_review import ReviewResponseClass
 from autoskillit.execution.github_review.gateway import DefaultGitHubReviewGateway
 from autoskillit.execution.github_review.ledger import GitHubReviewLedger
 

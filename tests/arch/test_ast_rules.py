@@ -1108,7 +1108,7 @@ def test_fcntl_import_allowlist() -> None:
     from tests.fleet.test_state_lock_contract import _FCNTL_ALLOWED_RELATIVE_PATHS
 
     FCNTL_ALLOWED_MODULES = _FCNTL_ALLOWED_RELATIVE_PATHS | {
-        "execution/session/_managed_headless_session_lineage.py",
+        "execution/session/_managed_headless_session_lineage_records.py",
         "hooks/guards/open_kitchen_guard.py",
         "hooks/_join_ledger.py",
     }

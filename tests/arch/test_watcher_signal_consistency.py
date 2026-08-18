@@ -13,6 +13,7 @@ _CLI_APP = Path("src/autoskillit/cli/app.py")
 _PROCESS_RACE = Path("src/autoskillit/execution/process/_process_race.py")
 _PROCESS_MONITOR = Path("src/autoskillit/execution/process/_process_monitor.py")
 _PROCESS_INIT = Path("src/autoskillit/execution/process/__init__.py")
+_PROCESS_TERMINATION = Path("src/autoskillit/execution/process/_termination.py")
 
 _WATCHERS_THAT_MUST_CHECK_EXECUTION_MARKER = frozenset(
     {
@@ -108,7 +109,7 @@ _KILL_EXECUTORS_THAT_MUST_CHECK_CHILD_LIVENESS = frozenset(
 def test_kill_executor_checks_child_liveness(executor: str) -> None:
     """Kill executors authorized to call async_kill_process_tree must consult
     _has_active_child_processes before killing on the COMPLETED path."""
-    callers = _functions_calling_predicate(_PROCESS_INIT, "_has_active_child_processes")
+    callers = _functions_calling_predicate(_PROCESS_TERMINATION, "_has_active_child_processes")
     assert executor in callers, (
         f"{executor} does not call _has_active_child_processes. "
         f"Functions that do: {sorted(callers)}"

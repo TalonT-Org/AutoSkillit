@@ -53,7 +53,7 @@ class TestClaudeSessionLocator:
         )
         monkeypatch.setattr(Path, "home", lambda: fake_home)
         monkeypatch.setattr(
-            "autoskillit.execution.backends.claude.claude_code_project_dir",
+            "autoskillit.execution.backends._claude_session_locator.claude_code_project_dir",
             lambda _cwd: index_dir,
         )
 
@@ -109,7 +109,7 @@ class TestClaudeSessionLocator:
             encoding="utf-8",
         )
         monkeypatch.setattr(
-            "autoskillit.execution.backends.claude.claude_code_project_dir",
+            "autoskillit.execution.backends._claude_session_locator.claude_code_project_dir",
             lambda _cwd: index_dir,
         )
 
@@ -128,7 +128,7 @@ class TestClaudeSessionLocator:
         index_dir.mkdir()
         (index_dir / "sessions-index.json").write_text(contents, encoding="utf-8")
         monkeypatch.setattr(
-            "autoskillit.execution.backends.claude.claude_code_project_dir",
+            "autoskillit.execution.backends._claude_session_locator.claude_code_project_dir",
             lambda _cwd: index_dir,
         )
 

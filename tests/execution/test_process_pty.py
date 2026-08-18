@@ -731,7 +731,7 @@ class TestChannelBAssistantRecovery:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Assistant messages remain nonterminal when stdout is empty."""
-        import autoskillit.execution.headless._headless_result as headless_result_mod
+        import autoskillit.execution.headless._headless_adjudication as headless_result_mod
 
         fake_session = ClaudeSessionResult(
             subtype=CliSubtype.EMPTY_OUTPUT,

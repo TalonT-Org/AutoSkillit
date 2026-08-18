@@ -73,3 +73,40 @@ def test_echo_mentioning_gh_pr_create_allowed(monkeypatch, tmp_path):
     event = _build_bash_event("echo 'running gh pr create for docs'")
     output = _run_hook(event, monkeypatch)
     assert output == "", f"Expected allow but guard produced: {output!r}"
+
+
+def test_exempt_skill_gh_pr_create_allowed_with_kitchen_open(monkeypatch, tmp_path):
+    """The legitimate state that broke: an exempt skill creating a PR mid-session.
+
+    Kitchen open is the guard's arming condition, so it is exactly the state a
+    false positive would fire on.
+    """
+    _set_kitchen_open(tmp_path, monkeypatch)
+    monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+
+    event = _build_bash_event("gh pr create --fill")
+    output = _run_hook(event, monkeypatch)
+    assert output == "", f"Expected allow but guard produced: {output!r}"
+
+
+def test_orchestrator_session_gh_pr_create_allowed(monkeypatch, tmp_path):
+    """Orchestrator sessions own the compose pipeline and must not be blocked."""
+    _set_kitchen_open(tmp_path, monkeypatch)
+    monkeypatch.delenv("AUTOSKILLIT_SKILL_NAME", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+
+    event = _build_bash_event("gh pr create --fill")
+    output = _run_hook(event, monkeypatch)
+    assert output == "", f"Expected allow but guard produced: {output!r}"
+
+
+def test_unrelated_gh_command_allowed_with_kitchen_open(monkeypatch, tmp_path):
+    """Only `gh pr create` is in scope; sibling gh subcommands are ordinary work."""
+    _set_kitchen_open(tmp_path, monkeypatch)
+    monkeypatch.delenv("AUTOSKILLIT_SKILL_NAME", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+
+    event = _build_bash_event("gh pr list --state open")
+    output = _run_hook(event, monkeypatch)
+    assert output == "", f"Expected allow but guard produced: {output!r}"

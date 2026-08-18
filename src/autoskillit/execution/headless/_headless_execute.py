@@ -153,6 +153,9 @@ async def _execute_claude_headless(
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     cfg = ctx.config.run_skill
+    # Read from the same authority the spec builders use, so adapter_digest and
+    # CmdSpec.force_inactive_agent_teams cannot disagree. `cfg` is RunSkillConfig.
+    force_inactive_teams = ctx.config.agent_backend.force_claude_agent_teams_inactive
     if idle_output_timeout is not None:
         _raw_idle = idle_output_timeout
     else:
@@ -331,6 +334,7 @@ async def _execute_claude_headless(
                 lifecycle_observation_enabled=lifecycle_observation_enabled,
                 on_launch_resolved=observe_launch,
                 managed_attempt_id=managed_attempt_id,
+                force_inactive_agent_teams=force_inactive_teams,
                 **lineage_callbacks.attempt_kwargs,
             )
         except Exception as exc:

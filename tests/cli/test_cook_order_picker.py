@@ -519,6 +519,7 @@ class TestOrderResumeParsing:
             default_base_branch=None,
             workspace_temp_dir=None,
             backend=None,
+            force_inactive_agent_teams=False,
         ):
             captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec
@@ -574,6 +575,7 @@ class TestOrderResumeParsing:
             default_base_branch=None,
             workspace_temp_dir=None,
             backend=None,
+            force_inactive_agent_teams=False,
         ):
             captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec
@@ -619,6 +621,7 @@ class TestOrderResumeParsing:
             default_base_branch=None,
             workspace_temp_dir=None,
             backend=None,
+            force_inactive_agent_teams=False,
         ):
             captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec

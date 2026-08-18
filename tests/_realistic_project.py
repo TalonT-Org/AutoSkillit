@@ -41,6 +41,7 @@ def make_realistic_project(
     extra_settings_keys: bool = True,
     malformed_local: bool = False,
     force_claude_agent_teams_inactive: bool = False,
+    project_dir: Path | None = None,
 ) -> Path:
     """Build a project directory resembling a real developer checkout.
 
@@ -50,8 +51,11 @@ def make_realistic_project(
     fail-closed trigger for the force-inactive policy. Passing neither
     ``agent_teams`` nor ``malformed_local`` and setting ``extra_settings_keys``
     False produces a project with no ``.claude/`` directory at all.
+
+    ``project_dir`` writes into an existing directory instead of creating
+    ``tmp_path/"project"``, for tests that already own a project layout.
     """
-    project = tmp_path / "project"
+    project = project_dir if project_dir is not None else tmp_path / "project"
     project.mkdir(parents=True, exist_ok=True)
 
     atomic_write(

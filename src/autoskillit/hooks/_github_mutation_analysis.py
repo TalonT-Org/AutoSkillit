@@ -1,10 +1,12 @@
 """GitHub-mutation analysis extracted from _command_classification.
 
-This module is the consumer of tokenization primitives defined in
-_command_classification. Tokenization primitives are imported lazily
-inside each wrapper to avoid a circular import — the bare-name
-_command_classification reference is resolved after the source module
-is fully populated.
+This module is the consumer of command-segment helpers defined in
+_command_classification (verb extraction, tokenizer, executable
+normalization, redirect partitioning, interpreter-spec extraction, and
+two shell-payload helpers). Each helper is imported lazily inside a thin
+wrapper to satisfy the hook-script stdlib-only contract — the bare-name
+_command_classification reference resolves once the sibling module is
+fully populated. See test_hooks_are_stdlib_only for the enforcement.
 """
 
 from __future__ import annotations

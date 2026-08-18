@@ -343,6 +343,7 @@ providers:
 
 agent_backend:
   backend: claude-code
+  auto_provision_exploration: false
   step_overrides: {}
   recipe_overrides:
     implementation:

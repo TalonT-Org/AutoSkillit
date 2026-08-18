@@ -25,6 +25,9 @@ from autoskillit.core import (
     SessionType,
     get_logger,
 )
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
 from autoskillit.execution import (
     find_orphaned_autoskillit_daemons,
     find_orphaned_codex_processes,
@@ -33,6 +36,7 @@ from autoskillit.execution import (
 )
 from autoskillit.fleet import sweep_stale_dispatch_labels
 from autoskillit.pipeline import (
+    EXPLORER_INELIGIBLE_SESSION_TYPES,
     KitchenOpenPhase,
     OwnerBoundExplorationContextStore,
     confirm_kitchen_effect,
@@ -247,6 +251,15 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
 
     _mcp.enable(tags={"kitchen"})
     _mcp.enable(tags={"plan-review"})
+    # #4684 Fix D: auto-provision the exploration tag at boot, mirroring
+    # open_kitchen's gated reveal. Visibility-only — the per-call HMAC
+    # capability lease minted by enable_exploration remains the authorization
+    # boundary regardless of tag visibility.
+    if (
+        ctx.config.agent_backend.auto_provision_exploration
+        and _resolve_session_type() not in EXPLORER_INELIGIBLE_SESSION_TYPES
+    ):
+        _mcp.enable(tags={"exploration"})
 
     for subset in ctx.config.subsets.disabled:
         _mcp.disable(tags={subset})

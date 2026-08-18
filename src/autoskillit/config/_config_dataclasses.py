@@ -717,6 +717,14 @@ class AgentBackendConfig:
     # to False — repositories with the option disabled remain byte-for-byte
     # unchanged. Independent from join.required. Refs #4575.
     force_inactive_agent_teams: bool = False
+    # When True, open_kitchen (both visibility branches) and _pre_reveal_kitchen
+    # pre-apply the "exploration" tag reveal alongside kitchen/plan-review, for
+    # session types eligible to bind exploration authority. Defaults to False —
+    # the HMAC capability lease remains the authorization boundary regardless;
+    # this only auto-provisions the weaker visibility gate. consumer:
+    # server/tools/tools_kitchen/_open_kitchen.py open_kitchen,
+    # server/_lifespan/_session_boots.py _pre_reveal_kitchen. Refs #4684.
+    auto_provision_exploration: bool = False
 
     def __post_init__(self) -> None:
         if not self.backend:

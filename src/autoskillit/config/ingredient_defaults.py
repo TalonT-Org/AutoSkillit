@@ -172,7 +172,9 @@ SERVER_AUTHORITATIVE_CONFIG_PATHS: dict[str, str] = {
 
 SERVER_AUTHORITATIVE_KEY_HINTS: dict[str, str] = {}
 
-CONFIG_DEFAULT_INGREDIENTS: frozenset[str] = frozenset({"pipeline_health"})
+CONFIG_DEFAULT_INGREDIENTS: frozenset[str] = frozenset(
+    {"pipeline_health", "auto_provision_exploration"}
+)
 
 
 def build_config_default_layer(defaults: dict[str, str]) -> dict[str, str]:
@@ -207,12 +209,16 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
         resolved["local_review_rounds"] = str(cfg.review.local_review_rounds)
         resolved["adversarial_review_level"] = cfg.plan.adversarial_review_level
         resolved["pipeline_health"] = str(cfg.diagnostics.pipeline_health).lower()
+        resolved["auto_provision_exploration"] = str(
+            cfg.agent_backend.auto_provision_exploration
+        ).lower()
     except Exception:
         logger.warning("resolve_base_branch_failed", exc_info=True)
         resolved["base_branch"] = "main"
         resolved["local_review_rounds"] = "0"
         resolved["adversarial_review_level"] = "auto"
         resolved["pipeline_health"] = "false"
+        resolved["auto_provision_exploration"] = "false"
 
     # Fleet dispatch detection — reads env vars, not config, so must run unconditionally.
     resolved["is_fleet_dispatch"] = "true" if os.environ.get(DISPATCH_ID_ENV_VAR) else "false"

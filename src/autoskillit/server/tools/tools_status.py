@@ -22,7 +22,10 @@ from autoskillit.core import (
     render_dot,
     render_mermaid,
 )
-from autoskillit.pipeline import TelemetryFormatter
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
+from autoskillit.pipeline import EXPLORER_INELIGIBLE_SESSION_TYPES, TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import (
@@ -93,6 +96,14 @@ async def kitchen_status() -> str:
                 github_client.has_token if github_client is not None else False
             )
             status["github_default_repo"] = _get_config().github.default_repo
+            # #4684 Fix D: surface broker eligibility so a caller learns why
+            # enable_exploration would refuse *before* the downstream zero-tool
+            # subagent refusal, instead of only after the fact.
+            status["broker_authority"] = (
+                "ineligible_session_type"
+                if _resolve_session_type() in EXPLORER_INELIGIBLE_SESSION_TYPES
+                else "no_session_bound"
+            )
             ctx = _get_ctx()
             from autoskillit.server.tools._pipeline_deps import (  # circular-break
                 _derive_phase_a_deps,

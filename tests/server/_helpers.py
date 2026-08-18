@@ -794,6 +794,7 @@ _PATCHED_DEFAULTS = {
     "is_fleet_dispatch": "true",
     "dispatch_id": "test-dispatch-999",
     "pipeline_health": "true",
+    "auto_provision_exploration": "false",
 }
 
 _SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir"})

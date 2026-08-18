@@ -169,11 +169,14 @@ def test_superseded_version_is_enqueued_on_publish(home: Path, source_root: Path
     """A new version must queue the prior version, not just prior incarnations."""
     first = _publish(home, source_root, "1.0.0")
     (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
-    _publish(home, source_root, "2.0.0")
+    second = _publish(home, source_root, "2.0.0")
 
     queued = {record.managed_path for record in read_retiring_cache().records}
 
     assert first.managed_path in queued, "the superseded 1.0.0 generation must be queued"
+    assert second.managed_path not in queued, (
+        "the currently selected generation must not be queued"
+    )
 
 
 def test_queued_generation_is_reclaimable_by_the_default_coordinator(
@@ -203,8 +206,11 @@ def test_selected_generations_are_never_reclaimed(home: Path, source_root: Path)
     current = _publish(home, source_root, "2.0.0")
 
     coordinator = default_plugin_retirement_coordinator()
-    coordinator.sweep_due(datetime.now(UTC) + timedelta(days=2))
+    outcomes = coordinator.sweep_due(datetime.now(UTC) + timedelta(days=2))
 
+    assert RetirementOutcome.RECLAIMED in outcomes, (
+        "the superseded 1.0.0 generation must be reclaimed"
+    )
     assert current.managed_path.is_dir()
     assert resolve_current_generation_for_plugin(home, _PLUGIN_REF) == current.managed_path
 

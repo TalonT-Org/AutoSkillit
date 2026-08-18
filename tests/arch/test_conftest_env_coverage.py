@@ -1,12 +1,11 @@
-"""Structural guard: root conftest's env-clearing fixture must reference the
-canonical source-of-truth sets AUTOSKILLIT_PRIVATE_ENV_VARS and
-_HEADLESS_EXCLUSIVE_VARS programmatically.
+"""Structural guard: root conftest's env-scrubbing fixture must reference the
+canonical source-of-truth registry AMBIENT_ENV_DISPOSITIONS programmatically.
 
-The arch test validates the *mechanism* — that _clear_private_env iterates the
-named constant sets — not the individual var names.  It catches regression if
+The arch test validates the *mechanism* — that _scrub_ambient_env iterates the
+named registry — not the individual var names.  It catches regression if
 someone replaces the programmatic fixture with hand-written individual fixtures
-(the named-set references would disappear), and catches import-path drift if
-one import is changed but not the other.
+(the named-registry reference would disappear), and catches import-path drift
+if the import is changed without updating the loop (or vice versa).
 """
 
 from __future__ import annotations
@@ -16,15 +15,13 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
-from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _CONFTEST_PY = Path(__file__).parent.parent / "conftest.py"
-_FIXTURE_NAME = "_clear_private_env"
-_PRIVATE_VARS_NAME = "AUTOSKILLIT_PRIVATE_ENV_VARS"
-_EXCLUSIVE_VARS_NAME = "_HEADLESS_EXCLUSIVE_VARS"
+_FIXTURE_NAME = "_scrub_ambient_env"
+_REGISTRY_NAME = "AMBIENT_ENV_DISPOSITIONS"
 
 
 def _find_fixture_func(tree: ast.AST) -> ast.FunctionDef | None:
@@ -54,57 +51,40 @@ def _for_loop_name_ids(func: ast.FunctionDef) -> set[str]:
     return ids
 
 
-def test_clear_private_env_fixture_exists() -> None:
-    """_clear_private_env autouse fixture must be present in tests/conftest.py."""
+def test_scrub_ambient_env_fixture_exists() -> None:
+    """_scrub_ambient_env autouse fixture must be present in tests/conftest.py."""
     tree = ast.parse(_CONFTEST_PY.read_text(), filename=str(_CONFTEST_PY))
     func = _find_fixture_func(tree)
     assert func is not None, (
         f"{_FIXTURE_NAME!r} fixture not found in {_CONFTEST_PY}. "
-        "The programmatic env-clearing fixture may have been removed or renamed."
+        "The programmatic env-scrubbing fixture may have been removed or renamed."
     )
 
 
-def test_clear_private_env_imports_private_vars_constant() -> None:
-    """_clear_private_env must import AUTOSKILLIT_PRIVATE_ENV_VARS by name."""
+def test_scrub_ambient_env_imports_registry_constant() -> None:
+    """_scrub_ambient_env must import AMBIENT_ENV_DISPOSITIONS by name."""
     tree = ast.parse(_CONFTEST_PY.read_text(), filename=str(_CONFTEST_PY))
     func = _find_fixture_func(tree)
     assert func is not None, f"{_FIXTURE_NAME!r} not found in conftest"
     imported = _imported_names(func)
-    assert _PRIVATE_VARS_NAME in imported, (
-        f"{_FIXTURE_NAME} does not import {_PRIVATE_VARS_NAME!r}. "
-        "The fixture must iterate AUTOSKILLIT_PRIVATE_ENV_VARS programmatically."
+    assert _REGISTRY_NAME in imported, (
+        f"{_FIXTURE_NAME} does not import {_REGISTRY_NAME!r}. "
+        f"The fixture must iterate {_REGISTRY_NAME} programmatically."
     )
 
 
-def test_clear_private_env_imports_headless_exclusive_vars_constant() -> None:
-    """_clear_private_env must import _HEADLESS_EXCLUSIVE_VARS by name."""
-    tree = ast.parse(_CONFTEST_PY.read_text(), filename=str(_CONFTEST_PY))
-    func = _find_fixture_func(tree)
-    assert func is not None, f"{_FIXTURE_NAME!r} not found in conftest"
-    imported = _imported_names(func)
-    assert _EXCLUSIVE_VARS_NAME in imported, (
-        f"{_FIXTURE_NAME} does not import {_EXCLUSIVE_VARS_NAME!r}. "
-        "The fixture must iterate _HEADLESS_EXCLUSIVE_VARS programmatically."
-    )
-
-
-def test_clear_private_env_for_loop_references_both_sets() -> None:
-    """_clear_private_env for loop iterator must reference both named sets."""
+def test_scrub_ambient_env_for_loop_references_registry() -> None:
+    """_scrub_ambient_env for loop iterator must reference the registry."""
     tree = ast.parse(_CONFTEST_PY.read_text(), filename=str(_CONFTEST_PY))
     func = _find_fixture_func(tree)
     assert func is not None, f"{_FIXTURE_NAME!r} not found in conftest"
     loop_ids = _for_loop_name_ids(func)
-    assert _PRIVATE_VARS_NAME in loop_ids, (
-        f"{_FIXTURE_NAME} for loop does not reference {_PRIVATE_VARS_NAME!r}. "
-        "The loop must iterate over the union of both constant sets."
-    )
-    assert _EXCLUSIVE_VARS_NAME in loop_ids, (
-        f"{_FIXTURE_NAME} for loop does not reference {_EXCLUSIVE_VARS_NAME!r}. "
-        "The loop must iterate over the union of both constant sets."
+    assert _REGISTRY_NAME in loop_ids, (
+        f"{_FIXTURE_NAME} for loop does not reference {_REGISTRY_NAME!r}. "
+        f"The loop must iterate over {_REGISTRY_NAME}."
     )
 
 
-def test_coverage_parity_private_env_vars() -> None:
-    """Both env-var sets are non-empty and importable from their canonical paths."""
-    assert AUTOSKILLIT_PRIVATE_ENV_VARS, "AUTOSKILLIT_PRIVATE_ENV_VARS is empty"
-    assert _HEADLESS_EXCLUSIVE_VARS, "_HEADLESS_EXCLUSIVE_VARS is empty"
+def test_scrub_ambient_env_registry_is_nonempty() -> None:
+    """AMBIENT_ENV_DISPOSITIONS must be importable from its canonical path and non-empty."""
+    assert len(AMBIENT_ENV_DISPOSITIONS) > 0, f"{_REGISTRY_NAME} is empty"

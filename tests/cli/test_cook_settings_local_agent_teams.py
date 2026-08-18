@@ -16,7 +16,6 @@ an inactive setting when the opt-in is on.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -94,15 +93,13 @@ def test_cook_against_populated_settings_local_json(
     config = AutomationConfig()
     config.agent_backend.force_inactive_agent_teams = force_inactive
     # do NOT stub validate_interactive_invocation — the real policy must run.
-    captured = arrange_cook(monkeypatch, tmp_path, config=config)
+    captured = arrange_cook(
+        monkeypatch, tmp_path, config=config, settings_content=settings_content
+    )
     monkeypatch.setattr(
         "autoskillit.cli.session._session_reload.consume_reload_sentinel",
         lambda _project: None,
     )
-
-    claude_dir = tmp_path / "project" / ".claude"
-    claude_dir.mkdir(parents=True, exist_ok=True)
-    (claude_dir / "settings.local.json").write_text(json.dumps(settings_content))
 
     if expect_error:
         with pytest.raises(RuntimeError, match="force_inactive_agent_teams requested"):

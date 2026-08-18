@@ -2,11 +2,8 @@
 
 Owns the projection, registration, and atomic-replacement mechanics
 for the bundled explorer role set (BUNDLED_EXPLORER_ROLES) and the
-parent config that fronts them.
-
-This file is unrelated to `execution/backends/_codex/explorer_projection.py`
-which holds the role-transport primitives (e.g. `_canonical_explorer_mcp_transport`).
-That module is imported here.
+parent config that fronts them. Imports the role-transport primitives
+from `execution/backends/_codex/explorer_projection.py`.
 """
 
 from __future__ import annotations

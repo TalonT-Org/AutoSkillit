@@ -2,7 +2,6 @@
 
 Owns the NDJSON line classifier (ClaudeStreamParser.parse_line) and the
 final-result reader (ClaudeResultParser.parse_result / parse_stdout).
-The backend file imports them and exposes them via its public surface.
 """
 
 from __future__ import annotations

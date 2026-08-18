@@ -1,9 +1,9 @@
 """Codex startup / validation probes — bounded subprocess + inventory + cache.
 
-Extracted from `codex.py` so the backend file can stay focused on the cmd/cmd-spec
-grammar. These helpers run a small Codex subprocess to verify MCP server inventory
-and confirm the generated home is wired correctly. Every helper is either
-stateless or guarded by the shared module-level lock; the cache and the lock
+Owns the bounded Codex probe runner (`_run_bounded_codex_probe`),
+the MCP-inventory validator, the tool-flag validator, and the
+shared validation cache. Every helper is either stateless or
+guarded by the shared module-level lock; the cache and the lock
 are the module-level state.
 """
 

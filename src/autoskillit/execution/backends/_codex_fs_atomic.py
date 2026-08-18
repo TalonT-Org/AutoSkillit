@@ -1,10 +1,9 @@
 """Stateless filesystem primitives used by the Codex session storage layer.
 
-These helpers are pure with respect to module-level state — they only wrap
-the stdlib (`os`, `pathlib`, `subprocess`) and the parsed `_codex_parse`
-helpers. The transaction-boundary core (`CodexSessionStore`,
-`CodexInteractiveSessionLease`, `_FileLease`) remains in
-`_codex_session_storage.py`.
+Owns the file lease, atomic write, and macOS quarantine helpers consumed
+by the Codex session-storage core. These helpers are pure with respect
+to module-level state — they only wrap the stdlib (`os`, `pathlib`,
+`subprocess`) and the parsed `_codex_parse` helpers.
 """
 
 from __future__ import annotations

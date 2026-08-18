@@ -62,7 +62,6 @@ from autoskillit.server.tools.tools_kitchen._lock_ingredients import (
     lock_ingredients,
 )
 from autoskillit.server.tools.tools_kitchen._open_kitchen import (
-    _collect_disabled_feature_tags,
     _open_kitchen_handler,
     _prime_quota_cache,
     _redisable_subsets,
@@ -142,7 +141,6 @@ __all__ = [
     "_apply_unlock_keys",
     "_attach_transition_fields",
     "_bind_open_kitchen_transition",
-    "_collect_disabled_feature_tags",
     "_ensure_kitchen_transition",
     "_find_session_id_for_reload",
     "_read_open_kitchen_request_ctx",

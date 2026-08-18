@@ -747,21 +747,28 @@ class PluginArtifactRetirementEngine:
             return RetirementOutcome.LEGACY_EVIDENCE
         try:
             path = destination_location(Path(evidence.path))
-        except (OSError, ValueError):
+        except (OSError, TypeError, ValueError):
             return RetirementOutcome.LEGACY_EVIDENCE
         if not is_reclaimable_artifact_path(path, self.managed_root):
             return RetirementOutcome.LEGACY_EVIDENCE
         if not self.contains(path):
             return RetirementOutcome.LEGACY_EVIDENCE
-        if not path.exists() and not path.is_symlink():
-            # Nothing left to protect; drop the bookkeeping without any I/O.
+        if not path.exists():
+            # Nothing left to protect (also covers a broken symlink: exists()
+            # follows the link and is False when the target is gone).
             remove_retiring_records((evidence.record_id,))
             return RetirementOutcome.RECORD_REMOVED
         try:
             writer = ArtifactLease.acquire_exclusive(self._lease_path(path), blocking=False)
         except ArtifactLeaseContention:
             return RetirementOutcome.DEFERRED_CONTENDED
-        except (OSError, RuntimeError):
+        except (OSError, RuntimeError) as exc:
+            self._logger.warning(
+                "plugin_artifact_legacy_promotion_lease_failed",
+                artifact_kind=self.artifact_kind.value,
+                path=str(path),
+                error=str(exc),
+            )
             return RetirementOutcome.DEFERRED_IO_ERROR
         try:
             if self._is_current is not None and self._is_current(path):

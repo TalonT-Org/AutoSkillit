@@ -7,7 +7,8 @@ import sqlite3
 import time
 from collections.abc import Awaitable, Callable
 
-from .ledger import GitHubReviewLedger, MutationSlot
+from ._ledger_schema import MutationSlot
+from .ledger import GitHubReviewLedger
 
 
 class GitHubReviewMutationCoordinator:

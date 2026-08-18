@@ -26,8 +26,7 @@ from autoskillit.core import (
     review_receipt_validation_error,
     unlink_sqlite_initialization_artifacts,
 )
-
-from ._ledger_schema import (  # noqa: F401 — re-exported for sibling modules
+from autoskillit.execution.github_review._ledger_schema import (
     _DATABASE_MODE,
     _DIRECTORY_MODE,
     _SCHEMA,

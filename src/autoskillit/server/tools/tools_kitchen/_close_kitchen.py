@@ -111,7 +111,7 @@ def _close_kitchen_handler() -> None:
     review_gate_path = ctx.project_dir / ".autoskillit" / "temp" / "review_gate_state.json"
     try:
         try:
-            state = json.loads(review_gate_path.read_text())
+            state = json.loads(review_gate_path.read_text(encoding="utf-8"))
             loop_active = (
                 isinstance(state, dict)
                 and state.get("gate") == "LOOP_REQUIRED"

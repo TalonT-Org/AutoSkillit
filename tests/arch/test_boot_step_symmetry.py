@@ -41,20 +41,35 @@ _BOOT_STEP_ORDERING: list[tuple[str, str, tuple[str, ...]]] = [
 ]
 
 
+def _references_symbol(node: ast.expr, symbol: str) -> bool:
+    """True if node is a bare ``symbol`` reference or a ``pkg.symbol`` attribute access.
+
+    The decomposed packages route several facade-patched symbols through a
+    self-import (``from autoskillit.server.tools import tools_kitchen as _tk_pkg``)
+    and call them as ``_tk_pkg.symbol(...)`` instead of a bare name, so both
+    forms count as the boot step being present.
+    """
+    if isinstance(node, ast.Name):
+        return node.id == symbol
+    return isinstance(node, ast.Attribute) and node.attr == symbol
+
+
 def _function_body_contains_symbol(tree: ast.Module, func_name: str, symbol: str) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, ast.AsyncFunctionDef) and node.name == func_name:
             for child in ast.walk(node):
-                if isinstance(child, ast.Name) and child.id == symbol:
+                if isinstance(child, (ast.Name, ast.Attribute)) and _references_symbol(
+                    child, symbol
+                ):
                     return True
     return False
 
 
 def _first_symbol_line(func_node: ast.AsyncFunctionDef, symbol: str) -> int | None:
-    """Return the line number of the first ast.Name reference to symbol in func_node.body."""
+    """Return the line number of the first bare-name or pkg.symbol reference in func_node.body."""
     for stmt in func_node.body:
         for child in ast.walk(stmt):
-            if isinstance(child, ast.Name) and child.id == symbol:
+            if isinstance(child, (ast.Name, ast.Attribute)) and _references_symbol(child, symbol):
                 return stmt.lineno
     return None
 

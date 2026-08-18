@@ -1,7 +1,6 @@
 """Codex explorer role projection — agent toml rendering, registration, refresh, clear.
 
-Extracted from `codex.py`. The backend file is focused on cmd/cmd-spec grammar;
-this module owns the projection, registration, and atomic-replacement mechanics
+Owns the projection, registration, and atomic-replacement mechanics
 for the bundled explorer role set (BUNDLED_EXPLORER_ROLES) and the
 parent config that fronts them.
 

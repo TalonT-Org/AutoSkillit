@@ -17,7 +17,7 @@ import time
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum, unique
 from pathlib import Path
 from typing import Any
@@ -1528,12 +1528,7 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)
-        return CmdSpec(
-            cmd=spec.cmd,
-            env=spec.env,
-            cwd=cwd,
-            inherited_fds=spec.inherited_fds,
-        )
+        return replace(spec, cwd=cwd)
 
     def stream_parser(self, completion_marker: str = "") -> CodexStreamParser:
         return CodexStreamParser(completion_marker=completion_marker)

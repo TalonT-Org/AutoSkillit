@@ -474,6 +474,10 @@ class CmdSpec:
     is_resume: bool = False
     process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
+    # Records that the builder was asked to keep Claude agent teams inactive
+    # and honored that request at construction. Post-spawn checkpoints read
+    # this intent rather than inferring policy from environment content.
+    force_inactive_agent_teams: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(

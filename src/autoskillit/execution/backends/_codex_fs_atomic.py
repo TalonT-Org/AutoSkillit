@@ -12,12 +12,13 @@ from __future__ import annotations
 import json
 import os
 import plistlib
-import re
 import stat
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.core import get_logger
 

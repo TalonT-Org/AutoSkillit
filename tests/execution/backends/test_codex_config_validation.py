@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core import PreLaunchReadiness
+from autoskillit.execution.backends import _codex_probes as probes
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -69,9 +70,9 @@ def test_mcp_inventory_rejects_non_string_array_fields(
 
 
 def test_bounded_codex_probe_captures_success(tmp_path: Path) -> None:
-    from autoskillit.execution.backends.codex import _run_bounded_codex_probe
+    from autoskillit.execution.backends import _codex_probes as probes
 
-    result = _run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import os; os.write(1, b'probe-ok')"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -91,7 +92,7 @@ def test_bounded_codex_probe_times_out_and_reaps(
 
     monkeypatch.setattr(codex, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
 
-    result = codex._run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import time; time.sleep(60)"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -126,7 +127,7 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
     monkeypatch.setattr(codex.subprocess, "Popen", recording_popen)
     monkeypatch.setattr(codex.os, "killpg", recording_killpg)
 
-    result = codex._run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import time; time.sleep(60)"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -147,7 +148,7 @@ def test_bounded_codex_probe_enforces_stream_limit(
 
     monkeypatch.setattr(codex, "_CODEX_PROBE_STREAM_LIMIT", 128)
 
-    result = codex._run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import os; os.write(1, b'x' * 4096)"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -175,7 +176,7 @@ def test_mcp_probe_normalizes_process_and_output_failures(
 
     monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
 
-    errors = codex._validate_mcp_probe(
+    errors = probes._validate_mcp_probe(
         (sys.executable, "-c", program),
         env=os.environ,
         cwd=str(tmp_path),
@@ -194,10 +195,10 @@ def test_mcp_probe_caches_successful_validation(
 
     calls = 0
 
-    def run_probe(*_args: object, **_kwargs: object) -> codex._BoundedProbeResult:
+    def run_probe(*_args: object, **_kwargs: object) -> probes._BoundedProbeResult:
         nonlocal calls
         calls += 1
-        return codex._BoundedProbeResult(
+        return probes._BoundedProbeResult(
             returncode=0,
             stdout=_VALID_INVENTORY_BYTES,
             stderr=b"",
@@ -208,7 +209,7 @@ def test_mcp_probe_caches_successful_validation(
     command = ("codex", "mcp", "list", "--json")
 
     assert (
-        codex._validate_mcp_probe(
+        probes._validate_mcp_probe(
             command,
             env=os.environ,
             cwd=str(tmp_path),
@@ -217,7 +218,7 @@ def test_mcp_probe_caches_successful_validation(
         == []
     )
     assert (
-        codex._validate_mcp_probe(
+        probes._validate_mcp_probe(
             command,
             env=os.environ,
             cwd=str(tmp_path),
@@ -253,9 +254,9 @@ def test_real_interactive_validator_reaches_successful_native_probe(
     def run_probe(
         command: tuple[str, ...],
         **_kwargs: object,
-    ) -> codex._BoundedProbeResult:
+    ) -> probes._BoundedProbeResult:
         commands.append(command)
-        return codex._BoundedProbeResult(
+        return probes._BoundedProbeResult(
             returncode=0,
             stdout=_VALID_INVENTORY_BYTES,
             stderr=b"",

@@ -12,11 +12,6 @@ import pytest
 import autoskillit.hooks._command_classification as command_classification
 import autoskillit.hooks._github_mutation_analysis as github_mutation_analysis
 from autoskillit.hooks._command_classification import (
-    GitHubMutationAnalysis,
-    GitHubMutationKind,
-    GitHubMutationRecord,
-    GitHubMutationStatus,
-    analyze_github_mutations,
     command_verb,
     extract_interpreter_write_paths,
     extract_redirect_targets,
@@ -25,6 +20,13 @@ from autoskillit.hooks._command_classification import (
     has_nested_shell,
     is_gh_command,
     tokenize_command_segments,
+)
+from autoskillit.hooks._github_mutation_analysis import (
+    GitHubMutationAnalysis,
+    GitHubMutationKind,
+    GitHubMutationRecord,
+    GitHubMutationStatus,
+    analyze_github_mutations,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]

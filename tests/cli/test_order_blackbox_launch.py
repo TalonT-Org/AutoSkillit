@@ -54,7 +54,7 @@ steps:
     write_fake_agent_binary(shim_dir)
 
 
-def _launch_roots(tmp_path: Path) -> dict[str, Path]:
+def _launch_roots(tmp_path: Path) -> tuple[dict[str, Path], dict[str, Path]]:
     roots = {
         "project": tmp_path / "project",
         "isolated_home": tmp_path / "home",
@@ -71,7 +71,7 @@ def _launch_roots(tmp_path: Path) -> dict[str, Path]:
     for directory in (*roots.values(), *xdg_roots.values()):
         directory.mkdir(parents=True, exist_ok=True)
     _write_fixture(roots["project"], roots["isolated_home"], roots["shim_dir"])
-    return {**roots, **{f"xdg_{k}": v for k, v in xdg_roots.items()}}
+    return roots, xdg_roots
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX PTY launch coverage")
@@ -81,19 +81,14 @@ def test_order_reaches_spawn_with_exported_teams_variable(tmp_path: Path) -> Non
     Under default config this is legitimate state, so the corridor must reach
     spawn — proven by the fake binary's marker file, not by a built spec.
     """
-    roots = _launch_roots(tmp_path)
+    roots, xdg_roots = _launch_roots(tmp_path)
     environment = hermetic_launch_env(
         project=roots["project"],
         isolated_home=roots["isolated_home"],
         state_dir=roots["state_dir"],
         shim_dir=roots["shim_dir"],
         temp_dir=roots["temp_dir"],
-        xdg_roots={
-            "config": roots["xdg_config"],
-            "cache": roots["xdg_cache"],
-            "data": roots["xdg_data"],
-            "state": roots["xdg_state"],
-        },
+        xdg_roots=xdg_roots,
         extra={AGENT_TEAMS_ENV_VAR: "1"},
     )
 

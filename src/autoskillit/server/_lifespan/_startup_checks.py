@@ -25,15 +25,20 @@ from autoskillit.execution import (
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     find_broken_hook_scripts,
-    iter_all_scope_paths,
     render_hooks_json_text,
-    validate_plugin_cache_hooks,
 )
-from autoskillit.server._state import _get_ctx_or_none
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server._lifespan.iter_all_scope_paths",
+# "autoskillit.server._lifespan.validate_plugin_cache_hooks",
+# "autoskillit.server._lifespan.repair_broken_plugin_cache_hooks", and
+# "autoskillit.server._lifespan._get_ctx_or_none" (the package facade), so
+# these must be resolved via attribute access on the package at call time
+# rather than imported by name into this submodule.
+from autoskillit.server import _lifespan as _lifespan_pkg
 from autoskillit.workspace import (
     PluginHookRepairStatus,
     read_obligation,
-    repair_broken_plugin_cache_hooks,
     repair_broken_projection_hooks,
     verify_install_state,
 )
@@ -102,7 +107,7 @@ def run_startup_hook_health_check() -> list[str]:
     """
     broken: list[str] = []
     try:
-        for scope_label, settings_path in iter_all_scope_paths(None):
+        for scope_label, settings_path in _lifespan_pkg.iter_all_scope_paths(None):
             scope_broken = find_broken_hook_scripts(settings_path)
             if scope_broken:
                 broken.extend(scope_broken)
@@ -117,7 +122,7 @@ def run_startup_hook_health_check() -> list[str]:
         return []
 
     try:
-        cache_broken = validate_plugin_cache_hooks()
+        cache_broken = _lifespan_pkg.validate_plugin_cache_hooks()
         if cache_broken:
             broken.extend(cache_broken)
             logger.warning(
@@ -132,7 +137,7 @@ def run_startup_hook_health_check() -> list[str]:
     if cache_broken or pending_obligation is not None:
         cache_dir = installed_plugin_cache_dir(Path.home(), "autoskillit")
         try:
-            for outcome in repair_broken_plugin_cache_hooks(cache_dir):
+            for outcome in _lifespan_pkg.repair_broken_plugin_cache_hooks(cache_dir):
                 if outcome.status is PluginHookRepairStatus.REPAIRED:
                     logger.info(
                         "plugin_cache_hooks_repaired_at_startup",
@@ -256,7 +261,7 @@ def run_startup_fix_required_coverage_check() -> None:
 
 def _finalize_recorder() -> None:
     """Finalize the recording subprocess runner if one is active."""
-    ctx = _get_ctx_or_none()
+    ctx = _lifespan_pkg._get_ctx_or_none()
     if ctx is not None and isinstance(ctx.runner, RecordingSubprocessRunner):
         try:
             ctx.runner.recorder.finalize()

@@ -22,7 +22,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
-    cleanup_readiness_sentinel,
     get_logger,
     write_readiness_sentinel,
 )
@@ -30,6 +29,12 @@ from autoskillit.core import (
     session_type as _resolve_session_type,
 )
 from autoskillit.pipeline import create_background_task
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server._lifespan._get_ctx_or_none" (the package facade), so
+# _get_ctx_or_none must be resolved via attribute access on the package at
+# call time rather than imported by name into this submodule.
+from autoskillit.server import _lifespan as _lifespan_pkg
 from autoskillit.server._lifespan._session_boots import (
     _LIFESPAN_BOOT_REGISTRY,
     _cleanup_stale_loop,
@@ -43,10 +48,7 @@ from autoskillit.server._lifespan._startup_checks import (
     run_startup_hook_health_check,
     run_startup_install_state_check,
 )
-from autoskillit.server._state import (  # noqa: E402  (kept module-level for clarity; the in-block import below is the actual circular-break)
-    _get_ctx_or_none,
-    deferred_initialize,
-)
+from autoskillit.server._state import deferred_initialize
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -62,7 +64,7 @@ async def _run_drift_check_async() -> None:
 
 async def _run_retiring_sweep_async() -> None:
     """Offload blocking retiring cache sweep to a thread."""
-    ctx = _get_ctx_or_none()
+    ctx = _lifespan_pkg._get_ctx_or_none()
     if ctx is None or ctx.plugin_retirement_coordinator is None:
         return
     loop = _asyncio.get_running_loop()
@@ -87,7 +89,7 @@ async def _run_install_state_check_async() -> None:
 
 async def _run_deferred_init(ready_event: _asyncio.Event) -> None:
     """Run deferred_initialize, signalling *ready_event* when done."""
-    ctx = _get_ctx_or_none()
+    ctx = _lifespan_pkg._get_ctx_or_none()
     if ctx is not None:
         await deferred_initialize(ctx, ready_event=ready_event)
     else:
@@ -162,7 +164,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
         bg_tasks.append(create_background_task(_cleanup_stale_loop(), label="cleanup_stale"))
-        _boot_ctx = _get_ctx_or_none()
+        _boot_ctx = _lifespan_pkg._get_ctx_or_none()
 
         if (
             _boot_ctx is not None
@@ -171,7 +173,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         ):
             bg_tasks.append(
                 create_background_task(
-                    _run_backend_mcp_registration_async(_boot_ctx.backend),
+                    _lifespan_pkg._run_backend_mcp_registration_async(_boot_ctx.backend),
                     label="backend_mcp_registration",
                 )
             )
@@ -189,7 +191,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             except _asyncio.CancelledError:
                 pass  # don't let task cancellation bypass finalize_recorder
         try:
-            cleanup_readiness_sentinel()
+            _lifespan_pkg.cleanup_readiness_sentinel()
         except Exception:
             logger.exception("lifespan sentinel cleanup error")
         try:

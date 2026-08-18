@@ -23,31 +23,28 @@ from autoskillit.core import (
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
     SessionType,
-    _collect_disabled_feature_tags,
     get_logger,
-    register_active_kitchen,
-    resolve_kitchen_id,
 )
-from autoskillit.fleet import (
-    discover_campaign_state_files,
-    reap_stale_dispatches_async,
-    sweep_stale_dispatch_labels,
-)
+from autoskillit.fleet import sweep_stale_dispatch_labels
 from autoskillit.pipeline import (
     KitchenOpenPhase,
     OwnerBoundExplorationContextStore,
     confirm_kitchen_effect,
-    create_background_task,
     get_kitchen_process_identity,
     new_kitchen_open_state,
     start_kitchen_effect,
 )
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server._lifespan._get_ctx_or_none" (the package facade), so
+# _get_ctx_or_none must be resolved via attribute access on the package at
+# call time rather than imported by name into this submodule.
+from autoskillit.server import _lifespan as _lifespan_pkg
 from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._lifespan._startup_checks import (
     _activate_recipe_kitchen,
     _retain_context_tracker_authority,
 )
-from autoskillit.server._state import _get_ctx_or_none
 
 logger = get_logger(__name__)
 
@@ -65,7 +62,7 @@ async def _cleanup_stale_loop(interval: float = 1800.0) -> None:
     loop = _asyncio.get_running_loop()
     while True:
         await _asyncio.sleep(interval)
-        ctx = _get_ctx_or_none()
+        ctx = _lifespan_pkg._get_ctx_or_none()
         if ctx is not None and ctx.session_skill_manager is not None:
             try:
                 removed = await loop.run_in_executor(
@@ -87,7 +84,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     is open before any tool call arrives. Fails open: any step failure is
     logged as a warning and does not abort gate activation.
     """
-    ctx.kitchen_id = resolve_kitchen_id()
+    ctx.kitchen_id = _lifespan_pkg.resolve_kitchen_id()
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
@@ -104,19 +101,21 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
             _prime_quota_cache,
             _quota_refresh_loop,
         )
-        from autoskillit.server.tools.tools_kitchen._hook_config import (  # circular-break
-            _write_hook_config,
+        from autoskillit.server.tools import (  # circular-break
+            tools_kitchen as _tk_fleet,
         )
 
         _features = ctx.config.features if ctx.config is not None else {}
         _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
-        for _tag in _collect_disabled_feature_tags(_features, experimental_enabled=_exp_enabled):
+        for _tag in _lifespan_pkg._collect_disabled_feature_tags(
+            _features, experimental_enabled=_exp_enabled
+        ):
             _mcp.disable(tags={_tag})
     except Exception:
         logger.warning("fleet_auto_gate_boot_feature_suppression_failed", exc_info=True)
 
     try:
-        _write_hook_config()
+        _tk_fleet._write_hook_config()
     except Exception:
         logger.warning("fleet_auto_gate_boot_write_hook_config_failed", exc_info=True)
 
@@ -128,7 +127,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_prime_quota_cache_failed", exc_info=True)
 
     try:
-        ctx.quota_refresh_task = create_background_task(
+        ctx.quota_refresh_task = _lifespan_pkg.create_background_task(
             _quota_refresh_loop(
                 ctx.config.quota_guard,
                 supports_quota_check=_supports_quota,
@@ -140,20 +139,20 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(get_kitchen_process_identity(ctx))
+        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
     _campaign_state_paths: list[Path] = []
     try:
-        _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
+        _campaign_state_paths = _lifespan_pkg.discover_campaign_state_files(ctx.project_dir)
     except Exception:
         logger.warning("fleet_auto_gate_boot_state_discovery_failed", exc_info=True)
 
     if _campaign_state_paths:
         try:
-            await reap_stale_dispatches_async(
+            await _lifespan_pkg.reap_stale_dispatches_async(
                 _campaign_state_paths,
                 own_campaign_id=ctx.kitchen_id,
                 min_reap_age_seconds=60.0,
@@ -165,7 +164,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     if _campaign_state_paths and ctx.github_client is not None:
         try:
-            create_background_task(
+            _lifespan_pkg.create_background_task(
                 sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
                 label="startup_label_recovery_sweep",
             )
@@ -177,15 +176,13 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     """Pre-reveal kitchen for non-notification backends (no tools/list_changed support)."""
     from autoskillit.server import mcp as _mcp  # circular-break
     from autoskillit.server._misc import _prime_quota_cache  # circular-break
-    from autoskillit.server.tools.tools_kitchen._hook_config import (  # circular-break
-        _write_hook_config,
-    )
+    from autoskillit.server.tools import tools_kitchen as _tk_pre_reveal  # circular-break
 
     with ctx.kitchen_transition_lock:
         state = ctx.kitchen_open_state
         if state.phase is KitchenOpenPhase.CLOSED:
             state = new_kitchen_open_state(
-                kitchen_id=resolve_kitchen_id(),
+                kitchen_id=_lifespan_pkg.resolve_kitchen_id(),
                 context_id=state.context_id,
             )
             ctx.kitchen_open_state = state
@@ -206,15 +203,17 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
 
     for subset in ctx.config.subsets.disabled:
         _mcp.disable(tags={subset})
-    for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
+    for tag in _lifespan_pkg._collect_disabled_feature_tags(
+        ctx.config.features, experimental_enabled=False
+    ):
         _mcp.disable(tags={tag})
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(get_kitchen_process_identity(ctx))
+        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("pre_reveal_kitchen_registry_failed", exc_info=True)
-    _write_hook_config()
+    _tk_pre_reveal._write_hook_config()
     _supports_quota = _backend_supports_quota(ctx)
     await _prime_quota_cache(supports_quota_check=_supports_quota)
     ctx.gate_infrastructure_ready = True
@@ -238,9 +237,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         _prime_quota_cache,
         _quota_refresh_loop,
     )
-    from autoskillit.server.tools.tools_kitchen._hook_config import (  # circular-break
-        _write_hook_config,
-    )
+    from autoskillit.server.tools import tools_kitchen as _tk_food_truck  # circular-break
 
     if os.environ.get(HEADLESS_ENV_VAR) != "1":
         if ctx.backend is not None and not ctx.backend.capabilities.supports_tool_list_changed:
@@ -251,7 +248,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         return
 
     _packs = frozenset(p.strip() for p in _raw_tags.split(",") if p.strip())
-    ctx.kitchen_id = resolve_kitchen_id()
+    ctx.kitchen_id = _lifespan_pkg.resolve_kitchen_id()
     ctx.active_recipe_packs = _packs
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
@@ -274,13 +271,15 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
         _features = ctx.config.features if ctx.config is not None else {}
         _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
-        for _tag in _collect_disabled_feature_tags(_features, experimental_enabled=_exp_enabled):
+        for _tag in _lifespan_pkg._collect_disabled_feature_tags(
+            _features, experimental_enabled=_exp_enabled
+        ):
             _mcp.disable(tags={_tag})
     except Exception:
         logger.warning("food_truck_auto_gate_boot_feature_suppression_failed", exc_info=True)
 
     try:
-        _write_hook_config()
+        _tk_food_truck._write_hook_config()
     except Exception:
         logger.warning("food_truck_auto_gate_boot_hook_config_failed", exc_info=True)
 
@@ -293,7 +292,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     try:
         if ctx.config is not None:
-            ctx.quota_refresh_task = create_background_task(
+            ctx.quota_refresh_task = _lifespan_pkg.create_background_task(
                 _quota_refresh_loop(
                     ctx.config.quota_guard,
                     supports_quota_check=_supports_quota,
@@ -305,13 +304,13 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(get_kitchen_process_identity(ctx))
+        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
 
     try:
-        _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
+        _campaign_state_paths = _lifespan_pkg.discover_campaign_state_files(ctx.project_dir)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_state_discovery_failed", exc_info=True)
         return
@@ -327,7 +326,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
             except Exception:
                 logger.warning("food_truck_auto_gate_boot_self_exclusion_failed", exc_info=True)
 
-            await reap_stale_dispatches_async(
+            await _lifespan_pkg.reap_stale_dispatches_async(
                 _campaign_state_paths,
                 skip_dispatch_ids=_skip,
                 own_campaign_id=_own_campaign_id,
@@ -340,7 +339,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     try:
         if _campaign_state_paths and ctx.github_client is not None:
-            create_background_task(
+            _lifespan_pkg.create_background_task(
                 sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
                 label="startup_label_recovery_sweep",
             )
@@ -364,7 +363,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
         return
 
-    ctx.kitchen_id = resolve_kitchen_id()
+    ctx.kitchen_id = _lifespan_pkg.resolve_kitchen_id()
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
@@ -386,17 +385,17 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
 
         _features = ctx.config.features if ctx.config is not None else {}
         _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
-        for _tag in _collect_disabled_feature_tags(_features, experimental_enabled=_exp_enabled):
+        for _tag in _lifespan_pkg._collect_disabled_feature_tags(
+            _features, experimental_enabled=_exp_enabled
+        ):
             _mcp.disable(tags={_tag})
     except Exception:
         logger.warning("skill_auto_gate_boot_feature_suppression_failed", exc_info=True)
 
     try:
-        from autoskillit.server.tools.tools_kitchen._hook_config import (  # circular-break
-            _write_hook_config,
-        )
+        from autoskillit.server.tools import tools_kitchen as _tk_skill  # circular-break
 
-        _write_hook_config()
+        _tk_skill._write_hook_config()
     except Exception:
         logger.warning("skill_auto_gate_boot_hook_config_failed", exc_info=True)
 
@@ -410,7 +409,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(get_kitchen_process_identity(ctx))
+        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)

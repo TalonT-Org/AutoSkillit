@@ -24,15 +24,20 @@ import asyncio as _asyncio  # noqa: F401  (mock.patch reachability)
 import autoskillit.core.paths as _core_paths  # noqa: F401  (mock.patch reachability)
 from autoskillit.core import (  # noqa: F401  (mock.patch reachability)
     _collect_disabled_feature_tags,
+    cleanup_readiness_sentinel,
     register_active_kitchen,
     resolve_kitchen_id,
+    write_readiness_sentinel,
 )
-from autoskillit.core.runtime.readiness import write_readiness_sentinel  # noqa: F401
 from autoskillit.fleet import (  # noqa: F401  (mock.patch reachability)
+    discover_campaign_state_files,
     reap_stale_dispatches_async,
     sweep_stale_dispatch_labels,
 )
-from autoskillit.hook_registry import validate_plugin_cache_hooks  # noqa: F401
+from autoskillit.hook_registry import (  # noqa: F401  (mock.patch reachability)
+    iter_all_scope_paths,
+    validate_plugin_cache_hooks,
+)
 from autoskillit.pipeline import create_background_task  # noqa: F401  (mock.patch reachability)
 from autoskillit.server._lifespan._lifespan import (
     _autoskillit_lifespan,
@@ -53,22 +58,18 @@ from autoskillit.server._lifespan._session_boots import (
     _food_truck_auto_gate_boot,
     _pre_reveal_kitchen,
     _skill_auto_gate_boot,
-    discover_campaign_state_files,  # noqa: F401  (mock.patch reachability)
 )
 from autoskillit.server._lifespan._startup_checks import (
     _activate_recipe_kitchen,
     _finalize_recorder,
     _retain_context_tracker_authority,
-    iter_all_scope_paths,  # noqa: F401  (mock.patch reachability)
     run_startup_drift_check,
     run_startup_fix_required_coverage_check,
     run_startup_hook_health_check,
     run_startup_install_state_check,
 )
 from autoskillit.server._state import _get_ctx_or_none  # noqa: F401  (mock.patch reachability)
-from autoskillit.workspace._projected_artifact._hook_repair import (  # noqa: F401
-    repair_broken_plugin_cache_hooks,
-)
+from autoskillit.workspace import repair_broken_plugin_cache_hooks  # noqa: F401
 
 __all__ = [
     "_LIFESPAN_BOOT_REGISTRY",

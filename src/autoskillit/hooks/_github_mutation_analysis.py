@@ -4,9 +4,11 @@ This module is the consumer of command-segment helpers defined in
 _command_classification (verb extraction, tokenizer, executable
 normalization, redirect partitioning, interpreter-spec extraction, and
 two shell-payload helpers). Each helper is imported lazily inside a thin
-wrapper to satisfy the hook-script stdlib-only contract — the bare-name
+wrapper to defer imports past the module-load boundary — the bare-name
 _command_classification reference resolves once the sibling module is
-fully populated. See test_hooks_are_stdlib_only for the enforcement.
+fully populated. The bare-name form is also required to satisfy the
+hook-script stdlib-only contract enforced by test_hooks_are_stdlib_only
+(REQ-AST-001).
 """
 
 from __future__ import annotations

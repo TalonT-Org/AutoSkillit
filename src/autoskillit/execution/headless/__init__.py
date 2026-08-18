@@ -38,10 +38,6 @@ from autoskillit.core import (
     get_logger,
     temp_dir_display_str,
 )
-from autoskillit.execution.headless._headless_adjudication import (
-    _parse_stdout,  # noqa: F401
-    _resolve_skill_session_id,  # noqa: F401
-)
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,  # noqa: F401
     _apply_budget_guard,  # noqa: F401

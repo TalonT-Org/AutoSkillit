@@ -367,7 +367,7 @@ class TestResolveSessionId:
 
     def test_prefers_session_session_id(self):
         """stdout-parsed session_id is preferred over Channel B when both present."""
-        from autoskillit.execution.headless import _resolve_skill_session_id
+        from autoskillit.execution.headless._headless_adjudication import _resolve_skill_session_id
         from autoskillit.execution.session import ClaudeSessionResult
 
         session = ClaudeSessionResult(
@@ -378,7 +378,7 @@ class TestResolveSessionId:
 
     def test_falls_back_to_channel_b_when_session_empty(self):
         """Channel B UUID is used when stdout-parsed session_id is empty."""
-        from autoskillit.execution.headless import _resolve_skill_session_id
+        from autoskillit.execution.headless._headless_adjudication import _resolve_skill_session_id
         from autoskillit.execution.session import ClaudeSessionResult
 
         session = ClaudeSessionResult(
@@ -389,7 +389,7 @@ class TestResolveSessionId:
 
     def test_returns_empty_when_both_empty(self):
         """Returns empty string when neither source has a session ID."""
-        from autoskillit.execution.headless import _resolve_skill_session_id
+        from autoskillit.execution.headless._headless_adjudication import _resolve_skill_session_id
         from autoskillit.execution.session import ClaudeSessionResult
 
         session = ClaudeSessionResult(
@@ -400,7 +400,7 @@ class TestResolveSessionId:
 
     def test_handles_none_session(self):
         """When session is None, falls back to Channel B UUID."""
-        from autoskillit.execution.headless import _resolve_skill_session_id
+        from autoskillit.execution.headless._headless_adjudication import _resolve_skill_session_id
 
         result = _sr(channel_b_session_id="from-channel-b")
         assert _resolve_skill_session_id(None, result) == "from-channel-b"

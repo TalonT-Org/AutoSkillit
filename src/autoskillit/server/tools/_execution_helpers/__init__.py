@@ -1,4 +1,9 @@
-"""Decomposition of the legacy server.tools._execution_helpers module facade."""
+"""Helpers shared by the MCP ``run_cmd`` and ``run_python`` tool surfaces.
+
+Re-exports dispatch metadata, capture-stream plumbing, scalar coercion,
+skill-contract lifecycle helpers, and the path-anchoring utilities that
+``tools_execution.py`` and its tests bind through this package facade.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Decomposition of the legacy server._response_budget module facade."""
+"""Lossless, shape-preserving response budget enforcement for MCP handlers.
+
+Re-exports the budget primitives, the spill envelope helpers, and the
+``enforce_response_budget`` checkpoint machinery that MCP tools bind
+through this package facade.
+"""
 
 from __future__ import annotations
 

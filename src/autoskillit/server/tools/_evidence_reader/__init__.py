@@ -1,4 +1,9 @@
-"""Decomposition of the legacy server.tools._evidence_reader module facade."""
+"""Sealed evidence-reader package facade.
+
+Re-exports the authority helpers, invocation lifecycle, reader page API,
+and stable-artifact capture symbols so that ``tools_evidence_reader.py``
+and its tests can bind the canonical symbols through this package surface.
+"""
 
 from __future__ import annotations
 

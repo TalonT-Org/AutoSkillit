@@ -394,12 +394,20 @@ class TestSkillAutoGateBoot:
     ):
         """#4684 Fix D: _pre_reveal_kitchen reveals the exploration tag at boot when
         agent_backend.auto_provision_exploration is True and the boot-time session
-        type is eligible to bind exploration authority."""
+        type is eligible to bind exploration authority.
+
+        Asserts the call was made on the mocked mcp singleton rather than
+        inspecting the real cumulative tools/list output: submit_exploration_query
+        et al. also carry the "kitchen" tag, so FastMCP's last-match-wins
+        transform stack would make them visible via the unconditional
+        `_mcp.enable(tags={"kitchen"})` call regardless of this gate whenever
+        no *later* transform disables "exploration" specifically — a real-state
+        assertion would pass or fail for reasons unrelated to this opt-in.
+        """
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import mcp
         from autoskillit.server._lifespan import _skill_auto_gate_boot
 
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
@@ -410,37 +418,28 @@ class TestSkillAutoGateBoot:
         mock_backend.capabilities.supports_tool_list_changed = False
         ctx = build_ctx(backend=mock_backend)
         ctx.gate = DefaultGateState(enabled=False)
-        # The "exploration" feature gate is a separate, coarser switch than the new
-        # auto_provision_exploration opt-in — _pre_reveal_kitchen's unconditional
-        # feature-suppression pass disables the "exploration" tag it just enabled
-        # unless the feature itself is also on. Both must be True for auto-provision
-        # to actually surface the tag, mirroring real deployment (a user who opts
-        # into auto-provision has necessarily also enabled the exploration feature).
-        ctx.config.features = {**ctx.config.features, "exploration": True}
         ctx.config.agent_backend.auto_provision_exploration = True
 
-        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
-                    await _skill_auto_gate_boot(ctx)
+        with patch("autoskillit.server.mcp") as mock_mcp:
+            with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                        await _skill_auto_gate_boot(ctx)
 
-        tools = {t.name for t in await mcp.list_tools()}
-        assert "submit_exploration_query" in tools, (
-            "exploration-tagged tools should be visible after auto-provision opt-in"
-        )
+        mock_mcp.enable.assert_any_call(tags={"exploration"})
 
     @pytest.mark.anyio
     async def test_codex_non_headless_pre_reveal_skips_exploration_when_opted_out(
         self, build_ctx, monkeypatch
     ):
-        """#4684 Fix D: default (auto_provision_exploration=False) leaves the exploration
-        tag hidden at boot — the HMAC capability lease minted by enable_exploration
-        remains the sole route to broker tool visibility."""
-        from unittest.mock import AsyncMock, MagicMock, patch
+        """#4684 Fix D: default (auto_provision_exploration=False) never calls
+        enable(tags={"exploration"}) — auto-provision contributes nothing to
+        the tag's visibility, leaving it exactly where the pre-existing
+        feature-suppression pass and any prior close_kitchen() left it."""
+        from unittest.mock import AsyncMock, MagicMock, call, patch
 
         from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import mcp
         from autoskillit.server._lifespan import _skill_auto_gate_boot
 
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
@@ -451,21 +450,15 @@ class TestSkillAutoGateBoot:
         mock_backend.capabilities.supports_tool_list_changed = False
         ctx = build_ctx(backend=mock_backend)
         ctx.gate = DefaultGateState(enabled=False)
-        # Exploration feature ON, auto_provision_exploration left at its False
-        # default — isolates the opt-in flag as the reason the tag stays hidden,
-        # rather than conflating it with the separate feature gate.
-        ctx.config.features = {**ctx.config.features, "exploration": True}
         assert ctx.config.agent_backend.auto_provision_exploration is False
 
-        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
-                    await _skill_auto_gate_boot(ctx)
+        with patch("autoskillit.server.mcp") as mock_mcp:
+            with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                        await _skill_auto_gate_boot(ctx)
 
-        tools = {t.name for t in await mcp.list_tools()}
-        assert "submit_exploration_query" not in tools, (
-            "exploration-tagged tools must stay hidden without the opt-in"
-        )
+        assert call(tags={"exploration"}) not in mock_mcp.enable.call_args_list
 
     @pytest.mark.anyio
     async def test_codex_non_headless_pre_reveal_suppresses_disabled_subset(

@@ -1,6 +1,6 @@
 """The config authority must reach spec construction, not merely a nearby parameter.
 
-``force_claude_agent_teams_inactive`` was declared, ledgered, and never read by
+``force_inactive_agent_teams`` was declared, ledgered, and never read by
 any production site. Wiring that stops at an intermediate parameter is the same
 defect wearing a different shape, so these tests assert on the objects that
 actually reach the backend builders.

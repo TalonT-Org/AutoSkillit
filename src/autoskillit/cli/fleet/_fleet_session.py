@@ -94,7 +94,7 @@ def _launch_fleet_session(
                 project_dir=project_dir,
                 required_env=FLEET_SESSION_REQUIRED_ENV,
                 backend=_backend,
-                force_inactive_agent_teams=cfg.agent_backend.force_claude_agent_teams_inactive,
+                force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
             )
             if session_signal is None:
                 break
@@ -205,7 +205,7 @@ def _launch_fleet_session(
                 project_dir=project_dir,
                 required_env=FLEET_SESSION_REQUIRED_ENV,
                 backend=_backend,
-                force_inactive_agent_teams=cfg.agent_backend.force_claude_agent_teams_inactive,
+                force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
             )
             if session_signal is None:
                 break

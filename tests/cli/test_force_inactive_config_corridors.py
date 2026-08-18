@@ -205,7 +205,7 @@ def test_launch_cook_session_forwards_force_inactive_agent_teams(
 
 # ---------------------------------------------------------------------------
 # 3 & 4. Both _launch_fleet_session call sites forward
-#    cfg.agent_backend.force_claude_agent_teams_inactive.
+#    cfg.agent_backend.force_inactive_agent_teams.
 # ---------------------------------------------------------------------------
 
 
@@ -215,7 +215,7 @@ def _write_fleet_config(tmp_path: Path, *, force_inactive: bool) -> None:
     (config_dir / "config.yaml").write_text(
         "agent_backend:\n"
         "  backend: claude-code\n"
-        f"  force_claude_agent_teams_inactive: {str(force_inactive).lower()}\n"
+        f"  force_inactive_agent_teams: {str(force_inactive).lower()}\n"
     )
 
 

@@ -104,7 +104,7 @@ class _ExecutionContext:
                 proc_interval=1.0,
             ),
             features=SimpleNamespace(),
-            agent_backend=SimpleNamespace(force_claude_agent_teams_inactive=False),
+            agent_backend=SimpleNamespace(force_inactive_agent_teams=False),
         )
         self.runner = runner
         self.backend = ClaudeCodeBackend()

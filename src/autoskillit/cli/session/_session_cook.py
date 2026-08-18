@@ -128,7 +128,7 @@ def cook(
     )
 
     config = load_config()
-    force_inactive_agent_teams = config.agent_backend.force_claude_agent_teams_inactive
+    force_inactive_agent_teams = config.agent_backend.force_inactive_agent_teams
     # Same derivation the MCP server uses (git toplevel -> cwd). Running `cook`
     # from a repository subdirectory used to yield a different project_dir than
     # the server derived on the same machine, and both values flow into the

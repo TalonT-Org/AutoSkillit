@@ -2,7 +2,7 @@
 
 The config ledger proves a key *parses*. Nothing proved a key was ever *read*, and
 three fields were parsed, validated, and dead from birth —
-`force_claude_agent_teams_inactive` among them, which is why a documented opt-in
+`force_inactive_agent_teams` among them, which is why a documented opt-in
 could not be opted into. This is the missing half, modeled on
 `tests/arch/test_capability_consumption.py`.
 
@@ -170,16 +170,14 @@ def test_all_config_fields_have_production_consumers() -> None:
     )
 
 
-def test_force_claude_agent_teams_inactive_is_consumed() -> None:
+def test_force_inactive_agent_teams_is_consumed() -> None:
     """The field this contract was written for: it must never go dead again."""
     from autoskillit.core import paths
 
-    reads = _collect_attribute_reads(
-        paths.pkg_root(), frozenset({"force_claude_agent_teams_inactive"})
-    )
-    sites = reads["force_claude_agent_teams_inactive"]
+    reads = _collect_attribute_reads(paths.pkg_root(), frozenset({"force_inactive_agent_teams"}))
+    sites = reads["force_inactive_agent_teams"]
 
-    assert "force_claude_agent_teams_inactive" not in _FORWARD_DECLARED
+    assert "force_inactive_agent_teams" not in _FORWARD_DECLARED
     assert sites, "the agent-teams opt-in must be read by production code"
 
 

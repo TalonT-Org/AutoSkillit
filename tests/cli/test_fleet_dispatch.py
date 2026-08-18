@@ -102,7 +102,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
     _agent_backend = type(
-        "AB", (), {"backend": "claude-code", "force_claude_agent_teams_inactive": False}
+        "AB", (), {"backend": "claude-code", "force_inactive_agent_teams": False}
     )()
     _branching = type("Branching", (), {"default_base_branch": "main"})()
     monkeypatch.setattr(
@@ -182,7 +182,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
     _agent_backend = type(
-        "AB", (), {"backend": "claude-code", "force_claude_agent_teams_inactive": False}
+        "AB", (), {"backend": "claude-code", "force_inactive_agent_teams": False}
     )()
     _branching = type("Branching", (), {"default_base_branch": "main"})()
     monkeypatch.setattr(

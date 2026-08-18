@@ -353,6 +353,14 @@ RETIRED_CONFIG_KEYS: Mapping[tuple[str, str], RetiredConfigKeyDef] = types.Mappi
             retired_in="0.9.135",
             note="features.franchise was renamed to features.fleet in 0.9.135.",
         ),
+        ("agent_backend", "force_claude_agent_teams_inactive"): RetiredConfigKeyDef(
+            new_key="force_inactive_agent_teams",
+            retired_in="0.10.987",
+            note=(
+                "agent_backend.force_claude_agent_teams_inactive was renamed to "
+                "agent_backend.force_inactive_agent_teams in 0.10.987."
+            ),
+        ),
     }
 )
 

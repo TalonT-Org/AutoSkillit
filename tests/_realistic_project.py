@@ -28,7 +28,7 @@ workspace:
 
 _CONFIG_YAML_FORCE_INACTIVE = """agent_backend:
   backend: claude-code
-  force_claude_agent_teams_inactive: true
+  force_inactive_agent_teams: true
 workspace:
   temp_dir: .autoskillit/temp
 """
@@ -40,7 +40,7 @@ def make_realistic_project(
     agent_teams: str | None = None,
     extra_settings_keys: bool = True,
     malformed_local: bool = False,
-    force_claude_agent_teams_inactive: bool = False,
+    force_inactive_agent_teams: bool = False,
     project_dir: Path | None = None,
 ) -> Path:
     """Build a project directory resembling a real developer checkout.
@@ -60,7 +60,7 @@ def make_realistic_project(
 
     atomic_write(
         project / ".autoskillit" / "config.yaml",
-        _CONFIG_YAML_FORCE_INACTIVE if force_claude_agent_teams_inactive else _CONFIG_YAML,
+        _CONFIG_YAML_FORCE_INACTIVE if force_inactive_agent_teams else _CONFIG_YAML,
     )
 
     if extra_settings_keys:

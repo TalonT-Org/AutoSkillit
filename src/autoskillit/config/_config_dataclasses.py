@@ -676,7 +676,7 @@ class AgentBackendConfig:
     # target repository's .claude/settings*.json files before spawn. Defaults
     # to False — repositories with the option disabled remain byte-for-byte
     # unchanged. Independent from join.required. Refs #4575.
-    force_claude_agent_teams_inactive: bool = False
+    force_inactive_agent_teams: bool = False
 
     def __post_init__(self) -> None:
         if not self.backend:

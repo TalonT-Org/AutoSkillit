@@ -1,0 +1,31 @@
+from_version: "0.10.986"
+to_version: "0.10.987"
+description: >
+  Agent-backend configuration rename: agent_backend.force_claude_agent_teams_inactive
+  is now agent_backend.force_inactive_agent_teams.
+changes:
+  - id: force-claude-agent-teams-inactive-to-force-inactive-agent-teams
+    description: >
+      The agent_backend.force_claude_agent_teams_inactive config key has been
+      renamed to agent_backend.force_inactive_agent_teams for consistency with
+      every downstream consumer (CLI kwargs, backend builder parameters,
+      CmdSpec field, and the launch-contract payload key), which already used
+      the backend-neutral name. The value and default behavior are unchanged.
+    instruction: |
+      In your user or project .autoskillit/config.yaml, replace:
+        agent_backend:
+          force_claude_agent_teams_inactive: true
+      with:
+        agent_backend:
+          force_inactive_agent_teams: true
+      Preserve the configured boolean value. The old key is remapped
+      automatically with a deprecation warning for now, but will eventually
+      stop being recognized.
+    detect:
+      key: agent_backend.force_claude_agent_teams_inactive
+    example_before: |
+      agent_backend:
+        force_claude_agent_teams_inactive: true
+    example_after: |
+      agent_backend:
+        force_inactive_agent_teams: true

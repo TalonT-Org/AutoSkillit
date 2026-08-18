@@ -11,6 +11,7 @@
 # registering it in RETIRED_CONFIG_KEYS fails this test at development time.
 agent_backend.backend
 agent_backend.force_claude_agent_teams_inactive
+agent_backend.force_inactive_agent_teams
 agent_backend.recipe_overrides
 agent_backend.step_overrides
 branching.default_base_branch

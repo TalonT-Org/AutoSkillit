@@ -394,9 +394,7 @@ async def run_headless_core(
             network_access=network_access,
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
-            force_inactive_agent_teams=(
-                ctx.config.agent_backend.force_claude_agent_teams_inactive
-            ),
+            force_inactive_agent_teams=(ctx.config.agent_backend.force_inactive_agent_teams),
         )
 
         logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)

@@ -8,10 +8,7 @@ from typing import Any
 from autoskillit import __version__
 from autoskillit.config import (
     SERVER_AUTHORITATIVE_INGREDIENTS,
-    build_config_authoritative_layer,
-    build_config_default_layer,
     iter_display_categories,
-    resolve_ingredient_defaults,
 )
 from autoskillit.core import (
     ProcessStaleError,
@@ -19,12 +16,17 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.server import mcp
-from autoskillit.server._misc import resolve_log_dir, strip_ingredients_only_keys
+from autoskillit.server._misc import strip_ingredients_only_keys
 from autoskillit.server._recipe_delivery import (
     enforce_recipe_resource_response,
-    finalize_recipe_delivery,
     prepare_recipe_delivery_generation,
 )
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so
+# cross-submodule helpers must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
 from autoskillit.server.tools._serve_helpers import (
@@ -33,7 +35,6 @@ from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
     pop_finalized_recipe_projection,
     render_served_response,
-    serve_recipe,
 )
 
 logger = get_logger(__name__)
@@ -56,11 +57,11 @@ def get_recipe(name: str) -> str:
         return json.dumps({"error": "Kitchen not open."})
     try:
         match = _admit_recipe_name(ctx, name)
-        _defaults = resolve_ingredient_defaults(ctx.project_dir)
-        _config_layer = build_config_authoritative_layer(_defaults)
+        _defaults = _tk_pkg.resolve_ingredient_defaults(ctx.project_dir)
+        _config_layer = _tk_pkg.build_config_authoritative_layer(_defaults)
         _session_overrides: dict[str, str] = {
             "kitchen_id": ctx.kitchen_id,
-            "diagnostics_log_dir": str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
+            "diagnostics_log_dir": str(_tk_pkg.resolve_log_dir(ctx.config.linux_tracing.log_dir)),
         }
         _raw_recipe = ctx.recipes.load(match.path)
         _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
@@ -72,8 +73,8 @@ def get_recipe(name: str) -> str:
         _backend_capabilities_map = build_backend_capabilities_map(
             _effective_backend_map, ctx.backend
         )
-        _config_default = build_config_default_layer(_defaults)
-        result = serve_recipe(
+        _config_default = _tk_pkg.build_config_default_layer(_defaults)
+        result = _tk_pkg.serve_recipe(
             ctx,
             name,
             caller_overrides=None,
@@ -114,7 +115,7 @@ def get_recipe(name: str) -> str:
         tool_ctx=ctx,
         finalized_projection=_resource_finalized_projection,
     )
-    finalized = finalize_recipe_delivery(
+    finalized = _tk_pkg.finalize_recipe_delivery(
         result,
         surface="get_recipe",
         recipe_name=name,

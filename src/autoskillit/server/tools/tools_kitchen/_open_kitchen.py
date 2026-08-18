@@ -17,67 +17,48 @@ from fastmcp.dependencies import CurrentContext
 from mcp.types import ToolListChangedNotification
 
 from autoskillit import __version__
-from autoskillit.config import (
-    build_config_authoritative_layer,
-    build_config_default_layer,
-    resolve_ingredient_defaults,
-)
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
-    _collect_disabled_feature_tags,
     detect_autoskillit_mcp_prefix,
     get_logger,
     sweep_stale_markers,
-)
-from autoskillit.fleet import (
-    discover_campaign_state_files,
-    reap_stale_dispatches_async,
 )
 from autoskillit.pipeline import (
     KITCHEN_EFFECT_RECIPE_SERVING,
     KitchenOpenPhase,
     advance_kitchen_phase,
-    create_background_task,
     transition_abort,
     transition_ambiguous,
     transition_confirm,
     transition_degraded,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _backend_supports_quota, _require_orchestrator_exact
-from autoskillit.server._misc import (
-    _apply_triage_gate,
-    _build_hook_diagnostic_warning,
-    _prime_quota_cache,
-    _quota_refresh_loop,
-    resolve_log_dir,
-    strip_ingredients_only_keys,
-)
+from autoskillit.server._guards import _backend_supports_quota
+from autoskillit.server._misc import strip_ingredients_only_keys
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._recipe_delivery import (
     document_recipe_delivery_contract,
-    finalize_recipe_delivery,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_execution import clear_recipe_execution
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so
+# cross-submodule helpers must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._preflight import (
-    _check_dispatch_feasibility,
-    filter_steps_by_post_prune,
-)
+from autoskillit.server.tools._preflight import filter_steps_by_post_prune
 from autoskillit.server.tools._serve_helpers import (
     _admit_recipe_name,
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
     pop_finalized_recipe_projection,
-    project_orchestrator_guidance,
     render_served_response,
     response_backstop_tool_meta,
-    serve_recipe,
 )
 from autoskillit.server.tools._types import _validate_result
 from autoskillit.server.tools.tools_kitchen._get_recipe import (
@@ -85,7 +66,6 @@ from autoskillit.server.tools.tools_kitchen._get_recipe import (
     _check_override_keys,
     _render_ingredients_only_response,
 )
-from autoskillit.server.tools.tools_kitchen._hook_config import _write_hook_config
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
     _recipe_validation_error_response,
@@ -103,6 +83,8 @@ from autoskillit.server.tools.tools_kitchen._tracker_authority import (
     _auto_init_pipeline_tracker,
     _pipeline_tracker_auto_init_failure,
     _register_active_recipe_kitchen,
+    _retain_kitchen_tracker_authority,
+    prune_stale_kitchen_state,
 )
 
 logger = get_logger(__name__)
@@ -130,14 +112,14 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         ctx.active_recipe_features = frozenset()
         ctx.active_recipe_steps = {}
         ctx.active_recipe_ingredients = frozenset()
-        clear_recipe_execution(ctx)
+        _tk_pkg.clear_recipe_execution(ctx)
         transition_confirm(ctx, "active_recipe_reset", receipt="active_recipe:cleared")
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _supports_quota = _backend_supports_quota(ctx)
 
     if _transition_start(ctx, "hook_configuration"):
         try:
-            _write_hook_config()
+            _tk_pkg._write_hook_config()
         except Exception as exc:
             ctx.gate.disable()
             transition_ambiguous(ctx, "hook_configuration", exc)
@@ -147,7 +129,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "quota_cache_prime"):
         try:
-            await _prime_quota_cache(supports_quota_check=_supports_quota)
+            await _tk_pkg._prime_quota_cache(supports_quota_check=_supports_quota)
         except Exception as exc:
             ctx.gate.disable()
             transition_ambiguous(ctx, "quota_cache_prime", exc)
@@ -159,8 +141,8 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         if ctx.quota_refresh_task is not None:
             ctx.quota_refresh_task.cancel()
         try:
-            ctx.quota_refresh_task = create_background_task(
-                _quota_refresh_loop(
+            ctx.quota_refresh_task = _tk_pkg.create_background_task(
+                _tk_pkg._quota_refresh_loop(
                     ctx.config.quota_guard,
                     supports_quota_check=_supports_quota,
                 ),
@@ -180,10 +162,6 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "registry_update"):
         try:
-            from autoskillit.server.tools.tools_kitchen._tracker_authority import (  # circular-break
-                _retain_kitchen_tracker_authority,
-            )
-
             _retain_kitchen_tracker_authority(ctx)
             _register_active_recipe_kitchen(ctx)
         except Exception as exc:
@@ -199,10 +177,6 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "tracker_prune"):
         try:
-            from autoskillit.server.tools.tools_kitchen._tracker_authority import (  # circular-break
-                prune_stale_kitchen_state,
-            )
-
             prune_stale_kitchen_state(ctx.project_dir, ctx.kitchen_id)
         except Exception as exc:
             transition_degraded(ctx, "tracker_prune", exc)
@@ -221,9 +195,9 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "stale_dispatch_reap"):
         try:
-            _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
+            _campaign_state_paths = _tk_pkg.discover_campaign_state_files(ctx.project_dir)
             if _campaign_state_paths:
-                await reap_stale_dispatches_async(
+                await _tk_pkg.reap_stale_dispatches_async(
                     _campaign_state_paths,
                     min_reap_age_seconds=60.0,
                     heartbeat_grace_seconds=90.0,
@@ -269,7 +243,7 @@ async def _redisable_subsets(
 
     # Pass 2: feature gate — suppress tool tags for disabled features
     _features = features or {}
-    for tag in _collect_disabled_feature_tags(
+    for tag in _tk_pkg._collect_disabled_feature_tags(
         _features, experimental_enabled=experimental_enabled
     ):
         await _disable_tag(tag)
@@ -331,7 +305,7 @@ async def open_kitchen(
     """
     try:
         # Headless guard — wrap denial in envelope shape
-        if (h := _require_orchestrator_exact("open_kitchen")) is not None:
+        if (h := _tk_pkg._require_orchestrator_exact("open_kitchen")) is not None:
             parsed_h = json.loads(h)
             return json.dumps(
                 {
@@ -377,7 +351,7 @@ async def open_kitchen(
         tool_ctx = _get_ctx()
 
         if not _skip_handler:
-            handler_err = await _open_kitchen_handler(
+            handler_err = await _tk_pkg._open_kitchen_handler(
                 preserve_active_recipe=ingredients_only and _ctx_pre.gate.enabled,
             )
             if handler_err is not None:
@@ -387,8 +361,8 @@ async def open_kitchen(
             if _ctx_post.quota_refresh_task is None:
                 _supports_quota_post = _backend_supports_quota(_ctx_post)
                 try:
-                    _ctx_post.quota_refresh_task = create_background_task(
-                        _quota_refresh_loop(
+                    _ctx_post.quota_refresh_task = _tk_pkg.create_background_task(
+                        _tk_pkg._quota_refresh_loop(
                             _ctx_post.config.quota_guard,
                             supports_quota_check=_supports_quota_post,
                         ),
@@ -430,8 +404,8 @@ async def open_kitchen(
                 # refreshes after disable; without an explicit re-enable
                 # notification, the client keeps serving the post-close list.)
                 if _transition_start(tool_ctx, "client_visibility"):
-                    mcp.enable(tags={"kitchen"})
-                    mcp.enable(tags={"plan-review"})
+                    _tk_pkg.mcp.enable(tags={"kitchen"})
+                    _tk_pkg.mcp.enable(tags={"plan-review"})
                     transition_confirm(
                         tool_ctx,
                         "client_visibility",
@@ -515,7 +489,7 @@ async def open_kitchen(
         if name is not None:
             tool_ctx = _get_ctx()
             if not ingredients_only:
-                clear_recipe_execution(tool_ctx)
+                _tk_pkg.clear_recipe_execution(tool_ctx)
             if tool_ctx.recipes is None:
                 return _kitchen_failure_envelope(
                     RuntimeError("Server not initialized"),
@@ -526,16 +500,18 @@ async def open_kitchen(
                     ),
                 )
             suppressed = tool_ctx.config.migration.suppressed
-            _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
+            _defaults = _tk_pkg.resolve_ingredient_defaults(tool_ctx.project_dir)
             assert _admitted_recipe_info is not None
             _recipe_info = _admitted_recipe_info
             _raw_recipe = tool_ctx.recipes.load(_recipe_info.path)
             _session_overrides: dict[str, str] = {
                 "kitchen_id": tool_ctx.kitchen_id,
-                "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
+                "diagnostics_log_dir": str(
+                    _tk_pkg.resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)
+                ),
             }
-            _config_layer = build_config_authoritative_layer(_defaults)
-            _config_default = build_config_default_layer(_defaults)
+            _config_layer = _tk_pkg.build_config_authoritative_layer(_defaults)
+            _config_default = _tk_pkg.build_config_default_layer(_defaults)
             _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
@@ -560,7 +536,7 @@ async def open_kitchen(
             if _is_deferred_recall:
                 try:
                     _transition_start(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
-                    result = serve_recipe(
+                    result = _tk_pkg.serve_recipe(
                         tool_ctx,
                         name,
                         caller_overrides=overrides,
@@ -629,7 +605,7 @@ async def open_kitchen(
                     _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
                     if _tracker_error is not None:
                         return _pipeline_tracker_auto_init_failure(tool_ctx, _tracker_error)
-                    _preflight_err = _check_dispatch_feasibility(
+                    _preflight_err = _tk_pkg._check_dispatch_feasibility(
                         post_prune_step_names=result.get("post_prune_step_names", []),
                         active_recipe_steps=tool_ctx.active_recipe_steps,
                         backend=tool_ctx.backend,
@@ -648,7 +624,9 @@ async def open_kitchen(
                         return _preflight_err
                 result = build_open_kitchen_recipe_payload(result, version=__version__)
                 try:
-                    result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+                    result = await _tk_pkg._apply_triage_gate(
+                        result, name, recipe_info=recipe_info
+                    )
                 except Exception as exc:
                     logger.warning(
                         "open_kitchen_failure", stage="apply_triage_gate", exc_info=True
@@ -684,7 +662,7 @@ async def open_kitchen(
                     _attach_transition_fields(result, tool_ctx, committed=True)
                     return cast(
                         str,
-                        finalize_recipe_delivery(
+                        _tk_pkg.finalize_recipe_delivery(
                             result,
                             surface="open_kitchen_deferred_recall",
                             recipe_name=name,
@@ -702,7 +680,7 @@ async def open_kitchen(
                 return render_served_response(result)
             try:
                 _transition_start(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
-                result = serve_recipe(
+                result = _tk_pkg.serve_recipe(
                     tool_ctx,
                     name,
                     caller_overrides=overrides,
@@ -779,7 +757,7 @@ async def open_kitchen(
                 tool_ctx.active_recipe_ingredients = None
 
             try:
-                result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+                result = await _tk_pkg._apply_triage_gate(result, name, recipe_info=recipe_info)
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
@@ -804,7 +782,7 @@ async def open_kitchen(
                 _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
                 if _tracker_error is not None:
                     return _pipeline_tracker_auto_init_failure(tool_ctx, _tracker_error)
-                _preflight_err = _check_dispatch_feasibility(
+                _preflight_err = _tk_pkg._check_dispatch_feasibility(
                     post_prune_step_names=result.get("post_prune_step_names", []),
                     active_recipe_steps=tool_ctx.active_recipe_steps,
                     backend=tool_ctx.backend,
@@ -845,7 +823,7 @@ async def open_kitchen(
 
             try:
                 warning = (
-                    _build_hook_diagnostic_warning(
+                    _tk_pkg._build_hook_diagnostic_warning(
                         detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
                     )
                     if tool_ctx.backend is not None
@@ -883,7 +861,7 @@ async def open_kitchen(
                 _attach_transition_fields(result, tool_ctx, committed=True)
                 return cast(
                     str,
-                    finalize_recipe_delivery(
+                    _tk_pkg.finalize_recipe_delivery(
                         result,
                         surface="open_kitchen",
                         recipe_name=name,
@@ -917,7 +895,7 @@ async def open_kitchen(
         # Anonymous opens receive the projected orchestrator discipline. Named opens
         # returned above and preserve their attested recipe-delivery bytes unchanged.
         try:
-            text += project_orchestrator_guidance(_ctx)
+            text += _tk_pkg.project_orchestrator_guidance(_ctx)
         except Exception as exc:
             logger.warning("open_kitchen_failure", stage="project_sous_chef", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="project_sous_chef")
@@ -936,7 +914,7 @@ async def open_kitchen(
 
         try:
             warning = (
-                _build_hook_diagnostic_warning(
+                _tk_pkg._build_hook_diagnostic_warning(
                     detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
                 )
                 if tool_ctx.backend is not None

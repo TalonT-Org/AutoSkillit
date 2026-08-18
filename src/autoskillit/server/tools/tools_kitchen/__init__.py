@@ -18,30 +18,45 @@ Submodule layout:
     _reload_session            — reload_session tool + sentinel writer
     _disable_quota_guard       — disable_quota_guard tool
     _get_recipe                — recipe:// resource + ingredient inspection
+    _declare_join_batch        — declare_join_batch tool + join-ledger handler
 """
 
 from __future__ import annotations
 
 # Re-exports for tests that patch symbols via the package facade.
 from autoskillit import __version__
-from autoskillit.config import resolve_ingredient_defaults
+from autoskillit.config import (
+    build_config_authoritative_layer,
+    build_config_default_layer,
+    resolve_ingredient_defaults,
+)
+from autoskillit.core import (
+    _collect_disabled_feature_tags,
+    find_latest_session_id,
+    initialize_kitchen_tracker,
+    resolve_kitchen_id,
+    try_retire_tracker,
+    unregister_active_kitchen,
+)
 from autoskillit.core import get_logger as _get_logger
-from autoskillit.core._plugin_cache import unregister_active_kitchen
-from autoskillit.core.feature_flags import _collect_disabled_feature_tags
-from autoskillit.core.pipeline_tracker import initialize_kitchen_tracker
-from autoskillit.core.runtime.kitchen_state import resolve_kitchen_id
 from autoskillit.fleet import (
     discover_campaign_state_files,
     execute_dispatch,
     reap_stale_dispatches_async,
 )
 from autoskillit.hook_registry import iter_all_scope_paths
-from autoskillit.pipeline import create_background_task
-from autoskillit.pipeline.kitchen_transition import bind_kitchen_intent
+from autoskillit.pipeline import (
+    bind_kitchen_intent,
+    claim_kitchen_request,
+    create_background_task,
+    release_kitchen_request,
+)
 from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import (
     _apply_triage_gate,
+    _build_hook_diagnostic_warning,
     _hook_config_path,
+    _prime_quota_cache,
     _quota_refresh_loop,
     resolve_log_dir,
 )
@@ -49,7 +64,8 @@ from autoskillit.server._recipe_delivery import finalize_recipe_delivery
 from autoskillit.server._recipe_execution import clear_recipe_execution
 from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
 from autoskillit.server.tools._overlay_state import locked_overlay, update_overlay
-from autoskillit.server.tools._serve_helpers import serve_recipe
+from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+from autoskillit.server.tools._serve_helpers import project_orchestrator_guidance, serve_recipe
 
 # Tool entry points — each lives in its own submodule and is re-exported
 # here so ``from autoskillit.server.tools.tools_kitchen import open_kitchen``
@@ -57,6 +73,9 @@ from autoskillit.server.tools._serve_helpers import serve_recipe
 from autoskillit.server.tools.tools_kitchen._close_kitchen import (
     _close_kitchen_handler,
     close_kitchen,
+)
+from autoskillit.server.tools.tools_kitchen._declare_join_batch import (
+    declare_join_batch,
 )
 from autoskillit.server.tools.tools_kitchen._disable_quota_guard import (
     disable_quota_guard,
@@ -85,7 +104,6 @@ from autoskillit.server.tools.tools_kitchen._lock_ingredients import (
 )
 from autoskillit.server.tools.tools_kitchen._open_kitchen import (
     _open_kitchen_handler,
-    _prime_quota_cache,
     _redisable_subsets,
     open_kitchen,
 )
@@ -115,7 +133,6 @@ from autoskillit.server.tools.tools_kitchen._reload_session import (
     _find_session_id_for_reload,
     _reload_session_handler,
     _write_reload_sentinel,
-    find_latest_session_id,
     reload_session,
 )
 from autoskillit.server.tools.tools_kitchen._tracker_authority import (
@@ -146,6 +163,7 @@ __all__ = [
     # Public MCP entry points
     "open_kitchen",
     "close_kitchen",
+    "declare_join_batch",
     "lock_ingredients",
     "reload_session",
     "disable_quota_guard",
@@ -169,6 +187,8 @@ __all__ = [
     "_apply_unlock_keys",
     "_attach_transition_fields",
     "_bind_open_kitchen_transition",
+    "_build_hook_diagnostic_warning",
+    "_check_dispatch_feasibility",
     "_collect_disabled_feature_tags",
     "_ensure_kitchen_transition",
     "_find_session_id_for_reload",
@@ -197,6 +217,9 @@ __all__ = [
     "OutputBudgetPolicyHookPayload",
     "QuotaGuardHookPayload",
     "bind_kitchen_intent",
+    "build_config_authoritative_layer",
+    "build_config_default_layer",
+    "claim_kitchen_request",
     "clear_recipe_execution",
     "create_background_task",
     "discover_campaign_state_files",
@@ -209,11 +232,14 @@ __all__ = [
     "logger",
     "mcp",
     "prepare_recipe_segment_delivery",
+    "project_orchestrator_guidance",
     "reap_stale_dispatches_async",
+    "release_kitchen_request",
     "resolve_ingredient_defaults",
     "resolve_kitchen_id",
     "resolve_log_dir",
     "serve_recipe",
+    "try_retire_tracker",
     "unregister_active_kitchen",
     "update_overlay",
 ]

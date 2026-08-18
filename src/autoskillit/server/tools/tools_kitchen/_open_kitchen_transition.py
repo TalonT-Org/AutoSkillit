@@ -14,7 +14,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextvars import ContextVar
 from typing import Any, cast
 
-from autoskillit.core import resolve_kitchen_id
 from autoskillit.pipeline import (
     KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
     KitchenEffectPhase,
@@ -22,17 +21,20 @@ from autoskillit.pipeline import (
     KitchenOpenPhase,
     KitchenRetryDisposition,
     ToolContext,
-    bind_kitchen_intent,
     canonical_kitchen_intent_fingerprint,
-    claim_kitchen_request,
     commit_kitchen_response,
     confirm_kitchen_effect,
     kitchen_state_payload,
     mark_kitchen_effect_ambiguous,
     new_kitchen_open_state,
-    release_kitchen_request,
     start_kitchen_effect,
 )
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so
+# cross-submodule helpers must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.tools import tools_kitchen as _tk_pkg
 
 _OPEN_KITCHEN_REQUEST_CTX: ContextVar[ToolContext] = ContextVar("open_kitchen_request_context")
 
@@ -43,7 +45,7 @@ def _ensure_kitchen_transition(tool_ctx: ToolContext) -> None:
         state = tool_ctx.kitchen_open_state
         if state.phase is KitchenOpenPhase.CLOSED:
             state = new_kitchen_open_state(
-                kitchen_id=resolve_kitchen_id(),
+                kitchen_id=_tk_pkg.resolve_kitchen_id(),
                 context_id=state.context_id,
             )
             tool_ctx.kitchen_open_state = state
@@ -201,7 +203,7 @@ def _bind_open_kitchen_transition(
                 )
         try:
             with tool_ctx.kitchen_transition_lock:
-                tool_ctx.kitchen_open_state = bind_kitchen_intent(
+                tool_ctx.kitchen_open_state = _tk_pkg.bind_kitchen_intent(
                     tool_ctx.kitchen_open_state,
                     fingerprint=fingerprint,
                 )
@@ -222,7 +224,7 @@ def _bind_open_kitchen_transition(
             return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
         with tool_ctx.kitchen_transition_lock:
-            state, claimed = claim_kitchen_request(tool_ctx.kitchen_open_state)
+            state, claimed = _tk_pkg.claim_kitchen_request(tool_ctx.kitchen_open_state)
             tool_ctx.kitchen_open_state = state
         if not claimed:
             payload = kitchen_state_payload(state)
@@ -290,6 +292,8 @@ def _bind_open_kitchen_transition(
             return result
         finally:
             with tool_ctx.kitchen_transition_lock:
-                tool_ctx.kitchen_open_state = release_kitchen_request(tool_ctx.kitchen_open_state)
+                tool_ctx.kitchen_open_state = _tk_pkg.release_kitchen_request(
+                    tool_ctx.kitchen_open_state
+                )
 
     return wrapper

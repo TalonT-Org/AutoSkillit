@@ -8,7 +8,6 @@ from pathlib import Path
 
 from autoskillit.core import (
     atomic_write,
-    find_latest_session_id,
     get_logger,
     get_state_dir,
     is_marker_fresh,
@@ -16,6 +15,12 @@ from autoskillit.core import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.tools.tools_kitchen.find_latest_session_id" (the
+# package facade), so it must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -37,7 +42,7 @@ def _find_session_id_for_reload(cwd: Path) -> str | None:
             marker = read_marker(p.stem)
             if marker is not None and is_marker_fresh(marker):
                 return marker.session_id
-    return find_latest_session_id(str(cwd))
+    return _tk_pkg.find_latest_session_id(str(cwd))
 
 
 def _write_reload_sentinel(cwd: Path, session_id: str) -> None:

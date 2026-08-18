@@ -12,13 +12,10 @@ from autoskillit.core import (
     TrackerAuthorityTarget,
     TrackerParticipantKey,
     get_logger,
-    initialize_kitchen_tracker,
     pipeline_tracker_directory,
     register_active_kitchen,
     release_tracker_lease,
     retain_tracker_lease,
-    try_retire_tracker,
-    unregister_active_kitchen,
 )
 from autoskillit.pipeline import (
     KITCHEN_EFFECT_RECIPE_SERVING,
@@ -26,6 +23,12 @@ from autoskillit.pipeline import (
     get_kitchen_process_identity,
     transition_abort,
 )
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.tools.tools_kitchen.initialize_kitchen_tracker" (the
+# package facade), so it must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
@@ -75,10 +78,10 @@ def _release_kitchen_tracker_authority(
             tool_ctx.kitchen_process_identity = None
     try:
         if unregister and identity is not None:
-            unregister_active_kitchen(identity)
+            _tk_pkg.unregister_active_kitchen(identity)
     finally:
         if retire and key is not None:
-            try_retire_tracker(key.target)
+            _tk_pkg.try_retire_tracker(key.target)
 
 
 def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> None:
@@ -97,13 +100,16 @@ def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> Non
                 expected=False,
             )
         except ValueError as exc:
-            logger.warning(
+            # Facade-routed (not the local `logger`): tests patch
+            # "autoskillit.server.tools.tools_kitchen.logger" to assert on this
+            # specific warning.
+            _tk_pkg.logger.warning(
                 "invalid_stale_tracker_candidate",
                 path=str(tracker_file),
                 error=str(exc),
             )
             continue
-        try_retire_tracker(target)
+        _tk_pkg.try_retire_tracker(target)
 
 
 def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
@@ -141,7 +147,7 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
         "initialized_at": datetime.now(UTC).isoformat(),
     }
     try:
-        result = initialize_kitchen_tracker(key.target, lease, tracker_data)
+        result = _tk_pkg.initialize_kitchen_tracker(key.target, lease, tracker_data)
     except Exception:
         _release_kitchen_tracker_authority(tool_ctx, unregister=False, retire=False)
         raise

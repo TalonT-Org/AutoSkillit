@@ -14,21 +14,22 @@ from autoskillit.core import (
     fast_dumps,
     get_logger,
     release_tracker_lease,
-    try_retire_tracker,
 )
 from autoskillit.fleet import FleetSemaphore
 from autoskillit.pipeline import closed_kitchen_open_state
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_orchestrator_exact
-from autoskillit.server._misc import _hook_config_path, resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._recipe_delivery import retire_recipe_artifacts
-from autoskillit.server._recipe_execution import clear_recipe_execution
 from autoskillit.server._recipe_generation import (
     retire_kitchen as retire_recipe_generation,
 )
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so
+# cross-submodule helpers must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._overlay_state import locked_overlay
 from autoskillit.server.tools.tools_kitchen._tracker_authority import (
     _release_kitchen_tracker_authority,
 )
@@ -38,7 +39,10 @@ logger = get_logger(__name__)
 
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
-    from autoskillit.server import _get_ctx  # circular-break
+    # `logger` is the shared `autoskillit.server` logger (not this module's own),
+    # matching the pattern in `_hook_config.py` — tests patch
+    # "autoskillit.server.logger" to assert on hook-config removal warnings.
+    from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
     authority = ctx.run_skill_completion
@@ -52,8 +56,8 @@ def _close_kitchen_handler() -> None:
         max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
         timeout=baseline_config.fleet.acquire_timeout_sec,
     )
-    hook_cfg_path = _hook_config_path(ctx.project_dir)
-    with locked_overlay(ctx.project_dir) as (overlay_path, _):
+    hook_cfg_path = _tk_pkg._hook_config_path(ctx.project_dir)
+    with _tk_pkg.locked_overlay(ctx.project_dir) as (overlay_path, _):
         ctx.gate.disable()
         try:
             hook_cfg_path.unlink(missing_ok=True)
@@ -75,7 +79,7 @@ def _close_kitchen_handler() -> None:
         for key in list(ctx.tracker_leases):
             release_tracker_lease(ctx.tracker_leases, key)
     for target in abandoned_targets:
-        try_retire_tracker(target)
+        _tk_pkg.try_retire_tracker(target)
     if isinstance(ctx.kitchen_id, str) and ctx.kitchen_id:
         if isinstance(ctx.temp_dir, Path) and not retire_recipe_artifacts(
             ctx.temp_dir,
@@ -96,14 +100,14 @@ def _close_kitchen_handler() -> None:
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
     ctx.recipe_version = ""
-    clear_recipe_execution(ctx)
+    _tk_pkg.clear_recipe_execution(ctx)
     ctx.gate_infrastructure_ready = False
     logger.info("close_kitchen", gate_state="closed")
     if (log := ctx.github_api_log) is not None:
         orphan_usage = log.drain(ctx.kitchen_id)
         if orphan_usage is not None:
             try:
-                log_dir = resolve_log_dir(ctx.config.linux_tracing.log_dir)
+                log_dir = _tk_pkg.resolve_log_dir(ctx.config.linux_tracing.log_dir)
                 orphan_path = log_dir / "github_api_usage_orchestrator.json"
                 atomic_write(orphan_path, fast_dumps(orphan_usage))
             except Exception:
@@ -149,7 +153,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     Never raises.
     """
     try:
-        if (h := _require_orchestrator_exact("close_kitchen")) is not None:
+        if (h := _tk_pkg._require_orchestrator_exact("close_kitchen")) is not None:
             return h
         _close_kitchen_handler()
         from autoskillit.server import _get_ctx  # circular-break: server lifecycle owner
@@ -158,9 +162,9 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
         if exploration_store is not None:
             exploration_store.close()
 
-        mcp.disable(tags={"kitchen"})
-        mcp.disable(tags={"exploration"})
-        mcp.disable(tags={"plan-review"})
+        _tk_pkg.mcp.disable(tags={"kitchen"})
+        _tk_pkg.mcp.disable(tags={"exploration"})
+        _tk_pkg.mcp.disable(tags={"plan-review"})
 
         await ctx.reset_visibility()
         return "Kitchen is closed."

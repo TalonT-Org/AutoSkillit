@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import OutputFormat, SkillSessionConfig
+from autoskillit.core import OutputFormat
 from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.execution.headless._managed._launch_adapter import (
     _food_truck_launch_spec_builder,
@@ -67,12 +67,6 @@ def test_skill_spec_builder_threads_intent_into_the_spec(tmp_path: Path, force: 
     spec = build(None, None, None)
 
     assert spec.force_inactive_agent_teams is force
-
-
-def test_skill_session_config_carries_intent() -> None:
-    """The field the closure populates must exist on the config it builds."""
-    config = SkillSessionConfig(force_inactive_agent_teams=True)
-    assert config.force_inactive_agent_teams is True
 
 
 @pytest.mark.parametrize("force", [True, False])

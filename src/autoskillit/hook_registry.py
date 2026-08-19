@@ -605,6 +605,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "join_settle_guard.py",  # NEW (#4575, #4520)
         "join_stop_guard.py",  # NEW (#4575, #4520)
         "join_followup_guard.py",  # NEW (#4575, #4520)
+        "resource_exhaustion_guard.py",  # NEW (#4678 rectify)
     }
 )
 

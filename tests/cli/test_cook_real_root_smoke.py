@@ -104,7 +104,6 @@ def test_cook_real_root_settings_local_json_composition(
     A single test function (not two) so the Taskfile's post-validation of
     "exactly one non-skipped test" mirrors test_claude_explorer_live_gate.py.
     """
-    monkeypatch.delenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", raising=False)
     monkeypatch.setattr(
         "autoskillit.cli.session._session_reload.consume_reload_sentinel",
         lambda _project: None,

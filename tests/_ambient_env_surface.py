@@ -543,7 +543,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/_lifespan/_session_boots.py:518": (
+    "server/_lifespan/_session_boots.py:531": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
@@ -559,7 +559,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "Dict-comprehension key bound by `for key in _EXPLORER_BINDING_ENV_KEYS`; the four"
         "explorer-binding names are already captured directly via that collection's own R4 scan."
     ),
-    "server/tools/tools_evidence_reader.py:170": (
+    "server/tools/tools_evidence_reader.py:174": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
@@ -607,19 +607,19 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:515": (
+    "execution/backends/codex.py:517": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:649": (
+    "execution/backends/codex.py:652": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:768": (
+    "execution/backends/codex.py:772": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/codex.py:840": (
+    "execution/backends/codex.py:845": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

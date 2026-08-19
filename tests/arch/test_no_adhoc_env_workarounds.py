@@ -249,22 +249,29 @@ def _collect_env_call_sites(tree: ast.Module, rel: str) -> list[tuple[str, int, 
     return sites
 
 
-def _all_env_call_sites() -> list[tuple[str, int, str]]:
+def _all_env_call_sites() -> tuple[list[tuple[str, int, str]], list[str]]:
+    """Return (call sites, unparseable file paths) across every tests/**/*.py file.
+
+    A SyntaxError is recorded rather than silently skipped — a syntactically broken
+    test file must not evade this guard by going unscanned with no trace."""
     sites: list[tuple[str, int, str]] = []
+    unparseable: list[str] = []
     for py in sorted(TESTS_ROOT.rglob("*.py")):
         rel = py.relative_to(TESTS_ROOT.parent).as_posix()
         try:
             tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
         except SyntaxError:
+            unparseable.append(rel)
             continue
         sites.extend(_collect_env_call_sites(tree, rel))
-    return sites
+    return sites, unparseable
 
 
 def test_no_adhoc_delenv_or_pop_for_centrally_scrubbed_vars() -> None:
     """Ad-hoc delenv/pop calls for centrally-scrubbed vars must be declared, not silent."""
     offenders: list[str] = []
-    for rel, line, var in _all_env_call_sites():
+    sites, _unparseable = _all_env_call_sites()
+    for rel, line, var in sites:
         entry = AMBIENT_ENV_DISPOSITIONS.get(var)
         if entry is None or entry.disposition != "scrub":
             continue
@@ -284,7 +291,8 @@ def test_no_adhoc_delenv_or_pop_for_centrally_scrubbed_vars() -> None:
 
 def test_intentional_env_input_sites_are_not_stale() -> None:
     """Allowlist hygiene: every declared site must still exist and still need declaring."""
-    matched_keys = {f"{rel}::{var}" for rel, _line, var in _all_env_call_sites()}
+    sites, _unparseable = _all_env_call_sites()
+    matched_keys = {f"{rel}::{var}" for rel, _line, var in sites}
     stale: list[str] = []
     for key in _INTENTIONAL_ENV_INPUT_SITES:
         _rel, _, var = key.partition("::")
@@ -294,3 +302,13 @@ def test_intentional_env_input_sites_are_not_stale() -> None:
         elif key not in matched_keys:
             stale.append(f"{key} (no longer matched by the guard's own scanner)")
     assert not stale, f"Stale _INTENTIONAL_ENV_INPUT_SITES entries, remove them: {stale}"
+
+
+def test_all_test_files_parse_for_env_call_site_scan() -> None:
+    """Fail loudly, never silently under-report: the ad-hoc-env-workaround scanner
+    above must be able to parse every tests/**/*.py file it scans."""
+    _sites, unparseable = _all_env_call_sites()
+    assert not unparseable, (
+        "The ad-hoc-env-workaround guard could not parse these files, so it silently "
+        "skipped scanning them for violations: " + ", ".join(sorted(unparseable))
+    )

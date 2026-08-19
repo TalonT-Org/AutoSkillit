@@ -36,7 +36,6 @@ from autoskillit.core import (
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import (
     NON_INTERACTIVE_KINDS,
-    all_validated_recipe_names,
     list_recipes,
     load_and_validate,
 )
@@ -52,6 +51,7 @@ from autoskillit.server._response_budget import (
 from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
 )
+from tests._tracked_recipes import tracked_recipe_names
 from tests.contracts._delivery_constants import (
     CALIBRATED_PAGES_PER_SECTION,
     MAX_ENVELOPE_MANIFEST_BYTES,
@@ -65,7 +65,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _recipe_names() -> list[str]:
-    return sorted(all_validated_recipe_names(_PROJECT_ROOT))
+    return sorted(tracked_recipe_names(_PROJECT_ROOT))
 
 
 def _delivery_recipe_names() -> list[str]:

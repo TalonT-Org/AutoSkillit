@@ -14,9 +14,10 @@ from autoskillit.recipe.contracts import (
     generate_recipe_card,
     validate_recipe_cards,
 )
-from autoskillit.recipe.io import all_validated_recipe_names, builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import RecipeKind
 from autoskillit.recipe.validator import run_semantic_rules
+from tests._tracked_recipes import tracked_recipe_names
 from tests.recipe.test_bundled_recipes_behavioral_properties import _SALVAGE_ROUTE_SITES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -25,7 +26,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RECIPES_DIR = builtin_recipes_dir()
 _CONTRACTS_DIR = _RECIPES_DIR / "contracts"
 # Unified discovery: covers builtin, campaigns, eval, and project-local recipes
-_RECIPE_STEMS = all_validated_recipe_names(_PROJECT_ROOT)
+_RECIPE_STEMS = tracked_recipe_names(_PROJECT_ROOT)
 _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
 

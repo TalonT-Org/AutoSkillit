@@ -25,11 +25,11 @@ def test_model_facing_recipe_surfaces_define_namespace_boundary():
 def test_bundled_recipe_and_skill_names_are_disjoint() -> None:
     from pathlib import Path
 
-    from autoskillit.recipe import all_validated_recipe_names
     from autoskillit.workspace import DefaultSkillResolver
+    from tests._tracked_recipes import tracked_recipe_names
 
     project_root = Path(__file__).resolve().parent.parent.parent
-    recipe_names = set(all_validated_recipe_names(project_root))
+    recipe_names = set(tracked_recipe_names(project_root))
     skill_names = {skill.name for skill in DefaultSkillResolver().list_all()}
 
     assert recipe_names.isdisjoint(skill_names), (

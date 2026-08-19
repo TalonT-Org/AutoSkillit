@@ -65,7 +65,6 @@ class TestCLIOrderCommand:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """order exits 1 when script name doesn't match any entry."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -80,7 +79,6 @@ class TestCLIOrderCommand:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """order exits 1 with available bundled recipes listed when name not found."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
@@ -95,7 +93,6 @@ class TestCLIOrderCommand:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """order lists available scripts when name doesn't match."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -112,7 +109,6 @@ class TestCLIOrderCommand:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """order exits 1 when claude command is not found."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -130,7 +126,6 @@ class TestCLIOrderCommand:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """order exits 1 when script YAML fails validation."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -150,7 +145,6 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order passes correct flags to subprocess.run."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -191,7 +185,6 @@ class TestCLIOrderCommand:
         """order still passes --plugin-dir when a marketplace plugin is installed —
         EXPLICIT_PLUGIN_DIR generation-store binding is unconditional for a
         plugin-install-capable backend (IMPLICIT_INSTALLED was retired in #4480)."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -258,7 +251,6 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order includes --plugin-dir when marketplace plugin is not installed."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -287,7 +279,6 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order does not raise SystemExit on returncode 0."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -307,7 +298,6 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order propagates non-zero subprocess exit codes."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -328,7 +318,6 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order passes --dangerously-skip-permissions to claude."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -349,7 +338,6 @@ class TestCLIOrderCommand:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """order exits 1 when the given recipe name is not found."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
@@ -367,7 +355,6 @@ class TestCLIOrderCommand:
         """order exits 1 with YAML parse error message when load_recipe raises YAMLError."""
         from autoskillit.core import YAMLError
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with (
@@ -388,7 +375,6 @@ class TestCLIOrderCommand:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """order exits 1 with structure error message when load_recipe raises ValueError."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with (
@@ -410,7 +396,6 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order() passes AUTOSKILLIT_SESSION_TYPE=order to subprocess env."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -433,7 +418,6 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order() passes AUTOSKILLIT_LAUNCH_ID in subprocess env."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -463,7 +447,6 @@ class TestCLIOrderCommand:
         real_backend = _real_get_backend(backend_name)
         captured: dict = {}
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)

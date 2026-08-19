@@ -2,7 +2,9 @@
 
 import functools
 import os
+from collections.abc import Mapping
 from pathlib import Path as _Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
@@ -25,6 +27,22 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
+
+_AMBIENT_ENV_AT_STARTUP: Mapping[str, str] = MappingProxyType(dict(os.environ))
+
+
+def pytest_report_header(config: pytest.Config) -> list[str] | None:
+    from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
+
+    contaminated = sorted(
+        var
+        for var, entry in AMBIENT_ENV_DISPOSITIONS.items()
+        if entry.disposition == "scrub" and var in _AMBIENT_ENV_AT_STARTUP
+    )
+    if not contaminated:
+        return None
+    return [f"ambient env scrubbed ({len(contaminated)}): {', '.join(contaminated)}"]
+
 
 _LAYER_DIRS: frozenset[str] = frozenset(
     {
@@ -283,18 +301,16 @@ def _isolated_home(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def _clear_private_env(monkeypatch) -> None:
-    """Clear ALL autoskillit-private env vars before every test.
+def _scrub_ambient_env(request, monkeypatch) -> None:
+    """Delete every ambient variable production code reads, except declared opt-outs."""
+    from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
 
-    Iterates AUTOSKILLIT_PRIVATE_ENV_VARS ∪ _HEADLESS_EXCLUSIVE_VARS
-    programmatically, so new vars are automatically covered without
-    manual fixture additions.
-    """
-    from autoskillit.core.types._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
-
-    for var in AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS:
-        monkeypatch.delenv(var, raising=False)
+    preserved = {
+        name for marker in request.node.iter_markers("ambient_env") for name in marker.args
+    }
+    for var, entry in AMBIENT_ENV_DISPOSITIONS.items():
+        if entry.disposition == "scrub" and var not in preserved:
+            monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture(autouse=True)

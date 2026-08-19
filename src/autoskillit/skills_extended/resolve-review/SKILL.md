@@ -551,6 +551,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Hook env-var authority | `test_hook_env_var_authority.py` | Hook scripts that read `AUTOSKILLIT_PROVIDER_PROFILE` without also reading `AUTOSKILLIT_AGENT_BACKEND` — provider profile is a credentials label, not a backend-identity signal |
 | Evidence-bound intake rules | `test_intake_rule_registry.py` | `CODEX_INTAKE_RULES` entries stating an absolute imperative without a declared `exception`; `basis`/`evidence`/`evidence_anchor` that does not resolve to a live backend capability, ADR, or issue; a `path_classes` entry naming a file class `recipe_read_guard` denies |
 | Interpreter bytecode suppression | `test_interpreter_bytecode_suppression.py` | `sys.executable`/`python3` interpreter-spawn sites under `hooks/`, `hook_registry.py`, or `_codex_hooks.py` missing the `-B` flag — must suppress bytecode writes unconditionally |
+| No ad-hoc env scrub duplication | `test_no_adhoc_env_workarounds.py` | New `monkeypatch.delenv(...)` / `os.environ.pop(...)` calls in tests for a var already scrubbed by conftest's `_scrub_ambient_env` autouse fixture, unless declared in `_INTENTIONAL_ENV_INPUT_SITES` |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

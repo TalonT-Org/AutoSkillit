@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from tests._ambient_env_surface import production_env_read_surface
+from tests.arch._helpers import SRC_ROOT
+
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _FLEET_INJECTED_VARS: frozenset[str] = frozenset(
@@ -17,6 +20,16 @@ _FLEET_INJECTED_VARS: frozenset[str] = frozenset(
 _CLAUDE_CODE_PASSTHROUGH_VARS: frozenset[str] = frozenset(
     {
         "CLAUDE_CODE_EXECPATH",  # intentional: binary discovery (_version_snapshot.py)
+        # intentional: force_inactive_agent_teams (config.agent_backend, default False)
+        # is the opt-in neutralization mechanism -- _neutralize_agent_teams_env() +
+        # assert_agent_teams_inactive() in claude.py -- not a base-env denylist.
+        # Default passthrough is required byte-for-byte-preservation behavior; see
+        # tests/execution/test_launch_force_inactive_default.py.
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+        # not a real env var: __all__ list member in core/types/_type_constants_env.py
+        # (R4 predicate-(b) scanner false positive) -- the constant's own identifier
+        # name, never itself set as an OS environment variable.
+        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR",
     }
 )
 
@@ -175,18 +188,18 @@ def test_fleet_injected_vars_covered_by_filter_lists() -> None:
     )
 
 
+_PREFIX_BRANCH_EXEMPLARS: frozenset[str] = frozenset({"CLAUDE_CODE_IDE_THEME"})
+
+
 def test_no_unrecognized_claude_code_vars_pass_through() -> None:
     """Any known CLAUDE_CODE_* var must be filtered or documented as intentional passthrough."""
     from autoskillit.core._claude_env import IDE_ENV_DENYLIST, IDE_ENV_PREFIX_DENYLIST
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
-    known_vars = [
-        "CLAUDE_CODE_SUBAGENT_MODEL",
-        "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
-        "CLAUDE_CODE_SSE_PORT",
-        "CLAUDE_CODE_IDE_THEME",
-        "CLAUDE_CODE_EXECPATH",
-    ]
+    surface = production_env_read_surface(SRC_ROOT)
+    known_vars = sorted(
+        {v for v in surface.names if v.startswith("CLAUDE_CODE_")} | _PREFIX_BRANCH_EXEMPLARS
+    )
 
     for var in known_vars:
         in_exclusive = var in _HEADLESS_EXCLUSIVE_VARS

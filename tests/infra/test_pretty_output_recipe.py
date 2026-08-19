@@ -1041,12 +1041,12 @@ def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypa
     recipe under both ingredient modes."""
     from autoskillit.core import load_yaml
     from autoskillit.hooks.formatters._fmt_recipe_compact import compact_recipe_display
-    from autoskillit.recipe import all_validated_recipe_names
+    from tests._tracked_recipes import tracked_recipe_names
 
     project_root = Path(__file__).resolve().parent.parent.parent
     remediation_note_checked = False
 
-    for recipe_name in all_validated_recipe_names(project_root):
+    for recipe_name in tracked_recipe_names(project_root):
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
             content = _served_content(recipe_name, project_root, overrides, tmp_path, monkeypatch)
             if not content:
@@ -1074,7 +1074,7 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
     """Measure the same pre-backstop string in characters and UTF-8 bytes."""
 
     from autoskillit import __version__
-    from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
+    from autoskillit.recipe import _api_cache, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.recipe.io import _SCRIPTS_PLACEHOLDER, builtin_scripts_dir
     from autoskillit.recipe.repository import DefaultRecipeRepository
@@ -1084,6 +1084,7 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
         render_served_response,
         serve_recipe,
     )
+    from tests._tracked_recipes import tracked_recipe_names
 
     project_root = Path(__file__).resolve().parent.parent.parent
     measured_modes: set[tuple[str, str, bool]] = set()
@@ -1093,7 +1094,7 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
     # maxima are identical regardless of checkout location.
     _scripts_dir = str(builtin_scripts_dir())
 
-    for recipe_name in all_validated_recipe_names(project_root):
+    for recipe_name in tracked_recipe_names(project_root):
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
             monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
             tool_ctx = SimpleNamespace(
@@ -1197,9 +1198,10 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
         _fmt_open_kitchen,
         _strip_yaml_ingredients_block,
     )
-    from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
+    from autoskillit.recipe import _api_cache, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
+    from tests._tracked_recipes import tracked_recipe_names
 
     project_root = Path(__file__).resolve().parent.parent.parent
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
@@ -1220,7 +1222,7 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     over_budget: list[str] = []
     maximum: tuple[int, str, str] = (0, "", "")
 
-    for recipe_name in all_validated_recipe_names(project_root):
+    for recipe_name in tracked_recipe_names(project_root):
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
             monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
             resolved = dict(overrides, source_dir=str(project_root))

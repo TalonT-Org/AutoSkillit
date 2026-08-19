@@ -744,16 +744,15 @@ class TestContextLimitBehaviorContract:
         """
         from autoskillit.core import SKILL_TOOLS
         from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
-        from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
+        from autoskillit.recipe.io import load_recipe
+        from tests._tracked_recipes import tracked_recipe_paths
 
         manifest = load_bundled_manifest()
         assert manifest is not None, "load_bundled_manifest() returned None"
         skills = manifest.get("skills", {})
 
         _bundled_only = [
-            p
-            for p in all_validated_recipe_paths(_project_root())
-            if "src/autoskillit/recipes" in str(p)
+            p for p in tracked_recipe_paths(_project_root()) if "src/autoskillit/recipes" in str(p)
         ]
 
         missing: list[str] = []

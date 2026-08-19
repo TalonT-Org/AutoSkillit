@@ -1,0 +1,314 @@
+"""Architectural guard: forbid new ad-hoc ``monkeypatch.delenv(...)`` /
+``os.environ.pop(...)`` calls for ambient env vars the central ``_scrub_ambient_env``
+autouse fixture (``tests/conftest.py``) already scrubs unconditionally before every test.
+
+Scans every ``tests/**/*.py`` file for two unambiguous call shapes:
+
+- ``<anything>.delenv("VAR", ...)`` — any receiver, since AST alone cannot resolve
+  whether a given local name is monkeypatch-typed.
+- ``os.environ.pop("VAR", ...)`` — receiver must literally be ``os.environ`` (not an
+  arbitrary local dict), which is exactly what distinguishes a real ambient-environment
+  workaround from stripping a locally constructed child-process env dict.
+
+A third shape — ``<local-env-dict>.pop(...)`` — is deliberately NOT matched: AST alone
+cannot distinguish ``environ.pop(...)`` on a local dict from ``os.environ.pop(...)`` on
+the ambient environment without a broad, hand-maintained exception list. The two shapes
+above are unambiguous and cover the overwhelming majority of sites; a narrow guard beats
+a broad one carrying inferred exceptions.
+
+Any collected var that is ``disposition="scrub"`` in ``AMBIENT_ENV_DISPOSITIONS`` is
+already deleted for every test by the central fixture before the test body runs, so a
+per-test delenv/pop call for that var is either dead code or, worse, disguises a real
+behavioral input (e.g. "assert X when var is absent") as if it were ambient cleanup.
+Sites that ARE a genuine behavioral input — usually paired with a sibling test that
+``setenv``s the same var — are declared in ``_INTENTIONAL_ENV_INPUT_SITES`` with a
+justification, mirroring the ``_TEMP_PATH_WHITELIST`` pattern in
+``test_python_no_hardcoded_temp.py``.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+import pytest
+
+from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
+
+pytestmark = [pytest.mark.small]
+
+TESTS_ROOT = Path(__file__).resolve().parent.parent
+
+# Keyed by "<repo-relative file>::<VAR_NAME>", not "file:line" — line numbers drift
+# across edits. Two kinds of entry: (1) a genuine behavioral test input — usually the
+# delenv/pop half of a setenv/delenv pair exercising presence-vs-absence behavior for
+# that var — and (2) a pre-existing site outside this change's CLAUDECODE/
+# CLAUDE_CODE_EXECPATH remediation scope, grandfathered here rather than silently
+# passing, pending a future consolidation pass that assesses it individually.
+_GRANDFATHERED_JUSTIFICATION = (
+    "Pre-existing test-owned {var} clear predating the central _scrub_ambient_env "
+    "fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation scope of this "
+    "change; grandfathered pending a future consolidation pass."
+)
+
+_INTENTIONAL_ENV_INPUT_SITES: dict[str, str] = {
+    site: _GRANDFATHERED_JUSTIFICATION.format(var=site.rsplit("::", 1)[1])
+    for site in (
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_MCP_CLIENT_BACKEND",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/arch/test_feature_markers.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_MCP_CLIENT_BACKEND",
+        "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS",
+        "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_HEADLESS_AUTO_GATE",
+        "tests/cli/_cook_launch_helpers.py::AUTOSKILLIT_CODEX_STARTUP_TRACE",
+        "tests/cli/test_doctor.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/cli/test_doctor_fleet_checks.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/cli/test_doctor_fleet_checks.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/cli/test_init.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/cli/test_init.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/cli/test_init_helpers.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/cli/test_init_helpers.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/cli/test_startup_budget.py::GITHUB_TOKEN",
+        "tests/cli/test_update_checks_guards.py::AUTOSKILLIT_SOURCE_REPO",
+        "tests/config/test_agent_backend_config.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/config/test_agent_backend_config.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/contracts/test_backend_prompt_conventions.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/contracts/test_backend_prompt_conventions.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/core/test_backend_gating_core.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/core/test_kitchen_state.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/core/test_kitchen_state.py::AUTOSKILLIT_STATE_DIR",
+        "tests/core/test_session_provenance.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/core/test_session_provenance.py::AUTOSKILLIT_STATE_DIR",
+        "tests/core/test_session_type.py::AUTOSKILLIT_HEADLESS",
+        "tests/core/test_session_type.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/core/test_version_snapshot.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/core/test_version_snapshot_codex_routing.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_backend_sandbox_invariants.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_backend_sandbox_invariants.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_claude_backend.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_claude_backend.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_claude_code_backend.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_claude_code_backend.py::CLAUDE_CODE_EXECPATH",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_probe_canary.py::GITHUB_REPOSITORY",
+        "tests/execution/test_codex_flag_contracts.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/test_codex_flag_contracts.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/test_commands_skill_session.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/test_commands_skill_session.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/test_headless_execute.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/test_headless_path_validation.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/test_idle_output_env.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/test_quota_sleep.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/execution/test_quota_sleep.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED",
+        "tests/execution/test_session_log_flush.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/test_session_log_flush.py::AUTOSKILLIT_STATE_DIR",
+        "tests/fleet/test_gate_state_persistence.py::AUTOSKILLIT_CAMPAIGN_STATE_PATH",
+        "tests/fleet/test_gate_state_persistence.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_compose_pr_body_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_github_mutation_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_github_mutation_guard.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/hooks/test_hook_config_bridge.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/hooks/test_hook_settings.py::AUTOSKILLIT_LOG_DIR",
+        "tests/hooks/test_lint_after_edit_hook.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_lint_after_edit_hook.py::AUTOSKILLIT_SKILL_NAME",
+        "tests/hooks/test_pipeline_step_guard.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SKILL_NAME",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_LOG_DIR",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_LOG_DIR",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/hooks/test_session_start_reminder.py::AUTOSKILLIT_STATE_DIR",
+        "tests/hooks/test_shell_capture_hook.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/hooks/test_state_root_resolution.py::AUTOSKILLIT_STATE_ROOT",
+        "tests/hooks/test_test_runner_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_CWD",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/infra/test_open_kitchen_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/infra/test_open_kitchen_guard.py::AUTOSKILLIT_STATE_DIR",
+        "tests/integration/test_codex_food_truck.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/integration/test_codex_food_truck.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/integration/test_guard_composition.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "tests/integration/test_guard_composition.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
+        "tests/integration/test_pipeline_step_completion_flow.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/integration/test_write_guard_worktree_integration.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "tests/integration/test_write_guard_worktree_integration.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
+        "tests/integration/test_write_guard_worktree_integration.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_delivery_e2e_verification.py::AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+        "tests/server/test_delivery_e2e_verification.py::AUTOSKILLIT_ATTESTED_META_SUPPORT",
+        "tests/server/test_factory.py::AUTOSKILLIT_EXPLORATION_CAPABILITY",
+        "tests/server/test_factory.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_factory.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/server/test_factory.py::GITHUB_TOKEN",
+        "tests/server/test_factory.py::RECORD_SCENARIO",
+        "tests/server/test_factory.py::REPLAY_SCENARIO",
+        "tests/server/test_factory_recording.py::RECORD_SCENARIO",
+        "tests/server/test_factory_recording.py::REPLAY_SCENARIO",
+        "tests/server/test_helpers_tier_guards.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_helpers_tier_guards.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/server/test_lifespan_fleet_boot.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_progress_heartbeat_wiring.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_record_pipeline_step.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/server/test_record_pipeline_step_complete.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/server/test_session_deadline.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/server/test_session_type_visibility_fleet.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_session_type_visibility_fleet.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_HEADLESS_AUTO_GATE",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/server/test_tools_clone.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/server/test_tools_dispatch_halt.py::AUTOSKILLIT_CAMPAIGN_STATE_PATH",
+        "tests/server/test_tools_dispatch_validation.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_execution_routing.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/server/test_tools_kitchen_envelope.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_kitchen_gate.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/server/test_tools_run_cmd_invariants.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_run_python_invariants.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_status_kitchen.py::GITHUB_TOKEN",
+        "tests/workspace/test_clone_registry.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/workspace/test_clone_registry.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+    )
+}
+
+
+def _string_literal_arg(call: ast.Call, keyword: str) -> str | None:
+    """Resolve a call's var argument: first positional arg, else the named keyword."""
+    if call.args:
+        arg = call.args[0]
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value
+        return None
+    for kw in call.keywords:
+        if (
+            kw.arg == keyword
+            and isinstance(kw.value, ast.Constant)
+            and isinstance(kw.value.value, str)
+        ):
+            return kw.value.value
+    return None
+
+
+def _is_os_environ(node: ast.expr) -> bool:
+    """True only for the literal receiver ``os.environ`` — not an arbitrary local dict."""
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "environ"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "os"
+    )
+
+
+def _collect_env_call_sites(tree: ast.Module, rel: str) -> list[tuple[str, int, str]]:
+    """Collect ``(file, line, var)`` for every matching delenv/pop call in *tree*."""
+    sites: list[tuple[str, int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr == "delenv":
+            var = _string_literal_arg(node, "name")
+        elif func.attr == "pop" and _is_os_environ(func.value):
+            var = _string_literal_arg(node, "key")
+        else:
+            continue
+        if var is not None:
+            sites.append((rel, node.lineno, var))
+    return sites
+
+
+def _all_env_call_sites() -> tuple[list[tuple[str, int, str]], list[str]]:
+    """Return (call sites, unparseable file paths) across every tests/**/*.py file.
+
+    A SyntaxError is recorded rather than silently skipped — a syntactically broken
+    test file must not evade this guard by going unscanned with no trace."""
+    sites: list[tuple[str, int, str]] = []
+    unparseable: list[str] = []
+    for py in sorted(TESTS_ROOT.rglob("*.py")):
+        rel = py.relative_to(TESTS_ROOT.parent).as_posix()
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
+        except SyntaxError:
+            unparseable.append(rel)
+            continue
+        sites.extend(_collect_env_call_sites(tree, rel))
+    return sites, unparseable
+
+
+def test_no_adhoc_delenv_or_pop_for_centrally_scrubbed_vars() -> None:
+    """Ad-hoc delenv/pop calls for centrally-scrubbed vars must be declared, not silent."""
+    offenders: list[str] = []
+    sites, _unparseable = _all_env_call_sites()
+    for rel, line, var in sites:
+        entry = AMBIENT_ENV_DISPOSITIONS.get(var)
+        if entry is None or entry.disposition != "scrub":
+            continue
+        if f"{rel}::{var}" in _INTENTIONAL_ENV_INPUT_SITES:
+            continue
+        offenders.append(f"{rel}:{line} ({var})")
+    assert not offenders, (
+        "Ad-hoc monkeypatch.delenv(...) / os.environ.pop(...) calls found for vars the "
+        "central `_scrub_ambient_env` autouse fixture (tests/conftest.py) already scrubs "
+        "unconditionally before every test: "
+        + ", ".join(sorted(offenders))
+        + ". Remove the redundant call — the fixture already handles it. If this is a "
+        "genuine behavioral test input (not a workaround), add an entry to "
+        "_INTENTIONAL_ENV_INPUT_SITES with a justification."
+    )
+
+
+def test_intentional_env_input_sites_are_not_stale() -> None:
+    """Allowlist hygiene: every declared site must still exist and still need declaring."""
+    sites, _unparseable = _all_env_call_sites()
+    matched_keys = {f"{rel}::{var}" for rel, _line, var in sites}
+    stale: list[str] = []
+    for key in _INTENTIONAL_ENV_INPUT_SITES:
+        _rel, _, var = key.partition("::")
+        entry = AMBIENT_ENV_DISPOSITIONS.get(var)
+        if entry is None or entry.disposition != "scrub":
+            stale.append(f"{key} (var is no longer scrub-disposition)")
+        elif key not in matched_keys:
+            stale.append(f"{key} (no longer matched by the guard's own scanner)")
+    assert not stale, f"Stale _INTENTIONAL_ENV_INPUT_SITES entries, remove them: {stale}"
+
+
+def test_all_test_files_parse_for_env_call_site_scan() -> None:
+    """Fail loudly, never silently under-report: the ad-hoc-env-workaround scanner
+    above must be able to parse every tests/**/*.py file it scans."""
+    _sites, unparseable = _all_env_call_sites()
+    assert not unparseable, (
+        "The ad-hoc-env-workaround guard could not parse these files, so it silently "
+        "skipped scanning them for violations: " + ", ".join(sorted(unparseable))
+    )

@@ -277,6 +277,117 @@ def test_run_subprocess_callers_use_safe_env_pattern() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sibling rule: every server/** subprocess-runner call (_run_subprocess or
+# _run_subprocess_captured) that passes an env= kwarg must trace it to a
+# sealing builder call — build_sanitized_env()/build_agent_env()/
+# build_maintenance_env() — never a raw os.environ-derived dict and never
+# None. Distinct from test_run_subprocess_callers_use_safe_env_pattern above:
+# that rule's "safe" definition (env=None, env={**os.environ, ...}) describes
+# the general _run_subprocess contract and predates run_cmd's sealed-env fix;
+# this rule enforces the stricter, sealed-only contract those callers must
+# meet, and it also covers _run_subprocess_captured, which the predicate
+# above does not match.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SEALING_BUILDER_NAMES = frozenset(
+    {"build_sanitized_env", "build_agent_env", "build_maintenance_env"}
+)
+_SUBPROCESS_RUNNER_NAMES = frozenset({"_run_subprocess", "_run_subprocess_captured"})
+
+
+def _resolves_to_sealing_builder_call(env_val: ast.expr, bindings: dict[str, ast.expr]) -> bool:
+    """True if env_val is (or resolves via bound-name lookup to) a call to one of
+    the three sealing builder functions."""
+    if isinstance(env_val, ast.Call):
+        func = env_val.func
+        if isinstance(func, ast.Name) and func.id in _SEALING_BUILDER_NAMES:
+            return True
+        return isinstance(func, ast.Attribute) and func.attr in _SEALING_BUILDER_NAMES
+    if isinstance(env_val, ast.Name):
+        bound = bindings.get(env_val.id)
+        if bound is None:
+            return False
+        return _resolves_to_sealing_builder_call(bound, bindings)
+    return False
+
+
+def _collect_own_scope_bindings(func_node: ast.AST) -> dict[str, ast.expr]:
+    """Collect name-to-value bindings from func_node's own scope only.
+
+    Does not descend into nested function/class bodies — those introduce
+    independent scopes, so a nested `env = ...` assignment must not overwrite
+    an outer-scope binding of the same name."""
+    bindings: dict[str, ast.expr] = {}
+
+    def _walk(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.Assign) and len(child.targets) == 1:
+                target = child.targets[0]
+                if isinstance(target, ast.Name):
+                    bindings[target.id] = child.value
+            elif isinstance(child, ast.AnnAssign) and child.value is not None:
+                if isinstance(child.target, ast.Name):
+                    bindings[child.target.id] = child.value
+            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                _walk(child)
+
+    _walk(func_node)
+    return bindings
+
+
+def _find_sealed_env_violations(source: str, path: Path) -> list[str]:
+    """Find server/** subprocess-runner calls whose env= kwarg does not trace to
+    a sealing builder call."""
+    tree = ast.parse(source)
+    violations: list[str] = []
+    for func_node in ast.walk(tree):
+        if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        bindings = _collect_own_scope_bindings(func_node)
+        for node in ast.walk(func_node):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Name) and func.id in _SUBPROCESS_RUNNER_NAMES):
+                continue
+            env_kw = None
+            for kw in node.keywords:
+                if kw.arg == "env":
+                    env_kw = kw.value
+                    break
+            if env_kw is None:
+                continue
+            rel = path.relative_to(SERVER_ROOT.parents[2])
+            if isinstance(env_kw, ast.Constant) and env_kw.value is None:
+                violations.append(f"{rel}:{node.lineno}: {func.id}(env=None) is not a sealed env")
+                continue
+            if not _resolves_to_sealing_builder_call(env_kw, bindings):
+                violations.append(
+                    f"{rel}:{node.lineno}: {func.id}(env=...) does not trace to a sealing "
+                    "builder call (build_sanitized_env/build_agent_env/build_maintenance_env)"
+                )
+    return violations
+
+
+def test_server_tools_route_subprocess_env_through_a_sealing_function() -> None:
+    """Every env= kwarg passed to _run_subprocess/_run_subprocess_captured under
+    server/** must trace to build_sanitized_env(), build_agent_env(), or
+    build_maintenance_env() — never a raw os.environ-derived dict and never None."""
+    if not SERVER_ROOT.is_dir():
+        pytest.skip("Source tree unavailable")
+    violations: list[str] = []
+    for py_file in sorted(SERVER_ROOT.rglob("*.py")):
+        source = py_file.read_text(encoding="utf-8")
+        if not any(name in source for name in _SUBPROCESS_RUNNER_NAMES):
+            continue
+        violations.extend(_find_sealed_env_violations(source, py_file))
+    assert not violations, (
+        "Found server/** subprocess env= kwargs not sourced from a sealing builder call:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sibling rule: claude-launching subprocess calls must route env through
 # build_agent_env() — enforced via intra-function AST walk.
 # ─────────────────────────────────────────────────────────────────────────────

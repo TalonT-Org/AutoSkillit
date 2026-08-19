@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types import Severity
-from autoskillit.recipe.io import all_validated_recipe_names, builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
+from tests._tracked_recipes import tracked_recipe_names
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -16,7 +17,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _bundled_recipe_names() -> list[str]:
-    names = sorted(all_validated_recipe_names(_PROJECT_ROOT))
+    names = sorted(tracked_recipe_names(_PROJECT_ROOT))
     rd = builtin_recipes_dir()
     return [n for n in names if (rd / f"{n}.yaml").exists()]
 

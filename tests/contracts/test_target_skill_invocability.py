@@ -12,10 +12,10 @@ import pytest
 
 from autoskillit.core import SkillSource, extract_skill_name, resolve_target_skill
 from autoskillit.recipe import load_recipe
-from autoskillit.recipe.io import all_validated_recipe_paths
 from autoskillit.workspace import (
     DefaultSkillResolver,
 )
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -159,7 +159,7 @@ class TestAllRecipeSkillCommandsInvocable:
         resolver = DefaultSkillResolver()
         bundled_recipes = [
             path
-            for path in all_validated_recipe_paths(_PROJECT_ROOT)
+            for path in tracked_recipe_paths(_PROJECT_ROOT)
             if "src/autoskillit/recipes" in str(path)
         ]
         for yaml_path in bundled_recipes:

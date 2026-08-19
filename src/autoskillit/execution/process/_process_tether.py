@@ -137,6 +137,11 @@ class OrphanedTetherRecord:
     reason: str
 
 
+def format_orphaned_tether_fields(record: TetherRecord, reason: str) -> str:
+    """Shared ``pid=... origin=... reason=...`` rendering for CLI/doctor orphan surfaces."""
+    return f"pid={record.child_pid} origin={record.origin} reason={reason}"
+
+
 def _tether_record_to_dict(record: TetherRecord) -> dict[str, Any]:
     """Payload only — schema_version is added by write_versioned_json at write time."""
     return {

@@ -18,7 +18,11 @@ def run_process_orphans(*, reap: bool = False, output_json: bool = False) -> Non
     ``--reap`` invokes the same identity-verified sweep the automatic
     chokepoints use — no separate kill path exists.
     """
-    from autoskillit.execution import default_tether_dir, find_orphaned_tethers
+    from autoskillit.execution import (
+        default_tether_dir,
+        find_orphaned_tethers,
+        format_orphaned_tether_fields,
+    )
 
     tether_dir = default_tether_dir()
     orphaned = find_orphaned_tethers(tether_dir)
@@ -64,7 +68,7 @@ def run_process_orphans(*, reap: bool = False, output_json: bool = False) -> Non
     # what was targeted exists even if signaling wedges.
     for o in orphaned:
         print(
-            f"orphan: pid={o.record.child_pid} origin={o.record.origin} reason={o.reason}",
+            f"orphan: {format_orphaned_tether_fields(o.record, o.reason)}",
             flush=reap,
         )
 

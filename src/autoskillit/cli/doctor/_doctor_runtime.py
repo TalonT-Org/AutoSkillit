@@ -34,6 +34,7 @@ from autoskillit.execution import (
     find_orphaned_autoskillit_daemons,
     find_orphaned_codex_processes,
     find_orphaned_tethers,
+    format_orphaned_tether_fields,
     resolve_log_dir,
     session_index_lock_path,
 )
@@ -629,9 +630,7 @@ def _check_orphaned_process_tethers() -> list[DoctorResult]:
         DoctorResult(
             Severity.WARNING,
             check_name,
-            f"orphaned tether pid={o.record.child_pid}"
-            f" origin={o.record.origin}"
-            f" reason={o.reason};"
+            f"orphaned tether {format_orphaned_tether_fields(o.record, o.reason)};"
             f" run: autoskillit process-orphans --reap",
         )
         for o in orphaned

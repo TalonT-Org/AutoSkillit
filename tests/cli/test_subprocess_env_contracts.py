@@ -311,6 +311,30 @@ def _resolves_to_sealing_builder_call(env_val: ast.expr, bindings: dict[str, ast
     return False
 
 
+def _collect_own_scope_bindings(func_node: ast.AST) -> dict[str, ast.expr]:
+    """Collect name-to-value bindings from func_node's own scope only.
+
+    Does not descend into nested function/class bodies — those introduce
+    independent scopes, so a nested `env = ...` assignment must not overwrite
+    an outer-scope binding of the same name."""
+    bindings: dict[str, ast.expr] = {}
+
+    def _walk(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.Assign) and len(child.targets) == 1:
+                target = child.targets[0]
+                if isinstance(target, ast.Name):
+                    bindings[target.id] = child.value
+            elif isinstance(child, ast.AnnAssign) and child.value is not None:
+                if isinstance(child.target, ast.Name):
+                    bindings[child.target.id] = child.value
+            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                _walk(child)
+
+    _walk(func_node)
+    return bindings
+
+
 def _find_sealed_env_violations(source: str, path: Path) -> list[str]:
     """Find server/** subprocess-runner calls whose env= kwarg does not trace to
     a sealing builder call."""
@@ -319,15 +343,7 @@ def _find_sealed_env_violations(source: str, path: Path) -> list[str]:
     for func_node in ast.walk(tree):
         if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        bindings: dict[str, ast.expr] = {}
-        for stmt in ast.walk(func_node):
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                target = stmt.targets[0]
-                if isinstance(target, ast.Name):
-                    bindings[target.id] = stmt.value
-            elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
-                if isinstance(stmt.target, ast.Name):
-                    bindings[stmt.target.id] = stmt.value
+        bindings = _collect_own_scope_bindings(func_node)
         for node in ast.walk(func_node):
             if not isinstance(node, ast.Call):
                 continue

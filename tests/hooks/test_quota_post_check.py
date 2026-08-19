@@ -516,7 +516,7 @@ def test_post_anthropic_profile_does_not_bypass(tmp_path, monkeypatch):
 def _setup_backend_env(monkeypatch, agent_backend):
     """Set or remove AUTOSKILLIT_AGENT_BACKEND for matrix rows.
 
-    The root ``_clear_private_env`` fixture already deletes the variable
+    The root ``_scrub_ambient_env`` fixture already deletes the variable
     before every test; this helper re-deletes for row-level isolation
     before optionally setting it.
     """

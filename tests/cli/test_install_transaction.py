@@ -587,7 +587,6 @@ def test_direct_mode_defaults_to_ambient_cwd_when_unspecified(
     # DIRECT mode without an explicit child_cwd snapshots the caller's
     # ambient os.getcwd(). A host Claude Code session running this suite
     # sets CLAUDECODE, which would otherwise defer the install.
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     _configure_direct_backend(monkeypatch)
     calls: list[tuple[str, Path]] = []
 

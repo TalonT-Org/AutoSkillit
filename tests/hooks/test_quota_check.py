@@ -694,7 +694,7 @@ def test_anthropic_profile_does_not_bypass(tmp_path, monkeypatch):
 def _setup_backend_env(monkeypatch, agent_backend: str | None) -> None:
     """Set or remove AUTOSKILLIT_AGENT_BACKEND for matrix rows.
 
-    The root ``_clear_private_env`` fixture already deletes
+    The root ``_scrub_ambient_env`` fixture already deletes
     ``AUTOSKILLIT_AGENT_BACKEND`` before every test. When ``agent_backend``
     is ``None`` we must explicitly delete it again to be safe (the fixture
     only deletes, never sets), and any future ``setenv`` must replace the

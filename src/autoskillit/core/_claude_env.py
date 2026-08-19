@@ -57,6 +57,17 @@ IDE_ENV_DENYLIST: frozenset[str] = frozenset(
         # leak into a child that the launcher did not itself attest.
         AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
         AUTOSKILLIT_ATTESTED_META_SUPPORT,
+        # Skill-session hardening: _CLAUDE_SKILL_SESSION_HARDENING in
+        # _claude_prompt.py force-sets these for skill sessions only.
+        # build_interactive_cmd/build_resume_cmd don't apply that hardening,
+        # so stripped from base here to stop a host-inherited value leaking
+        # into those non-skill launch paths.
+        "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS",
+        "CLAUDE_CODE_DISABLE_CRON",
+        # Per-MCP-tool-call idle-abort timeout: only overridden when the caller
+        # passes mcp_tool_timeout_sec > 0. Stripped from base so an unset caller
+        # value doesn't let a host-inherited timeout leak into the child.
+        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT",
     }
 )
 

@@ -55,7 +55,6 @@ def cold_launch(
         captured["env"] = dict(kwargs["env"])
         return InteractiveProcessStub()
 
-    monkeypatch.delenv("CLAUDE_CODE_EXECPATH", raising=False)
     monkeypatch.setattr(subprocess, "run", capture_run)
     monkeypatch.setattr(subprocess, "Popen", capture_final_spawn)
     monkeypatch.setattr(

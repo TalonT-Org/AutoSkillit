@@ -209,6 +209,7 @@ from autoskillit.execution.session_log import (
 )
 from autoskillit.execution.testing import (
     DefaultTestRunner,
+    build_sanitized_env,
     check_test_passed,
     condense_test_output,
     parse_pytest_summary,
@@ -298,6 +299,7 @@ __all__ = [
     "parse_pytest_summary",
     "check_test_passed",
     "DefaultTestRunner",
+    "build_sanitized_env",
     "condense_test_output",
     # ci
     "DefaultCIWatcher",

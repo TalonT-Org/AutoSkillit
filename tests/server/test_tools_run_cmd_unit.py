@@ -101,15 +101,30 @@ class TestRunCmdRecording:
         assert env[SCENARIO_STEP_NAME_ENV] == "setup"
 
     @pytest.mark.anyio
-    async def test_run_cmd_without_step_name_passes_no_env(self, tool_ctx_kitchen_open):
-        """run_cmd without step_name passes env=None (no SCENARIO_STEP_NAME in env)."""
+    async def test_run_cmd_strips_private_env_vars(self, tool_ctx_kitchen_open, monkeypatch):
+        """run_cmd must strip AUTOSKILLIT_PRIVATE_ENV_VARS members from the child env."""
+        monkeypatch.setenv("AUTOSKILLIT_SKIP_STALE_CHECK", "1")
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        await run_cmd(cmd='echo "$AUTOSKILLIT_SKIP_STALE_CHECK"', cwd="/tmp")
+        call_kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1][3]
+        env = call_kwargs.get("env")
+        assert env is not None
+        assert "AUTOSKILLIT_SKIP_STALE_CHECK" not in env, (
+            "run_cmd leaked a server-private env var into the child process env"
+        )
+
+    @pytest.mark.anyio
+    async def test_run_cmd_without_step_name_omits_scenario_step_name(self, tool_ctx_kitchen_open):
+        """run_cmd without step_name still builds a sanitized env dict (never None),
+        omitting SCENARIO_STEP_NAME since no step_name was given."""
         from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
 
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         await run_cmd(cmd="echo hi", cwd="/tmp")
         call_kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1][3]
         env = call_kwargs.get("env")
-        assert env is None or SCENARIO_STEP_NAME_ENV not in env
+        assert isinstance(env, dict), "run_cmd must always pass a sanitized env dict, not None"
+        assert SCENARIO_STEP_NAME_ENV not in env
 
     @pytest.mark.anyio
     async def test_run_cmd_with_step_name_records_non_session_step(

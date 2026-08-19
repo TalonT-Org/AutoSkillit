@@ -39,12 +39,7 @@ def test_run_update_checks_skips_on_guard_env_var(
 ) -> None:
     monkeypatch.setenv(env_var, value)
     # Ensure no other guard vars are set
-    for other in [
-        "CLAUDECODE",
-        "CI",
-        "AUTOSKILLIT_SKIP_STALE_CHECK",
-        "AUTOSKILLIT_SKIP_UPDATE_CHECK",
-    ]:
+    for other in ["CI"]:
         if other != env_var:
             monkeypatch.delenv(other, raising=False)
     fetched: list[str] = []
@@ -62,10 +57,7 @@ def test_run_update_checks_skips_on_guard_env_var(
 def test_run_update_checks_skips_non_tty_stdin(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
     fake_stdin = io.StringIO()
     fake_stdout = io.StringIO()
     monkeypatch.setattr(sys, "stdin", fake_stdin)
@@ -82,10 +74,7 @@ def test_run_update_checks_skips_non_tty_stdin(
 def test_run_update_checks_skips_non_tty_stdout(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
 
     fake_stdin = MagicMock()
     fake_stdin.isatty.return_value = True
@@ -108,11 +97,7 @@ def test_run_update_checks_skips_non_tty_stdout(
 def test_run_update_checks_skips_local_and_unknown_install_types(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, install_type: InstallType
 ) -> None:
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
     fake_stdin = MagicMock()
     fake_stdin.isatty.return_value = True

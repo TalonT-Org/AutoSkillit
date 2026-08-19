@@ -14,12 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe.io import all_validated_recipe_paths, builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_ALL_PATHS = all_validated_recipe_paths(_PROJECT_ROOT)
+_ALL_PATHS = tracked_recipe_paths(_PROJECT_ROOT)
 _BUNDLED_ONLY = [p for p in _ALL_PATHS if "src/autoskillit/recipes" in str(p)]
 assert _BUNDLED_ONLY, "no bundled recipes found"
 _RECIPE_NAMES = [p.name for p in _BUNDLED_ONLY]

@@ -68,7 +68,6 @@ def test_fleet_dispatch_rejects_inside_claude_session(monkeypatch: pytest.Monkey
 def test_fleet_dispatch_rejects_skill_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
     """fleet dispatch exits 1 when ambient SESSION_TYPE is skill."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     with pytest.raises(SystemExit, match="1"):
         _fleet_dispatch()
 
@@ -78,7 +77,6 @@ def test_fleet_dispatch_rejects_deprecated_leaf_session_type(
 ) -> None:
     """fleet dispatch exits 1 when ambient SESSION_TYPE is removed 'leaf'."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-    monkeypatch.delenv("CLAUDECODE", raising=False)
     with pytest.raises(SystemExit, match="1"):
         _fleet_dispatch()
 
@@ -93,8 +91,6 @@ def test_fleet_dispatch_exits_when_claude_missing(
 ) -> None:
     """fleet dispatch exits 1 when claude is not on PATH."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.setattr("autoskillit.cli.fleet.is_feature_enabled", lambda *a, **kw: True)
     _fleet = type(
         "Fleet",

@@ -50,6 +50,10 @@ class EnableComponentsFailed(Exception):
     """ctx.enable_components raised while granting exploration visibility."""
 
 
+class StoreUnavailable(Exception):
+    """No exploration context store is configured for this session."""
+
+
 class _NodeKeyPayload(TypedDict):
     namespace: str
     value: str
@@ -248,7 +252,7 @@ def _fetch_page_from_launch_environment(
     if not 0 < page_size <= _MAX_RESPONSE_PAGE_SIZE:
         return _failure(_FAILURE_INVALID_REQUEST)
     if store is None:
-        raise RuntimeError("exploration context store is unavailable")
+        raise StoreUnavailable("exploration context store is unavailable")
     status, page = store.get_page_from_launch_environment(
         page_size=page_size,
         cursor=cursor,
@@ -284,7 +288,7 @@ async def submit_exploration_query(
         if request is None:
             return _failure(_FAILURE_INVALID_REQUEST)
         if store is None:
-            raise RuntimeError("exploration context store is unavailable")
+            raise StoreUnavailable("exploration context store is unavailable")
         status, page = store.submit_from_launch_environment(
             query=request,
             page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
@@ -306,9 +310,11 @@ async def submit_exploration_query(
             if page is None:
                 return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="accepted")
-    except Exception:
-        logger.warning("exploration query submission failed", exc_info=True)
+    except StoreUnavailable:
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("exploration query submission failed", exc_info=True)
+        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -357,9 +363,11 @@ async def get_exploration_page(
                 if page is not None:
                     return _page_payload(page, status="ready")
         return result
-    except Exception:
-        logger.warning("exploration page retrieval failed", exc_info=True)
+    except StoreUnavailable:
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("exploration page retrieval failed", exc_info=True)
+        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -404,9 +412,11 @@ async def resume_exploration_context(
                 if page is not None:
                     return _page_payload(page, status="resumed")
         return result
-    except Exception:
-        logger.warning("exploration context resumption failed", exc_info=True)
+    except StoreUnavailable:
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("exploration context resumption failed", exc_info=True)
+        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(

@@ -536,7 +536,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Registry key casing | `test_registry_key_casing.py` | Uppercase keys in `FEATURE_REGISTRY`, `RETIRED_FEATURES`, or `PACK_REGISTRY` |
 | Retired config key registry invariants | `test_retired_config_key_invariants.py` | `RETIRED_CONFIG_KEYS` entry reusing a retired name for a live field, a remap target that is not itself a currently-valid key (chained rename), or a remap touching a `_SECRETS_ONLY_KEYS` entry |
 | Turn ID resolution | `test_resolve_turn_id_guard.py` | Direct `request_id` dict `.get()` outside `_resolve_turn_id()` — all turn ID resolution must go through the single resolver |
-| No hardcoded @-mentions in SKILL.md | `test_skills.py` | `@word` tokens at word-boundary in SKILL.md prose — includes Python decorator examples (`@dataclass`, `@mcp`); use prose descriptions or remove the `@` prefix |
+| No hardcoded @-mentions in SKILL.md | `test_skills_mention_guard.py` | `@word` tokens at word-boundary in SKILL.md prose — includes Python decorator examples (`@dataclass`, `@mcp`); use prose descriptions or remove the `@` prefix |
 | FastMCP tag hygiene | `test_transforms_hygiene.py` | Test fixtures touching `mcp._transforms` without using the canonical `ALL_VISIBILITY_TAGS` constant |
 | Watcher dispatch marker | `test_watcher_signal_consistency.py` | Process watchers that skip `_has_active_dispatch_marker()` check |
 | Write restriction enforcement | `test_write_restriction_coverage.py` | Skills with prose write restrictions (`never modify source`, `read-only`, `output dir`) lacking runtime `WriteBehaviorSpec` enforcement |

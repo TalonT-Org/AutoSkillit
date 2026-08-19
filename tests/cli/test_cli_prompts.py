@@ -939,7 +939,7 @@ class TestPromptsReExporter:
     """Guard: _prompts.py re-exports every public symbol from submodules."""
 
     def test_reexporter_exposes_all_symbols(self) -> None:
-        from autoskillit.cli import (
+        from autoskillit.cli.prompts import (
             _prompts,
             _prompts_campaign,
             _prompts_kitchen,

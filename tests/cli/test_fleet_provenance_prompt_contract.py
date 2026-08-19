@@ -6,7 +6,7 @@ import inspect
 
 import pytest
 
-from autoskillit.cli import _prompts_campaign, _prompts_kitchen
+from autoskillit.cli.prompts import _prompts_campaign, _prompts_kitchen
 from tests.cli._fleet_provenance_prompt_contract import (
     REQUIRED_PROVENANCE_CLAUSES,
     assert_provenance_contract,

@@ -242,7 +242,7 @@ class TestInstalledPluginArtifactAuthority:
     def test_publication_does_not_wrap_control_flow_exceptions(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli import _plugin_artifact
+        from autoskillit.cli.install import _plugin_artifact
 
         def interrupt(_root: Path) -> Path:
             raise KeyboardInterrupt
@@ -258,7 +258,7 @@ class TestInstalledPluginArtifactAuthority:
     def test_binding_acquisition_does_not_wrap_control_flow_exceptions(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli import _plugin_artifact
+        from autoskillit.cli.install import _plugin_artifact
         from autoskillit.core import PluginLoadMode
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

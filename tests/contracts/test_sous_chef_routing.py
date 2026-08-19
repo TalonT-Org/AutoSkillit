@@ -350,6 +350,7 @@ def test_prompts_worktree_stale_carveout() -> None:
         / "src"
         / "autoskillit"
         / "cli"
+        / "prompts"
         / "_prompts_orchestrator.py"
     )
     prompts_text = prompts_path.read_text().lower()

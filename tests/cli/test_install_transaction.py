@@ -89,7 +89,7 @@ def _configure_transaction(
     or fetch cache for it to find.
     """
     import autoskillit.workspace as workspace
-    from autoskillit.cli import _marketplace
+    from autoskillit.cli.install import _marketplace
 
     update_checks = importlib.import_module("autoskillit.cli.update._update_checks")
     neutral_cwd = tmp_path / "neutral"
@@ -244,7 +244,7 @@ def test_optional_maintenance_obligation_returns_before_any_preflight(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.cli import _marketplace
+    from autoskillit.cli.install import _marketplace
 
     monkeypatch.setattr(
         _marketplace,
@@ -284,7 +284,7 @@ def test_install_boundary_rejects_worktree_without_persistent_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.cli import _marketplace
+    from autoskillit.cli.install import _marketplace
 
     home = tmp_path / "home"
     child_cwd = tmp_path / "neutral"

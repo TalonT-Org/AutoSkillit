@@ -378,7 +378,7 @@ class TestCLIInstall:
 
         from autoskillit.core.paths import pkg_root
 
-        source = (pkg_root() / "cli" / "_marketplace.py").read_text()
+        source = (pkg_root() / "cli" / "install" / "_marketplace.py").read_text()
         tree = ast.parse(source)
 
         # Check that no top-level import references autoskillit.config

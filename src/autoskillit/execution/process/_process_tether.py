@@ -16,6 +16,7 @@ the same platform gating `bind_session_owner` already uses.
 
 from __future__ import annotations
 
+import math
 import shutil
 import subprocess
 import sys
@@ -84,6 +85,12 @@ class TetherSpec:
     origin: str
     ceiling_seconds: float
     tether_dir: Path | None = None
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.ceiling_seconds) or self.ceiling_seconds <= 0:
+            raise ValueError(
+                f"ceiling_seconds must be a positive finite number, got {self.ceiling_seconds}"
+            )
 
 
 @dataclass(frozen=True, slots=True)

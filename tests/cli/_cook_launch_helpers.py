@@ -57,6 +57,12 @@ def arrange_cook(
     function will not mkdir() or write settings_content into it, since doing
     so on a real, pre-existing repository root would be destructive.
     """
+    if project_dir_override is not None and settings_content is not None:
+        raise ValueError(
+            "arrange_cook() cannot combine settings_content with "
+            "project_dir_override — callers passing project_dir_override own "
+            "creating/populating that directory themselves."
+        )
     if project_dir_override is not None:
         project_dir = project_dir_override
     else:

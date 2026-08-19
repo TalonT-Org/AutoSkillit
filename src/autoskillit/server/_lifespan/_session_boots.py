@@ -409,8 +409,9 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
 
     Runs at lifespan startup when AUTOSKILLIT_HEADLESS=1 and
     AUTOSKILLIT_HEADLESS_AUTO_GATE=1. No-ops for non-headless sessions.
-    Omits quota-refresh loop and campaign state recovery — SKILL sessions
-    are short-lived.
+    Omits quota-refresh loop, campaign state recovery, and the codex/daemon
+    orphan reap — SKILL sessions are short-lived and don't own long-lived
+    codex/daemon children (see test_boot_step_symmetry.py's carve-out).
     """
 
     if os.environ.get(HEADLESS_ENV_VAR) != "1":

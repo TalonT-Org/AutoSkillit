@@ -5,8 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from autoskillit.cli._restart import perform_restart
 from autoskillit.cli.ui._terminal import terminal_guard
+from autoskillit.cli.update._restart import perform_restart
 from autoskillit.cli.update._transaction import (
     UpdateProcessStatus,
     process_status_for_update_outcome,

@@ -25,7 +25,6 @@ from typing import Literal
 from packaging.version import Version
 
 from autoskillit.cli._hooks import _claude_settings_path
-from autoskillit.cli._restart import perform_restart
 from autoskillit.cli.install._install_info import (
     InstallInfo,
     InstallType,
@@ -34,6 +33,7 @@ from autoskillit.cli.install._install_info import (
     dismissal_window,
 )
 from autoskillit.cli.ui._terminal import terminal_guard
+from autoskillit.cli.update._restart import perform_restart
 from autoskillit.cli.update._transaction import (
     UpdateTransactionOutcome,
     run_update_transaction,

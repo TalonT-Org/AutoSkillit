@@ -307,7 +307,7 @@ def _resolves_to_sealing_builder_call(env_val: ast.expr, bindings: dict[str, ast
         bound = bindings.get(env_val.id)
         if bound is None:
             return False
-        return _resolves_to_sealing_builder_call(bound, {})
+        return _resolves_to_sealing_builder_call(bound, bindings)
     return False
 
 

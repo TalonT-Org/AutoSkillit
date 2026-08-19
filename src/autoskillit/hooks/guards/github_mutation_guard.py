@@ -5,6 +5,11 @@ The structured ``post_pr_review`` tool is the sole pull-request review
 publication authority. Other raw GitHub writes are allowed only when this
 guard can prove that the command issues exactly one non-review mutation.
 
+Bash command classification is delegated to ``_command_classification``
+primitives (re-exposed by ``_github_mutation_analysis``); this guard
+consumes ``analyze_github_mutations`` and the ``GitHubMutationKind`` /
+``GitHubMutationStatus`` enums without re-implementing any shell tokenization.
+
 stdlib-only; no autoskillit imports.
 """
 
@@ -22,7 +27,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_classification import (
+    from autoskillit.hooks._github_mutation_analysis import (
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,
@@ -33,7 +38,7 @@ if TYPE_CHECKING:
         parse_hook_command,
     )
 else:
-    from _command_classification import (  # noqa: E402
+    from _github_mutation_analysis import (  # noqa: E402
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,

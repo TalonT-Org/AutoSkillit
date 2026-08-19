@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
-from autoskillit.hooks._command_classification import (
+from autoskillit.hooks._github_mutation_analysis import (
     GitHubMutationStatus,
     analyze_github_mutations,
 )

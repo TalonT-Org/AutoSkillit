@@ -102,6 +102,9 @@ def test_fleet_dispatch_exits_when_claude_missing(
     )()
     _branching = type("Branching", (), {"default_base_branch": "main"})()
     _run_skill = type("RunSkill", (), {"mcp_tool_timeout_sec": 14364.0})()
+    _process_tether = type(
+        "ProcessTether", (), {"cook_ceiling_seconds": 172800.0, "systemd_scope_enabled": False}
+    )()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -114,6 +117,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
                 "agent_backend": _agent_backend,
                 "branching": _branching,
                 "run_skill": _run_skill,
+                "process_tether": _process_tether,
             },
         )(),
     )
@@ -184,6 +188,9 @@ def test_fleet_dispatch_proceeds_when_enabled(
     )()
     _branching = type("Branching", (), {"default_base_branch": "main"})()
     _run_skill = type("RunSkill", (), {"mcp_tool_timeout_sec": 14364.0})()
+    _process_tether = type(
+        "ProcessTether", (), {"cook_ceiling_seconds": 172800.0, "systemd_scope_enabled": False}
+    )()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -196,6 +203,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
                 "agent_backend": _agent_backend,
                 "branching": _branching,
                 "run_skill": _run_skill,
+                "process_tether": _process_tether,
             },
         )(),
     )

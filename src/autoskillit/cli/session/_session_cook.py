@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import time
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -21,10 +22,12 @@ from autoskillit.core import (
     PluginLoadMode,
     SkillContractError,
     executable_binding_matches_current_file,
+    get_logger,
     is_feature_enabled,
     plugin_launch_binding_scope,
     resolve_project_dir,
 )
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -35,6 +38,8 @@ if TYPE_CHECKING:
         SkillProjectionContext,
         SkillsDirectoryProvider,
     )
+
+logger = get_logger(__name__)
 
 
 _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
@@ -321,6 +326,10 @@ def cook(
         ) as managed_home,
     ):
         if isinstance(resume_spec, BareResume):
+            try:
+                sweep_orphaned_tethers(default_tether_dir())
+            except Exception:
+                logger.warning("cook_startup_tether_sweep_failed", exc_info=True)
             backend.recover_cook_history()
             from autoskillit.cli.session._session_picker import pick_session
 
@@ -434,6 +443,7 @@ def cook(
                     launch_id=launch_id,
                     attempt=attempt,
                     current_resume_spec=current_resume_spec,
+                    ceiling_seconds=config.process_tether.cook_ceiling_seconds,
                 ) as attempt_handle:
                     trace.record_attempt_anchor(
                         attempt=attempt,
@@ -475,6 +485,8 @@ def cook(
                         on_reaped=attempt_handle.record_reaped,
                         trace=trace,
                         observer=observer,
+                        not_after=time.time() + config.process_tether.cook_ceiling_seconds,
+                        systemd_scope_enabled=config.process_tether.systemd_scope_enabled,
                     )
                     reload_session_id = consume_reload_sentinel(project_dir)
                     _require_observer_ready(observer)

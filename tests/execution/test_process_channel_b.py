@@ -7,6 +7,7 @@ import textwrap
 from functools import partial
 from pathlib import Path
 
+import psutil
 import pytest
 
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
@@ -262,6 +263,7 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.TIMED_OUT
+        assert not psutil.pid_exists(result.pid)
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
         assert not result.stdout.strip()
 
@@ -327,6 +329,7 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.TIMED_OUT
+        assert not psutil.pid_exists(result.pid)
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
     @pytest.mark.timeout(90)
@@ -406,6 +409,7 @@ class TestChannelBDrainWait:
             _phase1_timeout=120,
         )
         assert result.termination == TerminationReason.TIMED_OUT
+        assert not psutil.pid_exists(result.pid)
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
 
@@ -464,6 +468,7 @@ class TestChannelBFullPipelineAdjudication:
             backend=ClaudeCodeBackend(),
         )
         assert result.termination == TerminationReason.TIMED_OUT
+        assert not psutil.pid_exists(result.pid)
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
         assert skill_result.success is False
         assert skill_result.needs_retry is False
@@ -510,6 +515,7 @@ class TestChannelBTimeoutPipelineAdjudication:
         )
 
         assert result.termination == TerminationReason.TIMED_OUT
+        assert not psutil.pid_exists(result.pid)
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
         skill_result = _build_skill_result(

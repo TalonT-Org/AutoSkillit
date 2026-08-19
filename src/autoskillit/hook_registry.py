@@ -119,6 +119,7 @@ class LifecycleContractDef:
 # planner_gh_discovery_guard             | works-as-is
 # artifact_download_guard                | works-as-is
 # git_ops_guard                          | works-as-is
+# resource_exhaustion_guard              | works-as-is
 # test_runner_guard                      | works-as-is
 # shell_capture_hook                     | works-as-is (Codex-only input-rewrite, #4286/ADR-0006)
 # exploration_request_identity_guard     | not-applicable
@@ -256,6 +257,13 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/git_ops_guard.py"],
+        mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+    ),
+    HookDef(
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["guards/resource_exhaustion_guard.py"],
+        session_scope="any",
         mechanism="deny",
         enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
@@ -597,6 +605,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "join_settle_guard.py",  # NEW (#4575, #4520)
         "join_stop_guard.py",  # NEW (#4575, #4520)
         "join_followup_guard.py",  # NEW (#4575, #4520)
+        "resource_exhaustion_guard.py",  # NEW (#4678 rectify)
     }
 )
 

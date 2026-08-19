@@ -566,6 +566,16 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         machine_local=False,
         detection=None,
     ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.execution.process._process_tether:write_tether",
+        artifact=(
+            "process-tethers/*.json under default_log_dir() — per-spawn spawner/child "
+            "identity and ceiling records; ephemeral host-and-boot-tied state, never "
+            "relocated, removed by settle() or the sweep — not a configuration artifact"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
 )
 
 _validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)

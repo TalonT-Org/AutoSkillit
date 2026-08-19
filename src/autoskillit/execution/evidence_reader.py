@@ -46,6 +46,7 @@ from autoskillit.execution.backends._probe_cache import (
     write_probe_cache,
 )
 from autoskillit.execution.process._process_kill import spawn_owned_process
+from autoskillit.execution.process._process_tether import TetherSpec
 
 _EVIDENCE_ENV = EVIDENCE_READER_ENV_FORWARD_VARS
 _PROVIDER_ENV = frozenset(
@@ -586,6 +587,7 @@ def _run_bounded(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
+            tether=TetherSpec(origin="evidence_reader", ceiling_seconds=3600.0),
         )
     except OSError as exc:
         raise EvidenceReaderLaunchError("codex_unavailable") from exc

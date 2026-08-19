@@ -4,16 +4,34 @@ from __future__ import annotations
 
 import errno
 import signal
+from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 
 import psutil
 import pytest
 import structlog.testing
 
-from autoskillit.execution import async_kill_process_tree, kill_process_tree
+from autoskillit.execution import TetherSpec, async_kill_process_tree, kill_process_tree
 from autoskillit.execution.process import _process_kill
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _fake_spawn_identity() -> Generator[None, None, None]:
+    """Fake Linux process-identity reads for the module.
+
+    ``spawn_owned_process``'s fail-closed identity guard reads the real
+    ``/proc`` for the spawned child's start-time ticks and the host boot ID;
+    ``FakePopen`` below hands back a synthetic, nonexistent pid, so the real
+    readers would return ``None`` and the guard would raise. Pin both readers
+    to fixed fake values for every test in this module.
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(_process_kill, "read_boot_id", lambda: "test-boot-id")
+        mp.setattr(_process_kill, "read_starttime_ticks", lambda _pid: 12345)
+        yield
 
 
 def test_missing_unowned_root_is_incomplete_evidence() -> None:
@@ -335,7 +353,7 @@ class FakePopen:
 
 
 def test_spawn_provenance_and_unreaped_leader_authorize_group_signal(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     signals: list[tuple[int, signal.Signals]] = []
     monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
@@ -347,14 +365,18 @@ def test_spawn_provenance_and_unreaped_leader_authorize_group_signal(
         lambda _pid: _process_kill.ProcessObservationSnapshot(),
     )
 
-    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    owner = _process_kill.spawn_owned_process(
+        ["command"],
+        start_new_session=True,
+        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+    )
     owner._signal_group(signal.SIGTERM)
 
     assert signals == [(owner.pid, signal.SIGTERM)]
 
 
 def test_spawn_preserves_identity_exception_when_reap_times_out(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     class ReapTimeoutPopen(FakePopen):
         def wait(self, timeout: float | None = None) -> int:
@@ -369,13 +391,17 @@ def test_spawn_preserves_identity_exception_when_reap_times_out(
     )
 
     with pytest.raises(KeyboardInterrupt) as raised:
-        _process_kill.spawn_owned_process(["command"], start_new_session=True)
+        _process_kill.spawn_owned_process(
+            ["command"],
+            start_new_session=True,
+            tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+        )
 
     assert raised.value is identity_error
 
 
 def test_spawn_validation_error_is_not_masked_by_reap_timeout(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     class ReapTimeoutPopen(FakePopen):
         def wait(self, timeout: float | None = None) -> int:
@@ -385,11 +411,15 @@ def test_spawn_validation_error_is_not_masked_by_reap_timeout(
     monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid + 1)
 
     with pytest.raises(RuntimeError, match="did not establish owned group leadership"):
-        _process_kill.spawn_owned_process(["command"], start_new_session=True)
+        _process_kill.spawn_owned_process(
+            ["command"],
+            start_new_session=True,
+            tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+        )
 
 
 def test_missing_atomic_spawn_provenance_refuses_ownership(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     popen_calls: list[dict[str, Any]] = []
     monkeypatch.setattr(
@@ -399,13 +429,16 @@ def test_missing_atomic_spawn_provenance_refuses_ownership(
     )
 
     with pytest.raises(ValueError, match="fresh-group mode"):
-        _process_kill.spawn_owned_process(["command"])
+        _process_kill.spawn_owned_process(
+            ["command"],
+            tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+        )
 
     assert popen_calls == []
 
 
 def test_reaped_leader_permanently_revokes_group_signal(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     signals: list[tuple[int, signal.Signals]] = []
     monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
@@ -416,7 +449,11 @@ def test_reaped_leader_permanently_revokes_group_signal(
     )
     monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
     monkeypatch.setattr(_process_kill.os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
-    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    owner = _process_kill.spawn_owned_process(
+        ["command"],
+        start_new_session=True,
+        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+    )
     owner.process.returncode = 0
 
     owner._signal_group(signal.SIGKILL)
@@ -426,7 +463,7 @@ def test_reaped_leader_permanently_revokes_group_signal(
 
 
 def test_sigkill_escalation_uses_final_direct_reap_timeout(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     wait_timeouts: list[float | None] = []
 
@@ -442,7 +479,11 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
         "_snapshot_process_tree",
         lambda _pid: _process_kill.ProcessObservationSnapshot(),
     )
-    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    owner = _process_kill.spawn_owned_process(
+        ["command"],
+        start_new_session=True,
+        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+    )
     monkeypatch.setattr(owner, "capture_snapshot", lambda: owner.snapshot)
     monkeypatch.setattr(owner, "_scan_group", lambda: ())
     monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
@@ -455,7 +496,7 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
 
 
 def test_settle_preserving_converts_cleanup_failure_to_evidence(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
@@ -464,7 +505,11 @@ def test_settle_preserving_converts_cleanup_failure_to_evidence(
         "_snapshot_process_tree",
         lambda _pid: _process_kill.ProcessObservationSnapshot(),
     )
-    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    owner = _process_kill.spawn_owned_process(
+        ["command"],
+        start_new_session=True,
+        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+    )
     cleanup_error = OSError(errno.EIO, "cleanup failed")
     monkeypatch.setattr(
         owner,
@@ -481,7 +526,7 @@ def test_settle_preserving_converts_cleanup_failure_to_evidence(
 
 
 def test_unexpected_group_authority_error_is_logged(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
@@ -490,7 +535,11 @@ def test_unexpected_group_authority_error_is_logged(
         "_snapshot_process_tree",
         lambda _pid: _process_kill.ProcessObservationSnapshot(),
     )
-    owner = _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    owner = _process_kill.spawn_owned_process(
+        ["command"],
+        start_new_session=True,
+        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+    )
     monkeypatch.setattr(
         _process_kill.os,
         "getpgid",
@@ -511,7 +560,9 @@ def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
         _process_kill.OwnedProcessGroup(process, process.pid)
 
 
-def _spawn_owner(monkeypatch: pytest.MonkeyPatch) -> _process_kill.OwnedProcessGroup:
+def _spawn_owner(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> _process_kill.OwnedProcessGroup:
     monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
     monkeypatch.setattr(
@@ -519,10 +570,16 @@ def _spawn_owner(monkeypatch: pytest.MonkeyPatch) -> _process_kill.OwnedProcessG
         "_snapshot_process_tree",
         lambda _pid: _process_kill.ProcessObservationSnapshot(),
     )
-    return _process_kill.spawn_owned_process(["command"], start_new_session=True)
+    return _process_kill.spawn_owned_process(
+        ["command"],
+        start_new_session=True,
+        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+    )
 
 
-def test_identity_is_alive_returns_false_for_zombie(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_identity_is_alive_returns_false_for_zombie(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     class ZombieProcess:
         def __init__(self, pid: int) -> None:
             self.pid = pid
@@ -533,13 +590,15 @@ def test_identity_is_alive_returns_false_for_zombie(monkeypatch: pytest.MonkeyPa
         def status(self) -> str:
             return psutil.STATUS_ZOMBIE
 
-    owner = _spawn_owner(monkeypatch)
+    owner = _spawn_owner(monkeypatch, tmp_path)
     monkeypatch.setattr(_process_kill.psutil, "Process", lambda pid: ZombieProcess(pid))
 
     assert owner._identity_is_alive((101, 123.0)) is False
 
 
-def test_cleanup_completes_when_only_survivor_is_zombie(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cleanup_completes_when_only_survivor_is_zombie(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """A zombie descendant must not land in survivor_pids — cleanup() reports complete."""
 
     class ZombieProcess:
@@ -554,7 +613,7 @@ def test_cleanup_completes_when_only_survivor_is_zombie(monkeypatch: pytest.Monk
             return psutil.STATUS_ZOMBIE
 
     zombie_identity = (99999, 111.0)
-    owner = _spawn_owner(monkeypatch)
+    owner = _spawn_owner(monkeypatch, tmp_path)
     owner.merge_snapshot(
         _process_kill.ProcessObservationSnapshot(
             process_identities=(zombie_identity,), observation_complete=True
@@ -577,10 +636,10 @@ def test_cleanup_completes_when_only_survivor_is_zombie(monkeypatch: pytest.Monk
 
 
 def test_settle_still_raises_on_genuinely_incomplete_evidence(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """settle() must keep raising for non-zombie incompleteness — cli/session depends on it."""
-    owner = _spawn_owner(monkeypatch)
+    owner = _spawn_owner(monkeypatch, tmp_path)
     incomplete_result = _process_kill.ProcessCleanupResult(
         root_pid=owner.pid,
         access_denied_pids=(1234,),
@@ -604,10 +663,11 @@ def test_settle_evidence_returns_without_raising(
     returncode: int | None,
     complete: bool,
     expect_incomplete_log: bool,
+    tmp_path: Path,
 ) -> None:
     """settle_evidence returns the cleanup tuple without raising across the
     (incomplete + leader-confirmed) and (complete + leader-unconfirmed) cases."""
-    owner = _spawn_owner(monkeypatch)
+    owner = _spawn_owner(monkeypatch, tmp_path)
     result_stub = _process_kill.ProcessCleanupResult(
         root_pid=owner.pid,
         access_denied_pids=(1234,) if not complete else (),

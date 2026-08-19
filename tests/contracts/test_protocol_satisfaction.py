@@ -454,6 +454,8 @@ class TestGroupDApiContractPreservation:
             "pass_fds",
             "backend_resume_session_id",
             "lifecycle_observation_enabled",
+            "ceiling_seconds",
+            "systemd_scope_enabled",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -531,6 +533,8 @@ class TestGroupDApiContractPreservation:
             "pass_fds",
             "backend_resume_session_id",
             "lifecycle_observation_enabled",
+            "ceiling_seconds",
+            "systemd_scope_enabled",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -589,7 +593,16 @@ class TestGroupDApiContractPreservation:
         """run_managed_sync parameter set is unchanged."""
         sig = inspect.signature(run_managed_sync)
         params = set(sig.parameters)
-        expected = {"cmd", "cwd", "timeout", "input_data", "env", "capture_dir"}
+        expected = {
+            "cmd",
+            "cwd",
+            "timeout",
+            "input_data",
+            "env",
+            "capture_dir",
+            "ceiling_seconds",
+            "systemd_scope_enabled",
+        }
         assert expected == params, (
             f"run_managed_sync params changed.\n"
             f"  Missing: {expected - params}\n"

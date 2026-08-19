@@ -81,8 +81,11 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
             launch_id: str,
             attempt: int,
             current_resume_spec: object,
+            ceiling_seconds: float = 172800.0,
+            systemd_scope_enabled: bool = False,
         ):
-            del session_home, project_dir, current_resume_spec
+            del session_home, project_dir, current_resume_spec, ceiling_seconds
+            del systemd_scope_enabled
             return nullcontext(
                 CookSessionHandle(
                     view_id=f"{launch_id}-{attempt}",

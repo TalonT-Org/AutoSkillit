@@ -151,6 +151,7 @@ class TestExecutionSubpackages:
             "_process_monitor",
             "_process_pty",
             "_process_race",
+            "_process_tether",
         }
         actual = {p.stem for p in (SRC / "execution" / "process").glob("_process_*.py")}
         assert actual == expected

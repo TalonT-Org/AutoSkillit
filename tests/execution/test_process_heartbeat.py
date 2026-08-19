@@ -72,6 +72,7 @@ class TestHeartbeatDetectsCompletion:
         assert result.termination == TerminationReason.TIMED_OUT, (
             "Non-matching output should not trigger heartbeat"
         )
+        assert not psutil.pid_exists(result.pid)
 
 
 class TestNoHeartbeatPreservesExistingBehavior:
@@ -98,6 +99,7 @@ class TestNoHeartbeatPreservesExistingBehavior:
         )
 
         assert result.termination == TerminationReason.TIMED_OUT
+        assert not psutil.pid_exists(result.pid)
 
 
 class TestHeartbeatStructuredParsing:

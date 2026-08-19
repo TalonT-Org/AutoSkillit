@@ -46,6 +46,7 @@ from autoskillit.execution.headless._managed._launch_adapter import (
     _HeadlessLaunchAdapter,
     _skill_launch_spec_builder,
 )
+from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 from autoskillit.execution.session import _check_expected_patterns
 
 if TYPE_CHECKING:
@@ -126,6 +127,8 @@ async def _run_headless_attempt(
     on_spawn: Callable[[int, int], None] | None,
     enable_deadline_extension: bool,
     max_extension_seconds: float,
+    ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+    systemd_scope_enabled: bool = False,
     marker_dir: Path | None,
     session_id: str | None,
     on_session_id_resolved: Callable[[str], None] | None,
@@ -195,6 +198,8 @@ async def _run_headless_attempt(
             on_pid_resolved=on_spawn,
             enable_deadline_extension=enable_deadline_extension,
             max_extension_seconds=max_extension_seconds,
+            ceiling_seconds=ceiling_seconds,
+            systemd_scope_enabled=systemd_scope_enabled,
             marker_dir=marker_dir,
             session_id=session_id,
             on_session_id_resolved=on_session_id_resolved,

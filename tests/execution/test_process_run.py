@@ -452,6 +452,7 @@ class TestIdleStallWatchdog:
         elapsed = time.monotonic() - start
         assert result.termination == TerminationReason.IDLE_STALL
         assert elapsed < 12.0
+        assert not psutil.pid_exists(result.pid)
 
 
 class TestCaptureMode:

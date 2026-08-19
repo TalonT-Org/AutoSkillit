@@ -1739,6 +1739,11 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_quota_io.py": frozenset({"autoskillit.config"}),
     "tests/execution/test_quota_sleep.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
     "tests/execution/test_quota_http.py": frozenset({"autoskillit.config"}),
+    # tether tests cross into config to validate the parity between
+    # ProcessTetherConfig's literal ceiling defaults and this module's constants,
+    # and to exercise the coherence gate — config cannot import execution (IL-002),
+    # so this parity can only be tested from the execution side
+    "tests/execution/test_process_tether.py": frozenset({"autoskillit.config"}),
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
     "tests/workspace/test_skills.py": frozenset({"autoskillit.config"}),

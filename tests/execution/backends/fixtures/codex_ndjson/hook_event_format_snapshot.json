@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "c4f96b42c9783a169ebf0772bfe88f0b2817852b722744c45dc2908426909141",
+  "_registry_hash": "d683b220edd1fb757d5a6a5af34629ca1c5fcf9445d975f369f7f3f74f46c3d6",
   "hooks": {
     "PostToolUse": [
       {
@@ -189,6 +189,11 @@
           },
           {
             "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/git_ops_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/resource_exhaustion_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },

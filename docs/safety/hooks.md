@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 51 Claude Code hook scripts: 37 PreToolUse, 11 PostToolUse,
+AutoSkillit registers 52 Claude Code hook scripts: 38 PreToolUse, 11 PostToolUse,
 2 SessionStart, and 1 Stop. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (37)
+## PreToolUse hooks (38)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -97,6 +97,21 @@ Also catches interpreter-wrapped (`python3 -c "subprocess.run(['git', 'commit', 
 and nested-shell forms. Session scope: headless only. Orchestrator sessions
 are exempt. Per-subcommand allow-overrides are available via `git_ops_policy`
 in `.hook_config.json` for future recipes that legitimately need these operations.
+
+### `resource_exhaustion_guard.py`
+**Guarded tool:** `Bash`, `run_cmd`
+Denies two resource-exhaustion command shapes: a backgrounded infinite loop
+(`while :` / `while true` ... `done` followed by `&`, at the top level or
+inside an `sh -c`/`bash -c`/`eval` payload), and `kill %N` job-control
+syntax, which silently fails to kill anything under a non-interactive shell
+(job control is disabled there) and is easily hidden behind
+`2>/dev/null`. This is the exact leak shape behind issue #4678 Incident B.
+Deny message steers toward `kill $!`-style PID capture, `timeout`-wrapped
+loops, and foreground execution. Session scope: any (no `AUTOSKILLIT_HEADLESS`
+dependency). Matches raw command text before shell expansion — see the
+module's Documented Threat Model docstring for the bypass classes this
+cannot cover; the process-tether ceiling and host limits are the structural
+backstop.
 
 ### `shell_capture_hook.py`
 **Matched tool:** `Bash`

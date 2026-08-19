@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import functools
 import subprocess
+import sys
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
@@ -87,6 +88,23 @@ from autoskillit.execution.process._process_race import (
     fold_lifecycle_evidence_path,
     resolve_termination,
 )
+from autoskillit.execution.process._process_tether import (
+    DEFAULT_TETHER_CEILING_SECONDS,
+    INTERACTIVE_TETHER_CEILING_SECONDS,
+    OrphanedTetherRecord,
+    TetherRecord,
+    TetherSpec,
+    TetherSweepOutcome,
+    TetherSweepReport,
+    default_tether_dir,
+    find_orphaned_tethers,
+    format_orphaned_tether_fields,
+    probe_systemd_scope_available,
+    sweep_orphaned_tethers,
+    sweep_orphaned_tethers_async,
+    update_tether_workload,
+    wrap_systemd_scope,
+)
 from autoskillit.execution.process._termination import (
     decide_termination_action,
     execute_termination_action,
@@ -104,12 +122,19 @@ logger = get_logger(__name__)
 # internal sub-module split private — callers import from the facade, not from
 # internal sub-module paths.
 __all__ = [
+    "DEFAULT_TETHER_CEILING_SECONDS",
+    "INTERACTIVE_TETHER_CEILING_SECONDS",
     "CodexOrphanReapResult",
     "DaemonOrphanReapResult",
     "DefaultSubprocessRunner",
     "OrphanedAutoSkillitDaemon",
     "OrphanedCodexProcess",
+    "OrphanedTetherRecord",
     "OwnedProcessGroup",
+    "TetherRecord",
+    "TetherSpec",
+    "TetherSweepOutcome",
+    "TetherSweepReport",
     "_extract_stdout_session_id",
     "_resolve_session_id",
     "RaceAccumulator",
@@ -133,10 +158,14 @@ __all__ = [
     "CaptureSetupError",
     "create_temp_io",
     "decide_termination_action",
+    "default_tether_dir",
     "execute_termination_action",
+    "find_orphaned_tethers",
     "fold_lifecycle_evidence",
     "fold_lifecycle_evidence_path",
+    "format_orphaned_tether_fields",
     "kill_process_tree",
+    "probe_systemd_scope_available",
     "pty_wrap_command",
     "read_temp_output",
     "reap_orphaned_codex_processes",
@@ -146,6 +175,10 @@ __all__ = [
     "run_managed_sync",
     "spawn_owned_process",
     "summarize_capture",
+    "sweep_orphaned_tethers",
+    "sweep_orphaned_tethers_async",
+    "update_tether_workload",
+    "wrap_systemd_scope",
 ]
 
 
@@ -205,6 +238,8 @@ async def run_managed_async(
     capture_dir: Path | None = None,
     backend_resume_session_id: str = "",
     lifecycle_observation_enabled: bool = False,
+    ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+    systemd_scope_enabled: bool = False,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -224,6 +259,11 @@ async def run_managed_async(
 
     if pty_mode:
         cmd = pty_wrap_command(cmd)
+
+    # Defense-in-depth kernel ceiling, applied last so systemd-run wraps
+    # whatever the eventual funnel leader is (script(1) in PTY mode, the
+    # workload directly otherwise) — inert unless explicitly enabled.
+    cmd = wrap_systemd_scope(cmd, enabled=systemd_scope_enabled, ceiling_seconds=ceiling_seconds)
 
     _keep = capture_dir is not None
     with create_temp_io(input_data, capture_dir=capture_dir, keep_streams=_keep) as (
@@ -276,6 +316,7 @@ async def run_managed_async(
                     env=_env,
                     start_new_session=True,
                     pass_fds=_inherited_fds,
+                    tether=TetherSpec(origin="run_managed", ceiling_seconds=ceiling_seconds),
                 ),
                 abandon_on_cancel=False,
             )
@@ -312,6 +353,46 @@ async def run_managed_async(
                 assert _target is not None
                 _observed_pid = _target.pid
                 _tracked_comm = _target.comm
+
+            # PTY-wrapper hazard: a tether recording only the wrapper's identity
+            # re-creates the orphan class one level down (wrapper dies, workload
+            # survives reparented). Resolve and attach workload identity for every
+            # PTY-wrapped spawn on Linux, decoupled from whether tracing is
+            # enabled — the tracing branch above may have already resolved it.
+            if pty_mode and sys.platform == "linux" and owner.tether_path is not None:
+                _workload_pid: int | None = None
+                _workload_ticks: int | None = None
+                if _target is not None:
+                    _workload_pid = _target.pid
+                    _workload_ticks = _target.starttime_ticks
+                else:
+                    from autoskillit.execution.linux_tracing import (
+                        TraceTargetResolutionError,
+                        resolve_trace_target,
+                    )
+
+                    try:
+                        _workload_target = await resolve_trace_target(
+                            root_pid=root_pid,
+                            expected_basename=_workload_basename,
+                            timeout=2.0,
+                            expected_basenames=workload_basenames,
+                        )
+                    except TraceTargetResolutionError:
+                        logger.warning("tether_workload_resolution_failed", pid=root_pid)
+                    else:
+                        _workload_pid = _workload_target.pid
+                        _workload_ticks = _workload_target.starttime_ticks
+                if _workload_pid is not None and _workload_pid != root_pid:
+                    await anyio.to_thread.run_sync(
+                        functools.partial(
+                            update_tether_workload,
+                            owner.tether_path,
+                            _workload_pid,
+                            _workload_ticks or 0,
+                        ),
+                        abandon_on_cancel=False,
+                    )
 
             if on_pid_resolved is not None and _observed_pid > 0:
                 _ticks: int = 0
@@ -661,12 +742,18 @@ def run_managed_sync(
     input_data: str | None = None,
     env: Mapping[str, str] | None = None,
     capture_dir: Path | None = None,
+    ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+    systemd_scope_enabled: bool = False,
 ) -> SubprocessResult:
     """Sync subprocess execution with temp file I/O and process tree cleanup.
 
     Same composition pattern as run_managed_async but uses subprocess.Popen
     with start_new_session=True. No channel monitoring — wall-clock timeout only.
     """
+    # Defense-in-depth kernel ceiling, mirroring run_managed_async — inert
+    # unless explicitly enabled.
+    cmd = wrap_systemd_scope(cmd, enabled=systemd_scope_enabled, ceiling_seconds=ceiling_seconds)
+
     _keep = capture_dir is not None
     with create_temp_io(input_data, capture_dir=capture_dir, keep_streams=_keep) as (
         stdout_file,
@@ -694,6 +781,7 @@ def run_managed_sync(
                 cwd=cwd,
                 env=_env,
                 start_new_session=True,
+                tether=TetherSpec(origin="run_managed", ceiling_seconds=ceiling_seconds),
             )
             process = owner.process
 
@@ -784,6 +872,8 @@ class DefaultSubprocessRunner:
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
+        ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+        systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -815,4 +905,6 @@ class DefaultSubprocessRunner:
             capture_dir=capture_dir,
             backend_resume_session_id=backend_resume_session_id,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
+            ceiling_seconds=ceiling_seconds,
+            systemd_scope_enabled=systemd_scope_enabled,
         )

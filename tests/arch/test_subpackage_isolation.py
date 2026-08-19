@@ -999,9 +999,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
-        "cli": 27,  # +_install_contract typed install process boundary (#4409);
+        "cli": 28,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim; +_codex_orphans (#4536);
-        # +_codex_attempts (#4361); +_daemon_orphans operator surface (#4544)
+        # +_codex_attempts (#4361); +_daemon_orphans operator surface (#4544);
+        # +_process_orphans tether-sweep operator surface (#4678)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -1032,8 +1033,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
         # +_recipe_section_handler.py (bounded recipe-section pull handler)
-        "hooks/guards": 39,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
+        "hooks/guards": 40,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
+        # +resource_exhaustion_guard (#4678 rectify: Bash busy-loop pattern denial)
         # +fabricated_completion_guard (#4457)
+        "execution/process": 11,  # +_termination (RE: #4664 decompose); +_process_tether
+        # (#4678 rectify: process-tether spawner-death immunity mechanism)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:
@@ -1116,6 +1120,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1500,
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
         "lifecycle, and strict result validation behind one evidence-reader launch interface",
+    ),
+    "execution/process/__init__.py": (
+        1050,
+        "REQ-CNST-010-E27: #4678 rectify threads ceiling_seconds through run_managed_async/"
+        "run_managed_sync/DefaultSubprocessRunner and adds the PTY-wrapper workload-identity "
+        "resolution for the process-tether spawner-death immunity mechanism — this facade is "
+        "the single composition point for both spawn paths and must stay adjacent to the "
+        "spawn call sites it wires the tether into.",
     ),
     # REQ-CNST-010-E1: core/types.py is the canonical type registry for the entire
     # package. It defines all StrEnums, protocols, constants, and shared type aliases
@@ -1357,7 +1369,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "CodexSessionStore across multiple files would duplicate the inode-preserving "
         "staging, process/thread/view leases, promotion, index publication, manifest "
         "validation, crash recovery, and explicit legacy-view reconciliation invariants. "
-        "Cap lowered to 1500 lines to accommodate the core without the stateless helpers.",
+        "Cap lowered to 1500 lines to accommodate the core without the stateless helpers. "
+        "#4678 rectify adds spawn-identity capture to _record_spawn and verify-before-mark "
+        "identity checks to recover() — both belong to the same transaction boundary as "
+        "the leases they gate, and fit under this cap post-extraction.",
     ),
     "workspace/session_skills.py": (
         1400,

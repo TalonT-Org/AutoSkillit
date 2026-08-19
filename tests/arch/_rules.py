@@ -103,6 +103,7 @@ _PRINT_EXEMPT = frozenset(
         "_capture_store.py",
         "_codex_orphans.py",
         "_daemon_orphans.py",  # operator report/reap output must precede signaling
+        "_process_orphans.py",  # operator report/reap output must precede signaling
     }
 )
 
@@ -149,6 +150,7 @@ _STRENUM_COMPARE_EXEMPT_FILES: frozenset[str] = frozenset(
         # CodexLimitVerificationDef.status: Literal[...], not StrEnum
         "test_codex_limit_verification.py",
         "test_codex_limit_findings_are_recorded.py",
+        "test_process_tether.py",  # TetherSweepOutcome.outcome: plain str, not SessionOutcome
     }
 )
 
@@ -167,6 +169,7 @@ _STRENUM_SRC_COMPARE_EXEMPT_PATHS: frozenset[str] = frozenset(
         # CodexLimitVerificationDef.status: CodexLimitVerificationStatus = Literal[...],
         # not StrEnum
         "execution/backends/_codex_config.py",
+        "cli/_process_orphans.py",  # TetherSweepOutcome.outcome: plain str, not SessionOutcome
     }
 )
 

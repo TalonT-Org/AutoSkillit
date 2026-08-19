@@ -25,6 +25,12 @@ from autoskillit.core import (
     SessionType,
     get_logger,
 )
+from autoskillit.execution import (
+    find_orphaned_autoskillit_daemons,
+    find_orphaned_codex_processes,
+    reap_orphaned_autoskillit_daemons,
+    reap_orphaned_codex_processes,
+)
 from autoskillit.fleet import sweep_stale_dispatch_labels
 from autoskillit.pipeline import (
     KitchenOpenPhase,
@@ -52,6 +58,22 @@ logger = get_logger(__name__)
 _CLEANUP_STALE_MAX_AGE = 86400
 
 
+def _reap_self_excluded_codex_and_daemon_orphans() -> None:
+    """Manual-only reapers, promoted to an automatic chokepoint.
+
+    Self-excludes the calling process's own pid — the boot gate runs inside
+    an autoskillit process itself, which must never be mistaken for one of
+    the orphan classes it is sweeping.
+    """
+    self_pid = os.getpid()
+    codex_orphans = [o for o in find_orphaned_codex_processes() if o.pid != self_pid]
+    if codex_orphans:
+        reap_orphaned_codex_processes(codex_orphans)
+    daemon_orphans = [d for d in find_orphaned_autoskillit_daemons() if d.pid != self_pid]
+    if daemon_orphans:
+        reap_orphaned_autoskillit_daemons(daemon_orphans)
+
+
 async def _cleanup_stale_loop(interval: float = 1800.0) -> None:
     """Periodically sweep stale session skill directories (defense-in-depth).
 
@@ -75,6 +97,21 @@ async def _cleanup_stale_loop(interval: float = 1800.0) -> None:
                     logger.info("cleanup_stale_sweep", removed=removed)
             except Exception:
                 logger.warning("cleanup_stale_loop_error", exc_info=True)
+        try:
+            # The only ceiling enforcement that reaches a headless child whose
+            # spawner (this long-lived server) is still alive — boot gates
+            # only run once, at process start.
+            report = await _lifespan_pkg.sweep_orphaned_tethers_async(
+                _lifespan_pkg.default_tether_dir()
+            )
+            if report.outcomes:
+                logger.info(
+                    "cleanup_stale_tether_sweep",
+                    reaped=report.reaped_count,
+                    total=len(report.outcomes),
+                )
+        except Exception:
+            logger.warning("cleanup_stale_tether_sweep_error", exc_info=True)
 
 
 async def _fleet_auto_gate_boot(ctx: Any) -> None:
@@ -161,6 +198,16 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
             )
         except Exception:
             logger.warning("fleet_auto_gate_boot_reap_failed", exc_info=True)
+
+    try:
+        await _lifespan_pkg.sweep_orphaned_tethers_async(_lifespan_pkg.default_tether_dir())
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_tether_sweep_failed", exc_info=True)
+
+    try:
+        _lifespan_pkg._reap_self_excluded_codex_and_daemon_orphans()
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_codex_daemon_reap_failed", exc_info=True)
 
     if _campaign_state_paths and ctx.github_client is not None:
         try:
@@ -338,6 +385,16 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
             logger.warning("food_truck_auto_gate_boot_reap_failed", exc_info=True)
 
     try:
+        await _lifespan_pkg.sweep_orphaned_tethers_async(_lifespan_pkg.default_tether_dir())
+    except Exception:
+        logger.warning("food_truck_auto_gate_boot_tether_sweep_failed", exc_info=True)
+
+    try:
+        _lifespan_pkg._reap_self_excluded_codex_and_daemon_orphans()
+    except Exception:
+        logger.warning("food_truck_auto_gate_boot_codex_daemon_reap_failed", exc_info=True)
+
+    try:
         if _campaign_state_paths and ctx.github_client is not None:
             _lifespan_pkg.create_background_task(
                 sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
@@ -352,8 +409,9 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
 
     Runs at lifespan startup when AUTOSKILLIT_HEADLESS=1 and
     AUTOSKILLIT_HEADLESS_AUTO_GATE=1. No-ops for non-headless sessions.
-    Omits quota-refresh loop and campaign state recovery — SKILL sessions
-    are short-lived.
+    Omits quota-refresh loop, campaign state recovery, and the codex/daemon
+    orphan reap — SKILL sessions are short-lived and don't own long-lived
+    codex/daemon children (see test_boot_step_symmetry.py's carve-out).
     """
 
     if os.environ.get(HEADLESS_ENV_VAR) != "1":
@@ -413,6 +471,11 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)
+
+    try:
+        await _lifespan_pkg.sweep_orphaned_tethers_async(_lifespan_pkg.default_tether_dir())
+    except Exception:
+        logger.warning("skill_auto_gate_boot_tether_sweep_failed", exc_info=True)
 
 
 _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | None] = {

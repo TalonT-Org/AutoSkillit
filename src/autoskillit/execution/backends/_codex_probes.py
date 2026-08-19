@@ -66,6 +66,7 @@ def _run_bounded_codex_probe(
 ) -> _BoundedProbeResult:
     try:
         from autoskillit.execution.process._process_kill import spawn_owned_process
+        from autoskillit.execution.process._process_tether import TetherSpec
 
         owner = spawn_owned_process(
             command,
@@ -75,6 +76,7 @@ def _run_bounded_codex_probe(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
+            tether=TetherSpec(origin="codex_probe", ceiling_seconds=3600.0),
         )
         process = owner.process
     except OSError as exc:

@@ -247,4 +247,8 @@ class SubprocessRunner(Protocol):
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
+        # Literal default, not an import of execution.process.DEFAULT_TETHER_CEILING_SECONDS —
+        # core (IL-0) cannot import execution (IL-1). Kept equal by a parity test.
+        ceiling_seconds: float = 86400.0,
+        systemd_scope_enabled: bool = False,
     ) -> Awaitable[SubprocessResult]: ...

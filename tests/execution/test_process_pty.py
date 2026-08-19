@@ -13,6 +13,7 @@ import shutil
 import sys
 import textwrap
 
+import psutil
 import pytest
 
 from autoskillit.core.types import (
@@ -420,6 +421,7 @@ class TestStaleRecoveryPipelineAdjudication:
         )
 
         assert result.termination == TerminationReason.STALE
+        assert not psutil.pid_exists(result.pid)
 
         # Use completion_marker="" so _check_session_content does not require
         # the marker to appear in the recovered result ("Task completed successfully.").
@@ -466,6 +468,7 @@ class TestTimedOutPipelineAdjudication:
         )
 
         assert result.termination == TerminationReason.TIMED_OUT
+        assert not psutil.pid_exists(result.pid)
         # Note: SubprocessResult.returncode is the actual kill signal (e.g. -15 for SIGTERM).
         # _build_skill_result overrides returncode to -1 internally for the SkillResult.
 

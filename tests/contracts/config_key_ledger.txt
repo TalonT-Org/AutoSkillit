@@ -73,6 +73,9 @@ output_budget.shell_max_inline_bytes
 output_budget.tail_chars
 packs.enabled
 plan.adversarial_review_level
+process_tether.cook_ceiling_seconds
+process_tether.orphan_ceiling_seconds
+process_tether.systemd_scope_enabled
 providers.default_provider
 providers.model_overrides
 providers.profiles

@@ -253,6 +253,7 @@ from .runtime._linux_proc import is_pid_alive as is_pid_alive
 from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
+from .runtime._linux_proc import read_pid_namespace_inode as read_pid_namespace_inode
 from .runtime._linux_proc import read_process_state as read_process_state
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease

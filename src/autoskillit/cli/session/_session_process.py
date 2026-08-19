@@ -16,7 +16,13 @@ from autoskillit.cli.session.pty._exec import launcher_argv
 from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.core import CmdSpec, get_logger
-from autoskillit.execution import OwnedProcessGroup, spawn_owned_process
+from autoskillit.execution import (
+    INTERACTIVE_TETHER_CEILING_SECONDS,
+    OwnedProcessGroup,
+    TetherSpec,
+    spawn_owned_process,
+    wrap_systemd_scope,
+)
 
 _GROUP_POLL_SECONDS = 0.02
 logger = get_logger(__name__)
@@ -39,8 +45,15 @@ def run_cook_attempt(
     on_reaped: Callable[[int, int], None],
     trace: StartupTrace,
     observer: PtyObserver | None,
+    not_after: float,
+    systemd_scope_enabled: bool = False,
 ) -> CookAttemptResult:
-    """Run one finalized cook command and prove complete child cleanup."""
+    """Run one finalized cook command and prove complete child cleanup.
+
+    ``not_after`` (epoch seconds) is the live spawner's own ceiling: both wait
+    branches terminate the child once it passes, independent of the tether
+    sweep, which only ever matters once this process itself has died.
+    """
     _require_posix_process_ownership()
     cwd = _canonical_cwd(spec.cwd)
     inherited_fds = _normalize_pass_fds(pass_fds)
@@ -57,26 +70,43 @@ def run_cook_attempt(
         try:
             if observer is None:
                 owner = spawn_owned_process(
-                    spec.cmd,
+                    wrap_systemd_scope(
+                        list(spec.cmd),
+                        enabled=systemd_scope_enabled,
+                        ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS,
+                    ),
                     cwd=cwd,
                     env=dict(spec.env),
                     pass_fds=inherited_fds,
                     process_group=0,
                     start_new_session=False,
+                    tether=TetherSpec(
+                        origin="cook", ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS
+                    ),
                 )
             else:
                 master_fd, slave_fd = os.openpty()
                 launcher_fds = _merge_launcher_fds(inherited_fds, slave_fd)
+                # systemd-run wraps the PTY launcher (script(1)) itself here, not
+                # the workload it execvpe's into — same leader-wrapping shape as
+                # the non-PTY branch above, one process earlier in the chain.
                 owner = spawn_owned_process(
-                    launcher_argv(
-                        slave_fd,
-                        spec.cmd,
-                        lease_fds=inherited_fds,
+                    wrap_systemd_scope(
+                        launcher_argv(
+                            slave_fd,
+                            spec.cmd,
+                            lease_fds=inherited_fds,
+                        ),
+                        enabled=systemd_scope_enabled,
+                        ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS,
                     ),
                     cwd=cwd,
                     env=dict(spec.env),
                     pass_fds=launcher_fds,
                     start_new_session=True,
+                    tether=TetherSpec(
+                        origin="cook", ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS
+                    ),
                 )
 
             pid = owner.pid
@@ -86,7 +116,7 @@ def run_cook_attempt(
 
             if observer is None:
                 with _foreground_process_group(pgid):
-                    _wait_for_owned_exit(owner)
+                    _wait_for_owned_exit(owner, not_after)
             else:
                 assert master_fd is not None
                 assert slave_fd is not None
@@ -94,7 +124,7 @@ def run_cook_attempt(
                 slave_fd = None
                 observer.relay(
                     master_fd,
-                    cancelled=lambda: owner.observe_exit() is not None,
+                    cancelled=lambda: owner.observe_exit() is not None or time.time() >= not_after,
                 )
                 master_fd = None
         except BaseException as exc:
@@ -229,9 +259,14 @@ def _safe_tcsetpgrp(terminal_fd: int, pgid: int) -> None:
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
 
 
-def _wait_for_owned_exit(owner: OwnedProcessGroup) -> None:
-    """Cooperatively observe an owned child without releasing its reap fence."""
-    while owner.observe_exit() is None:
+def _wait_for_owned_exit(owner: OwnedProcessGroup, not_after: float) -> None:
+    """Cooperatively observe an owned child without releasing its reap fence.
+
+    Returns once the child has exited OR its ceiling has passed — in the
+    ceiling case the child is very likely still alive, and the caller's
+    unconditional settle()/settle_preserving() cleanup terminates it.
+    """
+    while owner.observe_exit() is None and time.time() < not_after:
         time.sleep(_GROUP_POLL_SECONDS)
 
 

@@ -10,13 +10,14 @@ from __future__ import annotations
 import os
 import selectors
 import shutil
-import signal
 import stat
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Final
+
+from autoskillit.execution import OwnedProcessGroup, TetherSpec, spawn_owned_process
 
 
 class CollectorSafetyError(ValueError):
@@ -533,7 +534,7 @@ def run_bounded_rg(
         command.extend(("--glob", glob))
     command.append(".")
     try:
-        process = subprocess.Popen(
+        owner = spawn_owned_process(
             command,
             cwd=root,
             env=dict(_SAFE_RG_ENV),
@@ -541,15 +542,17 @@ def run_bounded_rg(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
+            tether=TetherSpec(origin="exploration_bounded", ceiling_seconds=3600.0),
         )
     except OSError as exc:
         return BoundedCommandResult(None, b"", b"", f"rg unavailable ({type(exc).__name__})")
-    return _drain_bounded_process(process, limits)
+    return _drain_bounded_process(owner, limits)
 
 
 def _drain_bounded_process(
-    process: subprocess.Popen[bytes], limits: CollectorLimits
+    owner: OwnedProcessGroup, limits: CollectorLimits
 ) -> BoundedCommandResult:
+    process = owner.process
     output = {"stdout": bytearray(), "stderr": bytearray()}
     selector_factory = selectors.DefaultSelector
     selector = selector_factory()
@@ -559,10 +562,10 @@ def _drain_bounded_process(
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
         deadline = time.monotonic() + limits.timeout_seconds
-        while selector.get_map() or process.poll() is None:
+        while selector.get_map() or owner.observe_exit() is None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                _terminate(process)
+                owner.settle_evidence()
                 return BoundedCommandResult(
                     None, bytes(output["stdout"]), bytes(output["stderr"]), "timeout"
                 )
@@ -577,7 +580,7 @@ def _drain_bounded_process(
                     len(output["stdout"]) + len(output["stderr"]) + len(chunk)
                     > limits.max_output_bytes
                 ):
-                    _terminate(process)
+                    owner.settle_evidence()
                     return BoundedCommandResult(
                         None,
                         bytes(output["stdout"]),
@@ -585,32 +588,10 @@ def _drain_bounded_process(
                         "output limit exceeded",
                     )
                 output[key.data].extend(chunk)
-        return BoundedCommandResult(
-            process.wait(timeout=0), bytes(output["stdout"]), bytes(output["stderr"])
-        )
+        returncode, _cleanup_result = owner.settle_evidence()
+        return BoundedCommandResult(returncode, bytes(output["stdout"]), bytes(output["stderr"]))
     finally:
         selector.close()
         for stream in (process.stdout, process.stderr):
             if stream is not None:
                 stream.close()
-
-
-def _terminate(process: subprocess.Popen[bytes]) -> None:
-    try:
-        if (
-            process.returncode is None
-            and process.pid > 0
-            and os.getpgid(process.pid) == process.pid
-        ):
-            os.killpg(process.pid, signal.SIGKILL)
-        else:
-            process.kill()
-    except OSError:
-        try:
-            process.kill()
-        except OSError:
-            pass
-    try:
-        process.wait(timeout=1)
-    except (OSError, subprocess.TimeoutExpired):
-        pass

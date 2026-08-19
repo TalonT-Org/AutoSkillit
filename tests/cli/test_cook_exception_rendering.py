@@ -154,6 +154,8 @@ def test_app_main_is_single_traceback_owner_for_process_runner_failure(
         tmp_path,
         mode,
         """
+        import time
+
         from autoskillit.cli.session._session_process import run_cook_attempt
         from autoskillit.core import CmdSpec
 
@@ -178,6 +180,7 @@ def test_app_main_is_single_traceback_owner_for_process_runner_failure(
                 on_reaped=lambda _pid, _pgid: None,
                 trace=Trace(),
                 observer=None,
+                not_after=time.time() + 60,
             )
         """,
     )

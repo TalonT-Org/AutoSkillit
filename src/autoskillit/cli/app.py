@@ -370,6 +370,14 @@ def daemon_orphans(*, reap: bool = False, output_json: bool = False) -> None:
 
 
 @app.command
+def process_orphans(*, reap: bool = False, output_json: bool = False) -> None:
+    """Report tethered children whose guardian is dead or ceiling passed, or reap with --reap."""
+    from autoskillit.cli._process_orphans import run_process_orphans
+
+    run_process_orphans(reap=reap, output_json=output_json)
+
+
+@app.command
 def codex_attempts(
     *,
     discard_view: str | None = None,

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import functools
+import sys
+import time
 
 import anyio
+import psutil
 import pytest
 
+from autoskillit.execution.process import run_managed_async
 from autoskillit.execution.process._process_race import _watch_child_activity
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -318,3 +322,30 @@ def test_marker_dir_threaded_from_run_managed_async() -> None:
         "run_managed_async does not thread marker_dir and session_id "
         "to _watch_child_activity via functools.partial"
     )
+
+
+@pytest.mark.anyio
+async def test_extension_cap_kills_real_process(tmp_path) -> None:
+    """A real, continuously-active child hits max_extension_seconds and gets killed
+    regardless of ongoing activity — closes the "kill leg never exercised" gap left by
+    the scope-arithmetic tests above, which only assert against a fake pid=1."""
+    script = tmp_path / "stay_active.py"
+    script.write_text(
+        "import subprocess, sys, time\n"
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        "time.sleep(30)\n"
+    )
+
+    start = time.monotonic()
+    result = await run_managed_async(
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        timeout=1.0,
+        enable_deadline_extension=True,
+        max_extension_seconds=1.5,
+    )
+    elapsed = time.monotonic() - start
+
+    assert not psutil.pid_exists(result.pid)
+    # The cap must actually bind — well under the child's own 30s sleep.
+    assert elapsed < 15.0

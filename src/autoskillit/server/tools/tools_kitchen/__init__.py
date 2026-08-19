@@ -39,6 +39,7 @@ from autoskillit.core import (
     unregister_active_kitchen,
 )
 from autoskillit.core import get_logger as _get_logger
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers_async
 from autoskillit.fleet import (
     discover_campaign_state_files,
     execute_dispatch,
@@ -222,6 +223,7 @@ __all__ = [
     "claim_kitchen_request",
     "clear_recipe_execution",
     "create_background_task",
+    "default_tether_dir",
     "discover_campaign_state_files",
     "execute_dispatch",
     "finalize_recipe_delivery",
@@ -239,6 +241,7 @@ __all__ = [
     "resolve_kitchen_id",
     "resolve_log_dir",
     "serve_recipe",
+    "sweep_orphaned_tethers_async",
     "try_retire_tracker",
     "unregister_active_kitchen",
     "update_overlay",

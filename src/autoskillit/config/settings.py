@@ -49,6 +49,7 @@ from autoskillit.config._config_dataclasses import (
     OutputBudgetConfig,
     PacksConfig,
     PlanConfig,
+    ProcessTetherConfig,
     ProviderProfileDef,
     ProvidersConfig,
     QuotaGuardConfig,
@@ -204,6 +205,34 @@ def _claude_mcp_timeout_coherence_gate(
         )
 
 
+def _process_tether_coherence_gate(
+    process_tether: ProcessTetherConfig, fleet: FleetConfig, run_skill: RunSkillConfig
+) -> None:
+    """Warn when orphan_ceiling_seconds undercuts the maximum session duration.
+
+    Defaults are safe today (10800s max session vs 86400s ceiling default),
+    but a user raising session timeouts past the ceiling would otherwise get
+    a tether sweep whose ceiling fires before the session it's supposed to
+    guard has even finished — this is the only configuration in which the
+    sweep's periodic cadence becomes the binding constraint instead of the
+    per-session timeout.
+    """
+    max_fleet = fleet.default_timeout_sec + fleet.max_extension_seconds
+    max_session = max(max_fleet, run_skill.timeout)
+    if process_tether.orphan_ceiling_seconds < max_session:
+        logger.warning(
+            "process_tether_ceiling_coherence",
+            orphan_ceiling_seconds=process_tether.orphan_ceiling_seconds,
+            max_session_duration=max_session,
+            message=(
+                f"process_tether.orphan_ceiling_seconds "
+                f"({process_tether.orphan_ceiling_seconds}s) is below the maximum possible "
+                f"session duration ({max_session}s). A dead-spawner sweep could reap a "
+                f"headless child before its own session timeout would have fired."
+            ),
+        )
+
+
 __all__ = [
     "AgentBackendConfig",
     "AutomationConfig",
@@ -223,6 +252,7 @@ __all__ = [
     "MigrationConfig",
     "OutputBudgetConfig",
     "PacksConfig",
+    "ProcessTetherConfig",
     "ProviderProfileDef",
     "ProvidersConfig",
     "QuotaGuardConfig",
@@ -535,6 +565,7 @@ class AutomationConfig:
     packs: PacksConfig = field(default_factory=PacksConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     fleet: FleetConfig = field(default_factory=FleetConfig)
+    process_tether: ProcessTetherConfig = field(default_factory=ProcessTetherConfig)
     providers: ProvidersConfig = field(default_factory=ProvidersConfig)
     agent_backend: AgentBackendConfig = field(default_factory=AgentBackendConfig)
     features: dict[str, bool] = field(default_factory=dict)
@@ -681,11 +712,16 @@ class AutomationConfig:
             )
         except ValueError as exc:
             raise ValueError(f"fleet config: {exc}") from exc
+        try:
+            result.process_tether.validate()
+        except ValueError as exc:
+            raise ValueError(f"process_tether config: {exc}") from exc
         _timeout_coherence_gate(result.run_skill)
         _codex_mcp_timeout_coherence_gate(
             result.run_skill, result.fleet, tool_timeout=result.run_skill.mcp_tool_timeout_sec
         )
         _claude_mcp_timeout_coherence_gate(result.run_skill, result.fleet)
+        _process_tether_coherence_gate(result.process_tether, result.fleet, result.run_skill)
         return result
 
 

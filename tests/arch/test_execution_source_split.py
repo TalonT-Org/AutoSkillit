@@ -23,7 +23,9 @@ HEADLESS_SIZE_BUDGETS = {
     # #4233 threads backend resume identity and the skill-only lifecycle enable flag.
     # #4659 rectify: the agent-teams opt-in must be read here from the same config
     # authority the spec builders use, or adapter_digest and the spec field diverge.
-    "headless/_headless_execute.py": 646,
+    # #4678 rectify: threads ceiling_seconds and systemd_scope_enabled through to
+    # run_managed_async for the process-tether spawner-death immunity mechanism.
+    "headless/_headless_execute.py": 651,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

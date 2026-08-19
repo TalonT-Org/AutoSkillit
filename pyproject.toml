@@ -339,8 +339,16 @@ modules = [
 # pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.
 # config/ depends only on IL-0 (IL-002), so no cycle is introduced.
 # This exception mirrors the one already documented in IL-003.
+# EXCEPTION: autoskillit.exploration.collectors._bounded may import
+# autoskillit.execution (spawn_owned_process/OwnedProcessGroup/TetherSpec).
+# This is the one detached spawn the codebase-wide funnel guard
+# (test_no_detached_spawn_outside_owned_funnel) requires onto the owned-process
+# funnel — a raw subprocess.Popen(start_new_session=True) here is exactly the
+# orphan class the process-tether mechanism closes. execution/ depends only on
+# IL-0 (IL-004), so no cycle is introduced.
 ignore_imports = [
     "autoskillit.pipeline.context -> autoskillit.config",
+    "autoskillit.exploration.collectors._bounded -> autoskillit.execution",
 ]
 
 # IL-009 | Lens: module-dependency | DS-001

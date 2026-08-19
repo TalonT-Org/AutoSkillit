@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import subprocess
 import termios
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -454,6 +455,7 @@ class TestCookTerminalGuard:
                 on_reaped=lambda _pid, _pgid: None,
                 trace=Mock(),
                 observer=None,
+                not_after=time.time() + 60,
             )
 
         assert tcsetattr_calls, (

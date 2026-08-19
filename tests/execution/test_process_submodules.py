@@ -14,6 +14,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
     {
+        "DEFAULT_TETHER_CEILING_SECONDS",
+        "INTERACTIVE_TETHER_CEILING_SECONDS",
         "CaptureReadError",
         "CaptureSetupError",
         "CodexOrphanReapResult",
@@ -21,7 +23,12 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "DefaultSubprocessRunner",
         "OrphanedAutoSkillitDaemon",
         "OrphanedCodexProcess",
+        "OrphanedTetherRecord",
         "OwnedProcessGroup",
+        "TetherRecord",
+        "TetherSpec",
+        "TetherSweepOutcome",
+        "TetherSweepReport",
         "_extract_stdout_session_id",
         "_resolve_session_id",
         "RaceAccumulator",
@@ -41,12 +48,16 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "async_kill_process_tree",
         "create_temp_io",
         "decide_termination_action",
+        "default_tether_dir",
         "execute_termination_action",
         "fold_lifecycle_evidence",
         "fold_lifecycle_evidence_path",
         "find_orphaned_codex_processes",
         "find_orphaned_autoskillit_daemons",
+        "find_orphaned_tethers",
+        "format_orphaned_tether_fields",
         "kill_process_tree",
+        "probe_systemd_scope_available",
         "pty_wrap_command",
         "read_temp_output",
         "reap_orphaned_codex_processes",
@@ -56,6 +67,10 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "run_managed_sync",
         "summarize_capture",
         "spawn_owned_process",
+        "sweep_orphaned_tethers",
+        "sweep_orphaned_tethers_async",
+        "update_tether_workload",
+        "wrap_systemd_scope",
     }
 )
 

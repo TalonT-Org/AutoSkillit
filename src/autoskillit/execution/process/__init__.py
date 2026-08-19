@@ -741,12 +741,17 @@ def run_managed_sync(
     env: Mapping[str, str] | None = None,
     capture_dir: Path | None = None,
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+    systemd_scope_enabled: bool = False,
 ) -> SubprocessResult:
     """Sync subprocess execution with temp file I/O and process tree cleanup.
 
     Same composition pattern as run_managed_async but uses subprocess.Popen
     with start_new_session=True. No channel monitoring — wall-clock timeout only.
     """
+    # Defense-in-depth kernel ceiling, mirroring run_managed_async — inert
+    # unless explicitly enabled.
+    cmd = wrap_systemd_scope(cmd, enabled=systemd_scope_enabled, ceiling_seconds=ceiling_seconds)
+
     _keep = capture_dir is not None
     with create_temp_io(input_data, capture_dir=capture_dir, keep_streams=_keep) as (
         stdout_file,

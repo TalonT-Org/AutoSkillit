@@ -38,7 +38,7 @@ def _make_orphan(pid: int, reason: str = "spawner_dead") -> OrphanedTetherRecord
 
 
 def test_process_orphans_cmd_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.cli.ops._process_orphans as process_orphans_mod
+    import autoskillit.cli.ops as ops_pkg
     from autoskillit import cli
 
     called_with: dict[str, object] = {}
@@ -47,7 +47,7 @@ def test_process_orphans_cmd_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
         called_with["reap"] = reap
         called_with["output_json"] = output_json
 
-    monkeypatch.setattr(process_orphans_mod, "run_process_orphans", mock_run_process_orphans)
+    monkeypatch.setattr(ops_pkg, "run_process_orphans", mock_run_process_orphans)
 
     cli.process_orphans(reap=True, output_json=True)
 

@@ -33,7 +33,7 @@ def _make_orphan(pid: int) -> OrphanedCodexProcess:
 
 
 def test_codex_orphans_cmd_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.cli.ops._codex_orphans as codex_orphans_mod
+    import autoskillit.cli.ops as ops_pkg
     from autoskillit import cli
 
     called_with: dict[str, object] = {}
@@ -42,7 +42,7 @@ def test_codex_orphans_cmd_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
         called_with["reap"] = reap
         called_with["output_json"] = output_json
 
-    monkeypatch.setattr(codex_orphans_mod, "run_codex_orphans", mock_run_codex_orphans)
+    monkeypatch.setattr(ops_pkg, "run_codex_orphans", mock_run_codex_orphans)
 
     cli.codex_orphans(reap=True, output_json=True)
 

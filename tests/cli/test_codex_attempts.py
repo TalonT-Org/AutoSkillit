@@ -10,11 +10,11 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_codex_attempts_command_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.cli.ops._codex_attempts as command
+    import autoskillit.cli.ops as ops_pkg
     from autoskillit import cli
 
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(command, "run_codex_attempts", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(ops_pkg, "run_codex_attempts", lambda **kwargs: calls.append(kwargs))
 
     cli.codex_attempts(
         discard_view="0123456789abcdef-1",

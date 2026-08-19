@@ -610,7 +610,7 @@ def test_recovery_uses_versioned_shadow_projector(
     projector.assert_called_once()
     assert tuple(registry) == (1,)
     assert registry.keys() == ledger_module.CONTEXT_ADMISSION_REDUCER_REGISTRY.keys()
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="does not support item assignment"):
         registry[2] = projector  # type: ignore[index]
 
 

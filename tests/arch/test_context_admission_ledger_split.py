@@ -18,6 +18,7 @@ SPLIT_FILES = (
 )
 ORIGINAL_MEGA_FILE = "test_context_admission_ledger.py"
 _MAX_LINES = 1000
+_MIN_LINES = 50
 
 
 def test_context_admission_ledger_split_files_exist() -> None:
@@ -40,9 +41,18 @@ def test_context_admission_ledger_mega_file_was_removed() -> None:
 
 @pytest.mark.parametrize("name", SPLIT_FILES)
 def test_context_admission_ledger_split_files_stay_small(name: str) -> None:
-    """Issue #4606: each split file stays under the oversized-file limit."""
+    """Issue #4606: each split file stays under the oversized-file limit.
+
+    Also asserts a floor so a regression that empties/guts a split file
+    into a placeholder stub (still under the max-line cap) is caught.
+    """
     path = PIPELINE / name
-    line_count = len(path.read_text().splitlines())
+    line_count = len(path.read_text(encoding="utf-8").splitlines())
+    assert line_count >= _MIN_LINES, (
+        f"{name} has {line_count} lines, below the {_MIN_LINES}-line "
+        f"minimum. A split file was gutted into a placeholder; restore "
+        f"the migrated tests."
+    )
     assert line_count <= _MAX_LINES, (
         f"{name} has {line_count} lines, over the {_MAX_LINES}-line "
         f"oversized-test-file limit. Split it further along concern "

@@ -35,8 +35,14 @@ from tests.fixtures.context_admission import (
     uninitialized_state,
 )
 from tests.pipeline._context_admission_ledger_helpers import (
-    _GOLDEN_JOURNAL,
     _authority,
+)
+
+_GOLDEN_JOURNAL = (
+    Path(__file__).resolve().parent.parent
+    / "fixtures"
+    / "context_admission_journals"
+    / "protocol_v1_encoding_v1.json"
 )
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]

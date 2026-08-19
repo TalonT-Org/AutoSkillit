@@ -2460,10 +2460,10 @@
     "tests/core/test_context_admission_reducer.py",
     "tests/core/test_context_admission_state_machine.py",
     "tests/core/types/test_context_admission_persistence_contract.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
     "tests/pipeline/test_context_admission_ledger_contention.py",
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
     "tests/pipeline/test_context_admission_ledger_sticky_health.py"
   ],
   "src/autoskillit/core/feature_flags.py": [
@@ -4435,16 +4435,16 @@
     "tests/execution/github_review/test_pacing.py",
     "tests/execution/github_review/test_poster.py",
     "tests/execution/github_review/test_resilience.py",
+    "tests/pipeline/test_context_admission_ledger_contention.py",
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
+    "tests/pipeline/test_context_admission_ledger_sticky_health.py",
     "tests/server/test_enable_exploration.py",
     "tests/server/test_lifespan_fleet_boot.py",
     "tests/server/test_server_init_gate.py",
     "tests/server/test_tools_kitchen_visibility.py",
-    "tests/server/test_wire_compat.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
-    "tests/pipeline/test_context_admission_ledger_contention.py",
-    "tests/pipeline/test_context_admission_ledger_sticky_health.py"
+    "tests/server/test_wire_compat.py"
   ],
   "src/autoskillit/core/runtime/readiness.py": [
     "tests/arch/test_feature_markers.py",
@@ -5440,12 +5440,12 @@
     "tests/core/test_context_admission_state_machine.py",
     "tests/core/types/test_context_admission_contract.py",
     "tests/core/types/test_context_admission_persistence_contract.py",
-    "tests/server/test_state.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
     "tests/pipeline/test_context_admission_ledger_contention.py",
-    "tests/pipeline/test_context_admission_ledger_sticky_health.py"
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
+    "tests/pipeline/test_context_admission_ledger_sticky_health.py",
+    "tests/server/test_state.py"
   ],
   "src/autoskillit/core/types/_type_context_admission_persistence.py": [
     "tests/cli/test_cli_serve_logging.py",
@@ -5457,6 +5457,11 @@
     "tests/contracts/test_protocol_satisfaction.py",
     "tests/core/types/test_context_admission_persistence_contract.py",
     "tests/pipeline/test_context.py",
+    "tests/pipeline/test_context_admission_ledger_contention.py",
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
+    "tests/pipeline/test_context_admission_ledger_sticky_health.py",
     "tests/server/test_enable_exploration.py",
     "tests/server/test_factory.py",
     "tests/server/test_factory_backend_coherence.py",
@@ -5477,12 +5482,7 @@
     "tests/server/test_tools_kitchen_gate_features.py",
     "tests/server/test_tools_kitchen_preflight.py",
     "tests/server/test_tools_kitchen_visibility.py",
-    "tests/server/test_wire_compat.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
-    "tests/pipeline/test_context_admission_ledger_contention.py",
-    "tests/pipeline/test_context_admission_ledger_sticky_health.py"
+    "tests/server/test_wire_compat.py"
   ],
   "src/autoskillit/core/types/_type_dimensions.py": [
     "tests/arch/test_feature_registry.py",
@@ -6101,6 +6101,11 @@
     "tests/integration/test_pipeline_step_completion_flow.py",
     "tests/integration/test_write_guard_worktree_integration.py",
     "tests/migration/test_engine.py",
+    "tests/pipeline/test_context_admission_ledger_contention.py",
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
+    "tests/pipeline/test_context_admission_ledger_sticky_health.py",
     "tests/pipeline/test_exploration_context.py",
     "tests/recipe/test_api.py",
     "tests/recipe/test_api_cache_isolation.py",
@@ -6309,12 +6314,7 @@
     "tests/skills/test_investigate_design_intent_contracts.py",
     "tests/test_helpers_strip.py",
     "tests/workspace/test_project_local_overrides.py",
-    "tests/workspace/test_skills.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
-    "tests/pipeline/test_context_admission_ledger_contention.py",
-    "tests/pipeline/test_context_admission_ledger_sticky_health.py"
+    "tests/workspace/test_skills.py"
   ],
   "src/autoskillit/core/types/_type_install.py": [
     "tests/cli/test_install_contract.py",
@@ -7123,6 +7123,11 @@
     "tests/integration/test_write_guard_worktree_integration.py",
     "tests/migration/test_engine.py",
     "tests/pipeline/test_audit.py",
+    "tests/pipeline/test_context_admission_ledger_contention.py",
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
+    "tests/pipeline/test_context_admission_ledger_sticky_health.py",
     "tests/server/test_attestation_delivery_reachability.py",
     "tests/server/test_audit_admission_fault_immunity.py",
     "tests/server/test_audit_admission_production_seam.py",
@@ -7181,12 +7186,7 @@
     "tests/workspace/test_cleanup.py",
     "tests/workspace/test_session_skills_codex.py",
     "tests/workspace/test_session_skills_provider.py",
-    "tests/workspace/test_session_skills_stale_path.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
-    "tests/pipeline/test_context_admission_ledger_contention.py",
-    "tests/pipeline/test_context_admission_ledger_sticky_health.py"
+    "tests/workspace/test_session_skills_stale_path.py"
   ],
   "src/autoskillit/core/types/_type_results_execution.py": [
     "tests/core/test_type_results_execution.py",
@@ -11952,16 +11952,16 @@
     "tests/server/test_tools_migrate_recipe.py"
   ],
   "src/autoskillit/pipeline/_context_admission_storage.py": [
+    "tests/pipeline/test_context_admission_ledger_contention.py",
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
+    "tests/pipeline/test_context_admission_ledger_sticky_health.py",
     "tests/server/test_enable_exploration.py",
     "tests/server/test_lifespan_fleet_boot.py",
     "tests/server/test_server_init_gate.py",
     "tests/server/test_tools_kitchen_visibility.py",
-    "tests/server/test_wire_compat.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
-    "tests/pipeline/test_context_admission_ledger_contention.py",
-    "tests/pipeline/test_context_admission_ledger_sticky_health.py"
+    "tests/server/test_wire_compat.py"
   ],
   "src/autoskillit/pipeline/audit.py": [
     "tests/arch/test_pty_coherence.py",
@@ -12295,6 +12295,11 @@
     "tests/contracts/test_projection_freshness.py",
     "tests/contracts/test_protocol_satisfaction.py",
     "tests/pipeline/test_context.py",
+    "tests/pipeline/test_context_admission_ledger_contention.py",
+    "tests/pipeline/test_context_admission_ledger_journal.py",
+    "tests/pipeline/test_context_admission_ledger_projection.py",
+    "tests/pipeline/test_context_admission_ledger_recovery.py",
+    "tests/pipeline/test_context_admission_ledger_sticky_health.py",
     "tests/server/test_enable_exploration.py",
     "tests/server/test_factory.py",
     "tests/server/test_factory_backend_coherence.py",
@@ -12314,12 +12319,7 @@
     "tests/server/test_tools_kitchen_gate_features.py",
     "tests/server/test_tools_kitchen_preflight.py",
     "tests/server/test_tools_kitchen_visibility.py",
-    "tests/server/test_wire_compat.py",
-    "tests/pipeline/test_context_admission_ledger_recovery.py",
-    "tests/pipeline/test_context_admission_ledger_projection.py",
-    "tests/pipeline/test_context_admission_ledger_journal.py",
-    "tests/pipeline/test_context_admission_ledger_contention.py",
-    "tests/pipeline/test_context_admission_ledger_sticky_health.py"
+    "tests/server/test_wire_compat.py"
   ],
   "src/autoskillit/pipeline/exploration_context.py": [
     "tests/cli/test_cli_serve_logging.py",

@@ -12,6 +12,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    ExplorationFailureCode,
     atomic_write,
     compute_analysis,
     filter_sessions_by_recipe,
@@ -100,7 +101,7 @@ async def kitchen_status() -> str:
             # enable_exploration would refuse *before* the downstream zero-tool
             # subagent refusal, instead of only after the fact.
             status["broker_authority"] = (
-                "ineligible_session_type"
+                ExplorationFailureCode.SESSION_TYPE_INELIGIBLE.value
                 if _resolve_session_type() in EXPLORER_INELIGIBLE_SESSION_TYPES
                 else "no_session_bound"
             )

@@ -72,7 +72,7 @@ packless terminal leaves. Their fixed Luna/max/read-only policy is documented in
 `docs/execution/explorer-agents.md`; do not add model or permission overrides to callers.
 `pluginless-explorer` is a third, packless terminal-leaf explorer restricted to
 `Read`/`Grep`/`Glob` — the fallback used only when `enable_exploration` returns
-`ineligible_session_type` or `exploration_store_unavailable`, in lieu of the two
+`session_type_ineligible` or `exploration_store_unavailable`, in lieu of the two
 broker-bound explorers above. It is deliberately excluded from
 `BUNDLED_EXPLORER_ROLES`: that set drives Codex's per-child terminal-binding
 machinery for the two MCP-broker-tool explorers, a contract `pluginless-explorer`

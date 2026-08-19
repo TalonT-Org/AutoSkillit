@@ -21,8 +21,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
     ("session_type", "expected"),
     [
         ("skill", "no_session_bound"),
-        ("orchestrator", "ineligible_session_type"),
-        ("fleet", "ineligible_session_type"),
+        ("orchestrator", "session_type_ineligible"),
+        ("fleet", "session_type_ineligible"),
     ],
 )
 async def test_kitchen_status_reports_broker_authority(

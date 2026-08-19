@@ -102,7 +102,7 @@ def _safe_submit_failure_reason(
     sensitive_values = (capability,) + tuple(
         str(getattr(authority, field.name)) for field in fields(authority)
     )
-    for value in sensitive_values:
+    for value in sorted(sensitive_values, key=len, reverse=True):
         if value:
             reason = reason.replace(value, "[redacted]")
     return truncate_text(reason, _MAX_SUBMIT_FAILURE_REASON_LENGTH)

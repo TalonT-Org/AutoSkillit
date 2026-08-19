@@ -20,6 +20,16 @@ _FLEET_INJECTED_VARS: frozenset[str] = frozenset(
 _CLAUDE_CODE_PASSTHROUGH_VARS: frozenset[str] = frozenset(
     {
         "CLAUDE_CODE_EXECPATH",  # intentional: binary discovery (_version_snapshot.py)
+        # intentional: force_inactive_agent_teams (config.agent_backend, default False)
+        # is the opt-in neutralization mechanism -- _neutralize_agent_teams_env() +
+        # assert_agent_teams_inactive() in claude.py -- not a base-env denylist.
+        # Default passthrough is required byte-for-byte-preservation behavior; see
+        # tests/execution/test_launch_force_inactive_default.py.
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+        # not a real env var: __all__ list member in core/types/_type_constants_env.py
+        # (R4 predicate-(b) scanner false positive) -- the constant's own identifier
+        # name, never itself set as an OS environment variable.
+        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR",
     }
 )
 

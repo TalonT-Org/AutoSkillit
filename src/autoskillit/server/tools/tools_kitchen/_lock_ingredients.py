@@ -16,9 +16,14 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import _hook_config_path
 from autoskillit.server._notify import track_response_size
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so
+# cross-submodule helpers must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._authority_feedback import build_authority_rejection_envelope
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._overlay_state import update_overlay
 
 logger = get_logger(__name__)
 
@@ -46,7 +51,7 @@ def _write_ingredient_locks(
                 current,
             )
 
-    return update_overlay(project_dir, _mutate)
+    return _tk_pkg.update_overlay(project_dir, _mutate)
 
 
 def _compute_unlocked_steps(

@@ -43,7 +43,6 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._progress_heartbeat import progress_heartbeat
 from autoskillit.server.tools import (
     tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
 )
@@ -411,7 +410,7 @@ async def dispatch_food_truck(
                     f"seconds, got {tool_timeout_sec!r}.",
                 )
             with anyio.fail_after(tool_timeout_sec) as cancel_scope:
-                async with progress_heartbeat(ctx):
+                async with tools_fleet_dispatch.progress_heartbeat(ctx):
                     result = await tools_fleet_dispatch.execute_dispatch(
                         tool_ctx=tool_ctx,
                         recipe=recipe,

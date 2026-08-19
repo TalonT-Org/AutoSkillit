@@ -36,6 +36,7 @@ from autoskillit.execution._recording_skills import (
     restore_skill_snapshot as _restore_skill_snapshot,
 )
 from autoskillit.execution.backends.codex_scenario_player import CodexScenarioPlayer
+from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 
 if TYPE_CHECKING:
     from api_simulator.claude import ScenarioPlayer, ScenarioRecorder
@@ -149,7 +150,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
-        ceiling_seconds: float = 86400.0,
+        ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
@@ -377,7 +378,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
-        ceiling_seconds: float = 86400.0,
+        ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
         """Record an FD-aware inner-runner session via cassette files."""
@@ -524,7 +525,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
-        ceiling_seconds: float = 86400.0,
+        ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
         del pass_fds, backend_resume_session_id, ceiling_seconds, systemd_scope_enabled

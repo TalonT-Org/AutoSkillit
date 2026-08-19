@@ -319,7 +319,8 @@ def bind_session_scoped_durable(
         source_identity=source_identity,
     )
     lease = store.lease_for_capability(capability)
-    assert lease is not None, "bind_session_scoped must mint a lease for its own capability"
+    if lease is None:
+        raise RuntimeError("bind_session_scoped must mint a lease for its own capability")
     _ExplorationLaunchAuthorityStore().write(
         authority_home=authority_home,
         session_id=session_id,

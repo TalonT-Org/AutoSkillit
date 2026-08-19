@@ -20,18 +20,6 @@
     "tests/test_test_filter.py",
     "tests/test_test_filter_core_cascade.py"
   ],
-  "src/autoskillit/cli/_capture_store.py": [
-    "tests/cli/test_capture_store.py"
-  ],
-  "src/autoskillit/cli/_codex_attempts.py": [
-    "tests/cli/test_codex_attempts.py"
-  ],
-  "src/autoskillit/cli/_codex_orphans.py": [
-    "tests/cli/test_codex_orphans_cmd.py"
-  ],
-  "src/autoskillit/cli/_daemon_orphans.py": [
-    "tests/cli/test_daemon_orphans_cli.py"
-  ],
   "src/autoskillit/cli/_features.py": [
     "tests/cli/test_features_cli.py"
   ],
@@ -117,9 +105,6 @@
     "tests/cli/test_install_transaction.py",
     "tests/cli/test_update_checks_lifecycle.py",
     "tests/contracts/test_version_consistency.py"
-  ],
-  "src/autoskillit/cli/_onboarding.py": [
-    "tests/cli/test_onboarding.py"
   ],
   "src/autoskillit/cli/_plugin_artifact.py": [
     "tests/cli/test_app_main.py",
@@ -210,9 +195,6 @@
     "tests/contracts/test_sous_chef_routing.py",
     "tests/contracts/test_sous_chef_scheduling.py",
     "tests/execution/backends/test_failure_predicate_spanning.py"
-  ],
-  "src/autoskillit/cli/_restart.py": [
-    "tests/cli/test_restart.py"
   ],
   "src/autoskillit/cli/_serve_guard.py": [
     "tests/cli/test_serve_guard_deferral.py"
@@ -372,6 +354,18 @@
     "tests/cli/test_fleet_session.py",
     "tests/cli/test_reload_loop.py"
   ],
+  "src/autoskillit/cli/ops/_capture_store.py": [
+    "tests/cli/test_capture_store.py"
+  ],
+  "src/autoskillit/cli/ops/_codex_attempts.py": [
+    "tests/cli/test_codex_attempts.py"
+  ],
+  "src/autoskillit/cli/ops/_codex_orphans.py": [
+    "tests/cli/test_codex_orphans_cmd.py"
+  ],
+  "src/autoskillit/cli/ops/_daemon_orphans.py": [
+    "tests/cli/test_daemon_orphans_cli.py"
+  ],
   "src/autoskillit/cli/session/_session_backend.py": [
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",
@@ -420,6 +414,9 @@
     "tests/cli/test_session_launch.py",
     "tests/cli/test_terminal.py",
     "tests/contracts/test_claude_code_interface_contracts.py"
+  ],
+  "src/autoskillit/cli/session/_session_onboarding.py": [
+    "tests/cli/test_onboarding.py"
   ],
   "src/autoskillit/cli/session/_session_order.py": [
     "tests/cli/test_cook_features.py",
@@ -539,6 +536,9 @@
     "tests/cli/test_update_command.py",
     "tests/contracts/test_publication_obligation_loop.py",
     "tests/integration/test_obligation_repair_e2e.py"
+  ],
+  "src/autoskillit/cli/update/_restart.py": [
+    "tests/cli/test_restart.py"
   ],
   "src/autoskillit/cli/update/_transaction.py": [
     "tests/cli/test_update_checks_lifecycle.py",

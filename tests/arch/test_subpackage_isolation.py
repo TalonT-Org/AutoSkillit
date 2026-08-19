@@ -90,11 +90,11 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "_reconcile",  # hooks/_capture/_reconcile.py: immutable owner budget contracts
-        "_capture_store",  # cli/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
+        "_capture_store",  # cli/ops/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
-        "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
+        "_sessions",  # cli/ops/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         "claude",  # execution/backends/claude.py: _ANNOTATION_SUPPORT_MIN = Version(...)
@@ -929,10 +929,6 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _features.py adds feature gate inspection subcommand (list/status).
             _session_picker.py adds the scoped session resume picker that filters
             sessions by type (cook/order) using the session registry.
-            _sessions.py adds the sessions analyze CLI subcommand for cross-session
-            tool call sequence diagnostics.
-            _restart.py adds the perform_restart() NoReturn contract for post-upgrade
-            process re-exec, keeping the restart logic isolated from update orchestration.
             _doctor.py was split (1245 lines → facade + 9 sub-modules) following the
             _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
             _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
@@ -940,13 +936,20 @@ def test_no_subpackage_exceeds_10_files() -> None:
             In issue #4670 Part A, _prompts.py and the four install-cluster files
             (_install_contract.py, _install_info.py, _installed_plugins.py,
             _marketplace.py, _plugin_artifact.py) were extracted to the new
-            `cli/prompts/` and `cli/install/` subpackages respectively. Remaining
-            top-level files: _capture_store, _codex_attempts, _codex_orphans,
-            _daemon_orphans, _process_orphans (each slated for `cli/ops/` in Part B).
+            `cli/prompts/` and `cli/install/` subpackages respectively.
+            In issue #4670 Part B, _onboarding.py was folded into `cli/session/`
+            as _session_onboarding.py (its only consumer lives inside that package),
+            _restart.py was folded into `cli/update/` (its two consumers live inside
+            that package), and the six operator-facing diagnostic subcommand runners
+            (_capture_store, _codex_attempts, _codex_orphans, _daemon_orphans,
+            _process_orphans, _sessions) were extracted to the new `cli/ops/`
+            subpackage. The 11 remaining top-level files (app.py + 10 small shared
+            utilities — see the dict entry below) are the orchestration entry points
+            and shared helpers that have no coherent subpackage home.
             _hooks_codex.py adds Codex config.toml hook generation and sync
     (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
     _hooks.py for Claude Code settings.json hooks.
-    Exempt at 19 files.
+    Exempt at 11 files.
           hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
             (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
             file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -1000,14 +1003,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
-        "cli": 19,  # issue #4670 Part A: -_prompts* (4) -_install_*_marketplace (5) extracted
-        # to cli/prompts/ and cli/install/ subpackages; _capture_store, _codex_attempts,
-        # _codex_orphans, _daemon_orphans, _process_orphans remain at cli/ top level
-        # (slated for cli/ops/ in Part B); +_install_contract typed install process
-        # boundary (#4409); +_capture_store capture-store stats/reclaim;
-        # +_codex_orphans (#4536); +_codex_attempts (#4361);
-        # +_daemon_orphans operator surface (#4544);
-        # +_process_orphans tether-sweep operator surface (#4678)
+        "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
+        # (app.py + 10 small shared utilities — _features.py, _hooks.py,
+        # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
+        # _serve_guard.py, _validate.py, _workspace.py, __init__.py); no
+        # coherent subpackage home exists for any of them
+        "cli/session": 11,  # +_session_onboarding.py folded in from cli/_onboarding.py,
+        # first-run detection consumed only by _session_cook.py (#4670)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -1153,7 +1155,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "re-exports capture_store_stats, reconcile_capture_store, CaptureStoreStats, "
         "CleanupBlocker, CleanupProgress, and SweepBudgetSpec from its own dual-mode "
         "(flat sys.path / dotted package) _capture import bootstrap so hooks/__init__.py "
-        "can gateway them to cli/_capture_store.py without importing _capture submodules "
+        "can gateway them to cli/ops/_capture_store.py without importing _capture submodules "
         "directly, which would race the standalone hook scripts' own flat-style bootstrap "
         "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
         "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",

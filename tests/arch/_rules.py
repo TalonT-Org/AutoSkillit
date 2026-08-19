@@ -170,7 +170,7 @@ _STRENUM_SRC_COMPARE_EXEMPT_PATHS: frozenset[str] = frozenset(
         # CodexLimitVerificationDef.status: CodexLimitVerificationStatus = Literal[...],
         # not StrEnum
         "execution/backends/_codex_config.py",
-        "cli/_process_orphans.py",  # TetherSweepOutcome.outcome: plain str, not SessionOutcome
+        "cli/ops/_process_orphans.py",  # TetherSweepOutcome.outcome: plain str, not SessionOutcome
     }
 )
 

@@ -503,10 +503,18 @@ async def enable_exploration(
             # the lease too — a bound-but-invisible session is an orphan
             # authority; disable_components is the mirror of enable_components,
             # so a partial-success enable_components call never leaves the tag
-            # visible without a live lease behind it (#4684 Fix E).
+            # visible without a live lease behind it (#4684 Fix E). Each
+            # cleanup call is independently guarded so a failure in one
+            # cannot mask the original in-flight exception or skip the other.
             if not exploration_enabled:
-                store.cleanup_session(session_id)
-                await ctx.disable_components(tags={"exploration"})
+                try:
+                    store.cleanup_session(session_id)
+                except Exception:
+                    logger.warning("enable_exploration_cleanup_session_failed", exc_info=True)
+                try:
+                    await ctx.disable_components(tags={"exploration"})
+                except Exception:
+                    logger.warning("enable_exploration_disable_components_failed", exc_info=True)
         return json.dumps(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),

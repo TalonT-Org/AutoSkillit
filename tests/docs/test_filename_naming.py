@@ -25,6 +25,7 @@ ALLOWLIST = {
         "0005-output-budget-protocol.md",  # prescribed by issue #4272
         "0008-shell-capture-snapshot-authority.md",  # prescribed by issue #4322
         "0009-verified-output-delivery-disposition.md",  # prescribed by issue #4479
+        "0010-systemd-scope-defense-in-depth.md",  # prescribed by PR #4695 review fix
         "paper-backend-n3-exercise.md",  # 4 segments; prescribed by issue #4052
     },
 }

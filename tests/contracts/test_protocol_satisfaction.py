@@ -593,7 +593,16 @@ class TestGroupDApiContractPreservation:
         """run_managed_sync parameter set is unchanged."""
         sig = inspect.signature(run_managed_sync)
         params = set(sig.parameters)
-        expected = {"cmd", "cwd", "timeout", "input_data", "env", "capture_dir", "ceiling_seconds"}
+        expected = {
+            "cmd",
+            "cwd",
+            "timeout",
+            "input_data",
+            "env",
+            "capture_dir",
+            "ceiling_seconds",
+            "systemd_scope_enabled",
+        }
         assert expected == params, (
             f"run_managed_sync params changed.\n"
             f"  Missing: {expected - params}\n"

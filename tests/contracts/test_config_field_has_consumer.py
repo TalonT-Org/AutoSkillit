@@ -144,24 +144,15 @@ def _field_has_consumer(field_name: str, cls: type) -> bool:
     return _has_direct_reader(field_name) or _has_indirect_method_reader(field_name, cls)
 
 
-def test_escape_hatch_and_reader_detection_on_synthetic_fields() -> None:
-    """Unit-verify the scanner mechanism itself against known-shape inputs.
+def test_inert_tracked_regex_matches_comment_block_shapes() -> None:
+    """Verify _INERT_TRACKED_RE against representative matching/non-matching text.
 
-    Exercises the inert-tracked:#NNNN escape hatch per the plan's requirement
-    that this contract not go live without a demonstrated bypass path.
+    Only validates the regex itself; the escape-hatch and consumer-detection
+    functions (_field_has_consumer, _field_is_inert_tracked) are exercised
+    against real fields by
+    test_natural_exit_grace_seconds_is_inert_tracked_against_a_real_field and
+    test_allowed_labels_is_consumed_indirectly_via_a_dataclass_method below.
     """
-    synthetic_source = """
-@dataclass
-class _SyntheticConfig:
-    has_reader_field: str = ""
-    # Deliberately unread pending #99999.
-    # inert-tracked:#99999
-    inert_tracked_field: bool = False
-    truly_orphaned_field: bool = False
-"""
-    tree = ast.parse(synthetic_source)
-    assert isinstance(tree.body[0], ast.ClassDef)
-
     comment_block = "# Deliberately unread pending #99999.\n# inert-tracked:#99999"
     assert _INERT_TRACKED_RE.search(comment_block) is not None
     assert _INERT_TRACKED_RE.search("# no marker here") is None

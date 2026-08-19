@@ -77,6 +77,16 @@ class TetherRecord:
     workload_pid: int | None = None
     workload_starttime_ticks: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.child_pid <= 0 or self.child_pgid <= 0 or self.spawner_pid <= 0:
+            raise ValueError("child_pid, child_pgid, and spawner_pid must be positive")
+        if self.child_starttime_ticks < 0 or self.spawner_starttime_ticks < 0:
+            raise ValueError("starttime_ticks must be non-negative")
+        if not math.isfinite(self.not_after):
+            raise ValueError(f"not_after must be finite, got {self.not_after}")
+        if self.workload_pid is not None and self.workload_pid <= 0:
+            raise ValueError("workload_pid must be positive when set")
+
 
 @dataclass(frozen=True, slots=True)
 class TetherSpec:

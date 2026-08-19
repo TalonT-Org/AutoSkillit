@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from fastmcp import Context
 
+    from autoskillit.core.types._type_audit_cycle import ArtifactRef
+    from autoskillit.core.types._type_results import ValidatedAddDir
+    from autoskillit.core.types._type_skill_contract import ExplorationVectorApplicabilityId
     from autoskillit.pipeline import ToolContext
 
 
@@ -104,7 +107,7 @@ class _RunSkillDispatchState:
     _prior_input_field: str | None
     _prior_path: str | None
     _recipe_execution_key: Any
-    _audited_plan_refs: list[Any] | None
+    _audited_plan_refs: tuple[ArtifactRef, ...] | None
     _cycle_id: str | None
     _scope_id: str | None
     _part_id: str | None
@@ -124,8 +127,8 @@ class _RunSkillDispatchState:
     _in_fleet_dispatch: bool
     _inspector_model: str | None
     effective_model: str
-    provider_extras: dict[str, Any] | None
-    profile_name_out: tuple[str, ...] | None
+    provider_extras: dict[str, str] | None
+    profile_name_out: str | None
     _profile: Any
     _env_dict: dict[str, str] | None
     _mo_recipe_map: dict[str, str] | None
@@ -143,22 +146,22 @@ class _RunSkillDispatchState:
     _effective_backend_obj: Any  # CodingAgentBackend | None
     _explicit_binary: str | None
     _fresh_parent_sandbox_mode: str | None
-    _active_exploration_applicabilities: tuple[Any, ...] | None
+    _active_exploration_applicabilities: frozenset[ExplorationVectorApplicabilityId] | None
 
     # --- Dispatch metadata ---
-    expected_output_patterns: tuple[str, ...] | None
+    expected_output_patterns: list[str] | None
     write_spec: Any  # WriteBehaviorSpec | None
     _skill_contract: Any  # SkillContract | None
     closure_spec: Any
     closure_report_root: Path | None
     _closure_root: Path | None
-    write_watch_dirs: tuple[str, ...] | None
+    write_watch_dirs: list[Path] | None
     _default_temp: Path | None
     is_read_only: bool
     scope_discipline_skill: Any
     completion_required: bool
     invocation_marker: Any
-    skill_add_dirs: tuple[Any, ...] | None  # tuple[ValidatedAddDir, ...] | None
+    skill_add_dirs: list[ValidatedAddDir] | None
     replay_snapshot_used: bool
     _runner: Any
     _ephemeral_root: Path | None
@@ -203,5 +206,7 @@ class _RunSkillDispatchState:
 
     # --- Writable: written by finalize helper ---
     # Trailing position keeps the dataclass-ordering invariant satisfied
-    # (all default-bearing fields must follow non-default ones).
-    _completion_invocation_id: str | None = None
+    # (all default-bearing fields must follow non-default ones). The empty
+    # string seed matches the original `tools_execution.py` semantics
+    # (`_completion_invocation_id = ""` before finalize runs).
+    _completion_invocation_id: str = ""

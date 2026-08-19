@@ -198,6 +198,42 @@ def test_every_forwarding_site_is_declared() -> None:
     )
 
 
+def test_no_orphan_forwarding_sites() -> None:
+    surface = production_env_read_surface(SRC_ROOT)
+    live = {f"{s.file}:{s.line}" for s in surface.forwarding_sites}
+    orphans = set(FORWARDING_SITES) - live
+    assert not orphans, (
+        f"Stale FORWARDING_SITES entries no longer in the surface: {sorted(orphans)}"
+    )
+
+
+def test_every_unresolved_read_is_declared() -> None:
+    surface = production_env_read_surface(SRC_ROOT)
+    undeclared = {f"{u.file}:{u.line}" for u in surface.unresolved} - set(DYNAMIC_READ_EXEMPTIONS)
+    assert not undeclared, (
+        f"Unresolved dynamic reads missing a DYNAMIC_READ_EXEMPTIONS entry: {sorted(undeclared)}"
+    )
+
+
+def test_no_orphan_dynamic_read_exemptions() -> None:
+    surface = production_env_read_surface(SRC_ROOT)
+    live = {f"{u.file}:{u.line}" for u in surface.unresolved}
+    orphans = set(DYNAMIC_READ_EXEMPTIONS) - live
+    assert not orphans, (
+        f"Stale DYNAMIC_READ_EXEMPTIONS entries no longer in the surface: {sorted(orphans)}"
+    )
+
+
+def test_production_env_surface_scan_parses_all_source_files() -> None:
+    """Fail loudly, never silently under-report: the AST scanner above must be able
+    to parse every src/autoskillit/**/*.py file it scans."""
+    surface = production_env_read_surface(SRC_ROOT)
+    assert not surface.unparseable_files, (
+        "production_env_read_surface could not parse these files, so it silently "
+        "skipped scanning them: " + ", ".join(sorted(surface.unparseable_files))
+    )
+
+
 def test_justifications_are_substantive() -> None:
     """Every justification must be at least 40 characters."""
     short = {
@@ -222,12 +258,15 @@ def test_justifications_are_substantive() -> None:
     assert not short_dynamic, f"DYNAMIC_READ_EXEMPTIONS justifications too short: {short_dynamic}"
 
 
-def _ambient_env_marker_names(tests_root: Path) -> set[str]:
+def _ambient_env_marker_names(tests_root: Path) -> tuple[set[str], list[str]]:
+    """Return (marker names, unparseable file paths) across every tests/**/*.py file."""
     names: set[str] = set()
+    unparseable: list[str] = []
     for path in tests_root.rglob("*.py"):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except SyntaxError:
+            unparseable.append(path.relative_to(tests_root.parent).as_posix())
             continue
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -245,7 +284,7 @@ def _ambient_env_marker_names(tests_root: Path) -> set[str]:
             for arg in node.args:
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                     names.add(arg.value)
-    return names
+    return names, unparseable
 
 
 def test_ambient_env_markers_reference_scrubbed_surface_vars() -> None:
@@ -256,7 +295,7 @@ def test_ambient_env_markers_reference_scrubbed_surface_vars() -> None:
     preserve-disposition one.
     """
     tests_root = Path(__file__).resolve().parent.parent
-    referenced = _ambient_env_marker_names(tests_root)
+    referenced, _unparseable = _ambient_env_marker_names(tests_root)
     undeclared = {
         name
         for name in referenced
@@ -265,6 +304,17 @@ def test_ambient_env_markers_reference_scrubbed_surface_vars() -> None:
     }
     assert not undeclared, (
         f"pytest.mark.ambient_env names not declared as scrub: {sorted(undeclared)}"
+    )
+
+
+def test_ambient_env_marker_scan_parses_all_test_files() -> None:
+    """Fail loudly, never silently under-report: the pytest.mark.ambient_env scanner
+    above must be able to parse every tests/**/*.py file it scans."""
+    tests_root = Path(__file__).resolve().parent.parent
+    _names, unparseable = _ambient_env_marker_names(tests_root)
+    assert not unparseable, (
+        "The pytest.mark.ambient_env scanner could not parse these files, so it "
+        "silently skipped scanning them: " + ", ".join(sorted(unparseable))
     )
 
 

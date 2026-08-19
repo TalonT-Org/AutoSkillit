@@ -1,11 +1,8 @@
-"""Tests for Codex-specific session skill layout delegation."""
+"""Codex-backend session layout/materialization/projection delegation tests."""
 
 from __future__ import annotations
 
-import json
-from dataclasses import replace
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -20,36 +17,15 @@ from autoskillit.core import (
     ValidatedAddDir,
     pkg_root,
 )
-from tests.workspace._helpers import _CODEX_CAPABILITIES
+from tests.workspace._helpers import (
+    _CODEX_CAPABILITIES,
+    _catalog_context,
+    _make_codex_backend,
+    _managed,
+    _materialize,
+)
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
-
-
-class _BodyFailure(Exception):
-    pass
-
-
-class _DeletionFailure(Exception):
-    pass
-
-
-class _ReleaseFailure(Exception):
-    pass
-
-
-def _make_codex_backend() -> MagicMock:
-    from autoskillit.execution.backends import CodexBackend
-
-    b = MagicMock()
-    b.name = "codex"
-    b.capabilities = _CODEX_CAPABILITIES
-    b.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-    b.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
-    b.setup_session_dir.return_value = None
-    b.validate_session_layout.return_value = []
-    b.adapt_skill_semantics.side_effect = CodexBackend().adapt_skill_semantics
-    b.exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
-    return b
 
 
 def test_generated_home_skill_removal_rejects_non_child_path(tmp_path: Path) -> None:
@@ -62,85 +38,6 @@ def test_generated_home_skill_removal_rejects_non_child_path(tmp_path: Path) -> 
         session_skills._remove_generated_home_skill_entry(discovery_root, "../outside")
 
     assert outside.is_dir()
-
-
-def _catalog_context(
-    manager,
-    *,
-    backend=None,
-    names: frozenset[str] | None = None,
-    role: SkillExecutionRole = SkillExecutionRole.SESSION,
-):
-    from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
-
-    project_root = manager._root
-    catalog = DefaultSkillResolver().list_effective(
-        project_root,
-        role,
-    )
-    if names is not None:
-        catalog = EffectiveSkillCatalog(
-            skills=tuple(member for member in catalog.skills if member.name in names),
-            execution_role=role,
-        )
-    else:
-        catalog = EffectiveSkillCatalog(
-            skills=tuple(member for member in catalog.skills if not member.exploration_vectors),
-            execution_role=role,
-        )
-    resolved_exploration_profile = (
-        RepositoryProfileId.AUTOSKILLIT
-        if any(member.exploration_vectors for member in catalog.skills)
-        else None
-    )
-    context = manager._provider.catalog_projection_context(
-        catalog,
-        project_root,
-        backend=backend,
-        durable_scripts_root=pkg_root(),
-        resolved_exploration_profile=resolved_exploration_profile,
-    )
-    return catalog, context
-
-
-def _materialize(
-    manager,
-    session_id: str,
-    *,
-    backend=None,
-    names: frozenset[str] | None = None,
-) -> ValidatedAddDir:
-    catalog, context = _catalog_context(manager, backend=backend, names=names)
-    return manager.init_session(session_id, catalog, context)
-
-
-def _managed(
-    manager,
-    session_id: str,
-    *,
-    backend,
-    names: frozenset[str] | None = None,
-    role: SkillExecutionRole = SkillExecutionRole.SESSION,
-):
-    from autoskillit.workspace import compile_session_skill_catalog
-
-    catalog, context = _catalog_context(manager, backend=backend, names=names, role=role)
-    compilation = compile_session_skill_catalog(catalog, backend)
-    return manager.managed_session(session_id, compilation, context)
-
-
-@pytest.fixture
-def codex_env():
-    """Codex backend mock for delegation-contract tests."""
-    backend = _make_codex_backend()
-
-    return type(
-        "CodexEnv",
-        (),
-        {
-            "backend": backend,
-        },
-    )()
 
 
 def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, codex_env) -> None:
@@ -534,6 +431,8 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
     ambient_state: str,
     helper_available: bool,
 ) -> None:
+    import json
+
     from autoskillit.core import SkillSource
     from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.workspace import (
@@ -721,6 +620,8 @@ def test_persistent_backend_declares_its_own_inert_paths(
     make_session_skill_manager,
     tmp_path: Path,
 ) -> None:
+    from dataclasses import replace
+
     # backend.name stays "codex" (from _make_codex_backend()) because persistent
     # roots are now resolved per backend name (#4391) — the fixture's codex_root
     # kwarg only populates a "codex" entry in the manager's persistent_roots map.
@@ -741,354 +642,6 @@ def test_persistent_backend_declares_its_own_inert_paths(
         assert records.resolve(strict=True).is_dir()
         assert not (managed.generated_home / "sessions").exists()
         assert not (managed.generated_home / "archived_sessions").exists()
-
-
-@pytest.mark.parametrize(
-    ("failure_stage", "expected"),
-    [
-        pytest.param("prelaunch", "prelaunch failed", id="prelaunch"),
-        pytest.param("setup", "setup failed", id="backend-setup"),
-        pytest.param("layout", "layout failed", id="strict-layout"),
-    ],
-)
-def test_managed_codex_home_rolls_back_every_published_owner_on_initialization_failure(
-    make_session_skill_manager,
-    codex_env,
-    tmp_path: Path,
-    failure_stage: str,
-    expected: str,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    mgr = make_session_skill_manager(codex_root=codex_root)
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-
-    if failure_stage == "prelaunch":
-        codex_env.backend.ensure_pre_launch.side_effect = RuntimeError(expected)
-    elif failure_stage == "setup":
-        codex_env.backend.setup_session_dir.side_effect = RuntimeError(expected)
-    else:
-        codex_env.backend.validate_session_layout.return_value = [expected]
-
-    with pytest.raises(RuntimeError, match=expected):
-        with _managed(
-            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-        ):
-            pytest.fail("initialization failure must occur before managed_session yields")
-
-    assert not (codex_root / "0123456789abcdef").exists()
-    assert "0123456789abcdef" not in mgr._session_roots
-    assert "0123456789abcdef" not in mgr._session_leases
-    assert "0123456789abcdef" not in mgr._session_skills_subdirs
-
-
-def test_managed_codex_home_cleans_up_once_when_body_raises(
-    make_session_skill_manager, codex_env, tmp_path: Path, monkeypatch
-) -> None:
-    import autoskillit.workspace.session_skills as session_skills
-
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    mgr = make_session_skill_manager(codex_root=codex_root)
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    real_rmtree = session_skills.shutil.rmtree
-    removed: list[Path] = []
-
-    def recording_rmtree(path: Path, *args, **kwargs) -> None:
-        removed.append(Path(path))
-        real_rmtree(path, *args, **kwargs)
-
-    monkeypatch.setattr(session_skills.shutil, "rmtree", recording_rmtree)
-
-    with pytest.raises(KeyboardInterrupt, match="stop"):
-        with _managed(
-            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-        ) as managed:
-            assert managed.generated_home.exists()
-            raise KeyboardInterrupt("stop")
-
-    home = codex_root / "0123456789abcdef"
-    assert removed.count(home) == 1
-    assert not home.exists()
-
-
-def test_codex_session_requires_persistent_root_before_any_home_mutation(
-    make_session_skill_manager, codex_env, tmp_path: Path
-) -> None:
-    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
-
-    ephemeral_root = tmp_path / "ephemeral"
-    mgr = DefaultSessionSkillManager(
-        SkillsDirectoryProvider(),
-        ephemeral_root=ephemeral_root,
-        persistent_roots={},
-    )
-
-    with pytest.raises(RuntimeError) as exc_info:
-        _materialize(mgr, "0123456789abcdef", backend=codex_env.backend)
-
-    assert str(exc_info.value) == (
-        "A persistent_root is required for persistent generated-home sessions; "
-        "selected_backend='codex'; configured_backend_keys=[]"
-    )
-    assert not ephemeral_root.exists()
-    assert mgr._session_roots == {}
-    assert mgr._session_leases == {}
-    assert mgr._session_skills_subdirs == {}
-
-
-def test_managed_codex_home_lease_acquisition_failure_precedes_home_mutation(
-    make_session_skill_manager,
-    codex_env,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    mgr = make_session_skill_manager(codex_root=codex_root)
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-
-    def fail_acquire(
-        cls: type[session_skills._SessionLease],
-        path: Path,
-        *,
-        blocking: bool,
-    ) -> session_skills._SessionLease | None:
-        del cls, path, blocking
-        raise OSError("lease open failed")
-
-    monkeypatch.setattr(
-        session_skills._SessionLease,
-        "acquire",
-        classmethod(fail_acquire),
-    )
-
-    with pytest.raises(OSError, match="lease open failed"):
-        with _managed(
-            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-        ):
-            pytest.fail("lease failure must precede yield")
-
-    assert not (codex_root / "0123456789abcdef").exists()
-    assert mgr._session_roots == {}
-    assert mgr._session_leases == {}
-    assert mgr._session_skills_subdirs == {}
-
-
-def test_managed_codex_home_never_reacquires_its_lease_after_initialization(
-    make_session_skill_manager,
-    codex_env,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    mgr = make_session_skill_manager(codex_root=codex_root)
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    original_acquire = session_skills._SessionLease.acquire.__func__
-    calls: list[Path] = []
-
-    def recording_acquire(
-        cls: type[session_skills._SessionLease],
-        path: Path,
-        *,
-        blocking: bool,
-    ) -> session_skills._SessionLease | None:
-        calls.append(path)
-        return original_acquire(cls, path, blocking=blocking)
-
-    monkeypatch.setattr(
-        session_skills._SessionLease,
-        "acquire",
-        classmethod(recording_acquire),
-    )
-
-    with _managed(
-        mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-    ):
-        pass
-
-    assert len(calls) == 1
-
-
-def test_unowned_cleanup_refuses_a_contended_generated_home(
-    make_session_skill_manager,
-    codex_env,
-    tmp_path: Path,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    owner = make_session_skill_manager(codex_root=codex_root)
-    contender = make_session_skill_manager(codex_root=codex_root)
-    _materialize(
-        owner, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-    )
-
-    assert contender.cleanup_session("0123456789abcdef") is False
-    assert (codex_root / "0123456789abcdef").is_dir()
-    assert owner.cleanup_session("0123456789abcdef") is True
-
-
-def test_session_lease_rejects_non_lock_path(tmp_path: Path) -> None:
-    invalid_path = tmp_path / ".session-leases" / "lease"
-
-    with pytest.raises(ValueError, match=r"\.lock suffix"):
-        session_skills._SessionLease.acquire(invalid_path, blocking=True)
-
-    assert not invalid_path.parent.exists()
-
-
-def test_session_lease_refuses_symlinked_lock_directory(tmp_path: Path) -> None:
-    codex_root = tmp_path / "codex-sessions"
-    codex_root.mkdir()
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    lock_root = codex_root / ".session-leases"
-    lock_root.symlink_to(outside, target_is_directory=True)
-
-    with pytest.raises(OSError):
-        session_skills._SessionLease.acquire(
-            lock_root / "0123456789abcdef.lock",
-            blocking=True,
-        )
-
-    assert list(outside.iterdir()) == []
-
-
-def test_session_lease_refuses_symlinked_lock_file(tmp_path: Path) -> None:
-    lock_root = tmp_path / "codex-sessions" / ".session-leases"
-    lock_root.mkdir(parents=True)
-    outside = tmp_path / "outside.lock"
-    outside.write_text("sentinel", encoding="utf-8")
-    lock_path = lock_root / "0123456789abcdef.lock"
-    lock_path.symlink_to(outside)
-
-    with pytest.raises(OSError):
-        session_skills._SessionLease.acquire(lock_path, blocking=True)
-
-    assert outside.read_text(encoding="utf-8") == "sentinel"
-
-
-def test_stale_cleanup_never_treats_the_external_lock_directory_as_a_home(
-    make_session_skill_manager,
-    tmp_path: Path,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    lock_root = codex_root / ".session-leases"
-    lock_root.mkdir(parents=True)
-    (lock_root / "orphan.lock").write_text("diagnostic", encoding="utf-8")
-    mgr = make_session_skill_manager(
-        ephemeral_root=tmp_path / "ephemeral",
-        codex_root=codex_root,
-    )
-
-    assert mgr.cleanup_stale(max_age_seconds=0) == 0
-    assert (lock_root / "orphan.lock").is_file()
-
-
-def test_unowned_cleanup_reclaims_a_dead_owner_home(
-    make_session_skill_manager,
-    tmp_path: Path,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    generated_home = codex_root / "0123456789abcdef"
-    generated_home.mkdir(parents=True)
-    (generated_home / "stale").write_text("orphan", encoding="utf-8")
-    mgr = make_session_skill_manager(codex_root=codex_root)
-
-    assert mgr.cleanup_session("0123456789abcdef") is True
-    assert not generated_home.exists()
-
-
-def test_managed_cleanup_preserves_a_lone_deletion_failure(
-    make_session_skill_manager,
-    codex_env,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    mgr = make_session_skill_manager(codex_root=codex_root)
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-
-    def fail_delete(path: Path) -> bool:
-        del path
-        raise _DeletionFailure("delete failed")
-
-    with pytest.raises(_DeletionFailure, match="delete failed"):
-        with _managed(
-            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-        ):
-            monkeypatch.setattr(
-                session_skills,
-                "_remove_and_verify",
-                fail_delete,
-            )
-
-
-def test_managed_cleanup_preserves_a_lone_release_failure(
-    make_session_skill_manager,
-    codex_env,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    mgr = make_session_skill_manager(codex_root=codex_root)
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    real_release = session_skills._SessionLease.release
-
-    def fail_after_release(lease: session_skills._SessionLease) -> None:
-        real_release(lease)
-        raise _ReleaseFailure("release failed")
-
-    with pytest.raises(_ReleaseFailure, match="release failed"):
-        with _managed(
-            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-        ):
-            monkeypatch.setattr(
-                session_skills._SessionLease,
-                "release",
-                fail_after_release,
-            )
-
-
-def test_managed_cleanup_groups_body_deletion_and_release_failures_in_order(
-    make_session_skill_manager,
-    codex_env,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    codex_root = tmp_path / "persistent" / "codex-sessions"
-    mgr = make_session_skill_manager(codex_root=codex_root)
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    real_release = session_skills._SessionLease.release
-
-    def fail_delete(path: Path) -> bool:
-        del path
-        raise _DeletionFailure("delete failed")
-
-    def fail_after_release(lease: session_skills._SessionLease) -> None:
-        real_release(lease)
-        raise _ReleaseFailure("release failed")
-
-    with pytest.raises(BaseExceptionGroup) as caught:
-        with _managed(
-            mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
-        ):
-            monkeypatch.setattr(session_skills, "_remove_and_verify", fail_delete)
-            monkeypatch.setattr(
-                session_skills._SessionLease,
-                "release",
-                fail_after_release,
-            )
-            raise _BodyFailure("body failed")
-
-    assert [type(error) for error in caught.value.exceptions] == [
-        _BodyFailure,
-        _DeletionFailure,
-        _ReleaseFailure,
-    ]
 
 
 @pytest.mark.parametrize("backend_kind", ["claude-code", "codex"])
@@ -1120,81 +673,3 @@ def test_session_projection_is_agent_safe_for_each_backend(
         "execution_role",
     }.isdisjoint(frontmatter)
     assert frontmatter["name"] == "make-arch-diag"
-
-
-def _stub_backend(
-    name: str,
-    *,
-    session_dir_persistent: bool = True,
-    persistent_session_root_subdir: Path | None,
-) -> MagicMock:
-    """Minimal stub with .name/.capabilities/.conventions built from real dataclasses."""
-    from autoskillit.core import BackendCapabilities, BackendConventions
-
-    backend = MagicMock()
-    backend.name = name
-    backend.capabilities = BackendCapabilities(session_dir_persistent=session_dir_persistent)
-    backend.conventions = BackendConventions(
-        persistent_session_root_subdir=persistent_session_root_subdir
-    )
-    return backend
-
-
-class TestResolvePersistentSessionRoot:
-    """T1 — direct unit tests for resolve_persistent_session_root (#4391)."""
-
-    def test_non_persistent_backend_returns_none(self, tmp_path: Path) -> None:
-        from autoskillit.execution.backends import get_backend
-
-        backend = get_backend("claude-code")
-        assert session_skills.resolve_persistent_session_root(tmp_path, backend) is None
-
-    def test_codex_backend_returns_subdir_of_base_root(self, tmp_path: Path) -> None:
-        from autoskillit.core import CODEX_SESSIONS_SUBDIR
-        from autoskillit.execution.backends import get_backend
-
-        backend = get_backend("codex")
-        assert session_skills.resolve_persistent_session_root(tmp_path, backend) == (
-            tmp_path / CODEX_SESSIONS_SUBDIR
-        )
-
-    def test_missing_root_convention_raises(self, tmp_path: Path) -> None:
-        backend = _stub_backend("synthetic", persistent_session_root_subdir=None)
-        with pytest.raises(RuntimeError, match="no generated-home root convention"):
-            session_skills.resolve_persistent_session_root(tmp_path, backend)
-
-    def test_absolute_subdir_raises_unsafe(self, tmp_path: Path) -> None:
-        backend = _stub_backend("synthetic", persistent_session_root_subdir=Path("/abs"))
-        with pytest.raises(RuntimeError, match="Unsafe persistent generated-home root"):
-            session_skills.resolve_persistent_session_root(tmp_path, backend)
-
-    def test_parent_traversal_subdir_raises_unsafe(self, tmp_path: Path) -> None:
-        backend = _stub_backend("synthetic", persistent_session_root_subdir=Path("../x"))
-        with pytest.raises(RuntimeError, match="Unsafe persistent generated-home root"):
-            session_skills.resolve_persistent_session_root(tmp_path, backend)
-
-
-class TestResolvePersistentSessionRoots:
-    """T2 — unit tests for resolve_persistent_session_roots (#4391)."""
-
-    def test_only_persistent_backends_are_included(self, tmp_path: Path) -> None:
-        from autoskillit.core import CODEX_SESSIONS_SUBDIR
-        from autoskillit.execution.backends import get_backend
-
-        backends = [get_backend("claude-code"), get_backend("codex")]
-        roots = session_skills.resolve_persistent_session_roots(tmp_path, backends)
-        assert roots == {"codex": tmp_path / CODEX_SESSIONS_SUBDIR}
-
-    def test_malformed_backend_not_in_required_names_is_skipped(self, tmp_path: Path) -> None:
-        backend = _stub_backend("synthetic", persistent_session_root_subdir=None)
-        roots = session_skills.resolve_persistent_session_roots(tmp_path, [backend])
-        assert roots == {}
-
-    def test_malformed_backend_in_required_names_raises(self, tmp_path: Path) -> None:
-        backend = _stub_backend("synthetic", persistent_session_root_subdir=None)
-        with pytest.raises(RuntimeError, match="no generated-home root convention"):
-            session_skills.resolve_persistent_session_roots(
-                tmp_path,
-                [backend],
-                required_backend_names=frozenset({"synthetic"}),
-            )

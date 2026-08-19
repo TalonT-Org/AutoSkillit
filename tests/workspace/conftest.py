@@ -126,3 +126,19 @@ def make_session_skill_manager(tmp_path: Path):
         )
 
     return _factory
+
+
+@pytest.fixture
+def codex_env():
+    """Codex backend mock for delegation-contract tests."""
+    from tests.workspace._helpers import _make_codex_backend
+
+    backend = _make_codex_backend()
+
+    return type(
+        "CodexEnv",
+        (),
+        {
+            "backend": backend,
+        },
+    )()

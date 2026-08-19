@@ -17,6 +17,46 @@ from autoskillit.core import (
     pkg_root,
 )
 
+
+def _document(name: str, body: str) -> str:
+    return f"---\nname: {name}\ndescription: Cache fixture.\n---\n{body}\n"
+
+
+def _write_effective_skill(
+    root,
+    name,
+    *,
+    capabilities: tuple[str, ...],
+    execution_role: str,
+    body: str,
+):
+    evidence = {
+        "github_api_write": "Run `gh issue edit 1 --body-file issue.md`.",
+        "open_kitchen": "Call `open_kitchen()`.",
+        "run_skill": "Call `run_skill('/autoskillit:child', '.')`.",
+        "test_check": "Call `test_check()`.",
+    }
+    evidence_body = "\n".join(evidence[cap] for cap in capabilities if cap in evidence)
+    skill_path = root / name / "SKILL.md"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    skill_path.write_text(
+        "\n".join(
+            (
+                "---",
+                f"name: {name}",
+                "description: Effective source fixture.",
+                f"uses_capabilities: [{', '.join(capabilities)}]",
+                f"execution_role: {execution_role}",
+                "---",
+                body,
+                evidence_body,
+                "",
+            )
+        )
+    )
+    return skill_path
+
+
 _CODEX_CAPABILITIES = BackendCapabilities(
     channel_b_capable=False,
     pty_required=False,

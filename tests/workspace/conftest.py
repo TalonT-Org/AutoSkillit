@@ -142,3 +142,35 @@ def codex_env():
             "backend": backend,
         },
     )()
+
+
+@pytest.fixture
+def evidence_cache(monkeypatch):
+    import autoskillit.workspace.skill_capabilities as capabilities
+
+    cache = capabilities._SkillCapabilityEvidenceCache(
+        max_entries=32,
+        max_bytes=1024 * 1024,
+        max_input_bytes=64 * 1024,
+    )
+    monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+    return cache
+
+
+@pytest.fixture
+def scan_calls(monkeypatch):
+    import autoskillit.workspace.skill_capabilities as capabilities
+
+    calls: list[tuple[str, str]] = []
+    original = capabilities._scan_skill_capability_evidence_uncached
+
+    def recording_scanner(content: str, effective_name: str):
+        calls.append((content, effective_name))
+        return original(content, effective_name)
+
+    monkeypatch.setattr(
+        capabilities,
+        "_scan_skill_capability_evidence_uncached",
+        recording_scanner,
+    )
+    return calls

@@ -34,15 +34,6 @@ _SRC = (
     / "tools_exploration.py"
 )
 
-# Envelope *shapes* (not code values) that bypass this "code"-keyed registry
-# scan. The cancellation envelope produced by _cancellation_shield()
-# (``{"success": False, "error": "cancelled", "subtype": "cancelled"}``)
-# carries no "code" key at all, so it is already outside this scan's
-# predicate by construction; the name is kept here so a future envelope
-# shape that deliberately needs the same exemption has somewhere to
-# register itself instead of weakening the scan predicate.
-EXPLORATION_FAILURE_ENVELOPE_WHITELIST = frozenset({"cancelled_envelope"})
-
 
 def _code_dict_literal_values(tree: ast.Module) -> list[ast.expr]:
     """Return the value expression of every dict-literal `"code": <value>` pair."""

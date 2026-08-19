@@ -1,0 +1,100 @@
+"""Sealed evidence-reader package facade.
+
+Re-exports the authority helpers, invocation lifecycle, reader page API,
+and stable-artifact capture symbols so that ``tools_evidence_reader.py``
+and its tests can bind the canonical symbols through this package surface.
+"""
+
+from __future__ import annotations
+
+import time  # noqa: F401  (mock.patch reachability: reader_module.time.time)
+
+from autoskillit.exploration import (
+    ArtifactCaptureError,
+    ArtifactCaptureStatus,
+    StableArtifactCapture,
+    capture_stable_artifact,
+    resolve_repository_identity,
+    stable_artifact_matches,
+)
+from autoskillit.server.tools._evidence_reader._authority import (
+    _capability_hash,
+    _environment,
+    _limits_from_authority,
+    _open_authority,
+    _OpenedAuthority,
+    _readers_root,
+    _secure_json,
+    _snapshot_content,
+    _validate_authority_fields,
+    _verified_readers_root,
+    _write_secure_json,
+)
+from autoskillit.server.tools._evidence_reader._invocation import (
+    _acquire_call_lock,
+    _initial_receipts,
+    _limits_payload,
+    _receipt_state,
+    _release_call_lock,
+    _write_receipt_state,
+    create_evidence_reader_invocation,
+)
+from autoskillit.server.tools._evidence_reader._reader import (
+    _page_end,
+    _scope_digest,
+    _validate_call_binding,
+    evidence_reader_scope_digest,
+    read_bound_evidence_reader_page,
+    read_evidence_reader_page,
+)
+from autoskillit.server.tools._evidence_reader._startup import (
+    EvidenceReaderError,
+    EvidenceReaderInvocation,
+    EvidenceReaderLimits,
+    EvidenceReaderPage,
+    EvidenceReaderReceipt,
+    load_evidence_reader_receipts,
+    revoke_evidence_reader_invocation,
+    validate_evidence_reader_startup,
+)
+
+__all__ = [
+    "ArtifactCaptureError",
+    "ArtifactCaptureStatus",
+    "EvidenceReaderError",
+    "EvidenceReaderInvocation",
+    "EvidenceReaderLimits",
+    "EvidenceReaderPage",
+    "EvidenceReaderReceipt",
+    "StableArtifactCapture",
+    "_OpenedAuthority",
+    "_acquire_call_lock",
+    "_capability_hash",
+    "_environment",
+    "_initial_receipts",
+    "_limits_from_authority",
+    "_limits_payload",
+    "_open_authority",
+    "_page_end",
+    "_readers_root",
+    "_receipt_state",
+    "_release_call_lock",
+    "_scope_digest",
+    "_secure_json",
+    "_snapshot_content",
+    "_validate_authority_fields",
+    "_validate_call_binding",
+    "_verified_readers_root",
+    "_write_receipt_state",
+    "_write_secure_json",
+    "capture_stable_artifact",
+    "create_evidence_reader_invocation",
+    "evidence_reader_scope_digest",
+    "load_evidence_reader_receipts",
+    "read_bound_evidence_reader_page",
+    "read_evidence_reader_page",
+    "resolve_repository_identity",
+    "revoke_evidence_reader_invocation",
+    "stable_artifact_matches",
+    "validate_evidence_reader_startup",
+]

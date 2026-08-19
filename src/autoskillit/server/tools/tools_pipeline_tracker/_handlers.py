@@ -1,4 +1,4 @@
-"""MCP tool: record_pipeline_step — pipeline step tracker init, status, and complete."""
+"""MCP tool handlers for the pipeline tracker, run_skill recovery, and completion."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -16,211 +16,37 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     ArtifactLease,
-    AuditIdentityReservation,
-    TrackerAuthorityReadResult,
     TrackerAuthorityTarget,
-    TrackerParticipantKey,
     get_logger,
     initialize_manual_tracker,
     mutate_tracker,
-    read_tracker_authority,
-    release_tracker_lease,
-    retain_tracker_lease,
 )
-from autoskillit.pipeline import canonical_step_name, get_kitchen_process_identity
-from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
-
-if TYPE_CHECKING:
-    from autoskillit.pipeline import ToolContext
+from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_orchestrator_exact
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._recipe_segment_delivery import (
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
+from autoskillit.server._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server._run_skill_completion import _request_session_identity
+from autoskillit.server.tools import (
+    tools_pipeline_tracker,  # noqa: F401 — late-binding for monkeypatch reach
+)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._overlay_state import read_overlay
 from autoskillit.server.tools._types import deny_envelope
+from autoskillit.server.tools.tools_pipeline_tracker._authority import (
+    _release_context_tracker,
+    _resolve_skipped_steps,
+    _retain_context_tracker,
+    select_tracker_target,
+)
+from autoskillit.server.tools.tools_pipeline_tracker._status import (
+    _build_tracker_steps,
+    _compute_status_counts,
+)
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 
 logger = get_logger(__name__)
-
-
-def read_tracker_identity(
-    target: TrackerAuthorityTarget,
-    lease: ArtifactLease,
-) -> tuple[str, str] | None:
-    """Read kitchen and incarnation identity under the target's retained lease."""
-    authority = read_tracker_authority(target, lease)
-    if authority.data is None:
-        return None
-    kitchen_id = authority.data.get("kitchen_id")
-    incarnation_id = authority.data.get("tracker_incarnation_id")
-    if not isinstance(kitchen_id, str) or not isinstance(incarnation_id, str):
-        return None
-    return kitchen_id, incarnation_id
-
-
-def select_tracker_target(
-    tool_ctx: ToolContext,
-    order_id: str,
-    *,
-    expected: bool,
-) -> TrackerAuthorityTarget | None:
-    """Select one explicit target without scanning for ambient tracker files."""
-    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "") or tool_ctx.kitchen_id
-    if not effective_oid:
-        return None
-    return TrackerAuthorityTarget.for_project(
-        tool_ctx.project_dir,
-        effective_oid,
-        expected=expected,
-    )
-
-
-def _retain_context_tracker(
-    tool_ctx: ToolContext,
-    target: TrackerAuthorityTarget,
-    *,
-    owner_kind: Literal["kitchen", "dispatch", "manual"],
-    owner_id: str,
-) -> tuple[TrackerParticipantKey, ArtifactLease]:
-    with tool_ctx.tracker_leases_lock:
-        identity = get_kitchen_process_identity(tool_ctx, owner_id)
-        key = TrackerParticipantKey(
-            target=target,
-            owner_kind=owner_kind,
-            owner_id=owner_id,
-            pid=identity.pid,
-            create_time=identity.create_time,
-            project_path=identity.project_path,
-        )
-        lease = retain_tracker_lease(tool_ctx.tracker_leases, key)
-    return key, lease
-
-
-def _release_context_tracker(tool_ctx: ToolContext, key: TrackerParticipantKey) -> None:
-    with tool_ctx.tracker_leases_lock:
-        release_tracker_lease(tool_ctx.tracker_leases, key)
-
-
-def _select_tracker_authority(
-    tool_ctx: ToolContext,
-    order_id: str,
-    *,
-    expected: bool | None = None,
-) -> tuple[
-    TrackerAuthorityTarget | None,
-    TrackerAuthorityReadResult | None,
-    TrackerParticipantKey | None,
-    ArtifactLease | None,
-]:
-    explicit_target = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-    target_order_id = explicit_target or tool_ctx.kitchen_id
-    if not target_order_id:
-        return None, None, None, None
-    if expected is None:
-        expected = bool(explicit_target)
-        if not expected and tool_ctx.active_recipe_steps:
-            try:
-                expected = bool(_derive_phase_a_deps(tool_ctx.active_recipe_steps))
-            except (AttributeError, TypeError):
-                expected = False
-    target = TrackerAuthorityTarget.for_project(
-        tool_ctx.project_dir,
-        target_order_id,
-        expected=expected,
-    )
-    key, lease = _retain_context_tracker(
-        tool_ctx,
-        target,
-        owner_kind="manual",
-        owner_id=f"selection:{uuid.uuid4().hex}",
-    )
-    try:
-        authority = read_tracker_authority(target, lease)
-    except Exception:
-        _release_context_tracker(tool_ctx, key)
-        raise
-    return target, authority, key, lease
-
-
-def _restore_reserved_tracker_authority(
-    tool_ctx: ToolContext,
-    reservation: AuditIdentityReservation,
-    current_key: TrackerParticipantKey | None,
-) -> tuple[
-    TrackerAuthorityTarget | None,
-    TrackerAuthorityReadResult | None,
-    TrackerParticipantKey | None,
-    ArtifactLease | None,
-]:
-    target_order_id = reservation.tracker_target_order_id
-    if target_order_id is None:
-        if current_key is not None:
-            _release_context_tracker(tool_ctx, current_key)
-        return None, None, None, None
-    target = TrackerAuthorityTarget.for_project(
-        tool_ctx.project_dir,
-        target_order_id,
-        expected=reservation.tracker_expected,
-    )
-    key, lease = _retain_context_tracker(
-        tool_ctx,
-        target,
-        owner_kind="kitchen",
-        owner_id=tool_ctx.kitchen_id or target_order_id,
-    )
-    try:
-        authority = read_tracker_authority(target, lease)
-    except Exception:
-        if key != current_key:
-            _release_context_tracker(tool_ctx, key)
-        raise
-    if current_key is not None and current_key != key:
-        _release_context_tracker(tool_ctx, current_key)
-    return target, authority, key, lease
-
-
-def _authority_blocks_dependency_check(authority: TrackerAuthorityReadResult | None) -> bool:
-    return bool(
-        authority is not None
-        and (authority.error is not None or (authority.data or {}).get("dependencies"))
-    )
-
-
-def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
-    try:
-        overlay = read_overlay(project_dir)
-        pid_locks = overlay.get("locked_steps", {}).get(pipeline_id, {})
-        return {s for s, v in pid_locks.items() if v is False}
-    except OSError:
-        return set()
-
-
-def _build_tracker_steps(
-    active_steps: dict[str, object], skipped: set[str]
-) -> dict[str, dict[str, str]]:
-    return {
-        name: {"status": "skipped"} if name in skipped else {"status": "pending"}
-        for name in active_steps
-    }
-
-
-def _compute_status_counts(
-    steps: dict[str, dict[str, object]], dependencies: dict[str, list[str]]
-) -> dict[str, int]:
-    return {
-        "complete": sum(1 for s in steps.values() if s.get("status") == "complete"),
-        "pending": sum(1 for s in steps.values() if s.get("status") == "pending"),
-        "skipped": sum(1 for s in steps.values() if s.get("status") == "skipped"),
-        "blocked": sum(
-            1
-            for sname, sdata in steps.items()
-            if sdata.get("status") == "pending" and sname in dependencies
-        ),
-    }
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -286,7 +112,7 @@ async def record_pipeline_step(
 
         if op == "init":
             try:
-                result = _handle_init(ctx, target, lease, dependencies)
+                result = tools_pipeline_tracker._handle_init(ctx, target, lease, dependencies)
             except Exception:
                 _release_context_tracker(ctx, key)
                 raise
@@ -296,7 +122,7 @@ async def record_pipeline_step(
 
         if op == "status":
             try:
-                result = _handle_status(target, lease)
+                result = tools_pipeline_tracker._handle_status(target, lease)
             except Exception:
                 _release_context_tracker(ctx, key)
                 raise
@@ -379,7 +205,7 @@ def _handle_init(
 
 
 def _handle_status(target: TrackerAuthorityTarget, lease: ArtifactLease) -> str:
-    authority = read_tracker_authority(target, lease)
+    authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
     if authority.data is None:
         return json.dumps(
             {
@@ -431,7 +257,7 @@ def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: st
         owner_id=target.target_order_id,
     )
     try:
-        tracker_authority = read_tracker_authority(target, lease)
+        tracker_authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
     except Exception:
         _release_context_tracker(ctx, key)
         raise
@@ -473,7 +299,7 @@ def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: st
             tracker_kitchen_id=tracker_kitchen_id,
             tracker_incarnation_id=tracker_incarnation_id,
             step_name=step_name,
-            effect=lambda: mark_step_complete(
+            effect=lambda: tools_pipeline_tracker.mark_step_complete(
                 target,
                 lease,
                 step_name,
@@ -689,7 +515,9 @@ async def complete_run_skill_result(
             kitchen_id=tool_ctx.kitchen_id,
             request_session_id=request_session_id,
         )
-        prepared_segment = prepare_recipe_segment_delivery(tool_ctx, receipt.step_name)
+        prepared_segment = tools_pipeline_tracker.prepare_recipe_segment_delivery(
+            tool_ctx, receipt.step_name
+        )
 
         def _apply_tracker_outcome() -> Mapping[str, object]:
             if not receipt.tracker_incarnation_id:
@@ -720,7 +548,7 @@ async def complete_run_skill_result(
                         tracker_incarnation_id=receipt.tracker_incarnation_id,
                         step_name=receipt.step_name,
                         receipt_id=receipt.receipt_id,
-                        effect=lambda: mark_step_complete(
+                        effect=lambda: tools_pipeline_tracker.mark_step_complete(
                             target,
                             lease,
                             receipt.step_name,

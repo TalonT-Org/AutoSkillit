@@ -2,24 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
-import functools
-import inspect
 import json
 import math
 import os
-from collections.abc import Callable
-from contextvars import ContextVar
 from dataclasses import replace
-from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import anyio
-
-if TYPE_CHECKING:
-    from autoskillit.fleet import DispatchOutcome
-
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
@@ -28,46 +18,34 @@ from autoskillit.core import (
     FleetErrorCode,
     NativeShellCaptureMode,
     SessionCheckpoint,
-    SkillExecutionRole,
-    detect_autoskillit_mcp_prefix,
-    find_caller_session_id,
     fleet_error,
     get_logger,
     is_feature_enabled,
 )
 from autoskillit.fleet import (
     _INFRASTRUCTURE_FAILURE_REASONS,
-    CampaignStateMutator,
     DispatchAggregatePhase,
     DispatchCompleted,
     DispatchEffectName,
-    DispatchEffectProvenance,
-    DispatchProvenanceTracker,
     DispatchRecord,
     DispatchRejected,
     DispatchResult,
     DispatchStatus,
-    _build_food_truck_prompt,
     evaluate_skip_when,
-    execute_dispatch,
     find_completed_dispatch,
     has_blocking_dispatch,
     prepare_resume,
     read_all_campaign_captures,
-    read_state,
     record_gate_outcome,
     upsert_dispatch_record_by_name,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled, _require_fleet
-from autoskillit.server._misc import (
-    SkillProjectionContext,
-    project_agent_skill_document,
-    resolve_backend_override,
-    resolve_log_dir,
-)
+from autoskillit.server._guards import _require_enabled
+from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._progress_heartbeat import progress_heartbeat
+from autoskillit.server.tools import (
+    tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
+)
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
@@ -77,274 +55,24 @@ from autoskillit.server.tools._preflight import (
     filter_steps_by_post_prune,
 )
 from autoskillit.server.tools._serve_helpers import build_backend_capabilities_map
+from autoskillit.server.tools.tools_fleet_dispatch._campaign_state import (
+    _confirm_campaign_state_write,
+    _dispatch_effect_identities,
+    _get_food_truck_prompt_builder,
+    _project_food_truck_sous_chef,
+    _write_dispatch_to_campaign_state,
+)
+from autoskillit.server.tools.tools_fleet_dispatch._provenance import (
+    _ACTIVE_DISPATCH_PROVENANCE,
+    _bind_dispatch_provenance,
+    _bound_dispatch_provenance,
+    _dispatch_cancellation_response,
+    _read_health_report,
+)
 
 logger = get_logger(__name__)
 
-_BOUND_DISPATCH_PROVENANCE: ContextVar[DispatchProvenanceTracker | None] = ContextVar(
-    "bound_dispatch_provenance",
-    default=None,
-)
-_ACTIVE_DISPATCH_PROVENANCE: ContextVar[DispatchProvenanceTracker] = ContextVar(
-    "active_dispatch_provenance"
-)
-
-
-def _attach_dispatch_provenance(
-    raw: str,
-    provenance: DispatchProvenanceTracker,
-) -> str:
-    """Attach the current immutable provenance snapshot to any JSON envelope."""
-    try:
-        envelope = json.loads(raw)
-    except (TypeError, json.JSONDecodeError):
-        return raw
-    if not isinstance(envelope, dict):
-        return raw
-    envelope["effect_provenance"] = provenance.snapshot().to_dict()
-    return json.dumps(envelope)
-
-
-def _bound_dispatch_provenance() -> DispatchProvenanceTracker:
-    provenance = _BOUND_DISPATCH_PROVENANCE.get()
-    if provenance is None:
-        raise RuntimeError("dispatch provenance binder was not initialized")
-    return provenance
-
-
-def _dispatch_cancellation_response(
-    provenance: DispatchProvenanceTracker,
-    _exc: asyncio.CancelledError,
-) -> str:
-    provenance.request_cancel()
-    return _attach_dispatch_provenance(
-        fleet_error(
-            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            "CancelledError: transport teardown",
-        ),
-        provenance,
-    )
-
-
-def _bind_dispatch_provenance(fn: Callable[..., Any]) -> Callable[..., Any]:
-    """Create one argument-aware provenance journal at the outer MCP boundary."""
-    signature = inspect.signature(fn)
-
-    @wraps(fn)
-    async def wrapper(*args: Any, **kwargs: Any) -> str:
-        bound = signature.bind_partial(*args, **kwargs)
-        tracker = DispatchProvenanceTracker()
-        requested_resume = str(bound.arguments.get("resume_session_id") or "")
-        prior_dispatch = str(bound.arguments.get("prior_dispatch_id") or "")
-        if requested_resume:
-            tracker.start(
-                DispatchEffectName.REQUESTED_RESUME_BINDING,
-                retry_relevant=False,
-                identities={
-                    "resume_session_id": requested_resume,
-                    "prior_dispatch_id": prior_dispatch,
-                },
-            )
-            tracker.confirm(
-                DispatchEffectName.REQUESTED_RESUME_BINDING,
-                receipt="outer MCP request arguments bound",
-                retry_relevant=False,
-                identities={
-                    "resume_session_id": requested_resume,
-                    "prior_dispatch_id": prior_dispatch,
-                },
-            )
-        token = _BOUND_DISPATCH_PROVENANCE.set(tracker)
-        try:
-            raw = await fn(*args, **kwargs)
-            return _attach_dispatch_provenance(raw, tracker)
-        finally:
-            _BOUND_DISPATCH_PROVENANCE.reset(token)
-
-    return wrapper
-
-
-def _read_health_report(diagnostics_log_dir: Path, dispatch_id: str) -> dict[str, Any] | None:
-    """Read the per-dispatch health report JSON written by analyze-pipeline-health."""
-    report_path = diagnostics_log_dir / "health-reports" / f"{dispatch_id}_health_report.json"
-    if not report_path.is_file():
-        return None
-    try:
-        return json.loads(report_path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
 _MAX_CALLER_INSTRUCTIONS_LEN = 2000
-
-
-def _write_dispatch_to_campaign_state(
-    campaign_state_path_str: str,
-    effective_name: str,
-    outcome: DispatchOutcome,
-    per_dispatch_state_path: Path | None = None,
-) -> bool:
-    """Write the dispatch outcome to the campaign state file.
-
-    Accepts a DispatchOutcome (DispatchCompleted or DispatchRejected) and persists
-    the dispatch record to AUTOSKILLIT_CAMPAIGN_STATE_PATH. Never raises — state
-    write failures are non-fatal.
-
-    When per_dispatch_state_path is provided, reads the authoritative DispatchRecord
-    from the per-dispatch state file and forwards it directly, avoiding manual
-    field reconstruction and eliminating double-normalization of token_usage.
-    """
-    try:
-        match outcome:
-            case DispatchRejected(error_code=code, message=msg):
-                upsert_dispatch_record_by_name(
-                    Path(campaign_state_path_str),
-                    DispatchRecord.for_refusal(
-                        name=effective_name,
-                        error_code=code,
-                        diagnostic_message=msg,
-                        dispatch_id=outcome.dispatch_id,
-                        effect_provenance=outcome.effect_provenance.to_dict(),
-                    ),
-                )
-            case DispatchCompleted() as completed:
-                if per_dispatch_state_path is not None:
-                    per_dispatch_state = read_state(per_dispatch_state_path)
-                    if per_dispatch_state is None:
-                        logger.warning(
-                            "_write_dispatch_to_campaign_state: read_state(%s) returned None "
-                            "— falling back to manual reconstruction",
-                            per_dispatch_state_path,
-                        )
-                    else:
-                        for d in per_dispatch_state.dispatches:
-                            if d.name == effective_name:
-                                upsert_dispatch_record_by_name(
-                                    Path(campaign_state_path_str),
-                                    d,
-                                )
-                                return True
-                        logger.warning(
-                            "_write_dispatch_to_campaign_state: no dispatch named %r in %s "
-                            "— falling back to manual reconstruction",
-                            effective_name,
-                            per_dispatch_state_path,
-                        )
-                upsert_dispatch_record_by_name(
-                    Path(campaign_state_path_str),
-                    DispatchRecord(
-                        name=effective_name,
-                        status=completed.dispatch_status,
-                        dispatch_id=completed.dispatch_id,
-                        dispatched_session_id=completed.dispatched_session_id,
-                        reason=completed.reason,
-                        diagnostic_message=completed.diagnostic_message,
-                        token_usage=completed.token_usage,
-                        effect_provenance=completed.effect_provenance.to_dict(),
-                    ),
-                )
-        return True
-    except Exception:
-        logger.warning("_write_dispatch_to_campaign_state: failed", exc_info=True)
-        return False
-
-
-def _confirm_campaign_state_write(
-    provenance: DispatchProvenanceTracker,
-    campaign_state_path_str: str,
-    effective_name: str,
-) -> bool:
-    """Confirm the write and persist its post-confirmation provenance receipt."""
-    provenance.confirm(
-        DispatchEffectName.CAMPAIGN_STATE_WRITE,
-        receipt="campaign state writer confirmed persistence",
-        identities={"campaign_state_path": campaign_state_path_str},
-    )
-    try:
-        receipt_persisted = False
-        with CampaignStateMutator(Path(campaign_state_path_str)) as mutator:
-            if mutator.state is not None:
-                record = next(
-                    (
-                        dispatch
-                        for dispatch in mutator.state.dispatches
-                        if dispatch.name == effective_name
-                    ),
-                    None,
-                )
-                if record is not None:
-                    receipt = provenance.snapshot().to_dict()
-                    if record.effect_provenance != receipt:
-                        record.effect_provenance = receipt
-                        mutator.mark_dirty()
-                    receipt_persisted = True
-    except Exception:
-        logger.warning(
-            "_confirm_campaign_state_write: receipt persistence failed",
-            exc_info=True,
-        )
-        receipt_persisted = False
-    if not receipt_persisted:
-        provenance.mark_ambiguous(
-            DispatchEffectName.CAMPAIGN_STATE_WRITE,
-            evidence="campaign state confirmation receipt persistence failed",
-            identities={"campaign_state_path": campaign_state_path_str},
-        )
-    return receipt_persisted
-
-
-def _get_food_truck_prompt_builder(
-    backend: CodingAgentBackend,
-    has_unguarded_filesystem_access: bool = False,
-    projected_sous_chef: str = "",
-) -> Callable[..., str]:
-    """Return the food truck prompt builder with mcp_prefix pre-bound."""
-
-    mcp_prefix = detect_autoskillit_mcp_prefix(backend.capabilities)
-    return functools.partial(
-        _build_food_truck_prompt,
-        mcp_prefix=mcp_prefix,
-        has_unguarded_filesystem_access=has_unguarded_filesystem_access,
-        projected_sous_chef=projected_sous_chef,
-    )
-
-
-def _project_food_truck_sous_chef(
-    tool_ctx: Any,
-    backend: CodingAgentBackend | None,
-) -> str:
-    """Project L2 orchestration guidance before crossing into the fleet layer."""
-    if tool_ctx.skill_resolver is None:
-        return ""
-    catalog = tool_ctx.skill_resolver.list_effective(
-        tool_ctx.project_dir,
-        SkillExecutionRole.ORCHESTRATOR,
-        visibility=tool_ctx.config.skill_visibility_spec(),
-        recipe_packs=tool_ctx.active_recipe_packs,
-        recipe_features=tool_ctx.active_recipe_features,
-    )
-    sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
-    if sous_chef is None:
-        return ""
-    return project_agent_skill_document(
-        sous_chef,
-        SkillProjectionContext(
-            cwd=tool_ctx.project_dir.resolve(),
-            catalog=catalog,
-            backend=backend,
-            conventions=backend.conventions if backend is not None else None,
-            gating=False,
-        ),
-    ).content
-
-
-def _dispatch_effect_identities(
-    snapshot: DispatchEffectProvenance,
-) -> dict[str, str]:
-    """Collect the latest recorded value for each downstream identity."""
-    identities: dict[str, str] = {}
-    for effect in snapshot.effects:
-        identities.update(effect.known_downstream_identities)
-    return identities
 
 
 @mcp.tool(
@@ -420,7 +148,7 @@ async def dispatch_food_truck(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("dispatch_food_truck")) is not None:
+    if (fleet_gate := tools_fleet_dispatch._require_fleet("dispatch_food_truck")) is not None:
         return fleet_gate
 
     try:
@@ -482,9 +210,8 @@ async def dispatch_food_truck(
                         "continue_on_failure is false. "
                         "No further dispatches permitted.",
                     )
-                # Backward-compat with the legacy path: also probe the global
-                # blocking-dispatch set (handles campaigns where the named
-                # dispatch isn't the one in the blocking state).
+                # Probe the global blocking-dispatch set to catch campaigns where
+                # the named dispatch isn't the one currently in the blocking state.
                 if has_blocking_dispatch(campaign_sp):
                     return fleet_error(
                         FleetErrorCode.FLEET_CAMPAIGN_HALTED,
@@ -517,7 +244,9 @@ async def dispatch_food_truck(
             DispatchEffectName.CALLER_IDENTITY,
             retry_relevant=False,
         )
-        caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
+        caller_session_id = tools_fleet_dispatch.find_caller_session_id(
+            project_dir=tool_ctx.project_dir
+        )
         provenance.confirm(
             DispatchEffectName.CALLER_IDENTITY,
             receipt="caller session identity resolved",
@@ -681,8 +410,8 @@ async def dispatch_food_truck(
                     f"seconds, got {tool_timeout_sec!r}.",
                 )
             with anyio.fail_after(tool_timeout_sec) as cancel_scope:
-                async with progress_heartbeat(ctx):
-                    result = await execute_dispatch(
+                async with tools_fleet_dispatch.progress_heartbeat(ctx):
+                    result = await tools_fleet_dispatch.execute_dispatch(
                         tool_ctx=tool_ctx,
                         recipe=recipe,
                         task=task,
@@ -854,7 +583,7 @@ async def record_gate_dispatch(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("record_gate_dispatch")) is not None:
+    if (fleet_gate := tools_fleet_dispatch._require_fleet("record_gate_dispatch")) is not None:
         return fleet_gate
 
     try:

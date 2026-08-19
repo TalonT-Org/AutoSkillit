@@ -637,7 +637,7 @@ async def test_resume_rejects_incompatible_bound_contract_before_executor(
     field: str,
     value: object,
 ) -> None:
-    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+    from autoskillit.execution.session._skill_session_contract_codec import _digest_json
     from tests.conftest import bind_test_skill_resume_contract
     from tests.fakes import InMemoryHeadlessExecutor
 

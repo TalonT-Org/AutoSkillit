@@ -15,14 +15,15 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 # Files to check and their allowed Path.cwd() sites.
 # None means: compute allowed lines dynamically by function name (see _get_allowlisted_lines).
 TOOLS_FILES: dict[str, list[int] | None] = {
-    "src/autoskillit/server/tools/tools_kitchen.py": None,  # allowed in _reload_session_handler
+    # allowed in _reload_session_handler
+    "src/autoskillit/server/tools/tools_kitchen/_reload_session.py": None,
     "src/autoskillit/server/tools/tools_recipe.py": [],
     "src/autoskillit/server/tools/tools_issue_headless.py": [],
     "src/autoskillit/server/tools/tools_issue_labels.py": [],
 }
 
 LIFESPAN_FILES: dict[str, list[int] | None] = {
-    "src/autoskillit/server/_lifespan.py": [],
+    "src/autoskillit/server/_lifespan/_lifespan.py": [],
 }
 
 ALL_FILES: dict[str, list[int] | None] = {**TOOLS_FILES, **LIFESPAN_FILES}

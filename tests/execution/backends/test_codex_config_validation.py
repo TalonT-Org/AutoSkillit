@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core import PreLaunchReadiness
+from autoskillit.execution.backends import _codex_probes as probes
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -52,7 +53,7 @@ def test_mcp_inventory_rejects_non_string_array_fields(
     field: str,
     value: object,
 ) -> None:
-    from autoskillit.execution.backends.codex import _validate_codex_mcp_inventory
+    from autoskillit.execution.backends._codex_probes import _validate_codex_mcp_inventory
 
     transport: dict[str, object] = {
         "type": "stdio",
@@ -69,9 +70,9 @@ def test_mcp_inventory_rejects_non_string_array_fields(
 
 
 def test_bounded_codex_probe_captures_success(tmp_path: Path) -> None:
-    from autoskillit.execution.backends.codex import _run_bounded_codex_probe
+    from autoskillit.execution.backends import _codex_probes as probes
 
-    result = _run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import os; os.write(1, b'probe-ok')"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -87,11 +88,10 @@ def test_bounded_codex_probe_times_out_and_reaps(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
 
-    monkeypatch.setattr(codex, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(probes, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
 
-    result = codex._run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import time; time.sleep(60)"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -105,14 +105,12 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
-
-    original_popen = codex.subprocess.Popen
-    original_killpg = codex.os.killpg
-    processes: list[codex.subprocess.Popen[bytes]] = []
+    original_popen = probes.subprocess.Popen
+    original_killpg = probes.os.killpg
+    processes: list[probes.subprocess.Popen[bytes]] = []
     group_signals: list[tuple[int, signal.Signals]] = []
 
-    def recording_popen(*args: object, **kwargs: Any) -> codex.subprocess.Popen[bytes]:
+    def recording_popen(*args: object, **kwargs: Any) -> probes.subprocess.Popen[bytes]:
         assert kwargs["start_new_session"] is True
         process = original_popen(*args, **kwargs)
         processes.append(process)
@@ -122,11 +120,11 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
         group_signals.append((pgid, sig))
         original_killpg(pgid, sig)
 
-    monkeypatch.setattr(codex, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
-    monkeypatch.setattr(codex.subprocess, "Popen", recording_popen)
-    monkeypatch.setattr(codex.os, "killpg", recording_killpg)
+    monkeypatch.setattr(probes, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(probes.subprocess, "Popen", recording_popen)
+    monkeypatch.setattr(probes.os, "killpg", recording_killpg)
 
-    result = codex._run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import time; time.sleep(60)"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -143,11 +141,10 @@ def test_bounded_codex_probe_enforces_stream_limit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
 
-    monkeypatch.setattr(codex, "_CODEX_PROBE_STREAM_LIMIT", 128)
+    monkeypatch.setattr(probes, "_CODEX_PROBE_STREAM_LIMIT", 128)
 
-    result = codex._run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import os; os.write(1, b'x' * 4096)"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -163,7 +160,6 @@ def test_run_bounded_codex_probe_returns_success_with_diagnostic_on_incomplete_c
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.core import ProcessCleanupResult
-    from autoskillit.execution.backends import codex
     from autoskillit.execution.process._process_kill import OwnedProcessGroup
 
     original_cleanup = OwnedProcessGroup.cleanup
@@ -183,7 +179,7 @@ def test_run_bounded_codex_probe_returns_success_with_diagnostic_on_incomplete_c
 
     monkeypatch.setattr(OwnedProcessGroup, "cleanup", incomplete_cleanup)
 
-    result = codex._run_bounded_codex_probe(
+    result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import os; os.write(1, b'probe-ok')"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -209,11 +205,10 @@ def test_mcp_probe_normalizes_process_and_output_failures(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
 
-    monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
 
-    errors = codex._validate_mcp_probe(
+    errors = probes._validate_mcp_probe(
         (sys.executable, "-c", program),
         env=os.environ,
         cwd=str(tmp_path),
@@ -228,25 +223,24 @@ def test_mcp_probe_caches_successful_validation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
 
     calls = 0
 
-    def run_probe(*_args: object, **_kwargs: object) -> codex._BoundedProbeResult:
+    def run_probe(*_args: object, **_kwargs: object) -> probes._BoundedProbeResult:
         nonlocal calls
         calls += 1
-        return codex._BoundedProbeResult(
+        return probes._BoundedProbeResult(
             returncode=0,
             stdout=_VALID_INVENTORY_BYTES,
             stderr=b"",
         )
 
-    monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
-    monkeypatch.setattr(codex, "_run_bounded_codex_probe", run_probe)
+    monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
     command = ("codex", "mcp", "list", "--json")
 
     assert (
-        codex._validate_mcp_probe(
+        probes._validate_mcp_probe(
             command,
             env=os.environ,
             cwd=str(tmp_path),
@@ -255,7 +249,7 @@ def test_mcp_probe_caches_successful_validation(
         == []
     )
     assert (
-        codex._validate_mcp_probe(
+        probes._validate_mcp_probe(
             command,
             env=os.environ,
             cwd=str(tmp_path),
@@ -270,20 +264,18 @@ def test_validate_mcp_probe_returns_clean_result_when_cleanup_incomplete_but_pro
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
-
-    def run_probe(*_args: object, **_kwargs: object) -> codex._BoundedProbeResult:
-        return codex._BoundedProbeResult(
+    def run_probe(*_args: object, **_kwargs: object) -> probes._BoundedProbeResult:
+        return probes._BoundedProbeResult(
             returncode=0,
             stdout=_VALID_INVENTORY_BYTES,
             stderr=b"",
             cleanup_incomplete=True,
         )
 
-    monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
-    monkeypatch.setattr(codex, "_run_bounded_codex_probe", run_probe)
+    monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
 
-    errors = codex._validate_mcp_probe(
+    errors = probes._validate_mcp_probe(
         ("codex", "mcp", "list", "--json"),
         env=os.environ,
         cwd=str(tmp_path),
@@ -318,16 +310,16 @@ def test_real_interactive_validator_reaches_successful_native_probe(
     def run_probe(
         command: tuple[str, ...],
         **_kwargs: object,
-    ) -> codex._BoundedProbeResult:
+    ) -> probes._BoundedProbeResult:
         commands.append(command)
-        return codex._BoundedProbeResult(
+        return probes._BoundedProbeResult(
             returncode=0,
             stdout=_VALID_INVENTORY_BYTES,
             stderr=b"",
         )
 
-    monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
-    monkeypatch.setattr(codex, "_run_bounded_codex_probe", run_probe)
+    monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
 
     assert backend.validate_interactive_invocation(spec) == []
     assert len(commands) == 1

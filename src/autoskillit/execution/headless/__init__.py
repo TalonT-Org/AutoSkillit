@@ -100,8 +100,6 @@ from autoskillit.execution.headless._headless_recovery import (
 )
 from autoskillit.execution.headless._headless_result import (
     _build_skill_result,  # noqa: F401
-    _parse_stdout,  # noqa: F401
-    _resolve_skill_session_id,  # noqa: F401
 )
 from autoskillit.execution.headless._managed import (
     _headless_plugin_load_mode,

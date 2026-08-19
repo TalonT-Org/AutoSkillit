@@ -50,18 +50,26 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("server/tools/tools_kitchen.py", "_close_kitchen_handler", "hook_cfg_path.unlink"): (
+    (
+        "server/tools/tools_kitchen/_close_kitchen.py",
+        "_close_kitchen_handler",
+        "hook_cfg_path.unlink",
+    ): (
         1,
         "Closing the kitchen removes the project-owned generated hook configuration; "
         "the next kitchen activation regenerates it.",
     ),
-    ("server/tools/tools_kitchen.py", "_close_kitchen_handler", "overlay_path.unlink"): (
+    (
+        "server/tools/tools_kitchen/_close_kitchen.py",
+        "_close_kitchen_handler",
+        "overlay_path.unlink",
+    ): (
         1,
         "Closing the kitchen removes the project-owned session overlay while preserving "
         "its durable synchronization sidecar.",
     ),
     (
-        "server/tools/tools_kitchen.py",
+        "server/tools/tools_kitchen/_close_kitchen.py",
         "_close_kitchen_handler",
         "review_gate_path.unlink",
     ): (
@@ -313,7 +321,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Removes the manifest and lease sidecars for the exact unpublished generation.",
     ),
     (
-        "execution/backends/codex.py",
+        "execution/backends/_codex_explorer_projection.py",
         "_atomically_replace_explorer_projection",
         "os.replace",
     ): (
@@ -322,7 +330,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "session-root transaction with rollback.",
     ),
     (
-        "execution/backends/codex.py",
+        "execution/backends/_codex_explorer_projection.py",
         "_atomically_replace_explorer_projection",
         "shutil.rmtree",
     ): (
@@ -526,6 +534,14 @@ def _is_plugin_lifecycle_tree(tree: ast.AST) -> bool:
     return not _referenced_symbols(tree).isdisjoint(_PLUGIN_LIFECYCLE_SYMBOLS)
 
 
+# Files that are decomposed submodules of a plugin-lifecycle package but no
+# longer import the lifecycle symbols directly (those live in sibling
+# submodules). The package collectively is plugin lifecycle.
+_PLUGIN_LIFECYCLE_PACKAGES: frozenset[str] = frozenset(
+    {"server/tools/tools_kitchen"},
+)
+
+
 def _strict_plugin_write_scopes(tree: ast.AST) -> frozenset[str]:
     return frozenset(
         node.name
@@ -569,7 +585,17 @@ def _scan_plugin_mutation_trees(
     hits: Counter[tuple[str, str, str]] = Counter()
     for rel, tree in sources:
         is_projected_artifact_module = rel.startswith("workspace/_projected_artifact/")
-        if not is_projected_artifact_module and not _is_plugin_lifecycle_tree(tree):
+        # The Codex explorer projection was scanned as part of codex.py until #4664 split
+        # it out; it references no plugin-lifecycle symbol of its own, so it is named
+        # explicitly to keep its staged session-root swaps under the ratchet.
+        is_codex_projection_module = rel == "execution/backends/_codex_explorer_projection.py"
+        in_plugin_pkg = any(rel.startswith(f"{pkg}/") for pkg in _PLUGIN_LIFECYCLE_PACKAGES)
+        if (
+            not is_projected_artifact_module
+            and not is_codex_projection_module
+            and not in_plugin_pkg
+            and not _is_plugin_lifecycle_tree(tree)
+        ):
             continue
         hits.update(_scan_plugin_mutations_in_tree(rel, tree))
     return hits

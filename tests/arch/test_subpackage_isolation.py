@@ -100,6 +100,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "claude",  # execution/backends/claude.py: _ANNOTATION_SUPPORT_MIN = Version(...)
         "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
+        "_provenance",  # request-scoped fleet dispatch provenance ContextVars (submodule)
         "_run_skill_completion",  # request-scoped #4457 receipt delivery bindings
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
@@ -119,6 +120,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
+        "_primitives",  # server/_response_budget/_primitives.py: SHA-256 hexdigests
+        # derived once at import time from the canonical spill schema
         "_explorer_projection",  # server-owned logger and immutable projection authority
         "_explorer_dispatch",  # immutable backend-specific native dispatch renderers
         "tools_recipe",  # request-scoped recipe pagination ContextVar (delegated)
@@ -173,7 +176,10 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_STATE_TYPES"),
-        ("src/autoskillit/server/tools/tools_kitchen.py", "_OPEN_KITCHEN_REQUEST_CTX"),
+        (
+            "src/autoskillit/server/tools/tools_kitchen/_open_kitchen_transition.py",
+            "_OPEN_KITCHEN_REQUEST_CTX",
+        ),
     }
 )
 
@@ -645,7 +651,7 @@ def test_server_file_count_under_limit() -> None:
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
     Limit updated from 16 to 17 after _editable_guard.py was added as
     the pre-deletion editable install guard for perform_merge().
-    Limit updated from 17 to 18 after _lifespan.py was added for
+    Limit updated from 17 to 18 after _lifespan/_lifespan.py was added for
     FastMCP server lifespan teardown (#745).
     Limit updated from 18 to 19 after _wire_compat.py was added for
     Claude Code wire-format sanitization middleware.
@@ -1003,9 +1009,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         # +_update_obligation (persisted "republication owed" journal; must be writable
-        # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
-        # so it lives at this IL-1 layer rather than splitting further — its 176 lines
-        # are one cohesive read/write/clear API with no internal seam to extract)
+        # by cli/update/ and readable by server/_lifespan/_startup_checks.py without a
+        # server->cli edge, so it lives at this IL-1 layer rather than splitting further —
+        # its 176 lines are one cohesive read/write/clear API with no internal seam to extract)
         "hooks": 24,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
@@ -1029,7 +1035,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         # +_explorer_conformance version-bound live attestation authority (#4443)
-        "execution/backends": 20,  # +execution identity parser and explorer dispatch adapter
+        "execution/backends": 30,  # +decomposed _codex_* and _claude_* siblings (#4664)
+        "execution/github_review": 15,  # +_ledger_schema and _poster_post_attempt siblings (#4664)
+        "execution/headless": 15,  # +_headless_adjudication from _headless_result (#4664)
+        "execution/session": 20,  # +codec and lineage siblings decomposed out (#4664)
         # +_codex_catalog shared validated catalog projection (#4585)
         "smoke_utils": 12,  # +_review_design split from _review
     }
@@ -1213,61 +1222,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "#4557 decomposes pagination into sibling modules (_recipe_section_planning, "
         "_recipe_section_rendering) with char-ceiling plumbing and dual-domain page fitting.",
     ),
-    "tools_kitchen.py": (
-        2400,
-        "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
-        "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
-        "and the request-scoped replay binder journals operation/effect provenance; "
-        "for ingredient key validation; splitting would cross import-layer boundaries; "
-        "backend capability promotion delegated to _promote_capability_keys in _auto_overrides; "
-        "fail-closed validity gate on both deferred-recall and normal paths adds structural "
-        "error propagation from LoadRecipeResult; get_recipe validity guard adds 9 lines; "
-        "dispatch-feasibility preflight wiring on both paths with gate-close on failure; "
-        "gate_infrastructure_ready guard restructuring adds 22 lines for handler-skip path, "
-        "quota_refresh_loop deferred start, and all four gate.disable() rollback resets; "
-        "_dispatch_infeasible_response helper for DOA pipeline refusal"
-        "; capability admission control dispatch_feasible gating on deferred-recall and "
-        "get_recipe paths (+22 net lines)"
-        "; supports_quota_check bool at call sites replaces resolve_provider (+3 net lines)"
-        "; reap_stale_dispatches_async call in _open_kitchen_handler for interactive session "
-        "dispatch recovery (+8 net lines)"
-        "; provider-aware capability override bridge: try/except around early find for "
-        "graceful degradation when recipes.find raises (+10 net lines)"
-        "; config-default ingredient layer: build_config_default_layer call and "
-        "docstring update for pipeline_health demotion (+10 net lines)"
-        "; get_recipe session_serve_overrides replay via serve_recipe; "
-        "deferred-recall snapshot update guard (+3 net lines)"
-        "; per-step backend override config_backend kwarg threading (+5 net lines)"
-        "; _auto_init_pipeline_tracker helper + call sites on both deferred-recall and "
-        "normal open_kitchen paths for self-arming pipeline dependency tracker init "
-        "(+53 net lines)"
-        "; _auto_init_pipeline_tracker tool_ctx param typed as ToolContext under "
-        "TYPE_CHECKING instead of Any, matching _active_order_ids_for_kitchen's "
-        "established pattern (+1 net line)"
-        "; serve_recipe backend_capabilities_map threading at get_recipe + deferred-recall + "
-        "normal open_kitchen paths with safe _distinct_backends extraction from "
-        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)"
-        "; output-budget hook payload type, serializer, and hook-config bridge "
-        "(+21 net lines); response artifact temp-root bridge (+2 net lines)"
-        "; prune_stale_kitchen_state liveness-gated tracker pruning wired into both "
-        "fresh-open and deferred-recall open_kitchen paths, plus overlay lock sidecar "
-        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)"
-        "; envelope integration on both deferred-recall and normal open_kitchen paths: "
-        "resolve_general_output_token_limit + BackendCapabilities isinstance guard + "
-        "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)"
-        "; compiled recipe binding publication and execution-lifecycle cleanup across "
-        "recipe load, kitchen open, and kitchen close (+13 net lines)"
-        "; #4399 close→open visibility restore: mcp.enable() refresh in open_kitchen's "
-        "_use_global_enable branch to override prior global mcp.disable() from close_kitchen "
-        "(+2 lines), plus ToolListChangedNotification send through ctx.send_notification so "
-        "connected Clients refresh their stale tool cache; rename of _skip_notify → "
-        "_use_global_enable clarifies the branch is about the enable mechanism, not "
-        "notification suppression; scope-placement invariant comment at the "
-        "`if not _skip_handler:` guard (+10 net lines)"
-        "; finalized projection/flow generation and explicit activating-surface delivery "
-        "are threaded through normal, deferred, and resource paths while named-open "
-        "replacement clears stale readiness before every early return",
-    ),
     "tools_recipe.py": (
         750,
         "REQ-CNST-010-E25: #4557 decomposes get_recipe_section handler into "
@@ -1312,63 +1266,20 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2500,
-        "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
-        "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
-        "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
-        "session_meta NDJSON support and process_name_aliases add ~8 lines; "
-        "explicit plugin_install_capable + supports_context_window_suffix kwargs for arch guard; "
-        "CodexSessionLocator nominally subclasses SessionLocator Protocol with codex_home "
-        "promoted from locate_session parameter to frozen dataclass field (3 net lines: "
-        "field declaration, blank line between field and method, SessionLocator in import block)"
-        "; project_log_dir method added to CodexSessionLocator (+3 net lines)"
-        "; session_log_path method added to CodexSessionLocator (+5 net lines)"
-        "; process_idle_timeout_ms field wired through build_skill_session_cmd and "
-        "build_food_truck_cmd CmdSpec constructors (+8 net lines)"
-        "; CapabilityNotSupportedError capability-gate in build_inspector_cmd (+1 net line); "
-        "AGENT_BACKEND_ENV_VAR injection in build_interactive_cmd merged_extras (+1 net line) "
-        "and build_resume_cmd _codex_exec_extras call expansion to multi-line (+2 net lines) "
-        "for T5-P4-A3-WP3 guard-hook backend dispatch"
-        "; #4585 excludes reader-only roles from ordinary Codex agent materialization (+1 line)"
-        "; _materialize_profile_skills function (~43 lines) for T5-P4-A4-WP2 profile skill "
-        "materialization into Codex session directories; registered-daemon launch identity "
-        "forwarding adds both required environment keys to all Codex command shapes (+8 net lines)"
-        "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)"
-        "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)"
-        "; fleet inspector child-boundary defaults across Codex command builders (+5 net lines)"
-        "; explicit parameter dispositions for "
-        "plugin_source/output_format/exit_after_stop_delay_ms "
-        "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1"
-        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)"
-        "; output-discipline delivery for fresh interactive sessions and generated agent "
-        "TOMLs (+12 net lines)"
-        "; _register_agent_tomls session-config registration for generated roles "
-        "(+39 net lines)"
-        "; REQ-SEM-ADAPT-001 semantic-plan adaptation remains on the registered Codex "
-        "backend so model and reasoning policy resolution has one authority; "
-        "interactive Codex startup validation, explicit generated-home construction, "
-        "profile probing, and durable cook-storage adapter integration remain co-located "
-        "with the backend whose command grammar they validate; managed native-shell "
-        "decision and lineage-reference injection remain adjacent to the Codex command "
-        "builders that own the protected environment boundary; #4443 adds canonical "
-        "agent-definition projection, parent/child sandbox precedence, and specialized "
-        "Codex explorer role registration and invocation wiring; #4478 review "
-        "remediation: build_skill_session_cmd/build_resume_cmd gain an "
-        "include_scope_discipline parameter and build_interactive_cmd's suffix call is "
-        "widened to codex_discipline_suffix(include_scope=True) so scope-discipline "
-        "delivery scoping stays adjacent to the same command builders that already own "
-        "prompt-injection composition (+14 net lines)"
-        "; #4488/#4489/#4492 explorer surface authority: setup_session_dir gains "
-        "explorer-role TOML exclusion filter for unbound sessions (+7 net lines) and "
-        "explicit session-scoped capability disposition (+1 net line); #4507 adds runtime "
-        "child cardinality rendering and protects the live-web bundled role (+12 net lines)"
-        "; #4566 pins ORCHESTRATOR file auth, durable auth linkage, and role-exact profile "
-        "materialization at the backend-owned generated-home setup boundary (+42 net lines); "
-        "launch/state MCP forwarding defaults remain in the Codex env policy (+2 net lines)"
-        "; #4641/#4644 rectify: settle_evidence() swap plus cleanup_incomplete diagnostic "
-        "threading in _run_bounded_codex_probe/_terminate_probe/_validate_mcp_probe stays "
-        "adjacent to the bounded probe it must not misclassify as a validation failure "
-        "(+10 net lines)",
+        1300,
+        "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1062 lines "
+        "(cmd/cmd-spec grammar with build_skill_session_cmd/"
+        "build_food_truck_cmd/build_interactive_cmd/"
+        "validate_interactive_invocation/setup_session_dir), "
+        "with the four cmd-builder methods tightly coupled to CodexBackend "
+        "state. CodexBackend retains all five cmd-builder methods because each "
+        "touches instance state (capabilities, env policy, flag vocabulary, "
+        "session locator) and the cmd-spec grammar is the backend's authority "
+        "boundary — splitting these would force a separate mutable state object "
+        "and break the protocol. The remaining slimmed file is 1242 "
+        "lines; cap lowered from 2500 to 1300 to acknowledge the architectural seam that "
+        "the decomposition could not cross without breaking the backend "
+        "dataclass invariant.",
     ),
     "execution/backends/claude.py": (
         1600,
@@ -1397,11 +1308,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
     ),
     "execution/headless/_headless_result.py": (
-        1053,
-        "REQ-CNST-010-E25: #4233 keeps the async-obligation success gate adjacent to "
+        900,
+        "REQ-CNST-010-E25-narrowed: #4233 keeps the async-obligation success gate adjacent to "
         "the existing stale, idle, timeout, and content adjudication order it must preempt. "
-        "#4641/#4644 rectify adds the _should_flag_cleanup_incomplete diagnostic helper shared by "
-        "both SkillResult construction seams it must not silently drop evidence at.",
+        "After #4664 decomposition, adjudication helpers live in _headless_adjudication.py "
+        "— including the #4641/#4644 _should_flag_cleanup_incomplete diagnostic shared by "
+        "both SkillResult construction seams; _build_skill_result remains here as the "
+        "headless orchestration authority. The 827-line residual is dominated by that "
+        "single 741-line function, which owns the success-gate adjacency rule.",
     ),
     "workspace/skill_capabilities.py": (
         1120,
@@ -1428,12 +1342,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "skill-invalidity threading and the completed explorer sidecar migration.",
     ),
     "execution/backends/_codex_session_storage.py": (
-        1650,
-        "REQ-CNST-010-E13: Codex interactive rollout storage is one transaction boundary "
-        "covering inode-preserving staging, process/thread/view leases, promotion, index "
-        "publication, manifest validation, crash recovery, and explicit legacy-view "
-        "reconciliation; splitting those lock-coupled state transitions would duplicate "
-        "invariants across independently mutable modules",
+        1500,
+        "REQ-CNST-010-E13-narrowed: CodexSessionStore + CodexInteractiveSessionLease + "
+        "_FileLease transaction-boundary core only; stateless FS primitives extracted to "
+        "_codex_fs_atomic.py (RE: #4664). The transaction-boundary core remains one "
+        "lock-coupled module — splitting _FileLease / CodexInteractiveSessionLease / "
+        "CodexSessionStore across multiple files would duplicate the inode-preserving "
+        "staging, process/thread/view leases, promotion, index publication, manifest "
+        "validation, crash recovery, and explicit legacy-view reconciliation invariants. "
+        "Cap lowered to 1500 lines to accommodate the core without the stateless helpers.",
     ),
     "workspace/session_skills.py": (
         1400,
@@ -1459,18 +1376,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
-    ),
-    "_response_budget.py": (
-        1500,
-        "REQ-CNST-010-E12: lossless response spill — atomic_write, projection "
-        "(uniform and tiered), exact canonical projection finalization, "
-        "measured exemptions, both exempted and non-exempted spill paths, "
-        "spill metadata schema, bounded-failure rendering, and shared "
-        "_tiered_projection helper for the exempted (recipe/load_recipe) and "
-        "non-exempted (run_skill) spill paths (issue #4304 priority-tier "
-        "delivery-bound summary); splitting would scatter the priority-tier "
-        "algorithm across modules that must remain the single source of "
-        "truth for the bound-vs-deprioritized budget allocation order.",
     ),
     "core/types/_type_constants_registries.py": (
         1100,
@@ -1522,14 +1427,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection and execution-identity persistence remain at the same admission boundary. "
         "#4457 keeps receipt drafting beside exhaustive run_skill terminal projection so "
         "every post-launch classification passes through one finalization path.",
-    ),
-    "server/tools/_execution_helpers.py": (
-        1075,
-        "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
-        "remain one server-tool support authority; the managed session metadata additions "
-        "must stay beside contract rehydration and persistence to prevent resume drift. #4443 "
-        "also keeps parent sandbox authority, resolved backend/profile applicability, vector "
-        "projection, and execution identity in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
         1200,
@@ -2153,3 +2050,94 @@ def test_update_checks_docstring_describes_both_windows() -> None:
                 "_is_dismissed docstring must mention the 12-hour window"
             )
             break
+
+
+# ---------------------------------------------------------------------------
+# Decomposition sibling-set guards for GitHub issue #4663
+#
+# These tests pin the exact set of submodules each decomposed package
+# contains. Adding or removing a sibling submodule is a structural decision
+# that must be reviewed (the registry tracer warns when test sites rebind
+# attributes via these exact module paths).
+# ---------------------------------------------------------------------------
+
+
+def test_response_budget_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "_response_budget"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_primitives",
+        "_projection",
+        "_spill",
+        "_enforce",
+    }
+
+
+def test_execution_helpers_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "_execution_helpers"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_skill_contract",
+        "_dispatch_metadata",
+        "_run_cmd_spill",
+        "_run_python_coercion",
+    }
+
+
+def test_evidence_reader_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "_evidence_reader"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_authority",
+        "_invocation",
+        "_reader",
+        "_startup",
+    }
+
+
+def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_kitchen"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_open_kitchen",
+        "_open_kitchen_transition",
+        "_open_kitchen_errors",
+        "_close_kitchen",
+        "_lock_ingredients",
+        "_reload_session",
+        "_disable_quota_guard",
+        "_get_recipe",
+        "_hook_config",
+        "_tracker_authority",
+        "_declare_join_batch",
+    }
+
+
+def test_tools_fleet_dispatch_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_provenance",
+        "_campaign_state",
+        "_handlers",
+    }
+
+
+def test_tools_pipeline_tracker_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_pipeline_tracker"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_authority",
+        "_status",
+        "_handlers",
+    }
+
+
+def test_lifespan_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "_lifespan"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_startup_checks",
+        "_session_boots",
+        "_lifespan",
+    }

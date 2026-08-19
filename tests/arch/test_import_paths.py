@@ -247,8 +247,11 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
 
 def test_req_imp_006_prompts_no_gate_state_import() -> None:
     """server/tools_kitchen.py must not directly import DefaultGateState or pipeline.gate."""
-    path = SRC / "server" / "tools" / "tools_kitchen.py"
-    tree = ast.parse(path.read_text())
+    path = SRC / "server" / "tools" / "tools_kitchen"
+    text = ""
+    for py in sorted(path.rglob("*.py")):
+        text += py.read_text()
+    tree = ast.parse(text)
     violations: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
@@ -349,7 +352,18 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
     allowlist = {
         Path("server/_factory.py"),
         Path("server/git.py"),
-        Path("server/tools/tools_kitchen.py"),
+        Path("server/tools/tools_kitchen/__init__.py"),
+        Path("server/tools/tools_kitchen/_open_kitchen.py"),
+        Path("server/tools/tools_kitchen/_open_kitchen_transition.py"),
+        Path("server/tools/tools_kitchen/_open_kitchen_errors.py"),
+        Path("server/tools/tools_kitchen/_close_kitchen.py"),
+        Path("server/tools/tools_kitchen/_lock_ingredients.py"),
+        Path("server/tools/tools_kitchen/_reload_session.py"),
+        Path("server/tools/tools_kitchen/_disable_quota_guard.py"),
+        Path("server/tools/tools_kitchen/_get_recipe.py"),
+        Path("server/tools/tools_kitchen/_hook_config.py"),
+        Path("server/tools/tools_kitchen/_tracker_authority.py"),
+        Path("server/tools/tools_kitchen/_declare_join_batch.py"),
         Path("server/tools/tools_execution.py"),  # capture-mode types from execution gateway
         Path("cli/app.py"),
         Path("cli/session/_session_cook.py"),  # REQ-IMP-011

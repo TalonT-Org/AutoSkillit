@@ -47,7 +47,10 @@ _SCOPED_MODULES: tuple[str, ...] = (
     "cli/_hooks.py",
     "execution/backends/_codex_hooks.py",
     "execution/backends/_codex_config.py",
-    "server/_lifespan.py",
+    "server/_lifespan/__init__.py",
+    "server/_lifespan/_startup_checks.py",
+    "server/_lifespan/_session_boots.py",
+    "server/_lifespan/_lifespan.py",
 )
 
 #: Names of persistence functions/methods whose call sites count as a durable
@@ -91,6 +94,10 @@ _NON_HOOK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # Bare TOML scalars (tool_output_token_limit, auto-compact limit) — unrelated to hooks.
         ("execution/backends/_codex_config.py", "_ensure_top_level_key"),
         ("execution/backends/_codex_config.py", "_upsert_top_level_key_exact"),
+        # Drift-check re-renders hooks.json from the registry hash; same content
+        # unless the registry changes, so this is the canonical hook-config writer,
+        # not a hook-artifact writer.
+        ("server/_lifespan/_startup_checks.py", "run_startup_drift_check"),
     }
 )
 
@@ -222,7 +229,7 @@ def test_registered_writers_have_a_matching_call_site() -> None:
 
 def test_codex_reconciliation_audit_no_clobber_writer_is_registered() -> None:
     """The immutable audit hard-link publisher remains a registered durable writer."""
-    rel = "execution/backends/_codex_session_storage.py"
+    rel = "execution/backends/_codex_fs_atomic.py"
     path = SRC_ROOT / rel
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     writer = next(
@@ -238,5 +245,5 @@ def test_codex_reconciliation_audit_no_clobber_writer_is_registered() -> None:
 
     assert {"link", "fsync", "unlink"} <= calls
     assert (
-        "autoskillit.execution.backends._codex_session_storage:_write_reconciliation_audit"
+        "autoskillit.execution.backends._codex_fs_atomic:_write_reconciliation_audit"
     ) in _REGISTERED_WRITERS

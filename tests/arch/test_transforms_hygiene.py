@@ -18,6 +18,24 @@ _TESTS_ROOT = Path(__file__).parent.parent
 _SRC_ROOT = _TESTS_ROOT.parent / "src" / "autoskillit"
 
 
+def _iter_tool_modules(tools_dir: Path) -> list[Path]:
+    """Yield every tool source file: flat ``tools_*.py`` files plus the ``.py``
+    submodules of any sibling tool package that was decomposed in issue #4663.
+    """
+    paths: list[Path] = []
+    for entry in sorted(tools_dir.iterdir()):
+        if entry.is_file() and entry.name.startswith("tools_") and entry.suffix == ".py":
+            paths.append(entry)
+        elif entry.is_dir() and entry.name.startswith("tools_") and entry.name != "tools_kitchen":
+            # tools_kitchen.py is a flat file consumed by other tests; the
+            # decomposed siblings are checked separately via their package.
+            for submodule in sorted(entry.glob("*.py")):
+                if submodule.name == "__init__.py":
+                    continue
+                paths.append(submodule)
+    return paths
+
+
 def test_all_visibility_tags_constant_exists():
     """ALL_VISIBILITY_TAGS must be defined in _type_constants.py and exported."""
     from autoskillit.core import ALL_VISIBILITY_TAGS
@@ -413,7 +431,7 @@ def test_tool_decorators_enforce_tag_partition():
     tools_dir = _SRC_ROOT / "server" / "tools"
     violations = []
 
-    for path in sorted(tools_dir.glob("tools_*.py")):
+    for path in sorted(_iter_tool_modules(tools_dir)):
         source = path.read_text()
         tree = ast.parse(source, filename=str(path))
 
@@ -463,7 +481,7 @@ def test_tool_tags_are_literal_sets():
     tools_dir = _SRC_ROOT / "server" / "tools"
     non_literals = []
 
-    for path in sorted(tools_dir.glob("tools_*.py")):
+    for path in sorted(_iter_tool_modules(tools_dir)):
         source = path.read_text()
         tree = ast.parse(source, filename=str(path))
 
@@ -502,7 +520,7 @@ def test_fleet_tools_carry_required_subset_tag():
     tools_dir = _SRC_ROOT / "server" / "tools"
     name_to_tags: dict[str, set[str]] = {}
 
-    for path in sorted(tools_dir.glob("tools_*.py")):
+    for path in sorted(_iter_tool_modules(tools_dir)):
         source = path.read_text()
         tree = ast.parse(source, filename=str(path))
 

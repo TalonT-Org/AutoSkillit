@@ -534,8 +534,10 @@ async def enable_exploration(
     except OwnerBoundExplorationContextStore.CapacityExceeded:
         return _failure(ExplorationFailureCode.CAPACITY_EXCEEDED)
     except BindSessionScopedFailed:
+        logger.warning("enable_exploration_bind_session_scoped_failed", exc_info=True)
         return _failure(ExplorationFailureCode.BIND_FAILED)
     except EnableComponentsFailed:
+        logger.warning("enable_exploration_enable_components_failed", exc_info=True)
         return _failure(ExplorationFailureCode.ENABLE_COMPONENTS_FAILED)
     except Exception:  # truly unexpected — preserve the "Never raises" contract
         logger.warning("enable_exploration: unexpected", exc_info=True)

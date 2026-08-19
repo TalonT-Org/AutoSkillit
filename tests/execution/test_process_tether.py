@@ -393,7 +393,8 @@ class TestPtyWrappedSpawnUpdatesTetherWithWorkloadIdentity:
         assert update_calls, "update_tether_workload was never called for a PTY-wrapped spawn"
         _path, workload_pid, workload_starttime_ticks = update_calls[0]
         assert workload_pid != result.pid
-        assert workload_starttime_ticks is not None
+        assert workload_pid > 0
+        assert isinstance(workload_starttime_ticks, int) and workload_starttime_ticks > 0
 
 
 class TestPtyWorkloadResolutionFailureDoesNotAbortSpawn:

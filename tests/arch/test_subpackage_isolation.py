@@ -2155,6 +2155,17 @@ def test_tools_pipeline_tracker_decomposition_has_expected_siblings() -> None:
     }
 
 
+def test_tools_execution_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_execution"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_run_cmd",
+        "_run_python",
+        "_run_skill_dispatch",
+        "_run_skill_finalize",
+    }
+
+
 def test_lifespan_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "server" / "_lifespan"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {

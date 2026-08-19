@@ -9,13 +9,20 @@ the real policy against a real settings file, which is exactly the
 composition PR #4613 broke (#4684).
 
 The check is opt-in on the artifact (CmdSpec.force_inactive_agent_teams,
-threaded from AutomationConfig.agent_backend.force_inactive_agent_teams):
-it must be a no-op whenever the opt-in is off, and must positively confirm
-an inactive setting when the opt-in is on.
+threaded from AutomationConfig.agent_backend.force_inactive_agent_teams).
+Per #4688, the opt-in *remediates* rather than refuses: conflicting settings
+entries are stripped before the inactivity confirmation, so a repository
+whose settings enable teams is neutralized and launched rather than
+rejected (refusing would turn away precisely the population this opt-in
+serves). What must hold either way is that the opt-in is genuinely live —
+with it on, a real settings file is actually rewritten and the launch env
+carries no agent-teams var; with it off, the repository is left
+byte-for-byte unchanged.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -27,6 +34,8 @@ from autoskillit.execution.backends import ClaudeCodeBackend
 from tests.cli._cook_launch_helpers import arrange_cook
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+_AGENT_TEAMS_VAR = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 
 def _write_claude_shim(path: Path) -> None:
@@ -42,37 +51,37 @@ def _write_claude_shim(path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("settings_content", "force_inactive", "expect_error"),
+    ("settings_content", "force_inactive", "expect_key_stripped"),
     [
         pytest.param(
-            {"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}},
+            {"env": {_AGENT_TEAMS_VAR: "1"}},
             False,
             False,
-            id="no_error_when_force_inactive_false",
+            id="opt_in_off_leaves_settings_untouched",
         ),
         pytest.param(
-            {"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}},
+            {"env": {_AGENT_TEAMS_VAR: "1"}},
             True,
             True,
-            id="raises_when_force_inactive_true_and_setting_active",
+            id="strips_when_force_inactive_true_and_setting_active",
         ),
         pytest.param(
-            {"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "true"}},
+            {"env": {_AGENT_TEAMS_VAR: "true"}},
             True,
             True,
-            id="raises_truthy_values_normalized",
+            id="strips_truthy_values_normalized",
         ),
         pytest.param(
             {},
             True,
             False,
-            id="no_error_when_setting_absent",
+            id="no_op_when_setting_absent",
         ),
         pytest.param(
-            {"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "0"}},
+            {"env": {_AGENT_TEAMS_VAR: "0"}},
             True,
-            False,
-            id="no_error_when_setting_falsy",
+            True,
+            id="strips_even_falsy_value",
         ),
     ],
 )
@@ -81,14 +90,14 @@ def test_cook_against_populated_settings_local_json(
     tmp_path: Path,
     settings_content: dict,
     force_inactive: bool,
-    expect_error: bool,
+    expect_key_stripped: bool,
 ) -> None:
     shim = tmp_path / "claude"
     _write_claude_shim(shim)
     monkeypatch.setenv("PATH", str(tmp_path))
     # Hermetic regardless of the host/dev-session's own env — this repo's own
     # .claude/settings.local.json may set this var for the *outer* session.
-    monkeypatch.delenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", raising=False)
+    monkeypatch.delenv(_AGENT_TEAMS_VAR, raising=False)
 
     config = AutomationConfig()
     config.agent_backend.force_inactive_agent_teams = force_inactive
@@ -101,10 +110,22 @@ def test_cook_against_populated_settings_local_json(
         lambda _project: None,
     )
 
-    if expect_error:
-        with pytest.raises(RuntimeError, match="force_inactive_agent_teams requested"):
-            cli.cook(backend=ClaudeCodeBackend())
-        assert captured == []
+    cli.cook(backend=ClaudeCodeBackend())
+
+    assert len(captured) == 1
+    spec = captured[0]
+    # The caller's intent is stamped onto the artifact the checkpoint reads.
+    assert spec.force_inactive_agent_teams is force_inactive
+    if force_inactive:
+        assert _AGENT_TEAMS_VAR not in spec.env
+
+    settings_file = tmp_path / "project" / ".claude" / "settings.local.json"
+    written = json.loads(settings_file.read_text(encoding="utf-8"))
+    if expect_key_stripped:
+        assert _AGENT_TEAMS_VAR not in written.get("env", {}), (
+            "the opt-in must actually rewrite the repository settings file"
+        )
     else:
-        cli.cook(backend=ClaudeCodeBackend())
-        assert len(captured) == 1
+        assert written == settings_content, (
+            "settings must be left byte-for-byte unchanged when nothing needs stripping"
+        )

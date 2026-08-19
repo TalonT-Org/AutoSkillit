@@ -18,7 +18,7 @@ discipline documented at `tests/AGENTS.md` § run_skill Parameter-Role Ledgers
 fields) to every `@dataclass` directly defined in `config/_config_dataclasses.py`.
 An advertised-but-unread config field is the most dangerous config shape — it
 makes reviewers believe a gate exists when none does. `#4684`'s original bug
-was exactly this: `AgentBackendConfig.force_claude_agent_teams_inactive` was
+was exactly this: `AgentBackendConfig.force_inactive_agent_teams` was
 declared and documented but never read anywhere in `src/`, while the policy it
 was supposed to gate ran unconditionally.
 

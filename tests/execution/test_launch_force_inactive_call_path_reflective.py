@@ -139,7 +139,9 @@ _BEHAVIORAL_PROBES: dict[str, Callable[[bool], CmdSpec]] = {
 
 
 def _stripped(builder_name: str, force: bool) -> bool:
-    return "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in _BEHAVIORAL_PROBES[builder_name](force).env
+    return (
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in _BEHAVIORAL_PROBES[builder_name](force).env
+    )
 
 
 def test_every_discovered_builder_has_a_behavioral_probe() -> None:

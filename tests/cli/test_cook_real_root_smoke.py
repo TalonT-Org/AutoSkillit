@@ -93,10 +93,13 @@ def test_cook_real_root_settings_local_json_composition(
     and restored around each sub-case:
 
     1. cli.cook() returns without ValueError when settings.local.json exists
-       and force_claude_agent_teams_inactive is False.
-    2. cli.cook() raises when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in the
-       real settings.local.json and force_claude_agent_teams_inactive=True —
-       the exact composition PR #4613 broke and this plan's opt-in fixes.
+       and force_inactive_agent_teams is False.
+    2. with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in the real
+       settings.local.json and force_inactive_agent_teams=True, cli.cook()
+       strips the entry from the real file in place and launches with an
+       agent-teams-free env — the composition PR #4613 broke and this plan's
+       opt-in fixes. Per #4688 the opt-in remediates rather than refuses, so
+       the assertion is on the rewrite, not on a raise.
 
     A single test function (not two) so the Taskfile's post-validation of
     "exactly one non-skipped test" mirrors test_claude_explorer_live_gate.py.
@@ -108,7 +111,7 @@ def test_cook_real_root_settings_local_json_composition(
     )
 
     no_error_config = AutomationConfig()
-    no_error_config.agent_backend.force_claude_agent_teams_inactive = False
+    no_error_config.agent_backend.force_inactive_agent_teams = False
     with _settings_local_json_round_trip({}):
         captured_ok: list[CmdSpec] = arrange_cook(
             monkeypatch,
@@ -119,15 +122,20 @@ def test_cook_real_root_settings_local_json_composition(
         cli.cook(backend=ClaudeCodeBackend())
     assert len(captured_ok) == 1
 
-    raises_config = AutomationConfig()
-    raises_config.agent_backend.force_claude_agent_teams_inactive = True
+    strip_config = AutomationConfig()
+    strip_config.agent_backend.force_inactive_agent_teams = True
     with _settings_local_json_round_trip({"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}}):
-        captured_raises: list[CmdSpec] = arrange_cook(
+        captured_stripped: list[CmdSpec] = arrange_cook(
             monkeypatch,
-            tmp_path / "raises_case",
-            config=raises_config,
+            tmp_path / "strip_case",
+            config=strip_config,
             project_dir_override=_ROOT,
         )
-        with pytest.raises(RuntimeError, match="force_inactive_agent_teams requested"):
-            cli.cook(backend=ClaudeCodeBackend())
-    assert captured_raises == []
+        cli.cook(backend=ClaudeCodeBackend())
+        # Asserted inside the round-trip: the context manager restores the
+        # original file on exit, so the rewrite is only observable here.
+        rewritten = json.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
+        assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in rewritten.get("env", {})
+    assert len(captured_stripped) == 1
+    assert captured_stripped[0].force_inactive_agent_teams is True
+    assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in captured_stripped[0].env

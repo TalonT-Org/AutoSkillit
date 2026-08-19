@@ -11,9 +11,10 @@ those two paths share.
 Split into a sibling module — not a new method on
 ``OwnerBoundExplorationContextStore`` — because that class's file sits at
 its 1100-line REQ-CNST-010-E22 exemption ceiling with zero headroom (see
-open issue #4667, which tracks the file's further decomposition). Every
-import here flows one way (this module has zero imports from
-``exploration_context``) so there is no import cycle: exploration_context.py
+open issue #4667, which tracks the file's further decomposition). This
+module has zero *runtime* imports from ``exploration_context`` (the only
+import is a ``TYPE_CHECKING``-only annotation import below, erased before
+execution) so there is no runtime import cycle: exploration_context.py
 imports ``_ExplorationLaunchAuthorityStore``, ``_ReopenedLaunchAuthority``,
 and ``_safe_submit_failure_reason`` from here, not the reverse.
 """
@@ -70,6 +71,11 @@ EXPLORATION_PRINCIPAL_ROLE = "shared-explorer-session"
 
 
 def _is_capability_shape(value: str) -> bool:
+    # Mirrors OwnerBoundExplorationContextStore._is_capability_shape in
+    # exploration_context.py — kept as an independent duplicate rather than
+    # imported, to preserve this module's one-way/no-cycle import direction
+    # (see module docstring). Both implementations validate the same
+    # "explore_<token>" capability string shape and must be changed together.
     return (
         isinstance(value, str)
         and value.startswith("explore_")
@@ -306,10 +312,11 @@ def bind_session_scoped_durable(
     module's docstring on why the split lives here.
 
     ``authority_home`` is caller-supplied — for the session-scoped path it
-    is resolved from the active session context (see
-    ``server/_factory.py``'s ``session_authority_home``, added alongside the
-    pre-existing ``exploration_trusted_root``, both derived from the same
-    ``project_dir``).
+    is computed by the caller (currently only
+    ``tools_exploration.enable_exploration``) as
+    ``ctx.temp_dir / "exploration-session-authority" / session_id``; there
+    is no dedicated factory accessor for it (unlike the pre-existing
+    ``exploration_trusted_root``).
     """
     capability = store.bind_session_scoped(
         owner_id=owner_id,

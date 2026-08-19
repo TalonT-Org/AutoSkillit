@@ -407,18 +407,28 @@ def _run_interactive_session(
             executable = prepared.executable
             # This is the sole launch path for ad-hoc fleet and campaign
             # interactive sessions (_run_interactive_session called without
-            # managed_home — cli/fleet/_fleet_session.py:89,199). It never
-            # threads force_inactive_agent_teams (out of scope per #4684's
-            # own plan — see cli/session/_session_cook.py's wiring, which
-            # this branch does not share), so the content-policy check this
-            # gate exists to run is unconditionally a no-op here today; the
-            # generic backend.validate_interactive_invocation Protocol call
-            # is deliberately NOT added here because for Codex it enforces
-            # an unrelated, stricter contract (matching CODEX_HOME/SQLite
-            # home env vars) that only a managed session home satisfies —
-            # calling it here would break real fleet/campaign Codex
-            # sessions, which never have one. assert_interactive_ordering's
-            # cmd-shape check still applies.
+            # managed_home — cli/fleet/_fleet_session.py:89,199).
+            # _run_interactive_session has no force_inactive_agent_teams
+            # parameter in #4684's scope (the cook-loop opt-in regression;
+            # see cli/session/_session_cook.py's own direct
+            # prepare_interactive_launch wiring, which this branch does not
+            # share) — plumbing it here, plus enforcement, belongs to the
+            # broader interactive-launch-corridor investigation (#4688),
+            # already shipped on develop (0b1b412c0), which threads the flag
+            # through both of _run_interactive_session's branches directly on
+            # its own single-inline-call architecture. Duplicating that here
+            # via this plan's differently-shaped single-enforcement-point
+            # design (Step 2.4) would produce two competing, partial
+            # implementations of the same corridor; left to the develop
+            # reconciliation instead. Explicitly out of scope per this
+            # plan's own §6 (audit-impl remediation, 2026-08-18).
+            # generic backend.validate_interactive_invocation is deliberately
+            # NOT added here either way: for Codex it enforces an unrelated,
+            # stricter contract (matching CODEX_HOME/SQLite home env vars)
+            # that only a managed session home satisfies — calling it here
+            # would break real fleet/campaign Codex sessions, which never
+            # have one. assert_interactive_ordering's cmd-shape check still
+            # applies.
             assert_interactive_ordering(spec=spec)
             if not executable_binding_matches_current_file(executable):
                 sys.stderr.write(

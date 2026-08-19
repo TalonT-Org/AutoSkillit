@@ -27,8 +27,13 @@ _SHAPE_TOOL_NAMES = {
 _SHAPE_INPUT_KEYS = {"run_cmd": "cmd", "bash": "command"}
 
 
-def _run(cmd: str, *, shape: str, raw_stdin: str | None = None) -> str:
-    """Run the guard's main() in-process for the given tool shape, return captured stdout."""
+def _run_capture_exit(
+    cmd: str, *, shape: str, raw_stdin: str | None = None
+) -> tuple[str, int | str | None]:
+    """Run the guard's main() in-process for the given tool shape.
+
+    Returns (captured_stdout, SystemExit.code or None if main() didn't exit).
+    """
     from autoskillit.hooks.guards.resource_exhaustion_guard import main
 
     tool_input = {_SHAPE_INPUT_KEYS[shape]: cmd, "cwd": "/some/path"}
@@ -43,13 +48,20 @@ def _run(cmd: str, *, shape: str, raw_stdin: str | None = None) -> str:
         )
     )
     buf = io.StringIO()
+    exit_code: int | str | None = None
     with patch("sys.stdin", io.StringIO(stdin_content)):
         with redirect_stdout(buf):
             try:
                 main()
-            except SystemExit:
-                pass
-    return buf.getvalue()
+            except SystemExit as exc:
+                exit_code = exc.code
+    return buf.getvalue(), exit_code
+
+
+def _run(cmd: str, *, shape: str, raw_stdin: str | None = None) -> str:
+    """Run the guard's main() in-process for the given tool shape, return captured stdout."""
+    output, _exit_code = _run_capture_exit(cmd, shape=shape, raw_stdin=raw_stdin)
+    return output
 
 
 def _is_denied(output: str) -> bool:
@@ -140,8 +152,11 @@ def test_allows_kill_by_pid(cmd: str, shape: str) -> None:
 
 class TestResourceExhaustionGuardEdgeCases:
     def test_malformed_json_fail_open(self) -> None:
-        output = _run("irrelevant", shape="run_cmd", raw_stdin="not-json{{{")
+        output, exit_code = _run_capture_exit(
+            "irrelevant", shape="run_cmd", raw_stdin="not-json{{{"
+        )
         assert output == ""
+        assert exit_code == 0
 
     def test_missing_cmd_field_fail_open(self) -> None:
         stdin = json.dumps(
@@ -150,8 +165,9 @@ class TestResourceExhaustionGuardEdgeCases:
                 "tool_input": {},
             }
         )
-        output = _run("irrelevant", shape="run_cmd", raw_stdin=stdin)
+        output, exit_code = _run_capture_exit("irrelevant", shape="run_cmd", raw_stdin=stdin)
         assert output == ""
+        assert exit_code == 0
 
     def test_unrelated_command_allowed(self) -> None:
         assert not _is_denied(_run("pytest tests/", shape="run_cmd"))

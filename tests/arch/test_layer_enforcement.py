@@ -200,7 +200,19 @@ def test_all_mcp_tools_are_registered() -> None:
     expected = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
     server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
+    tool_sources: list[Path] = []
     for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
+        tool_sources.append(py_file)
+    for pkg_dir in (server_dir / "tools").iterdir():
+        if not pkg_dir.is_dir():
+            continue
+        if not pkg_dir.name.startswith("tools_"):
+            continue
+        for submodule in pkg_dir.glob("*.py"):
+            if submodule.name == "__init__.py":
+                continue
+            tool_sources.append(submodule)
+    for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -1005,8 +1017,14 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
         # intentionally package-flat (no package-level __init__ that re-exports
         # these symbols), so the test must allow the cross-package submodule
         # access for the join batch machinery.
-        ("server/tools/tools_kitchen.py", "autoskillit.hooks._join_ledger"),
-        ("server/tools/tools_kitchen.py", "autoskillit.hooks._hook_settings"),
+        (
+            "server/tools/tools_kitchen/_declare_join_batch.py",
+            "autoskillit.hooks._join_ledger",
+        ),
+        (
+            "server/tools/tools_kitchen/_declare_join_batch.py",
+            "autoskillit.hooks._hook_settings",
+        ),
     }
 )
 
@@ -1475,7 +1493,19 @@ def test_tool_subset_tags_match_decorators() -> None:
     server_dir = SRC_ROOT / "server"
     decorator_tags: dict[str, frozenset[str]] = {}
 
+    tool_sources: list[Path] = []
     for py_file in (server_dir / "tools").glob("*.py"):
+        tool_sources.append(py_file)
+    for pkg_dir in (server_dir / "tools").iterdir():
+        if not pkg_dir.is_dir():
+            continue
+        if not pkg_dir.name.startswith("tools_"):
+            continue
+        for submodule in pkg_dir.glob("*.py"):
+            if submodule.name == "__init__.py":
+                continue
+            tool_sources.append(submodule)
+    for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

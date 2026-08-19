@@ -32,7 +32,10 @@ def _get_call_name(node: ast.Call) -> str:
 
 def test_lifespan_calls_deferred_initialize() -> None:
     """Lifespan must wire deferred_initialize as a background task."""
-    source = (SRC / "server" / "_lifespan.py").read_text()
+    _LIFESPAN_PKG = SRC / "server" / "_lifespan"
+    source = ""
+    for py in sorted(_LIFESPAN_PKG.rglob("*.py")):
+        source += py.read_text()
     tree = ast.parse(source)
 
     lifespan_func = None

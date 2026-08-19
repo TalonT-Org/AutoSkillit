@@ -100,6 +100,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "claude",  # execution/backends/claude.py: _ANNOTATION_SUPPORT_MIN = Version(...)
         "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
+        "_provenance",  # request-scoped fleet dispatch provenance ContextVars (submodule)
         "_run_skill_completion",  # request-scoped #4457 receipt delivery bindings
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
@@ -119,6 +120,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
+        "_primitives",  # server/_response_budget/_primitives.py: SHA-256 hexdigests
+        # derived once at import time from the canonical spill schema
         "_explorer_projection",  # server-owned logger and immutable projection authority
         "_explorer_dispatch",  # immutable backend-specific native dispatch renderers
         "tools_recipe",  # request-scoped recipe pagination ContextVar (delegated)
@@ -173,7 +176,10 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_STATE_TYPES"),
-        ("src/autoskillit/server/tools/tools_kitchen.py", "_OPEN_KITCHEN_REQUEST_CTX"),
+        (
+            "src/autoskillit/server/tools/tools_kitchen/_open_kitchen_transition.py",
+            "_OPEN_KITCHEN_REQUEST_CTX",
+        ),
     }
 )
 
@@ -645,7 +651,7 @@ def test_server_file_count_under_limit() -> None:
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
     Limit updated from 16 to 17 after _editable_guard.py was added as
     the pre-deletion editable install guard for perform_merge().
-    Limit updated from 17 to 18 after _lifespan.py was added for
+    Limit updated from 17 to 18 after _lifespan/_lifespan.py was added for
     FastMCP server lifespan teardown (#745).
     Limit updated from 18 to 19 after _wire_compat.py was added for
     Claude Code wire-format sanitization middleware.
@@ -1003,9 +1009,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         # +_update_obligation (persisted "republication owed" journal; must be writable
-        # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
-        # so it lives at this IL-1 layer rather than splitting further — its 176 lines
-        # are one cohesive read/write/clear API with no internal seam to extract)
+        # by cli/update/ and readable by server/_lifespan/_startup_checks.py without a
+        # server->cli edge, so it lives at this IL-1 layer rather than splitting further —
+        # its 176 lines are one cohesive read/write/clear API with no internal seam to extract)
         "hooks": 24,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
@@ -1216,61 +1222,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "#4557 decomposes pagination into sibling modules (_recipe_section_planning, "
         "_recipe_section_rendering) with char-ceiling plumbing and dual-domain page fitting.",
     ),
-    "tools_kitchen.py": (
-        2400,
-        "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
-        "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
-        "and the request-scoped replay binder journals operation/effect provenance; "
-        "for ingredient key validation; splitting would cross import-layer boundaries; "
-        "backend capability promotion delegated to _promote_capability_keys in _auto_overrides; "
-        "fail-closed validity gate on both deferred-recall and normal paths adds structural "
-        "error propagation from LoadRecipeResult; get_recipe validity guard adds 9 lines; "
-        "dispatch-feasibility preflight wiring on both paths with gate-close on failure; "
-        "gate_infrastructure_ready guard restructuring adds 22 lines for handler-skip path, "
-        "quota_refresh_loop deferred start, and all four gate.disable() rollback resets; "
-        "_dispatch_infeasible_response helper for DOA pipeline refusal"
-        "; capability admission control dispatch_feasible gating on deferred-recall and "
-        "get_recipe paths (+22 net lines)"
-        "; supports_quota_check bool at call sites replaces resolve_provider (+3 net lines)"
-        "; reap_stale_dispatches_async call in _open_kitchen_handler for interactive session "
-        "dispatch recovery (+8 net lines)"
-        "; provider-aware capability override bridge: try/except around early find for "
-        "graceful degradation when recipes.find raises (+10 net lines)"
-        "; config-default ingredient layer: build_config_default_layer call and "
-        "docstring update for pipeline_health demotion (+10 net lines)"
-        "; get_recipe session_serve_overrides replay via serve_recipe; "
-        "deferred-recall snapshot update guard (+3 net lines)"
-        "; per-step backend override config_backend kwarg threading (+5 net lines)"
-        "; _auto_init_pipeline_tracker helper + call sites on both deferred-recall and "
-        "normal open_kitchen paths for self-arming pipeline dependency tracker init "
-        "(+53 net lines)"
-        "; _auto_init_pipeline_tracker tool_ctx param typed as ToolContext under "
-        "TYPE_CHECKING instead of Any, matching _active_order_ids_for_kitchen's "
-        "established pattern (+1 net line)"
-        "; serve_recipe backend_capabilities_map threading at get_recipe + deferred-recall + "
-        "normal open_kitchen paths with safe _distinct_backends extraction from "
-        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)"
-        "; output-budget hook payload type, serializer, and hook-config bridge "
-        "(+21 net lines); response artifact temp-root bridge (+2 net lines)"
-        "; prune_stale_kitchen_state liveness-gated tracker pruning wired into both "
-        "fresh-open and deferred-recall open_kitchen paths, plus overlay lock sidecar "
-        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)"
-        "; envelope integration on both deferred-recall and normal open_kitchen paths: "
-        "resolve_general_output_token_limit + BackendCapabilities isinstance guard + "
-        "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)"
-        "; compiled recipe binding publication and execution-lifecycle cleanup across "
-        "recipe load, kitchen open, and kitchen close (+13 net lines)"
-        "; #4399 close→open visibility restore: mcp.enable() refresh in open_kitchen's "
-        "_use_global_enable branch to override prior global mcp.disable() from close_kitchen "
-        "(+2 lines), plus ToolListChangedNotification send through ctx.send_notification so "
-        "connected Clients refresh their stale tool cache; rename of _skip_notify → "
-        "_use_global_enable clarifies the branch is about the enable mechanism, not "
-        "notification suppression; scope-placement invariant comment at the "
-        "`if not _skip_handler:` guard (+10 net lines)"
-        "; finalized projection/flow generation and explicit activating-surface delivery "
-        "are threaded through normal, deferred, and resource paths while named-open "
-        "replacement clears stale readiness before every early return",
-    ),
     "tools_recipe.py": (
         750,
         "REQ-CNST-010-E25: #4557 decomposes get_recipe_section handler into "
@@ -1426,18 +1377,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
     ),
-    "_response_budget.py": (
-        1500,
-        "REQ-CNST-010-E12: lossless response spill — atomic_write, projection "
-        "(uniform and tiered), exact canonical projection finalization, "
-        "measured exemptions, both exempted and non-exempted spill paths, "
-        "spill metadata schema, bounded-failure rendering, and shared "
-        "_tiered_projection helper for the exempted (recipe/load_recipe) and "
-        "non-exempted (run_skill) spill paths (issue #4304 priority-tier "
-        "delivery-bound summary); splitting would scatter the priority-tier "
-        "algorithm across modules that must remain the single source of "
-        "truth for the bound-vs-deprioritized budget allocation order.",
-    ),
     "core/types/_type_constants_registries.py": (
         1100,
         "REQ-CNST-010-E16: canonical immutable registries and their measured digests remain "
@@ -1488,14 +1427,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection and execution-identity persistence remain at the same admission boundary. "
         "#4457 keeps receipt drafting beside exhaustive run_skill terminal projection so "
         "every post-launch classification passes through one finalization path.",
-    ),
-    "server/tools/_execution_helpers.py": (
-        1075,
-        "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
-        "remain one server-tool support authority; the managed session metadata additions "
-        "must stay beside contract rehydration and persistence to prevent resume drift. #4443 "
-        "also keeps parent sandbox authority, resolved backend/profile applicability, vector "
-        "projection, and execution identity in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
         1200,
@@ -2119,3 +2050,94 @@ def test_update_checks_docstring_describes_both_windows() -> None:
                 "_is_dismissed docstring must mention the 12-hour window"
             )
             break
+
+
+# ---------------------------------------------------------------------------
+# Decomposition sibling-set guards for GitHub issue #4663
+#
+# These tests pin the exact set of submodules each decomposed package
+# contains. Adding or removing a sibling submodule is a structural decision
+# that must be reviewed (the registry tracer warns when test sites rebind
+# attributes via these exact module paths).
+# ---------------------------------------------------------------------------
+
+
+def test_response_budget_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "_response_budget"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_primitives",
+        "_projection",
+        "_spill",
+        "_enforce",
+    }
+
+
+def test_execution_helpers_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "_execution_helpers"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_skill_contract",
+        "_dispatch_metadata",
+        "_run_cmd_spill",
+        "_run_python_coercion",
+    }
+
+
+def test_evidence_reader_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "_evidence_reader"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_authority",
+        "_invocation",
+        "_reader",
+        "_startup",
+    }
+
+
+def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_kitchen"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_open_kitchen",
+        "_open_kitchen_transition",
+        "_open_kitchen_errors",
+        "_close_kitchen",
+        "_lock_ingredients",
+        "_reload_session",
+        "_disable_quota_guard",
+        "_get_recipe",
+        "_hook_config",
+        "_tracker_authority",
+        "_declare_join_batch",
+    }
+
+
+def test_tools_fleet_dispatch_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_provenance",
+        "_campaign_state",
+        "_handlers",
+    }
+
+
+def test_tools_pipeline_tracker_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_pipeline_tracker"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_authority",
+        "_status",
+        "_handlers",
+    }
+
+
+def test_lifespan_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "_lifespan"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_startup_checks",
+        "_session_boots",
+        "_lifespan",
+    }

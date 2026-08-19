@@ -651,197 +651,42 @@ FORWARDING_SITES: dict[str, str] = {
 }
 
 
+_R4_COREUTILS_ENV_FLAG_JUSTIFICATION = (
+    "R4 false positive: a coreutils env(1) command-line flag captured only because its"
+    "defining collection name contains the substring ENV (the `env` shell command, not"
+    "os.environ)."
+)
+
 AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
-    "--argv0": AmbientEnvDisposition(
-        var="--argv0",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--block-signal": AmbientEnvDisposition(
-        var="--block-signal",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--chdir": AmbientEnvDisposition(
-        var="--chdir",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--debug": AmbientEnvDisposition(
-        var="--debug",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--default-signal": AmbientEnvDisposition(
-        var="--default-signal",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--help": AmbientEnvDisposition(
-        var="--help",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--ignore-environment": AmbientEnvDisposition(
-        var="--ignore-environment",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--ignore-signal": AmbientEnvDisposition(
-        var="--ignore-signal",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--null": AmbientEnvDisposition(
-        var="--null",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--split-string": AmbientEnvDisposition(
-        var="--split-string",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--unset": AmbientEnvDisposition(
-        var="--unset",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "--version": AmbientEnvDisposition(
-        var="--version",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "-0": AmbientEnvDisposition(
-        var="-0",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "-C": AmbientEnvDisposition(
-        var="-C",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "-S": AmbientEnvDisposition(
-        var="-S",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "-V": AmbientEnvDisposition(
-        var="-V",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "-i": AmbientEnvDisposition(
-        var="-i",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "-u": AmbientEnvDisposition(
-        var="-u",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
-    "-v": AmbientEnvDisposition(
-        var="-v",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 false positive: a coreutils env(1) command-line flag captured only because its"
-            "defining collection name contains the substring ENV (the `env` shell command, not"
-            "os.environ)."
-        ),
-    ),
+    **{
+        flag: AmbientEnvDisposition(
+            var=flag,
+            disposition="scrub",
+            owner="autoskillit",
+            justification=_R4_COREUTILS_ENV_FLAG_JUSTIFICATION,
+        )
+        for flag in (
+            "--argv0",
+            "--block-signal",
+            "--chdir",
+            "--debug",
+            "--default-signal",
+            "--help",
+            "--ignore-environment",
+            "--ignore-signal",
+            "--null",
+            "--split-string",
+            "--unset",
+            "--version",
+            "-0",
+            "-C",
+            "-S",
+            "-V",
+            "-i",
+            "-u",
+            "-v",
+        )
+    },
     "AGENT_BACKEND_CLAUDE_CODE": AmbientEnvDisposition(
         var="AGENT_BACKEND_CLAUDE_CODE",
         disposition="scrub",

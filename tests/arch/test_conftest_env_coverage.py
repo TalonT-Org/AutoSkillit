@@ -7,20 +7,17 @@ someone replaces the programmatic fixture with hand-written individual fixtures
 (the named-registry reference would disappear), and catches import-path drift
 if the import is changed without updating the loop (or vice versa).
 
-This file previously ran 5 tests against the legacy ``_clear_private_env``
-fixture: one existence check, one import-check per legacy constant
-(``AUTOSKILLIT_PRIVATE_ENV_VARS``, ``_HEADLESS_EXCLUSIVE_VARS``), one for-loop
-check that both were referenced, and one direct non-emptiness check on both
-constants. The registry redesign collapses the two legacy constants the
+The registry redesign collapses the two legacy constants
+(``AUTOSKILLIT_PRIVATE_ENV_VARS``, ``_HEADLESS_EXCLUSIVE_VARS``) that the
 fixture iterates into a single ``AMBIENT_ENV_DISPOSITIONS`` symbol (proven a
 superset of both via the V4 subsumption test in
 ``tests/contracts/test_ambient_env_surface.py``), so there is now only one
-symbol for the mechanism-guard to check, not two — hence 3 mechanism tests
-below, not 4. The legacy constants remain live production symbols in their
-own right (imported directly by ``execution/testing.py``,
-``execution/backends/claude.py``, ``execution/backends/codex.py``, etc.), so
-their own non-emptiness is still checked directly, not just via the registry,
-in ``test_scrub_ambient_env_registry_is_nonempty`` below.
+symbol for the mechanism-guard to check. The legacy constants remain live
+production symbols in their own right (imported directly by
+``execution/testing.py``, ``execution/backends/claude.py``,
+``execution/backends/codex.py``, etc.), so their own non-emptiness is still
+checked directly, not just via the registry, in
+``test_scrub_ambient_env_registry_is_nonempty`` below.
 """
 
 from __future__ import annotations

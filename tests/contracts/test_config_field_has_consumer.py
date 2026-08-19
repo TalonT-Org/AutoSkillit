@@ -5,32 +5,48 @@ tests/AGENTS.md § run_skill Parameter-Role Ledgers (precedent:
 tests/contracts/test_recipe_step_field_ledger.py, which applies it to
 ``RecipeStep`` fields) to config dataclass fields. A field is "live" iff
 either (a) some production module outside config/_config_dataclasses.py
-reads ``.<field_name>``, or (b) the field's doc-comment carries an
-``inert-tracked:#NNNN`` annotation citing an open issue.
+reads ``.<field_name>`` directly, (b) a method defined on the same
+dataclass reads ``self.<field_name>`` and that method itself has an
+external call site (indirect consumption — e.g. ``GitHubConfig.
+check_label_allowed`` reads ``self.allowed_labels`` and is called from
+``tools_issue_labels.py`` et al.), or (c) the field's doc-comment carries
+an ``inert-tracked:#NNNN`` annotation citing an open issue.
+
+``__post_init__`` is excluded from (b): it is auto-invoked at construction
+for every instance regardless of whether the field's *value* ever reaches
+real behavior, so a field read only inside its own dataclass's
+``__post_init__`` (typically a self-consistency check against a sibling
+field) does not count as "consumed" — see
+``RunSkillConfig.natural_exit_grace_seconds``, which validates itself
+against ``exit_after_stop_delay_ms`` in ``__post_init__`` but is never
+threaded into ``execution/process/__init__.py``'s
+``natural_exit_grace_seconds`` parameter at either real call site.
 
 Distinct from tests/contracts/test_config_field_coverage.py, which checks a
 different thing (REQ-CONFIG-001: every dataclass field is populated by
 _build_subconfig) — a field can be populated and still have zero readers.
 
-Scope: this test enforces the discipline against ``AgentBackendConfig``
-only — the dataclass this rectify plan actually wires a consumer into
-(``force_inactive_agent_teams``, previously orphaned per #4684).
-Retroactively auditing every field of every config dataclass in
-_config_dataclasses.py (~20 dataclasses) is a separate, much larger
-undertaking outside this plan's scope; the scanner below is written
-generally so a future PR can widen ``_ENFORCED_DATACLASSES`` one dataclass
-at a time as each is audited, without redesigning the mechanism.
+Scope: enforces every ``@dataclass``/``@dataclass(frozen=True, slots=True)``
+directly defined in config/_config_dataclasses.py (reflectively discovered,
+not hand-maintained — mirrors the reflective-discovery pattern in
+tests/execution/test_launch_force_inactive_call_path_reflective.py). Two
+pre-existing orphans surfaced by widening from the original
+AgentBackendConfig-only scope (RunSkillConfig.natural_exit_grace_seconds,
+ProviderProfileDef.context_window — both unrelated to #4684's actual root
+cause) are annotated inert-tracked:#4693 in _config_dataclasses.py rather
+than wired here, to avoid unrelated scope creep in this rectify.
 """
 
 from __future__ import annotations
 
 import ast
+import dataclasses
 import re
 from pathlib import Path
 
 import pytest
 
-from autoskillit.config._config_dataclasses import AgentBackendConfig
+from autoskillit.config import _config_dataclasses as _config_dataclasses_module
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -38,16 +54,30 @@ _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 _CONFIG_DATACLASSES_FILE = _SRC_ROOT / "config" / "_config_dataclasses.py"
 _INERT_TRACKED_RE = re.compile(r"inert-tracked:#[1-9]\d*")
 
-# Dataclasses currently enforced by this contract. Add a dataclass here only
-# after confirming (grep or reading) that every field either has a real
-# reader or carries an inert-tracked:#NNNN annotation — widening this set
-# blindly would make task test-check fail on pre-existing, unaudited fields
-# unrelated to whatever change triggered the widening.
-_ENFORCED_DATACLASSES = (AgentBackendConfig,)
+# Every dataclass directly defined in config/_config_dataclasses.py,
+# reflectively discovered — not hand-maintained. A dataclass imported into
+# this module from elsewhere would not satisfy __module__ equality below and
+# is correctly excluded (its fields are that other module's responsibility).
+_ENFORCED_DATACLASSES = tuple(
+    obj
+    for obj in vars(_config_dataclasses_module).values()
+    if isinstance(obj, type)
+    and dataclasses.is_dataclass(obj)
+    and obj.__module__ == _config_dataclasses_module.__name__
+)
+
+# Cache of all non-defining-module .py file contents, read once per test run.
+_OTHER_SRC_TEXT: dict[Path, str] = {
+    p: p.read_text(encoding="utf-8")
+    for p in _SRC_ROOT.rglob("*.py")
+    if p != _CONFIG_DATACLASSES_FILE
+}
 
 
 def _dataclass_field_names(cls: type) -> list[str]:
-    return list(getattr(cls, "__dataclass_fields__", {}))
+    # dataclasses.fields() (unlike raw __dataclass_fields__) correctly excludes
+    # ClassVar-annotated pseudo-fields, e.g. RunSkillConfig._EXIT_GRACE_BUFFER_MS.
+    return [f.name for f in dataclasses.fields(cls)]
 
 
 def _field_source_comment(field_name: str) -> str:
@@ -75,15 +105,43 @@ def _field_is_inert_tracked(field_name: str) -> bool:
     return bool(_INERT_TRACKED_RE.search(_field_source_comment(field_name)))
 
 
-def _field_has_grep_discoverable_reader(field_name: str) -> bool:
+def _has_direct_reader(field_name: str) -> bool:
     """True iff some non-config-dataclass module accesses ``.<field_name>``."""
     pattern = re.compile(rf"\.{re.escape(field_name)}\b")
-    for py_file in _SRC_ROOT.rglob("*.py"):
-        if py_file == _CONFIG_DATACLASSES_FILE:
+    return any(pattern.search(text) for text in _OTHER_SRC_TEXT.values())
+
+
+def _class_node(cls: type) -> ast.ClassDef | None:
+    source = _CONFIG_DATACLASSES_FILE.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    return next(
+        (n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls.__name__),
+        None,
+    )
+
+
+def _has_indirect_method_reader(field_name: str, cls: type) -> bool:
+    """True iff a non-``__post_init__`` method on ``cls`` reads
+    ``self.<field_name>`` and that method has an external call site."""
+    class_node = _class_node(cls)
+    if class_node is None:
+        return False
+    source = _CONFIG_DATACLASSES_FILE.read_text(encoding="utf-8")
+    self_pattern = re.compile(rf"self\.{re.escape(field_name)}\b")
+    for item in class_node.body:
+        if not isinstance(item, ast.FunctionDef) or item.name == "__post_init__":
             continue
-        if pattern.search(py_file.read_text(encoding="utf-8")):
+        method_source = ast.get_source_segment(source, item) or ""
+        if not self_pattern.search(method_source):
+            continue
+        call_pattern = re.compile(rf"\.{re.escape(item.name)}\(")
+        if any(call_pattern.search(text) for text in _OTHER_SRC_TEXT.values()):
             return True
     return False
+
+
+def _field_has_consumer(field_name: str, cls: type) -> bool:
+    return _has_direct_reader(field_name) or _has_indirect_method_reader(field_name, cls)
 
 
 def test_escape_hatch_and_reader_detection_on_synthetic_fields() -> None:
@@ -109,17 +167,44 @@ class _SyntheticConfig:
     assert _INERT_TRACKED_RE.search("# no marker here") is None
 
 
-def test_agent_backend_config_fields_have_consumers() -> None:
+def test_natural_exit_grace_seconds_is_inert_tracked_against_a_real_field() -> None:
+    """Exercise the escape hatch against a real (not synthetic) orphaned field.
+
+    RunSkillConfig.natural_exit_grace_seconds is read only inside its own
+    __post_init__ self-consistency check — never threaded into
+    execution/process/__init__.py's same-named parameter at either real call
+    site — so it must rely on the inert-tracked:#NNNN annotation, not a
+    detected consumer, to pass the contract below.
+    """
+    from autoskillit.config._config_dataclasses import RunSkillConfig
+
+    assert not _field_has_consumer("natural_exit_grace_seconds", RunSkillConfig)
+    assert _field_is_inert_tracked("natural_exit_grace_seconds")
+
+
+def test_allowed_labels_is_consumed_indirectly_via_a_dataclass_method() -> None:
+    """Positive control for the two-hop detector: allowed_labels has no
+    external `.allowed_labels` access, only external calls to
+    check_label_allowed(...)/check_labels_allowed(...), which read
+    self.allowed_labels internally."""
+    from autoskillit.config._config_dataclasses import GitHubConfig
+
+    assert not _has_direct_reader("allowed_labels")
+    assert _has_indirect_method_reader("allowed_labels", GitHubConfig)
+
+
+def test_every_config_dataclass_field_has_a_consumer() -> None:
     violations: list[str] = []
     for cls in _ENFORCED_DATACLASSES:
         for field_name in _dataclass_field_names(cls):
-            if _field_has_grep_discoverable_reader(field_name):
+            if _field_has_consumer(field_name, cls):
                 continue
             if _field_is_inert_tracked(field_name):
                 continue
             violations.append(f"{cls.__name__}.{field_name}")
     assert not violations, (
-        "Config field(s) with no grep-discoverable production reader and no "
+        "Config field(s) with no discoverable production reader (direct or via "
+        "an externally-called method on the same dataclass) and no "
         f"inert-tracked:#NNNN annotation: {violations}. Either wire a consumer "
         "or add an `inert-tracked:#NNNN` comment line citing an open issue."
     )

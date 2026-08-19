@@ -195,6 +195,9 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     class TrustedRootMismatch(ValueError):
         """repository_root does not match the bound session's trusted root."""
 
+    class InvalidSourceIdentity(ValueError):
+        """source_identity is missing or exceeds the bounded length."""
+
     class ServiceNotConfigured(RuntimeError):
         """exploration service is not configured."""
 
@@ -431,7 +434,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         """
         self._validate_binding(owner_id=owner_id, role="server", session_id=session_id)
         if not source_identity or len(source_identity) > _MAX_SOURCE_IDENTITY_LENGTH:
-            raise self.TrustedRootMismatch("source_identity must be bounded non-empty text")
+            raise self.InvalidSourceIdentity("source_identity must be bounded non-empty text")
         canonical_cwd = cwd.resolve()
         canonical_repository_root = repository_root.resolve()
         if canonical_repository_root != self._trusted_root:

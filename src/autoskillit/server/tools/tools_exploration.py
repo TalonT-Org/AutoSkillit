@@ -484,6 +484,7 @@ async def enable_exploration(
             )
         except (
             OwnerBoundExplorationContextStore.TrustedRootMismatch,
+            OwnerBoundExplorationContextStore.InvalidSourceIdentity,
             OwnerBoundExplorationContextStore.ServiceNotConfigured,
             OwnerBoundExplorationContextStore.SnapshotStale,
             OwnerBoundExplorationContextStore.StoreClosed,
@@ -522,6 +523,8 @@ async def enable_exploration(
         )
     except OwnerBoundExplorationContextStore.TrustedRootMismatch:
         return _failure(ExplorationFailureCode.TRUSTED_ROOT_MISMATCH)
+    except OwnerBoundExplorationContextStore.InvalidSourceIdentity:
+        return _failure(ExplorationFailureCode.INVALID_SOURCE_IDENTITY)
     except OwnerBoundExplorationContextStore.ServiceNotConfigured:
         return _failure(ExplorationFailureCode.SERVICE_NOT_CONFIGURED)
     except OwnerBoundExplorationContextStore.SnapshotStale:

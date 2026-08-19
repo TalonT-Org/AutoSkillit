@@ -568,6 +568,7 @@ class ExplorationFailureCode(StrEnum):
     BIND_FAILED = "bind_failed"
     ENABLE_COMPONENTS_FAILED = "enable_components_failed"
     TRUSTED_ROOT_MISMATCH = "trusted_root_mismatch"
+    INVALID_SOURCE_IDENTITY = "invalid_source_identity"
     SERVICE_NOT_CONFIGURED = "service_not_configured"
     SNAPSHOT_STALE = "snapshot_stale"
     STORE_CLOSED = "store_closed"

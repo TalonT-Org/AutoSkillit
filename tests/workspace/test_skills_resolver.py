@@ -1,4 +1,4 @@
-"""Skill resolver behavior: resolve/list/tier, cache, execution-role, schema exhaustiveness."""
+"""Skill resolver: resolve/list, bundled directory layout, cache, execution-role, schema."""
 
 from __future__ import annotations
 

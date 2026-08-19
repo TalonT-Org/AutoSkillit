@@ -1,4 +1,4 @@
-"""Skill categories: frontmatter categories, taxonomy, and tier-validation fall-through."""
+"""Skill categories and session-injection tiers: taxonomy, tier assignment, tier fall-through."""
 
 from __future__ import annotations
 

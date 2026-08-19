@@ -40,11 +40,12 @@ def _cmd_spec_call_sites() -> list[tuple[Path, ast.Call]]:
             continue
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "CmdSpec"
-            ):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_bare_name = isinstance(func, ast.Name) and func.id == "CmdSpec"
+            is_qualified = isinstance(func, ast.Attribute) and func.attr == "CmdSpec"
+            if is_bare_name or is_qualified:
                 sites.append((py_file, node))
     return sites
 

@@ -39,6 +39,7 @@ _MAX_RESPONSE_PAGE_SIZE = 100
 _FAILURE_INVALID_REQUEST = ExplorationFailureCode.INVALID_REQUEST
 _FAILURE_CONTEXT_UNAVAILABLE = ExplorationFailureCode.CONTEXT_UNAVAILABLE
 _FAILURE_BROKER_UNAVAILABLE = ExplorationFailureCode.BROKER_UNAVAILABLE
+_FAILURE_UNEXPECTED_INTERNAL_ERROR = ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR
 logger = get_logger(__name__)
 
 
@@ -314,7 +315,7 @@ async def submit_exploration_query(
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
     except Exception:  # truly unexpected — preserve the "Never raises" contract
         logger.warning("exploration query submission failed", exc_info=True)
-        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -367,7 +368,7 @@ async def get_exploration_page(
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
     except Exception:  # truly unexpected — preserve the "Never raises" contract
         logger.warning("exploration page retrieval failed", exc_info=True)
-        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -416,7 +417,7 @@ async def resume_exploration_context(
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
     except Exception:  # truly unexpected — preserve the "Never raises" contract
         logger.warning("exploration context resumption failed", exc_info=True)
-        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -535,4 +536,4 @@ async def enable_exploration(
         return _failure(ExplorationFailureCode.ENABLE_COMPONENTS_FAILED)
     except Exception:  # truly unexpected — preserve the "Never raises" contract
         logger.warning("enable_exploration: unexpected", exc_info=True)
-        return _failure(ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)

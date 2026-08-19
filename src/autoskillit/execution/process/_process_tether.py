@@ -415,9 +415,9 @@ def wrap_systemd_scope(cmd: Sequence[str], *, enabled: bool, ceiling_seconds: fl
     probe-failure case so an operator who turned this on can tell it silently
     didn't apply.
 
-    See ``ProcessTetherConfig.systemd_scope_enabled`` for the full reliability
-    caveats (WSL2 systemd requirement, ``loginctl enable-linger``, and why
-    ``RuntimeMaxSec`` is not the ceiling of record).
+    See docs/decisions/0010-systemd-scope-defense-in-depth.md for the full
+    reliability caveats (WSL2 systemd requirement, ``loginctl enable-linger``,
+    and why ``RuntimeMaxSec`` is not the ceiling of record).
     """
     if not enabled:
         return list(cmd)

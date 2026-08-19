@@ -566,26 +566,11 @@ class ProcessTetherConfig:
 
     orphan_ceiling_seconds: float = 86400.0
     cook_ceiling_seconds: float = 172800.0
-    # Optional, default-off. When enabled, funnel spawns are wrapped with
-    # `systemd-run --user --scope --quiet -p RuntimeMaxSec=<ceiling>` for a
-    # kernel-enforced ceiling that survives spawner death — defense-in-depth,
-    # never the ceiling of record. Three conditions make it real, one makes
-    # it unreliable:
-    #   - WSL2 requires `[boot] systemd=true` in /etc/wsl.conf and WSL >=
-    #     0.67.6 (verify with `systemctl status`); WSL1 and systemd-less
-    #     containers cannot use this path at all.
-    #   - Headless contexts require `loginctl enable-linger $USER` — without
-    #     linger the user manager is torn down at logout, taking every
-    #     attached scope with it, including live sessions.
-    #   - The probe (systemd-run on PATH + `systemctl --user
-    #     is-system-running` in {running, degraded}) must pass, or the spawn
-    #     proceeds unwrapped with a warning.
-    #   - RuntimeMaxSec on scope units is not reliably enforced (Launchpad
-    #     #2015126), and monotonic-clock timers do not advance while the
-    #     host is suspended. The tether's `not_after` is wall-clock
-    #     (time.time()) and does count suspended time, so the two ceilings
-    #     deliberately measure different clocks and the tether stays
-    #     authoritative.
+    # Optional, default-off kernel-enforced ceiling via
+    # `systemd-run --user --scope`; defense-in-depth only, never the ceiling
+    # of record — see docs/decisions/0010-systemd-scope-defense-in-depth.md
+    # for the WSL2/linger/probe preconditions and why RuntimeMaxSec is
+    # unreliable.
     systemd_scope_enabled: bool = False
 
     def validate(self) -> None:

@@ -321,14 +321,22 @@ def bind_session_scoped_durable(
     lease = store.lease_for_capability(capability)
     if lease is None:
         raise RuntimeError("bind_session_scoped must mint a lease for its own capability")
-    _ExplorationLaunchAuthorityStore().write(
-        authority_home=authority_home,
-        session_id=session_id,
-        cwd=cwd,
-        repository_root=repository_root,
-        capability=capability,
-        source_identity=source_identity,
-        snapshot_digest=lease.snapshot_digest,
-        expires_at=int(lease.expires_at * 1_000_000_000),
-    )
+    try:
+        _ExplorationLaunchAuthorityStore().write(
+            authority_home=authority_home,
+            session_id=session_id,
+            cwd=cwd,
+            repository_root=repository_root,
+            capability=capability,
+            source_identity=source_identity,
+            snapshot_digest=lease.snapshot_digest,
+            expires_at=int(lease.expires_at * 1_000_000_000),
+        )
+    except Exception:
+        # The lease was already minted in-memory by bind_session_scoped above;
+        # if the durable write fails, release it immediately rather than
+        # leaving it to expire via TTL (mirrors the symmetric grant/revoke
+        # cleanup pattern used at this function's call site).
+        store.cleanup_session(session_id)
+        raise
     return lease

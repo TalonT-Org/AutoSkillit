@@ -45,739 +45,160 @@ TESTS_ROOT = Path(__file__).resolve().parent.parent
 # that var — and (2) a pre-existing site outside this change's CLAUDECODE/
 # CLAUDE_CODE_EXECPATH remediation scope, grandfathered here rather than silently
 # passing, pending a future consolidation pass that assesses it individually.
+_GRANDFATHERED_JUSTIFICATION = (
+    "Pre-existing test-owned {var} clear predating the central _scrub_ambient_env "
+    "fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation scope of this "
+    "change; grandfathered pending a future consolidation pass."
+)
+
 _INTENTIONAL_ENV_INPUT_SITES: dict[str, str] = {
-    "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_MCP_CLIENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_MCP_CLIENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_env_symmetry.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_env_symmetry.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_env_symmetry.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_env_symmetry.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_feature_markers.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_MCP_CLIENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_MCP_CLIENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS": (
-        "Pre-existing test-owned AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_HEADLESS_AUTO_GATE": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS_AUTO_GATE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/_cook_launch_helpers.py::AUTOSKILLIT_CODEX_STARTUP_TRACE": (
-        "Pre-existing test-owned AUTOSKILLIT_CODEX_STARTUP_TRACE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_doctor.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_doctor_fleet_checks.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_doctor_fleet_checks.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_init.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_init.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_init_helpers.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_init_helpers.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_startup_budget.py::GITHUB_TOKEN": (
-        "Pre-existing test-owned GITHUB_TOKEN clear predating the central _scrub_ambient_env "
-        "fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation scope of this "
-        "change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/cli/test_update_checks_guards.py::AUTOSKILLIT_SOURCE_REPO": (
-        "Pre-existing test-owned AUTOSKILLIT_SOURCE_REPO clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/config/test_agent_backend_config.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/config/test_agent_backend_config.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/contracts/test_backend_prompt_conventions.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/contracts/test_backend_prompt_conventions.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_backend_gating_core.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_kitchen_state.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_kitchen_state.py::AUTOSKILLIT_STATE_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_STATE_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_session_provenance.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_session_provenance.py::AUTOSKILLIT_STATE_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_STATE_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_session_type.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_session_type.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_version_snapshot.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/core/test_version_snapshot_codex_routing.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND__BACKEND clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_backend_sandbox_invariants.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    (
-        "tests/execution/backends/test_backend_sandbox_invariants.py"
-        "::AUTOSKILLIT_KITCHEN_SESSION_ID"
-    ): (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_claude_backend.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_claude_backend.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_claude_code_backend.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_claude_code_backend.py::CLAUDE_CODE_EXECPATH": (
-        "Pre-existing test-owned CLAUDE_CODE_EXECPATH clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": (
-        "Pre-existing test-owned AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/backends/test_probe_canary.py::GITHUB_REPOSITORY": (
-        "Pre-existing test-owned GITHUB_REPOSITORY clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_codex_flag_contracts.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_codex_flag_contracts.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_commands_skill_session.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_commands_skill_session.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_headless_execute.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": (
-        "Pre-existing test-owned AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_headless_path_validation.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": (
-        "Pre-existing test-owned AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_idle_output_env.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": (
-        "Pre-existing test-owned AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_quota_sleep.py::AUTOSKILLIT_PROVIDER_PROFILE": (
-        "Pre-existing test-owned AUTOSKILLIT_PROVIDER_PROFILE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_quota_sleep.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED": (
-        "Pre-existing test-owned AUTOSKILLIT_QUOTA_GUARD__DISABLED clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_session_log_flush.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/execution/test_session_log_flush.py::AUTOSKILLIT_STATE_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_STATE_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/fleet/test_gate_state_persistence.py::AUTOSKILLIT_CAMPAIGN_STATE_PATH": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_STATE_PATH clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/fleet/test_gate_state_persistence.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_compose_pr_body_guard.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_github_mutation_guard.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_github_mutation_guard.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_hook_config_bridge.py::AUTOSKILLIT_SESSION_DEADLINE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_DEADLINE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_hook_settings.py::AUTOSKILLIT_LOG_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_LOG_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_lint_after_edit_hook.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_lint_after_edit_hook.py::AUTOSKILLIT_SKILL_NAME": (
-        "Pre-existing test-owned AUTOSKILLIT_SKILL_NAME clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_pipeline_step_guard.py::AUTOSKILLIT_DISPATCH_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_DISPATCH_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SKILL_NAME": (
-        "Pre-existing test-owned AUTOSKILLIT_SKILL_NAME clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_check.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_check.py::AUTOSKILLIT_LOG_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_LOG_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_check.py::AUTOSKILLIT_PROVIDER_PROFILE": (
-        "Pre-existing test-owned AUTOSKILLIT_PROVIDER_PROFILE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_check.py::AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH": (
-        "Pre-existing test-owned AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_check.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED": (
-        "Pre-existing test-owned AUTOSKILLIT_QUOTA_GUARD__DISABLED clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_check.py::AUTOSKILLIT_SESSION_DEADLINE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_DEADLINE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_LOG_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_LOG_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_PROVIDER_PROFILE": (
-        "Pre-existing test-owned AUTOSKILLIT_PROVIDER_PROFILE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH": (
-        "Pre-existing test-owned AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED": (
-        "Pre-existing test-owned AUTOSKILLIT_QUOTA_GUARD__DISABLED clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_SESSION_DEADLINE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_DEADLINE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_session_start_reminder.py::AUTOSKILLIT_STATE_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_STATE_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_shell_capture_hook.py::AUTOSKILLIT_AGENT_BACKEND": (
-        "Pre-existing test-owned AUTOSKILLIT_AGENT_BACKEND clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_state_root_resolution.py::AUTOSKILLIT_STATE_ROOT": (
-        "Pre-existing test-owned AUTOSKILLIT_STATE_ROOT clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_test_runner_guard.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_write_guard.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX": (
-        "Pre-existing test-owned AUTOSKILLIT_ALLOWED_WRITE_PREFIX clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_write_guard.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES": (
-        "Pre-existing test-owned AUTOSKILLIT_ALLOWED_WRITE_PREFIXES clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_write_guard.py::AUTOSKILLIT_CWD": (
-        "Pre-existing test-owned AUTOSKILLIT_CWD clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/hooks/test_write_guard.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/infra/test_open_kitchen_guard.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/infra/test_open_kitchen_guard.py::AUTOSKILLIT_STATE_DIR": (
-        "Pre-existing test-owned AUTOSKILLIT_STATE_DIR clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/integration/test_codex_food_truck.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/integration/test_codex_food_truck.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/integration/test_guard_composition.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX": (
-        "Pre-existing test-owned AUTOSKILLIT_ALLOWED_WRITE_PREFIX clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/integration/test_guard_composition.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES": (
-        "Pre-existing test-owned AUTOSKILLIT_ALLOWED_WRITE_PREFIXES clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/integration/test_pipeline_step_completion_flow.py::AUTOSKILLIT_DISPATCH_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_DISPATCH_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    (
-        "tests/integration/test_write_guard_worktree_integration.py"
-        "::AUTOSKILLIT_ALLOWED_WRITE_PREFIX"
-    ): (
-        "Pre-existing test-owned AUTOSKILLIT_ALLOWED_WRITE_PREFIX clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    (
-        "tests/integration/test_write_guard_worktree_integration.py"
-        "::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"
-    ): (
-        "Pre-existing test-owned AUTOSKILLIT_ALLOWED_WRITE_PREFIXES clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/integration/test_write_guard_worktree_integration.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_delivery_e2e_verification.py::AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS": (
-        "Pre-existing test-owned AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_delivery_e2e_verification.py::AUTOSKILLIT_ATTESTED_META_SUPPORT": (
-        "Pre-existing test-owned AUTOSKILLIT_ATTESTED_META_SUPPORT clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory.py::AUTOSKILLIT_EXPLORATION_CAPABILITY": (
-        "Pre-existing test-owned AUTOSKILLIT_EXPLORATION_CAPABILITY clear predating the "
-        "central _scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH "
-        "remediation scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory.py::AUTOSKILLIT_PROVIDER_PROFILE": (
-        "Pre-existing test-owned AUTOSKILLIT_PROVIDER_PROFILE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory.py::GITHUB_TOKEN": (
-        "Pre-existing test-owned GITHUB_TOKEN clear predating the central _scrub_ambient_env "
-        "fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation scope of this "
-        "change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory.py::RECORD_SCENARIO": (
-        "Pre-existing test-owned RECORD_SCENARIO clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory.py::REPLAY_SCENARIO": (
-        "Pre-existing test-owned REPLAY_SCENARIO clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory_recording.py::RECORD_SCENARIO": (
-        "Pre-existing test-owned RECORD_SCENARIO clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_factory_recording.py::REPLAY_SCENARIO": (
-        "Pre-existing test-owned REPLAY_SCENARIO clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_helpers_tier_guards.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_helpers_tier_guards.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_lifespan_fleet_boot.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_progress_heartbeat_wiring.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_record_pipeline_step.py::AUTOSKILLIT_DISPATCH_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_DISPATCH_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_record_pipeline_step_complete.py::AUTOSKILLIT_DISPATCH_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_DISPATCH_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_session_deadline.py::AUTOSKILLIT_SESSION_DEADLINE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_DEADLINE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_session_type_visibility_fleet.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_session_type_visibility_fleet.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    (
-        "tests/server/test_session_type_visibility_orchestrator.py"
-        "::AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"
-    ): (
-        "Pre-existing test-owned AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_HEADLESS_AUTO_GATE": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS_AUTO_GATE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_SESSION_TYPE": (
-        "Pre-existing test-owned AUTOSKILLIT_SESSION_TYPE clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_clone.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_dispatch_halt.py::AUTOSKILLIT_CAMPAIGN_STATE_PATH": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_STATE_PATH clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_dispatch_validation.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_execution_routing.py::AUTOSKILLIT_DISPATCH_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_DISPATCH_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_kitchen_envelope.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_kitchen_gate.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_run_cmd_invariants.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_run_python_invariants.py::AUTOSKILLIT_HEADLESS": (
-        "Pre-existing test-owned AUTOSKILLIT_HEADLESS clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/server/test_tools_status_kitchen.py::GITHUB_TOKEN": (
-        "Pre-existing test-owned GITHUB_TOKEN clear predating the central _scrub_ambient_env "
-        "fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation scope of this "
-        "change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/workspace/test_clone_registry.py::AUTOSKILLIT_CAMPAIGN_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_CAMPAIGN_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
-    "tests/workspace/test_clone_registry.py::AUTOSKILLIT_KITCHEN_SESSION_ID": (
-        "Pre-existing test-owned AUTOSKILLIT_KITCHEN_SESSION_ID clear predating the central "
-        "_scrub_ambient_env fixture; outside the CLAUDECODE/CLAUDE_CODE_EXECPATH remediation "
-        "scope of this change; grandfathered pending a future consolidation pass."
-    ),
+    site: _GRANDFATHERED_JUSTIFICATION.format(var=site.rsplit("::", 1)[1])
+    for site in (
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/arch/test_codex_env_forward_bridge.py::AUTOSKILLIT_MCP_CLIENT_BACKEND",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/arch/test_env_symmetry.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/arch/test_feature_markers.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_MCP_CLIENT_BACKEND",
+        "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS",
+        "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_HEADLESS_AUTO_GATE",
+        "tests/cli/_cook_launch_helpers.py::AUTOSKILLIT_CODEX_STARTUP_TRACE",
+        "tests/cli/test_doctor.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/cli/test_doctor_fleet_checks.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/cli/test_doctor_fleet_checks.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/cli/test_init.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/cli/test_init.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/cli/test_init_helpers.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/cli/test_init_helpers.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/cli/test_startup_budget.py::GITHUB_TOKEN",
+        "tests/cli/test_update_checks_guards.py::AUTOSKILLIT_SOURCE_REPO",
+        "tests/config/test_agent_backend_config.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/config/test_agent_backend_config.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/contracts/test_backend_prompt_conventions.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/contracts/test_backend_prompt_conventions.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/core/test_backend_gating_core.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/core/test_kitchen_state.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/core/test_kitchen_state.py::AUTOSKILLIT_STATE_DIR",
+        "tests/core/test_session_provenance.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/core/test_session_provenance.py::AUTOSKILLIT_STATE_DIR",
+        "tests/core/test_session_type.py::AUTOSKILLIT_HEADLESS",
+        "tests/core/test_session_type.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/core/test_version_snapshot.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/core/test_version_snapshot_codex_routing.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_backend_env_injection.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_backend_sandbox_invariants.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_backend_sandbox_invariants.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_claude_backend.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_claude_backend.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_claude_code_backend.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_claude_code_backend.py::CLAUDE_CODE_EXECPATH",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/backends/test_codex_backend.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/backends/test_probe_canary.py::GITHUB_REPOSITORY",
+        "tests/execution/test_codex_flag_contracts.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/test_codex_flag_contracts.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/test_commands_skill_session.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/test_commands_skill_session.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/execution/test_headless_execute.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/test_headless_path_validation.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/test_idle_output_env.py::AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
+        "tests/execution/test_quota_sleep.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/execution/test_quota_sleep.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED",
+        "tests/execution/test_session_log_flush.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/execution/test_session_log_flush.py::AUTOSKILLIT_STATE_DIR",
+        "tests/fleet/test_gate_state_persistence.py::AUTOSKILLIT_CAMPAIGN_STATE_PATH",
+        "tests/fleet/test_gate_state_persistence.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_compose_pr_body_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_github_mutation_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_github_mutation_guard.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/hooks/test_hook_config_bridge.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/hooks/test_hook_settings.py::AUTOSKILLIT_LOG_DIR",
+        "tests/hooks/test_lint_after_edit_hook.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_lint_after_edit_hook.py::AUTOSKILLIT_SKILL_NAME",
+        "tests/hooks/test_pipeline_step_guard.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SKILL_NAME",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_LOG_DIR",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED",
+        "tests/hooks/test_quota_check.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_LOG_DIR",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_QUOTA_GUARD__DISABLED",
+        "tests/hooks/test_quota_post_check.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/hooks/test_session_start_reminder.py::AUTOSKILLIT_STATE_DIR",
+        "tests/hooks/test_shell_capture_hook.py::AUTOSKILLIT_AGENT_BACKEND",
+        "tests/hooks/test_state_root_resolution.py::AUTOSKILLIT_STATE_ROOT",
+        "tests/hooks/test_test_runner_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_CWD",
+        "tests/hooks/test_write_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/infra/test_open_kitchen_guard.py::AUTOSKILLIT_HEADLESS",
+        "tests/infra/test_open_kitchen_guard.py::AUTOSKILLIT_STATE_DIR",
+        "tests/integration/test_codex_food_truck.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/integration/test_codex_food_truck.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+        "tests/integration/test_guard_composition.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "tests/integration/test_guard_composition.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
+        "tests/integration/test_pipeline_step_completion_flow.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/integration/test_write_guard_worktree_integration.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "tests/integration/test_write_guard_worktree_integration.py::AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
+        "tests/integration/test_write_guard_worktree_integration.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_delivery_e2e_verification.py::AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS",
+        "tests/server/test_delivery_e2e_verification.py::AUTOSKILLIT_ATTESTED_META_SUPPORT",
+        "tests/server/test_factory.py::AUTOSKILLIT_EXPLORATION_CAPABILITY",
+        "tests/server/test_factory.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_factory.py::AUTOSKILLIT_PROVIDER_PROFILE",
+        "tests/server/test_factory.py::GITHUB_TOKEN",
+        "tests/server/test_factory.py::RECORD_SCENARIO",
+        "tests/server/test_factory.py::REPLAY_SCENARIO",
+        "tests/server/test_factory_recording.py::RECORD_SCENARIO",
+        "tests/server/test_factory_recording.py::REPLAY_SCENARIO",
+        "tests/server/test_helpers_tier_guards.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_helpers_tier_guards.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/server/test_lifespan_fleet_boot.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_progress_heartbeat_wiring.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_record_pipeline_step.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/server/test_record_pipeline_step_complete.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/server/test_session_deadline.py::AUTOSKILLIT_SESSION_DEADLINE",
+        "tests/server/test_session_type_visibility_fleet.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_session_type_visibility_fleet.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_HEADLESS_AUTO_GATE",
+        "tests/server/test_session_type_visibility_orchestrator.py::AUTOSKILLIT_SESSION_TYPE",
+        "tests/server/test_tools_clone.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/server/test_tools_dispatch_halt.py::AUTOSKILLIT_CAMPAIGN_STATE_PATH",
+        "tests/server/test_tools_dispatch_validation.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_execution_routing.py::AUTOSKILLIT_DISPATCH_ID",
+        "tests/server/test_tools_kitchen_envelope.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_kitchen_gate.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/server/test_tools_run_cmd_invariants.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_run_python_invariants.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_status_kitchen.py::GITHUB_TOKEN",
+        "tests/workspace/test_clone_registry.py::AUTOSKILLIT_CAMPAIGN_ID",
+        "tests/workspace/test_clone_registry.py::AUTOSKILLIT_KITCHEN_SESSION_ID",
+    )
 }
 
 

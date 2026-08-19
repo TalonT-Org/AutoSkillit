@@ -30,10 +30,10 @@ from autoskillit.core import (
     session_type as _resolve_session_type,
 )
 from autoskillit.pipeline import (
-    EXPLORER_INELIGIBLE_SESSION_TYPES,
     KITCHEN_EFFECT_RECIPE_SERVING,
     KitchenOpenPhase,
     advance_kitchen_phase,
+    exploration_auto_provision_eligible,
     transition_abort,
     transition_ambiguous,
     transition_confirm,
@@ -415,9 +415,9 @@ async def open_kitchen(
             # exploration authority. Visibility-only — the per-call HMAC capability
             # lease minted by enable_exploration remains the authorization boundary
             # regardless of tag visibility.
-            _auto_provision_exploration = (
-                _kctx_pre.config.agent_backend.auto_provision_exploration
-                and _resolve_session_type() not in EXPLORER_INELIGIBLE_SESSION_TYPES
+            _auto_provision_exploration = exploration_auto_provision_eligible(
+                auto_provision=_kctx_pre.config.agent_backend.auto_provision_exploration,
+                session_type=_resolve_session_type(),
             )
             if _use_global_enable:
                 # Issue #4399: when the backend can't process tool/list_changed

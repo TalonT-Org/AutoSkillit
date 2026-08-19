@@ -59,6 +59,7 @@ __all__ = [
     "ExplorationContextStoreProtocol",
     "ExplorationServiceProtocol",
     "OwnerBoundExplorationContextStore",
+    "exploration_auto_provision_eligible",
     "is_explorer_binding_eligible",
 ]
 
@@ -101,6 +102,20 @@ def is_explorer_binding_eligible(
     if terminal_explorer_capable or session_scoped_explorer_capable:
         return parent_sandbox_mode == "read-only"
     return False
+
+
+def exploration_auto_provision_eligible(
+    *, auto_provision: bool, session_type: SessionType
+) -> bool:
+    """Pure eligibility predicate for exploration tag auto-provisioning at boot.
+
+    Shared by both boot entry points (pre_reveal_kitchen and open_kitchen) so
+    the "is auto-provisioning eligible for this session" rule is defined once.
+    Visibility-only — the per-call HMAC capability lease minted by
+    enable_exploration remains the authorization boundary regardless of tag
+    visibility.
+    """
+    return auto_provision and session_type not in EXPLORER_INELIGIBLE_SESSION_TYPES
 
 
 @dataclass(frozen=True, slots=True)

@@ -36,10 +36,10 @@ from autoskillit.execution import (
 )
 from autoskillit.fleet import sweep_stale_dispatch_labels
 from autoskillit.pipeline import (
-    EXPLORER_INELIGIBLE_SESSION_TYPES,
     KitchenOpenPhase,
     OwnerBoundExplorationContextStore,
     confirm_kitchen_effect,
+    exploration_auto_provision_eligible,
     get_kitchen_process_identity,
     new_kitchen_open_state,
     start_kitchen_effect,
@@ -255,9 +255,9 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     # open_kitchen's gated reveal. Visibility-only — the per-call HMAC
     # capability lease minted by enable_exploration remains the authorization
     # boundary regardless of tag visibility.
-    if (
-        ctx.config.agent_backend.auto_provision_exploration
-        and _resolve_session_type() not in EXPLORER_INELIGIBLE_SESSION_TYPES
+    if exploration_auto_provision_eligible(
+        auto_provision=ctx.config.agent_backend.auto_provision_exploration,
+        session_type=_resolve_session_type(),
     ):
         _mcp.enable(tags={"exploration"})
 

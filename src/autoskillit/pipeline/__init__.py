@@ -44,6 +44,7 @@ from autoskillit.pipeline.exploration_context import (
     ExplorationContextStoreProtocol,
     ExplorationLaunchBinding,
     OwnerBoundExplorationContextStore,
+    exploration_auto_provision_eligible,
     is_explorer_binding_eligible,
 )
 from autoskillit.pipeline.exploration_context_durable import bind_session_scoped_durable
@@ -158,6 +159,7 @@ __all__ = [
     "ExplorationLaunchBinding",
     "OwnerBoundExplorationContextStore",
     "bind_session_scoped_durable",
+    "exploration_auto_provision_eligible",
     "is_explorer_binding_eligible",
     "DefaultAuditAdmissionLedger",
     "DefaultContextAdmissionLedger",

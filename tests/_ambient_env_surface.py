@@ -90,6 +90,7 @@ class ProductionEnvSurface:
     reads: tuple[EnvRead, ...]
     unresolved: tuple[UnresolvedRead, ...]
     forwarding_sites: tuple[ForwardingSite, ...]
+    unparseable_files: tuple[str, ...]
 
 
 def _module_level_binding(stmt: ast.stmt) -> tuple[str | None, ast.expr | None]:
@@ -408,10 +409,12 @@ def _comprehension_exclusion_set(gen: ast.comprehension) -> str:
 def production_env_read_surface(src_root: Path) -> ProductionEnvSurface:
     files = sorted(src_root.rglob("*.py"))
     trees: dict[Path, ast.Module] = {}
+    unparseable: list[str] = []
     for f in files:
         try:
             trees[f] = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
         except SyntaxError:
+            unparseable.append(f.relative_to(src_root).as_posix())
             continue
 
     module_scalars: dict[Path, dict[str, str]] = {}
@@ -515,6 +518,7 @@ def production_env_read_surface(src_root: Path) -> ProductionEnvSurface:
         reads=tuple(reads),
         unresolved=tuple(unresolved),
         forwarding_sites=tuple(forwarding),
+        unparseable_files=tuple(unparseable),
     )
 
 

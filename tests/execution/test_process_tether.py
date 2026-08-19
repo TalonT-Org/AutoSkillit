@@ -577,15 +577,13 @@ class TestSystemdScopeWrap:
     def test_probe_false_when_systemctl_reports_not_running(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import subprocess as _subprocess
-
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.shutil.which",
             lambda _name: "/usr/bin/systemd-run",
         )
 
         def _fake_run(*args, **kwargs):
-            return _subprocess.CompletedProcess(args, 1, stdout="offline\n")
+            return subprocess.CompletedProcess(args, 1, stdout="offline\n")
 
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.subprocess.run", _fake_run
@@ -595,15 +593,13 @@ class TestSystemdScopeWrap:
     def test_probe_true_when_systemctl_reports_running(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import subprocess as _subprocess
-
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.shutil.which",
             lambda _name: "/usr/bin/systemd-run",
         )
 
         def _fake_run(*args, **kwargs):
-            return _subprocess.CompletedProcess(args, 0, stdout="running\n")
+            return subprocess.CompletedProcess(args, 0, stdout="running\n")
 
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.subprocess.run", _fake_run
@@ -613,15 +609,13 @@ class TestSystemdScopeWrap:
     def test_probe_true_when_systemctl_reports_degraded(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import subprocess as _subprocess
-
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.shutil.which",
             lambda _name: "/usr/bin/systemd-run",
         )
 
         def _fake_run(*args, **kwargs):
-            return _subprocess.CompletedProcess(args, 0, stdout="degraded\n")
+            return subprocess.CompletedProcess(args, 0, stdout="degraded\n")
 
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.subprocess.run", _fake_run
@@ -629,15 +623,13 @@ class TestSystemdScopeWrap:
         assert probe_systemd_scope_available() is True
 
     def test_probe_false_on_systemctl_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import subprocess as _subprocess
-
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.shutil.which",
             lambda _name: "/usr/bin/systemd-run",
         )
 
         def _raise_timeout(*args, **kwargs):
-            raise _subprocess.TimeoutExpired(cmd="systemctl", timeout=5.0)
+            raise subprocess.TimeoutExpired(cmd="systemctl", timeout=5.0)
 
         monkeypatch.setattr(
             "autoskillit.execution.process._process_tether.subprocess.run", _raise_timeout

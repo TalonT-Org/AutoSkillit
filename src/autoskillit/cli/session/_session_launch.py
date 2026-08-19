@@ -405,30 +405,16 @@ def _run_interactive_session(
                 _exit_launch_preparation_error(exc)
             spec = prepared.spec
             executable = prepared.executable
-            # This is the sole launch path for ad-hoc fleet and campaign
-            # interactive sessions (_run_interactive_session called without
-            # managed_home — cli/fleet/_fleet_session.py:89,199).
-            # _run_interactive_session has no force_inactive_agent_teams
-            # parameter in #4684's scope (the cook-loop opt-in regression;
-            # see cli/session/_session_cook.py's own direct
-            # prepare_interactive_launch wiring, which this branch does not
-            # share) — plumbing it here, plus enforcement, belongs to the
-            # broader interactive-launch-corridor investigation (#4688),
-            # already shipped on develop (0b1b412c0), which threads the flag
-            # through both of _run_interactive_session's branches directly on
-            # its own single-inline-call architecture. Duplicating that here
-            # via this plan's differently-shaped single-enforcement-point
-            # design (Step 2.4) would produce two competing, partial
-            # implementations of the same corridor; left to the develop
-            # reconciliation instead. Explicitly out of scope per this
-            # plan's own §6 (audit-impl remediation, 2026-08-18).
-            # generic backend.validate_interactive_invocation is deliberately
-            # NOT added here either way: for Codex it enforces an unrelated,
-            # stricter contract (matching CODEX_HOME/SQLite home env vars)
-            # that only a managed session home satisfies — calling it here
-            # would break real fleet/campaign Codex sessions, which never
-            # have one. assert_interactive_ordering's cmd-shape check still
-            # applies.
+            # This is the sole raw/non-managed launch path for ad-hoc fleet
+            # and campaign interactive sessions (_run_interactive_session
+            # called without managed_home — cli/fleet/_fleet_session.py:89,199).
+            # backend.validate_interactive_invocation is never called on this
+            # branch, so force_inactive_agent_teams enforcement is a no-op
+            # here today. It is deliberately not added generically: for Codex
+            # it enforces a stricter CODEX_HOME/SQLite-home contract that
+            # only a managed session home satisfies, and adding it would
+            # break real fleet/campaign Codex sessions, which never have one.
+            # assert_interactive_ordering's cmd-shape check still applies.
             assert_interactive_ordering(spec=spec)
             if not executable_binding_matches_current_file(executable):
                 sys.stderr.write(

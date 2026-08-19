@@ -31,7 +31,7 @@ from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_ca
 _AMBIENT_ENV_AT_STARTUP: Mapping[str, str] = MappingProxyType(dict(os.environ))
 
 
-def pytest_report_header(config) -> list[str] | None:
+def pytest_report_header(config: pytest.Config) -> list[str] | None:
     from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
 
     contaminated = sorted(

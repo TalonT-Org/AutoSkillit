@@ -1741,11 +1741,17 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_quota_http.py": frozenset({"autoskillit.config"}),
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
-    "tests/workspace/test_skills.py": frozenset({"autoskillit.config"}),
+    # skills split — categories tests call load_config() to validate tier assignments
+    "tests/workspace/test_skills_categories.py": frozenset({"autoskillit.config"}),
     # project-local override tests use backend convention objects to verify scoping behavior
     "tests/workspace/test_project_local_overrides.py": frozenset({"autoskillit.execution"}),
-    # codex session skills tests import _materialize_profile_skills from codex backend
-    "tests/workspace/test_session_skills_codex.py": frozenset({"autoskillit.execution"}),
+    # codex session skills split — layout, locking, persistent_root tests import
+    # codex backend helpers (CodexBackend, materialize_codex_profile_skills, get_backend)
+    "tests/workspace/test_session_skills_codex_layout.py": frozenset({"autoskillit.execution"}),
+    "tests/workspace/test_session_skills_codex_locking.py": frozenset({"autoskillit.execution"}),
+    "tests/workspace/test_session_skills_codex_persistent_root.py": frozenset(
+        {"autoskillit.execution"}
+    ),
     # recipe tests — recipe layer is IL-2 and may use workspace (IL-1 sibling) or config (IL-1)
     "tests/recipe/test_rules_inputs.py": frozenset({"autoskillit.config"}),
     "tests/recipe/test_contracts.py": frozenset({"autoskillit.workspace"}),

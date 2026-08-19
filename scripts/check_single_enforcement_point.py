@@ -108,7 +108,10 @@ def _module_to_relpath(module: str) -> str:
     if module.startswith(prefix):
         module = module[len(prefix) :]
     elif module == SRC_ROOT.name:
-        module = ""
+        # A bare `import autoskillit` with no submodule resolves to the
+        # root package file, keyed as "__init__.py" in the parsed dict —
+        # not "" + ".py", which never matches any real key.
+        return "__init__.py"
     return module.replace(".", "/") + ".py"
 
 

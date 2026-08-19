@@ -252,16 +252,18 @@ def _handle_call(
     if not isinstance(func, ast.Attribute):
         return
     if func.attr == "getenv" and isinstance(func.value, ast.Name) and func.value.id == "os":
-        arg = node.args[0] if node.args else None
-        _record_key_arg(node, arg, rel, module_scalars, flat_scalars, reads, unresolved)
+        _record_key_arg(
+            node, _get_call_key_arg(node), rel, module_scalars, flat_scalars, reads, unresolved
+        )
         return
     if func.attr in _ENVIRON_READ_METHODS and _is_environ_attr(func.value):
-        arg = (
-            _get_call_key_arg(node)
-            if func.attr == "get"
-            else (node.args[0] if node.args else None)
+        # _get_call_key_arg resolves the `key=`/positional-first-arg form uniformly for
+        # get/pop/setdefault (and getenv above) -- os.environ's mixin methods and
+        # os.getenv all name their first parameter `key`, so an all-keyword call
+        # (e.g. os.environ.pop(key=...)) is not silently dropped.
+        _record_key_arg(
+            node, _get_call_key_arg(node), rel, module_scalars, flat_scalars, reads, unresolved
         )
-        _record_key_arg(node, arg, rel, module_scalars, flat_scalars, reads, unresolved)
 
 
 def _handle_subscript(

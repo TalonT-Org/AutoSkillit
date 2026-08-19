@@ -76,6 +76,48 @@ def test_scanner_reports_unresolved_dynamic_reads(tmp_path: Path) -> None:
     assert matches[0].expression == "some_runtime_name"
 
 
+_KEYWORD_ONLY_READ_CASES: tuple[tuple[str, str, str], ...] = (
+    (
+        "getenv_kwonly",
+        "import os\n\n\ndef read() -> str | None:\n"
+        '    return os.getenv(key="KWONLY_GETENV_SYNTHETIC_VAR", default="x")\n',
+        "KWONLY_GETENV_SYNTHETIC_VAR",
+    ),
+    (
+        "environ_pop_kwonly",
+        "import os\n\n\ndef read() -> str | None:\n"
+        '    return os.environ.pop(key="KWONLY_POP_SYNTHETIC_VAR", default=None)\n',
+        "KWONLY_POP_SYNTHETIC_VAR",
+    ),
+    (
+        "environ_setdefault_kwonly",
+        "import os\n\n\ndef read() -> str | None:\n"
+        '    return os.environ.setdefault(key="KWONLY_SETDEFAULT_SYNTHETIC_VAR", default="x")\n',
+        "KWONLY_SETDEFAULT_SYNTHETIC_VAR",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "name,source,expected_var",
+    _KEYWORD_ONLY_READ_CASES,
+    ids=[c[0] for c in _KEYWORD_ONLY_READ_CASES],
+)
+def test_scanner_resolves_all_keyword_argument_env_reads(
+    tmp_path: Path, name: str, source: str, expected_var: str
+) -> None:
+    """R1 completeness: os.getenv/os.environ.pop/.setdefault called with an
+    all-keyword ``key=``/``default=`` form must resolve into surface.names, never
+    vanish silently (R6 -- must fail loudly, never silently under-report)."""
+    module = tmp_path / f"synthetic_{name}.py"
+    module.write_text(source)
+    surface = production_env_read_surface(tmp_path)
+    assert expected_var in surface.names, (
+        f"{name}: {expected_var!r} not resolved into surface.names "
+        f"(names={sorted(surface.names)}, unresolved={surface.unresolved})"
+    )
+
+
 _T6_CASES: tuple[tuple[str, str, str], ...] = (
     (
         "dict_call",

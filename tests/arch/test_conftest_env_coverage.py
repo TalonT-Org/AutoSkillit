@@ -6,6 +6,21 @@ named registry — not the individual var names.  It catches regression if
 someone replaces the programmatic fixture with hand-written individual fixtures
 (the named-registry reference would disappear), and catches import-path drift
 if the import is changed without updating the loop (or vice versa).
+
+This file previously ran 5 tests against the legacy ``_clear_private_env``
+fixture: one existence check, one import-check per legacy constant
+(``AUTOSKILLIT_PRIVATE_ENV_VARS``, ``_HEADLESS_EXCLUSIVE_VARS``), one for-loop
+check that both were referenced, and one direct non-emptiness check on both
+constants. The registry redesign collapses the two legacy constants the
+fixture iterates into a single ``AMBIENT_ENV_DISPOSITIONS`` symbol (proven a
+superset of both via the V4 subsumption test in
+``tests/contracts/test_ambient_env_surface.py``), so there is now only one
+symbol for the mechanism-guard to check, not two — hence 3 mechanism tests
+below, not 4. The legacy constants remain live production symbols in their
+own right (imported directly by ``execution/testing.py``,
+``execution/backends/claude.py``, ``execution/backends/codex.py``, etc.), so
+their own non-emptiness is still checked directly, not just via the registry,
+in ``test_scrub_ambient_env_registry_is_nonempty`` below.
 """
 
 from __future__ import annotations
@@ -15,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -86,5 +103,14 @@ def test_scrub_ambient_env_for_loop_references_registry() -> None:
 
 
 def test_scrub_ambient_env_registry_is_nonempty() -> None:
-    """AMBIENT_ENV_DISPOSITIONS must be importable from its canonical path and non-empty."""
+    """The registry and the two legacy constants it subsumes must all stay non-empty.
+
+    AUTOSKILLIT_PRIVATE_ENV_VARS and _HEADLESS_EXCLUSIVE_VARS are still live
+    production symbols in their own right (see module docstring), so they are
+    checked directly here rather than only through the registry -- the V4
+    subsumption test proves AMBIENT_ENV_DISPOSITIONS is a superset of both, but
+    a superset check passes vacuously if either legacy set became empty.
+    """
+    assert AUTOSKILLIT_PRIVATE_ENV_VARS, "AUTOSKILLIT_PRIVATE_ENV_VARS is empty"
+    assert _HEADLESS_EXCLUSIVE_VARS, "_HEADLESS_EXCLUSIVE_VARS is empty"
     assert len(AMBIENT_ENV_DISPOSITIONS) > 0, f"{_REGISTRY_NAME} is empty"

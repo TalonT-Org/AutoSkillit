@@ -15,11 +15,11 @@ from typing import Any
 import pytest
 import structlog.testing
 
-from autoskillit.cli._install_contract import (
+from autoskillit.cli.install._install_contract import (
     InstallOutcome,
     InstallProcessStatus,
 )
-from autoskillit.cli._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.cli.update._transaction import (
     IRREVERSIBLE_PIVOT_PHASE,
     UPDATE_TRANSACTION_PHASES,
@@ -256,7 +256,7 @@ import tempfile
 from pathlib import Path
 
 import autoskillit.cli.update._transaction as t
-from autoskillit.cli._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType
 
 
 def _info():
@@ -383,7 +383,7 @@ import tempfile
 from pathlib import Path
 
 import autoskillit.cli.update._transaction as t
-from autoskillit.cli._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType
 
 
 def _info():
@@ -1171,7 +1171,7 @@ registry.write_text(
     autoskillit_entrypoint = fake_bin / "autoskillit"
     child_bootstrap = (
         "import runpy,sys;"
-        "import autoskillit.cli._marketplace as marketplace;"
+        "import autoskillit.cli.install._marketplace as marketplace;"
         "marketplace.is_git_worktree=lambda _path:False;"
         "sys.argv[0]='autoskillit';"
         "runpy.run_module('autoskillit',run_name='__main__')"

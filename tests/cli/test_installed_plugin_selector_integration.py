@@ -15,7 +15,7 @@ from typing import cast
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
 from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
     _run_interactive_session,

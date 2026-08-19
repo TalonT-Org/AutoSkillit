@@ -83,7 +83,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
         "_generation_publication",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
-        "_install_info",  # cli/_install_info.py: window constants (see comment above)
+        "_install_info",  # cli/install/_install_info.py: window constants (see comment above)
         # KITCHEN_GUARDED_COMMANDS: frozenset[str]
         "_update_checks",  # cli/_update_checks.py: module-level frozenset (see comment above)
         # _HTTP_TIMEOUT = httpx.Timeout(...) — module-level httpx client timeout config
@@ -98,7 +98,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         "claude",  # execution/backends/claude.py: _ANNOTATION_SUPPORT_MIN = Version(...)
-        "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
+        "_prompts",  # cli/prompts/_prompts.py: immutable startup recovery spec and rendering
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
         "_provenance",  # request-scoped fleet dispatch provenance ContextVars (submodule)
         "_run_skill_completion",  # request-scoped #4457 receipt delivery bindings
@@ -923,8 +923,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
             management context manager (terminal_guard) for interactive subprocess
-            sessions. _install_info.py adds pure install classification + policy.
-            _update_checks.py adds the unified update check orchestration.
+            sessions. _update_checks.py adds the unified update check orchestration.
             _update.py adds the first-class update subcommand implementation.
             _fleet.py adds fleet error envelope rendering for CLI consumers.
             _features.py adds feature gate inspection subcommand (list/status).
@@ -938,14 +937,16 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
             _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
             _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
-            _prompts.py (819 lines) was decomposed into three domain-focused submodules:
-            _prompts_campaign.py (IL-3 campaign dispatcher), _prompts_orchestrator.py
-            (IL-1/IL-2 cook session), and _prompts_kitchen.py (open-kitchen + fleet-dispatch),
-            with _prompts.py reduced to a shared-helpers + re-export hub (~50 lines).
+            In issue #4670 Part A, _prompts.py and the four install-cluster files
+            (_install_contract.py, _install_info.py, _installed_plugins.py,
+            _marketplace.py, _plugin_artifact.py) were extracted to the new
+            `cli/prompts/` and `cli/install/` subpackages respectively. Remaining
+            top-level files: _capture_store, _codex_attempts, _codex_orphans,
+            _daemon_orphans, _process_orphans (each slated for `cli/ops/` in Part B).
             _hooks_codex.py adds Codex config.toml hook generation and sync
     (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
     _hooks.py for Claude Code settings.json hooks.
-    Exempt at 21 files.
+    Exempt at 19 files.
           hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
             (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
             file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -999,9 +1000,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
-        "cli": 28,  # +_install_contract typed install process boundary (#4409);
-        # +_capture_store capture-store stats/reclaim; +_codex_orphans (#4536);
-        # +_codex_attempts (#4361); +_daemon_orphans operator surface (#4544);
+        "cli": 19,  # issue #4670 Part A: -_prompts* (4) -_install_*_marketplace (5) extracted
+        # to cli/prompts/ and cli/install/ subpackages; _capture_store, _codex_attempts,
+        # _codex_orphans, _daemon_orphans, _process_orphans remain at cli/ top level
+        # (slated for cli/ops/ in Part B); +_install_contract typed install process
+        # boundary (#4409); +_capture_store capture-store stats/reclaim;
+        # +_codex_orphans (#4536); +_codex_attempts (#4361);
+        # +_daemon_orphans operator surface (#4544);
         # +_process_orphans tether-sweep operator surface (#4678)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
@@ -2010,7 +2015,7 @@ def test_singleton_exemption_comment_matches_both_windows() -> None:
     """The _install_info exemption comment in SINGLETON_ALLOWED_MODULES must
     accurately reflect both the _STABLE_DISMISS_WINDOW and _DEV_DISMISS_WINDOW values."""
 
-    from autoskillit.cli._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
+    from autoskillit.cli.install._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
 
     this_file = Path(__file__)
     content = this_file.read_text(encoding="utf-8")
@@ -2162,4 +2167,27 @@ def test_lifespan_decomposition_has_expected_siblings() -> None:
         "_startup_checks",
         "_session_boots",
         "_lifespan",
+    }
+
+
+def test_prompts_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "prompts"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_prompts",
+        "_prompts_campaign",
+        "_prompts_kitchen",
+        "_prompts_orchestrator",
+    }
+
+
+def test_install_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "install"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_install_contract",
+        "_install_info",
+        "_installed_plugins",
+        "_marketplace",
+        "_plugin_artifact",
     }

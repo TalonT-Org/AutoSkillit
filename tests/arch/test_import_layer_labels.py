@@ -65,7 +65,7 @@ _LOAD_BEARING_SKIP_PATHS: frozenset[str] = frozenset(
     {
         "hooks/guards/skill_orchestration_guard.py",  # (L3)+(L3) in docstring: guard invariants
         "fleet/summary.py",  # "L3 fleet sessions" in module docstring
-        "cli/_prompts.py",  # "L1/L3 orchestration sessions" in docstring
+        "cli/prompts/_prompts.py",  # "L1/L3 orchestration sessions" in docstring
         "execution/backends/claude.py",  # "at L1 (cook...)" in docstring: orchestration level
     }
 )

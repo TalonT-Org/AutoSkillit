@@ -46,7 +46,7 @@ _EXPECTED_ROUTES: dict[RetryReason, tuple[str, str | None]] = {
 
 def test_all_retry_reasons_have_routing_rules() -> None:
     """Every orchestrator-visible RetryReason must have an explicit routing rule."""
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.cli.prompts import _build_orchestrator_prompt
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
     missing = []
@@ -71,7 +71,7 @@ def test_reason_routes_to_expected_destination(
     expected: tuple[str, str | None],
 ) -> None:
     """Every RetryReason must route to its declared destination in _prompts.py."""
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.cli.prompts import _build_orchestrator_prompt
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
     idx = prompt_text.find(reason.value)

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._plugin_artifact import (
+from autoskillit.cli.install._plugin_artifact import (
     interactive_plugin_authority as _production_interactive_plugin_authority,
 )
 from autoskillit.cli.session._session_launch import (
@@ -86,7 +86,7 @@ def _stub_artifact_authorities(
         lambda **_kwargs: _TestAuthority(plugin_dir),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.current_installed_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.current_installed_plugin_authority",
         lambda: _TestAuthority(None),
     )
 
@@ -284,7 +284,7 @@ def test_run_interactive_session_holds_binding_through_reap_and_passes_descripto
     events: list[str] = []
 
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -316,7 +316,7 @@ def test_run_interactive_session_closes_binding_on_launch_failure(
     expected = RuntimeError(f"injected {failure_site} failure")
 
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
     if failure_site == "build":
@@ -357,7 +357,7 @@ def test_run_interactive_session_preserves_failure_when_binding_close_fails(
     authority = _TestAuthority(None)
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -1788,7 +1788,7 @@ def _prepare_codex_order_composition(
         return _CapturingAuthority(authority), load_mode
 
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         capture_interactive_authority,
     )
 
@@ -2024,7 +2024,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         lambda *args, **kwargs: _LifecycleManager(),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (_LifecycleAuthority(), PluginLoadMode.GENERATED_HOME),
     )
 

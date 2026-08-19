@@ -16,14 +16,14 @@ from autoskillit.cli._init_helpers import (
     evict_direct_mcp_entry,
     validate_public_plugin_projection,
 )
-from autoskillit.cli._install_contract import (
+from autoskillit.cli._install_snapshot import _fetch_cache_path
+from autoskillit.cli.install._install_contract import (
     InstallFailureKind,
     InstallMode,
     InstallOutcome,
     InstallRequest,
     InstallResult,
 )
-from autoskillit.cli._install_snapshot import _fetch_cache_path
 from autoskillit.core import (
     MARKETPLACE_PREFIX,
     SkillExecutionRole,
@@ -335,7 +335,7 @@ def install(
             findings=(f"preflight failure: {exc}",),
         )
 
-    from autoskillit.cli._plugin_artifact import installed_plugin_semantic_key
+    from autoskillit.cli.install._plugin_artifact import installed_plugin_semantic_key
     from autoskillit.core import _InstallLock
     from autoskillit.workspace import publish_generation, reconcile_install_artifacts
 

@@ -81,7 +81,7 @@ def _stub_plugin_artifact_authority(
         return authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR
 
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         choose,
     )
 
@@ -219,7 +219,7 @@ def _install_harness(
         lambda *args, **kwargs: manager,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._installed_plugins.InstalledPluginsFile.contains",
+        "autoskillit.cli.install._installed_plugins.InstalledPluginsFile.contains",
         lambda self, key: False,
     )
     monkeypatch.setattr(
@@ -430,7 +430,7 @@ def test_cook_uses_managed_home_for_final_child_context(
     authority = _CookAuthority(binding.plugin_dir)
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -471,7 +471,7 @@ def test_cook_retains_projection_binding_when_launch_consumes_no_artifact(
 
     authority.acquire_launch_binding = acquire_binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.NONE),
     )
 

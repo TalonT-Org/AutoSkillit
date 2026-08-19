@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.cli.update._update_checks import (
     _is_dismissed,
     _read_dismiss_state,

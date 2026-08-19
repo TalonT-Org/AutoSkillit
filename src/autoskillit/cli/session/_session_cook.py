@@ -281,7 +281,7 @@ def cook(
         resolve_repository_profile(project_dir) if requires_resolved_exploration_profile else None
     )
 
-    from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+    from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
 
     # The selected authority also owns the scripts rendered into the catalog.
     artifact_authority, load_mode = interactive_plugin_authority(

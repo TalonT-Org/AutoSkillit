@@ -319,7 +319,7 @@ def test_launch_fleet_session_forwards_initial_message_campaign(
         mock_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+        "autoskillit.cli.prompts._build_fleet_campaign_prompt",
         lambda *a, **kw: "campaign-prompt",
     )
     monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")
@@ -372,7 +372,7 @@ def test_launch_fleet_session_clears_initial_message_on_reload_campaign(
         mock_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+        "autoskillit.cli.prompts._build_fleet_campaign_prompt",
         lambda *a, **kw: "campaign-prompt",
     )
     monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")

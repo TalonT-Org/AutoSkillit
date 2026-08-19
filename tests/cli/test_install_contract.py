@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._install_contract import (
+from autoskillit.cli.install._install_contract import (
     InstallFailureKind,
     InstallMode,
     InstallOutcome,

@@ -141,7 +141,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 26),
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
-    ("src/autoskillit/cli/_installed_plugins.py", 81),
+    ("src/autoskillit/cli/install/_installed_plugins.py", 81),
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/update/_update_checks.py", 82),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)

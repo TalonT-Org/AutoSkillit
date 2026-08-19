@@ -547,7 +547,7 @@ def test_unknown_version_probes_then_verifies_exact_state(
     )
 
     monkeypatch.setattr(
-        "autoskillit.cli._install_info.detect_install",
+        "autoskillit.cli.install._install_info.detect_install",
         lambda: MagicMock(entrypoint=None),
     )
 

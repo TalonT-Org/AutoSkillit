@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import __version__
-from autoskillit.cli._install_contract import InstallMode, InstallRequest
+from autoskillit.cli.install._install_contract import InstallMode, InstallRequest
 from autoskillit.cli.update._transaction import (
     UpdateTransactionOutcome,
     UpdateTransactionResult,
@@ -215,7 +215,7 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     import importlib
     from types import SimpleNamespace
 
-    _app_mod = importlib.import_module("autoskillit.cli._marketplace")
+    _app_mod = importlib.import_module("autoskillit.cli.install._marketplace")
 
     cache_file = tmp_path / ".autoskillit" / "github_fetch_cache.json"
     cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -247,9 +247,13 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
         manifest_path=gen_dir.parent / f".{incarnation_id}.autoskillit-artifact.json",
     )
 
-    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.install._marketplace.evict_direct_mcp_entry", lambda _: False
+    )
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
-    monkeypatch.setattr("autoskillit.cli._marketplace._ensure_marketplace", lambda **_kw: None)
+    monkeypatch.setattr(
+        "autoskillit.cli.install._marketplace._ensure_marketplace", lambda **_kw: None
+    )
     monkeypatch.setattr("autoskillit.workspace.reconcile_install_artifacts", lambda: ())
     monkeypatch.setattr(
         "autoskillit.workspace.publish_generation",
@@ -266,7 +270,7 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
     monkeypatch.setattr(_app_mod, "_ensure_workspace_ready", lambda **_kw: None)
 
-    from autoskillit.cli._marketplace import install as _install
+    from autoskillit.cli.install._marketplace import install as _install
 
     _install(request=_direct_request())
     assert not cache_file.exists(), "Fetch cache must be deleted after plugin install"

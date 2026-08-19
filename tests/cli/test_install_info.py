@@ -1,4 +1,4 @@
-"""Tests for cli/_install_info.py — install classification and update policy."""
+"""Tests for cli/install/_install_info.py — install classification and update policy."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._install_info import (
+from autoskillit.cli.install._install_info import (
     _INSTALL_FROM_DEVELOP,
     InstallInfo,
     InstallType,
@@ -443,7 +443,7 @@ def test_is_stable_track_false(rev: str) -> None:
 def test_classify_track(
     install_type: InstallType, revision: str | None, expected_track: str
 ) -> None:
-    from autoskillit.cli._install_info import InstallTrack, classify_track
+    from autoskillit.cli.install._install_info import InstallTrack, classify_track
 
     info = InstallInfo(
         install_type=install_type,

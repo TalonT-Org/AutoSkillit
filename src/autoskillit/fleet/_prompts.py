@@ -1,6 +1,6 @@
 """Food truck prompt builder for L2 food truck sessions.
 
-Moved from autoskillit.cli._prompts — this module depends only on
+Moved from autoskillit.cli.prompts — this module depends only on
 autoskillit.core and stdlib, making it importable from both server and CLI
 layers without introducing cross-L3 coupling.
 """

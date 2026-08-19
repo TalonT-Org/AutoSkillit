@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit import __version__, cli
-from autoskillit.cli._install_contract import InstallMode, InstallRequest
+from autoskillit.cli.install._install_contract import InstallMode, InstallRequest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -76,8 +76,8 @@ def _successful_claude_run(home: Path):
 class TestCLIInstall:
     def test_install_validates_scope(self) -> None:
         """install rejects invalid scope values."""
-        from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
-        from autoskillit.cli._marketplace import install
+        from autoskillit.cli.install._install_contract import InstallFailureKind, InstallOutcome
+        from autoskillit.cli.install._marketplace import install
 
         result = install(request=_direct_request("invalid"))
         assert result.outcome is InstallOutcome.FAILED
@@ -91,9 +91,9 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._marketplace import _ensure_marketplace
+        from autoskillit.cli.install._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
         assert (marketplace_dir / ".claude-plugin" / "marketplace.json").is_file()
@@ -111,7 +111,7 @@ class TestCLIInstall:
         from autoskillit.workspace import parse_frontmatter_content
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        marketplace = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(marketplace, "is_git_worktree", lambda path: False)
 
         marketplace_dir = marketplace._ensure_marketplace()
@@ -168,7 +168,7 @@ class TestCLIInstall:
             SkillSource.BUNDLED,
             invalid_md,
         )
-        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        marketplace = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         monkeypatch.setattr(marketplace, "is_git_worktree", lambda _path: False)
         monkeypatch.setattr(
@@ -189,9 +189,9 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._marketplace import _ensure_marketplace
+        from autoskillit.cli.install._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
         published = marketplace_dir / "plugins" / "autoskillit"
@@ -208,9 +208,9 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._marketplace import _ensure_marketplace
+        from autoskillit.cli.install._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
         data = json.loads((marketplace_dir / ".claude-plugin" / "marketplace.json").read_text())
@@ -226,10 +226,10 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._install_contract import InstallOutcome
-        from autoskillit.cli._marketplace import install
+        from autoskillit.cli.install._install_contract import InstallOutcome
+        from autoskillit.cli.install._marketplace import install
 
         result = install(request=_direct_request())
 
@@ -254,7 +254,7 @@ class TestCLIInstall:
         """install() forwards scope into the settings path used for hook eviction."""
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
 
         home = tmp_path / "home"
         project = tmp_path / "project"
@@ -286,7 +286,7 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: home)
         monkeypatch.setattr(Path, "cwd", lambda: project)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._marketplace import install
+        from autoskillit.cli.install._marketplace import install
 
         install(request=_direct_request("project"))
 
@@ -304,11 +304,11 @@ class TestCLIInstall:
         """Running install twice recreates the sanitized projection without error."""
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._marketplace import install
+        from autoskillit.cli.install._marketplace import install
 
         install(request=_direct_request())
         install(request=_direct_request())  # second run should not fail
@@ -336,11 +336,11 @@ class TestCLIInstall:
         mock_backend.capabilities.plugin_install_capable = False
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
-        from autoskillit.cli._marketplace import install
+        from autoskillit.cli.install._marketplace import install
 
         result = install(request=_direct_request())
 
-        from autoskillit.cli._install_contract import InstallOutcome
+        from autoskillit.cli.install._install_contract import InstallOutcome
 
         assert result.outcome is InstallOutcome.DECLINED
         assert "plugin_install_capable" in result.findings[0]
@@ -356,7 +356,7 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
 
-        _app_mod = importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(_app_mod, "evict_direct_mcp_entry", lambda _: False)
         monkeypatch.setattr(
@@ -364,11 +364,11 @@ class TestCLIInstall:
         )
         monkeypatch.setattr(_app_mod, "write_generated_hooks_json", lambda _root: None)
         monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
-        from autoskillit.cli._marketplace import install
+        from autoskillit.cli.install._marketplace import install
 
         result = install(request=_direct_request())
 
-        from autoskillit.cli._install_contract import InstallOutcome
+        from autoskillit.cli.install._install_contract import InstallOutcome
 
         assert result.outcome is InstallOutcome.COMPLETED  # transaction ran past the guard
 
@@ -399,7 +399,7 @@ class TestCLIInstall:
         """install() must remove a stale mcpServers.autoskillit entry left by a prior init."""
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
 
         # Seed stale direct entry as left by a prior `autoskillit init`
         claude_json = tmp_path / ".claude.json"
@@ -414,7 +414,7 @@ class TestCLIInstall:
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._marketplace import install
+        from autoskillit.cli.install._marketplace import install
 
         install(request=_direct_request())
 
@@ -673,9 +673,9 @@ class TestInstallCommand:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: True)
-        from autoskillit.cli._marketplace import _assert_not_worktree
+        from autoskillit.cli.install._marketplace import _assert_not_worktree
 
         with pytest.raises(RuntimeError, match="worktree"):
             _assert_not_worktree()
@@ -687,9 +687,9 @@ class TestInstallCommand:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+        _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._marketplace import _ensure_marketplace
+        from autoskillit.cli.install._marketplace import _ensure_marketplace
 
         result = _ensure_marketplace()
         assert result == tmp_path / ".autoskillit" / "marketplace"
@@ -715,7 +715,7 @@ class TestInstallCommand:
                 break
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        from autoskillit.cli._marketplace import _ensure_marketplace
+        from autoskillit.cli.install._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
         published = marketplace_dir / "plugins" / "autoskillit"
@@ -734,7 +734,7 @@ class TestGroupFInstall:
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
         """upgrade() must call atomic_write, not yaml_file.write_text."""
-        import autoskillit.cli._marketplace as _mkt
+        import autoskillit.cli.install._marketplace as _mkt
         import autoskillit.core as _core
 
         monkeypatch.chdir(tmp_path)
@@ -750,7 +750,7 @@ class TestGroupFInstall:
             return original(path, content)
 
         monkeypatch.setattr(_mkt, "atomic_write", capture)
-        from autoskillit.cli._marketplace import upgrade
+        from autoskillit.cli.install._marketplace import upgrade
 
         upgrade()
 
@@ -873,13 +873,13 @@ def test_install_claudecode_guard_returns_deferred_result(
     """install() returns a deferred result when the CLAUDECODE guard fires."""
     import importlib as _importlib
 
-    from autoskillit.cli._marketplace import install as _install
+    from autoskillit.cli.install._marketplace import install as _install
 
-    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setenv("CLAUDECODE", "1")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._install_contract import InstallOutcome
+    from autoskillit.cli.install._install_contract import InstallOutcome
 
     result = _install(request=_direct_request())
     assert result.outcome is InstallOutcome.DEFERRED
@@ -891,8 +891,8 @@ def test_app_install_deferred_result_exits_without_next_steps(
     """app.install() preserves the typed deferred outcome at the process boundary."""
 
     import autoskillit.cli._init_helpers as _init_helpers_mod
-    import autoskillit.cli._marketplace as _mkt_mod
-    from autoskillit.cli._install_contract import (
+    import autoskillit.cli.install._marketplace as _mkt_mod
+    from autoskillit.cli.install._install_contract import (
         InstallOutcome,
         InstallProcessStatus,
         InstallResult,
@@ -922,8 +922,8 @@ def test_app_install_constructs_direct_request_and_prints_only_after_completion(
 ) -> None:
     """The direct command records its obligation and consumes typed completion."""
     import autoskillit.cli._init_helpers as _init_helpers_mod
-    import autoskillit.cli._install_contract as _contract_mod
-    import autoskillit.cli._marketplace as _mkt_mod
+    import autoskillit.cli.install._install_contract as _contract_mod
+    import autoskillit.cli.install._marketplace as _mkt_mod
     from autoskillit import __version__
 
     real_request = _contract_mod.InstallRequest
@@ -993,8 +993,8 @@ def test_app_install_not_required_succeeds_without_next_steps(
 ) -> None:
     """A typed no-op result remains successful but does not claim completion."""
     import autoskillit.cli._init_helpers as _init_helpers_mod
-    import autoskillit.cli._marketplace as _mkt_mod
-    from autoskillit.cli._install_contract import InstallOutcome, InstallResult
+    import autoskillit.cli.install._marketplace as _mkt_mod
+    from autoskillit.cli.install._install_contract import InstallOutcome, InstallResult
 
     next_steps_called: list[dict] = []
     monkeypatch.setattr(
@@ -1049,8 +1049,8 @@ def test_registered_install_boundary_reports_every_outcome_and_suppresses_next_s
 ) -> None:
     """Every typed outcome crosses the registered process boundary truthfully."""
     import autoskillit.cli._init_helpers as _init_helpers_mod
-    import autoskillit.cli._marketplace as _mkt_mod
-    from autoskillit.cli._install_contract import (
+    import autoskillit.cli.install._marketplace as _mkt_mod
+    from autoskillit.cli.install._install_contract import (
         InstallFailureKind,
         InstallOutcome,
     )
@@ -1140,9 +1140,9 @@ def test_install_creates_autoskillit_gitignore(
     """After install(), .autoskillit/.gitignore must exist (ensure_project_temp was called)."""
     import importlib as _importlib
 
-    from autoskillit.cli._marketplace import install as _install
+    from autoskillit.cli.install._marketplace import install as _install
 
-    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
@@ -1151,12 +1151,14 @@ def test_install_creates_autoskillit_gitignore(
         "subprocess.run",
         _successful_claude_run(tmp_path),
     )
-    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.install._marketplace.evict_direct_mcp_entry", lambda _: False
+    )
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr(
-        "autoskillit.cli._marketplace.write_generated_hooks_json", lambda _root: None
+        "autoskillit.cli.install._marketplace.write_generated_hooks_json", lambda _root: None
     )
-    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli.install._marketplace.atomic_write", lambda *a, **kw: None)
     (tmp_path / ".autoskillit").mkdir()
     _install(request=_direct_request())
 
@@ -1171,9 +1173,9 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
     """install() must migrate .autoskillit/scripts/ → .autoskillit/recipes/ if scripts/ exists."""
     import importlib as _importlib
 
-    from autoskillit.cli._marketplace import install as _install
+    from autoskillit.cli.install._marketplace import install as _install
 
-    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    _app_mod = _importlib.import_module("autoskillit.cli.install._marketplace")
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
@@ -1182,12 +1184,14 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
         "subprocess.run",
         _successful_claude_run(tmp_path),
     )
-    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.install._marketplace.evict_direct_mcp_entry", lambda _: False
+    )
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr(
-        "autoskillit.cli._marketplace.write_generated_hooks_json", lambda _root: None
+        "autoskillit.cli.install._marketplace.write_generated_hooks_json", lambda _root: None
     )
-    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli.install._marketplace.atomic_write", lambda *a, **kw: None)
     scripts_dir = tmp_path / ".autoskillit" / "scripts"
     scripts_dir.mkdir(parents=True)
 

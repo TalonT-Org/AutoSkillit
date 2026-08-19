@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.cli._prompts import _read_full_sous_chef
+from autoskillit.cli.prompts import _read_full_sous_chef
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

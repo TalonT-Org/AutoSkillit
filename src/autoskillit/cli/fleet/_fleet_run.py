@@ -57,7 +57,7 @@ async def _execute_fleet_run(
 ) -> DispatchResult:
     import functools
 
-    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
+    from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
     from autoskillit.core import SkillExecutionRole, detect_autoskillit_mcp_prefix
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
     from autoskillit.server import make_context

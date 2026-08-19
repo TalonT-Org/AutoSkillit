@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.cli._prompts import (
+from autoskillit.cli.prompts._prompts import (
     _MCP_RETRY_INSTRUCTION,
     _backend_supplement,
     _ingredient_table_display_instruction,

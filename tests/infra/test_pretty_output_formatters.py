@@ -1146,6 +1146,10 @@ def test_dependency_unmet_routing_documented():
     from pathlib import Path
 
     src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-    for rel in ("cli/_prompts_orchestrator.py", "fleet/_prompts.py", "skills/sous-chef/SKILL.md"):
+    for rel in (
+        "cli/prompts/_prompts_orchestrator.py",
+        "fleet/_prompts.py",
+        "skills/sous-chef/SKILL.md",
+    ):
         content = (src / rel).read_text()
         assert "DEPENDENCY UNMET" in content, f"DEPENDENCY UNMET not found in {rel}"

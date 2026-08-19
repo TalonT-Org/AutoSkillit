@@ -49,7 +49,7 @@ def _stub_campaign_resolution(
     monkeypatch.setattr("autoskillit.recipe.load_recipe", lambda *a, **kw: recipe)
     monkeypatch.setattr("autoskillit.recipe.validate_recipe_structure", lambda *a: [])
     monkeypatch.setattr("autoskillit.cli._preview.show_campaign_preview", lambda *a, **kw: None)
-    monkeypatch.setattr("autoskillit.cli._prompts._get_ingredients_table", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli.prompts._get_ingredients_table", lambda *a, **kw: None)
     monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
     return recipe
 

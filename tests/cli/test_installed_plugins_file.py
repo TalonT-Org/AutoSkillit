@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._installed_plugins import InstalledPluginsFile
+from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

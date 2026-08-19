@@ -160,7 +160,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         )
     else:
         audit_admission_store_authority = None
-    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
+    from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
 
     ctx = make_context(
         cfg,
@@ -273,14 +273,14 @@ def install(
     """
     from autoskillit import __version__
     from autoskillit.cli._init_helpers import _print_next_steps
-    from autoskillit.cli._install_contract import (
+    from autoskillit.cli.install._install_contract import (
         InstallMode,
         InstallOutcome,
         InstallProcessStatus,
         InstallRequest,
         process_status_for_result,
     )
-    from autoskillit.cli._marketplace import install as _install
+    from autoskillit.cli.install._marketplace import install as _install
 
     if maintenance_update:
         if expected_version is None:
@@ -324,7 +324,7 @@ def install(
 @app.command
 def upgrade() -> None:
     """Migrate project from .autoskillit/scripts/ format to .autoskillit/recipes/ format."""
-    from autoskillit.cli._marketplace import upgrade as _upgrade
+    from autoskillit.cli.install._marketplace import upgrade as _upgrade
 
     _upgrade()
 

@@ -74,7 +74,7 @@ def arrange_cook(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
     )
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (_Authority(plugin_dir), PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
     monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *args, **kwargs: None)

@@ -173,7 +173,7 @@ class TestCLIOrderPrompt:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The order command must pass a greeting as a positional argument."""
-        from autoskillit.cli._prompts import _COOK_GREETINGS
+        from autoskillit.cli.prompts import _COOK_GREETINGS
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -199,7 +199,7 @@ class TestCLIOrderPrompt:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Open-kitchen order sessions also pass a greeting as positional arg."""
-        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"

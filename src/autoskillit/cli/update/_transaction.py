@@ -17,7 +17,7 @@ from typing import Any, assert_never
 
 from packaging.version import Version
 
-from autoskillit.cli._install_contract import (
+from autoskillit.cli.install._install_contract import (
     InstallFailureKind,
     InstallMode,
     InstallOutcome,
@@ -27,13 +27,13 @@ from autoskillit.cli._install_contract import (
     MaintenanceInstallArgv,
     result_from_process_status,
 )
-from autoskillit.cli._install_info import (
+from autoskillit.cli.install._install_info import (
     InstallInfo,
     detect_install,
     resolve_autoskillit_entrypoint,
     upgrade_command,
 )
-from autoskillit.cli._installed_plugins import InstalledPluginsFile
+from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     _installed_plugins_path,

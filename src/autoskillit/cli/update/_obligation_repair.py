@@ -20,7 +20,7 @@ from typing import Any
 
 from packaging.version import InvalidVersion, Version
 
-from autoskillit.cli._install_contract import MaintenanceInstallArgv
+from autoskillit.cli.install._install_contract import MaintenanceInstallArgv
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     get_logger,
@@ -41,7 +41,10 @@ _ProcessRunner = Callable[..., "subprocess.CompletedProcess[Any]"]
 
 def _resolve_repair_entrypoint(environment: Mapping[str, str]) -> Path | None:
     """Resolve the executable while the current interpreter is still valid."""
-    from autoskillit.cli._install_info import detect_install, resolve_autoskillit_entrypoint
+    from autoskillit.cli.install._install_info import (
+        detect_install,
+        resolve_autoskillit_entrypoint,
+    )
 
     return resolve_autoskillit_entrypoint(
         detect_install().entrypoint,

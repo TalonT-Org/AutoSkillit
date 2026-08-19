@@ -1,19 +1,20 @@
 # cli/
 
 IL-3 CLI layer — entry points for all user-facing commands.
-Sub-packages: doctor/ (see doctor/AGENTS.md), fleet/,
-session/ (see session/AGENTS.md), ui/ (see ui/AGENTS.md), update/ (see update/AGENTS.md).
+Sub-packages: doctor/ (see doctor/AGENTS.md), fleet/, install/,
+session/ (see session/AGENTS.md), prompts/, ui/ (see ui/AGENTS.md),
+update/ (see update/AGENTS.md).
 
 ## Architecture Notes
 
-`install()` in `_marketplace.py` is transactional: every check that can decline
+`install()` in `cli/install/_marketplace.py` is transactional: every check that can decline
 the install runs before the first persistent mutation, and every failure
 afterwards restores the pre-attempt `marketplace.json`, `installed_plugins.json`,
 and retiring queue via `_InstallSnapshot`. Do not add a mutation above the
 preflight block, and do not add a failure path that bypasses the rollback —
 retiring the live plugin cache before its replacement was secured is what
 produced a dangling registry pointer two hours later.
-`_install_contract.py` is the dependency leaf that preserves install semantics
+`cli/install/_install_contract.py` is the dependency leaf that preserves install semantics
 across the Python, CLI, and update-child process boundaries. It exports typed
 requests/results (`InstallRequest`, `InstallResult`, `InstallMode`, etc.)
 **and** a typed argv builder (`MaintenanceInstallArgv.to_argv()`) for the

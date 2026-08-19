@@ -184,7 +184,7 @@ def test_queued_generation_is_reclaimable_by_the_default_coordinator(
     source_root: Path,
 ) -> None:
     """The regression: records were routed to an owner that could never contain them."""
-    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
+    from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
 
     first = _publish(home, source_root, "1.0.0")
     (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
@@ -199,7 +199,7 @@ def test_queued_generation_is_reclaimable_by_the_default_coordinator(
 
 def test_selected_generations_are_never_reclaimed(home: Path, source_root: Path) -> None:
     """Both selectors protect: per-version current and the plugin-level current."""
-    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
+    from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
 
     _publish(home, source_root, "1.0.0")
     (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
@@ -217,7 +217,7 @@ def test_selected_generations_are_never_reclaimed(home: Path, source_root: Path)
 
 def test_every_artifact_kind_has_a_registered_owner(home: Path) -> None:
     """A new storage location without an owner silently repeats the routing bug."""
-    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
+    from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
 
     coordinator = default_plugin_retirement_coordinator()
 

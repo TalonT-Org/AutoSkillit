@@ -39,7 +39,7 @@ def launch_kwargs() -> dict[str, object]:
 def _patch_worktree_guard_for_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent the worktree guard and plugin-installed check from firing in tests."""
     import autoskillit.cli._hooks as _hooks_mod
-    import autoskillit.cli._marketplace as _mkt_mod
+    import autoskillit.cli.install._marketplace as _mkt_mod
     import autoskillit.core.paths as _core_paths
 
     monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda path: False)

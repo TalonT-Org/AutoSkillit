@@ -239,7 +239,7 @@ def test_launch_fleet_session_adhoc_forwards_force_inactive_agent_teams(
         "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
     )
     monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
+        "autoskillit.cli.prompts._build_fleet_dispatch_prompt",
         lambda *a, **kw: "dispatch-prompt",
     )
     monkeypatch.chdir(tmp_path)
@@ -269,7 +269,7 @@ def test_launch_fleet_session_campaign_forwards_force_inactive_agent_teams(
         "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
     )
     monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+        "autoskillit.cli.prompts._build_fleet_campaign_prompt",
         lambda *a, **kw: "campaign-prompt",
     )
     monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")

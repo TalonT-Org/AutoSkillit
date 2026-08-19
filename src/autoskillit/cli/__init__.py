@@ -12,10 +12,6 @@ from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
-from autoskillit.cli._prompts import (
-    _build_open_kitchen_prompt,
-    _build_orchestrator_prompt,
-)
 from autoskillit.cli._validate import validate_app
 from autoskillit.cli.app import (
     _generate_config_yaml,
@@ -53,6 +49,10 @@ from autoskillit.cli.app import (
 )
 from autoskillit.cli.doctor import DoctorResult
 from autoskillit.cli.fleet import fleet_campaign, fleet_dispatch, fleet_list, fleet_status
+from autoskillit.cli.prompts import (
+    _build_open_kitchen_prompt,
+    _build_orchestrator_prompt,
+)
 from autoskillit.cli.session._session_cook import cook
 from autoskillit.hook_registry import HookDriftResult
 

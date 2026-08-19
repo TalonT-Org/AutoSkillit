@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.cli._prompts import (
+from autoskillit.cli.prompts._prompts import (
     _backend_supplement,
     _ingredient_table_display_instruction,
 )

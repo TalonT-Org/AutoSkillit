@@ -1169,7 +1169,7 @@ def validate_plugin_cache_hooks(cache_dir: Path | None = None) -> list[str]:
     """Return list of broken hook commands from the plugin cache hooks.json.
 
     Reads each hooks.json found under cache_dir/<version>/hooks/hooks.json —
-    the real installed layout (write site: ``cli/_marketplace.py``,
+    the real installed layout (write site: ``cli/install/_marketplace.py``,
     ``public_plugin_root / "hooks" / "hooks.json"``) — and checks that every
     autoskillit hook script path exists on disk. Token-bearing commands are
     expanded against ``hooks_json_path.parent.parent``: the ``<version>``

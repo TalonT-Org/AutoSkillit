@@ -206,7 +206,7 @@ def _check_dual_mcp_registration(
 
 def _check_plugin_cache_exists(cache_dir: Path | None = None) -> DoctorResult:
     """Check that the plugin cache directory exists."""
-    from autoskillit.cli._install_info import InstallType, detect_install
+    from autoskillit.cli.install._install_info import InstallType, detect_install
 
     info = detect_install()
     if info.install_type == InstallType.LOCAL_EDITABLE:

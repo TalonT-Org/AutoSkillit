@@ -13,7 +13,7 @@ from autoskillit.core import get_logger
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from autoskillit.cli._install_info import InstallInfo
+    from autoskillit.cli.install._install_info import InstallInfo
 
 
 def find_source_repo() -> Path | None:

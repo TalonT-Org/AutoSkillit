@@ -6,7 +6,7 @@ from typing import get_type_hints
 
 import pytest
 
-from autoskillit.cli._prompts_orchestrator import _build_orchestrator_prompt
+from autoskillit.cli.prompts._prompts_orchestrator import _build_orchestrator_prompt
 from autoskillit.fleet._prompts import _build_food_truck_prompt
 from autoskillit.server.tools._types import (
     MergeWorktreeResult,

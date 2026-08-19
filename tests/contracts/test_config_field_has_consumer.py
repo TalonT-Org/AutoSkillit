@@ -80,29 +80,38 @@ def _dataclass_field_names(cls: type) -> list[str]:
     return [f.name for f in dataclasses.fields(cls)]
 
 
-def _field_source_comment(field_name: str) -> str:
-    """Return the doc-comment line(s) immediately preceding a field's declaration.
+def _field_source_comment(field_name: str, cls: type) -> str:
+    """Return the doc-comment line(s) immediately preceding a field's declaration
+    within ``cls``'s own body.
 
     Config dataclass fields document intent with a ``#``-comment block above
     the field, not an inline trailing comment (see force_inactive_agent_teams
     for the pattern) — so this walks backward from the field's assignment
-    line collecting contiguous ``#`` lines.
+    line collecting contiguous ``#`` lines. Scoped to ``cls``'s ast.ClassDef
+    line range (via ``_class_node``), so a same-named field on an earlier
+    class in the file cannot be misattributed to a later class's field of
+    the same name.
     """
+    class_node = _class_node(cls)
+    if class_node is None:
+        return ""
     lines = _CONFIG_DATACLASSES_FILE.read_text(encoding="utf-8").splitlines()
     field_pattern = re.compile(rf"^\s{{4}}{re.escape(field_name)}\s*:")
-    for i, line in enumerate(lines):
-        if field_pattern.match(line):
+    start = class_node.lineno - 1
+    end = class_node.end_lineno or len(lines)
+    for i in range(start, end):
+        if field_pattern.match(lines[i]):
             comment_lines: list[str] = []
             j = i - 1
-            while j >= 0 and lines[j].strip().startswith("#"):
+            while j >= start and lines[j].strip().startswith("#"):
                 comment_lines.append(lines[j])
                 j -= 1
             return "\n".join(reversed(comment_lines))
     return ""
 
 
-def _field_is_inert_tracked(field_name: str) -> bool:
-    return bool(_INERT_TRACKED_RE.search(_field_source_comment(field_name)))
+def _field_is_inert_tracked(field_name: str, cls: type) -> bool:
+    return bool(_INERT_TRACKED_RE.search(_field_source_comment(field_name, cls)))
 
 
 def _has_direct_reader(field_name: str) -> bool:
@@ -170,7 +179,7 @@ def test_natural_exit_grace_seconds_is_inert_tracked_against_a_real_field() -> N
     from autoskillit.config._config_dataclasses import RunSkillConfig
 
     assert not _field_has_consumer("natural_exit_grace_seconds", RunSkillConfig)
-    assert _field_is_inert_tracked("natural_exit_grace_seconds")
+    assert _field_is_inert_tracked("natural_exit_grace_seconds", RunSkillConfig)
 
 
 def test_allowed_labels_is_consumed_indirectly_via_a_dataclass_method() -> None:
@@ -190,7 +199,7 @@ def test_every_config_dataclass_field_has_a_consumer() -> None:
         for field_name in _dataclass_field_names(cls):
             if _field_has_consumer(field_name, cls):
                 continue
-            if _field_is_inert_tracked(field_name):
+            if _field_is_inert_tracked(field_name, cls):
                 continue
             violations.append(f"{cls.__name__}.{field_name}")
     assert not violations, (

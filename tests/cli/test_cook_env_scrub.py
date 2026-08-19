@@ -168,7 +168,9 @@ def _capture_cook_spec(
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
     monkeypatch.setattr("shutil.which", lambda _cmd: "/usr/bin/claude")
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _path: False
+    )
     monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *_a, **_k: "")
     monkeypatch.setattr(
         "autoskillit.cli.install._installed_plugins.InstalledPluginsFile.contains",

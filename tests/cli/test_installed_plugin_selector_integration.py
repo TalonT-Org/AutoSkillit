@@ -226,7 +226,7 @@ def _install_cook_harness(
         lambda *args, **kwargs: manager,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.is_first_run",
+        "autoskillit.cli.session._session_onboarding.is_first_run",
         lambda _project_dir: False,
     )
     monkeypatch.setattr(

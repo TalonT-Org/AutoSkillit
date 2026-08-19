@@ -172,7 +172,9 @@ def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         "autoskillit.workspace.DefaultSessionSkillManager",
         lambda *args, **kwargs: manager,
     )
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
+    )
     with pytest.raises(SystemExit) as exc_info:
         cook(backend=ClaudeCodeBackend())
     assert exc_info.value.code == 1

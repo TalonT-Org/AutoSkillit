@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._onboarding import (
+from autoskillit.cli.session._session_onboarding import (
     is_first_run,
     mark_onboarded,
     run_onboarding_menu,
@@ -175,7 +175,7 @@ def test_run_onboarding_menu_e_path_no_executor_import(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_onboarding module must not import ThreadPoolExecutor after dead code removal."""
-    import autoskillit.cli._onboarding as _onboarding_module
+    import autoskillit.cli.session._session_onboarding as _onboarding_module
 
     assert not hasattr(_onboarding_module, "ThreadPoolExecutor"), (
         "ThreadPoolExecutor is still imported in _onboarding — dead code not removed"

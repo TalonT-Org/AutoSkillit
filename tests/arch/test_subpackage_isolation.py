@@ -2191,3 +2191,47 @@ def test_install_decomposition_has_expected_siblings() -> None:
         "_marketplace",
         "_plugin_artifact",
     }
+
+
+def test_session_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "session"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_session_backend",
+        "_session_constants",
+        "_session_cook",
+        "_session_launch",
+        "_session_onboarding",
+        "_session_order",
+        "_session_picker",
+        "_session_process",
+        "_session_reload",
+        "_session_startup_trace",
+    }
+
+
+def test_update_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "update"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_obligation_repair",
+        "_transaction",
+        "_update",
+        "_update_checks",
+        "_update_checks_fetch",
+        "_update_checks_source",
+        "_restart",
+    }
+
+
+def test_ops_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "ops"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_capture_store",
+        "_codex_attempts",
+        "_codex_orphans",
+        "_daemon_orphans",
+        "_process_orphans",
+        "_sessions",
+    }

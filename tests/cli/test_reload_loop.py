@@ -225,13 +225,13 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
+    monkeypatch.setattr("autoskillit.cli.session._session_onboarding.is_first_run", lambda _: True)
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.run_onboarding_menu",
+        "autoskillit.cli.session._session_onboarding.run_onboarding_menu",
         lambda *args, **kwargs: "/autoskillit:setup-project",
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.mark_onboarded",
+        "autoskillit.cli.session._session_onboarding.mark_onboarded",
         lambda project_dir: onboarded.append(project_dir),
     )
     monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *args, **kwargs: "")
@@ -394,7 +394,9 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
+    )
     monkeypatch.setattr(
         "autoskillit.cli.ui._timed_input.timed_prompt",
         lambda *args, **kwargs: "",

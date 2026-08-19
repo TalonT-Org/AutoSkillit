@@ -68,7 +68,9 @@ def arrange_cook(
         "autoskillit.cli.session._session_cook.resolve_project_dir",
         lambda: project_dir,
     )
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _path: False
+    )
     monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *args, **kwargs: "")
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager

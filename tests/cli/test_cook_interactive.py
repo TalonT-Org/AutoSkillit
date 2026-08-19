@@ -223,15 +223,15 @@ def _install_harness(
         lambda self, key: False,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.is_first_run",
+        "autoskillit.cli.session._session_onboarding.is_first_run",
         lambda _project: first_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.run_onboarding_menu",
+        "autoskillit.cli.session._session_onboarding.run_onboarding_menu",
         lambda *args, **kwargs: onboarding_prompt,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.mark_onboarded",
+        "autoskillit.cli.session._session_onboarding.mark_onboarded",
         lambda project: events.append(("onboarded", project)),
     )
     monkeypatch.setattr(
@@ -369,7 +369,9 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/codex")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _project: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _project: False
+    )
     monkeypatch.setattr(
         "autoskillit.cli.ui._timed_input.timed_prompt",
         lambda *args, **kwargs: "",
@@ -718,7 +720,9 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
+    )
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
     )

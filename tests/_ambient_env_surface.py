@@ -543,7 +543,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/_lifespan.py:747": (
+    "server/_lifespan/_session_boots.py:455": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
@@ -587,41 +587,41 @@ FORWARDING_SITES: dict[str, str] = {
         "Bare os.environ passed as `env=` to a read-only `git ls-remote` probe subprocess;"
         "unfiltered wholesale forward for a local diagnostic command."
     ),
-    "execution/backends/claude.py:1162": (
-        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
-        "headless Claude Code skill-session launch."
+    "execution/backends/_codex_probes.py:343": (
+        "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
+        "probe subprocess, with CODEX_COOK_RESERVED_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:1274": (
-        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
-        "headless Claude Code orchestrator-session launch."
-    ),
-    "execution/backends/claude.py:945": (
+    "execution/backends/claude.py:649": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
-    "execution/backends/codex.py:1613": (
+    "execution/backends/claude.py:866": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
-        "headless Codex skill-session launch."
+        "headless Claude Code skill-session launch."
     ),
-    "execution/backends/codex.py:1753": (
+    "execution/backends/claude.py:978": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
-        "headless Codex orchestrator-session launch."
+        "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:1887": (
-        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for"
-        "another headless Codex session-launch path."
+    "execution/backends/codex.py:374": (
+        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
+        "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:2006": (
-        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
-        "headless Codex initial-prompt launch."
+    "execution/backends/codex.py:514": (
+        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
+        "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:2078": (
-        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
-        "headless Codex resume-session launch."
+    "execution/backends/codex.py:648": (
+        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
+        "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:835": (
-        "Unfiltered dict(os.environ) base for a Codex maintenance/version-probe subprocess env,"
-        "distinct from the headless launch paths that apply _HEADLESS_EXCLUSIVE_VARS."
+    "execution/backends/codex.py:767": (
+        "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
+        "launch base env."
+    ),
+    "execution/backends/codex.py:839": (
+        "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
+        "Codex resume-session launch."
     ),
     "execution/merge_queue/_merge_queue_group_ci.py:109": (
         "Unfiltered {**os.environ} base for a local `gh run list` CI-status probe subprocess;"

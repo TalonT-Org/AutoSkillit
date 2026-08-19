@@ -291,6 +291,51 @@ def test_pty_attempt_retains_lease_fd_and_owns_controlling_slave(
     assert result.returncode == 0
 
 
+def test_cook_attempt_enforces_ceiling_in_both_wait_branches(tmp_path: Path) -> None:
+    """A live spawner terminates its child at not_after in both wait branches.
+
+    Closes the "kill leg never exercised" gap: the non-PTY branch's
+    _wait_for_owned_exit poll loop and the PTY branch's observer.relay
+    cancelled-callback both merely stop *waiting* at the ceiling — the
+    actual kill happens in run_cook_attempt's unconditional finally-block
+    settle(). This proves both branches reach that settle() promptly
+    against a child that never exits on its own.
+    """
+    if _assert_unsupported_platform(tmp_path):
+        return
+    ceiling_seconds = 1.5
+    sleeper_code = "import time; time.sleep(30)"
+
+    start = time.monotonic()
+    result = run_cook_attempt(
+        _spec(tmp_path, sleeper_code),
+        pass_fds=(),
+        on_spawn=lambda _pid, _pgid: None,
+        on_reaped=lambda _pid, _pgid: None,
+        trace=Mock(),
+        observer=None,
+        not_after=time.time() + ceiling_seconds,
+    )
+    elapsed = time.monotonic() - start
+    assert _wait_until_gone(result.pid)
+    # The ceiling must actually bind — well under the child's own 30s sleep.
+    assert elapsed < 15.0
+
+    start = time.monotonic()
+    result = run_cook_attempt(
+        _spec(tmp_path, sleeper_code),
+        pass_fds=(),
+        on_spawn=lambda _pid, _pgid: None,
+        on_reaped=lambda _pid, _pgid: None,
+        trace=Mock(),
+        observer=PtyObserver(readiness_probe=None),
+        not_after=time.time() + ceiling_seconds,
+    )
+    elapsed = time.monotonic() - start
+    assert _wait_until_gone(result.pid)
+    assert elapsed < 15.0
+
+
 def test_successful_popen_records_spawn_without_post_spawn_pgid_lookup() -> None:
     source = Path(run_cook_attempt.__code__.co_filename).read_text(encoding="utf-8")
     body = source[

@@ -31,6 +31,7 @@ from autoskillit.core import (
     pkg_root,
     resume_spec_from_cli,
 )
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 from autoskillit.workspace import (
     DefaultSkillResolver,
     compile_session_skill_catalog,
@@ -186,6 +187,10 @@ def order(
         from autoskillit.cli.session._session_picker import pick_session as _pick_session
 
         if isinstance(resume_spec, BareResume):
+            try:
+                sweep_orphaned_tethers(default_tether_dir())
+            except Exception:
+                logger.warning("order_startup_tether_sweep_failed", exc_info=True)
             backend.recover_cook_history()
             _sel = _pick_session(
                 "order",

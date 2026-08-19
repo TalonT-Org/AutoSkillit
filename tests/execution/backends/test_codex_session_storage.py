@@ -1092,21 +1092,39 @@ def test_record_spawn_captures_spawn_identity(tmp_path: Path) -> None:
     relative = Path("2026/07/rollout-identity.jsonl")
     _rollout((home / "sessions").resolve() / relative, "thread-identity")
 
-    before = time.time()
-    handle.record_spawn(os.getpid(), os.getpgrp())
-    after = time.time()
+    # A distinct real child (not os.getpid()) proves child_starttime_ticks is
+    # independently derived from the child's own /proc entry rather than
+    # trivially matching the spawner's — the spawner (this test process) and
+    # child must have different starttime ticks for the assertion to mean
+    # anything.
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+    try:
+        before = time.time()
+        handle.record_spawn(child.pid, child.pid)
+        after = time.time()
 
-    manifest = lease.manifest
-    assert manifest["spawner_pid"] == os.getpid()
-    assert manifest["spawner_starttime_ticks"] == read_starttime_ticks(os.getpid())
-    assert manifest["boot_id"] == read_boot_id()
-    assert manifest["child_starttime_ticks"] == read_starttime_ticks(os.getpid())
-    assert "pidns_inode" in manifest
-    assert before + lease.ceiling_seconds <= manifest["not_after"] <= after + lease.ceiling_seconds
-    assert manifest["schema_version"] == 1
+        manifest = lease.manifest
+        assert manifest["spawner_pid"] == os.getpid()
+        assert manifest["spawner_starttime_ticks"] == read_starttime_ticks(os.getpid())
+        assert manifest["boot_id"] == read_boot_id()
+        assert manifest["child_starttime_ticks"] == read_starttime_ticks(child.pid)
+        assert manifest["child_starttime_ticks"] != manifest["spawner_starttime_ticks"]
+        assert "pidns_inode" in manifest
+        assert (
+            before + lease.ceiling_seconds
+            <= manifest["not_after"]
+            <= after + lease.ceiling_seconds
+        )
+        assert manifest["schema_version"] == 1
 
-    handle.record_reaped(os.getpid(), os.getpgrp())
-    lease.__exit__(None, None, None)
+        handle.record_reaped(child.pid, child.pid)
+        lease.__exit__(None, None, None)
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
 
 
 def test_recover_kills_live_child_before_marking_reaped(tmp_path: Path) -> None:

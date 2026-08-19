@@ -22,10 +22,12 @@ from autoskillit.core import (
     PluginLoadMode,
     SkillContractError,
     executable_binding_matches_current_file,
+    get_logger,
     is_feature_enabled,
     plugin_launch_binding_scope,
     resolve_project_dir,
 )
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -36,6 +38,8 @@ if TYPE_CHECKING:
         SkillProjectionContext,
         SkillsDirectoryProvider,
     )
+
+logger = get_logger(__name__)
 
 
 _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
@@ -322,6 +326,10 @@ def cook(
         ) as managed_home,
     ):
         if isinstance(resume_spec, BareResume):
+            try:
+                sweep_orphaned_tethers(default_tether_dir())
+            except Exception:
+                logger.warning("cook_startup_tether_sweep_failed", exc_info=True)
             backend.recover_cook_history()
             from autoskillit.cli.session._session_picker import pick_session
 

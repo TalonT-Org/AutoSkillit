@@ -905,6 +905,125 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
     )
 
 
+# (path, rationale) rows rather than a bare set — the kill-funnel guard's docstring
+# rationale drifted out of sync with its allowlist because the two live apart; binding
+# rationale to entry here makes that drift unrepresentable.
+_DETACHED_SPAWN_ALLOWLIST: list[tuple[Path, str]] = [
+    (
+        SRC_ROOT / "execution" / "process" / "_process_kill.py",
+        "defines spawn_owned_process — the funnel itself",
+    ),
+    (
+        SRC_ROOT / "hooks" / "_capture_process.py",
+        "stdlib-only standalone hook primitive; sub-second bounded capture shells; "
+        "passes process_group=0 but start_new_session=False — group-isolated, not "
+        "session-detached, so not an orphan source; expansion forbidden",
+    ),
+]
+
+_DETACH_SPAWN_TARGETS = {
+    ("subprocess", "Popen"),
+    ("asyncio", "create_subprocess_exec"),
+    ("asyncio", "create_subprocess_shell"),
+}
+_DETACH_SPAWN_KEYWORDS = {"start_new_session", "process_group"}
+
+
+def _resolve_detach_spawn_target(
+    node: ast.Call, aliases: dict[str, tuple[str, str | None]]
+) -> tuple[str, str] | None:
+    """Resolve a Call to (module, attr) if it targets subprocess.Popen /
+    asyncio.create_subprocess_exec / asyncio.create_subprocess_shell, honoring
+    import aliases (``import subprocess as sp``, ``from subprocess import Popen``)."""
+    func = node.func
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        module, _ = aliases.get(func.value.id, (func.value.id, None))
+        target = (module, func.attr)
+        return target if target in _DETACH_SPAWN_TARGETS else None
+    if isinstance(func, ast.Name):
+        alias_entry = aliases.get(func.id)
+        if alias_entry is not None and alias_entry[1] is not None:
+            target = (alias_entry[0], alias_entry[1])
+            return target if target in _DETACH_SPAWN_TARGETS else None
+    return None
+
+
+def _detach_spawn_violation_reason(node: ast.Call) -> str | None:
+    """A call is a violation if it literally sets start_new_session=True or
+    process_group=0, or if its keywords cannot be statically proven NOT to set
+    either — a ``**kwargs`` unpack, or a non-literal value for either keyword.
+    Violations-by-default: an unprovable call is treated as a violation, closing
+    the indirection hole a static, value-based match cannot see through (the
+    funnel itself uses exactly this construction internally via **popen_kwargs).
+    """
+    for kw in node.keywords:
+        if kw.arg is None:
+            return (
+                "**kwargs unpack — cannot statically prove it omits "
+                "start_new_session/process_group"
+            )
+        if kw.arg not in _DETACH_SPAWN_KEYWORDS:
+            continue
+        value = kw.value
+        if not isinstance(value, ast.Constant):
+            return f"non-literal value for {kw.arg}= — cannot statically prove its value"
+        if kw.arg == "start_new_session" and value.value is True:
+            return "literal start_new_session=True"
+        if kw.arg == "process_group" and value.value == 0:
+            return "literal process_group=0"
+    return None
+
+
+def test_no_detached_spawn_outside_owned_funnel() -> None:
+    """No src file may construct a detached/process-group-isolated
+    subprocess.Popen or asyncio.create_subprocess_exec/_shell call outside the
+    owned-process spawn funnel (spawn_owned_process in _process_kill.py).
+
+    Every detached spawn must fund through spawn_owned_process so it durably
+    records a process tether (see _process_tether.py) — an untethered detached
+    child must never exist. Violations-by-default, explicit allowlist below.
+    """
+    allowed_files = {path for path, _ in _DETACHED_SPAWN_ALLOWLIST}
+    rationale_by_file = dict(_DETACHED_SPAWN_ALLOWLIST)
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file in allowed_files:
+            continue
+        try:
+            source = py_file.read_text()
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        aliases = _gather_import_aliases(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = _resolve_detach_spawn_target(node, aliases)
+            if target is None:
+                continue
+            reason = _detach_spawn_violation_reason(node)
+            if reason is None:
+                continue
+            module, attr = target
+            violations.append(
+                f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                f"{module}.{attr}() call is a detached-spawn violation ({reason})"
+            )
+
+    assert not violations, (
+        "Detached subprocess.Popen/asyncio.create_subprocess_* calls found outside "
+        "spawn_owned_process. Route through spawn_owned_process(tether=...) — or add "
+        "an allowlist entry to _DETACHED_SPAWN_ALLOWLIST with rationale — for:\n"
+        + "\n".join(violations)
+        + "\n\nAllowlisted files and why:\n"
+        + "\n".join(
+            f"  {path.relative_to(SRC_ROOT.parent.parent)}: {rationale}"
+            for path, rationale in rationale_by_file.items()
+        )
+    )
+
+
 def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
     """run_managed_async must not contain an if/elif chain that inspects
     TerminationReason.* or signals.process_exited directly.

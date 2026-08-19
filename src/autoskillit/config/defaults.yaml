@@ -326,6 +326,7 @@ fleet:
 process_tether:
   orphan_ceiling_seconds: 86400.0
   cook_ceiling_seconds: 172800.0
+  systemd_scope_enabled: false
 
 providers:
   default_provider: null

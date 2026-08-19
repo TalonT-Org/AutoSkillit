@@ -1029,7 +1029,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
         # +_recipe_section_handler.py (bounded recipe-section pull handler)
-        "hooks/guards": 39,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
+        "hooks/guards": 40,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
+        # +resource_exhaustion_guard (#4678 rectify: Bash busy-loop pattern denial)
         # +fabricated_completion_guard (#4457)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
@@ -1359,7 +1360,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "CodexSessionStore across multiple files would duplicate the inode-preserving "
         "staging, process/thread/view leases, promotion, index publication, manifest "
         "validation, crash recovery, and explicit legacy-view reconciliation invariants. "
-        "Cap lowered to 1500 lines to accommodate the core without the stateless helpers.",
+        "Cap lowered to 1500 lines to accommodate the core without the stateless helpers. "
+        "#4678 rectify adds spawn-identity capture to _record_spawn and verify-before-mark "
+        "identity checks to recover() — both belong to the same transaction boundary as "
+        "the leases they gate, and fit under this cap post-extraction.",
     ),
     "workspace/session_skills.py": (
         1400,

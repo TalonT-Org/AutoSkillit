@@ -21,6 +21,7 @@ from autoskillit.execution import (
     OwnedProcessGroup,
     TetherSpec,
     spawn_owned_process,
+    wrap_systemd_scope,
 )
 
 _GROUP_POLL_SECONDS = 0.02
@@ -45,6 +46,7 @@ def run_cook_attempt(
     trace: StartupTrace,
     observer: PtyObserver | None,
     not_after: float,
+    systemd_scope_enabled: bool = False,
 ) -> CookAttemptResult:
     """Run one finalized cook command and prove complete child cleanup.
 
@@ -68,7 +70,11 @@ def run_cook_attempt(
         try:
             if observer is None:
                 owner = spawn_owned_process(
-                    spec.cmd,
+                    wrap_systemd_scope(
+                        list(spec.cmd),
+                        enabled=systemd_scope_enabled,
+                        ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS,
+                    ),
                     cwd=cwd,
                     env=dict(spec.env),
                     pass_fds=inherited_fds,
@@ -81,11 +87,18 @@ def run_cook_attempt(
             else:
                 master_fd, slave_fd = os.openpty()
                 launcher_fds = _merge_launcher_fds(inherited_fds, slave_fd)
+                # systemd-run wraps the PTY launcher (script(1)) itself here, not
+                # the workload it execvpe's into — same leader-wrapping shape as
+                # the non-PTY branch above, one process earlier in the chain.
                 owner = spawn_owned_process(
-                    launcher_argv(
-                        slave_fd,
-                        spec.cmd,
-                        lease_fds=inherited_fds,
+                    wrap_systemd_scope(
+                        launcher_argv(
+                            slave_fd,
+                            spec.cmd,
+                            lease_fds=inherited_fds,
+                        ),
+                        enabled=systemd_scope_enabled,
+                        ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS,
                     ),
                     cwd=cwd,
                     env=dict(spec.env),

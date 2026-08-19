@@ -455,6 +455,7 @@ class TestGroupDApiContractPreservation:
             "backend_resume_session_id",
             "lifecycle_observation_enabled",
             "ceiling_seconds",
+            "systemd_scope_enabled",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -533,6 +534,7 @@ class TestGroupDApiContractPreservation:
             "backend_resume_session_id",
             "lifecycle_observation_enabled",
             "ceiling_seconds",
+            "systemd_scope_enabled",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

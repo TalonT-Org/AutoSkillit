@@ -168,7 +168,10 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             launch_id: str,
             attempt: int,
             current_resume_spec: object,
+            ceiling_seconds: float = 172800.0,
+            systemd_scope_enabled: bool = False,
         ):
+            del ceiling_seconds, systemd_scope_enabled
             events.append(
                 (
                     "attempt-enter",
@@ -468,6 +471,7 @@ def test_fleet_reload_relaunches_without_resume(
         force_inactive_agent_teams=False,
         mcp_tool_timeout_sec=None,
         cook_ceiling_seconds=None,
+        systemd_scope_enabled=None,
     ):
         call_count[0] += 1
         captured_resume_specs.append(resume_spec)

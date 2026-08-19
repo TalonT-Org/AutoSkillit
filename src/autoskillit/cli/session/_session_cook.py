@@ -478,6 +478,7 @@ def cook(
                         trace=trace,
                         observer=observer,
                         not_after=time.time() + config.process_tether.cook_ceiling_seconds,
+                        systemd_scope_enabled=config.process_tether.systemd_scope_enabled,
                     )
                     reload_session_id = consume_reload_sentinel(project_dir)
                     _require_observer_ready(observer)

@@ -98,9 +98,11 @@ from autoskillit.execution.process._process_tether import (
     TetherSweepReport,
     default_tether_dir,
     find_orphaned_tethers,
+    probe_systemd_scope_available,
     sweep_orphaned_tethers,
     sweep_orphaned_tethers_async,
     update_tether_workload,
+    wrap_systemd_scope,
 )
 from autoskillit.execution.process._termination import (
     decide_termination_action,
@@ -161,6 +163,7 @@ __all__ = [
     "fold_lifecycle_evidence",
     "fold_lifecycle_evidence_path",
     "kill_process_tree",
+    "probe_systemd_scope_available",
     "pty_wrap_command",
     "read_temp_output",
     "reap_orphaned_codex_processes",
@@ -173,6 +176,7 @@ __all__ = [
     "sweep_orphaned_tethers",
     "sweep_orphaned_tethers_async",
     "update_tether_workload",
+    "wrap_systemd_scope",
 ]
 
 
@@ -233,6 +237,7 @@ async def run_managed_async(
     backend_resume_session_id: str = "",
     lifecycle_observation_enabled: bool = False,
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+    systemd_scope_enabled: bool = False,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -252,6 +257,11 @@ async def run_managed_async(
 
     if pty_mode:
         cmd = pty_wrap_command(cmd)
+
+    # Defense-in-depth kernel ceiling, applied last so systemd-run wraps
+    # whatever the eventual funnel leader is (script(1) in PTY mode, the
+    # workload directly otherwise) — inert unless explicitly enabled.
+    cmd = wrap_systemd_scope(cmd, enabled=systemd_scope_enabled, ceiling_seconds=ceiling_seconds)
 
     _keep = capture_dir is not None
     with create_temp_io(input_data, capture_dir=capture_dir, keep_streams=_keep) as (
@@ -856,6 +866,7 @@ class DefaultSubprocessRunner:
         backend_resume_session_id: str = "",
         lifecycle_observation_enabled: bool = False,
         ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+        systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -888,4 +899,5 @@ class DefaultSubprocessRunner:
             backend_resume_session_id=backend_resume_session_id,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
             ceiling_seconds=ceiling_seconds,
+            systemd_scope_enabled=systemd_scope_enabled,
         )

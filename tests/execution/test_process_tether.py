@@ -27,8 +27,10 @@ from autoskillit.execution import (
     DEFAULT_TETHER_CEILING_SECONDS,
     INTERACTIVE_TETHER_CEILING_SECONDS,
     TetherSpec,
+    probe_systemd_scope_available,
     spawn_owned_process,
     sweep_orphaned_tethers,
+    wrap_systemd_scope,
 )
 from autoskillit.execution.process._process_tether import (
     TetherRecord,
@@ -121,6 +123,15 @@ class TestSpawnWritesTether:
             assert data["origin"] == "test"
         finally:
             owner.settle_evidence()
+
+
+class TestSpawnOwnedProcessRequiresTether:
+    def test_spawn_owned_process_requires_tether(self) -> None:
+        """``tether`` is keyword-only with no default — locks the required-param
+        invariant against future soft-defaulting that would silently reopen an
+        untethered detached-spawn path."""
+        with pytest.raises(TypeError):
+            spawn_owned_process(_sleeper_cmd(), start_new_session=True)  # type: ignore[call-arg]
 
 
 class TestSettleRemovesTether:
@@ -500,3 +511,134 @@ class TestConfigParityAndCoherence:
         assert not any(
             "process_tether_ceiling_coherence" in entry.get("event", "") for entry in cap_logs
         )
+
+
+class TestSystemdScopeWrap:
+    """Optional-ceiling tests: config default off / probe fails / probe passes."""
+
+    def test_disabled_leaves_argv_unchanged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        probed = False
+
+        def _fail_if_probed() -> bool:
+            nonlocal probed
+            probed = True
+            return True
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.probe_systemd_scope_available",
+            _fail_if_probed,
+        )
+        result = wrap_systemd_scope(["echo", "hi"], enabled=False, ceiling_seconds=60.0)
+        assert result == ["echo", "hi"]
+        assert probed is False, "disabled must short-circuit before probing"
+
+    def test_enabled_probe_fails_leaves_argv_unchanged_and_warns(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import structlog.testing
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.probe_systemd_scope_available",
+            lambda: False,
+        )
+        with structlog.testing.capture_logs() as cap_logs:
+            result = wrap_systemd_scope(["echo", "hi"], enabled=True, ceiling_seconds=60.0)
+        assert result == ["echo", "hi"]
+        assert any(entry.get("event") == "systemd_scope_probe_failed" for entry in cap_logs)
+
+    def test_enabled_probe_passes_prefixes_systemd_run_wrapper(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.probe_systemd_scope_available",
+            lambda: True,
+        )
+        result = wrap_systemd_scope(["echo", "hi"], enabled=True, ceiling_seconds=90.0)
+        assert result == [
+            "systemd-run",
+            "--user",
+            "--scope",
+            "--quiet",
+            "-p",
+            "RuntimeMaxSec=90",
+            "echo",
+            "hi",
+        ]
+
+    def test_probe_false_without_systemd_run_on_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.shutil.which", lambda _name: None
+        )
+        assert probe_systemd_scope_available() is False
+
+    def test_probe_false_when_systemctl_reports_not_running(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess as _subprocess
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.shutil.which",
+            lambda _name: "/usr/bin/systemd-run",
+        )
+
+        def _fake_run(*args, **kwargs):
+            return _subprocess.CompletedProcess(args, 1, stdout="offline\n")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.subprocess.run", _fake_run
+        )
+        assert probe_systemd_scope_available() is False
+
+    def test_probe_true_when_systemctl_reports_running(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess as _subprocess
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.shutil.which",
+            lambda _name: "/usr/bin/systemd-run",
+        )
+
+        def _fake_run(*args, **kwargs):
+            return _subprocess.CompletedProcess(args, 0, stdout="running\n")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.subprocess.run", _fake_run
+        )
+        assert probe_systemd_scope_available() is True
+
+    def test_probe_true_when_systemctl_reports_degraded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess as _subprocess
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.shutil.which",
+            lambda _name: "/usr/bin/systemd-run",
+        )
+
+        def _fake_run(*args, **kwargs):
+            return _subprocess.CompletedProcess(args, 0, stdout="degraded\n")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.subprocess.run", _fake_run
+        )
+        assert probe_systemd_scope_available() is True
+
+    def test_probe_false_on_systemctl_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess as _subprocess
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.shutil.which",
+            lambda _name: "/usr/bin/systemd-run",
+        )
+
+        def _raise_timeout(*args, **kwargs):
+            raise _subprocess.TimeoutExpired(cmd="systemctl", timeout=5.0)
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_tether.subprocess.run", _raise_timeout
+        )
+        assert probe_systemd_scope_available() is False

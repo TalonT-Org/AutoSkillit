@@ -16,8 +16,11 @@ the same platform gating `bind_session_owner` already uses.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -359,3 +362,57 @@ async def sweep_orphaned_tethers_async(
     return await anyio.to_thread.run_sync(
         partial(sweep_orphaned_tethers, tether_dir, min_age_seconds=min_age_seconds)
     )
+
+
+def probe_systemd_scope_available() -> bool:
+    """Return whether ``systemd-run --user --scope`` is viable on this host.
+
+    Requires ``systemd-run`` on PATH and ``systemctl --user is-system-running``
+    to report ``running`` or ``degraded`` — ``degraded`` still means the user
+    manager itself is up, only that some unit elsewhere failed. Any probe
+    failure (missing binary, non-zero/timeout/unreadable systemctl) returns
+    False; callers fall back to an unwrapped spawn plus a warning, never a
+    raise — this is defense-in-depth, not the ceiling of record.
+    """
+    if sys.platform != "linux":
+        return False
+    if shutil.which("systemd-run") is None:
+        return False
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", "is-system-running"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.stdout.strip() in {"running", "degraded"}
+
+
+def wrap_systemd_scope(cmd: Sequence[str], *, enabled: bool, ceiling_seconds: float) -> list[str]:
+    """Prefix *cmd* with a ``systemd-run --user --scope`` wrapper when enabled
+    and the host supports it, for a kernel-enforced ceiling that survives
+    spawner death. Returns *cmd* unchanged (as a ``list``) when ``enabled`` is
+    False, off Linux, or the probe fails — logging a warning in the
+    probe-failure case so an operator who turned this on can tell it silently
+    didn't apply.
+
+    See ``ProcessTetherConfig.systemd_scope_enabled`` for the full reliability
+    caveats (WSL2 systemd requirement, ``loginctl enable-linger``, and why
+    ``RuntimeMaxSec`` is not the ceiling of record).
+    """
+    if not enabled:
+        return list(cmd)
+    if not probe_systemd_scope_available():
+        logger.warning("systemd_scope_probe_failed", cmd=list(cmd[:1]))
+        return list(cmd)
+    return [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "-p",
+        f"RuntimeMaxSec={int(ceiling_seconds)}",
+        *cmd,
+    ]

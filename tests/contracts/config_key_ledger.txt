@@ -75,6 +75,7 @@ packs.enabled
 plan.adversarial_review_level
 process_tether.cook_ceiling_seconds
 process_tether.orphan_ceiling_seconds
+process_tether.systemd_scope_enabled
 providers.default_provider
 providers.model_overrides
 providers.profiles

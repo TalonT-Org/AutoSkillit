@@ -123,8 +123,10 @@ class _BackendLifecycleStub:
         launch_id: str,
         attempt: int,
         current_resume_spec,
+        ceiling_seconds: float = 172800.0,
+        systemd_scope_enabled: bool = False,
     ):
-        del project_dir
+        del project_dir, ceiling_seconds, systemd_scope_enabled
         from autoskillit.core import CookSessionHandle
 
         return nullcontext(
@@ -1990,7 +1992,10 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             launch_id: str,
             attempt: int,
             current_resume_spec: object,
+            ceiling_seconds: float = 172800.0,
+            systemd_scope_enabled: bool = False,
         ):
+            del ceiling_seconds, systemd_scope_enabled
             events.append(
                 (
                     "attempt-enter",

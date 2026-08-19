@@ -56,6 +56,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "find_orphaned_autoskillit_daemons",
         "find_orphaned_tethers",
         "kill_process_tree",
+        "probe_systemd_scope_available",
         "pty_wrap_command",
         "read_temp_output",
         "reap_orphaned_codex_processes",
@@ -68,6 +69,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "sweep_orphaned_tethers",
         "sweep_orphaned_tethers_async",
         "update_tether_workload",
+        "wrap_systemd_scope",
     }
 )
 

@@ -144,6 +144,7 @@ from autoskillit.execution.process import (
     find_orphaned_codex_processes,
     find_orphaned_tethers,
     kill_process_tree,
+    probe_systemd_scope_available,
     reap_orphaned_autoskillit_daemons,
     reap_orphaned_codex_processes,
     run_managed_async,
@@ -153,6 +154,7 @@ from autoskillit.execution.process import (
     sweep_orphaned_tethers,
     sweep_orphaned_tethers_async,
     update_tether_workload,
+    wrap_systemd_scope,
 )
 from autoskillit.execution.quota import (
     QUOTA_CACHE_SCHEMA_VERSION,
@@ -238,6 +240,7 @@ __all__ = [
     "find_orphaned_autoskillit_daemons",
     "find_orphaned_codex_processes",
     "find_orphaned_tethers",
+    "probe_systemd_scope_available",
     "reap_orphaned_autoskillit_daemons",
     "reap_orphaned_codex_processes",
     "run_managed_async",
@@ -247,6 +250,7 @@ __all__ = [
     "sweep_orphaned_tethers",
     "sweep_orphaned_tethers_async",
     "update_tether_workload",
+    "wrap_systemd_scope",
     # recording
     "RecordingSubprocessRunner",
     "ReplayingSubprocessRunner",

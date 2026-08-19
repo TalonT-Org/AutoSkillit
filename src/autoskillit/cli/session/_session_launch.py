@@ -182,6 +182,7 @@ def _run_interactive_session(
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
     cook_ceiling_seconds: float | None = None,
+    systemd_scope_enabled: bool | None = None,
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -205,11 +206,15 @@ def _run_interactive_session(
             mcp_tool_timeout_sec = config.run_skill.mcp_tool_timeout_sec
         if cook_ceiling_seconds is None:
             cook_ceiling_seconds = config.process_tether.cook_ceiling_seconds
+        if systemd_scope_enabled is None:
+            systemd_scope_enabled = config.process_tether.systemd_scope_enabled
     if cook_ceiling_seconds is None:
         # backend was pre-resolved by the caller without also supplying this —
         # fall back to ProcessTetherConfig's own literal default rather than
         # leaving run_cook_attempt's required not_after unresolvable.
         cook_ceiling_seconds = 172800.0
+    if systemd_scope_enabled is None:
+        systemd_scope_enabled = False
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.core import InfraExitCategory, bind_session_owner
@@ -361,6 +366,7 @@ def _run_interactive_session(
                 trace=startup_trace,
                 observer=None,
                 not_after=time.time() + cook_ceiling_seconds,
+                systemd_scope_enabled=systemd_scope_enabled,
             )
         returncode = managed_result.returncode
     else:

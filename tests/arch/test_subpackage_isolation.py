@@ -1032,6 +1032,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks/guards": 40,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
         # +resource_exhaustion_guard (#4678 rectify: Bash busy-loop pattern denial)
         # +fabricated_completion_guard (#4457)
+        "execution/process": 11,  # +_termination (RE: #4664 decompose); +_process_tether
+        # (#4678 rectify: process-tether spawner-death immunity mechanism)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:

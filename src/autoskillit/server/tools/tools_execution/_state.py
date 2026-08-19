@@ -1,24 +1,10 @@
-"""State dataclass for the run_skill dispatch/finalize split (REQ-DECOMP-001).
+"""State dataclass shared between ``_run_skill_dispatch`` and ``_run_skill_finalize``.
 
-The original ``tools_execution.py`` ran the entire ``run_skill`` flow in
-one 1,796-line function. The decomposition splits it into a dispatcher
-(``_run_skill_dispatch.py``) and a finalize helper
-(``_run_skill_finalize.py``). The finalize helper reads ~150 dispatch-scope
-locals; bundling them into one dataclass avoids a 150-parameter signature.
+Bundles every dispatch-scope local the finalize block reads into a single
+mutable container, avoiding a 150-parameter helper signature.
 
-The dataclass is intentionally NOT frozen: ``_completion_invocation_id`` is
-written into the state during the finalize block (the helper returns the
-result dict that the dispatcher then submits). The dataclass also carries
-the ContextVar reset tokens (``_sn_token``, ``_oid_token``) so the
-dispatcher-scope ``_run_skill_outer_finally`` can reset the contextvars
-after the helper returns — those tokens must live on the state because the
-helper's return would otherwise drop them from the dispatcher's frame.
-
-Cross-module types are typed as ``Any`` to keep the state module importable
-standalone without dragging in the dispatcher / finalize submodules. The
-dispatcher populates the state from typed call sites; the finalize module
-reads the typed values via attribute access. Type safety is enforced at
-the call sites, not the dataclass field type.
+Mutable by design: ``_completion_invocation_id`` is written into the state by
+the finalize block before the helper returns.
 """
 
 from __future__ import annotations
@@ -38,7 +24,7 @@ if TYPE_CHECKING:
 class _RunSkillDispatchState:
     """Bundles every dispatch-scope local read by the finalize block."""
 
-    # --- Tool-function parameters (lines 994-1015) ---
+    # --- Tool-function parameters ---
     skill_command: str
     cwd: str
     order_id: str
@@ -65,9 +51,6 @@ class _RunSkillDispatchState:
     tool_ctx: ToolContext | None
     ctx: Context
     contract_lifecycle: Any  # _RunSkillContractLifecycle
-
-    # --- Writable: written by finalize helper ---
-    _completion_invocation_id: str
 
     # --- Timing/state ---
     _start: float
@@ -117,11 +100,11 @@ class _RunSkillDispatchState:
     _audit_output_mode: Any  # AuditOutputMode | None
     _clone_allowed_root: Path
     _slot_intent_digest: str | None
-    _bound_input_map: dict | None
+    _bound_input_map: dict[str, Any] | None
     _prior_input_field: str | None
     _prior_path: str | None
     _recipe_execution_key: Any
-    _audited_plan_refs: list | None
+    _audited_plan_refs: list[Any] | None
     _cycle_id: str | None
     _scope_id: str | None
     _part_id: str | None
@@ -141,11 +124,11 @@ class _RunSkillDispatchState:
     _in_fleet_dispatch: bool
     _inspector_model: str | None
     effective_model: str
-    provider_extras: dict | None
+    provider_extras: dict[str, Any] | None
     profile_name_out: tuple[str, ...] | None
     _profile: Any
-    _env_dict: dict | None
-    _mo_recipe_map: dict | None
+    _env_dict: dict[str, str] | None
+    _mo_recipe_map: dict[str, str] | None
     _step_mo: Any
     _stored_contract: Any  # SkillContract | None
 
@@ -160,22 +143,22 @@ class _RunSkillDispatchState:
     _effective_backend_obj: Any  # CodingAgentBackend | None
     _explicit_binary: str | None
     _fresh_parent_sandbox_mode: str | None
-    _active_exploration_applicabilities: tuple | None
+    _active_exploration_applicabilities: tuple[Any, ...] | None
 
     # --- Dispatch metadata ---
-    expected_output_patterns: tuple | None
+    expected_output_patterns: tuple[str, ...] | None
     write_spec: Any  # WriteBehaviorSpec | None
     _skill_contract: Any  # SkillContract | None
     closure_spec: Any
     closure_report_root: Path | None
     _closure_root: Path | None
-    write_watch_dirs: tuple | None
+    write_watch_dirs: tuple[str, ...] | None
     _default_temp: Path | None
     is_read_only: bool
     scope_discipline_skill: Any
     completion_required: bool
     invocation_marker: Any
-    skill_add_dirs: tuple | None  # tuple[ValidatedAddDir, ...] | None
+    skill_add_dirs: tuple[Any, ...] | None  # tuple[ValidatedAddDir, ...] | None
     replay_snapshot_used: bool
     _runner: Any
     _ephemeral_root: Path | None
@@ -208,7 +191,7 @@ class _RunSkillDispatchState:
     _parsed: Any
     _missing: Any
     _shaped_response: str | None
-    _replay_payload: dict | None
+    _replay_payload: dict[str, Any] | None
     _crashed_result: Any
     _unhandled_result: Any
     _cancelled_result: Any
@@ -217,3 +200,8 @@ class _RunSkillDispatchState:
     _ssm: Any
     _cleanup_dir: Path | None
     _codex_fallback: Any
+
+    # --- Writable: written by finalize helper ---
+    # Trailing position keeps the dataclass-ordering invariant satisfied
+    # (all default-bearing fields must follow non-default ones).
+    _completion_invocation_id: str | None = None

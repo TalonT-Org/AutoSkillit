@@ -33,7 +33,7 @@ def _make_orphan(pid: int) -> OrphanedCodexProcess:
 
 
 def test_codex_orphans_cmd_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.cli._codex_orphans as codex_orphans_mod
+    import autoskillit.cli.ops._codex_orphans as codex_orphans_mod
     from autoskillit import cli
 
     called_with: dict[str, object] = {}
@@ -53,7 +53,7 @@ def test_run_reports_orphans_plain(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._codex_orphans import run_codex_orphans
+    from autoskillit.cli.ops import run_codex_orphans
 
     orphans = [_make_orphan(1001), _make_orphan(1002)]
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
@@ -71,7 +71,7 @@ def test_run_reports_no_orphans(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._codex_orphans import run_codex_orphans
+    from autoskillit.cli.ops import run_codex_orphans
 
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: [])
 
@@ -84,7 +84,7 @@ def test_run_output_json_shape(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._codex_orphans import run_codex_orphans
+    from autoskillit.cli.ops import run_codex_orphans
 
     orphans = [_make_orphan(1001), _make_orphan(1002)]
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
@@ -102,7 +102,7 @@ def test_run_reap_output_json_shape(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._codex_orphans import run_codex_orphans
+    from autoskillit.cli.ops import run_codex_orphans
 
     orphans = [_make_orphan(1001)]
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
@@ -136,7 +136,7 @@ def test_run_reap_invokes_reaper_and_reports(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._codex_orphans import run_codex_orphans
+    from autoskillit.cli.ops import run_codex_orphans
 
     orphans = [_make_orphan(2001), _make_orphan(2002), _make_orphan(2003)]
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
@@ -178,7 +178,7 @@ def test_run_reap_reports_observation_incomplete_without_pid_lists(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._codex_orphans import run_codex_orphans
+    from autoskillit.cli.ops import run_codex_orphans
 
     orphan = _make_orphan(2004)
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: [orphan])

@@ -10,7 +10,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_codex_attempts_command_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.cli._codex_attempts as command
+    import autoskillit.cli.ops._codex_attempts as command
     from autoskillit import cli
 
     calls: list[dict[str, object]] = []
@@ -36,7 +36,7 @@ def test_codex_attempts_lists_without_recovery_and_renders_json(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     import autoskillit.execution as execution
-    from autoskillit.cli._codex_attempts import run_codex_attempts
+    from autoskillit.cli.ops import run_codex_attempts
 
     class Store:
         def __init__(self, *, log_dir: object) -> None:
@@ -77,7 +77,7 @@ def test_codex_attempts_requires_view_and_reason_together(
     reason: str | None,
     message: str,
 ) -> None:
-    from autoskillit.cli._codex_attempts import run_codex_attempts
+    from autoskillit.cli.ops import run_codex_attempts
 
     with pytest.raises(ValueError, match=message):
         run_codex_attempts(discard_view=discard_view, reason=reason)

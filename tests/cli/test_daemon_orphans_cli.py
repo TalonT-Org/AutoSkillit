@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._daemon_orphans import run_daemon_orphans
+from autoskillit.cli.ops import run_daemon_orphans
 from autoskillit.core import ProcessCleanupResult
 from autoskillit.execution import DaemonOrphanReapResult, OrphanedAutoSkillitDaemon
 from autoskillit.execution.process import _daemon_orphans as daemon_orphans

@@ -12,6 +12,7 @@ from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
+from autoskillit.workspace.skill_capabilities import _SkillCapabilityEvidenceCache
 
 _UNSET = object()
 
@@ -142,3 +143,53 @@ def codex_env():
             "backend": backend,
         },
     )()
+
+
+@pytest.fixture
+def evidence_cache(monkeypatch) -> _SkillCapabilityEvidenceCache:
+    import autoskillit.workspace.skill_capabilities as capabilities
+
+    cache = _SkillCapabilityEvidenceCache(
+        max_entries=32,
+        max_bytes=1024 * 1024,
+        max_input_bytes=64 * 1024,
+    )
+    monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+    return cache
+
+
+@pytest.fixture
+def make_evidence_cache(monkeypatch):
+    """Factory fixture for tests that need a non-default cache size."""
+
+    def _factory(*, max_entries: int) -> _SkillCapabilityEvidenceCache:
+        import autoskillit.workspace.skill_capabilities as capabilities
+
+        cache = _SkillCapabilityEvidenceCache(
+            max_entries=max_entries,
+            max_bytes=1024 * 1024,
+            max_input_bytes=64 * 1024,
+        )
+        monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+        return cache
+
+    return _factory
+
+
+@pytest.fixture
+def scan_calls(monkeypatch):
+    import autoskillit.workspace.skill_capabilities as capabilities
+
+    calls: list[tuple[str, str]] = []
+    original = capabilities._scan_skill_capability_evidence_uncached
+
+    def recording_scanner(content: str, effective_name: str):
+        calls.append((content, effective_name))
+        return original(content, effective_name)
+
+    monkeypatch.setattr(
+        capabilities,
+        "_scan_skill_capability_evidence_uncached",
+        recording_scanner,
+    )
+    return calls

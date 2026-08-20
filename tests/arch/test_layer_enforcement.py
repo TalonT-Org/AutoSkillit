@@ -1748,8 +1748,14 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
     # skills split — categories tests call load_config() to validate tier assignments
     "tests/workspace/test_skills_categories.py": frozenset({"autoskillit.config"}),
-    # project-local override tests use backend convention objects to verify scoping behavior
-    "tests/workspace/test_project_local_overrides.py": frozenset({"autoskillit.execution"}),
+    # project-local override detection tests import backend convention objects to verify scoping
+    "tests/workspace/test_project_local_overrides_detection.py": frozenset(
+        {"autoskillit.execution"}
+    ),
+    # project-local override identity projection tests use CodexBackend/ClaudeCodeBackend + prepare_skill_projection
+    "tests/workspace/test_project_local_overrides_identity_projection.py": frozenset(
+        {"autoskillit.execution"}
+    ),
     # codex session skills split — layout, locking, persistent_root tests import
     # codex backend helpers (CodexBackend, materialize_codex_profile_skills, get_backend)
     "tests/workspace/test_session_skills_codex_layout.py": frozenset({"autoskillit.execution"}),

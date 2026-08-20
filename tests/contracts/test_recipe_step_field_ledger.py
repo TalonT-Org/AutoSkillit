@@ -103,7 +103,7 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     # compiler, lint/schema-only consumers" shape as constant.
     "python": "validation-only",
     # Validated by schema/validator only — the retry loop itself is
-    # agent-prompt-driven (cli/_prompts_orchestrator.py generic text), not a
+    # agent-prompt-driven (cli/prompts/_prompts_orchestrator.py generic text), not a
     # per-step Python read site.
     "retries": "validation-only",
     # Full execution chain: pipeline composition pruning

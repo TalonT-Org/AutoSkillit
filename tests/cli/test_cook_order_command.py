@@ -198,7 +198,7 @@ class TestCLIOrderCommand:
             lambda _capabilities: MARKETPLACE_PREFIX,
         )
         from autoskillit import __version__
-        from autoskillit.cli._plugin_artifact import (
+        from autoskillit.cli.install._plugin_artifact import (
             current_installed_plugin_root,
             installed_plugin_semantic_key,
             publish_installed_plugin_artifact,

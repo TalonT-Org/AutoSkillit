@@ -640,13 +640,13 @@ def test_actual_doctor_artifact_matrix_is_read_only(
 
 def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
     """Doctor must report when the plugin cache directory is missing."""
-    from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
     # Force non-editable install so the cache check actually runs
     monkeypatch.setattr(
-        "autoskillit.cli._install_info.detect_install",
+        "autoskillit.cli.install._install_info.detect_install",
         lambda: InstallInfo(
             install_type=InstallType.GIT_VCS,
             commit_id=None,
@@ -1337,8 +1337,8 @@ def test_check_source_version_drift_ok_outside_source_repo(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """GIT_VCS install with empty cache reports OK (no drift observable)."""
-    from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
     from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
@@ -1349,7 +1349,7 @@ def test_check_source_version_drift_ok_outside_source_repo(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     # Simulate empty cache and no source repo: resolve returns None
     monkeypatch.setattr(
         update_checks_module,
@@ -1365,8 +1365,8 @@ def test_check_source_version_drift_ok_for_editable_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """LOCAL_EDITABLE installs are under active development — drift check is skipped."""
-    from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1376,7 +1376,7 @@ def test_check_source_version_drift_ok_for_editable_install(
         url="file:///home/user/autoskillit",
         editable_source=Path("/home/user/autoskillit"),
     )
-    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
 
     result = _check_source_version_drift(home=tmp_path)
     assert result.severity == Severity.OK
@@ -1387,8 +1387,8 @@ def test_check_source_version_drift_ok_for_pinned_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
-    from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
     from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
@@ -1400,7 +1400,7 @@ def test_check_source_version_drift_ok_for_pinned_sha(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     # When requested_revision == commit_id, resolve_reference_sha returns commit_id
     monkeypatch.setattr(
         update_checks_module,
@@ -1416,8 +1416,8 @@ def test_check_source_version_drift_ok_when_cache_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When SHA cannot be resolved (network/cache miss), doctor reports OK."""
-    from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
     from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
@@ -1428,7 +1428,7 @@ def test_check_source_version_drift_ok_when_cache_empty(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
         update_checks_module,
         "resolve_reference_sha",
@@ -1447,8 +1447,8 @@ def test_check_source_version_drift_warning_on_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
-    from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
     from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
@@ -1462,7 +1462,7 @@ def test_check_source_version_drift_warning_on_drift(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
         update_checks_module,
         "resolve_reference_sha",
@@ -1556,7 +1556,7 @@ def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
     """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths.
 
     hooks.json lives two segments below the cache plugin dir
-    (<version>/hooks/hooks.json — write site: cli/_marketplace.py's
+    (<version>/hooks/hooks.json — write site: cli/install/_marketplace.py's
     public_plugin_root / "hooks" / "hooks.json"), not one
     (<version>/hooks.json) — this fixture pins the real layout so
     validate_plugin_cache_hooks's glob is exercised against it.

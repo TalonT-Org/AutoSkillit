@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
-from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
+from autoskillit.cli.prompts import _build_orchestrator_prompt, _get_ingredients_table
 from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
     _write_order_entry,
@@ -183,7 +183,7 @@ def order(
         resume_spec = resume_spec_from_cli(resume=True, session_id=session_id)
 
     if _resume and recipe is None:
-        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
+        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
         from autoskillit.cli.session._session_picker import pick_session as _pick_session
 
         if isinstance(resume_spec, BareResume):
@@ -230,7 +230,7 @@ def order(
     from autoskillit.cli.ui._timed_input import timed_prompt
 
     if recipe is None:
-        from autoskillit.cli._prompts import _build_open_kitchen_prompt
+        from autoskillit.cli.prompts import _build_open_kitchen_prompt
         from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
         from autoskillit.recipe import GROUP_LABELS, group_rank
 
@@ -253,7 +253,7 @@ def order(
             label="autoskillit order",
         )
         if resolved is SLOT_ZERO_SELECTED:
-            from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+            from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS
 
             system_prompt = (
                 _build_open_kitchen_prompt(
@@ -381,7 +381,7 @@ def order(
                 return
 
     from autoskillit.cli._preview import show_cook_preview
-    from autoskillit.cli._prompts import _COOK_GREETINGS
+    from autoskillit.cli.prompts import _COOK_GREETINGS
 
     _itable = _get_ingredients_table(recipe, _match, Path.cwd())
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())

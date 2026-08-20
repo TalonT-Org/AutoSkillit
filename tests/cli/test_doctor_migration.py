@@ -324,8 +324,8 @@ def test_source_version_drift_remediation_contains_upgrade_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_source_version_drift WARNING message contains the install-type-specific command."""
-    from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -335,7 +335,7 @@ def test_source_version_drift_remediation_contains_upgrade_command(
         url="https://github.com/TalonT-Org/AutoSkillit.git",
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.resolve_reference_sha",
         lambda *a, **kw: "bbbb2222cccc",

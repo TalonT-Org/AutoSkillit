@@ -210,8 +210,8 @@ def cook(
 
     print(permissions_warning())
 
-    from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
+    from autoskillit.cli.session._session_onboarding import is_first_run, run_onboarding_menu
     from autoskillit.core import (
         CODEX_STARTUP_TRACE_ENV_VAR,
         LAUNCH_ID_ENV_VAR,
@@ -281,7 +281,7 @@ def cook(
         resolve_repository_profile(project_dir) if requires_resolved_exploration_profile else None
     )
 
-    from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+    from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
 
     # The selected authority also owns the scripts rendered into the catalog.
     artifact_authority, load_mode = interactive_plugin_authority(
@@ -496,7 +496,7 @@ def cook(
                     if result.returncode != 0:
                         raise SystemExit(result.returncode)
                     if first_run and initial_prompt is not None:
-                        from autoskillit.cli._onboarding import mark_onboarded
+                        from autoskillit.cli.session._session_onboarding import mark_onboarded
 
                         mark_onboarded(project_dir)
                     trace.close(status="success")

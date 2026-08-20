@@ -296,7 +296,9 @@ class TestCookAddDirStructure:
         )
         monkeypatch.setattr(shutil, "which", lambda _name: str(tmp_path / "claude"))
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
+        )
         monkeypatch.setattr(
             "autoskillit.cli.ui._timed_input.timed_prompt",
             lambda *args, **kwargs: "",

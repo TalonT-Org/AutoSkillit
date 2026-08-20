@@ -134,7 +134,7 @@ def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
     from datetime import UTC, datetime, timedelta
 
     from autoskillit import __version__
-    from autoskillit.cli._plugin_artifact import (
+    from autoskillit.cli.install._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
         publish_installed_plugin_artifact,
     )

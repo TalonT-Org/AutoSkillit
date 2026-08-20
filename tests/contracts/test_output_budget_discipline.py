@@ -159,7 +159,7 @@ def test_codex_recipe_delivery_contract_is_generated_from_static_budget() -> Non
 
 
 def test_codex_recipe_delivery_contract_reaches_all_prompt_families() -> None:
-    from autoskillit.cli._prompts import (
+    from autoskillit.cli.prompts import (
         _build_open_kitchen_prompt,
         _build_orchestrator_prompt,
     )

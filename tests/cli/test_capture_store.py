@@ -20,10 +20,10 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.cli._capture_store as capture_store_command
 import autoskillit.cli.doctor._doctor_capture_store as doctor_capture_store
-from autoskillit.cli._capture_store import run_capture_store
+import autoskillit.cli.ops._capture_store as capture_store_command
 from autoskillit.cli.doctor._doctor_capture_store import _check_capture_store_stats
+from autoskillit.cli.ops import run_capture_store
 from autoskillit.core import Severity
 from autoskillit.hooks._capture import _reconcile as capture_reconcile
 from autoskillit.hooks._capture._authority import open_capture_root, open_project_anchor

@@ -325,7 +325,7 @@ def test_retained_incarnation_hooks_resolve_independently_of_newer_version(
     """
     from datetime import UTC, datetime, timedelta
 
-    from autoskillit.cli._plugin_artifact import (
+    from autoskillit.cli.install._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
         publish_installed_plugin_artifact,
     )

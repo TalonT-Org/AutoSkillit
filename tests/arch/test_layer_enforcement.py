@@ -1581,9 +1581,13 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
             "DefaultWorkspaceManager",  # signal guard cleanup
         },
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
-        Path("cli/_marketplace.py"): {"DefaultSkillResolver"},  # CLI marketplace skill resolution
-        Path("cli/_prompts.py"): {"DefaultSkillResolver"},  # interactive CLI skill selection
-        Path("cli/_plugin_artifact.py"): {
+        Path("cli/install/_marketplace.py"): {
+            "DefaultSkillResolver"
+        },  # CLI marketplace skill resolution
+        Path("cli/prompts/_prompts.py"): {
+            "DefaultSkillResolver"
+        },  # interactive CLI skill selection
+        Path("cli/install/_plugin_artifact.py"): {
             "DefaultPluginRetirementCoordinator",
             "DefaultSkillResolver",  # self-heal republish resolves bundled skills
         },

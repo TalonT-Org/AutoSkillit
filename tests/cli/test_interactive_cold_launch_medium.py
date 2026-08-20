@@ -58,7 +58,7 @@ def cold_launch(
     monkeypatch.setattr(subprocess, "run", capture_run)
     monkeypatch.setattr(subprocess, "Popen", capture_final_spawn)
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (None, PluginLoadMode.NONE),
     )
     monkeypatch.setattr(

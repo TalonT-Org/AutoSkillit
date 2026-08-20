@@ -45,7 +45,7 @@ def _make_recipe() -> Recipe:
 
 
 def _build(**overrides: object) -> str:
-    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
+    from autoskillit.cli.prompts import _build_fleet_campaign_prompt
 
     defaults: dict[str, object] = {
         "campaign_recipe": _make_recipe(),

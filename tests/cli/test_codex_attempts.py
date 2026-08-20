@@ -10,11 +10,20 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_codex_attempts_command_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.cli._codex_attempts as command
+    import autoskillit.cli.ops as ops_pkg
     from autoskillit import cli
+    from autoskillit.cli.ops import _codex_attempts as codex_attempts_mod
 
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(command, "run_codex_attempts", lambda **kwargs: calls.append(kwargs))
+
+    def mock_run(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    # Patch both the facade re-export AND the submodule attribute: if app.py
+    # is ever changed to import from cli.ops._codex_attempts directly, the
+    # facade patch silently no-ops, so the test would exercise the real runner.
+    monkeypatch.setattr(ops_pkg, "run_codex_attempts", mock_run)
+    monkeypatch.setattr(codex_attempts_mod, "run_codex_attempts", mock_run)
 
     cli.codex_attempts(
         discard_view="0123456789abcdef-1",
@@ -36,7 +45,7 @@ def test_codex_attempts_lists_without_recovery_and_renders_json(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     import autoskillit.execution as execution
-    from autoskillit.cli._codex_attempts import run_codex_attempts
+    from autoskillit.cli.ops import run_codex_attempts
 
     class Store:
         def __init__(self, *, log_dir: object) -> None:
@@ -77,7 +86,7 @@ def test_codex_attempts_requires_view_and_reason_together(
     reason: str | None,
     message: str,
 ) -> None:
-    from autoskillit.cli._codex_attempts import run_codex_attempts
+    from autoskillit.cli.ops import run_codex_attempts
 
     with pytest.raises(ValueError, match=message):
         run_codex_attempts(discard_view=discard_view, reason=reason)

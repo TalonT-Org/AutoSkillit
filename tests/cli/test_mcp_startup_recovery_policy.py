@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.cli import _prompts
+from autoskillit.cli.prompts import _prompts
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

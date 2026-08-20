@@ -22,7 +22,7 @@ Two public entry points:
     registry that only guards the repo would not repair a single user's machine.
 
 Layer note (**IL-005**): ``workspace`` is IL-1 and may import only ``core``.
-``InstalledPluginsFile`` lives at ``cli/_installed_plugins.py`` (IL-3), so
+``InstalledPluginsFile`` lives at ``cli/install/_installed_plugins.py`` (IL-3), so
 registry reads here go through ``core._plugin_ids.registered_install_paths``,
 the stdlib reader that exists precisely so any layer can ask this question.
 """

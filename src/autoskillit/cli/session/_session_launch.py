@@ -370,7 +370,7 @@ def _run_interactive_session(
             )
         returncode = managed_result.returncode
     else:
-        from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+        from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
         from autoskillit.cli.ui._terminal import terminal_guard
 
         skill_catalog = skill_compilation.catalog if skill_compilation is not None else None
@@ -579,7 +579,7 @@ def _launch_cook_session(
         run_loop()
         return
 
-    from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+    from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.core import PluginLoadMode
     from autoskillit.execution import all_backends

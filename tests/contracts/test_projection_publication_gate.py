@@ -589,7 +589,7 @@ class TestStaleGeneratorRefusal:
         from typing import Any, cast
 
         import autoskillit.workspace._projected_artifact.authority as _auth
-        from autoskillit.cli._plugin_artifact import InstalledPluginArtifactAuthority
+        from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactAuthority
         from autoskillit.workspace._projected_artifact.authority import StaleGeneratorError
 
         monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")

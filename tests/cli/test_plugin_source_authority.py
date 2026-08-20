@@ -242,7 +242,7 @@ class TestInstalledPluginArtifactAuthority:
     def test_publication_does_not_wrap_control_flow_exceptions(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli import _plugin_artifact
+        from autoskillit.cli.install import _plugin_artifact
 
         def interrupt(_root: Path) -> Path:
             raise KeyboardInterrupt
@@ -258,7 +258,7 @@ class TestInstalledPluginArtifactAuthority:
     def test_binding_acquisition_does_not_wrap_control_flow_exceptions(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli import _plugin_artifact
+        from autoskillit.cli.install import _plugin_artifact
         from autoskillit.core import PluginLoadMode
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -289,7 +289,7 @@ class TestInstalledPluginArtifactAuthority:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from autoskillit.cli._plugin_artifact import (
+        from autoskillit.cli.install._plugin_artifact import (
             InstalledPluginArtifactAuthority,
             installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
@@ -349,7 +349,7 @@ class TestInstalledPluginArtifactAuthority:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from autoskillit.cli._plugin_artifact import (
+        from autoskillit.cli.install._plugin_artifact import (
             InstalledPluginArtifactAuthority,
             installed_plugin_artifact_lease_path,
             publish_installed_plugin_artifact,
@@ -388,7 +388,7 @@ class TestInstalledPluginArtifactAuthority:
         self,
         tmp_path: Path,
     ) -> None:
-        from autoskillit.cli._plugin_artifact import (
+        from autoskillit.cli.install._plugin_artifact import (
             installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
@@ -410,7 +410,7 @@ class TestInstalledPluginArtifactAuthority:
 
     @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation requires POSIX")
     def test_publication_rejects_internal_special_file(self, tmp_path: Path) -> None:
-        from autoskillit.cli._plugin_artifact import (
+        from autoskillit.cli.install._plugin_artifact import (
             installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
@@ -432,7 +432,7 @@ class TestInstalledPluginArtifactAuthority:
     ) -> None:
         from types import SimpleNamespace
 
-        from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+        from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
         from autoskillit.core import PluginLoadMode
 
         backend = SimpleNamespace(
@@ -464,7 +464,7 @@ class TestInstalledPluginArtifactAuthority:
     ) -> None:
         from types import SimpleNamespace
 
-        from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+        from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
         from autoskillit.core import PluginLoadMode
 
         backend = SimpleNamespace(
@@ -505,7 +505,7 @@ class TestInstalledPluginArtifactAuthority:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from autoskillit.cli._plugin_artifact import (
+        from autoskillit.cli.install._plugin_artifact import (
             InstalledPluginArtifactAuthority,
             publish_installed_plugin_artifact,
         )

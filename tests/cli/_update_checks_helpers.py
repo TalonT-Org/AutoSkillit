@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from autoskillit.cli._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType
 
 
 def _make_stable_info(commit_id: str = "abc123", revision: str = "stable") -> InstallInfo:

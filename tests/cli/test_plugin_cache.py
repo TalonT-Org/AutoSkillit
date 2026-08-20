@@ -30,7 +30,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
 def _installed_identity(tmp_path: Path, version: str = "1.0.0"):
-    from autoskillit.cli._plugin_artifact import publish_installed_plugin_artifact
+    from autoskillit.cli.install._plugin_artifact import publish_installed_plugin_artifact
 
     root = (
         tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / version
@@ -105,7 +105,7 @@ def test_installed_reclaim_defers_until_final_reader_closes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.cli._plugin_artifact import (
+    from autoskillit.cli.install._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
         installed_plugin_artifact_lease_path,
     )
@@ -145,7 +145,7 @@ def test_installed_reclaim_io_failure_stays_queued_for_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import autoskillit.core._plugin_cache as plugin_cache
-    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+    from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
@@ -183,7 +183,7 @@ def test_installed_reclaim_lease_failure_stays_queued_for_retry(
     error: Exception,
 ) -> None:
     import autoskillit.core._plugin_cache as plugin_cache
-    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+    from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
@@ -208,7 +208,7 @@ def test_installed_reclaim_defers_when_cache_reread_is_unsafe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+    from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
@@ -230,7 +230,7 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
-    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+    from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
@@ -258,7 +258,7 @@ def test_installed_lifecycle_events_use_the_shared_schema(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.cli._plugin_artifact import (
+    from autoskillit.cli.install._plugin_artifact import (
         InstalledPluginArtifactAuthority,
         InstalledPluginArtifactRetirementOwner,
     )
@@ -317,7 +317,7 @@ def test_launch_binding_validates_generation_selected_during_lease_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactAuthority
+    from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactAuthority
     from autoskillit.core import PluginLoadMode, _InstallLock
     from autoskillit.workspace import publish_generation
 
@@ -371,7 +371,7 @@ def test_identity_mismatch_removes_record_without_deleting_current_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+    from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
@@ -607,7 +607,7 @@ def test_stale_cache_after_reorg_detected(tmp_path: Path) -> None:
 
     hooks.json lives two segments below the cache plugin dir
     (<version>/hooks/hooks.json — the write site is
-    cli/_marketplace.py's public_plugin_root / "hooks" / "hooks.json"), not
+    cli/install/_marketplace.py's public_plugin_root / "hooks" / "hooks.json"), not
     one (<version>/hooks.json). This fixture pins the real layout so the
     validator's glob is exercised against it, not a shape it never sees in
     production.

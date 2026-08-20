@@ -20,18 +20,6 @@
     "tests/test_test_filter.py",
     "tests/test_test_filter_core_cascade.py"
   ],
-  "src/autoskillit/cli/_capture_store.py": [
-    "tests/cli/test_capture_store.py"
-  ],
-  "src/autoskillit/cli/_codex_attempts.py": [
-    "tests/cli/test_codex_attempts.py"
-  ],
-  "src/autoskillit/cli/_codex_orphans.py": [
-    "tests/cli/test_codex_orphans_cmd.py"
-  ],
-  "src/autoskillit/cli/_daemon_orphans.py": [
-    "tests/cli/test_daemon_orphans_cli.py"
-  ],
   "src/autoskillit/cli/_features.py": [
     "tests/cli/test_features_cli.py"
   ],
@@ -74,7 +62,7 @@
     "tests/cli/test_workspace.py",
     "tests/contracts/test_version_consistency.py"
   ],
-  "src/autoskillit/cli/_install_contract.py": [
+  "src/autoskillit/cli/install/_install_contract.py": [
     "tests/cli/test_cli_hooks.py",
     "tests/cli/test_cli_marketplace.py",
     "tests/cli/test_install.py",
@@ -83,7 +71,7 @@
     "tests/cli/test_update_checks_lifecycle.py",
     "tests/cli/test_update_transaction.py"
   ],
-  "src/autoskillit/cli/_install_info.py": [
+  "src/autoskillit/cli/install/_install_info.py": [
     "tests/cli/test_doctor.py",
     "tests/cli/test_doctor_backend_guards.py",
     "tests/cli/test_doctor_broken_config.py",
@@ -106,11 +94,11 @@
     "tests/cli/test_update_checks_lifecycle.py",
     "tests/cli/test_update_checks_prompt.py"
   ],
-  "src/autoskillit/cli/_installed_plugins.py": [
+  "src/autoskillit/cli/install/_installed_plugins.py": [
     "tests/cli/test_installed_plugins_file.py",
     "tests/cli/test_update_transaction.py"
   ],
-  "src/autoskillit/cli/_marketplace.py": [
+  "src/autoskillit/cli/install/_marketplace.py": [
     "tests/cli/test_cli_hooks.py",
     "tests/cli/test_cli_marketplace.py",
     "tests/cli/test_install.py",
@@ -118,10 +106,7 @@
     "tests/cli/test_update_checks_lifecycle.py",
     "tests/contracts/test_version_consistency.py"
   ],
-  "src/autoskillit/cli/_onboarding.py": [
-    "tests/cli/test_onboarding.py"
-  ],
-  "src/autoskillit/cli/_plugin_artifact.py": [
+  "src/autoskillit/cli/install/_plugin_artifact.py": [
     "tests/cli/test_app_main.py",
     "tests/cli/test_cli_serve_logging.py",
     "tests/cli/test_cook_env_scrub.py",
@@ -156,7 +141,7 @@
     "tests/cli/test_fleet_campaign_preview.py",
     "tests/cli/test_preview.py"
   ],
-  "src/autoskillit/cli/_prompts.py": [
+  "src/autoskillit/cli/prompts/_prompts.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",
@@ -177,7 +162,7 @@
     "tests/contracts/test_sous_chef_scheduling.py",
     "tests/execution/backends/test_failure_predicate_spanning.py"
   ],
-  "src/autoskillit/cli/_prompts_campaign.py": [
+  "src/autoskillit/cli/prompts/_prompts_campaign.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_fleet_campaign.py",
     "tests/cli/test_l3_orchestrator_prompt.py",
@@ -185,7 +170,7 @@
     "tests/contracts/test_fleet_dispatch_bem_gate.py",
     "tests/contracts/test_instruction_surface.py"
   ],
-  "src/autoskillit/cli/_prompts_kitchen.py": [
+  "src/autoskillit/cli/prompts/_prompts_kitchen.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_order_picker.py",
     "tests/cli/test_cook_order_prompt.py",
@@ -195,7 +180,7 @@
     "tests/contracts/test_instruction_surface.py",
     "tests/contracts/test_output_budget_discipline.py"
   ],
-  "src/autoskillit/cli/_prompts_orchestrator.py": [
+  "src/autoskillit/cli/prompts/_prompts_orchestrator.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",
@@ -210,9 +195,6 @@
     "tests/contracts/test_sous_chef_routing.py",
     "tests/contracts/test_sous_chef_scheduling.py",
     "tests/execution/backends/test_failure_predicate_spanning.py"
-  ],
-  "src/autoskillit/cli/_restart.py": [
-    "tests/cli/test_restart.py"
   ],
   "src/autoskillit/cli/_serve_guard.py": [
     "tests/cli/test_serve_guard_deferral.py"
@@ -372,6 +354,18 @@
     "tests/cli/test_fleet_session.py",
     "tests/cli/test_reload_loop.py"
   ],
+  "src/autoskillit/cli/ops/_capture_store.py": [
+    "tests/cli/test_capture_store.py"
+  ],
+  "src/autoskillit/cli/ops/_codex_attempts.py": [
+    "tests/cli/test_codex_attempts.py"
+  ],
+  "src/autoskillit/cli/ops/_codex_orphans.py": [
+    "tests/cli/test_codex_orphans_cmd.py"
+  ],
+  "src/autoskillit/cli/ops/_daemon_orphans.py": [
+    "tests/cli/test_daemon_orphans_cli.py"
+  ],
   "src/autoskillit/cli/session/_session_backend.py": [
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",
@@ -420,6 +414,9 @@
     "tests/cli/test_session_launch.py",
     "tests/cli/test_terminal.py",
     "tests/contracts/test_claude_code_interface_contracts.py"
+  ],
+  "src/autoskillit/cli/session/_session_onboarding.py": [
+    "tests/cli/test_onboarding.py"
   ],
   "src/autoskillit/cli/session/_session_order.py": [
     "tests/cli/test_cook_features.py",
@@ -539,6 +536,9 @@
     "tests/cli/test_update_command.py",
     "tests/contracts/test_publication_obligation_loop.py",
     "tests/integration/test_obligation_repair_e2e.py"
+  ],
+  "src/autoskillit/cli/update/_restart.py": [
+    "tests/cli/test_restart.py"
   ],
   "src/autoskillit/cli/update/_transaction.py": [
     "tests/cli/test_update_checks_lifecycle.py",

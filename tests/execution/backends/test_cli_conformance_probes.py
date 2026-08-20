@@ -2498,8 +2498,8 @@ def _run_claude_startup_probe(
     connect_timeout_ms: int,
     run_skill_probe: bool = False,
 ) -> _ClaudeStartupProbeResult:
-    from autoskillit.cli._plugin_artifact import interactive_plugin_authority
-    from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
+    from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
+    from autoskillit.cli.prompts import _MCP_RETRY_INSTRUCTION
     from autoskillit.core import plugin_launch_binding_scope
 
     trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"

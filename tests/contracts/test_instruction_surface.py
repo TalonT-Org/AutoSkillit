@@ -273,7 +273,7 @@ class TestOrchestratorPromptDelegation:
         behavioral instructions only. Recipe content is discovered by the
         session via MCP tools.
         """
-        from autoskillit.cli._prompts import _build_orchestrator_prompt
+        from autoskillit.cli.prompts import _build_orchestrator_prompt
 
         prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
         # Must NOT contain recipe YAML markers
@@ -379,12 +379,12 @@ class TestSourceIsolationContract:
 
 
 def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
-    from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
-    from autoskillit.cli._prompts_kitchen import (
+    from autoskillit.cli.prompts._prompts_campaign import _build_fleet_campaign_prompt
+    from autoskillit.cli.prompts._prompts_kitchen import (
         _build_fleet_dispatch_prompt,
         _build_open_kitchen_prompt,
     )
-    from autoskillit.cli._prompts_orchestrator import _build_orchestrator_prompt
+    from autoskillit.cli.prompts._prompts_orchestrator import _build_orchestrator_prompt
     from autoskillit.fleet._prompts import _build_food_truck_prompt
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
 
@@ -831,7 +831,7 @@ class TestRunSkillAttestationParamDocumentation:
     """run_skill attestation parameters must be documented in instruction surfaces."""
 
     def test_run_skill_attestation_params_are_documented(self) -> None:
-        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
+        from autoskillit.cli.prompts import _MCP_RETRY_INSTRUCTION
         from autoskillit.core import RUN_SKILL_ATTESTATION_PARAMS
 
         for param in RUN_SKILL_ATTESTATION_PARAMS:

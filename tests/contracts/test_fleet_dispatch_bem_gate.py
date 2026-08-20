@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
+from autoskillit.cli.prompts._prompts_kitchen import _build_fleet_dispatch_prompt
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -106,7 +106,7 @@ def test_fleet_prompt_contains_gated_group_handling(fleet_prompt: str) -> None:
 
 
 def test_campaign_dynamic_dispatch_skips_gated_groups() -> None:
-    from autoskillit.cli._prompts_campaign import _build_dynamic_dispatch_section
+    from autoskillit.cli.prompts._prompts_campaign import _build_dynamic_dispatch_section
 
     section = _build_dynamic_dispatch_section(mcp_prefix=MCP_PREFIX)
     assert "gated" in section.lower(), (

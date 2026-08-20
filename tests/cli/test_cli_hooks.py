@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit import __version__
-from autoskillit.cli._install_contract import InstallMode, InstallRequest
+from autoskillit.cli.install._install_contract import InstallMode, InstallRequest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -440,7 +440,7 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     import importlib
     from types import SimpleNamespace
 
-    from autoskillit.cli._marketplace import install
+    from autoskillit.cli.install._marketplace import install
 
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
@@ -458,7 +458,7 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
     monkeypatch.setattr("shutil.which", lambda cmd, *, path=None: f"/usr/bin/{cmd}")
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.publish_installed_plugin_artifact",
+        "autoskillit.cli.install._plugin_artifact.publish_installed_plugin_artifact",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
@@ -472,7 +472,7 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
         ),
     )
 
-    _app_mod = importlib.import_module("autoskillit.cli._marketplace")
+    _app_mod = importlib.import_module("autoskillit.cli.install._marketplace")
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 

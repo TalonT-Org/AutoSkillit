@@ -120,7 +120,7 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
             "autoskillit.cli.session._session_reload.consume_reload_sentinel",
             return_value=None,
         ),
-        patch("autoskillit.cli._onboarding.is_first_run", return_value=False),
+        patch("autoskillit.cli.session._session_onboarding.is_first_run", return_value=False),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch(
@@ -384,7 +384,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._session_cook.is_feature_enabled", return_value=True),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=manager),
-        patch("autoskillit.cli._onboarding.is_first_run", return_value=False),
+        patch("autoskillit.cli.session._session_onboarding.is_first_run", return_value=False),
         patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.core.bind_session_owner") as bind_session_owner,

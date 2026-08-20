@@ -41,11 +41,11 @@ def test_fleet_call_sites_omit_managed_order_inputs(
         capture_session,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
+        "autoskillit.cli.prompts._build_fleet_dispatch_prompt",
         lambda *args, **kwargs: "dispatch-prompt",
     )
     monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+        "autoskillit.cli.prompts._build_fleet_campaign_prompt",
         lambda *args, **kwargs: "campaign-prompt",
     )
     monkeypatch.chdir(tmp_path)
@@ -113,7 +113,7 @@ class TestLaunchFleetSessionIngredientsTable:
             captured["ingredients_table"] = kwargs.get("ingredients_table")
             return "fake-prompt"
 
-        monkeypatch.setattr("autoskillit.cli._prompts._build_fleet_campaign_prompt", _fake_build)
+        monkeypatch.setattr("autoskillit.cli.prompts._build_fleet_campaign_prompt", _fake_build)
         monkeypatch.setattr(
             "autoskillit.cli.session._session_launch._run_interactive_session",
             lambda *a, **kw: None,
@@ -164,7 +164,7 @@ class TestLaunchFleetSessionProjectDirEnv:
             "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
+            "autoskillit.cli.prompts._build_fleet_dispatch_prompt",
             lambda *a, **kw: "fake-prompt",
         )
         monkeypatch.chdir(tmp_path)
@@ -185,7 +185,7 @@ class TestLaunchFleetSessionProjectDirEnv:
             "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
         monkeypatch.chdir(tmp_path)
@@ -235,7 +235,7 @@ class TestLaunchFleetSessionContinueOnFailureEnv:
             "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
         monkeypatch.chdir(tmp_path)
@@ -313,7 +313,7 @@ class TestReloadLoopRefreshesMetadata:
             _fake_resume,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -375,7 +375,7 @@ class TestReloadLoopRefreshesMetadata:
             return "fake-prompt"
 
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             _fake_build,
         )
 
@@ -433,7 +433,7 @@ class TestReloadLoopSentinelGuard:
             _fake_run_session,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -486,7 +486,7 @@ class TestReloadLoopSafetyGuards:
             _fake_run_session,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -537,7 +537,7 @@ class TestReloadLoopSafetyGuards:
             _fake_run_session,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -591,7 +591,7 @@ class TestReloadLoopUsesNamedResume:
             _fake_run_session,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -646,7 +646,7 @@ class TestCrossInvocationResume:
             _fake_run_session,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -709,7 +709,7 @@ class TestCrossInvocationResume:
             _fake_run_session,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -791,7 +791,7 @@ class TestSessionIdPersistence:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -849,7 +849,7 @@ class TestSessionIdPersistence:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            "autoskillit.cli.prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
         )
 
@@ -873,7 +873,7 @@ class TestFleetSessionPromptPriorDispatchId:
         self,
     ) -> None:
         """_build_fleet_campaign_prompt must accept prior_dispatch_id parameter."""
-        from autoskillit.cli._prompts_campaign import _build_fleet_campaign_prompt
+        from autoskillit.cli.prompts._prompts_campaign import _build_fleet_campaign_prompt
 
         sig = inspect.signature(_build_fleet_campaign_prompt)
         assert "prior_dispatch_id" in sig.parameters
@@ -899,7 +899,7 @@ class TestLaunchFleetSessionMaxIssuesPerFoodTruck:
             captured.update(kwargs)
             return "fake-prompt"
 
-        monkeypatch.setattr("autoskillit.cli._prompts._build_fleet_campaign_prompt", _fake_build)
+        monkeypatch.setattr("autoskillit.cli.prompts._build_fleet_campaign_prompt", _fake_build)
         monkeypatch.setattr(
             "autoskillit.cli.session._session_launch._run_interactive_session",
             lambda *a, **kw: None,
@@ -927,7 +927,7 @@ class TestLaunchFleetSessionMaxIssuesPerFoodTruck:
 
     def test_dispatch_prompt_does_not_accept_max_issues_per_food_truck(self) -> None:
         """_build_fleet_dispatch_prompt must not expose max_issues_per_food_truck parameter."""
-        from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
+        from autoskillit.cli.prompts._prompts_kitchen import _build_fleet_dispatch_prompt
 
         sig = inspect.signature(_build_fleet_dispatch_prompt)
         assert "max_issues_per_food_truck" not in sig.parameters

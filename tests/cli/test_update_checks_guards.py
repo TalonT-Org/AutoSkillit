@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.cli.update._update_checks import run_update_checks
 
 from ._update_checks_helpers import _make_develop_info, _make_stable_info

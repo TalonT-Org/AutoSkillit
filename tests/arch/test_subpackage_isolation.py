@@ -83,22 +83,22 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
         "_generation_publication",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
-        "_install_info",  # cli/_install_info.py: window constants (see comment above)
+        "_install_info",  # cli/install/_install_info.py: window constants (see comment above)
         # KITCHEN_GUARDED_COMMANDS: frozenset[str]
         "_update_checks",  # cli/_update_checks.py: module-level frozenset (see comment above)
         # _HTTP_TIMEOUT = httpx.Timeout(...) — module-level httpx client timeout config
         "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "_reconcile",  # hooks/_capture/_reconcile.py: immutable owner budget contracts
-        "_capture_store",  # cli/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
+        "_capture_store",  # cli/ops/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
-        "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
+        "_sessions",  # cli/ops/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         "claude",  # execution/backends/claude.py: _ANNOTATION_SUPPORT_MIN = Version(...)
-        "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
+        "_prompts",  # cli/prompts/_prompts.py: immutable startup recovery spec and rendering
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
         "_provenance",  # request-scoped fleet dispatch provenance ContextVars (submodule)
         "_run_skill_completion",  # request-scoped #4457 receipt delivery bindings
@@ -923,29 +923,39 @@ def test_no_subpackage_exceeds_10_files() -> None:
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
             management context manager (terminal_guard) for interactive subprocess
-            sessions. _install_info.py adds pure install classification + policy.
-            _update_checks.py adds the unified update check orchestration.
+            sessions. _update_checks.py adds the unified update check orchestration.
             _update.py adds the first-class update subcommand implementation.
             _fleet.py adds fleet error envelope rendering for CLI consumers.
             _features.py adds feature gate inspection subcommand (list/status).
             _session_picker.py adds the scoped session resume picker that filters
             sessions by type (cook/order) using the session registry.
-            _sessions.py adds the sessions analyze CLI subcommand for cross-session
-            tool call sequence diagnostics.
-            _restart.py adds the perform_restart() NoReturn contract for post-upgrade
-            process re-exec, keeping the restart logic isolated from update orchestration.
             _doctor.py was split (1245 lines → facade + 9 sub-modules) following the
             _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
             _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
             _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
-            _prompts.py (819 lines) was decomposed into three domain-focused submodules:
-            _prompts_campaign.py (IL-3 campaign dispatcher), _prompts_orchestrator.py
-            (IL-1/IL-2 cook session), and _prompts_kitchen.py (open-kitchen + fleet-dispatch),
-            with _prompts.py reduced to a shared-helpers + re-export hub (~50 lines).
+            The CLI is organized as: `cli/prompts/` (prompt builders — _prompts,
+            _prompts_campaign, _prompts_kitchen, _prompts_orchestrator),
+            `cli/install/` (install cluster — _install_contract, _install_info,
+            _installed_plugins, _marketplace, _plugin_artifact), `cli/ops/`
+            (diagnostic subcommand runners — _capture_store, _codex_attempts,
+            _codex_orphans, _daemon_orphans, _process_orphans, _sessions),
+            `cli/session/` (cook/order lifecycle — _session_cook, _session_order,
+            _session_onboarding, _session_launch, _session_backend,
+            _session_constants, _session_picker, _session_process,
+            _session_reload, _session_startup_trace), `cli/update/` (update
+            pipeline — _update, _update_checks, _update_checks_source,
+            _update_checks_fetch, _transaction, _obligation_repair, _restart),
+            and `cli/doctor/` (doctor commands — _doctor_types, _doctor_mcp,
+            _doctor_hooks, _doctor_install, _doctor_config, _doctor_runtime,
+            _doctor_env, _doctor_features, _doctor_fleet, _doctor_skills,
+            _doctor_capture_store, plus the facade).
+            The 11 remaining top-level files (app.py + 10 small shared utilities —
+            see the dict entry below) are the orchestration entry points and shared
+            helpers that have no coherent subpackage home.
             _hooks_codex.py adds Codex config.toml hook generation and sync
     (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
     _hooks.py for Claude Code settings.json hooks.
-    Exempt at 21 files.
+    Exempt at 11 files.
           hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
             (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
             file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -999,10 +1009,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         "core/types": 53,
-        "cli": 28,  # +_install_contract typed install process boundary (#4409);
-        # +_capture_store capture-store stats/reclaim; +_codex_orphans (#4536);
-        # +_codex_attempts (#4361); +_daemon_orphans operator surface (#4544);
-        # +_process_orphans tether-sweep operator surface (#4678)
+        "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
+        # (app.py + 10 small shared utilities — _features.py, _hooks.py,
+        # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
+        # _serve_guard.py, _validate.py, _workspace.py, __init__.py); no
+        # coherent subpackage home exists for any of them
+        "cli/session": 11,  # +_session_onboarding.py folded in from cli/_onboarding.py,
+        # first-run detection consumed only by _session_cook.py (#4670)
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -1151,7 +1164,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "re-exports capture_store_stats, reconcile_capture_store, CaptureStoreStats, "
         "CleanupBlocker, CleanupProgress, and SweepBudgetSpec from its own dual-mode "
         "(flat sys.path / dotted package) _capture import bootstrap so hooks/__init__.py "
-        "can gateway them to cli/_capture_store.py without importing _capture submodules "
+        "can gateway them to cli/ops/_capture_store.py without importing _capture submodules "
         "directly, which would race the standalone hook scripts' own flat-style bootstrap "
         "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
         "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",
@@ -2045,7 +2058,7 @@ def test_singleton_exemption_comment_matches_both_windows() -> None:
     """The _install_info exemption comment in SINGLETON_ALLOWED_MODULES must
     accurately reflect both the _STABLE_DISMISS_WINDOW and _DEV_DISMISS_WINDOW values."""
 
-    from autoskillit.cli._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
+    from autoskillit.cli.install._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
 
     this_file = Path(__file__)
     content = this_file.read_text(encoding="utf-8")
@@ -2219,3 +2232,124 @@ def test_lifespan_decomposition_has_expected_siblings() -> None:
         "_session_boots",
         "_lifespan",
     }
+
+
+def test_prompts_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "prompts"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_prompts",
+        "_prompts_campaign",
+        "_prompts_kitchen",
+        "_prompts_orchestrator",
+    }
+
+
+def test_install_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "install"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_install_contract",
+        "_install_info",
+        "_installed_plugins",
+        "_marketplace",
+        "_plugin_artifact",
+    }
+
+
+def test_session_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "session"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_session_backend",
+        "_session_constants",
+        "_session_cook",
+        "_session_launch",
+        "_session_onboarding",
+        "_session_order",
+        "_session_picker",
+        "_session_process",
+        "_session_reload",
+        "_session_startup_trace",
+    }
+
+
+def test_update_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "update"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_obligation_repair",
+        "_transaction",
+        "_update",
+        "_update_checks",
+        "_update_checks_fetch",
+        "_update_checks_source",
+        "_restart",
+    }
+
+
+def test_ops_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "cli" / "ops"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_capture_store",
+        "_codex_attempts",
+        "_codex_orphans",
+        "_daemon_orphans",
+        "_process_orphans",
+        "_sessions",
+    }
+
+
+@pytest.mark.parametrize(
+    "facade_pkg",
+    ["autoskillit.cli.prompts", "autoskillit.cli.ops", "autoskillit.cli.install"],
+)
+def test_cli_facade_all_resolves(facade_pkg: str) -> None:
+    """Guard: facade ``__all__`` entries resolve and match submodule declarations.
+
+    Forward direction (always covered): every name declared in the facade's
+    ``__all__`` must resolve via ``hasattr`` — otherwise ``from autoskillit.cli.X
+    import <name>`` raises ``ImportError``, the import form used by virtually
+    every consumer.
+
+    Reverse direction (covered for submodules that declare ``__all__``): when a
+    submodule declares an ``__all__``, every entry must also appear in the
+    facade's ``__all__`` and resolve to the same object. This catches drift
+    where a builder is added to one layer (e.g. ``_prompts.py``) but not the
+    other (e.g. ``prompts/__init__.py``), leaving the two lists silently out of
+    sync. Submodules without ``__all__`` are not reverse-checked here — they
+    rely on the forward-only ``hasattr`` check and on the existing
+    ``TestPromptsReExporter`` guard for the inner-hub case.
+    """
+    import importlib
+
+    facade = importlib.import_module(facade_pkg)
+    declared = set(getattr(facade, "__all__", ()))
+    assert declared, f"{facade_pkg}.__all__ is empty or missing"
+
+    # Forward direction: every declared name must resolve.
+    missing = sorted(name for name in declared if not hasattr(facade, name))
+    assert not missing, f"{facade_pkg} __all__ lists names that do not resolve: {missing}"
+
+    # Reverse direction: where declared, lazy-loaded entries must resolve to
+    # the same object as the submodule attribute. ``_*.py`` glob also matches
+    # ``__init__.py`` itself — skip the self-comparison.
+    pkg_dir = SRC_ROOT / facade_pkg.replace("autoskillit.", "").replace(".", "/")
+    for submodule_path in pkg_dir.glob("_*.py"):
+        if submodule_path.name == "__init__.py":
+            continue
+        submodule_name = submodule_path.stem
+        submodule = importlib.import_module(f"{facade_pkg}.{submodule_name}")
+        for name in getattr(submodule, "__all__", ()):
+            if name not in declared:
+                assert False, (
+                    f"{facade_pkg}.{submodule_name}.{name!r} is in submodule __all__ "
+                    f"but missing from facade __all__"
+                )
+            facade_value = getattr(facade, name)
+            submodule_value = getattr(submodule, name)
+            assert facade_value is submodule_value, (
+                f"{facade_pkg}.{name!r} resolves to a different object than "
+                f"{submodule_name}.{name!r}"
+            )

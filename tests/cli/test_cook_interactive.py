@@ -81,7 +81,7 @@ def _stub_plugin_artifact_authority(
         return authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR
 
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         choose,
     )
 
@@ -219,19 +219,19 @@ def _install_harness(
         lambda *args, **kwargs: manager,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._installed_plugins.InstalledPluginsFile.contains",
+        "autoskillit.cli.install._installed_plugins.InstalledPluginsFile.contains",
         lambda self, key: False,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.is_first_run",
+        "autoskillit.cli.session._session_onboarding.is_first_run",
         lambda _project: first_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.run_onboarding_menu",
+        "autoskillit.cli.session._session_onboarding.run_onboarding_menu",
         lambda *args, **kwargs: onboarding_prompt,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.mark_onboarded",
+        "autoskillit.cli.session._session_onboarding.mark_onboarded",
         lambda project: events.append(("onboarded", project)),
     )
     monkeypatch.setattr(
@@ -369,7 +369,9 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/codex")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _project: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _project: False
+    )
     monkeypatch.setattr(
         "autoskillit.cli.ui._timed_input.timed_prompt",
         lambda *args, **kwargs: "",
@@ -430,7 +432,7 @@ def test_cook_uses_managed_home_for_final_child_context(
     authority = _CookAuthority(binding.plugin_dir)
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -471,7 +473,7 @@ def test_cook_retains_projection_binding_when_launch_consumes_no_artifact(
 
     authority.acquire_launch_binding = acquire_binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.NONE),
     )
 
@@ -718,7 +720,9 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
+    )
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
     )

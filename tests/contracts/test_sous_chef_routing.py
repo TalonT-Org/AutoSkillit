@@ -350,6 +350,7 @@ def test_prompts_worktree_stale_carveout() -> None:
         / "src"
         / "autoskillit"
         / "cli"
+        / "prompts"
         / "_prompts_orchestrator.py"
     )
     prompts_text = prompts_path.read_text().lower()
@@ -361,7 +362,7 @@ def test_prompts_worktree_stale_carveout() -> None:
 def test_skill_md_covers_all_prompts_routing_reasons() -> None:
     """Every RetryReason with a routing rule in _prompts.py must also appear in SKILL.md."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.cli.prompts import _build_orchestrator_prompt
     from autoskillit.core.types import RetryReason
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)

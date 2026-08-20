@@ -6,8 +6,10 @@ Domain-specific prompt builders live in sibling modules:
 - _prompts_kitchen.py    — open-kitchen and fleet-dispatch prompts
 
 This module owns shared helpers used by multiple siblings and re-exports
-all public symbols so that existing ``from autoskillit.cli._prompts import X``
-statements continue to work unchanged.
+their public symbols. Both ``_prompts.py``'s bottom re-export block AND
+``prompts/__init__.py``'s import list plus ``__all__`` must be updated
+together — this hub serves ``from autoskillit.cli.prompts._prompts import X``,
+while the package ``__init__`` serves ``from autoskillit.cli.prompts import X``.
 """
 
 from __future__ import annotations
@@ -257,17 +259,17 @@ def _backend_supplement(has_unguarded_filesystem_access: bool) -> str:
 
 # ── Re-exports from domain submodules ───────────────────────────────────
 
-from autoskillit.cli._prompts_campaign import (  # noqa: E402
+from autoskillit.cli.prompts._prompts_campaign import (  # noqa: E402
     _build_dynamic_dispatch_section,
     _build_fleet_campaign_prompt,
     _has_dynamic_dispatch,
     _resume_reason_guidance,
 )
-from autoskillit.cli._prompts_kitchen import (  # noqa: E402
+from autoskillit.cli.prompts._prompts_kitchen import (  # noqa: E402
     _build_fleet_dispatch_prompt,
     _build_open_kitchen_prompt,
 )
-from autoskillit.cli._prompts_orchestrator import (  # noqa: E402
+from autoskillit.cli.prompts._prompts_orchestrator import (  # noqa: E402
     _COOK_GREETINGS,
     _OPEN_KITCHEN_GREETINGS,
     _build_orchestrator_prompt,

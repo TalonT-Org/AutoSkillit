@@ -38,8 +38,9 @@ def _make_orphan(pid: int, reason: str = "spawner_dead") -> OrphanedTetherRecord
 
 
 def test_process_orphans_cmd_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.cli._process_orphans as process_orphans_mod
+    import autoskillit.cli.ops as ops_pkg
     from autoskillit import cli
+    from autoskillit.cli.ops import _process_orphans as process_orphans_mod
 
     called_with: dict[str, object] = {}
 
@@ -47,6 +48,10 @@ def test_process_orphans_cmd_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
         called_with["reap"] = reap
         called_with["output_json"] = output_json
 
+    # Patch both the facade re-export AND the submodule attribute: if app.py
+    # is ever changed to import from cli.ops._process_orphans directly, the
+    # facade patch silently no-ops, so the test would exercise the real runner.
+    monkeypatch.setattr(ops_pkg, "run_process_orphans", mock_run_process_orphans)
     monkeypatch.setattr(process_orphans_mod, "run_process_orphans", mock_run_process_orphans)
 
     cli.process_orphans(reap=True, output_json=True)
@@ -58,7 +63,7 @@ def test_run_reports_orphans_plain(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._process_orphans import run_process_orphans
+    from autoskillit.cli.ops import run_process_orphans
 
     orphans = [_make_orphan(1001), _make_orphan(1002, reason="ceiling_expired")]
     monkeypatch.setattr(execution_mod, "find_orphaned_tethers", lambda _dir: orphans)
@@ -77,7 +82,7 @@ def test_run_reports_no_orphans(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._process_orphans import run_process_orphans
+    from autoskillit.cli.ops import run_process_orphans
 
     monkeypatch.setattr(execution_mod, "find_orphaned_tethers", lambda _dir: [])
 
@@ -90,7 +95,7 @@ def test_run_output_json_shape(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._process_orphans import run_process_orphans
+    from autoskillit.cli.ops import run_process_orphans
 
     orphans = [_make_orphan(1001), _make_orphan(1002)]
     monkeypatch.setattr(execution_mod, "find_orphaned_tethers", lambda _dir: orphans)
@@ -108,7 +113,7 @@ def test_run_reap_invokes_sweep_and_reports(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._process_orphans import run_process_orphans
+    from autoskillit.cli.ops import run_process_orphans
 
     orphans = [_make_orphan(2001), _make_orphan(2002)]
     monkeypatch.setattr(execution_mod, "find_orphaned_tethers", lambda _dir: orphans)
@@ -141,7 +146,7 @@ def test_run_reap_output_json_shape(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import autoskillit.execution as execution_mod
-    from autoskillit.cli._process_orphans import run_process_orphans
+    from autoskillit.cli.ops import run_process_orphans
 
     orphans = [_make_orphan(3001)]
     monkeypatch.setattr(execution_mod, "find_orphaned_tethers", lambda _dir: orphans)

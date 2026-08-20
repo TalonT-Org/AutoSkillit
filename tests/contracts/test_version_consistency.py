@@ -87,7 +87,7 @@ class TestVersionConsistency:
         """
         seed_legacy_home(legacy_state, tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        from autoskillit.cli._marketplace import _ensure_marketplace
+        from autoskillit.cli.install._marketplace import _ensure_marketplace
 
         _ensure_marketplace()
         manifest = (
@@ -116,7 +116,7 @@ class TestVersionConsistency:
         )
 
         seed_legacy_home(legacy_state, tmp_path)
-        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        marketplace = _importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         marketplace_root = marketplace._ensure_marketplace()
         public_root = marketplace_root / "plugins" / "autoskillit"

@@ -1,4 +1,4 @@
-"""Tests for cli/_restart.py — NoReturn process restart contract."""
+"""Tests for cli/update/_restart.py — NoReturn process restart contract."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 def test_perform_restart_sets_skip_env_and_execs() -> None:
     """perform_restart must set AUTOSKILLIT_SKIP_UPDATE_CHECK=1 then call os.execv."""
-    from autoskillit.cli._restart import perform_restart
+    from autoskillit.cli.update._restart import perform_restart
 
     captured: dict[str, object] = {}
 
@@ -24,7 +24,7 @@ def test_perform_restart_sets_skip_env_and_execs() -> None:
         raise SystemExit(0)
 
     with patch.dict(os.environ, {}, clear=False):
-        with patch("autoskillit.cli._restart.os.execv", fake_execv):
+        with patch("autoskillit.cli.update._restart.os.execv", fake_execv):
             try:
                 perform_restart()
             except SystemExit:
@@ -38,7 +38,7 @@ def test_perform_restart_is_noreturn_typed() -> None:
     """perform_restart must be annotated as -> NoReturn."""
     import typing
 
-    from autoskillit.cli._restart import perform_restart
+    from autoskillit.cli.update._restart import perform_restart
 
     hints = typing.get_type_hints(perform_restart)
     assert hints.get("return") is typing.NoReturn

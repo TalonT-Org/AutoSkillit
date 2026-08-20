@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 def _format_upgrade_cmd(info: object) -> str:
-    from autoskillit.cli._install_info import upgrade_command
+    from autoskillit.cli.install._install_info import upgrade_command
 
     cmd = upgrade_command(info)  # type: ignore[arg-type]
     return " ".join(cmd) if cmd else "autoskillit update"
@@ -96,7 +96,7 @@ def _check_stale_entry_points() -> DoctorResult:
         return DoctorResult(Severity.OK, check_name, "No stale autoskillit entry points found")
 
     stale_list = ", ".join(stale)
-    from autoskillit.cli._install_info import detect_install
+    from autoskillit.cli.install._install_info import detect_install
 
     _info = detect_install()
     _cmd_str = _format_upgrade_cmd(_info)
@@ -120,7 +120,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
     _home = home or Path.home()
 
     try:
-        from autoskillit.cli._install_info import InstallType, detect_install
+        from autoskillit.cli.install._install_info import InstallType, detect_install
         from autoskillit.cli.update._update_checks import resolve_reference_sha
 
         info = detect_install()
@@ -170,7 +170,7 @@ def _check_install_classification() -> DoctorResult:
     """Classify the current autoskillit install type via direct_url.json."""
     check_name = "install_classification"
     try:
-        from autoskillit.cli._install_info import InstallType, detect_install
+        from autoskillit.cli.install._install_info import InstallType, detect_install
 
         info = detect_install()
         if info.install_type == InstallType.UNKNOWN:
@@ -233,7 +233,7 @@ def _check_update_dismissal_state(home: Path | None = None) -> DoctorResult:
     check_name = "update_dismissal_state"
     _home = home or Path.home()
     try:
-        from autoskillit.cli._install_info import detect_install, dismissal_window
+        from autoskillit.cli.install._install_info import detect_install, dismissal_window
         from autoskillit.cli.update._update_checks import _read_dismiss_state
 
         state = _read_dismiss_state(_home)

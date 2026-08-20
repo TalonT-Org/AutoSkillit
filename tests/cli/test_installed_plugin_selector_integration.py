@@ -15,7 +15,7 @@ from typing import cast
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
 from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
     _run_interactive_session,
@@ -226,7 +226,7 @@ def _install_cook_harness(
         lambda *args, **kwargs: manager,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._onboarding.is_first_run",
+        "autoskillit.cli.session._session_onboarding.is_first_run",
         lambda _project_dir: False,
     )
     monkeypatch.setattr(

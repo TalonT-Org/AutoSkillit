@@ -23,11 +23,12 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._serve_guard import serve_with_signal_guard
-from autoskillit.cli._sessions import sessions_app
 from autoskillit.cli._validate import validate_app
 from autoskillit.cli.fleet import fleet_app
-from autoskillit.cli.session._session_cook import cook as cook_interactive
-from autoskillit.cli.session._session_order import _recipes_dir_for, order
+from autoskillit.cli.ops import sessions_app
+from autoskillit.cli.session import cook as cook_interactive
+from autoskillit.cli.session import order
+from autoskillit.cli.session._session_order import _recipes_dir_for
 from autoskillit.core import (
     AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
     AuditAdmissionStoreAuthority,
@@ -160,7 +161,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         )
     else:
         audit_admission_store_authority = None
-    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
+    from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
 
     ctx = make_context(
         cfg,
@@ -273,14 +274,14 @@ def install(
     """
     from autoskillit import __version__
     from autoskillit.cli._init_helpers import _print_next_steps
-    from autoskillit.cli._install_contract import (
+    from autoskillit.cli.install._install_contract import (
         InstallMode,
         InstallOutcome,
         InstallProcessStatus,
         InstallRequest,
         process_status_for_result,
     )
-    from autoskillit.cli._marketplace import install as _install
+    from autoskillit.cli.install._marketplace import install as _install
 
     if maintenance_update:
         if expected_version is None:
@@ -324,7 +325,7 @@ def install(
 @app.command
 def upgrade() -> None:
     """Migrate project from .autoskillit/scripts/ format to .autoskillit/recipes/ format."""
-    from autoskillit.cli._marketplace import upgrade as _upgrade
+    from autoskillit.cli.install._marketplace import upgrade as _upgrade
 
     _upgrade()
 
@@ -348,7 +349,7 @@ def doctor(*, output_json: bool = False):
 @app.command
 def capture_store(*, reclaim: bool = False) -> None:
     """Report capture-store ledger/directory statistics, or reclaim backlog with --reclaim."""
-    from autoskillit.cli._capture_store import run_capture_store
+    from autoskillit.cli.ops import run_capture_store
 
     run_capture_store(reclaim=reclaim)
 
@@ -356,7 +357,7 @@ def capture_store(*, reclaim: bool = False) -> None:
 @app.command
 def codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
     """Report orphaned codex TUI processes (deleted pty), or terminate them with --reap."""
-    from autoskillit.cli._codex_orphans import run_codex_orphans
+    from autoskillit.cli.ops import run_codex_orphans
 
     run_codex_orphans(reap=reap, output_json=output_json)
 
@@ -364,7 +365,7 @@ def codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
 @app.command
 def daemon_orphans(*, reap: bool = False, output_json: bool = False) -> None:
     """Report orphaned registered-stdio daemons, or terminate them with --reap."""
-    from autoskillit.cli._daemon_orphans import run_daemon_orphans
+    from autoskillit.cli.ops import run_daemon_orphans
 
     run_daemon_orphans(reap=reap, output_json=output_json)
 
@@ -372,7 +373,7 @@ def daemon_orphans(*, reap: bool = False, output_json: bool = False) -> None:
 @app.command
 def process_orphans(*, reap: bool = False, output_json: bool = False) -> None:
     """Report tethered children whose guardian is dead or ceiling passed, or reap with --reap."""
-    from autoskillit.cli._process_orphans import run_process_orphans
+    from autoskillit.cli.ops import run_process_orphans
 
     run_process_orphans(reap=reap, output_json=output_json)
 
@@ -385,7 +386,7 @@ def codex_attempts(
     output_json: bool = False,
 ) -> None:
     """List retained Codex attempt views, or explicitly discard one eligible view."""
-    from autoskillit.cli._codex_attempts import run_codex_attempts
+    from autoskillit.cli.ops import run_codex_attempts
 
     run_codex_attempts(
         discard_view=discard_view,

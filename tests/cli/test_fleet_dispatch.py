@@ -263,7 +263,7 @@ def test_fleet_dispatch_no_campaign_env_vars(
 def test_build_fleet_dispatch_prompt_no_open_kitchen() -> None:
     """Fleet dispatch prompt must NOT instruct calling open_kitchen."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "open_kitchen" not in prompt
@@ -271,7 +271,7 @@ def test_build_fleet_dispatch_prompt_no_open_kitchen() -> None:
 
 def test_build_fleet_dispatch_prompt_references_dispatch_tool() -> None:
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "dispatch_food_truck" in prompt
@@ -279,7 +279,7 @@ def test_build_fleet_dispatch_prompt_references_dispatch_tool() -> None:
 
 def test_build_fleet_dispatch_prompt_no_campaign_manifest() -> None:
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "DISPATCH MANIFEST" not in prompt
@@ -289,7 +289,7 @@ def test_build_fleet_dispatch_prompt_no_campaign_manifest() -> None:
 
 def test_build_fleet_dispatch_prompt_accepts_marketplace_prefix() -> None:
     from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(MARKETPLACE_PREFIX)
     assert MARKETPLACE_PREFIX + "open_kitchen" not in prompt
@@ -299,7 +299,7 @@ def test_build_fleet_dispatch_prompt_accepts_marketplace_prefix() -> None:
 def test_build_fleet_dispatch_prompt_lists_all_11_tools() -> None:
     """Dispatch prompt must enumerate all 11 tools in the TOOL SURFACE section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "TOOL SURFACE" in prompt, "Expected TOOL SURFACE section in dispatch prompt"
@@ -331,7 +331,7 @@ def test_build_fleet_dispatch_prompt_lists_all_11_tools() -> None:
 def test_build_fleet_dispatch_prompt_excludes_l2_admiral_sections() -> None:
     """L3 dispatchers use fleet-native rules, not the L2 sous-chef subset."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "ADMIRAL DISCIPLINE" not in prompt
@@ -347,7 +347,7 @@ def test_build_fleet_dispatch_prompt_excludes_l2_admiral_sections() -> None:
 def test_build_fleet_dispatch_prompt_has_recipe_discovery_guidance() -> None:
     """Dispatch prompt must guide recipe discovery flow."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "list_recipes" in prompt
@@ -357,7 +357,7 @@ def test_build_fleet_dispatch_prompt_has_recipe_discovery_guidance() -> None:
 def test_build_fleet_dispatch_prompt_role_text() -> None:
     """Dispatch prompt must identify role as fleet dispatcher."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "fleet dispatcher" in prompt.lower()
@@ -366,7 +366,7 @@ def test_build_fleet_dispatch_prompt_role_text() -> None:
 def test_build_fleet_dispatch_prompt_has_cleanup_protocol() -> None:
     """Dispatch prompt must include batch_cleanup_clones exit instruction."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "batch_cleanup_clones" in prompt
@@ -375,7 +375,7 @@ def test_build_fleet_dispatch_prompt_has_cleanup_protocol() -> None:
 def test_build_fleet_dispatch_prompt_no_sleep_toolsearch_preamble() -> None:
     """Dispatch prompt must NOT include sleep/ToolSearch boot sequence."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "sleep 2" not in prompt
@@ -384,7 +384,7 @@ def test_build_fleet_dispatch_prompt_no_sleep_toolsearch_preamble() -> None:
 def test_build_fleet_dispatch_prompt_uses_ingredients_only() -> None:
     """_build_fleet_dispatch_prompt recipe discovery must mention ingredients_only."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "ingredients_only" in prompt
@@ -552,7 +552,7 @@ def test_fleet_dispatch_greetings_are_plain_strings() -> None:
 def test_build_fleet_dispatch_prompt_embeds_recipe_table() -> None:
     """_build_fleet_dispatch_prompt embeds recipe_table under AVAILABLE FOOD TRUCKS section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     table = "smoke-test — Run smoke tests\nreview-pr — Review a PR"
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX, recipe_table=table)
@@ -564,7 +564,7 @@ def test_build_fleet_dispatch_prompt_embeds_recipe_table() -> None:
 def test_build_fleet_dispatch_prompt_no_recipe_table_section_when_none() -> None:
     """_build_fleet_dispatch_prompt omits AVAILABLE FOOD TRUCKS when recipe_table is None."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "AVAILABLE FOOD TRUCKS" not in prompt

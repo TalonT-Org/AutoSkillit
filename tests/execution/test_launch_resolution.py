@@ -40,6 +40,8 @@ STEP = LaunchValueSource(LaunchValueSourceKind.STEP, "recipe.steps.build.backend
 CALLER = LaunchValueSource(LaunchValueSourceKind.CALLER, "request.backend")
 ADAPTER = LaunchValueSource(LaunchValueSourceKind.ADAPTER, "adapter.model")
 
+_CODEX_NATIVE_MODEL_ID = "gpt-5.6-sol"
+
 
 def _authority(
     backend: str,
@@ -671,7 +673,7 @@ def test_launch_digest_distinguishes_force_inactive_intent() -> None:
 
 def test_codex_native_model_on_claude_backend_is_rejected() -> None:
     request = _request(
-        configured_model="gpt-5.6-sol",
+        configured_model=_CODEX_NATIVE_MODEL_ID,
         configured_model_source=LaunchValueSource(
             LaunchValueSourceKind.RECIPE,
             "model.recipe_overrides.implementation.review_pr",
@@ -681,7 +683,7 @@ def test_codex_native_model_on_claude_backend_is_rejected() -> None:
     with pytest.raises(
         LaunchContractError,
         match=(
-            "model.*gpt-5.6-sol.*model.recipe_overrides.implementation.review_pr"
+            f"model.*{_CODEX_NATIVE_MODEL_ID}.*model.recipe_overrides.implementation.review_pr"
             ".*codex.*agent_backend.backend.*claude-code"
         ),
     ):
@@ -697,7 +699,7 @@ def test_codex_native_model_on_codex_backend_is_accepted() -> None:
     )
     request = _request(
         authority_candidates=(candidate,),
-        configured_model="gpt-5.6-sol",
+        configured_model=_CODEX_NATIVE_MODEL_ID,
         configured_model_source=LaunchValueSource(
             LaunchValueSourceKind.RECIPE,
             "model.recipe_overrides.implementation.review_pr",
@@ -707,7 +709,7 @@ def test_codex_native_model_on_codex_backend_is_accepted() -> None:
     preparation = DefaultLaunchResolver().prepare(request)
 
     assert preparation.selected_backend == "codex"
-    assert preparation.configured_model == "gpt-5.6-sol"
+    assert preparation.configured_model == _CODEX_NATIVE_MODEL_ID
 
 
 @pytest.mark.parametrize("backend", ["claude-code", "codex"])
@@ -728,7 +730,7 @@ def test_canonical_aliases_are_accepted_on_every_backend(alias: str, backend: st
 
 
 def test_context_window_suffix_does_not_evade_the_gate() -> None:
-    request = _request(configured_model="gpt-5.6-sol[1m]")
+    request = _request(configured_model=f"{_CODEX_NATIVE_MODEL_ID}[1m]")
 
     with pytest.raises(LaunchContractError, match="is native to backend codex"):
         DefaultLaunchResolver().prepare(request)
@@ -738,7 +740,7 @@ def test_requested_model_is_gated_with_its_own_key_path() -> None:
     request = _request(
         configured_model=None,
         configured_model_source=STEP,
-        requested_model="gpt-5.6-sol",
+        requested_model=_CODEX_NATIVE_MODEL_ID,
         requested_model_source=LaunchValueSource(LaunchValueSourceKind.CALLER, "run_skill.model"),
     )
 

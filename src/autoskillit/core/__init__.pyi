@@ -110,8 +110,6 @@ from ._plugin_ids import parse_installed_plugin_semantic_key as parse_installed_
 from ._plugin_ids import project_agent_tool_name as project_agent_tool_name
 from ._plugin_ids import registered_install_paths as registered_install_paths
 from ._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
-from ._startup_warm import WARM_MODULE_NAMES as WARM_MODULE_NAMES
-from ._startup_warm import warm_failure_path_imports as warm_failure_path_imports
 from ._step_context import current_order_id as current_order_id
 from ._step_context import current_step_name as current_step_name
 from ._terminal_table import TerminalColumn as TerminalColumn

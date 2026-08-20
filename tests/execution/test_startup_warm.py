@@ -1,6 +1,6 @@
 """Tests for the startup-warm eager-import mechanism (A-10, issue #4597).
 
-``autoskillit.core._startup_warm.warm_failure_path_imports()`` is called from
+``autoskillit.fleet.warm_failure_path_imports()`` is called from
 the cook, headless, and fleet-dispatch entry points (``cli/app.py``,
 ``server/tools/tools_execution.py``, ``fleet/_api.py``) to preload every
 module a genuine except/finally-scoped ``autoskillit`` import can reach, so a
@@ -29,21 +29,15 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
-# Baseline import is deliberately minimal: `autoskillit.core` uses
-# lazy_loader's PEP 562 `attach_stub`, so importing the package alone (or
-# even pulling `warm_failure_path_imports` off it) does not eagerly import
-# `autoskillit.execution`/`autoskillit.fleet`/etc. -- only the tiny
-# `_startup_warm` submodule that defines the function gets imported as a
-# side effect of the attribute lookup. That keeps "before" a genuine
-# pre-warm baseline rather than an already-fully-loaded tree.
+# Importing the fleet gateway is itself part of the warm boundary: it loads
+# the fleet modules before the explicit warm call covers deferred execution
+# modules.
 _WARM_SUBPROCESS_SCRIPT = """
 import json
 import sys
 
-from autoskillit.core import warm_failure_path_imports
-from autoskillit.core._startup_warm import WARM_MODULE_NAMES
-
 before = set(sys.modules)
+from autoskillit.fleet import WARM_MODULE_NAMES, warm_failure_path_imports
 warm_failure_path_imports()
 after = set(sys.modules)
 
@@ -106,8 +100,7 @@ def test_failure_path_modules_are_preloaded_at_startup() -> None:
     Two assertions:
 
     1. At least one warm module was absent from ``sys.modules`` before the
-       call and present after -- proving the call itself did the work,
-       not the minimal baseline import that reached it.
+       entry-point import/call and present after.
     2. Every module named in ``WARM_MODULE_NAMES`` is present in
        ``sys.modules`` after the call, regardless of before/after diff
        specifics -- the actual load-bearing contract this function exists

@@ -30,7 +30,6 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
     select_child_session_deadline,
-    warm_failure_path_imports,
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._checkpoint_bridge import (
@@ -56,6 +55,7 @@ from autoskillit.fleet._outcome import (
 from autoskillit.fleet._outcome import (
     build_success_short_circuit as _build_success_short_circuit,
 )
+from autoskillit.fleet._startup_warm import warm_failure_path_imports
 from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
 from autoskillit.fleet.state_recovery import prepare_resume

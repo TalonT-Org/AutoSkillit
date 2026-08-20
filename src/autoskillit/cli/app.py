@@ -712,7 +712,7 @@ def main() -> None:
     """Entry point for autoskillit."""
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
     if _first_arg != "serve":
-        from autoskillit.core import warm_failure_path_imports
+        from autoskillit.fleet import warm_failure_path_imports
 
         warm_failure_path_imports()
 

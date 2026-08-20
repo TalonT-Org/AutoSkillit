@@ -4,7 +4,7 @@ an ``except``/``finally`` block.
 Issue #4597's finding #13: a deleted or replaced install tree turns one
 crash into an unrecoverable one when the error-handling path itself has to
 resolve a not-yet-imported ``autoskillit`` submodule. A-10 fixed today's
-known instances with a startup warm (``core._startup_warm``); this guard is
+known instances with a startup warm (``fleet._startup_warm``); this guard is
 the "stops the class from regrowing" half the plan calls for — new
 function-local imports of this shape are refused unless explicitly
 allowlisted with a one-line rationale, mirroring
@@ -33,7 +33,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 #: (relative file path, line number) pairs already carrying a function-local
 #: ``autoskillit`` import inside an ``except``/``finally`` block, each with a
 #: one-line rationale. A new entry requires the same rationale discipline;
-#: these are the same sites A-10's startup warm (``core._startup_warm``)
+#: these are the same sites the fleet startup warm preloads
 #: preloads, so a deleted/replaced tree cannot turn the import itself into a
 #: second failure.
 _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
@@ -114,9 +114,9 @@ def test_no_new_function_local_autoskillit_import_in_except_or_finally() -> None
     unexpected = found - _ALLOWLIST
     assert not unexpected, (
         "New function-local `autoskillit` import(s) found inside an "
-        "except/finally block, not covered by core._startup_warm and not "
+        "except/finally block, not covered by fleet._startup_warm and not "
         f"in this guard's allowlist: {sorted(unexpected)}. Either preload "
-        "the module in core._startup_warm and add a rationale-carrying "
+        "the module in fleet._startup_warm and add a rationale-carrying "
         "allowlist entry here, or restructure the import to not be "
         "function-local on a failure path."
     )

@@ -1001,7 +1001,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
             server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
             state_recovery.py to reduce the 757-line monolith and centralize deserialization
-            logic on DispatchRecord.from_dict. Exempt at 15 files.
+            logic on DispatchRecord.from_dict. Startup warming lives here so its
+            execution/fleet imports remain layer-correct. Exempt at 24 files.
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
@@ -1021,12 +1022,6 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
-        # +_startup_warm.py (#4597 rectify phase 1: eager import of the modules
-        # finding #13 showed can turn a crash into an unrecoverable one —
-        # deliberately its own IL-0 module since it must be dynamically-
-        # import-based to reach IL-2 fleet modules without a literal
-        # cross-layer import statement; see its own docstring for why that
-        # isn't a layering shortcut for anything else).
         # +_install_binding.py (#4597 rectify phase 2: the sealed install
         # identity B-1/B-2 route pkg_root() through — a single IL-0 module
         # kept separate from paths.py so paths.py's own "zero autoskillit
@@ -1035,7 +1030,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # entrypoint shim renderer/writer — stdlib-only and version-
         # independent by design, kept separate from the generation-store
         # publish machinery it is written alongside).
-        "core": 35,
+        "core": 34,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         "core/types": 56,
@@ -1071,7 +1066,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +exploration_context_durable.py: durable (0600 HMAC-signed) session-scoped
         # exploration authority, split from exploration_context.py to stay under its
         # own REQ-CNST-010-E22 1100-line ceiling (#4684 Fix E)
-        "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
+        "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)

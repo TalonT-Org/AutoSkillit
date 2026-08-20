@@ -25,10 +25,10 @@ from autoskillit.core import (
     extract_skill_name,
     get_logger,
     read_tracker_authority,
-    warm_failure_path_imports,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
+from autoskillit.fleet import warm_failure_path_imports
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _require_enabled,

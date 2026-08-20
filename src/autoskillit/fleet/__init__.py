@@ -34,6 +34,8 @@ from ._reset import (
     compute_reset_labels as compute_reset_labels,
 )
 from ._semaphore import FleetSemaphore
+from ._startup_warm import WARM_MODULE_NAMES as WARM_MODULE_NAMES
+from ._startup_warm import warm_failure_path_imports as warm_failure_path_imports
 from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
     IssueSidecarEntry,

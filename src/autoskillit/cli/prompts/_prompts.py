@@ -6,8 +6,10 @@ Domain-specific prompt builders live in sibling modules:
 - _prompts_kitchen.py    — open-kitchen and fleet-dispatch prompts
 
 This module owns shared helpers used by multiple siblings and re-exports
-all public symbols so that existing ``from autoskillit.cli.prompts import X``
-statements continue to work unchanged.
+their public symbols. Both ``_prompts.py``'s bottom re-export block AND
+``prompts/__init__.py``'s import list plus ``__all__`` must be updated
+together — this hub serves ``from autoskillit.cli.prompts._prompts import X``,
+while the package ``__init__`` serves ``from autoskillit.cli.prompts import X``.
 """
 
 from __future__ import annotations

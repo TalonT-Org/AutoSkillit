@@ -1,9 +1,10 @@
 # cli/
 
 IL-3 CLI layer — entry points for all user-facing commands.
-Sub-packages: doctor/ (see doctor/AGENTS.md), fleet/, install/, ops/,
-prompts/, session/ (see session/AGENTS.md), ui/ (see ui/AGENTS.md),
-update/ (see update/AGENTS.md).
+Sub-packages: doctor/ (see doctor/AGENTS.md), fleet/, install/ (see
+install/AGENTS.md), ops/ (see ops/AGENTS.md), prompts/ (see prompts/AGENTS.md),
+session/ (see session/AGENTS.md), ui/ (see ui/AGENTS.md), update/ (see
+update/AGENTS.md).
 
 ## Architecture Notes
 

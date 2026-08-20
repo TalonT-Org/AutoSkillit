@@ -2,7 +2,7 @@
 
 Re-exports dispatch metadata, capture-stream plumbing, scalar coercion,
 skill-contract lifecycle helpers, and the path-anchoring utilities that
-``tools_execution.py`` and its tests bind through this package facade.
+``tools_execution/`` and its tests bind through this package facade.
 """
 
 from __future__ import annotations

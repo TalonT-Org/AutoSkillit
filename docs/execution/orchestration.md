@@ -25,7 +25,7 @@ pipeline primarily connects the L2 orchestrator and L1 workers:
 
 The boundary is enforced three ways: FastMCP visibility, the
 `skill_orchestration_guard.py` PreToolUse hook, and runtime guards inside
-`tools_execution.py`. `run_skill` uses `_require_orchestrator_exact()`; `run_cmd` and
+`tools_execution/`. `run_skill` uses `_require_orchestrator_exact()`; `run_cmd` and
 `run_python` use `_require_orchestrator_or_higher()`. All three layers must agree.
 
 ## Recipe as a program

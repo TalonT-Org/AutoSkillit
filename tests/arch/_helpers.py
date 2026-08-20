@@ -471,6 +471,17 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
         and isinstance(stmts[idx].value, ast.Call)
     ):
         idx += 1
+    # Skip a leading `name: T | None = None` sentinel declared before the try so it
+    # can be constructed as the try's first statement (issue #4705 D6): the sentinel
+    # itself cannot raise, and guarding the except/finally bodies on `name is not
+    # None` requires the name to exist even when construction fails before the try.
+    while (
+        idx < len(stmts)
+        and isinstance(stmts[idx], ast.AnnAssign)
+        and isinstance(stmts[idx].value, ast.Constant)
+        and stmts[idx].value.value is None
+    ):
+        idx += 1
     if idx >= len(stmts):
         return False
     first = stmts[idx]

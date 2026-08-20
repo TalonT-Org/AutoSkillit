@@ -32,6 +32,7 @@ import shutil  # noqa: F401 — mock.patch("...tools_execution.shutil.which") re
 from autoskillit.core import (
     AuditResultOutcome,  # noqa: F401 — D5: read via _te_pkg in _run_skill_finalize.py
     execution_marker,  # noqa: F401 — D5: read via _te_pkg in _run_skill_finalize.py
+    find_caller_session_id,  # noqa: F401 — D5: read via _te_pkg in _run_skill_session.py
     get_logger,
     get_tool_def,  # noqa: F401 — D5: read via _te_pkg in _run_skill_admission.py
     is_feature_enabled,  # noqa: F401 — D5: read via _te_pkg in _run_skill_prepare.py
@@ -39,6 +40,7 @@ from autoskillit.core import (
 )
 from autoskillit.server._explorer_projection import (
     _cleanup_explorer_launch,  # noqa: F401 — D5: read via _te_pkg in _run_skill_dispatch.py
+    _explorer_launch_identity,  # noqa: F401 — D5: read via _te_pkg in _run_skill_prepare.py
     _issue_explorer_binding_env,  # noqa: F401 — D5: read via _te_pkg in _run_skill_session.py
 )
 from autoskillit.server._misc import (
@@ -150,6 +152,7 @@ __all__ = [
     "_complete_resumed_audit",
     "_completion_tracker_binding",
     "_execute_and_finalize_run_skill",
+    "_explorer_launch_identity",
     "_finalize_run_skill_completion",
     "_has_active_locks",
     "_import_and_call",
@@ -167,6 +170,7 @@ __all__ = [
     "_run_subprocess_captured",
     "_select_tracker_authority",
     "execution_marker",
+    "find_caller_session_id",
     "get_tool_def",
     "is_feature_enabled",
     "logger",

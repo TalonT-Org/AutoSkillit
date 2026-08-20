@@ -1,4 +1,4 @@
-"""Structural decomposition guard for tools_execution.py split."""
+"""Structural decomposition guard for tools_execution/ split."""
 
 from __future__ import annotations
 

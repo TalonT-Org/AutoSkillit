@@ -3,7 +3,7 @@
 Every attestation-relevant surface must derive from ``ToolParamDef.role``
 rather than maintaining its own hand-copied param list: the runtime gate's
 always-admit set (``runtime_exempt_param_names``), the execution-tuning
-fallback tables in ``tools_execution.py``, the pre-existing
+fallback tables in ``tools_execution/``, the pre-existing
 ``RUN_SKILL_ATTESTATION_PARAMS`` frozenset, and ``compute_tool_contract_identity``
 (which must explicitly exclude ``role`` — it is server-side policy, not wire
 shape). This module pins each derivation so a future edit to any one surface
@@ -62,7 +62,7 @@ def test_gate_admit_set_matches_role_derivation() -> None:
 
 def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
     """The EXECUTION_TUNING param set equals the *disjoint* union of the two
-    tools_execution.py fallback tables' keys, and every mapped RecipeStep field
+    tools_execution/ fallback tables' keys, and every mapped RecipeStep field
     name is real. Disjointness matters: a param in both tables, or in neither,
     is a coverage bug."""
     tool_def = _run_skill_tool_def()

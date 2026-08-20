@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from contextvars import Token
     from pathlib import Path
 
-    from autoskillit.server.tools.tools_execution._run_skill_prepare import _ExplorerLaunchLease
     from fastmcp import Context
 
     from autoskillit.config import AutomationConfig
@@ -98,6 +97,7 @@ if TYPE_CHECKING:
     from autoskillit.server.tools._native_shell_capture._lineage import (
         SkillNativeShellLineagePreparation,
     )
+    from autoskillit.server.tools.tools_execution._run_skill_prepare import _ExplorerLaunchLease
 
 
 @dataclass(slots=True, kw_only=True)

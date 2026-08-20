@@ -29,7 +29,6 @@ from autoskillit.core import (
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.server._explorer_projection import (
-    _explorer_launch_identity,
     _resolve_exploration_applicabilities,
     _resolve_exploration_profile,
 )
@@ -296,7 +295,7 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
             ),
             active_exploration_applicabilities=state._active_exploration_applicabilities,
         )
-    state._explorer_parent_identity = _explorer_launch_identity(state.invocation)
+    state._explorer_parent_identity = _te_pkg._explorer_launch_identity(state.invocation)
     if state.invocation is not None and state._stored_contract is None:
         if state.invocation.root.source_ref is None:
             raise SkillContractError("Effective skill source identity is missing")

@@ -24,7 +24,6 @@ from autoskillit.core import (
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
-    find_caller_session_id,
     get_logger,
 )
 from autoskillit.core import current_order_id as _current_order_id
@@ -361,7 +360,7 @@ def _prepare_dispatch_session(state: _RunSkillDispatchState) -> str | None:
             )
         state._caller_hook_session_id = state._registered_session_id
     else:
-        state._caller_hook_session_id = find_caller_session_id(
+        state._caller_hook_session_id = _te_pkg.find_caller_session_id(
             project_dir=state.tool_ctx.project_dir
         )
 

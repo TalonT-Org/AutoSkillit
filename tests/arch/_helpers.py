@@ -30,6 +30,17 @@ PROCESS_KILL_PY = SRC_ROOT / "execution" / "process" / "_process_kill.py"
 PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "process" / "_process_monitor.py"
 PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
 
+
+def _tool_module_paths(tools_dir: Path, *, flat_pattern: str = "tools_*.py") -> list[Path]:
+    """Return flat tool modules and modules from ``tools_*`` packages."""
+    files = list(tools_dir.glob(flat_pattern))
+    for package_dir in tools_dir.iterdir():
+        if not package_dir.is_dir() or not package_dir.name.startswith("tools_"):
+            continue
+        files.extend(path for path in package_dir.glob("*.py") if path.name != "__init__.py")
+    return sorted(files)
+
+
 # ── Section A: AST visitor infrastructure ─────────────────────────────────────
 
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
@@ -469,6 +480,17 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
         idx < len(stmts)
         and isinstance(stmts[idx], ast.Expr)
         and isinstance(stmts[idx].value, ast.Call)
+    ):
+        idx += 1
+    # Skip a leading `name: T | None = None` sentinel declared before the try so it
+    # can be constructed as the try's first statement (issue #4705 D6): the sentinel
+    # itself cannot raise, and guarding the except/finally bodies on `name is not
+    # None` requires the name to exist even when construction fails before the try.
+    while (
+        idx < len(stmts)
+        and isinstance(stmts[idx], ast.AnnAssign)
+        and isinstance(stmts[idx].value, ast.Constant)
+        and stmts[idx].value.value is None
     ):
         idx += 1
     if idx >= len(stmts):

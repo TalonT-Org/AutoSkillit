@@ -67,7 +67,7 @@ def test_all_executor_run_callsites_pass_provider_name_when_profile_name_set():
     from pathlib import Path
 
     files_to_scan = [
-        "src/autoskillit/server/tools/tools_execution.py",
+        "src/autoskillit/server/tools/tools_execution/_run_skill_finalize.py",
         "src/autoskillit/server/tools/tools_github.py",
         "src/autoskillit/server/tools/tools_issue_headless.py",
     ]

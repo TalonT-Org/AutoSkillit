@@ -132,7 +132,7 @@ Three independent layers prevent headless sessions from calling orchestration to
 |-------|-----------|----------------|
 | 1. FastMCP | Kitchen tools remain hidden (`mcp.enable(headless)` does not reveal kitchen-only tools) | `run_skill`, `run_cmd`, `run_python`, `merge_worktree`, and all other kitchen-only tools |
 | 2. Hook | `skill_orchestration_guard.py` PreToolUse hook | L1: `run_skill`, `run_cmd`, `run_python`; L3: `run_skill` |
-| 3. Code | Exact and monotonic guards in `tools_execution.py` | exact-L2 `run_skill`; L2-or-higher `run_cmd` and `run_python` |
+| 3. Code | Exact and monotonic guards in `tools_execution/` | exact-L2 `run_skill`; L2-or-higher `run_cmd` and `run_python` |
 
 All three layers must independently agree before any orchestration tool can execute.
 A bypassed hook is caught by the code guard; a bypassed code guard is caught by the
@@ -192,9 +192,9 @@ TL = `telemetry`, FL = `fleet`
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `run_cmd` | AS, K | `server/tools_execution.py` |
-| `run_python` | AS, K | `server/tools_execution.py` |
-| `run_skill` | AS, K | `server/tools_execution.py` |
+| `run_cmd` | AS, K | `server/tools_execution/` |
+| `run_python` | AS, K | `server/tools_execution/` |
+| `run_skill` | AS, K | `server/tools_execution/` |
 | `recover_run_skill_result` | AS, K | `server/tools_pipeline_tracker.py` |
 | `complete_run_skill_result` | AS, K | `server/tools_pipeline_tracker.py` |
 

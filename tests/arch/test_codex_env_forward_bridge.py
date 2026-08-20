@@ -15,7 +15,8 @@ _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 _LONG_LIVED_CAPTURE_AUTHORITY_FILES = (
     _SRC_ROOT / "pipeline" / "context.py",
     _SRC_ROOT / "server" / "_factory.py",
-    _SRC_ROOT / "server" / "tools" / "tools_execution.py",
+    _SRC_ROOT / "server" / "tools" / "tools_execution" / "_run_skill_prepare.py",
+    _SRC_ROOT / "server" / "tools" / "tools_execution" / "_run_skill_finalize.py",
     _SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch" / "_handlers.py",
     _SRC_ROOT / "fleet" / "_api.py",
 )

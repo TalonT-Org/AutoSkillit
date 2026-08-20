@@ -690,6 +690,17 @@ def test_split_files_under_750_lines() -> None:
         "tools_issue_headless.py",
         "tools_issue_labels.py",
         "tools_pr_ops.py",
+        "tools_execution/__init__.py",
+        "tools_execution/_state.py",
+        "tools_execution/_gates.py",
+        "tools_execution/_audit_response.py",
+        "tools_execution/_run_cmd.py",
+        "tools_execution/_run_python.py",
+        "tools_execution/_run_skill_admission.py",
+        "tools_execution/_run_skill_prepare.py",
+        "tools_execution/_run_skill_session.py",
+        "tools_execution/_run_skill_finalize.py",
+        "tools_execution/_run_skill_dispatch.py",
     ):
         lines = len((server / "tools" / name).read_text().splitlines())
         assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
@@ -1295,43 +1306,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "tools_recipe.py (tool entry points) and tools/_recipe_section_handler.py "
         "(bounded-delivery pull handler and counter injection).",
     ),
-    "tools_execution.py": (
-        1800,
-        "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
-        "three primary execution paths; fail-closed existence gate, empty-closure gate "
-        "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
-        "with resolver-absent fallback via extract_skill_name, and fix-required hook "
-        "dispatch gate add defense-in-depth checks; server-side recipe-read prohibition "
-        "and write-target boundary guards add defense-in-depth gate checks; "
-        "stale-path is_dir() guards on both init_session and replay-snapshot branches "
-        "crash-close before executor when /dev/shm path has been reclaimed (+26 net lines); "
-        "post-serialization validation gate at run_skill return site adds fail-closed "
-        "ToolFailureEnvelope substitution for structurally degraded payloads (+13 net lines); "
-        "R0 capability-driven routing: _skill_requires_claude computation, binary probe "
-        "for fail-closed behavior, and composite log reason emission (+40 net lines); "
-        "github_api_write capability: _aggregate_sandbox_overrides, _has_routing_capability, "
-        "_get_routing_caps helpers extracted from run_skill handler body (+30 net lines); "
-        "shape-aware _compute_write_prefixes (worktree cwd vs clone root) and "
-        "WORKTREE_SKILLS dispatch preflight + _scope_covers_cwd helper (+35 net lines)"
-        "; per-step explicit backend override resolution, binary probe gating, "
-        "override source evidence, and structured logging (+49 net lines)"
-        "; fail-closed error return for unregistered explicit backend override (+3 net lines)"
-        "; closure-mode MCP tool parameters: closure_authority_path/hash/plan_paths/"
-        "base_sha/diff_sha/target_sha threaded through run_skill handler for "
-        "execution-layer gate (+30 net lines)"
-        "; closure_report_root derivation after output_dir recipe auto-fill (+11 net lines)"
-        "; kitchen-scoped _check_pipeline_deps fallback, _active_order_ids_for_kitchen "
-        "multi-pipeline gating, _authority_blocks_dependency_check/"
-        "_check_review_approach_plan_path gates, "
-        "and ambiguous/empty step_name dependency-deny branches (+126 net lines)"
-        "; server-authoritative step completion: _mark_step_complete_server_side helper "
-        "called at the run_skill adjudication point, immutable explicit tracker target "
-        "selection, and deny_envelope conversion of all pre-flight deny sites "
-        "(#4293 pipeline tracker split-brain, +65 net lines)"
-        "; attested recipe execution identity/template verification, structured skill-input "
-        "binding, runtime-binding digest capture, and inventory-admission preflight keep all "
-        "run_skill launch denial paths before command construction (+139 net lines)",
-    ),
     "execution/backends/codex.py": (
         1300,
         "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1062 lines "
@@ -1486,18 +1460,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "would let independently mutable storage paths drift from its atomic publication "
         "and fail-closed health invariants.",
     ),
-    "server/tools/tools_execution.py": (
-        2800,
-        "REQ-CNST-010-E18: #4419 keeps the attested reservation, dispatch, exhaustive "
-        "materialization outcome routing, and durable response finalization at the existing "
-        "run_skill transaction boundary. Splitting that control flow would separate success "
-        "bookkeeping from the ledger state it must atomically finalize. Managed native-shell "
-        "lineage preparation remains at that same attested launch boundary so runtime "
-        "binding and child construction cannot select different modes; specialized explorer "
-        "projection and execution-identity persistence remain at the same admission boundary. "
-        "#4457 keeps receipt drafting beside exhaustive run_skill terminal projection so "
-        "every post-launch classification passes through one finalization path.",
-    ),
     "hook_registry.py": (
         1200,
         "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
@@ -1635,7 +1597,21 @@ def test_server_tool_handlers_have_no_business_logic() -> None:
     """
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
-    for py_file in sorted((server_dir / "tools").glob("tools_*.py")):
+    tool_sources: list[Path] = []
+    for py_file in (server_dir / "tools").glob("tools_*.py"):
+        tool_sources.append(py_file)
+    for pkg_dir in (server_dir / "tools").iterdir():
+        if not pkg_dir.is_dir():
+            continue
+        if not pkg_dir.name.startswith("tools_"):
+            continue
+        for submodule in pkg_dir.glob("*.py"):
+            if submodule.name == "__init__.py":
+                continue
+            tool_sources.append(submodule)
+    tool_sources.sort()
+
+    for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -2203,25 +2179,22 @@ def test_tools_pipeline_tracker_decomposition_has_expected_siblings() -> None:
     }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Tools-execution package decomposition is a multi-part plan; this PR adds "
-        "the _RunSkillDispatchState dataclass (Step 1) but Steps 2-3 — the package "
-        "__init__.py plus _run_cmd, _run_python, _run_skill_dispatch, _run_skill_finalize "
-        "siblings — land in subsequent PRs. Tracking issue #4677."
-    ),
-)
 def test_tools_execution_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "server" / "tools" / "tools_execution"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
+        "_audit_response",
+        "_gates",
         "_run_cmd",
         "_run_python",
+        "_run_skill_admission",
         "_run_skill_dispatch",
         "_run_skill_finalize",
+        "_run_skill_prepare",
+        "_run_skill_session",
         "_state",
     }
+    assert not (SRC_ROOT / "server" / "tools" / "tools_execution.py").exists()
 
 
 def test_lifespan_decomposition_has_expected_siblings() -> None:

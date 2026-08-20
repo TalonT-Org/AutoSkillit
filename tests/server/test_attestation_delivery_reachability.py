@@ -175,7 +175,7 @@ async def test_attested_run_skill_admits_explicit_order_id(
     it explicitly alongside the delivered protocol values without denial (the
     #4296 escape hatch), and the passed value reaches the executor ahead of
     the AUTOSKILLIT_DISPATCH_ID env fallback (effective_order_id = order_id or
-    env, tools_execution.py). Unreachable for attested calls before #4402 —
+    env, tools_execution/). Unreachable for attested calls before #4402 —
     order_id had no with:-declared template entry, so any non-empty value was
     an "undeclared effective name" and the gate denied it outright.
 

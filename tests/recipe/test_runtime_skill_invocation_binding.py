@@ -102,7 +102,7 @@ def _bind(
 ):
     """Bind against ``template``, matching production's shape: the caller
     always supplies actual values for every compiled (with:-declared)
-    param — see ``_build_actual_mcp_kwargs`` in tools_execution.py, which
+    param — see ``_build_actual_mcp_kwargs`` in tools_execution/, which
     never produces a sparse dict. ``skill_command``/``cwd``/``step_name``
     are always compiled (every ``_template()`` step declares them); pass
     extra kwargs to override or to supply values for anything else under

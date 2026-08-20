@@ -17,13 +17,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
 from check_tool_annotations import check as check_readonly_violations
 
+from tests.arch._helpers import _tool_module_paths
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SERVER_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "server"
-
-
-def _tools_files() -> list[Path]:
-    return sorted((_SERVER_DIR / "tools").glob("tools_*.py"))
 
 
 def _collect_missing_annotations(path: Path) -> list[tuple[str, int]]:
@@ -61,7 +59,7 @@ class TestToolAnnotationCompleteness:
         This catches tools that omit readOnlyHint entirely, which causes them to
         have no annotation on the wire even when the middleware is fixed.
         """
-        tool_files = _tools_files()
+        tool_files = _tool_module_paths(_SERVER_DIR / "tools")
         assert tool_files, (
             "No tool files found — glob path is wrong or tools/ subpackage is missing"
         )

@@ -226,7 +226,7 @@ def run_startup_install_state_check() -> list[str]:
 def run_startup_fix_required_coverage_check() -> None:
     """Validate that fix-required hook script stems are covered by at least one backend.
 
-    The dispatch gate in tools_execution._check_backend_compat refuses all skill
+    The run_skill dispatch gate's backend-compatibility check refuses all skill
     dispatches on a backend if HOOK_REGISTRY contains fix-required hooks whose
     script stems are not in that backend's applicable_guards. This check provides
     defense-in-depth: if the cross-registry invariant is violated, the server

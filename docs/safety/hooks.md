@@ -471,7 +471,7 @@ unblock `wait_for_ci`/`enqueue_pr`.
 
 ### ~~`pipeline_step_post_hook.py`~~ (RETIRED)
 Step completion marking is now **server-authoritative**: the `run_skill`
-handler in `tools_execution.py` writes step completion at the adjudication
+handler in `tools_execution/` writes step completion at the adjudication
 point, using the same tracker resolver as the dependency enforcer. This
 eliminates the split-brain between client-side hook writes and server-side
 enforcement reads that caused false `DEPENDENCY UNMET` denials (#4293).

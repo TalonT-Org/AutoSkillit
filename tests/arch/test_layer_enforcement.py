@@ -24,6 +24,7 @@ from tests.arch._helpers import (
     _is_mcp_tool_decorator,
     _rel,
     _runtime_import_froms,
+    _tool_module_paths,
 )
 from tests.arch._rules import RuleDescriptor
 
@@ -200,18 +201,9 @@ def test_all_mcp_tools_are_registered() -> None:
     expected = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
     server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
-    tool_sources: list[Path] = []
-    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
-        tool_sources.append(py_file)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
+    tool_sources = list(server_dir.glob("*.py")) + _tool_module_paths(
+        server_dir / "tools", flat_pattern="*.py"
+    )
     for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
@@ -234,7 +226,11 @@ def test_gated_tools_call_require_enabled_first() -> None:
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
 
-    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
+    tool_sources = list(server_dir.glob("*.py")) + _tool_module_paths(
+        server_dir / "tools", flat_pattern="*.py"
+    )
+
+    for py_file in tool_sources:
         src = py_file.read_text()
         tree = ast.parse(src)
         for node in ast.walk(tree):
@@ -278,47 +274,79 @@ def test_gated_tools_call_require_enabled_first() -> None:
 
 
 def test_backend_compat_precedes_dispatch() -> None:
-    """_check_backend_compat() must appear before executor.run() inside run_skill().
+    """_check_backend_compat() must be reached before executor.run() in the
+    run_skill dispatch pipeline.
 
-    Uses ast.walk + lineno comparison because both calls are inside nested
-    try/with/async-with blocks. Only _check_backend_compat is accepted —
-    the old _is_backend_incompatible helper is not fail-closed.
+    Since #4705 split run_skill's body across the tools_execution package,
+    the two calls no longer live in one function: _check_backend_compat is
+    reached from _prepare_dispatch_backend (_run_skill_prepare.py) and
+    executor.run() is reached from _execute_and_finalize_run_skill
+    (_run_skill_finalize.py). The ordering invariant now lives in
+    _run_skill_dispatch.py's run_skill: it must call _prepare_dispatch_backend
+    before _execute_and_finalize_run_skill.
     """
-    py_file = SRC_ROOT / "server" / "tools" / "tools_execution.py"
-    src = py_file.read_text()
-    tree = ast.parse(src)
+    pkg_dir = SRC_ROOT / "server" / "tools" / "tools_execution"
 
+    prepare_tree = ast.parse((pkg_dir / "_run_skill_prepare.py").read_text())
+    prepare_node: ast.AsyncFunctionDef | None = None
+    for node in ast.walk(prepare_tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_prepare_dispatch_backend":
+            prepare_node = node
+            break
+    assert prepare_node is not None, "_prepare_dispatch_backend not found in _run_skill_prepare.py"
+    assert any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "_check_backend_compat"
+        for n in ast.walk(prepare_node)
+    ), "_check_backend_compat call not found in _prepare_dispatch_backend"
+
+    finalize_tree = ast.parse((pkg_dir / "_run_skill_finalize.py").read_text())
+    finalize_node: ast.AsyncFunctionDef | None = None
+    for node in ast.walk(finalize_tree):
+        if (
+            isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "_execute_and_finalize_run_skill"
+        ):
+            finalize_node = node
+            break
+    assert finalize_node is not None, (
+        "_execute_and_finalize_run_skill not found in _run_skill_finalize.py"
+    )
+    assert any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "run"
+        and isinstance(n.func.value, ast.Attribute)
+        and n.func.value.attr == "executor"
+        for n in ast.walk(finalize_node)
+    ), "executor.run() call not found in _execute_and_finalize_run_skill"
+
+    dispatch_tree = ast.parse((pkg_dir / "_run_skill_dispatch.py").read_text())
     run_skill_node: ast.AsyncFunctionDef | None = None
-    for node in ast.walk(tree):
+    for node in ast.walk(dispatch_tree):
         if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_skill":
             run_skill_node = node
             break
-    assert run_skill_node is not None, "run_skill not found in tools_execution.py"
+    assert run_skill_node is not None, "run_skill not found in _run_skill_dispatch.py"
 
-    compat_lineno: int | None = None
-    executor_run_lineno: int | None = None
-
+    prepare_call_lineno: int | None = None
+    finalize_call_lineno: int | None = None
     for node in ast.walk(run_skill_node):
-        if not isinstance(node, ast.Call):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
-        func = node.func
-        is_compat = isinstance(func, ast.Name) and func.id == "_check_backend_compat"
-        is_executor_run = (
-            isinstance(func, ast.Attribute)
-            and func.attr == "run"
-            and isinstance(func.value, ast.Attribute)
-            and func.value.attr == "executor"
-        )
-        if is_compat and compat_lineno is None:
-            compat_lineno = node.lineno
-        elif is_executor_run and executor_run_lineno is None:
-            executor_run_lineno = node.lineno
+        if node.func.attr == "_prepare_dispatch_backend" and prepare_call_lineno is None:
+            prepare_call_lineno = node.lineno
+        elif node.func.attr == "_execute_and_finalize_run_skill" and finalize_call_lineno is None:
+            finalize_call_lineno = node.lineno
 
-    assert compat_lineno is not None, "_check_backend_compat call not found in run_skill"
-    assert executor_run_lineno is not None, "executor.run() call not found in run_skill"
-    assert compat_lineno < executor_run_lineno, (
-        f"Backend compat check at line {compat_lineno} must precede "
-        f"executor.run() at line {executor_run_lineno}"
+    assert prepare_call_lineno is not None, "_prepare_dispatch_backend call not found in run_skill"
+    assert finalize_call_lineno is not None, (
+        "_execute_and_finalize_run_skill call not found in run_skill"
+    )
+    assert prepare_call_lineno < finalize_call_lineno, (
+        f"_prepare_dispatch_backend call at line {prepare_call_lineno} must precede "
+        f"_execute_and_finalize_run_skill call at line {finalize_call_lineno}"
     )
 
 
@@ -448,7 +476,8 @@ def test_direct_executor_callers_check_backend_compat() -> None:
     Discovers every server tool module so new direct executor callers cannot
     silently escape the invariant.
     """
-    target_files = sorted((SRC_ROOT / "server" / "tools").glob("*.py"))
+    target_files = _tool_module_paths(SRC_ROOT / "server" / "tools", flat_pattern="*.py")
+
     compat_calls = {
         "_check_backend_compat",
         "_prepare_direct_skill_dispatch",
@@ -464,7 +493,10 @@ def test_direct_executor_callers_check_backend_compat() -> None:
         for func_node in ast.walk(tree):
             if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if py_file.name == "tools_execution.py" and func_node.name == "run_skill":
+            if (
+                py_file.name == "_run_skill_finalize.py"
+                and func_node.name == "_execute_and_finalize_run_skill"
+            ):
                 continue
             for run_line in _backend_compat_dominance_violations(func_node, compat_calls):
                 violations.append(
@@ -1144,7 +1176,9 @@ def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
     """
     server_dir = SRC_ROOT / "server"
     violations = []
-    for path in sorted((server_dir / "tools").glob("tools_*.py")):
+    tool_sources = _tool_module_paths(server_dir / "tools")
+
+    for path in tool_sources:
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if (
@@ -1170,7 +1204,9 @@ def test_all_tool_extra_keys_are_not_reserved() -> None:
 
     server_dir = SRC_ROOT / "server"
     violations = []
-    for path in sorted((server_dir / "tools").glob("tools_*.py")):
+    tool_sources = _tool_module_paths(server_dir / "tools")
+
+    for path in tool_sources:
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             # Find: _notify(ctx, level, msg, logger_name, extra={...})
@@ -1493,18 +1529,7 @@ def test_tool_subset_tags_match_decorators() -> None:
     server_dir = SRC_ROOT / "server"
     decorator_tags: dict[str, frozenset[str]] = {}
 
-    tool_sources: list[Path] = []
-    for py_file in (server_dir / "tools").glob("*.py"):
-        tool_sources.append(py_file)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
+    tool_sources = _tool_module_paths(server_dir / "tools", flat_pattern="*.py")
     for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
@@ -1913,7 +1938,9 @@ def test_tools_with_path_params_validate_existence():
     """Every tool accepting worktree_path or cwd must validate directory existence."""
     missing_guards: list[str] = []
 
-    for py_file in sorted(_TOOLS_DIR.glob("tools_*.py")):
+    tool_sources = _tool_module_paths(_TOOLS_DIR)
+
+    for py_file in tool_sources:
         source = py_file.read_text()
         tree = ast.parse(source, filename=str(py_file))
 

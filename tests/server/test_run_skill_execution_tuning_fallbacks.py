@@ -73,7 +73,7 @@ async def test_config_model_override_beats_recipe_step_fallback(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """config.model.model_override is a pre-executor config tier that already
-    outranks the param channel (tools_execution.py's own effective_model
+    outranks the param channel (tools_execution/'s own effective_model
     resolution, ahead of the RecipeStep fallback this plan adds) — the
     RecipeStep.model fallback must not un-do it."""
     executor = InMemoryHeadlessExecutor()
@@ -143,15 +143,17 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
     local variable, which Python cannot dispatch generically by name
     without unsafe locals() mutation). This is the alternative safety net:
     every table entry must have a real ``_recipe_step.<field>`` read site
-    inside run_skill(), so a table entry added without a matching if-block
-    — the exact silent-no-op drift this table exists to prevent — fails CI
-    instead of silently doing nothing at runtime."""
+    inside _prepare_dispatch_backend() — the run_skill prepare phase that
+    owns this fallback block (issue #4705 split run_skill's body across
+    the tools_execution package) — so a table entry added without a
+    matching if-block — the exact silent-no-op drift this table exists to
+    prevent — fails CI instead of silently doing nothing at runtime."""
     import ast
     import inspect
 
     from autoskillit.server.tools import tools_execution
 
-    tree = ast.parse(inspect.getsource(tools_execution.run_skill))
+    tree = ast.parse(inspect.getsource(tools_execution._prepare_dispatch_backend))
     read_fields = {
         node.attr
         for node in ast.walk(tree)
@@ -167,7 +169,8 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
     ]
     assert not missing, (
         f"EXECUTION_TUNING RecipeStep field(s) in _EXECUTION_TUNING_STEP_FIELDS have "
-        f"no matching '_recipe_step.<field>' read site inside run_skill(): {missing}. "
+        f"no matching '_recipe_step.<field>' read site inside "
+        f"_prepare_dispatch_backend(): {missing}. "
         "A table entry with no runtime consumer silently does nothing — add the "
         "matching fallback if-block (see model/stale_threshold/idle_output_timeout "
         "for the pattern)."

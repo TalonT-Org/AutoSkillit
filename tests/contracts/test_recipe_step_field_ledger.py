@@ -64,7 +64,7 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     "declared_with_args": "execution",
     # Decides sub-recipe merge vs. drop in _recipe_composition.py.
     "gate": "composition",
-    # Server-side RecipeStep fallback (tools_execution.py) — the #2969/#3377
+    # Server-side RecipeStep fallback (tools_execution/) — the #2969/#3377
     # pattern.
     "idle_output_timeout": "execution",
     # Embedded verbatim into the runtime orchestration_rules/
@@ -97,7 +97,7 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     "pass_through": "validation-only",
     "phoropter_family": "validation-only",
     # step_provider's server-side RecipeStep fallback (pre-gate, profile
-    # resolution) — tools_execution.py.
+    # resolution) — tools_execution/.
     "provider": "execution",
     # Discriminates a python-callable step; same "excluded from the
     # compiler, lint/schema-only consumers" shape as constant.
@@ -121,7 +121,7 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     # (bind_step_invocation); read at the real dispatch call site too.
     "tool": "execution",
     # Server-side RecipeStep fallback reads with_args directly
-    # (tools_execution.py's output_dir resolution) in addition to compiling
+    # (tools_execution/'s output_dir resolution) in addition to compiling
     # through bind_step_invocation.
     "with_args": "execution",
 }

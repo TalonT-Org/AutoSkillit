@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# Internal helpers re-exported for tools_execution.py and other sibling callers.
+# Internal helpers re-exported for tools_execution/ and other sibling callers.
 from autoskillit.core import read_tracker_authority  # noqa: F401
 
 # Re-exports for tests that patch symbols via the package facade.

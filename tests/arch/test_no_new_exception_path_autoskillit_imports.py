@@ -42,7 +42,7 @@ _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
         # the failure it is inside of.
         ("pipeline/background.py", 81),
         # Config re-read on a config-load failure path.
-        ("cli/_init_helpers.py", 550),
+        ("cli/_init_helpers.py", 557),
         # Fleet state re-import on a dispatch failure/cleanup path.
         ("fleet/_api.py", 381),
         ("fleet/_api.py", 1225),

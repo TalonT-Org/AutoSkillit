@@ -20,13 +20,19 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
 )
-from autoskillit.fleet import warm_failure_path_imports as warm_failure_path_imports
 
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, CodingAgentBackend
     from autoskillit.workspace import EffectiveSkillCatalog, SkillInfo
 
 logger = get_logger(__name__)
+
+
+def warm_failure_path_imports() -> None:
+    """Load the fleet-owned startup warm only when a CLI command starts."""
+    from autoskillit.fleet import warm_failure_path_imports as warm
+
+    warm()
 
 
 def validate_public_plugin_projection(

@@ -194,7 +194,7 @@ def _publish_real_package_generation(
             version=version,
             semantic_key=installed_plugin_semantic_key(install_ref, version),
             incarnation_id=incarnation_id,
-            staged_root=generation_root,
+            generation_root=generation_root,
         )
 
 

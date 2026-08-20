@@ -273,12 +273,12 @@ def publish_install_root_generation(
     version: str,
     semantic_key: str,
     incarnation_id: str,
-    staged_root: Path,
+    generation_root: Path,
 ) -> PluginArtifactIdentity:
     """Finalize an install-root generation whose content is already staged.
 
     Unlike ``publish_generation``, the caller has already materialized
-    ``staged_root`` directly — an installer (``uv tool install``) writes its
+    ``generation_root`` directly — an installer (``uv tool install``) writes its
     own destination tree and offers no staging-directory handoff, so content
     creation happens before this function is ever called, at a location the
     caller chose via ``core.generation_staging_root``. This performs
@@ -292,14 +292,18 @@ def publish_install_root_generation(
     ``publish_generation``.
     """
     version_root = generation_version_root(home, install_ref, version)
-    generation_root = generation_artifact_root(home, install_ref, version, incarnation_id)
+    expected_root = generation_artifact_root(home, install_ref, version, incarnation_id)
+    if generation_root != expected_root:
+        raise ValueError(f"install-root generation must be materialized at {expected_root}")
     selector = generation_selector_path(home, install_ref, version)
     lease_path = installed_plugin_artifact_lease_path(generation_root)
 
     version_root.mkdir(parents=True, exist_ok=True)
 
-    staged_digest = directory_tree_digest(staged_root, allow_symlinks=True, ignore_bytecode=True)
-    _fsync_tree_contents(staged_root)
+    staged_digest = directory_tree_digest(
+        generation_root, allow_symlinks=True, ignore_bytecode=True
+    )
+    _fsync_tree_contents(generation_root)
 
     # A venv's console scripts bake an absolute shebang path at creation time
     # (uv/venv are not relocatable), so the caller must have installed
@@ -310,8 +314,6 @@ def publish_install_root_generation(
     promoted = False
     safe_to_discard = True
     try:
-        if staged_root != generation_root:
-            os.rename(staged_root, generation_root)
         promoted = True
         _fsync_directory(version_root)
 

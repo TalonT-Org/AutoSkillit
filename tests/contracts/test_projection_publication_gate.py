@@ -583,7 +583,7 @@ class TestStaleGeneratorRefusal:
             _AUTOSKILLIT_INSTALL_ROOT_KEY,
             _InstallLock,
             due_retiring_records,
-            generation_staging_root,
+            generation_artifact_root,
             installed_plugin_semantic_key,
             new_plugin_artifact_incarnation_id,
         )
@@ -605,9 +605,11 @@ class TestStaleGeneratorRefusal:
 
         def _publish(version: str) -> PluginArtifactIdentity:
             incarnation_id = new_plugin_artifact_incarnation_id()
-            staging = generation_staging_root(tmp_path, install_ref) / incarnation_id
-            staging.mkdir(parents=True)
-            (staging / "marker").write_text(version)
+            generation_root = generation_artifact_root(
+                tmp_path, install_ref, version, incarnation_id
+            )
+            generation_root.mkdir(parents=True)
+            (generation_root / "marker").write_text(version)
             with _InstallLock():
                 return publish_install_root_generation(
                     home=tmp_path,
@@ -615,7 +617,7 @@ class TestStaleGeneratorRefusal:
                     version=version,
                     semantic_key=installed_plugin_semantic_key(install_ref, version),
                     incarnation_id=incarnation_id,
-                    staged_root=staging,
+                    generation_root=generation_root,
                 )
 
         old_identity = _publish("1.0.0")

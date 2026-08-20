@@ -574,7 +574,7 @@ def run_update_transaction(
                             expected_version,
                         ),
                         incarnation_id=install_root_incarnation_id,
-                        staged_root=generation_root,
+                        generation_root=generation_root,
                     )
             except Exception as exc:
                 _report_post_pivot_failure("update_install_root_generation_publish_failed")
@@ -737,6 +737,5 @@ def run_update_transaction(
         )
     finally:
         shutil.rmtree(working_dir, ignore_errors=True)
-        # Cleared by a successful publish_install_root_generation() rename; a
-        # leftover here means a failure occurred before or during finalize.
+        # A leftover here means the disposable probe failed before cleanup.
         shutil.rmtree(install_root_staging, ignore_errors=True)

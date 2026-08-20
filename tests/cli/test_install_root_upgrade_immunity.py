@@ -243,7 +243,7 @@ def _install_root_generation(
             version=version,
             semantic_key=installed_plugin_semantic_key(_INSTALL_REF, version),
             incarnation_id=incarnation_id,
-            staged_root=generation_root,
+            generation_root=generation_root,
         )
 
 

@@ -245,16 +245,16 @@ _INSTALL_ROOT_REF = "autoskillit-install@autoskillit-local"
 def _publish_install_root(home: Path, version: str) -> PluginArtifactIdentity:
     from autoskillit.core import (
         _InstallLock,
-        generation_staging_root,
+        generation_artifact_root,
         installed_plugin_semantic_key,
         new_plugin_artifact_incarnation_id,
     )
     from autoskillit.workspace import publish_install_root_generation
 
     incarnation_id = new_plugin_artifact_incarnation_id()
-    staging = generation_staging_root(home, _INSTALL_ROOT_REF) / incarnation_id
-    staging.mkdir(parents=True)
-    (staging / "marker").write_text(version, encoding="utf-8")
+    generation_root = generation_artifact_root(home, _INSTALL_ROOT_REF, version, incarnation_id)
+    generation_root.mkdir(parents=True)
+    (generation_root / "marker").write_text(version, encoding="utf-8")
     with _InstallLock():
         return publish_install_root_generation(
             home=home,
@@ -262,7 +262,7 @@ def _publish_install_root(home: Path, version: str) -> PluginArtifactIdentity:
             version=version,
             semantic_key=installed_plugin_semantic_key(_INSTALL_ROOT_REF, version),
             incarnation_id=incarnation_id,
-            staged_root=staging,
+            generation_root=generation_root,
         )
 
 

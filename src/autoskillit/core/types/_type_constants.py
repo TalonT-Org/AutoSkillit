@@ -344,12 +344,14 @@ class RetiredArtifactShape(NamedTuple):
     - ``"retire_via_engine"`` — enqueue into the retirement engine with
       the standard grace window and per-path lease gating, so a live
       session's inherited shared-lease fd is never invalidated.
+    - ``"preserve"`` — retain a legacy artifact when no reliable liveness
+      signal exists; cleanup requires explicit operator action.
     """
 
     shape: str
     retired_in: str
     reason: str
-    disposition: Literal["delete", "retire_via_engine"] = "delete"
+    disposition: Literal["delete", "retire_via_engine", "preserve"] = "delete"
 
 
 # Artifact key -> the shape that was retired. Keys are ``Path.home()``-relative
@@ -401,11 +403,10 @@ RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingPro
                 "~/.autoskillit/plugin-generations/autoskillit-install/. The old "
                 "shared uv tool root is retired but may still be referenced by a "
                 "live process launched before the upgrade — it predates the "
-                "generation store's lease mechanism entirely, so no shared lease "
-                "protects it — and is routed through the retirement engine "
-                "rather than deleted immediately."
+                "generation store's lease mechanism entirely, so no reliable signal "
+                "can prove that deletion is safe."
             ),
-            disposition="retire_via_engine",
+            disposition="preserve",
         ),
     }
 )

@@ -82,7 +82,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "tools_evidence_reader",
         # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
         "_generation_publication",
-        # _LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE = timedelta(hours=24) (#4597 Phase 3)
+        # Legacy installed-plugin retirement uses a six-hour enqueue deadline.
         "_install_state",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_install_info",  # cli/install/_install_info.py: window constants (see comment above)

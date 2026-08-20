@@ -321,26 +321,6 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Removes the manifest and lease sidecars for the exact unpublished generation.",
     ),
     (
-        "workspace/_install_state.py",
-        "_enqueue_legacy_uv_tool_root",
-        "shutil.rmtree",
-    ): (
-        1,
-        "Removes the pre-Phase-3 shared uv tool root only once its content digest has "
-        "been observed unchanged across a 30-day grace window (issue #4597) -- no "
-        "manifest or lease infrastructure predates it, so digest-stability is the only "
-        "available signal.",
-    ),
-    (
-        "workspace/_install_state.py",
-        "_enqueue_legacy_uv_tool_root",
-        "evidence_path.unlink",
-    ): (
-        1,
-        "Removes the digest-stability evidence sidecar once the legacy root itself has "
-        "been successfully removed.",
-    ),
-    (
         "smoke_utils/_cross_interpreter_upgrade.py",
         "_assert_overlapping_install_survives",
         "marker.unlink",

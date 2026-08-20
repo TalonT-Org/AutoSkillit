@@ -47,7 +47,6 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     RetiringArtifactRecord,
     RetiringCacheState,
     Severity,
-    directory_tree_digest,
     get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
@@ -55,10 +54,8 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     managed_home,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
-    read_versioned_json,
     registered_install_paths,
     resolve_current_generation,
-    write_versioned_json,
 )
 from autoskillit.workspace._installed_artifact import (
     _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK,
@@ -450,105 +447,10 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
         pass
 
 
-_LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE = timedelta(days=30)
-_LEGACY_UV_TOOL_ROOT_EVIDENCE_SCHEMA_VERSION = 1
-
-
-def _legacy_uv_tool_root_evidence_path(artifact: Path) -> Path:
-    """Return the stability-evidence sidecar for the legacy shared uv tool root.
-
-    A sibling of ``artifact``, never inside it, so recording evidence never
-    perturbs the very digest it is tracking.
-    """
-    return artifact.parent / f".{artifact.name}.autoskillit-legacy-retirement.json"
-
-
-def _enqueue_legacy_uv_tool_root(artifact: Path) -> None:
-    """Retire a legacy shared uv root after 30 days with an unchanged digest.
-
-    Legacy roots have no reader lease, so digest stability is only a migration
-    heuristic, not proof that no idle process still references the tree. Any
-    content change resets the grace window before deletion is considered.
-    """
-
-    evidence_path = _legacy_uv_tool_root_evidence_path(artifact)
-    try:
-        digest = directory_tree_digest(artifact, allow_symlinks=True)
-    except (OSError, ValueError) as exc:
-        logger.warning(
-            "reconcile_install_artifacts: legacy uv tool root %s cannot be digested, skipping: %s",
-            artifact,
-            exc,
-        )
-        return
-
-    now = datetime.now(UTC)
-    previous = read_versioned_json(
-        evidence_path,
-        _LEGACY_UV_TOOL_ROOT_EVIDENCE_SCHEMA_VERSION,
-    )
-    stable_since: datetime | None = None
-    if previous is not None and previous.get("artifact_digest") == digest:
-        observed_at = previous.get("observed_at")
-        if isinstance(observed_at, str):
-            try:
-                stable_since = datetime.fromisoformat(observed_at)
-            except ValueError:
-                stable_since = None
-            else:
-                if stable_since.tzinfo is None:
-                    stable_since = None
-
-    if stable_since is None:
-        try:
-            write_versioned_json(
-                evidence_path,
-                {"artifact_digest": digest, "observed_at": now.isoformat()},
-                schema_version=_LEGACY_UV_TOOL_ROOT_EVIDENCE_SCHEMA_VERSION,
-            )
-        except OSError as exc:
-            logger.warning(
-                "reconcile_install_artifacts: could not record legacy uv tool root "
-                "retirement evidence for %s: %s",
-                artifact,
-                exc,
-            )
-        return
-
-    if now - stable_since.astimezone(UTC) < _LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE:
-        return
-
-    try:
-        shutil.rmtree(artifact)
-    except OSError as exc:
-        logger.warning(
-            "reconcile_install_artifacts: could not remove stable legacy uv tool root %s: %s",
-            artifact,
-            exc,
-        )
-        return
-    try:
-        evidence_path.unlink(missing_ok=True)
-    except OSError as exc:
-        logger.warning(
-            "reconcile_install_artifacts: could not remove legacy uv tool root "
-            "retirement evidence %s: %s",
-            evidence_path,
-            exc,
-        )
-    logger.info(
-        "reconcile_install_artifacts: removed legacy uv tool root %s after "
-        "%s of unchanged content",
-        artifact,
-        _LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE,
-    )
-
-
 _RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path], None]] = {
     ".claude/plugins/cache/autoskillit-local/autoskillit": (
         _enqueue_legacy_installed_plugin_versions
     ),
-    ".local/share/uv/tools/autoskillit": _enqueue_legacy_uv_tool_root,
 }
 
 
@@ -566,6 +468,7 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
     directory with dynamic, artifact-specific children (version- or
     key-addressed subdirectories) that cannot be enumerated generically, so
     every entry must register a handler in ``_RETIRE_VIA_ENGINE_HANDLERS``.
+    ``preserve`` entries remain untouched because liveness cannot be proven.
     """
     resolved_home = home if home is not None else managed_home()
     repaired: list[str] = []
@@ -603,6 +506,13 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
                 retired.retired_in,
                 disposition,
             )
+        elif disposition == "preserve":
+            logger.info(
+                "reconcile_install_artifacts: preserving %s because safe retirement "
+                "cannot be proven",
+                artifact,
+            )
+            continue
         else:
             raise ValueError(
                 f"unknown disposition {disposition!r} for retired artifact {key!r} — "

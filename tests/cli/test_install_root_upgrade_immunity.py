@@ -455,10 +455,8 @@ def test_install_detection_survives_versioned_roots(tmp_path: Path, fake_git_sou
     ``commit_id``/``requested_revision``/``url`` from a versioned
     install-root generation's own ``direct_url.json``.
 
-    ``parse_direct_url()`` introspects the *running interpreter's own*
-    package metadata (``importlib.metadata.Distribution.from_name``), so
-    this must run inside a subprocess using the generation's own
-    interpreter -- the same constraint T-C1/T-C2 are built around.
+    The subprocess imports production ``detect_install()`` while resolving
+    distribution metadata from the published generation.
     """
     home = tmp_path / "home"
     python_pin = _python_pin()
@@ -478,12 +476,20 @@ def test_install_detection_survives_versioned_roots(tmp_path: Path, fake_git_sou
         "'commit_id': info.commit_id, 'requested_revision': info.requested_revision, "
         "'url': info.url}))\n"
     )
+    site_packages = next(
+        (identity.managed_path / "faketool" / "lib").glob("python*/site-packages")
+    )
     result = subprocess.run(
-        [str(inner_python), "-c", probe],
+        [sys.executable, "-c", probe],
         capture_output=True,
         text=True,
         timeout=15,
-        env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[2] / "src")},
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                (str(Path(__file__).parents[2] / "src"), str(site_packages))
+            ),
+        },
     )
     assert result.returncode == 0, result.stderr
     import json

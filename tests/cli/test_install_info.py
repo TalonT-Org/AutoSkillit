@@ -283,7 +283,7 @@ def test_upgrade_command_stable() -> None:
     )
     result = upgrade_command(info)
     assert result is not None
-    assert result.argv == [
+    assert list(result.argv) == [
         "uv",
         "tool",
         "upgrade",
@@ -303,7 +303,7 @@ def test_upgrade_command_main() -> None:
     )
     result = upgrade_command(info)
     assert result is not None
-    assert result.argv == [
+    assert list(result.argv) == [
         "uv",
         "tool",
         "upgrade",
@@ -323,7 +323,7 @@ def test_upgrade_command_release_tag() -> None:
     )
     result = upgrade_command(info)
     assert result is not None
-    assert result.argv == [
+    assert list(result.argv) == [
         "uv",
         "tool",
         "upgrade",
@@ -343,7 +343,7 @@ def test_upgrade_command_develop() -> None:
     )
     result = upgrade_command(info)
     assert result is not None
-    assert result.argv == [
+    assert list(result.argv) == [
         "uv",
         "tool",
         "install",
@@ -371,7 +371,7 @@ def test_upgrade_command_targets_a_fresh_versioned_root(tmp_path: Path) -> None:
     assert destination_result is not None
     assert plain_result is not None
     assert destination_result.env["UV_TOOL_DIR"] == str(destination)
-    assert destination_result.argv == [
+    assert list(destination_result.argv) == [
         "uv",
         "tool",
         "install",
@@ -395,7 +395,7 @@ def test_upgrade_command_local_editable() -> None:
     )
     result = upgrade_command(info)
     assert result is not None
-    assert result.argv == ["uv", "pip", "install", "-e", str(editable_source)]
+    assert list(result.argv) == ["uv", "pip", "install", "-e", str(editable_source)]
 
 
 @pytest.mark.parametrize(
@@ -541,7 +541,7 @@ def test_upgrade_command_arbitrary_dev_revision(revision: str) -> None:
     )
     result = upgrade_command(info)
     assert result is not None
-    assert result.argv[:3] == ["uv", "tool", "install"]
+    assert list(result.argv[:3]) == ["uv", "tool", "install"]
     assert "--force" in result.argv
     assert result.argv[result.argv.index("--python") + 1] == _PYTHON_PIN
 

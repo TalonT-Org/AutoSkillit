@@ -470,7 +470,7 @@ def run_update_transaction(
                 )
         try:
             upgrade_result = runner(
-                command.argv,
+                list(command.argv),
                 check=False,
                 env={**maintenance_env, **command.env},
                 cwd=working_dir,
@@ -544,7 +544,7 @@ def run_update_transaction(
                 generation_root.parent.mkdir(parents=True, exist_ok=True)
                 final_bin_dir = generation_root.parent / f".{generation_root.name}-bin"
                 final_result = runner(
-                    command.argv,
+                    list(command.argv),
                     check=False,
                     env={
                         **maintenance_env,

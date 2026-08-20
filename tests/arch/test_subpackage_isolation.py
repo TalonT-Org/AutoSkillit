@@ -933,19 +933,25 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
             _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
             _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
-            In issue #4670 Part A, _prompts.py and the four install-cluster files
-            (_install_contract.py, _install_info.py, _installed_plugins.py,
-            _marketplace.py, _plugin_artifact.py) were extracted to the new
-            `cli/prompts/` and `cli/install/` subpackages respectively.
-            In issue #4670 Part B, _onboarding.py was folded into `cli/session/`
-            as _session_onboarding.py (its only consumer lives inside that package),
-            _restart.py was folded into `cli/update/` (its two consumers live inside
-            that package), and the six operator-facing diagnostic subcommand runners
-            (_capture_store, _codex_attempts, _codex_orphans, _daemon_orphans,
-            _process_orphans, _sessions) were extracted to the new `cli/ops/`
-            subpackage. The 11 remaining top-level files (app.py + 10 small shared
-            utilities — see the dict entry below) are the orchestration entry points
-            and shared helpers that have no coherent subpackage home.
+            The CLI is organized as: `cli/prompts/` (prompt builders — _prompts,
+            _prompts_campaign, _prompts_kitchen, _prompts_orchestrator),
+            `cli/install/` (install cluster — _install_contract, _install_info,
+            _installed_plugins, _marketplace, _plugin_artifact), `cli/ops/`
+            (diagnostic subcommand runners — _capture_store, _codex_attempts,
+            _codex_orphans, _daemon_orphans, _process_orphans, _sessions),
+            `cli/session/` (cook/order lifecycle — _session_cook, _session_order,
+            _session_onboarding, _session_launch, _session_backend,
+            _session_constants, _session_picker, _session_process,
+            _session_reload, _session_startup_trace), `cli/update/` (update
+            pipeline — _update, _update_checks, _update_checks_source,
+            _update_checks_fetch, _transaction, _obligation_repair, _restart),
+            and `cli/doctor/` (doctor commands — _doctor_types, _doctor_mcp,
+            _doctor_hooks, _doctor_install, _doctor_config, _doctor_runtime,
+            _doctor_env, _doctor_features, _doctor_fleet, _doctor_skills,
+            _doctor_capture_store, plus the facade).
+            The 11 remaining top-level files (app.py + 10 small shared utilities —
+            see the dict entry below) are the orchestration entry points and shared
+            helpers that have no coherent subpackage home.
             _hooks_codex.py adds Codex config.toml hook generation and sync
     (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
     _hooks.py for Claude Code settings.json hooks.
@@ -2237,3 +2243,49 @@ def test_ops_decomposition_has_expected_siblings() -> None:
         "_process_orphans",
         "_sessions",
     }
+
+
+@pytest.mark.parametrize(
+    "facade_pkg",
+    ["autoskillit.cli.prompts", "autoskillit.cli.ops", "autoskillit.cli.install"],
+)
+def test_cli_facade_all_resolves(facade_pkg: str) -> None:
+    """Guard: every name declared in a CLI subpackage facade's __all__ resolves.
+
+    A facade symbol declared in ``__all__`` but missing from the module raises
+    ImportError for ``from autoskillit.cli.X import <name>`` — the import form
+    used by virtually every consumer. Conversely, an exportable symbol missing
+    from ``__all__`` is invisible to ``from autoskillit.cli.X import *`` and
+    star-import tools. This parity assertion catches both drift directions.
+    """
+    import importlib
+
+    facade = importlib.import_module(facade_pkg)
+    declared = set(getattr(facade, "__all__", ()))
+    assert declared, f"{facade_pkg}.__all__ is empty or missing"
+
+    # Forward direction: every declared name must resolve.
+    missing = sorted(name for name in declared if not hasattr(facade, name))
+    assert not missing, f"{facade_pkg} __all__ lists names that do not resolve: {missing}"
+
+    # Reverse direction: lazy-loaded entries declared in __all__ must resolve
+    # to the same object as the submodule attribute. This catches drift where
+    # a builder is added to one layer (e.g. _prompts.py) but not the other
+    # (e.g. prompts/__init__.py), leaving the two lists silently out of sync.
+    pkg_dir = SRC_ROOT / facade_pkg.replace("autoskillit.", "").replace(".", "/")
+    for submodule_path in pkg_dir.glob("_*.py"):
+        submodule_name = submodule_path.stem
+        submodule = importlib.import_module(f"{facade_pkg}.{submodule_name}")
+        for name in getattr(submodule, "__all__", ()):
+            if name not in declared:
+                # Submodule __all__ has names that the facade does not re-export
+                assert False, (
+                    f"{facade_pkg}.{submodule_name}.{name!r} is in submodule __all__ "
+                    f"but missing from facade __all__"
+                )
+            facade_value = getattr(facade, name)
+            submodule_value = getattr(submodule, name)
+            assert facade_value is submodule_value, (
+                f"{facade_pkg}.{name!r} resolves to a different object than "
+                f"{submodule_name}.{name!r}"
+            )

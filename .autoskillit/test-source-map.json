@@ -62,7 +62,7 @@
     "tests/cli/test_workspace.py",
     "tests/contracts/test_version_consistency.py"
   ],
-  "src/autoskillit/cli/_install_contract.py": [
+  "src/autoskillit/cli/install/_install_contract.py": [
     "tests/cli/test_cli_hooks.py",
     "tests/cli/test_cli_marketplace.py",
     "tests/cli/test_install.py",
@@ -71,7 +71,7 @@
     "tests/cli/test_update_checks_lifecycle.py",
     "tests/cli/test_update_transaction.py"
   ],
-  "src/autoskillit/cli/_install_info.py": [
+  "src/autoskillit/cli/install/_install_info.py": [
     "tests/cli/test_doctor.py",
     "tests/cli/test_doctor_backend_guards.py",
     "tests/cli/test_doctor_broken_config.py",
@@ -94,11 +94,11 @@
     "tests/cli/test_update_checks_lifecycle.py",
     "tests/cli/test_update_checks_prompt.py"
   ],
-  "src/autoskillit/cli/_installed_plugins.py": [
+  "src/autoskillit/cli/install/_installed_plugins.py": [
     "tests/cli/test_installed_plugins_file.py",
     "tests/cli/test_update_transaction.py"
   ],
-  "src/autoskillit/cli/_marketplace.py": [
+  "src/autoskillit/cli/install/_marketplace.py": [
     "tests/cli/test_cli_hooks.py",
     "tests/cli/test_cli_marketplace.py",
     "tests/cli/test_install.py",
@@ -106,7 +106,7 @@
     "tests/cli/test_update_checks_lifecycle.py",
     "tests/contracts/test_version_consistency.py"
   ],
-  "src/autoskillit/cli/_plugin_artifact.py": [
+  "src/autoskillit/cli/install/_plugin_artifact.py": [
     "tests/cli/test_app_main.py",
     "tests/cli/test_cli_serve_logging.py",
     "tests/cli/test_cook_env_scrub.py",
@@ -141,7 +141,7 @@
     "tests/cli/test_fleet_campaign_preview.py",
     "tests/cli/test_preview.py"
   ],
-  "src/autoskillit/cli/_prompts.py": [
+  "src/autoskillit/cli/prompts/_prompts.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",
@@ -162,7 +162,7 @@
     "tests/contracts/test_sous_chef_scheduling.py",
     "tests/execution/backends/test_failure_predicate_spanning.py"
   ],
-  "src/autoskillit/cli/_prompts_campaign.py": [
+  "src/autoskillit/cli/prompts/_prompts_campaign.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_fleet_campaign.py",
     "tests/cli/test_l3_orchestrator_prompt.py",
@@ -170,7 +170,7 @@
     "tests/contracts/test_fleet_dispatch_bem_gate.py",
     "tests/contracts/test_instruction_surface.py"
   ],
-  "src/autoskillit/cli/_prompts_kitchen.py": [
+  "src/autoskillit/cli/prompts/_prompts_kitchen.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_order_picker.py",
     "tests/cli/test_cook_order_prompt.py",
@@ -180,7 +180,7 @@
     "tests/contracts/test_instruction_surface.py",
     "tests/contracts/test_output_budget_discipline.py"
   ],
-  "src/autoskillit/cli/_prompts_orchestrator.py": [
+  "src/autoskillit/cli/prompts/_prompts_orchestrator.py": [
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",

@@ -12,9 +12,18 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 def test_codex_attempts_command_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     import autoskillit.cli.ops as ops_pkg
     from autoskillit import cli
+    from autoskillit.cli.ops import _codex_attempts as codex_attempts_mod
 
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(ops_pkg, "run_codex_attempts", lambda **kwargs: calls.append(kwargs))
+
+    def mock_run(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    # Patch both the facade re-export AND the submodule attribute: if app.py
+    # is ever changed to import from cli.ops._codex_attempts directly, the
+    # facade patch silently no-ops, so the test would exercise the real runner.
+    monkeypatch.setattr(ops_pkg, "run_codex_attempts", mock_run)
+    monkeypatch.setattr(codex_attempts_mod, "run_codex_attempts", mock_run)
 
     cli.codex_attempts(
         discard_view="0123456789abcdef-1",

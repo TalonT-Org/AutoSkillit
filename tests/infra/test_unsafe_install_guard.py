@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.hooks._command_classification import _PIP_GLOBAL_FLAG_SPEC, _FlagArity
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
@@ -155,6 +157,18 @@ class TestUnsafeInstallGuardAllowed:
         """Non-editable pip install does not create dangling entry points — allowed."""
         assert not _is_denied(_run_guard("pip install requests"))
 
+    def test_pip_install_non_editable_is_allowed_via_empty_output(self):
+        """Same case as above, asserted directly on the guard's raw output
+
+        (empty stdout = allow) rather than through the _is_denied wrapper --
+        this is the fail-closed guard registry's required behavioral
+        allow-test neighbor (see tests/arch/test_fail_closed_guard_contract.py),
+        which AST-scans for an assertion referencing the guard result by
+        name, not through an indirection helper.
+        """
+        result = _run_guard("pip install requests")
+        assert result == ""
+
     def test_task_install_worktree_allowed(self):
         """task install-worktree always uses --python .venv — allowed."""
         assert not _is_denied(_run_guard("task install-worktree"))
@@ -285,6 +299,10 @@ _DIRECT_DENIED: list[tuple[str, str]] = [
     ("stdbuf -o0 pip install -e .", "stdbuf-pip-install-e"),
     # Attached --python=<path> form: must remain unsafe when path is not .venv.
     ("pip install -e . --python=/usr/bin/python3", "attached-system-python"),
+    # Space-separated global *value* flag (--proxy <url>) preceding `install`:
+    # must still be recognized as a pip-install invocation and denied, not
+    # silently skipped (see _find_pip_install's _PIP_GLOBAL_FLAG_SPEC lookup).
+    ("pip --proxy http://example.invalid install -e .", "pip-global-value-flag-proxy-install-e"),
 ]
 
 
@@ -705,3 +723,75 @@ class TestSystemInstallScope:
     )
     def test_bash_guard_denies_scoped_system(self, cmd: str) -> None:
         assert _is_denied(_run_bash_guard(cmd))
+
+
+# --- Unrecognized pip global-flag ambiguity (kind propagation) ---
+# Guard-level coverage for the --proxy bypass regression lives in
+# _DIRECT_DENIED above. This directly unit-tests _is_unsafe_editable_install
+# so a fix that only teaches _find_pip_install to resolve the ambiguity,
+# without wiring that result through _classify_install_invocation and
+# _iter_install_segments to the top-level deny decision, stays caught.
+
+
+class TestPipGlobalFlagAmbiguityPropagation:
+    def test_is_unsafe_editable_install_denies_space_separated_global_value_flag(
+        self,
+    ) -> None:
+        from autoskillit.hooks.guards.unsafe_install_guard import (
+            _is_unsafe_editable_install,
+        )
+
+        assert (
+            _is_unsafe_editable_install("pip --proxy http://example.invalid install -e .") is True
+        )
+
+    def test_truly_unrecognized_pip_flag_yields_unresolved_pip_flags_kind(self) -> None:
+        """--proxy above is now correctly recognized by _PIP_GLOBAL_FLAG_SPEC
+
+        (Part C's table extension), so it never actually reaches the
+        "unresolved-pip-flags" sentinel path itself. This test isolates
+        that path directly with a flag genuinely absent from the spec
+        table, proving the propagation chain
+        _find_pip_install -> _classify_install_invocation ->
+        _iter_install_segments -> _is_unsafe_editable_install is real, not
+        a no-op that stops at _find_pip_install alone.
+        """
+        from autoskillit.hooks.guards.unsafe_install_guard import (
+            _classify_install_invocation,
+            _is_unsafe_editable_install,
+        )
+
+        segment = ["pip", "--this-pip-flag-does-not-exist", "val", "install", "-e", "."]
+        from autoskillit.hooks.guards.unsafe_install_guard import _PIP_INSTALL_UNRESOLVED
+
+        assert _classify_install_invocation(segment) == (_PIP_INSTALL_UNRESOLVED, [], [])
+        assert (
+            _is_unsafe_editable_install("pip --this-pip-flag-does-not-exist val install -e .")
+            is True
+        )
+
+
+class TestPipGlobalFlagSpecGenerativeCoverage:
+    """Generative coverage (Part D): every flag in _PIP_GLOBAL_FLAG_SPEC must
+
+    be recognized by _find_pip_install, not fall through to the
+    _PIP_INSTALL_UNRESOLVED sentinel. Parametrized directly from the spec
+    table's own keys (not a hand-maintained flag list) so this test can
+    never silently miss a flag added to the table later -- see
+    tests/arch/test_guard_flag_spec_coverage.py, which verifies this
+    parametrize genuinely iterates the full table.
+    """
+
+    @pytest.mark.parametrize("flag", sorted(_PIP_GLOBAL_FLAG_SPEC))
+    def test_every_pip_global_spec_flag_is_recognized(self, flag: str) -> None:
+        from autoskillit.hooks.guards.unsafe_install_guard import _find_pip_install
+
+        args = [flag]
+        if _PIP_GLOBAL_FLAG_SPEC[flag] == _FlagArity.VALUE:
+            args.append("someval")
+        args.append("install")
+
+        result = _find_pip_install(args)
+
+        assert result is not None
+        assert not isinstance(result, str)

@@ -3,12 +3,24 @@
 This module is the consumer of command-segment helpers defined in
 _command_classification (verb extraction, tokenizer, executable
 normalization, redirect partitioning, interpreter-spec extraction, and
-two shell-payload helpers). Each helper is imported lazily inside a thin
+two shell-payload helpers). Most of these are imported lazily inside a thin
 wrapper to defer imports past the module-load boundary — the bare-name
 _command_classification reference resolves once the sibling module is
 fully populated. The bare-name form is also required to satisfy the
 hook-script stdlib-only contract enforced by test_hooks_are_stdlib_only
 (REQ-AST-001).
+
+The quote-provenance/flag-arity primitives this module's own gh-api/curl
+analysis needs (ArgvToken, _FlagArity, _consume_argv_flag, and their
+helpers) are imported once at module scope instead, using the same
+TYPE_CHECKING/bare-name split hooks/guards/github_mutation_guard.py already
+uses for its own cross-hooks-file import of this module: they are used
+pervasively as type annotations and constructors throughout this file
+(every _analyze_gh_api/_analyze_curl_segment call site, the GraphQL
+provenance wrapping), so threading them through a per-call lazy wrapper —
+workable for the handful of simple delegating calls above — would not
+scale, and a plain sibling-module bare-name import carries no runtime cost
+either style of import doesn't already pay.
 """
 
 from __future__ import annotations
@@ -17,11 +29,32 @@ import json
 import os
 import re
 import stat
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._command_classification import (
+        ArgvToken,
+        _argv_token_after_prefix,
+        _argv_token_value_after_key,
+        _consume_argv_flag,
+        _FlagArity,
+        _select_executable_argv_tokens,
+        _verb_start_index,
+    )
+else:
+    from _command_classification import (  # noqa: E402
+        ArgvToken,
+        _argv_token_after_prefix,
+        _argv_token_value_after_key,
+        _consume_argv_flag,
+        _FlagArity,
+        _select_executable_argv_tokens,
+        _verb_start_index,
+    )
 
 
 def _command_verb_and_args(segment: Sequence[str]) -> tuple[str, list[str]]:
@@ -241,8 +274,14 @@ def _unresolved_github_analysis(
     )
 
 
-def _is_dynamic_shell_value(value: str) -> bool:
-    return bool(_DYNAMIC_SHELL_TOKEN_RE.search(value))
+def _is_dynamic_shell_value(token: ArgvToken) -> bool:
+    """A token is dynamic unless it was fully single-quoted end-to-end --
+
+    a fact provable from the raw command text independent of which
+    characters the (already-dequoted) token contains -- or its content is
+    otherwise proven inert by its own provenance (see ArgvToken).
+    """
+    return not token.fully_single_quoted and bool(_DYNAMIC_SHELL_TOKEN_RE.search(token.text))
 
 
 def _normalize_github_route(route: str) -> str:
@@ -281,16 +320,16 @@ def _json_object_without_duplicate_keys(raw: bytes) -> dict[str, Any]:
 
 
 def _load_literal_github_input(
-    value: str,
+    value: ArgvToken,
     *,
     cwd: str,
 ) -> tuple[dict[str, Any] | None, str, str]:
-    if value == "-":
+    if value.text == "-":
         return (None, "unsafe_input_provenance", "GitHub --input stdin is unresolved")
-    if not value or _is_dynamic_shell_value(value):
+    if not value.text or _is_dynamic_shell_value(value):
         return (None, "dynamic_target", "GitHub --input path is dynamic")
-    if os.path.isabs(value):
-        path = os.path.normpath(value)
+    if os.path.isabs(value.text):
+        path = os.path.normpath(value.text)
     else:
         if not cwd or not os.path.isabs(cwd):
             return (
@@ -298,7 +337,7 @@ def _load_literal_github_input(
                 "cwd_unresolved",
                 "relative GitHub --input requires an absolute cwd",
             )
-        path = os.path.normpath(os.path.join(cwd, value))
+        path = os.path.normpath(os.path.join(cwd, value.text))
 
     try:
         before = os.lstat(path)
@@ -381,36 +420,89 @@ def _comment_count_from_payload(payload: dict[str, Any]) -> tuple[int | None, st
 
 
 def _flag_value(
-    args: Sequence[str],
+    args: Sequence[ArgvToken],
     index: int,
     *,
     long_name: str,
     short_name: str | None = None,
-) -> tuple[str | None, int, bool]:
+) -> tuple[ArgvToken | None, int, bool]:
     token = args[index]
-    if token == long_name or (short_name is not None and token == short_name):
+    if token.text == long_name or (short_name is not None and token.text == short_name):
         if index + 1 >= len(args):
             return (None, index + 1, False)
+        # Space-form: the value is the next token in full -- return its own
+        # ArgvToken unmodified, full provenance already correct.
         return (args[index + 1], index + 2, True)
-    if token.startswith(f"{long_name}="):
-        return (token.split("=", 1)[1], index + 1, True)
-    if short_name and token.startswith(short_name) and token != short_name:
-        return (token[len(short_name) :], index + 1, True)
+    if token.text.startswith(f"{long_name}="):
+        # `=`-form: the value is a substring of this token, after the known
+        # `long_name=` prefix -- see _argv_token_after_prefix for how
+        # provenance is re-derived rather than inherited wholesale (a
+        # `--flag=` prefix outside any quotes does not disqualify a
+        # separately-quoted value, e.g. `--jq='.id'`).
+        value_text = token.text.split("=", 1)[1]
+        return (
+            _argv_token_after_prefix(token, f"{long_name}=", value_text),
+            index + 1,
+            True,
+        )
+    if short_name and token.text.startswith(short_name) and token.text != short_name:
+        # Bundled-short-form: same prefix-aware provenance re-derivation.
+        value_text = token.text[len(short_name) :]
+        return (
+            _argv_token_after_prefix(token, short_name, value_text),
+            index + 1,
+            True,
+        )
     return (None, index, False)
 
 
+# Complete `gh api` flag allowlist, verified against a live `gh api --help`
+# read (see tests/hooks/test_gh_api_flag_spec_contract.py, which fails the
+# suite if a future `gh` CLI adds a value-taking flag not listed here).
+# Recognizing every flag -- not just the ones _analyze_gh_api special-cases
+# for route/method extraction -- lets an unrecognized flag be denied with
+# its own distinguishable reason code instead of silently misparsed as a
+# second route (see _consume_argv_flag).
+_GH_API_FLAG_SPEC: Mapping[str, _FlagArity] = {
+    "-X": _FlagArity.VALUE,
+    "--method": _FlagArity.VALUE,
+    "--input": _FlagArity.VALUE,
+    "-F": _FlagArity.VALUE,
+    "--field": _FlagArity.VALUE,
+    "-f": _FlagArity.VALUE,
+    "--raw-field": _FlagArity.VALUE,
+    "-H": _FlagArity.VALUE,
+    "--header": _FlagArity.VALUE,
+    "--hostname": _FlagArity.VALUE,
+    "--cache": _FlagArity.VALUE,
+    "-q": _FlagArity.VALUE,
+    "--jq": _FlagArity.VALUE,
+    "-t": _FlagArity.VALUE,
+    "--template": _FlagArity.VALUE,
+    "-p": _FlagArity.VALUE,
+    "--preview": _FlagArity.VALUE,
+    "--paginate": _FlagArity.BOOLEAN,
+    "--silent": _FlagArity.BOOLEAN,
+    "-i": _FlagArity.BOOLEAN,
+    "--include": _FlagArity.BOOLEAN,
+    "--verbose": _FlagArity.BOOLEAN,
+    "-h": _FlagArity.BOOLEAN,
+    "--help": _FlagArity.BOOLEAN,
+}
+
+
 def _analyze_gh_api(
-    args: Sequence[str],
+    args: Sequence[ArgvToken],
     *,
     cwd: str,
     input_context_safe: bool,
     resolved_redirect_targets: Sequence[str],
     file_redirect_count: int,
 ) -> tuple[GitHubMutationRecord | None, str, str]:
-    method: str | None = None
-    route: str | None = None
-    input_value: str | None = None
-    field_values: list[str] = []
+    method: ArgvToken | None = None
+    route: ArgvToken | None = None
+    input_value: ArgvToken | None = None
+    field_values: list[ArgvToken] = []
     has_body_fields = False
     paginate = False
     graphql = False
@@ -418,22 +510,25 @@ def _analyze_gh_api(
 
     while i < len(args):
         token = args[i]
-        if token == "graphql" and route is None:
+        if token.text == "graphql" and route is None:
             graphql = True
-            route = "/graphql"
+            # Hardcoded literal, never shell-parsed -- provably inert by
+            # construction, not "true because we said so": no argv span
+            # exists for it to be dynamic through.
+            route = ArgvToken("/graphql", True, "'/graphql'")
             i += 1
             continue
 
         value, next_i, matched = _flag_value(args, i, long_name="--method", short_name="-X")
-        if matched or token in {"--method", "-X"}:
+        if matched or token.text in {"--method", "-X"}:
             if not matched or value is None:
                 return (None, "missing_required_value", "GitHub API method is missing")
-            method = value.upper()
+            method = value
             i = next_i
             continue
 
         value, next_i, matched = _flag_value(args, i, long_name="--input")
-        if matched or token == "--input":
+        if matched or token.text == "--input":
             if not matched or value is None:
                 return (None, "missing_required_value", "GitHub --input path is missing")
             input_value = value
@@ -449,7 +544,7 @@ def _analyze_gh_api(
             value, next_i, matched = _flag_value(
                 args, i, long_name=long_name, short_name=short_name
             )
-            if matched or token in {long_name, short_name}:
+            if matched or token.text in {long_name, short_name}:
                 if not matched or value is None:
                     return (None, "missing_required_value", f"{long_name} value is missing")
                 field_values.append(value)
@@ -460,20 +555,29 @@ def _analyze_gh_api(
         if field_match:
             continue
 
-        if token == "--paginate":
+        if token.text == "--paginate":
             paginate = True
             i += 1
             continue
-        if token in {"-H", "--header", "--hostname", "--cache"}:
-            if i + 1 >= len(args):
-                return (None, "missing_required_value", f"{token} value is missing")
-            i += 2
-            continue
-        if token.startswith(("--header=", "--hostname=", "--cache=")):
-            i += 1
-            continue
-        if token.startswith("-"):
-            i += 1
+        if token.text.startswith("-"):
+            value, next_i, recognized = _consume_argv_flag(args, i, _GH_API_FLAG_SPEC)
+            if not recognized:
+                return (
+                    None,
+                    "unrecognized_gh_api_flag",
+                    f"unrecognized gh api flag: {token.text!r}",
+                )
+            # _consume_argv_flag returns (None, i + 1, True) for both BOOLEAN
+            # arity and VALUE arity with a missing next token -- distinguish
+            # them here so a stray `-H` (no value) still surfaces as
+            # `missing_required_value` rather than silently passing.
+            if value is None and _GH_API_FLAG_SPEC.get(token.text) == _FlagArity.VALUE:
+                return (
+                    None,
+                    "missing_required_value",
+                    f"{token.text} value is missing",
+                )
+            i = next_i
             continue
         if route is None:
             route = token
@@ -507,9 +611,9 @@ def _analyze_gh_api(
         if loaded is None:
             return (None, reason_code, reason)
         input_path = (
-            os.path.normpath(input_value)
-            if os.path.isabs(input_value)
-            else os.path.normpath(os.path.join(cwd, input_value))
+            os.path.normpath(input_value.text)
+            if os.path.isabs(input_value.text)
+            else os.path.normpath(os.path.join(cwd, input_value.text))
         )
         if file_redirect_count != len(resolved_redirect_targets):
             return (
@@ -542,8 +646,12 @@ def _analyze_gh_api(
             )
         payload = loaded
 
-    effective_method = method or ("POST" if has_body_fields else "GET")
-    normalized_route = _normalize_github_route(route)
+    effective_method = (
+        method.text.upper()
+        if method is not None and method.text
+        else ("POST" if has_body_fields else "GET")
+    )
+    normalized_route = _normalize_github_route(route.text)
     if effective_method not in _GITHUB_WRITE_METHODS:
         return (None, "", "")
     if paginate:
@@ -558,23 +666,35 @@ def _analyze_gh_api(
         return (None, reason_code, reason)
 
     if graphql:
-        query = payload.get("query")
+        query: ArgvToken | None = None
+        raw_query = payload.get("query")
+        if isinstance(raw_query, str):
+            # File-content value (from --input): never shell-parsed, so
+            # quote provenance doesn't apply here -- query_from_literal_input
+            # alone is what proves this branch safe (see the skip condition
+            # below). The wrapper exists only to keep `query` uniformly
+            # typed across both assignment branches.
+            query = ArgvToken(raw_query, False, raw_query)
         if query is None and not query_from_literal_input:
             for field in field_values:
-                key, separator, value = field.partition("=")
-                if separator and key == "query":
-                    query = value
+                field_key, field_separator, _field_value_text = field.text.partition("=")
+                if field_separator and field_key == "query":
+                    # gh's `-f`/`-F key=value` syntax: `key` is a bareword,
+                    # never itself quoted, so a quoted value (the common
+                    # `-f query='...'` shape) must be re-derived from its
+                    # own raw span rather than inheriting `field`'s coarser
+                    # whole-token flag -- see _argv_token_value_after_key.
+                    query = _argv_token_value_after_key(field, field_key)
                     break
-        if not isinstance(query, str) or (
-            not query_from_literal_input and _is_dynamic_shell_value(query)
-        ):
+        if query is None or (not query_from_literal_input and _is_dynamic_shell_value(query)):
             return (None, "dynamic_target", "GraphQL mutation document is unresolved")
-        if not re.search(r"\bmutation\b", query):
+        if not re.search(r"\bmutation\b", query.text):
             return (None, "", "")
         kind = (
             GitHubMutationKind.GRAPHQL_REVIEW
             if any(
-                re.search(rf"\b{re.escape(name)}\b", query) for name in _GRAPHQL_REVIEW_MUTATIONS
+                re.search(rf"\b{re.escape(name)}\b", query.text)
+                for name in _GRAPHQL_REVIEW_MUTATIONS
             )
             else GitHubMutationKind.OTHER
         )
@@ -643,12 +763,12 @@ _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS: frozenset[str] = frozenset({"-b", "-F", "-m", 
 _GH_ISSUE_URL_RE = re.compile(r"^/[^/\s]+/[^/\s]+/issues/\d+/?$")
 
 
-def _is_static_issue_edit_target(value: str) -> bool:
-    if not value or _is_dynamic_shell_value(value):
+def _is_static_issue_edit_target(value: ArgvToken) -> bool:
+    if not value.text or _is_dynamic_shell_value(value):
         return False
-    if value.isdecimal():
+    if value.text.isdecimal():
         return True
-    parsed = urlsplit(value)
+    parsed = urlsplit(value.text)
     return bool(
         parsed.scheme in {"http", "https"}
         and parsed.netloc
@@ -656,43 +776,43 @@ def _is_static_issue_edit_target(value: str) -> bool:
     )
 
 
-def _issue_edit_request_count(args: Sequence[str]) -> tuple[int | None, str, str]:
+def _issue_edit_request_count(args: Sequence[ArgvToken]) -> tuple[int | None, str, str]:
     targets = 0
     options_ended = False
     i = 0
     while i < len(args):
         token = args[i]
-        if not options_ended and token == "--":
+        if not options_ended and token.text == "--":
             options_ended = True
             i += 1
             continue
         if not options_ended:
             if (
-                token in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS
-                or token in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
+                token.text in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS
+                or token.text in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
             ):
                 if i + 1 >= len(args):
                     return (
                         None,
                         "missing_required_value",
-                        f"gh issue edit flag {token} is missing a value",
+                        f"gh issue edit flag {token.text} is missing a value",
                     )
                 i += 2
                 continue
-            if any(token.startswith(f"{flag}=") for flag in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS):
+            if any(token.text.startswith(f"{flag}=") for flag in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS):
                 i += 1
                 continue
             if any(
-                token.startswith(flag) and token != flag
+                token.text.startswith(flag) and token.text != flag
                 for flag in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
             ):
                 i += 1
                 continue
-            if token.startswith("-"):
+            if token.text.startswith("-"):
                 return (
                     None,
                     "unsupported_grammar",
-                    f"gh issue edit flag {token} is unresolved",
+                    f"gh issue edit flag {token.text} is unresolved",
                 )
         if not _is_static_issue_edit_target(token):
             return (None, "dynamic_target", "gh issue edit target is unresolved")
@@ -730,12 +850,41 @@ _GH_READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
 
 
 def _gh_args_have_bare_help_flag(args: Sequence[str]) -> bool:
-    """Return True when -h/--help appears as its own flag, not another flag's value."""
+    """Return True when -h/--help appears as its own flag, not another flag's value.
+
+    A --help/-h token immediately following an unrecognized `-`-prefixed
+    flag (one that is neither a curated known-value flag nor --help/-h
+    itself) cannot be trusted as a bare flag -- an unrecognized flag's own
+    arity is unknown, so this token might actually be *its* value instead
+    (e.g. `gh release create v1 --notes '--help'`, where --notes is not in
+    _GH_KNOWN_VALUE_FLAGS). That occurrence is skipped rather than trusted.
+
+    This is deliberately narrower than defaulting every unrecognized flag
+    to value-taking (advance 2): doing so would also mis-skip a *known*
+    value-taking flag immediately following an unrecognized boolean one --
+    e.g. `gh pr review 5 --approve --body --help` (--approve is boolean,
+    unrecognized here; --body is a real _GH_KNOWN_VALUE_FLAGS entry whose
+    own value is the literal review-body text "--help") -- a blanket
+    advance-2 default would jump from --approve straight past --body
+    without ever separately recognizing it, corrupting the scan and
+    wrongly exempting a genuine review mutation. Scoping the fix to only
+    the --help occurrence itself keeps --body's own, already-correct
+    2-token skip intact.
+    """
     i = 0
     n = len(args)
     while i < n:
         token = args[i]
         if token in _GH_HELP_FLAGS:
+            previous = args[i - 1] if i > 0 else None
+            if (
+                previous is not None
+                and previous.startswith("-")
+                and previous not in _GH_HELP_FLAGS
+                and previous not in _GH_KNOWN_VALUE_FLAGS
+            ):
+                i += 1
+                continue
             return True
         if token in _GH_KNOWN_VALUE_FLAGS:
             i += 2
@@ -747,6 +896,7 @@ def _gh_args_have_bare_help_flag(args: Sequence[str]) -> bool:
 def _analyze_gh_segment(
     args: Sequence[str],
     *,
+    argv_args: Sequence[ArgvToken],
     cwd: str,
     input_context_safe: bool,
     resolved_redirect_targets: Sequence[str],
@@ -771,7 +921,7 @@ def _analyze_gh_segment(
             "",
         )
     if args[:2] == ["issue", "edit"]:
-        request_count, reason_code, reason = _issue_edit_request_count(args[2:])
+        request_count, reason_code, reason = _issue_edit_request_count(argv_args[2:])
         if request_count is None:
             return (None, reason_code, reason)
         return (
@@ -811,7 +961,7 @@ def _analyze_gh_segment(
     if args[0] != "api":
         return (None, "", "")
     return _analyze_gh_api(
-        args[1:],
+        argv_args[1:],
         cwd=cwd,
         input_context_safe=input_context_safe,
         resolved_redirect_targets=resolved_redirect_targets,
@@ -819,13 +969,92 @@ def _analyze_gh_segment(
     )
 
 
+# curl flag spec covering every flag _analyze_curl_segment already
+# special-cased, plus the flags named by this rectify's investigation
+# (-A/--user-agent, -b/--cookie, -c/--cookie-jar, -x/--proxy, -w/--write-out,
+# -m/--max-time, --cacert, --cert/-E, --key, --connect-timeout, --retry,
+# --resolve) and a further set of curl's most common boolean flags, verified
+# against a live `curl --help all` read. curl has hundreds of flags in
+# total; this is not exhaustive -- an unrecognized flag now fails closed
+# (see _analyze_curl_segment's catch-all) rather than being silently
+# misparsed, so this list trades some availability for the flags it omits
+# in exchange for closing the overblock-by-misparse bug shape.
+_CURL_FLAG_SPEC: Mapping[str, _FlagArity] = {
+    "-X": _FlagArity.VALUE,
+    "--request": _FlagArity.VALUE,
+    "--url": _FlagArity.VALUE,
+    "-d": _FlagArity.VALUE,
+    "--data": _FlagArity.VALUE,
+    "--data-raw": _FlagArity.VALUE,
+    "--data-binary": _FlagArity.VALUE,
+    "--data-urlencode": _FlagArity.VALUE,
+    "-F": _FlagArity.VALUE,
+    "--form": _FlagArity.VALUE,
+    "-T": _FlagArity.VALUE,
+    "--upload-file": _FlagArity.VALUE,
+    "-H": _FlagArity.VALUE,
+    "--header": _FlagArity.VALUE,
+    "-u": _FlagArity.VALUE,
+    "--user": _FlagArity.VALUE,
+    "-o": _FlagArity.VALUE,
+    "--output": _FlagArity.VALUE,
+    "-A": _FlagArity.VALUE,
+    "--user-agent": _FlagArity.VALUE,
+    "-b": _FlagArity.VALUE,
+    "--cookie": _FlagArity.VALUE,
+    "-c": _FlagArity.VALUE,
+    "--cookie-jar": _FlagArity.VALUE,
+    "-x": _FlagArity.VALUE,
+    "--proxy": _FlagArity.VALUE,
+    "-w": _FlagArity.VALUE,
+    "--write-out": _FlagArity.VALUE,
+    "-m": _FlagArity.VALUE,
+    "--max-time": _FlagArity.VALUE,
+    "--cacert": _FlagArity.VALUE,
+    "-E": _FlagArity.VALUE,
+    "--cert": _FlagArity.VALUE,
+    "--key": _FlagArity.VALUE,
+    "--connect-timeout": _FlagArity.VALUE,
+    "--retry": _FlagArity.VALUE,
+    "--resolve": _FlagArity.VALUE,
+    "-G": _FlagArity.BOOLEAN,
+    "--get": _FlagArity.BOOLEAN,
+    "--next": _FlagArity.BOOLEAN,
+    "-k": _FlagArity.BOOLEAN,
+    "--insecure": _FlagArity.BOOLEAN,
+    "-L": _FlagArity.BOOLEAN,
+    "--location": _FlagArity.BOOLEAN,
+    "-s": _FlagArity.BOOLEAN,
+    "--silent": _FlagArity.BOOLEAN,
+    "-S": _FlagArity.BOOLEAN,
+    "--show-error": _FlagArity.BOOLEAN,
+    "-v": _FlagArity.BOOLEAN,
+    "--verbose": _FlagArity.BOOLEAN,
+    "-i": _FlagArity.BOOLEAN,
+    "--include": _FlagArity.BOOLEAN,
+    "--compressed": _FlagArity.BOOLEAN,
+    "-0": _FlagArity.BOOLEAN,
+    "--http1.0": _FlagArity.BOOLEAN,
+    "--http1.1": _FlagArity.BOOLEAN,
+    "--http2": _FlagArity.BOOLEAN,
+    "-4": _FlagArity.BOOLEAN,
+    "--ipv4": _FlagArity.BOOLEAN,
+    "-6": _FlagArity.BOOLEAN,
+    "--ipv6": _FlagArity.BOOLEAN,
+    "-f": _FlagArity.BOOLEAN,
+    "--fail": _FlagArity.BOOLEAN,
+    "-g": _FlagArity.BOOLEAN,
+    "--globoff": _FlagArity.BOOLEAN,
+}
+
+
 def _analyze_curl_segment(
-    args: Sequence[str],
+    args: Sequence[ArgvToken],
 ) -> tuple[list[GitHubMutationRecord], str, str]:
-    method: str | None = None
+    method: ArgvToken | None = None
     has_data = False
     force_get = False
-    urls: list[str] = []
+    urls: list[ArgvToken] = []
     saw_next = False
     i = 0
     data_flags = (
@@ -840,24 +1069,24 @@ def _analyze_curl_segment(
     while i < len(args):
         token = args[i]
         value, next_i, matched = _flag_value(args, i, long_name="--request", short_name="-X")
-        if matched or token in {"--request", "-X"}:
+        if matched or token.text in {"--request", "-X"}:
             if not matched or value is None:
                 return ([], "missing_required_value", "curl method is missing")
-            method = value.upper()
+            method = value
             i = next_i
             continue
         value, next_i, matched = _flag_value(args, i, long_name="--url")
-        if matched or token == "--url":
+        if matched or token.text == "--url":
             if not matched or value is None:
                 return ([], "missing_required_value", "curl URL is missing")
             urls.append(value)
             i = next_i
             continue
-        if token in {"-G", "--get"}:
+        if token.text in {"-G", "--get"}:
             force_get = True
             i += 1
             continue
-        if token == "--next":
+        if token.text == "--next":
             saw_next = True
             i += 1
             continue
@@ -869,9 +1098,13 @@ def _analyze_curl_segment(
                 long_name=long_name,
                 short_name=short_name,
             )
-            if matched or token == long_name or (short_name is not None and token == short_name):
+            if (
+                matched
+                or token.text == long_name
+                or (short_name is not None and token.text == short_name)
+            ):
                 if not matched or value is None:
-                    return ([], "missing_required_value", f"{token} value is missing")
+                    return ([], "missing_required_value", f"{token.text} value is missing")
                 has_data = True
                 i = next_i
                 matched_value_flag = True
@@ -885,16 +1118,33 @@ def _analyze_curl_segment(
                 long_name=long_name,
                 short_name=short_name,
             )
-            if matched or token == long_name or token == short_name:
+            if matched or token.text == long_name or token.text == short_name:
                 if not matched or value is None:
-                    return ([], "missing_required_value", f"{token} value is missing")
+                    return ([], "missing_required_value", f"{token.text} value is missing")
                 i = next_i
                 matched_value_flag = True
                 break
         if matched_value_flag:
             continue
-        if token.startswith("-"):
-            i += 1
+        if token.text.startswith("-"):
+            value, next_i, recognized = _consume_argv_flag(args, i, _CURL_FLAG_SPEC)
+            if not recognized:
+                return (
+                    [],
+                    "unrecognized_curl_flag",
+                    f"unrecognized curl flag: {token.text!r}",
+                )
+            # _consume_argv_flag returns (None, i + 1, True) for both BOOLEAN
+            # arity and VALUE arity with a missing next token -- distinguish
+            # them here so a stray `-A`/`--proxy` (no value) surfaces as
+            # `missing_required_value` rather than silently passing.
+            if value is None and _CURL_FLAG_SPEC.get(token.text) == _FlagArity.VALUE:
+                return (
+                    [],
+                    "missing_required_value",
+                    f"{token.text} value is missing",
+                )
+            i = next_i
             continue
         urls.append(token)
         i += 1
@@ -905,12 +1155,16 @@ def _analyze_curl_segment(
         return ([], "dynamic_target", "curl URL is dynamic")
     github_urls = []
     for url in urls:
-        hostname = urlsplit(url).hostname
+        hostname = urlsplit(url.text).hostname
         if hostname is not None and hostname.lower() in {"api.github.com", "github.com"}:
             github_urls.append(url)
     if not github_urls:
         return ([], "", "")
-    effective_method = method or ("GET" if force_get else ("POST" if has_data else "GET"))
+    effective_method = (
+        method.text.upper()
+        if method is not None and method.text
+        else ("GET" if force_get else ("POST" if has_data else "GET"))
+    )
     if effective_method not in _GITHUB_WRITE_METHODS:
         return ([], "", "")
     if saw_next or len(github_urls) != 1 or len(urls) != 1:
@@ -919,7 +1173,7 @@ def _analyze_curl_segment(
             "request_cardinality_unresolved",
             "curl mutation request count is indeterminate",
         )
-    route = urlsplit(github_urls[0]).path or "/"
+    route = urlsplit(github_urls[0].text).path or "/"
     return (
         [
             GitHubMutationRecord(
@@ -961,12 +1215,24 @@ def _analyze_github_segment(
     input_context_safe: bool = True,
     resolved_redirect_targets: Sequence[str] = (),
     file_redirect_count: int = 0,
+    argv_tokens: Sequence[ArgvToken] | None = None,
 ) -> tuple[list[GitHubMutationRecord], str, str]:
     verb, args = _command_verb_and_args(list(segment))
     executable = _normalize_executable_call(verb)
+    if argv_tokens is None:
+        # Argv-payload segments (e.g. a parsed `subprocess.run([...])` list)
+        # are Python literal tokens that never passed through shell parsing
+        # at all -- no shell metacharacter interpretation is possible, so
+        # they are provably inert by construction, not a fabricated default.
+        argv_tokens = [ArgvToken(t, True, t) for t in segment]
+    argv_args: list[ArgvToken] = []
+    start = _verb_start_index(list(segment))
+    if start is not None:
+        argv_args = list(argv_tokens[start + 1 :])
     if executable == "gh":
         record, reason_code, reason = _analyze_gh_segment(
             args,
+            argv_args=argv_args,
             cwd=_segment_cwd(segment, cwd),
             input_context_safe=input_context_safe,
             resolved_redirect_targets=resolved_redirect_targets,
@@ -974,7 +1240,7 @@ def _analyze_github_segment(
         )
         return (([record] if record is not None else []), reason_code, reason)
     if executable == "curl":
-        return _analyze_curl_segment(args)
+        return _analyze_curl_segment(argv_args)
     return ([], "", "")
 
 
@@ -1032,6 +1298,12 @@ def analyze_github_mutations(
                     redirect_syntax=command_segment.redirect_syntax,
                 )
             )
+            executable_argv_tokens = _select_executable_argv_tokens(
+                raw_segment,
+                command_segment.argv_tokens,
+                cwd=current_cwd,
+                redirect_syntax=command_segment.redirect_syntax,
+            )
             active_redirect_targets = outer_redirect_targets + tuple(redirect_targets)
             active_file_redirect_count = outer_file_redirect_count + file_redirect_count
             segment_cwd = _segment_cwd(executable_tokens, current_cwd)
@@ -1047,7 +1319,13 @@ def analyze_github_mutations(
             verb, args = _command_verb_and_args(executable_tokens)
             if _normalize_executable_call(verb) == "cd":
                 input_context_safe = input_context_safe and file_redirect_count == 0
-                if len(args) != 1 or _is_dynamic_shell_value(args[0]):
+                # _verb_start_index has been determined to be non-None by
+                # command_verb_and_args above (same list, same algorithm), so
+                # this slice is always taken from the verb+1 position.
+                cd_start = _verb_start_index(executable_tokens)
+                assert cd_start is not None  # implied by verb == "cd" above
+                cd_argv_args = executable_argv_tokens[cd_start + 1 :]
+                if len(args) != 1 or _is_dynamic_shell_value(cd_argv_args[0]):
                     reasons.append(("cwd_unresolved", "shell cwd transition is unresolved"))
                 elif os.path.isabs(args[0]):
                     current_cwd = os.path.normpath(args[0])
@@ -1064,6 +1342,7 @@ def analyze_github_mutations(
                 input_context_safe=input_context_safe,
                 resolved_redirect_targets=active_redirect_targets,
                 file_redirect_count=active_file_redirect_count,
+                argv_tokens=executable_argv_tokens,
             )
             records.extend(found)
             if reason:

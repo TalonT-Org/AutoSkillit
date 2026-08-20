@@ -17,6 +17,8 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    _PIP_GLOBAL_FLAG_SPEC,
+    _consume_str_flag,
     command_verb_and_args,
     extract_interpreter_command_payloads,
     extract_shell_command_payloads,
@@ -26,6 +28,13 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
 UNSAFE_INSTALL_DENY_TRIGGER: str = "Blocked: editable install without --python .venv"
+
+# Sentinel _find_pip_install returns when an unrecognized global pip flag is
+# encountered before `install` could be confirmed either way -- distinguishable
+# from a bare None ("definitely not pip install") so callers can't collapse
+# "ambiguous" into "not pip install" and silently skip an unsafe install
+# (see _classify_install_invocation's "unresolved-pip-flags" kind).
+_PIP_INSTALL_UNRESOLVED = "<unresolved-pip-flags>"
 
 
 def _basename_lower(token: str) -> str:
@@ -97,8 +106,19 @@ def _is_editable_marker(token: str) -> bool:
     )
 
 
-def _find_pip_install(args: list[str]) -> tuple[list[str], list[str]] | None:
-    """Find `pip install` in *args* and return (pre_install, post_install)."""
+def _find_pip_install(
+    args: list[str],
+) -> tuple[list[str], list[str]] | str | None:
+    """Find `pip install` in *args* and return (pre_install, post_install).
+
+    Returns None when this is definitely not a pip-install invocation (no
+    `install` token found after only recognized global flags). Returns the
+    _PIP_INSTALL_UNRESOLVED sentinel when an unrecognized global pip flag
+    is encountered first -- an unrecognized flag's value would otherwise be
+    misread as the `install` token position never being reached, silently
+    treating the command as "not a pip install" (see
+    _classify_install_invocation).
+    """
     i = 0
     while i < len(args):
         token = args[i]
@@ -106,15 +126,10 @@ def _find_pip_install(args: list[str]) -> tuple[list[str], list[str]] | None:
             i += 1
             break
         if token.startswith("-"):
-            if "=" in token:
-                i += 1
-                continue
-            if token in {"-r", "-c", "-t", "-b", "--requirement", "--constraint"} and i + 1 < len(
-                args
-            ):
-                i += 2
-                continue
-            i += 1
+            _, next_i, recognized = _consume_str_flag(args, i, _PIP_GLOBAL_FLAG_SPEC)
+            if not recognized:
+                return _PIP_INSTALL_UNRESOLVED
+            i = next_i
             continue
         break
     if i >= len(args) or args[i] != "install":
@@ -133,6 +148,10 @@ def _classify_install_invocation(
     - python / python3 / python3.X -m pip install ...
     - maturin develop ...
     Returns None when the segment is not a matching install invocation.
+    An unrecognized global pip flag yields ("unresolved-pip-flags", [], [])
+    rather than None -- propagated through _iter_install_segments the same
+    way "unresolved-subprocess" already is, and treated as an unconditional
+    deny by _is_unsafe_editable_install.
     """
     verb, args = command_verb_and_args(segment)
     if not verb:
@@ -141,6 +160,8 @@ def _classify_install_invocation(
         match = _find_pip_install(args)
         if match is None:
             return None
+        if isinstance(match, str):
+            return (_PIP_INSTALL_UNRESOLVED, [], [])
         install_args, post_install = match
         return ("pip", install_args, post_install)
     if _is_uv_executable(verb):
@@ -149,6 +170,8 @@ def _classify_install_invocation(
         match = _find_pip_install(args[1:])
         if match is None:
             return None
+        if isinstance(match, str):
+            return (_PIP_INSTALL_UNRESOLVED, [], [])
         install_args, post_install = match
         return ("uv-pip", install_args, post_install)
     if _is_python_executable(verb):
@@ -157,6 +180,8 @@ def _classify_install_invocation(
         match = _find_pip_install(args[2:])
         if match is None:
             return None
+        if isinstance(match, str):
+            return (_PIP_INSTALL_UNRESOLVED, [], [])
         install_args, post_install = match
         return ("module-pip", install_args, post_install)
     if _is_maturin_executable(verb):
@@ -214,8 +239,10 @@ def _is_unsafe_editable_install(cmd: str) -> bool:
     for kind, _install_args, post_install in _iter_install_segments(cmd):
         if kind == "maturin":
             return True
-        if kind == "unresolved-subprocess":
-            # A matching process-launch call could not be statically resolved.
+        if kind in ("unresolved-subprocess", _PIP_INSTALL_UNRESOLVED):
+            # A matching process-launch call could not be statically resolved,
+            # or an unrecognized global pip flag made the install-args split
+            # ambiguous -- both fail closed the same way.
             return True
         if any(_is_editable_marker(t) for t in post_install):
             python_target = _python_target_value(post_install)

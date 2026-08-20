@@ -625,6 +625,7 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
         "exploration_request_identity_guard.py",
         "git_ops_guard.py",
         "pr_create_guard.py",
+        "unsafe_install_guard.py",
     }
 )
 

@@ -19,6 +19,12 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.hooks.guards.git_ops_guard import (
+    _GIT_FETCH_FLAG_SPEC,
+    _classify_fetch,
+    _FlagArity,
+)
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _TOOL_NAME = "mcp__autoskillit__local__autoskillit__run_cmd"
@@ -203,6 +209,30 @@ class TestGitPushForceDenied:
     def test_denies_full_path_git_push_force(self, tmp_path):
         out = _run_guard("/usr/local/bin/git push --force", kitchen_open=True, tmpdir=tmp_path)
         assert _is_denied(out)
+
+    def test_denies_push_force_with_unresolved_global_flag(self, tmp_path: Path) -> None:
+        """Defense regression for _contains_blocked_git_op's <unresolved>
+
+        short-circuit (git_ops_guard.py:206). An unrecognized git global
+        flag (`--attr-source` -- a genuine git option not yet enumerated in
+        _GIT_GLOBAL_FLAG_SPEC) before `push --force` makes
+        extract_git_subcommand_and_flags return ("<unresolved>", ...). The
+        short-circuit at git_ops_guard.py:206 then must deny unconditionally
+        via the fail-closed sentinel; without it, the sentinel would not
+        match any literal entry in _BLOCKED_GIT_OPS and the destructive
+        `push --force` would slip through undetected.
+        """
+        out = _run_guard(
+            "git --attr-source foo push --force",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert _is_denied(out)
+        data = json.loads(out)
+        reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+        # Distinguish from the checked-out-ref denial (TestCheckedOutRef*)
+        # and from a no-op exit: this path uses GIT_OPS_DENY_TRIGGER.
+        assert "destructive" in reason.lower() or "blocked" in reason.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -660,6 +690,32 @@ class TestCheckedOutRefMutations:
         assert any(row["target_ref"] == "refs/heads/develop" for row in threatened)
         _assert_ref_unchanged(linked, "refs/heads/develop", str(linked_repo["old_sha"]))
 
+    def test_denies_fetch_with_unrecognized_value_flag_space_separated(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        """--negotiation-tip <rev> in space-separated form (NOT --flag=value,
+        which is a single self-contained shlex token) previously fell through
+        _classify_fetch's flag parsing as unrecognized, so its value was
+        appended to `positional` and misread as the remote name. The wrong
+        remote.<name>.fetch lookup returned nothing, mappings stayed empty,
+        and the fetch passed through unclassified. See _GIT_FETCH_FLAG_SPEC.
+        """
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        old_sha = str(linked_repo["old_sha"])
+        out = _run_guard(
+            f"git fetch origin --negotiation-tip {old_sha} "
+            "+refs/remotes/origin/develop:refs/heads/develop",
+            kitchen_open=True,
+            tmpdir=linked,
+        )
+        assert _is_denied(out)
+        result = _checked_out_ref_result(out)
+        threatened = result["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert any(row["target_ref"] == "refs/heads/develop" for row in threatened)
+        _assert_ref_unchanged(linked, "refs/heads/develop", old_sha)
+
     @pytest.mark.parametrize(
         ("relative_target", "command_builder"),
         [
@@ -708,6 +764,67 @@ class TestCheckedOutRefAmbiguity:
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
         out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out)
+        result = _checked_out_ref_result(out)
+        refs = result["threatened_refs"]
+        assert isinstance(refs, list)
+        assert {row["target_ref"] for row in refs} >= {
+            "refs/heads/develop",
+            "refs/heads/review",
+        }
+        assert all(row["old_sha"] == linked_repo["old_sha"] for row in refs)
+
+    def test_literal_asterisk_in_value_is_recognized_as_dynamic(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        # Regression test: the shared _DYNAMIC_SHELL_TOKEN_RE (imported from
+        # _github_mutation_analysis.py) must include `*`. The guard previously
+        # defined its own local _DYNAMIC_TOKEN_RE for this preflight that
+        # omitted `*`, so a start-point value containing a literal `*` (a
+        # shell-glob-expandable character) was NOT recognized as dynamic and
+        # could slip through as if it were a resolvable literal ref. It must
+        # instead be treated as unresolved/ambiguous, matching the $TARGET
+        # case above.
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard("git branch -f develop br*nch", kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out)
+        result = _checked_out_ref_result(out)
+        refs = result["threatened_refs"]
+        assert isinstance(refs, list)
+        assert {row["target_ref"] for row in refs} >= {
+            "refs/heads/develop",
+            "refs/heads/review",
+        }
+        assert all(row["old_sha"] == linked_repo["old_sha"] for row in refs)
+
+    def test_unresolved_global_flag_before_subcommand_fails_closed_for_all_owners(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        # Regression test: extract_git_subcommand_and_flags() must return
+        # ("<unresolved>", []) -- not silently misparse -- when a real git
+        # global flag outside the guard's recognized _GIT_GLOBAL_FLAG_SPEC
+        # appears in space-separated form before the subcommand.
+        # --attr-source=<tree-ish> is a genuine git global option (see
+        # `git help git`'s OPTIONS section; `git --attr-source foo status`
+        # runs status normally, proving git itself consumes "foo" as the
+        # flag's value, not a subcommand) that the guard's flag spec does
+        # not recognize. The prior parser advanced its cursor by exactly
+        # one token for any unrecognized `-`-prefixed token, so the flag's
+        # *value* token ("foo") was misread as the subcommand itself: `git
+        # --attr-source foo branch -f develop start` classified
+        # subcommand="foo", which matched none of _classify_git_segment's
+        # dispatch branches, so the real `branch -f` mutation was never
+        # classified at all and slipped through undetected. It must
+        # instead be treated as unresolved/ambiguous, matching the
+        # $TARGET and asterisk cases above.
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard(
+            "git --attr-source foo branch -f develop start",
+            kitchen_open=True,
+            tmpdir=linked,
+        )
         assert _is_denied(out)
         result = _checked_out_ref_result(out)
         refs = result["threatened_refs"]
@@ -821,3 +938,47 @@ class TestCheckedOutRefPreflightOrdering:
         )
         assert _is_denied(out)
         _checked_out_ref_result(out)
+
+
+# ---------------------------------------------------------------------------
+# Spec table coverage: every entry in _GIT_FETCH_FLAG_SPEC must be recognized
+# by _classify_fetch's spec-driven consume loop. Parametrized directly from
+# the table's own keys so a future flag added to the spec extends coverage
+# automatically. Registered with test_guard_flag_spec_coverage.py via
+# _SPEC_TABLE_TEST_FILES so the standing-invariant AST scanner confirms the
+# parametrize genuinely iterates the table rather than a hand-copied list.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("flag", sorted(_GIT_FETCH_FLAG_SPEC))
+def test_every_git_fetch_spec_flag_is_recognized(flag: str) -> None:
+    """Generative coverage (Part D): every flag in _GIT_FETCH_FLAG_SPEC must be
+
+    recognized by _classify_fetch rather than misread as the remote/refspec
+    positional. An unrecognized flag's value would have been misclassified as
+    the fetch's remote URL and silently passed the destructive-op preflight;
+    that must not happen for any spec member.
+
+    --stdin is intentionally short-circuited by _classify_fetch's first
+    special case (it makes destinations ambiguous by design, independent of
+    spec-table recognition), so we assert the SPECIFIC ambiguous result shape
+    for it rather than the generic non-unresolved invariant.
+    """
+    args = [flag]
+    if _GIT_FETCH_FLAG_SPEC[flag] == _FlagArity.VALUE:
+        args.append("someval")
+    args.append("origin")
+
+    result = _classify_fetch(args, cwd="/tmp", owned_refs=[])
+
+    if flag == "--stdin":
+        # --stdin is special-cased at the top of _classify_fetch to return the
+        # ambiguous-deny idiom; the spec table entry exists so the generic
+        # consume loop doesn't misread it as a positional remote, not because
+        # the function's downstream logic actually consumes it.
+        assert result == [("", "<unresolved>", True)]
+    else:
+        # Any presence of an `<unresolved>` entry from the consume loop
+        # means the flag was NOT recognized -- the precise failure mode the
+        # spec table is supposed to prevent.
+        assert not any(entry[1] == "<unresolved>" for entry in result)

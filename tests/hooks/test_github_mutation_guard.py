@@ -9,6 +9,12 @@ from pathlib import Path
 
 import pytest
 
+from ._flag_form_matrix import (
+    GRAPHQL_DELIVERY_MATRIX,
+    GRAPHQL_MATRIX_CONTENT_BODIES,
+    deliver_graphql_document,
+    graphql_delivery_is_inherently_safe,
+)
 from .conftest import _RUN_CMD_TOOL_DIRECT, make_hook_event
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -664,6 +670,114 @@ def test_unresolved_mutation_denies_with_unresolved_mutation_reason(
     assert "dynamic_target" in reason
     assert "$OWNER" not in reason
     assert "GitHub API route is dynamic" not in reason
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_previously_unrecognized_gh_api_flags_no_longer_deny_at_guard_level(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """AC1 reproduction at the guard level: --jq used to shift its own value
+
+    into the route slot, tripping a false request_cardinality_unresolved deny.
+    """
+    command = "gh api /repos/o/r/issues -f title=Bug --jq .id"
+
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) != "deny"
+
+
+def test_unrecognized_gh_api_flag_denies_with_a_distinguishable_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command="gh api /repos/o/r/issues --this-flag-does-not-exist zzz",
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "unresolved_mutation" in reason
+    assert "unrecognized_gh_api_flag" in reason
+    assert "request_cardinality_unresolved" not in reason
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_fully_single_quoted_graphql_document_is_not_denied_as_dynamic(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """AC2/AC3 reproduction at the guard level: a fully single-quoted GraphQL
+
+    mutation document legitimately containing `$`/`[` must not be denied.
+    """
+    command = (
+        "gh api graphql -f query='mutation($id: ID!) "
+        "{ addLabels(labelIds: [$id]) { clientMutationId } }'"
+    )
+
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) != "deny"
+
+
+def test_unquoted_graphql_command_substitution_remains_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """AC4 regression pin at the guard level: identical-shaped content with a
+
+    real, unquoted command-substitution fragment must remain denied.
+    """
+    event = make_hook_event(
+        tool="Bash",
+        command=(
+            'gh api graphql -f query="mutation($id: ID!) '
+            '{ addLabels(labelIds: [`whoami`]) { clientMutationId } }"'
+        ),
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "dynamic_target" in reason
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+@pytest.mark.parametrize("delivery", GRAPHQL_DELIVERY_MATRIX)
+def test_graphql_delivery_matrix_decision_matches_classification(
+    delivery: str,
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """REQ-065: every GRAPHQL_DELIVERY_MATRIX form reaches a guard-level deny
+
+    decision that matches analyze_github_mutations's own per-delivery
+    resolution (see the exhaustive delivery x content matrix in
+    test_command_classification.py::TestAnalyzeGitHubMutations) -- filling
+    the one delivery form ("inline-unquoted") neither of this file's two
+    named GraphQL regression tests above happens to exercise. Content is
+    fixed at "dollar-variable" (the two tests above already separately pin
+    "plain"-via-single-quote and "command-substitution"-via-double-quote);
+    the full 16-cell delivery x content cross product is exhaustively
+    checked once, at the classification layer, not duplicated here -- this
+    test only proves the guard's own decision wiring surfaces that result.
+    """
+    content_body = GRAPHQL_MATRIX_CONTENT_BODIES["dollar-variable"]
+    command = deliver_graphql_document(delivery, content_body, tmp_path)
+
+    decision = _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch)
+
+    if graphql_delivery_is_inherently_safe(delivery, "dollar-variable"):
+        assert decision != "deny"
+    else:
+        assert decision == "deny"
 
 
 def test_deny_messages_mapping_is_exhaustive() -> None:

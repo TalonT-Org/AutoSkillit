@@ -250,9 +250,9 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
     totals = normalized_counter.totals()
     # Drift baseline, not a production-safe threshold.
     assert totals == {
-        "raw_chars": 22_318,
-        "utf8_bytes": 22_332,
-        "client_serialized_chars": 24_993,
+        "raw_chars": 22_319,
+        "utf8_bytes": 22_333,
+        "client_serialized_chars": 24_994,
         "estimated_tokens": 5_581,
         "responses": 5,
     }

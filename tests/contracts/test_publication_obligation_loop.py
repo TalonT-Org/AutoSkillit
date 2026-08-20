@@ -485,6 +485,10 @@ def test_expected_version_present_uses_full_verification(
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
     }
+    probe_cwd = captured_kwargs[0]["cwd"]
+    assert probe_cwd == captured_kwargs[1]["cwd"]
+    assert isinstance(probe_cwd, Path)
+    assert probe_cwd.is_relative_to(home / ".autoskillit")
 
 
 def test_mismatched_generation_identity_keeps_obligation(

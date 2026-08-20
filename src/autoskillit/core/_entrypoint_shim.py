@@ -41,6 +41,7 @@ autoskillit version, so it cannot import the autoskillit package itself.
 import os
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 _SELECTOR = (
     Path.home()
@@ -51,7 +52,7 @@ _SELECTOR = (
 )
 
 
-def _die(message: str) -> None:
+def _die(message: str) -> NoReturn:
     sys.stderr.write(f"autoskillit: {message}\\n")
     sys.exit(1)
 
@@ -62,16 +63,13 @@ def main() -> None:
             f"no install-root generation selector at {_SELECTOR}. "
             "Reinstall via install.sh (stable) or 'task install-dev' (develop)."
         )
-        return
     try:
         generation_dir = _SELECTOR.resolve(strict=True)
     except OSError as exc:
         _die(f"could not resolve install-root generation selector: {exc}")
-        return
     inner = generation_dir / "autoskillit" / "bin" / "autoskillit"
     if not os.access(inner, os.X_OK):
         _die(f"resolved install-root generation has no executable entrypoint: {inner}")
-        return
     os.execv(str(inner), [str(inner), *sys.argv[1:]])
 
 

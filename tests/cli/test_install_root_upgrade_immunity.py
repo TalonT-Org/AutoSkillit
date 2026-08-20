@@ -469,21 +469,27 @@ def test_install_detection_survives_versioned_roots(tmp_path: Path, fake_git_sou
 
     probe = (
         "import json, importlib.metadata as m\n"
-        "d = m.Distribution.from_name('faketool')\n"
-        "raw = d.read_text('direct_url.json')\n"
-        "print(raw)\n"
+        "real_from_name = m.Distribution.from_name\n"
+        "m.Distribution.from_name = lambda name: real_from_name('faketool') "
+        "if name == 'autoskillit' else real_from_name(name)\n"
+        "from autoskillit.cli.install._install_info import detect_install\n"
+        "info = detect_install()\n"
+        "print(json.dumps({'install_type': info.install_type.value, "
+        "'commit_id': info.commit_id, 'requested_revision': info.requested_revision, "
+        "'url': info.url}))\n"
     )
     result = subprocess.run(
         [str(inner_python), "-c", probe],
         capture_output=True,
         text=True,
         timeout=15,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[2] / "src")},
     )
     assert result.returncode == 0, result.stderr
     import json
 
     payload = json.loads(result.stdout)
-    assert payload["vcs_info"]["vcs"] == "git"
-    assert payload["vcs_info"]["commit_id"]
-    assert payload["vcs_info"]["requested_revision"] == "main"
+    assert payload["install_type"] == "git-vcs"
+    assert payload["commit_id"]
+    assert payload["requested_revision"] == "main"
     assert payload["url"] == f"file://{fake_git_source}"

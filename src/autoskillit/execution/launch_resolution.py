@@ -22,6 +22,7 @@ from autoskillit.core import (
     ResolvedLaunchContract,
     SecretEnvironmentBinding,
     SemanticLaunchPlan,
+    strip_context_window_suffix,
 )
 
 __all__ = ["DefaultLaunchResolver"]
@@ -170,6 +171,17 @@ class DefaultLaunchResolver:
                 )
             fallback_routes.append(replace(route, backend=route_backend))
 
+        for model_value, model_source in (
+            (request.configured_model, request.configured_model_source),
+            (request.requested_model, request.requested_model_source),
+        ):
+            self._reject_backend_foreign_model(
+                model_value,
+                model_source,
+                selected_backend=selected_backend,
+                authority_key_path=selected_candidate.key_path,
+            )
+
         return LaunchPreparation(
             surface=request.surface,
             selected_backend=selected_backend,
@@ -279,6 +291,38 @@ class DefaultLaunchResolver:
 
         backend = self._canonical_backend(authority.backend, key_path=authority.key_path)
         return get_backend(backend)
+
+    @staticmethod
+    def _native_model_owners(model: str) -> tuple[str, ...]:
+        """Backends declaring ``model`` as one of their own native ids."""
+        from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
+
+        base = strip_context_window_suffix(model)
+        return tuple(
+            name
+            for name in sorted(BACKEND_REGISTRY)
+            if base in get_backend(name).capabilities.native_model_ids
+        )
+
+    def _reject_backend_foreign_model(
+        self,
+        model: str | None,
+        source: LaunchValueSource,
+        *,
+        selected_backend: str,
+        authority_key_path: str,
+    ) -> None:
+        if not model:
+            return
+        owners = self._native_model_owners(model)
+        if not owners or selected_backend in owners:
+            return
+        raise LaunchContractError(
+            f"model {model!r} resolved from {source.key_path} is native to backend "
+            f"{'/'.join(owners)}, but backend authority {authority_key_path} selected "
+            f"{selected_backend!r}; pin the backend and the model to the same target — "
+            f"a model may never change the selected backend"
+        )
 
     @staticmethod
     def _require_equal(field_name: str, expected: object, observed: object) -> None:

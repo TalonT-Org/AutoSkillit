@@ -57,13 +57,13 @@ from autoskillit.execution.headless._headless_helpers import (
     PostSessionMetrics,
     _compute_post_session_metrics,  # noqa: F401
     _derive_step_name_from_skill_command,
-    _resolve_model,  # noqa: F401
     _resolve_pty_mode,  # noqa: F401
     _resolve_session_log_dir,  # noqa: F401
     _session_log_dir,  # noqa: F401
     _stat_snapshot,  # noqa: F401
     assert_interactive_ordering,
     resolve_model_identity,
+    resolve_model_pin,
 )
 from autoskillit.execution.headless._headless_launch import (
     _NUDGE_TIMEOUT,  # noqa: F401
@@ -197,13 +197,10 @@ async def run_headless_core(
         skill_command=original_skill_command[:SKILL_COMMAND_DISPLAY_MAX],
         step_name=step_name or None,
     ):
-        model_identity = resolve_model_identity(
-            model,
-            ctx.config,
-            step_name=step_name,
-            recipe_name=recipe_name,
-            profile_name=profile_name,
+        model_pin = resolve_model_pin(
+            model, ctx.config, step_name=step_name, recipe_name=recipe_name
         )
+        model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
         add_dirs_tuple = tuple(add_dirs)
         if backend_authority is None:
             if ctx.backend is None:
@@ -290,11 +287,15 @@ async def run_headless_core(
             arguments=(),
             cwd=cwd,
             requested_model=model or None,
-            requested_model_source=authority_source if model else default_source,
+            requested_model_source=(
+                LaunchValueSource(LaunchValueSourceKind.CALLER, "run_skill.model")
+                if model
+                else default_source
+            ),
             configured_model=model_identity.configured_model or None,
-            configured_model_source=authority_source
-            if model_identity.configured_model
-            else default_source,
+            configured_model_source=(
+                model_pin.source if model_identity.configured_model else default_source
+            ),
             effort=None,
             effort_source=default_source,
             sandbox_mode="pending-adapter",

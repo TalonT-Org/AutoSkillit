@@ -339,6 +339,12 @@ def test_backend_module_all_exhaustive():
     }
 
 
+def test_native_model_ids_defaults_to_empty_frozenset():
+    from autoskillit.core import BackendCapabilities
+
+    assert BackendCapabilities().native_model_ids == frozenset()
+
+
 def test_backend_conventions_frozen_slots_fields():
     import typing
     from dataclasses import FrozenInstanceError

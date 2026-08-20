@@ -19,7 +19,9 @@ NEW_HEADLESS_MODULES = [
 ]
 HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 550,
-    "headless/_headless_helpers.py": 220,
+    # #4238 threads typed model provenance: each resolution tier now returns a
+    # ModelPinResolution carrying its own LaunchValueSource key path.
+    "headless/_headless_helpers.py": 270,
     # #4233 threads backend resume identity and the skill-only lifecycle enable flag.
     # #4659 rectify: the agent-teams opt-in must be read here from the same config
     # authority the spec builders use, or adapter_digest and the spec field diverge.
@@ -96,7 +98,7 @@ def test_headless_facade_does_not_define_helpers():
         "def _session_log_dir",
         "def _resolve_pty_mode",
         "def _resolve_session_log_dir",
-        "def _resolve_model",
+        "def resolve_model_pin",
         "def _derive_step_name_from_skill_command",
         "def _stat_snapshot",
         "class PostSessionMetrics",

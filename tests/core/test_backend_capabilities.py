@@ -124,6 +124,7 @@ def test_backend_capabilities_field_count():
         "mcp_env_forward_vars",
         "write_guard_tool_names",
         "process_name_aliases",
+        "native_model_ids",
     }
     assert str_fields == {
         "min_version",
@@ -200,6 +201,7 @@ def test_backend_capabilities_field_names_locked():
         "recipe_delivery_budget",
         "hook_trust_policy",
         "fixed_set_join_capable",
+        "native_model_ids",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected

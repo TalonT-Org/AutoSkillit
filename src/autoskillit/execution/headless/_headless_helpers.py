@@ -12,7 +12,10 @@ from autoskillit.core import (
     ClaudeFlags,
     CmdSpec,
     CodingAgentBackend,
+    LaunchValueSource,
+    LaunchValueSourceKind,
     ModelIdentity,
+    ModelPinResolution,
     SkillResult,
     get_logger,
 )
@@ -112,52 +115,68 @@ def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | No
     return _session_log_dir(cwd, backend)
 
 
-def _resolve_model(
+def resolve_model_pin(
     step_model: str,
     config: AutomationConfig,
     *,
     step_name: str = "",
     recipe_name: str = "",
-) -> str | None:
+) -> ModelPinResolution:
     if config.model.model_override:
         logger.debug("model_resolved", tier="override", model=config.model.model_override)
-        return config.model.model_override
+        return ModelPinResolution(
+            config.model.model_override,
+            LaunchValueSource(LaunchValueSourceKind.GLOBAL, "model.model_override"),
+        )
     if recipe_name and step_name:
         recipe_model = config.model.recipe_overrides.get(recipe_name, {}).get(step_name)
         if recipe_model:
             logger.debug("model_resolved", tier="recipe_override", model=recipe_model)
-            return recipe_model
+            return ModelPinResolution(
+                recipe_model,
+                LaunchValueSource(
+                    LaunchValueSourceKind.RECIPE,
+                    f"model.recipe_overrides.{recipe_name}.{step_name}",
+                ),
+            )
     if step_name:
         step_override = config.model.step_overrides.get(step_name)
         if step_override:
             logger.debug("model_resolved", tier="step_override", model=step_override)
-            return step_override
+            return ModelPinResolution(
+                step_override,
+                LaunchValueSource(LaunchValueSourceKind.STEP, f"model.step_overrides.{step_name}"),
+            )
     if step_model:
         logger.debug("model_resolved", tier="step", model=step_model)
-        return step_model
+        return ModelPinResolution(
+            step_model,
+            LaunchValueSource(LaunchValueSourceKind.CALLER, "run_skill.model"),
+        )
     if config.model.default_model:
         logger.debug("model_resolved", tier="default", model=config.model.default_model)
-        return config.model.default_model
+        return ModelPinResolution(
+            config.model.default_model,
+            LaunchValueSource(LaunchValueSourceKind.DEFAULT, "model.default_model"),
+        )
     logger.debug("model_resolved", tier="none", model=None)
-    return None
+    return ModelPinResolution(
+        "", LaunchValueSource(LaunchValueSourceKind.DEFAULT, "run_skill.defaults")
+    )
 
 
 def resolve_model_identity(
-    step_model: str,
-    config: AutomationConfig,
+    pin: ModelPinResolution,
     *,
-    step_name: str = "",
-    recipe_name: str = "",
     profile_name: str = "",
 ) -> ModelIdentity:
-    """Wrap _resolve_model() with provider awareness.
+    """Wrap resolve_model_pin() with provider awareness.
 
     For non-Anthropic providers, effective_model is left empty so the downstream
     argmax fallback in flush_session_log fires and extracts the real provider model
     from model_breakdown.
     """
-    resolved = _resolve_model(step_model, config, step_name=step_name, recipe_name=recipe_name)
-    configured = resolved or ""
+    configured = pin.model
     if profile_name and profile_name != "anthropic":
         return ModelIdentity.for_provider(
             configured=configured, effective="", profile=profile_name

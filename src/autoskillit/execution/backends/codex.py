@@ -24,6 +24,7 @@ from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     CODEX_MODEL_ALIASES,
     CODEX_SESSIONS_SUBDIR,
+    CODEX_VALID_MODEL_IDS,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
@@ -276,6 +277,7 @@ class CodexBackend(BackendCmdBuilderBase):
             recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
             fixed_set_join_capable=False,
+            native_model_ids=CODEX_VALID_MODEL_IDS,
         )
 
     @property

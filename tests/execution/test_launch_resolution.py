@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.core import (
     CANONICAL_LAUNCH_DIGEST_FIELDS,
+    CODEX_VALID_MODEL_IDS,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -28,6 +29,7 @@ from autoskillit.core import (
     SkillProjectionBinding,
 )
 from autoskillit.execution import DefaultLaunchResolver
+from autoskillit.execution.backends import all_backends, get_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -665,3 +667,141 @@ def test_launch_digest_distinguishes_force_inactive_intent() -> None:
     )
 
     assert default_contract.digest != forced_contract.digest
+
+
+def test_codex_native_model_on_claude_backend_is_rejected() -> None:
+    request = _request(
+        configured_model="gpt-5.6-sol",
+        configured_model_source=LaunchValueSource(
+            LaunchValueSourceKind.RECIPE,
+            "model.recipe_overrides.implementation.review_pr",
+        ),
+    )
+
+    with pytest.raises(
+        LaunchContractError,
+        match=(
+            "model.*gpt-5.6-sol.*model.recipe_overrides.implementation.review_pr"
+            ".*codex.*agent_backend.backend.*claude-code"
+        ),
+    ):
+        DefaultLaunchResolver().prepare(request)
+
+
+def test_codex_native_model_on_codex_backend_is_accepted() -> None:
+    candidate = _authority(
+        "codex",
+        BackendAuthorityKind.GLOBAL,
+        BackendAuthorityTier.GLOBAL,
+        "agent_backend.backend",
+    )
+    request = _request(
+        authority_candidates=(candidate,),
+        configured_model="gpt-5.6-sol",
+        configured_model_source=LaunchValueSource(
+            LaunchValueSourceKind.RECIPE,
+            "model.recipe_overrides.implementation.review_pr",
+        ),
+    )
+
+    preparation = DefaultLaunchResolver().prepare(request)
+
+    assert preparation.selected_backend == "codex"
+    assert preparation.configured_model == "gpt-5.6-sol"
+
+
+@pytest.mark.parametrize("backend", ["claude-code", "codex"])
+@pytest.mark.parametrize("alias", ["sonnet", "opus", "haiku"])
+def test_canonical_aliases_are_accepted_on_every_backend(alias: str, backend: str) -> None:
+    candidate = _authority(
+        backend,
+        BackendAuthorityKind.GLOBAL,
+        BackendAuthorityTier.GLOBAL,
+        "agent_backend.backend",
+    )
+    request = _request(authority_candidates=(candidate,), configured_model=alias)
+
+    preparation = DefaultLaunchResolver().prepare(request)
+
+    assert preparation.selected_backend == backend
+    assert preparation.configured_model == alias
+
+
+def test_context_window_suffix_does_not_evade_the_gate() -> None:
+    request = _request(configured_model="gpt-5.6-sol[1m]")
+
+    with pytest.raises(LaunchContractError, match="is native to backend codex"):
+        DefaultLaunchResolver().prepare(request)
+
+
+def test_requested_model_is_gated_with_its_own_key_path() -> None:
+    request = _request(
+        configured_model=None,
+        configured_model_source=STEP,
+        requested_model="gpt-5.6-sol",
+        requested_model_source=LaunchValueSource(LaunchValueSourceKind.CALLER, "run_skill.model"),
+    )
+
+    with pytest.raises(LaunchContractError, match="run_skill.model"):
+        DefaultLaunchResolver().prepare(request)
+
+
+def test_claude_model_id_on_codex_backend_is_accepted() -> None:
+    """Documents the gate's one-directional decidability limit.
+
+    No Claude-side native-id allowlist exists, so a Claude model pinned onto
+    the Codex backend (the mirrored incident to the one this gate closes) is
+    knowingly out of the gate's reach.
+    """
+    candidate = _authority(
+        "codex",
+        BackendAuthorityKind.GLOBAL,
+        BackendAuthorityTier.GLOBAL,
+        "agent_backend.backend",
+    )
+    request = _request(authority_candidates=(candidate,), configured_model="claude-opus-5")
+
+    preparation = DefaultLaunchResolver().prepare(request)
+
+    assert preparation.selected_backend == "codex"
+    assert preparation.configured_model == "claude-opus-5"
+
+
+@pytest.mark.parametrize("backend", ["claude-code", "codex"])
+@pytest.mark.parametrize("model", ["MiniMax-M3", "gpt-9.9-unreleased"])
+def test_model_owned_by_no_backend_is_accepted(model: str, backend: str) -> None:
+    """An id absent from every backend's native_model_ids has no owner.
+
+    This is deliberately fail-open: refusing an unowned id would wrongly
+    reject provider-profile models and future-dated ids the gate cannot know
+    about yet.
+    """
+    candidate = _authority(
+        backend,
+        BackendAuthorityKind.GLOBAL,
+        BackendAuthorityTier.GLOBAL,
+        "agent_backend.backend",
+    )
+    request = _request(authority_candidates=(candidate,), configured_model=model)
+
+    preparation = DefaultLaunchResolver().prepare(request)
+
+    assert preparation.selected_backend == backend
+    assert preparation.configured_model == model
+
+
+def test_every_registered_backend_declares_native_model_ids() -> None:
+    for backend in all_backends():
+        assert isinstance(backend.capabilities.native_model_ids, frozenset)
+
+    assert get_backend("codex").capabilities.native_model_ids == CODEX_VALID_MODEL_IDS
+    assert get_backend("claude-code").capabilities.native_model_ids == frozenset()
+
+
+def test_no_model_never_triggers_the_gate() -> None:
+    request = _request(configured_model=None, requested_model=None)
+
+    preparation = DefaultLaunchResolver().prepare(request)
+
+    assert preparation.configured_model is None
+    assert preparation.requested_model is None

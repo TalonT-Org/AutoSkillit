@@ -32,7 +32,10 @@ from autoskillit.core import (
     SkillResult,
     temp_dir_display_str,
 )
-from autoskillit.execution.headless._headless_helpers import resolve_model_identity
+from autoskillit.execution.headless._headless_helpers import (
+    resolve_model_identity,
+    resolve_model_pin,
+)
 from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
 from autoskillit.execution.headless._managed._attempt import (
     _headless_plugin_load_mode,
@@ -128,9 +131,8 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     f"{dispatch_backend.name!r}: {'; '.join(readiness.errors)}"
                 )
         cfg = self._ctx.config
-        model_identity = resolve_model_identity(
-            model, cfg, step_name=step_name, profile_name=profile_name
-        )
+        model_pin = resolve_model_pin(model, cfg, step_name=step_name)
+        model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
         fleet_cfg = cfg.fleet
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
         if requires_packs:
@@ -187,10 +189,14 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 arguments=(),
                 cwd=cwd,
                 requested_model=model or None,
-                requested_model_source=authority_source if model else default_source,
+                requested_model_source=(
+                    LaunchValueSource(LaunchValueSourceKind.CALLER, "fleet.model")
+                    if model
+                    else default_source
+                ),
                 configured_model=model_identity.configured_model or None,
                 configured_model_source=(
-                    authority_source if model_identity.configured_model else default_source
+                    model_pin.source if model_identity.configured_model else default_source
                 ),
                 effort=None,
                 effort_source=default_source,

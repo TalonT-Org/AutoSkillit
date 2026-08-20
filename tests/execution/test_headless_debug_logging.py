@@ -88,7 +88,7 @@ class TestBuildSkillResultLogging:
 
 
 class TestResolveModelLogging:
-    """Verify _resolve_model logs which priority tier resolved the model."""
+    """Verify resolve_model_pin logs which priority tier resolved the model."""
 
     def _make_config(self, *, override=None, default=None):
         from tests._helpers import make_model_config, make_test_config
@@ -98,99 +98,131 @@ class TestResolveModelLogging:
         return cfg
 
     def test_logs_override_tier(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.core import LaunchValueSourceKind
+        from autoskillit.execution.headless import resolve_model_pin
 
         with structlog.testing.capture_logs() as logs:
-            result = _resolve_model("sonnet", self._make_config(override="opus"))
-        assert result == "opus"
+            pin = resolve_model_pin("sonnet", self._make_config(override="opus"))
+        assert pin.model == "opus"
+        assert pin.source.kind == LaunchValueSourceKind.GLOBAL
+        assert pin.source.key_path == "model.model_override"
         model_logs = [r for r in logs if r.get("event") == "model_resolved"]
         assert model_logs
         assert model_logs[0]["tier"] == "override"
         assert model_logs[0]["model"] == "opus"
 
     def test_logs_step_tier(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.core import LaunchValueSourceKind
+        from autoskillit.execution.headless import resolve_model_pin
 
         with structlog.testing.capture_logs() as logs:
-            result = _resolve_model("sonnet", self._make_config())
-        assert result == "sonnet"
+            pin = resolve_model_pin("sonnet", self._make_config())
+        assert pin.model == "sonnet"
+        assert pin.source.kind == LaunchValueSourceKind.CALLER
+        assert pin.source.key_path == "run_skill.model"
         model_logs = [r for r in logs if r.get("event") == "model_resolved"]
         assert model_logs
         assert model_logs[0]["tier"] == "step"
 
     def test_logs_default_tier(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.core import LaunchValueSourceKind
+        from autoskillit.execution.headless import resolve_model_pin
 
         with structlog.testing.capture_logs() as logs:
-            result = _resolve_model("", self._make_config(default="haiku"))
-        assert result == "haiku"
+            pin = resolve_model_pin("", self._make_config(default="haiku"))
+        assert pin.model == "haiku"
+        assert pin.source.kind == LaunchValueSourceKind.DEFAULT
+        assert pin.source.key_path == "model.default_model"
         model_logs = [r for r in logs if r.get("event") == "model_resolved"]
         assert model_logs
         assert model_logs[0]["tier"] == "default"
 
     def test_logs_none_tier(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.core import LaunchValueSourceKind
+        from autoskillit.execution.headless import resolve_model_pin
 
         with structlog.testing.capture_logs() as logs:
-            result = _resolve_model("", self._make_config())
-        assert result is None
+            pin = resolve_model_pin("", self._make_config())
+        assert pin.model == ""
+        assert pin.source.kind == LaunchValueSourceKind.DEFAULT
+        assert pin.source.key_path == "run_skill.defaults"
         model_logs = [r for r in logs if r.get("event") == "model_resolved"]
         assert model_logs
         assert model_logs[0]["tier"] == "none"
 
     def test_logs_recipe_override_tier(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.core import LaunchValueSourceKind
+        from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config()
         cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
         with structlog.testing.capture_logs() as logs:
-            result = _resolve_model("", cfg, step_name="plan", recipe_name="impl")
-        assert result == "opus"
+            pin = resolve_model_pin("", cfg, step_name="plan", recipe_name="impl")
+        assert pin.model == "opus"
+        assert pin.source.kind == LaunchValueSourceKind.RECIPE
+        assert pin.source.key_path == "model.recipe_overrides.impl.plan"
         model_logs = [r for r in logs if r.get("event") == "model_resolved"]
         assert model_logs
         assert model_logs[0]["tier"] == "recipe_override"
 
     def test_logs_step_override_tier(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.core import LaunchValueSourceKind
+        from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config()
         cfg.model.step_overrides = {"plan": "opus"}
         with structlog.testing.capture_logs() as logs:
-            result = _resolve_model("", cfg, step_name="plan")
-        assert result == "opus"
+            pin = resolve_model_pin("", cfg, step_name="plan")
+        assert pin.model == "opus"
+        assert pin.source.kind == LaunchValueSourceKind.STEP
+        assert pin.source.key_path == "model.step_overrides.plan"
         model_logs = [r for r in logs if r.get("event") == "model_resolved"]
         assert model_logs
         assert model_logs[0]["tier"] == "step_override"
 
     def test_recipe_override_beats_step_override(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config()
         cfg.model.step_overrides = {"plan": "haiku"}
         cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
-        result = _resolve_model("", cfg, step_name="plan", recipe_name="impl")
-        assert result == "opus"
+        pin = resolve_model_pin("", cfg, step_name="plan", recipe_name="impl")
+        assert pin.model == "opus"
 
     def test_step_override_beats_step_model(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config()
         cfg.model.step_overrides = {"plan": "opus"}
-        result = _resolve_model("sonnet", cfg, step_name="plan")
-        assert result == "opus"
+        pin = resolve_model_pin("sonnet", cfg, step_name="plan")
+        assert pin.model == "opus"
 
     def test_override_beats_recipe_override(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config(override="haiku")
         cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
-        result = _resolve_model("", cfg, step_name="plan", recipe_name="impl")
-        assert result == "haiku"
+        pin = resolve_model_pin("", cfg, step_name="plan", recipe_name="impl")
+        assert pin.model == "haiku"
 
     def test_recipe_override_no_leak(self):
-        from autoskillit.execution.headless import _resolve_model
+        from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config(default="sonnet")
         cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
-        result = _resolve_model("", cfg, step_name="plan", recipe_name="other")
-        assert result == "sonnet"
+        pin = resolve_model_pin("", cfg, step_name="plan", recipe_name="other")
+        assert pin.model == "sonnet"
+
+    def test_recipe_override_miss_falls_through_to_default(self):
+        """A recipe-name hit with a step-key miss does not jump straight to
+        default_model — resolution still falls through the step_overrides
+        and step_model (caller-arg) tiers first. This case only lands on
+        default_model because the fixture leaves both of those tiers empty.
+        """
+        from autoskillit.execution.headless import resolve_model_pin
+
+        cfg = self._make_config(default="haiku")
+        cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
+        pin = resolve_model_pin("", cfg, step_name="other-step", recipe_name="impl")
+        assert pin.model == "haiku"
+        assert pin.source.key_path == "model.default_model"

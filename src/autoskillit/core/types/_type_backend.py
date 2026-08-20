@@ -246,6 +246,15 @@ class BackendCapabilities:
     # cannot realize exact-set fixed membership, so its `fixed_set_join_capable`
     # must remain False until the active harness exposes a real fixed-set primitive.
     fixed_set_join_capable: bool = False
+    # Raw model identifiers only this backend can serve. Empty means the backend
+    # publishes no enumerable allowlist, so foreign-model detection is not
+    # decidable for it (no Claude-side native-id allowlist exists — see #4238).
+    # Read by DefaultLaunchResolver.prepare() to refuse a backend-foreign model
+    # pre-launch. An id owned by no backend is accepted: the gate degrades open,
+    # which is what keeps provider-profile models working, and which makes this
+    # set's freshness part of the gate's coverage — see
+    # CODEX_MODEL_ALIASES_LAST_VERIFIED.
+    native_model_ids: frozenset[str] = field(default_factory=frozenset)
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -417,6 +426,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     recipe_delivery_budget=None,
     hook_trust_policy=HookTrustPolicy.AUTOMATED,
     fixed_set_join_capable=True,
+    native_model_ids=frozenset(),
 )
 
 

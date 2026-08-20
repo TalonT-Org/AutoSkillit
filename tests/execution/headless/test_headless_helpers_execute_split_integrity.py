@@ -27,10 +27,10 @@ class TestHeadlessHelpersModuleExists:
 
         assert callable(_resolve_session_log_dir)
 
-    def test_resolve_model_importable(self):
-        from autoskillit.execution.headless._headless_helpers import _resolve_model
+    def test_resolve_model_pin_importable(self):
+        from autoskillit.execution.headless._headless_helpers import resolve_model_pin
 
-        assert callable(_resolve_model)
+        assert callable(resolve_model_pin)
 
     def test_derive_step_name_importable(self):
         from autoskillit.execution.headless._headless_helpers import (

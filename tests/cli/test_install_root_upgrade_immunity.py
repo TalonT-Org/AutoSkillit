@@ -13,12 +13,30 @@ package, installed from a real (local, file:// — no network) git repository
 so the install genuinely goes through uv's git-clone-and-build pipeline,
 exactly like a real GitHub-sourced install would.
 
+**Why criterion (c) ("acquire a plugin launch binding") is exercised from
+this test process, not the child.** The plan's literal T-C1/T-C2 wording
+assumes the live process IS ``autoskillit`` itself, so it can call
+``ProjectedPluginArtifactAuthority.acquire_launch_binding()`` directly. The
+``faketool`` substitution above means the child's own venv has no
+``autoskillit`` import available (adding it as a dependency would reintroduce
+the network/minutes cost this substitution exists to avoid). Instead, this
+test process — which does have ``autoskillit`` imported — exercises the
+literal underlying primitive ``acquire_launch_binding()`` itself depends on:
+acquiring a reader ``ArtifactLease`` against the generation's own lease path
+(``authority.py``'s ``acquire_launch_binding()`` acquires exactly this lease,
+see its ``reader = ArtifactLease.acquire_shared(plan.lease_path)`` calls;
+here the lease is already published by ``publish_install_root_generation()``,
+so ``acquire_existing_shared()`` is the accurate call, matching production's
+own self-lease acquisition in ``core/_install_binding.py``), applied
+directly to the child's own (superseded but retained) generation.
+
 Every test here spawns real subprocesses and does real `uv tool install`
 work, hence `large`.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -28,10 +46,13 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    ArtifactLease,
+    ArtifactLeaseContention,
     PluginArtifactIdentity,
     _InstallLock,
     generation_artifact_root,
     generation_staging_root,
+    installed_plugin_artifact_lease_path,
     installed_plugin_semantic_key,
     new_plugin_artifact_incarnation_id,
 )
@@ -42,6 +63,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.large]
 _INSTALL_REF = "faketool-immunity-test@fake-local"
 
 _PACKAGE_INIT = """
+import json
 import sys
 import time
 from pathlib import Path
@@ -52,9 +74,17 @@ def main() -> None:
     if args and args[0] == "block":
         marker_file = Path(args[1])
         release_file = Path(args[2])
+        checkpoint_file = Path(args[3]) if len(args) > 3 else None
         own_root = Path(__file__).parent
         # Prove we can read our own package root before blocking.
-        (own_root / "__init__.py").read_text()
+        content = (own_root / "__init__.py").read_text()
+        if checkpoint_file is not None:
+            # Phase 1 of an in-flight step: checkpoint state to disk before
+            # blocking. Phase 2 (after release) must read this back and
+            # build on it -- that dependency is what makes the continuation
+            # real, rather than two independent no-op checks either side of
+            # the boundary could pass on their own.
+            checkpoint_file.write_text(json.dumps({"phase": 1, "content_len": len(content)}))
         marker_file.write_text("ready\\n")
         deadline = time.time() + 30
         while not release_file.exists():
@@ -64,13 +94,20 @@ def main() -> None:
             time.sleep(0.05)
         # Prove we can STILL read our own package root after being released,
         # and that a fresh lazy import of a sibling module still works --
-        # this is the "in-flight step continues to completion" property
-        # (T-C2), not just a static file read.
+        # never touched before this point, so this is genuinely new code
+        # resolution from the old root, not already-loaded bytes.
         content = (own_root / "__init__.py").read_text()
         import faketool.lazy as lazy_mod
 
-        lazy_mod.touch()
-        print(f"SURVIVED:{len(content)}")
+        fresh_value = lazy_mod.touch()
+        combined = ""
+        if checkpoint_file is not None:
+            checkpoint = json.loads(checkpoint_file.read_text())
+            assert checkpoint["phase"] == 1, checkpoint
+            combined_value = checkpoint["content_len"] + fresh_value
+            checkpoint_file.write_text(json.dumps({"phase": 2, "combined": combined_value}))
+            combined = f":{combined_value}"
+        print(f"SURVIVED:{len(content)}:{_version()}{combined}")
         return
     print("VERSION:" + _version())
 
@@ -81,7 +118,7 @@ def _version() -> str:
     return importlib.metadata.version("faketool")
 """
 
-_PACKAGE_LAZY = "def touch() -> None:\n    pass\n"
+_PACKAGE_LAZY = "def touch() -> int:\n    return 41\n"
 
 _PYPROJECT = """
 [project]
@@ -195,7 +232,9 @@ def _python_pin() -> str:
 def test_live_process_survives_concurrent_upgrade(tmp_path: Path, fake_git_source: Path) -> None:
     """T-C1: a blocked child process's own root is never touched by a
     concurrent publish of a different version, and it can still read its own
-    files and perform a fresh import afterward.
+    files, perform a fresh import, and (per criterion c, from this process --
+    see the module docstring) acquire a launch-binding-shaped reader lease
+    afterward -- and its resolved version has not silently drifted to v2's.
     """
     home = tmp_path / "home"
     python_pin = _python_pin()
@@ -234,9 +273,25 @@ def test_live_process_survives_concurrent_upgrade(tmp_path: Path, fake_git_sourc
         assert identity_v2.managed_path != identity_v1.managed_path
 
         release.write_text("go\n")
+
+        # Criterion (c): acquiring a plugin-launch-binding-shaped reader
+        # lease against v1's (now superseded, still retained) generation
+        # must still succeed post-boundary -- see the module docstring for
+        # why this runs here rather than inside the child.
+        lease = ArtifactLease.acquire_existing_shared(
+            installed_plugin_artifact_lease_path(identity_v1.managed_path)
+        )
+        lease.close()
+
         stdout, stderr = child.communicate(timeout=15)
         assert child.returncode == 0, f"child exited {child.returncode}: {stderr}"
         assert "SURVIVED:" in stdout, f"child did not report survival: {stdout!r}"
+        version = stdout.strip().split(":")[2]
+        assert version == "1.0.0", (
+            f"child's resolved version drifted to {version!r} after the concurrent "
+            "v1.0.1 publish -- its own site-packages resolution must stay anchored "
+            "to the generation it started in, not silently pick up the new one"
+        )
     finally:
         if child.poll() is None:
             child.kill()
@@ -246,60 +301,114 @@ def test_live_process_survives_concurrent_upgrade(tmp_path: Path, fake_git_sourc
 def test_in_flight_pipeline_step_survives_concurrent_upgrade(
     tmp_path: Path, fake_git_source: Path
 ) -> None:
-    """T-C2: an in-flight step -- one that reads its root, blocks mid-step,
-    then performs a *fresh* import of a sibling module and continues to
-    completion -- survives a concurrent upgrade across the whole boundary.
+    """T-C2: an in-flight *step* -- not a bare import -- survives a
+    concurrent upgrade across the whole boundary, and continues to
+    completion. This is the acceptance criterion stated as an assertion:
+    without it, Phase 3 is not complete.
 
-    This is the acceptance criterion stated as an assertion: without it,
-    Phase 3 is not complete. The distinguishing property from T-C1 is the
-    fresh lazy import performed strictly after release (``faketool.lazy``,
-    imported for the first time post-boundary) -- proving the interpreter can
-    still resolve and load *new* code from the old root, not merely that
-    already-loaded bytes remain valid in memory.
+    Two properties distinguish this from T-C1, both load-bearing:
+
+    1. **Checkpointed continuation, not two independent no-ops.** The child
+       writes a phase-1 checkpoint to disk before blocking, then after
+       release reads it back and combines it with a value from a *fresh*
+       post-boundary import (``faketool.lazy``, never touched before this
+       point) to produce a phase-2 result. The test independently captures
+       the phase-1 value (once the marker file appears) and the phase-2
+       value (once the child exits) and asserts the arithmetic relationship
+       between them holds. A child that merely survived without genuinely
+       resuming the same step -- e.g. one reading stale or default state --
+       cannot produce the correct combined value.
+    2. **Reclamation is provably deferred for the whole step, not merely
+       absent by accident.** This test process acquires a real shared
+       ``ArtifactLease`` on v1's generation before the child even starts,
+       representing the in-flight step's own launch binding (see the module
+       docstring on why this runs here rather than inside the child), and
+       proves a concurrent exclusive (reclaiming) lease attempt is refused
+       while it is held, then succeeds the instant it is released.
     """
     home = tmp_path / "home"
     python_pin = _python_pin()
 
     identity_v1 = _install_root_generation(home, fake_git_source, "2.0.0", python_pin)
     inner_exe = identity_v1.managed_path / "faketool" / "bin" / "faketool"
+    lease_path = installed_plugin_artifact_lease_path(identity_v1.managed_path)
 
     marker = home / "marker"
     release = home / "release"
+    checkpoint = home / "checkpoint.json"
 
-    child = subprocess.Popen(
-        [str(inner_exe), "block", str(marker), str(release)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    # The in-flight step's own launch binding, held for the step's entire
+    # duration -- acquired before the child even starts, released only after
+    # it reports completion.
+    step_lease = ArtifactLease.acquire_existing_shared(lease_path)
     try:
-        deadline = time.time() + 15
-        while not marker.exists():
-            if child.poll() is not None:
-                out, err = child.communicate()
-                pytest.fail(f"child exited early rc={child.returncode} out={out!r} err={err!r}")
-            if time.time() > deadline:
+        child = subprocess.Popen(
+            [str(inner_exe), "block", str(marker), str(release), str(checkpoint)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.time() + 15
+            while not marker.exists():
+                if child.poll() is not None:
+                    out, err = child.communicate()
+                    pytest.fail(
+                        f"child exited early rc={child.returncode} out={out!r} err={err!r}"
+                    )
+                if time.time() > deadline:
+                    child.kill()
+                    pytest.fail("child never became ready")
+                time.sleep(0.05)
+
+            phase1 = json.loads(checkpoint.read_text())
+            assert phase1["phase"] == 1
+
+            # While the step is in flight, a concurrent reclaim attempt on
+            # its own generation must be refused -- this is the concrete
+            # guarantee behind "an in-flight step is never destroyed out
+            # from under it": the same lease its launch binding holds is
+            # what the retirement engine's try_reclaim() checks.
+            with pytest.raises(ArtifactLeaseContention):
+                ArtifactLease.acquire_exclusive(lease_path, blocking=False)
+
+            # Two concurrent upgrades across the same in-flight step,
+            # mirroring the issue's own observation that version bumps
+            # arrive several times a day relative to session lifetimes.
+            _install_root_generation(home, fake_git_source, "2.0.1", python_pin)
+            _install_root_generation(home, fake_git_source, "2.0.2", python_pin)
+
+            assert identity_v1.managed_path.is_dir()
+            assert inner_exe.is_file()
+
+            release.write_text("go\n")
+            stdout, stderr = child.communicate(timeout=15)
+            assert child.returncode == 0, f"child exited {child.returncode}: {stderr}"
+            assert "SURVIVED:" in stdout, f"in-flight step did not complete: {stdout!r}"
+            parts = stdout.strip().split(":")
+            version, combined_str = parts[2], parts[3]
+            assert version == "2.0.0", f"resolved version drifted mid-step: {version!r}"
+
+            phase2 = json.loads(checkpoint.read_text())
+            assert phase2["phase"] == 2, "the step never resumed past phase 1"
+            expected_combined = phase1["content_len"] + 41
+            assert phase2["combined"] == expected_combined == int(combined_str), (
+                "phase 2 did not genuinely resume from phase 1's checkpointed "
+                f"state: expected {expected_combined}, checkpoint says "
+                f"{phase2['combined']}, child reported {combined_str}"
+            )
+        finally:
+            if child.poll() is None:
                 child.kill()
-                pytest.fail("child never became ready")
-            time.sleep(0.05)
-
-        # Two concurrent upgrades across the same in-flight step, mirroring
-        # the issue's own observation that version bumps arrive several
-        # times a day relative to session lifetimes.
-        _install_root_generation(home, fake_git_source, "2.0.1", python_pin)
-        _install_root_generation(home, fake_git_source, "2.0.2", python_pin)
-
-        assert identity_v1.managed_path.is_dir()
-        assert inner_exe.is_file()
-
-        release.write_text("go\n")
-        stdout, stderr = child.communicate(timeout=15)
-        assert child.returncode == 0, f"child exited {child.returncode}: {stderr}"
-        assert "SURVIVED:" in stdout, f"in-flight step did not complete: {stdout!r}"
+                child.wait(timeout=5)
     finally:
-        if child.poll() is None:
-            child.kill()
-            child.wait(timeout=5)
+        step_lease.close()
+
+    # Only after the step's own launch binding is released does reclaiming
+    # v1's generation become possible -- proving the earlier refusal was
+    # scoped to the lease's lifetime, not a permanent or accidental block.
+    reclaim_lease = ArtifactLease.acquire_exclusive(lease_path, blocking=False)
+    reclaim_lease.close()
 
 
 def test_install_detection_survives_versioned_roots(tmp_path: Path, fake_git_source: Path) -> None:

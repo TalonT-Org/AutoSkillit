@@ -223,9 +223,10 @@ class TestResolveModelLogging:
         assert pin.source.key_path == "model.default_model"
 
     def test_step_override_wins_after_recipe_miss(self):
-        """Proves resolution actually visits the step_overrides tier after a
-        recipe-name-hit/step-key-miss, rather than jumping straight to
-        default_model once the recipe lookup misses."""
+        """step_overrides for the exact step under test wins over default_model
+        even when the recipe_overrides lookup misses on the step key (contrast
+        with test_recipe_override_miss_falls_through_to_default, which leaves
+        step_overrides empty)."""
         from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config(default="haiku")

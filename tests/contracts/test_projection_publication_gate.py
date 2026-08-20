@@ -552,28 +552,37 @@ class TestStaleGeneratorRefusal:
         with pytest.raises(StaleGeneratorError, match="no longer exists"):
             assert_generator_process_fresh()
 
-    def test_version_mismatch_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_version_skew_cannot_be_constructed_under_a_sealed_binding(
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """T-B10: mutating on-disk metadata mid-process cannot desync the seal.
+
+        Before B-3, ``assert_generator_process_fresh()`` re-read
+        ``importlib.metadata.version()`` live on every call and compared it
+        against the frozen in-process ``autoskillit.__version__`` -- exactly
+        the two-different-times read ARCH-012 forbids, and the shape this
+        test used to codify as "raise". After B-3, the freshness probe reads
+        the sealed ``InstallBinding``'s device/inode identity instead of a
+        version string, so a live metadata mutation mid-process has nothing
+        left to disagree with -- the mismatch this test used to construct is
+        now unconstructible.
+        """
         from autoskillit.workspace._projected_artifact.authority import (
-            StaleGeneratorError,
             assert_generator_process_fresh,
         )
 
-        # Use real pkg_root so the directory and dispatcher exist
         monkeypatch.setattr(
             "importlib.metadata.version",
             lambda name: "0.0.0-changed" if name == "autoskillit" else name,
         )
-        # Non-vacuity: the in-process version is NOT the mocked value,
-        # proving the probe reads the filesystem, not an import-time cache.
+        # Non-vacuity: the in-process version is NOT the mocked value, so a
+        # frozen-vs-live comparison (if one still existed) would disagree.
         import autoskillit
 
         assert autoskillit.__version__ != "0.0.0-changed", (
-            "in-process version equals the mock — probe cannot distinguish disk from cache"
+            "in-process version equals the mock — this test proves nothing"
         )
-        with pytest.raises(StaleGeneratorError, match="upgraded under this process"):
-            assert_generator_process_fresh()
+        assert_generator_process_fresh()  # must NOT raise
 
     def test_fresh_generator_passes(self) -> None:
         from autoskillit.workspace._projected_artifact.authority import (

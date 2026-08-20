@@ -142,6 +142,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_capture_lifecycle",
         # join ledger alphabet/filename constants resolved once at import time.
         "_join_ledger",  # hooks/_join_ledger.py: _BATCH_ID_ALPHABET, LEDGER_FILENAME
+        # INSTALL_STALENESS_REMEDY = InstallStalenessRemedy(...) — the single
+        # shared remedy text (B-8, issue #4597), derived once at import time.
+        "_install_binding",
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1014,11 +1017,22 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 21,  # +session_index strict byte-bounded retained-index reads (#4514)
         # +evidence_reader sterile reader lifecycle (#4585)
         # +agent_definition native-role authority (#4443).
-        "core": 33,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
+        # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
+        # +_startup_warm.py (#4597 rectify phase 1: eager import of the modules
+        # finding #13 showed can turn a crash into an unrecoverable one —
+        # deliberately its own IL-0 module since it must be dynamically-
+        # import-based to reach IL-2 fleet modules without a literal
+        # cross-layer import statement; see its own docstring for why that
+        # isn't a layering shortcut for anything else).
+        # +_install_binding.py (#4597 rectify phase 2: the sealed install
+        # identity B-1/B-2 route pkg_root() through — a single IL-0 module
+        # kept separate from paths.py so paths.py's own "zero autoskillit
+        # imports" character stays intact).
+        "core": 34,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         "core/types": 56,

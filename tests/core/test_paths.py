@@ -162,6 +162,45 @@ class TestPkgRoot:
         )
 
 
+class TestInstallBindingSeal:
+    """T-B6, T-B7: the sealed InstallBinding is captured once, never re-derived."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_seal(self):
+        from autoskillit.core._install_binding import resolve_install_binding
+
+        resolve_install_binding.cache_clear()
+        yield
+        resolve_install_binding.cache_clear()
+
+    def test_pkg_root_is_sealed_for_process_lifetime(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from autoskillit.core.paths import pkg_root
+
+        first = pkg_root()
+        monkeypatch.setattr(ir, "files", lambda name: tmp_path)
+        second = pkg_root()
+        assert second == first, "pkg_root() re-derived after being sealed"
+
+    def test_install_identity_is_sealed_and_self_consistent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.core._install_binding import resolve_install_binding
+
+        first = resolve_install_binding()
+        assert first.root.name == "autoskillit"
+        assert first.version
+
+        monkeypatch.setattr("importlib.metadata.version", lambda name: "0.0.0-mocked")
+        second = resolve_install_binding()
+        assert second is first, "lru_cache should return the identical sealed instance"
+        assert second.version != "0.0.0-mocked", (
+            "version changed after the seal — captured live instead of once"
+        )
+        assert second.root == first.root
+
+
 class TestIsGitMainCheckout:
     def test_plain_directory_returns_false(self, tmp_path: Path) -> None:
         from autoskillit.core.paths import is_git_main_checkout

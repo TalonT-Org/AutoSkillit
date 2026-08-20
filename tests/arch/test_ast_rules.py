@@ -1,4 +1,4 @@
-"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-010).
+"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-012).
 
 Rules enforced here (compile-time, no execution required):
   1. No print() calls in production code
@@ -11,6 +11,9 @@ Rules enforced here (compile-time, no execution required):
   8. No raw .pid attribute passed to start_linux_tracing()
   9. get_logger() result must be bound to variable named 'logger'
  10. StrEnum fields must not be compared against raw string literals
+ 11. __init__.pyi stub files must contain only re-export imports
+ 12. A frozen version reference must not be compared against a live
+     importlib.metadata.version() read
 
 Note: `import logging` and `logging.getLogger()` are enforced by ruff TID251
 at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
@@ -1432,3 +1435,155 @@ def test_pyi_stub_only_reexports() -> None:
         "ARCH-011: __init__.pyi stubs must contain only relative re-export imports "
         "(from .module import Name as Name):\n" + "\n".join(violations)
     )
+
+
+# ── ARCH-012: frozen-vs-live version comparison ────────────────────────────────
+
+_FROZEN_VERSION_NAMES = frozenset({"__version__", "AUTOSKILLIT_INSTALLED_VERSION"})
+
+
+def _is_frozen_version_ref(node: ast.expr) -> bool:
+    """True for a bare ``__version__``/``AUTOSKILLIT_INSTALLED_VERSION`` name,
+    or an attribute access ending in one of those (``autoskillit.__version__``).
+    """
+    if isinstance(node, ast.Name):
+        return node.id in _FROZEN_VERSION_NAMES
+    if isinstance(node, ast.Attribute):
+        return node.attr in _FROZEN_VERSION_NAMES
+    return False
+
+
+def _is_live_metadata_version_call(node: ast.expr) -> bool:
+    """True for ``importlib.metadata.version(...)`` or ``metadata.version(...)``.
+
+    Deliberately does NOT match a bare ``version(...)`` call (even where
+    ``from importlib.metadata import version`` is in scope) — narrowing to
+    the attribute-chain form is sufficient to reproduce the one real hit
+    this rule exists to catch and avoids matching unrelated same-named
+    functions elsewhere in the tree.
+    """
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        return False
+    if node.func.attr != "version":
+        return False
+    value = node.func.value
+    if isinstance(value, ast.Name) and value.id == "metadata":
+        return True
+    return isinstance(value, ast.Attribute) and value.attr == "metadata"
+
+
+def _check_frozen_vs_live_version_compare(src_dir: Path) -> list[str]:
+    """
+    ARCH-012: Detect a frozen version reference compared against a live
+    ``importlib.metadata.version()`` read — reading the same fact at two
+    different times and asserting the readings agree (issue #4597).
+
+    Two shapes are detected within one function's scope:
+      1. Direct: ``frozen_ref != importlib.metadata.version(...)``
+      2. Same-function dataflow: ``x = importlib.metadata.version(...)``
+         followed later in the same function by a comparison of ``x``
+         against a frozen reference (the actual pre-fix
+         ``assert_generator_process_fresh()`` shape: the live read was
+         bound to a local before being compared).
+
+    Does not track dataflow across function or module boundaries — see
+    the residual-coverage note in the rectify plan for issue #4597: a
+    frozen value stored on a dataclass field and compared many lines
+    later is not reachable by this local pattern match, and does not
+    need to be for the rule's true hit set.
+    """
+    violations: list[str] = []
+    for py_file in sorted(src_dir.rglob("*.py")):
+        try:
+            tree = ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        for func in ast.walk(tree):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            live_vars: set[str] = set()
+            for stmt in ast.walk(func):
+                if isinstance(stmt, ast.Assign) and _is_live_metadata_version_call(stmt.value):
+                    for target in stmt.targets:
+                        if isinstance(target, ast.Name):
+                            live_vars.add(target.id)
+                elif (
+                    isinstance(stmt, ast.AnnAssign)
+                    and stmt.value is not None
+                    and isinstance(stmt.target, ast.Name)
+                    and _is_live_metadata_version_call(stmt.value)
+                ):
+                    live_vars.add(stmt.target.id)
+            for node in ast.walk(func):
+                if not isinstance(node, ast.Compare):
+                    continue
+                operands = [node.left, *node.comparators]
+                frozen_hit = any(_is_frozen_version_ref(o) for o in operands)
+                live_hit = any(
+                    _is_live_metadata_version_call(o)
+                    or (isinstance(o, ast.Name) and o.id in live_vars)
+                    for o in operands
+                )
+                if frozen_hit and live_hit:
+                    violations.append(
+                        f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
+                        f"frozen version reference compared against a live "
+                        f"importlib.metadata.version() read -- use the sealed "
+                        f"InstallBinding instead (core.InstallBinding."
+                        f"matches_current_state())"
+                    )
+    return violations
+
+
+def test_arch012_no_frozen_version_vs_live_metadata_comparison(tmp_path: Path) -> None:
+    """ARCH-012 fires on the exact pre-fix authority.py shape (issue #4597)."""
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "import importlib.metadata\n"
+        "import autoskillit\n"
+        "\n"
+        "def assert_generator_process_fresh():\n"
+        "    disk_version = importlib.metadata.version('autoskillit')\n"
+        "    if disk_version != autoskillit.__version__:\n"
+        "        raise StaleGeneratorError('stale')\n"
+    )
+    violations = _check_frozen_vs_live_version_compare(tmp_path)
+    assert violations, "Expected ARCH-012 to flag the reproduced authority.py shape"
+    assert ":6: " in violations[0], f"Expected the compare's line (6), got: {violations[0]}"
+    assert "sealed" in violations[0] and "InstallBinding" in violations[0]
+
+
+def test_arch012_permits_version_as_namespace_key() -> None:
+    """ARCH-012 negative control: silent on the full real src/ tree.
+
+    An exhaustive sweep of src/ found exactly one genuine
+    frozen-constant-versus-live-``importlib.metadata.version()`` comparison —
+    the pre-fix shape at ``workspace/_projected_artifact/authority.py``,
+    reproduced synthetically by
+    ``test_arch012_no_frozen_version_vs_live_metadata_comparison`` above.
+    B-3 replaced that shape with the sealed-binding identity check, so a
+    full-tree scan of the real, fixed source must return zero violations —
+    with no exemption list, because none of the near-miss sites below share
+    the flagged shape:
+
+      - ``execution/backends/_codex_hooks.py``, ``cli/_plugin_artifact.py``,
+        ``migration/engine.py``: ``__version__`` used as a namespace-key
+        *function argument*, never inside a ``Compare`` node.
+      - ``cli/update/_transaction.py``, ``cli/doctor/_doctor_fleet.py``,
+        ``recipe/rules/rules_inputs.py``, ``cli/update/_update_checks.py``:
+        version comparisons wrapped in ``packaging.version.Version(...)`` --
+        neither operand is a bare frozen-reference Name/Attribute.
+      - ``cli/_marketplace.py``, ``recipe/rules/campaign/rules_campaign_flow.py``,
+        ``version.py``: a live read compared against a plain parameter or a
+        JSON-derived value, never against ``__version__``/
+        ``AUTOSKILLIT_INSTALLED_VERSION``.
+      - ``cli/update/_update_checks_fetch.py``: ``AUTOSKILLIT_INSTALLED_VERSION``
+        compared against a dict lookup (``entry.get(...)``), not a live
+        ``importlib.metadata.version()`` call.
+
+    A rule that needed an exemption list to stay silent on these would be
+    worse than no rule (see B-4's note on architecture fitness functions);
+    this one needs none.
+    """
+    violations = _check_frozen_vs_live_version_compare(SRC_ROOT)
+    assert not violations, f"ARCH-012 false positive(s) on real src/ tree: {violations}"

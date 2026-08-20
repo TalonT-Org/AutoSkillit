@@ -11,6 +11,25 @@ from autoskillit.core import (
 )
 
 
+def replace_directory_preserving_children(directory: Path) -> None:
+    """Give ``directory`` a new inode at the same path, preserving its contents.
+
+    Renames the directory aside, creates a fresh directory at the original
+    path (a genuinely different inode — ``os.rename`` alone never changes
+    one), then moves the former children back in. Reproduces "something else
+    now occupies this path" — the actual replacement hazard B-3/B-5 guard
+    against — without losing whatever a store may have written inside it,
+    unlike a plain ``rmtree`` + ``mkdir`` which would destroy any on-disk
+    state nested under the directory along with it.
+    """
+    staging = directory.parent / f"{directory.name}.replace-staging"
+    directory.rename(staging)
+    directory.mkdir()
+    for child in staging.iterdir():
+        child.rename(directory / child.name)
+    staging.rmdir()
+
+
 def seed_registry_owner(project_dir: Path, launch_id: str) -> None:
     """Seed stable owner identity fields into a test session registry row."""
     import json

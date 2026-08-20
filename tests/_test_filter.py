@@ -212,6 +212,27 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "infra/test_generated_files.py",
         }
     ),
+    # _install_binding underlies paths.pkg_root() (B-2) and is used directly by
+    # workspace (authority.py's freshness probe) and recipe (_api.py/_api_cache.py's
+    # shared staleness remedy) — same reach as paths itself (#4597 rectify phase 2).
+    "_install_binding": frozenset(
+        {
+            "core",
+            "cli",
+            "config",
+            "execution",
+            "fleet",
+            "hook_registry",
+            "migration",
+            "recipe",
+            "report",
+            "server",
+            "smoke_utils",
+            "workspace",
+            "infra/test_generated_file_write_guard.py",
+            "infra/test_generated_files.py",
+        }
+    ),
     "_claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
     "_startup_warm": frozenset({"core", "cli", "execution", "fleet", "server"}),
     "_version_snapshot": frozenset({"core", "execution"}),

@@ -101,6 +101,7 @@ class TestModuleCascadeCore:
             "_plugin_cache",
             "github_url",
             "paths",
+            "_install_binding",
             "_claude_env",
             "_cmd_runner",
             "_version_snapshot",

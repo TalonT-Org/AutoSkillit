@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from autoskillit.core import INSTALL_STALENESS_REMEDY
 from autoskillit.core.types import (
     BackendAuthority,
     CIRunScope,
@@ -207,8 +208,17 @@ class FakeManagedHeadlessSessionLineageStore:
         expected_record_digest: str | None = None,
     ) -> ManagedHeadlessSessionLineage:
         lineage = self._records[launch_id]
-        if Path(lineage.lineage_anchor) != lineage_anchor.resolve():
-            raise ValueError("Managed lineage anchor mismatch")
+        anchor = lineage_anchor.resolve()
+        try:
+            stat_result = anchor.stat()
+        except OSError as exc:
+            raise ValueError("Managed lineage anchor identity mismatch") from exc
+        if (
+            Path(lineage.lineage_anchor) != anchor
+            or lineage.anchor_device != stat_result.st_dev
+            or lineage.anchor_inode != stat_result.st_ino
+        ):
+            raise ValueError("Managed lineage anchor identity mismatch")
         if expected_generation is not None and (
             lineage.generation != expected_generation
             or lineage.record_digest != expected_record_digest
@@ -549,7 +559,12 @@ class FakePluginArtifactAuthority:
         backend: CodingAgentBackend,
         load_mode: PluginLoadMode,
     ) -> PluginLaunchBinding:
+        from autoskillit.workspace import (  # noqa: PLC0415
+            assert_generator_process_fresh,
+        )
+
         del backend
+        assert_generator_process_fresh()
         if self._closed:
             raise RuntimeError("fake plugin artifact authority is closed")
         binding = PluginLaunchBinding(
@@ -1072,7 +1087,7 @@ class InMemoryRecipeRepository(RecipeRepository):
             if session_type() is not SessionType.FLEET:
                 raise ProcessStaleError(
                     "Process is running stale code — package directory was modified on disk "
-                    "since server startup. Restart the MCP server via reload_session."
+                    f"since server startup. {INSTALL_STALENESS_REMEDY.remedy}"
                 )
         if name not in self._validated and name not in self._recipes:
             raise RecipeNotFoundError(f"No recipe named '{name}' found")

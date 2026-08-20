@@ -2250,13 +2250,21 @@ def test_ops_decomposition_has_expected_siblings() -> None:
     ["autoskillit.cli.prompts", "autoskillit.cli.ops", "autoskillit.cli.install"],
 )
 def test_cli_facade_all_resolves(facade_pkg: str) -> None:
-    """Guard: every name declared in a CLI subpackage facade's __all__ resolves.
+    """Guard: facade ``__all__`` entries resolve and match submodule declarations.
 
-    A facade symbol declared in ``__all__`` but missing from the module raises
-    ImportError for ``from autoskillit.cli.X import <name>`` — the import form
-    used by virtually every consumer. Conversely, an exportable symbol missing
-    from ``__all__`` is invisible to ``from autoskillit.cli.X import *`` and
-    star-import tools. This parity assertion catches both drift directions.
+    Forward direction (always covered): every name declared in the facade's
+    ``__all__`` must resolve via ``hasattr`` — otherwise ``from autoskillit.cli.X
+    import <name>`` raises ``ImportError``, the import form used by virtually
+    every consumer.
+
+    Reverse direction (covered for submodules that declare ``__all__``): when a
+    submodule declares an ``__all__``, every entry must also appear in the
+    facade's ``__all__`` and resolve to the same object. This catches drift
+    where a builder is added to one layer (e.g. ``_prompts.py``) but not the
+    other (e.g. ``prompts/__init__.py``), leaving the two lists silently out of
+    sync. Submodules without ``__all__`` are not reverse-checked here — they
+    rely on the forward-only ``hasattr`` check and on the existing
+    ``TestPromptsReExporter`` guard for the inner-hub case.
     """
     import importlib
 
@@ -2268,17 +2276,17 @@ def test_cli_facade_all_resolves(facade_pkg: str) -> None:
     missing = sorted(name for name in declared if not hasattr(facade, name))
     assert not missing, f"{facade_pkg} __all__ lists names that do not resolve: {missing}"
 
-    # Reverse direction: lazy-loaded entries declared in __all__ must resolve
-    # to the same object as the submodule attribute. This catches drift where
-    # a builder is added to one layer (e.g. _prompts.py) but not the other
-    # (e.g. prompts/__init__.py), leaving the two lists silently out of sync.
+    # Reverse direction: where declared, lazy-loaded entries must resolve to
+    # the same object as the submodule attribute. ``_*.py`` glob also matches
+    # ``__init__.py`` itself — skip the self-comparison.
     pkg_dir = SRC_ROOT / facade_pkg.replace("autoskillit.", "").replace(".", "/")
     for submodule_path in pkg_dir.glob("_*.py"):
+        if submodule_path.name == "__init__.py":
+            continue
         submodule_name = submodule_path.stem
         submodule = importlib.import_module(f"{facade_pkg}.{submodule_name}")
         for name in getattr(submodule, "__all__", ()):
             if name not in declared:
-                # Submodule __all__ has names that the facade does not re-export
                 assert False, (
                     f"{facade_pkg}.{submodule_name}.{name!r} is in submodule __all__ "
                     f"but missing from facade __all__"

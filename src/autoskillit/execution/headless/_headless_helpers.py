@@ -172,8 +172,9 @@ def resolve_model_pin(
             LaunchValueSource(LaunchValueSourceKind.DEFAULT, "model.default_model"),
         )
     logger.debug("model_resolved", tier="none", model=None)
+    default_key_path = f"{caller_key_path.rsplit('.', 1)[0]}.defaults"
     return ModelPinResolution(
-        "", LaunchValueSource(LaunchValueSourceKind.DEFAULT, "run_skill.defaults")
+        "", LaunchValueSource(LaunchValueSourceKind.DEFAULT, default_key_path)
     )
 
 

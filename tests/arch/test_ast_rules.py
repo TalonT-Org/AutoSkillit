@@ -1553,37 +1553,7 @@ def test_arch012_no_frozen_version_vs_live_metadata_comparison(tmp_path: Path) -
     assert "sealed" in violations[0] and "InstallBinding" in violations[0]
 
 
-def test_arch012_permits_version_as_namespace_key() -> None:
-    """ARCH-012 negative control: silent on the full real src/ tree.
-
-    An exhaustive sweep of src/ found exactly one genuine
-    frozen-constant-versus-live-``importlib.metadata.version()`` comparison —
-    the pre-fix shape at ``workspace/_projected_artifact/authority.py``,
-    reproduced synthetically by
-    ``test_arch012_no_frozen_version_vs_live_metadata_comparison`` above.
-    B-3 replaced that shape with the sealed-binding identity check, so a
-    full-tree scan of the real, fixed source must return zero violations —
-    with no exemption list, because none of the near-miss sites below share
-    the flagged shape:
-
-      - ``execution/backends/_codex_hooks.py``, ``cli/install/_plugin_artifact.py``,
-        ``migration/engine.py``: ``__version__`` used as a namespace-key
-        *function argument*, never inside a ``Compare`` node.
-      - ``cli/update/_transaction.py``, ``cli/doctor/_doctor_fleet.py``,
-        ``recipe/rules/rules_inputs.py``, ``cli/update/_update_checks.py``:
-        version comparisons wrapped in ``packaging.version.Version(...)`` --
-        neither operand is a bare frozen-reference Name/Attribute.
-      - ``cli/install/_marketplace.py``, ``recipe/rules/campaign/rules_campaign_flow.py``,
-        ``version.py``: a live read compared against a plain parameter or a
-        JSON-derived value, never against ``__version__``/
-        ``AUTOSKILLIT_INSTALLED_VERSION``.
-      - ``cli/update/_update_checks_fetch.py``: ``AUTOSKILLIT_INSTALLED_VERSION``
-        compared against a dict lookup (``entry.get(...)``), not a live
-        ``importlib.metadata.version()`` call.
-
-    A rule that needed an exemption list to stay silent on these would be
-    worse than no rule (see B-4's note on architecture fitness functions);
-    this one needs none.
-    """
+def test_arch012_has_no_violations_in_real_source_tree() -> None:
+    """ARCH-012 scans the complete production tree without exemptions."""
     violations = _check_frozen_vs_live_version_compare(SRC_ROOT)
     assert not violations, f"ARCH-012 false positive(s) on real src/ tree: {violations}"

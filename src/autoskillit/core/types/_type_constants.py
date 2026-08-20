@@ -575,7 +575,7 @@ class DurableArtifactWriterDef(NamedTuple):
     ``detection``: ``module:qualname`` of the staleness-detection callable;
         required when ``machine_local=True``, enforced by the import-time assertion.
 
-    See ``tests/contracts/test_durable_artifact_relocatability.py`` (T-C2) for
+    See ``tests/contracts/test_durable_artifact_relocatability.py`` for
     per-writer resolvability/relocatability contracts.
     """
 

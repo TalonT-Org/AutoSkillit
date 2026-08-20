@@ -1,4 +1,4 @@
-"""Sealed install identity for the current process (B-1, issue #4597).
+"""Sealed install identity for the current process (issue #4597).
 
 Modeled on :class:`ExecutableLaunchBinding` (``core/types/_type_backend.py``,
 sealed by ``core/runtime/executable_binding.py``): capture the process's
@@ -9,7 +9,7 @@ install root a long-lived process reads from: ``device``/``inode``, plus the
 version string captured at the same instant, so version and identity can
 never be read from two different points in time. That two-different-times
 shape is exactly what ARCH-012 forbids and what ``assert_generator_process_
-fresh()`` used to do before B-3.
+fresh()`` previously did by reading live state twice.
 
 Purely in-process: the sealed binding lives only in ``lru_cache`` memory for
 the interpreter's lifetime and is never written to disk, so it carries no

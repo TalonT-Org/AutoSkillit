@@ -739,7 +739,8 @@ def main() -> None:
                         finding=finding,
                     )
 
-        # Defence in depth alongside A-6's env fix: a self-invoked subcommand
+        # Defence in depth alongside the maintenance-child skip flags: a
+        # self-invoked subcommand
         # must not be able to prompt even if a future spawn site forgets the
         # skip-flag env. "update" is included (unlike the repair set above)
         # because the explicit `autoskillit update` command is itself the

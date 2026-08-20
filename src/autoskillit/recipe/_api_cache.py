@@ -182,7 +182,7 @@ def _check_process_staleness() -> bool:
     Fleet sessions always return False — dispatched subprocesses have fresh
     baselines and revalidate independently.
 
-    Fails closed (B-6): an unreadable package root reports stale/unknown, not
+    Fails closed: an unreadable package root reports stale/unknown, not
     "not stale" — an ``OSError``/``RuntimeError`` here is at least as likely
     to mean "mid-replacement" as "transient glitch", and the wrong guess in
     that direction is the one that matters.
@@ -194,7 +194,7 @@ def _check_process_staleness() -> bool:
     held directly, and PEP 552 hash-based ``.pyc`` validation means a stale
     ``__pycache__`` entry can still satisfy an import against replaced
     source. Neither changes ``assert_generator_process_fresh()``'s
-    device+inode check (B-3) — a replaced tree has a new inode regardless —
+    device+inode check — a replaced tree has a new inode regardless —
     which is why that detector stays alongside this content-hash one instead
     of being collapsed into it. Phase 3 (#4597) made AutoSkillit's own
     upgrades stop mutating a live process's root at all (immutable,

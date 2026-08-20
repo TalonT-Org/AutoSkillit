@@ -38,7 +38,7 @@ __all__ = ["WARM_MODULE_NAMES", "warm_failure_path_imports"]
 
 logger = get_logger(__name__)
 
-# The verified members of finding #13's set: modules reached by a
+# Modules reached by a
 # function-local `autoskillit` import on a genuine except/finally path (or,
 # for _process_kill, a path that cannot become a module-level import
 # without cycling — see execution/process/_process_tether.py's own comment

@@ -15,6 +15,7 @@ from typing import cast
 
 from autoskillit.core import (
     DIRECT_PREFIX,
+    INSTALL_STALENESS_REMEDY,
     SKILL_PROJECTION_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
@@ -39,10 +40,12 @@ from autoskillit.core import (
     StaleGeneratorError,
     _InstallLock,
     get_logger,
+    install_binding_matches_current_state,
     log_plugin_artifact_lifecycle,
     managed_home,
     new_plugin_artifact_incarnation_id,
     pkg_root,
+    resolve_install_binding,
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
@@ -98,31 +101,27 @@ def assert_generator_process_fresh() -> None:
 
     Checks:
     1. ``pkg_root()`` must still be a directory and contain ``hooks/_dispatch.py``.
-    2. The on-disk package version must match the in-process ``autoskillit.__version__``.
+    2. The sealed install root (``InstallBinding``, captured once at this
+       process's first access) must still own its path — verified by
+       ``device``/``inode`` via ``install_binding_matches_current_state()``,
+       never by comparing a live-re-read version string against the frozen
+       in-process one. A version-string comparison reads the same fact at two
+       different times and is exactly the shape ARCH-012 forbids.
     """
-    import importlib.metadata
-
     source = pkg_root()
     dispatcher = source / "hooks" / "_dispatch.py"
     if not source.is_dir() or not dispatcher.is_file():
         raise StaleGeneratorError(
             f"Generator installation deleted: {source} no longer exists or is "
-            f"missing hooks/_dispatch.py.  Restart the orchestrator process."
+            f"missing hooks/_dispatch.py.  {INSTALL_STALENESS_REMEDY.remedy}"
         )
-    try:
-        disk_version = importlib.metadata.version("autoskillit")
-    except importlib.metadata.PackageNotFoundError:
+    binding = resolve_install_binding()
+    if not install_binding_matches_current_state(binding):
         raise StaleGeneratorError(
-            "Generator package metadata missing: 'autoskillit' is no longer "
-            "installed.  Restart the orchestrator process."
-        )
-    import autoskillit
-
-    if disk_version != autoskillit.__version__:
-        raise StaleGeneratorError(
-            f"Generator installation upgraded under this process: "
-            f"on-disk version {disk_version!r} != in-process version "
-            f"{autoskillit.__version__!r}.  Restart the orchestrator process."
+            f"Generator installation replaced under this process: {binding.root} "
+            f"no longer matches the identity sealed at this process's first access "
+            f"(device={binding.device}, inode={binding.inode}). "
+            f"{INSTALL_STALENESS_REMEDY.remedy}"
         )
 
 

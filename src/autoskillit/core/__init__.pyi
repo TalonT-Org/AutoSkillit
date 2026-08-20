@@ -17,6 +17,13 @@ from ._delivery_bounds import (
     resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
 )
 from ._execution_marker import execution_marker as execution_marker
+from ._install_binding import INSTALL_STALENESS_REMEDY as INSTALL_STALENESS_REMEDY
+from ._install_binding import InstallBinding as InstallBinding
+from ._install_binding import InstallStalenessRemedy as InstallStalenessRemedy
+from ._install_binding import (
+    install_binding_matches_current_state as install_binding_matches_current_state,
+)
+from ._install_binding import resolve_install_binding as resolve_install_binding
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag
 from ._install_detect import _is_stable_track as _is_stable_track

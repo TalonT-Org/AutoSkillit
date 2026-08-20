@@ -18,9 +18,23 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "se
 READ_ONLY_EXCEPTIONS = {"open_kitchen": False, "declare_join_batch": False}
 
 
+def _collect_tool_paths() -> list[Path]:
+    paths = list(TOOLS_DIR.glob("tools_*.py"))
+    for pkg_dir in TOOLS_DIR.iterdir():
+        if not pkg_dir.is_dir():
+            continue
+        if not pkg_dir.name.startswith("tools_"):
+            continue
+        for submodule in pkg_dir.glob("*.py"):
+            if submodule.name == "__init__.py":
+                continue
+            paths.append(submodule)
+    return sorted(paths)
+
+
 def check() -> list[str]:
     violations = []
-    paths = sorted(TOOLS_DIR.glob("tools_*.py"))
+    paths = _collect_tool_paths()
     if not paths:
         return [f"{TOOLS_DIR}: no tool modules discovered"]
     for path in paths:

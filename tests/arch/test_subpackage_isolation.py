@@ -1635,7 +1635,21 @@ def test_server_tool_handlers_have_no_business_logic() -> None:
     """
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
-    for py_file in sorted((server_dir / "tools").glob("tools_*.py")):
+    tool_sources: list[Path] = []
+    for py_file in (server_dir / "tools").glob("tools_*.py"):
+        tool_sources.append(py_file)
+    for pkg_dir in (server_dir / "tools").iterdir():
+        if not pkg_dir.is_dir():
+            continue
+        if not pkg_dir.name.startswith("tools_"):
+            continue
+        for submodule in pkg_dir.glob("*.py"):
+            if submodule.name == "__init__.py":
+                continue
+            tool_sources.append(submodule)
+    tool_sources.sort()
+
+    for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

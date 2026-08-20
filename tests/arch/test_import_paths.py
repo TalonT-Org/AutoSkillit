@@ -133,7 +133,23 @@ def test_req_imp_001_no_cross_package_submodule_imports() -> None:
 # REQ-IMP-003: server/tools_*.py imports only core and pipeline (+ intra-server)
 # ---------------------------------------------------------------------------
 
-TOOLS_FILES = list((SRC / "server" / "tools").glob("tools_*.py"))
+
+def _collect_tools_files() -> list[Path]:
+    tools_dir = SRC / "server" / "tools"
+    files = list(tools_dir.glob("tools_*.py"))
+    for pkg_dir in tools_dir.iterdir():
+        if not pkg_dir.is_dir():
+            continue
+        if not pkg_dir.name.startswith("tools_"):
+            continue
+        for submodule in pkg_dir.glob("*.py"):
+            if submodule.name == "__init__.py":
+                continue
+            files.append(submodule)
+    return files
+
+
+TOOLS_FILES = _collect_tools_files()
 
 
 @pytest.mark.parametrize("path", TOOLS_FILES, ids=lambda p: p.name)
@@ -153,7 +169,11 @@ def test_req_imp_003_tools_import_namespace(path: Path) -> None:
         }
     )
     violations: list[str] = []
-    for mod, _in_tc in _parse_imports(path):
+    for mod, in_tc in _parse_imports(path):
+        if in_tc:
+            continue  # TYPE_CHECKING imports are exempt (no runtime coupling), matching
+            # REQ-IMP-001's exemption above — e.g. tools_execution/_state.py's
+            # autoskillit.recipe type-only imports for its dataclass field annotations.
         top2 = ".".join(mod.split(".")[:2])
         if top2 not in allowed and mod != "autoskillit":
             violations.append(mod)
@@ -364,7 +384,6 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/tools/tools_kitchen/_hook_config.py"),
         Path("server/tools/tools_kitchen/_tracker_authority.py"),
         Path("server/tools/tools_kitchen/_declare_join_batch.py"),
-        Path("server/tools/tools_execution.py"),  # capture-mode types from execution gateway
         Path("cli/app.py"),
         Path("cli/session/_session_cook.py"),  # REQ-IMP-011
         Path("cli/_workspace.py"),  # REQ-IMP-012

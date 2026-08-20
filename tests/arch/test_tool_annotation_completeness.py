@@ -23,7 +23,18 @@ _SERVER_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "ser
 
 
 def _tools_files() -> list[Path]:
-    return sorted((_SERVER_DIR / "tools").glob("tools_*.py"))
+    tools_dir = _SERVER_DIR / "tools"
+    files = list(tools_dir.glob("tools_*.py"))
+    for pkg_dir in tools_dir.iterdir():
+        if not pkg_dir.is_dir():
+            continue
+        if not pkg_dir.name.startswith("tools_"):
+            continue
+        for submodule in pkg_dir.glob("*.py"):
+            if submodule.name == "__init__.py":
+                continue
+            files.append(submodule)
+    return sorted(files)
 
 
 def _collect_missing_annotations(path: Path) -> list[tuple[str, int]]:

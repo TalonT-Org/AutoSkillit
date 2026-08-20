@@ -177,16 +177,8 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
         if state._target_contract is None:
             raise SkillContractError("audit output contract is unavailable")
         select_audit_output_contract(state._target_contract, state._audit_output_mode)
-    # Resolved from cwd so the audit-cycle containment anchor matches the
-    # clone's actual artifact directory (orchestrator's tool_ctx.temp_dir
-    # is disjoint from the clone's temp tree in clone-based pipelines).
-    # See #4387 — this must be defined BEFORE the if/elif chain so the
-    # publish call site (later in the function) can reach it regardless
-    # of which branch was taken above. An empty cwd is only rejected here
-    # (rather than by the earlier boundary guards) because it is only
-    # security-relevant once a recipe execution is active and this anchor
-    # is actually consumed as a containment root — ad-hoc skill calls with
-    # no active recipe execution never read _clone_allowed_root.
+    # Resolve the clone-local containment anchor before every publication branch (#4387).
+    # Only active recipe executions consume it, so only they require a non-empty cwd.
     if state._installed_execution is not None and not state.cwd:
         return json.dumps(
             deny_envelope(

@@ -115,7 +115,12 @@ def _enrolled_in_a_contract_suite(fake_name: str, contracts_dir: Path) -> bool:
     for py_file in contracts_dir.rglob("test_*.py"):
         if py_file.resolve() == Path(__file__).resolve():
             continue  # this file's own allowlist would otherwise self-enroll every entry
-        if fake_name in py_file.read_text():
+        tree = ast.parse(py_file.read_text())
+        if any(
+            (isinstance(node, ast.Name) and node.id == fake_name)
+            or (isinstance(node, ast.Attribute) and node.attr == fake_name)
+            for node in ast.walk(tree)
+        ):
             return True
     return False
 

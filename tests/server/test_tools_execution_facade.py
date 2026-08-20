@@ -91,39 +91,27 @@ _RE_EXPORTED_NAMES = (
     "shutil",
 )
 
-# Symbols a mock.patch("...tools_execution.<name>", ...) must be able to
-# intercept for every submodule caller — read via _te_pkg.name(...), never
-# imported directly into a submodule's own namespace (D5).
-_D5_SYMBOLS = frozenset(
-    {
-        "is_feature_enabled",
-        "execution_marker",
-        "_notify",
-        "_import_and_call",
-        "_run_subprocess_captured",
-        "_resolve_step_name_from_recipe",
-        "_check_review_approach_plan_path",
-        "_check_ingredient_locks",
-        "_check_pipeline_deps",
-        "read_overlay",
-        "resolve_closure_write_dirs",
-        "progress_heartbeat",
-        "read_registry",
-        "get_tool_def",
-        "AuditResultOutcome",
-        "shape_execution_response",
-        "_complete_audit_finalization_effects",
-        "prepare_recipe_segment_delivery",
-        "INGREDIENT_LOCK_DENY_PREFIX",
-        "DEPENDENCY_DENY_PREFIX",
-        "_explorer_launch_identity",
-        "find_caller_session_id",
-    }
-)
-
 
 def _submodule_paths() -> list[Path]:
     return sorted(p for p in _PKG_DIR.glob("*.py") if p.name != "__init__.py")
+
+
+def _d5_symbols() -> frozenset[str]:
+    symbols: set[str] = set()
+    for path in _submodule_paths():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        symbols.update(
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "_te_pkg"
+        )
+    return frozenset(symbols)
+
+
+# Every live _te_pkg.name read is a D5 patch surface and must remain indirect.
+_D5_SYMBOLS = _d5_symbols()
 
 
 @pytest.mark.parametrize("name", _RE_EXPORTED_NAMES)

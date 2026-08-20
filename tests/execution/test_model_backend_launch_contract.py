@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.core import LaunchPreparation, LaunchValueSourceKind
+from autoskillit.core import LaunchValueSourceKind
 from autoskillit.core.types import LaunchContractError, RetryReason, SkillResult
 
 from .conftest import _backend_authority, _mock_backend
@@ -100,13 +100,16 @@ async def test_codex_model_with_matching_backend_pin_launches(minimal_ctx):
 
     assert result.success is True
     mock_exec.assert_called_once()
+    launch_preparation = mock_exec.call_args.kwargs["launch_preparation"]
+    assert launch_preparation.selected_backend == "codex"
+    assert launch_preparation.configured_model == _CODEX_NATIVE_MODEL
 
 
 @pytest.mark.anyio
 async def test_model_key_path_reaches_launch_preparation(minimal_ctx):
     """Provenance of the resolved model must be the model's own config key path
     (model.recipe_overrides.<recipe>.<step>), not the backend authority's key
-    path (agent_backend.backend) — the real-provenance fix behind #4238."""
+    path (agent_backend.backend)."""
     minimal_ctx.config.model.recipe_overrides = _RECIPE_OVERRIDES
     minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
     minimal_ctx.runner = AsyncMock()
@@ -117,16 +120,10 @@ async def test_model_key_path_reaches_launch_preparation(minimal_ctx):
     codex_backend.name = "codex"
     authority = _backend_authority("codex")
 
-    original_prepare = minimal_ctx.launch_resolver.prepare
-    captured: list[LaunchPreparation] = []
-
-    def _spy_prepare(request):
-        preparation = original_prepare(request)
-        captured.append(preparation)
-        return preparation
-
     with (
-        patch.object(minimal_ctx.launch_resolver, "prepare", side_effect=_spy_prepare),
+        patch.object(
+            minimal_ctx.launch_resolver, "prepare", wraps=minimal_ctx.launch_resolver.prepare
+        ) as mock_prepare,
         patch.object(minimal_ctx.launch_resolver, "backend_for", return_value=codex_backend),
         patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
     ):
@@ -143,7 +140,7 @@ async def test_model_key_path_reaches_launch_preparation(minimal_ctx):
             backend_authority=authority,
         )
 
-    assert len(captured) == 1
-    preparation = captured[0]
-    assert preparation.configured_model_source.key_path == _MODEL_KEY_PATH
-    assert preparation.configured_model_source.kind is LaunchValueSourceKind.RECIPE
+    mock_prepare.assert_called_once()
+    request = mock_prepare.call_args.args[0]
+    assert request.configured_model_source.key_path == _MODEL_KEY_PATH
+    assert request.configured_model_source.kind is LaunchValueSourceKind.RECIPE

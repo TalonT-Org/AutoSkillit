@@ -170,6 +170,44 @@ def fake_git_source(tmp_path: Path) -> Path:
     return repo
 
 
+def _bump_source_version(source: Path, version: str) -> None:
+    """Rewrite the fake package's own ``pyproject.toml`` version and commit it.
+
+    ``importlib.metadata.version("faketool")`` reads the *installed
+    package's own* metadata, not the generation-store version label passed
+    to ``_install_root_generation`` -- those are otherwise two unrelated
+    strings. Without this, every install reads the ``pyproject.toml``
+    literal's static ``"0.0.0"`` regardless of which generation it landed
+    in, and a version-unchanged assertion could never distinguish correct
+    behavior from the pre-Phase-3 bug it exists to catch. Bumping and
+    committing before each install makes the two genuinely track each
+    other, so a resolved version really would drift if a later publish's
+    root leaked into an earlier one's process.
+    """
+    (source / "pyproject.toml").write_text(
+        _PYPROJECT.replace('version = "0.0.0"', f'version = "{version}"')
+    )
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t.com"}
+    subprocess.run(["git", "add", "-A"], cwd=source, env=env, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@t.com",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            f"v{version}",
+        ],
+        cwd=source,
+        env=env,
+        check=True,
+        capture_output=True,
+    )
+
+
 def _install_root_generation(
     home: Path,
     source: Path,
@@ -184,6 +222,7 @@ def _install_root_generation(
     creation, because a venv's console-script shebang bakes an absolute path
     at install time and cannot survive being moved.
     """
+    _bump_source_version(source, version)
     incarnation_id = new_plugin_artifact_incarnation_id()
     staging = generation_staging_root(home, _INSTALL_REF) / incarnation_id
     staging.mkdir(parents=True)

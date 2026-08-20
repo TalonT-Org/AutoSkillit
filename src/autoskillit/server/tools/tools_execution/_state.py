@@ -7,13 +7,15 @@ Access convention
 -----------------
 
 Fields without an underscore prefix are mostly tool-function parameters
-of ``run_skill`` (e.g. ``skill_command``, ``cwd``, ``skill_inputs``) and a
-handful of dispatch-computed values consumed by the finalize block (e.g.
-``invocation``, ``projection_context``, ``target_name``, ``child_skill_command``,
-``resolved_command``, ``write_spec``, ``closure_spec``, ``is_read_only``).
-Fields with a leading underscore are internal locals captured during
-dispatch and finalized. The convention is suggestive, not enforced; consult
-the section banner over each group when the boundary is unclear.
+of ``run_skill`` (e.g. ``skill_command``, ``cwd``, ``skill_inputs``) together
+with roughly twenty dispatch-computed values consumed by the finalize block
+(e.g. ``invocation``, ``projection_context``, ``target_name``,
+``child_skill_command``, ``resolved_command``, ``write_spec``,
+``closure_spec``, ``is_read_only``, ``completion_required``,
+``invocation_marker``). Fields with a leading underscore are internal locals
+captured during dispatch and finalized. The convention is suggestive, not
+enforced; consult the section banner over each group when the boundary is
+unclear.
 """
 
 from __future__ import annotations
@@ -117,8 +119,8 @@ class _RunSkillDispatchState:
 
     # --- Dispatch bootstrap (timing, tracker authority, explorer launch) ---
     _start: float
-    _sn_token: Token | None
-    _oid_token: Token | None
+    _sn_token: Token[str] | None
+    _oid_token: Token[str] | None
     _tracker_target: TrackerAuthorityTarget | None
     _tracker_authority: TrackerAuthorityReadResult | None
     _tracker_key: TrackerParticipantKey | None

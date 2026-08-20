@@ -121,7 +121,19 @@ def resolve_model_pin(
     *,
     step_name: str = "",
     recipe_name: str = "",
+    caller_key_path: str = "run_skill.model",
 ) -> ModelPinResolution:
+    """Resolve the model to launch with, in descending priority order.
+
+    Tiers, checked in order: global ``model_override``; the recipe-scoped
+    override (when both ``recipe_name`` and ``step_name`` are given); the
+    step-scoped override; the caller-supplied ``step_model`` (attributed to
+    ``caller_key_path`` — pass the caller's own key path, e.g. ``"fleet.model"``
+    for food-truck dispatch, when it differs from the default
+    ``"run_skill.model"``); then ``default_model``. If no tier resolves, the
+    returned ``ModelPinResolution.model`` is ``""`` — the sentinel for "no
+    model configured" — which callers must treat as absence, not error.
+    """
     if config.model.model_override:
         logger.debug("model_resolved", tier="override", model=config.model.model_override)
         return ModelPinResolution(
@@ -151,7 +163,7 @@ def resolve_model_pin(
         logger.debug("model_resolved", tier="step", model=step_model)
         return ModelPinResolution(
             step_model,
-            LaunchValueSource(LaunchValueSourceKind.CALLER, "run_skill.model"),
+            LaunchValueSource(LaunchValueSourceKind.CALLER, caller_key_path),
         )
     if config.model.default_model:
         logger.debug("model_resolved", tier="default", model=config.model.default_model)

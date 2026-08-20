@@ -131,7 +131,9 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     f"{dispatch_backend.name!r}: {'; '.join(readiness.errors)}"
                 )
         cfg = self._ctx.config
-        model_pin = resolve_model_pin(model, cfg, step_name=step_name)
+        model_pin = resolve_model_pin(
+            model, cfg, step_name=step_name, caller_key_path="fleet.model"
+        )
         model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
         fleet_cfg = cfg.fleet
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}

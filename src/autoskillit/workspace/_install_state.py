@@ -47,6 +47,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     RetiringArtifactRecord,
     RetiringCacheState,
     Severity,
+    directory_tree_digest,
     get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
@@ -54,8 +55,10 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     managed_home,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
+    read_versioned_json,
     registered_install_paths,
     resolve_current_generation,
+    write_versioned_json,
 )
 from autoskillit.workspace._installed_artifact import (
     _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK,
@@ -451,10 +454,137 @@ def _enqueue_legacy_installed_plugin_versions(
         pass
 
 
+_LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE = timedelta(days=30)
+_LEGACY_UV_TOOL_ROOT_EVIDENCE_SCHEMA_VERSION = 1
+
+
+def _legacy_uv_tool_root_evidence_path(artifact: Path) -> Path:
+    """Return the stability-evidence sidecar for the legacy shared uv tool root.
+
+    A sibling of ``artifact``, never inside it, so recording evidence never
+    perturbs the very digest it is tracking.
+    """
+    return artifact.parent / f".{artifact.name}.autoskillit-legacy-retirement.json"
+
+
+def _enqueue_legacy_uv_tool_root(artifact: Path, home: ManagedHome) -> None:
+    """Remove the pre-Phase-3 shared uv tool root once its content is provably idle.
+
+    Unlike the legacy Claude-cache tree above, this directory is uv's own venv —
+    materialized directly by ``uv tool install`` before Phase 3 introduced
+    generation-keyed publication — so it was never one of our manifest-bearing
+    incarnations and carries no lease a live pre-upgrade process could hold:
+    ``_acquire_self_lease()`` (``core/_install_binding.py``) is explicit that a
+    legacy shared-root process "has nothing to lease here." The only available
+    liveness signal is whether the tree's content is still changing — a
+    still-running interpreter lazily importing modules keeps writing fresh
+    ``__pycache__`` entries into it, which changes its digest.
+
+    This records a content digest plus a first-observed-stable timestamp in a
+    sidecar next to the artifact and only removes the tree once that exact
+    digest has been observed, unchanged, across a full grace window. Any
+    digest change resets the window rather than ever authorizing deletion —
+    fail-closed by construction, the same mtime-grace idiom
+    ``_sweep_orphaned_staging`` uses for abandoned publish staging directories.
+
+    **This is a heuristic, not a liveness guarantee, and the grace window is
+    deliberately long (30 days, not the 24-hour generation-retirement grace)
+    to reflect that.** Unlike the lease-gated retirement engine everywhere
+    else in this system, a digest that stops changing does not prove nothing
+    references the tree — a live process that is simply idle (imports
+    everything it needs at startup, then makes no further imports) looks
+    identical to a dead one by this signal alone. Reintroducing that failure
+    mode is exactly what issue #4597 exists to eliminate, so this path is
+    scoped narrowly: it only ever touches the one, one-time, pre-Phase-3
+    migration artifact, and the long window plus C-8's operational
+    recommendation (pin to release tags, upgrade deliberately) are the
+    accepted mitigation rather than a fresh liveness-detection subsystem for
+    a shape nothing will create again after this migration completes.
+
+    The ``home`` argument is unused but accepted for type compatibility with
+    ``_RETIRE_VIA_ENGINE_HANDLERS: Callable[[Path, ManagedHome], None]`` —
+    the handler does not need ManagedHome-bound paths because the artifact
+    argument is the resolved legacy shared root.
+    """
+    del home  # type-compatibility shim only; handler does not need ManagedHome
+    evidence_path = _legacy_uv_tool_root_evidence_path(artifact)
+    try:
+        digest = directory_tree_digest(artifact, allow_symlinks=True)
+    except (OSError, ValueError) as exc:
+        logger.warning(
+            "reconcile_install_artifacts: legacy uv tool root %s cannot be digested, skipping: %s",
+            artifact,
+            exc,
+        )
+        return
+
+    now = datetime.now(UTC)
+    previous = read_versioned_json(
+        evidence_path,
+        _LEGACY_UV_TOOL_ROOT_EVIDENCE_SCHEMA_VERSION,
+    )
+    stable_since: datetime | None = None
+    if previous is not None and previous.get("artifact_digest") == digest:
+        observed_at = previous.get("observed_at")
+        if isinstance(observed_at, str):
+            try:
+                stable_since = datetime.fromisoformat(observed_at)
+            except ValueError:
+                stable_since = None
+            else:
+                if stable_since.tzinfo is None:
+                    stable_since = None
+
+    if stable_since is None:
+        try:
+            write_versioned_json(
+                evidence_path,
+                {"artifact_digest": digest, "observed_at": now.isoformat()},
+                schema_version=_LEGACY_UV_TOOL_ROOT_EVIDENCE_SCHEMA_VERSION,
+            )
+        except OSError as exc:
+            logger.warning(
+                "reconcile_install_artifacts: could not record legacy uv tool root "
+                "retirement evidence for %s: %s",
+                artifact,
+                exc,
+            )
+        return
+
+    if now - stable_since.astimezone(UTC) < _LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE:
+        return
+
+    try:
+        shutil.rmtree(artifact)
+    except OSError as exc:
+        logger.warning(
+            "reconcile_install_artifacts: could not remove stable legacy uv tool root %s: %s",
+            artifact,
+            exc,
+        )
+        return
+    try:
+        evidence_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning(
+            "reconcile_install_artifacts: could not remove legacy uv tool root "
+            "retirement evidence %s: %s",
+            evidence_path,
+            exc,
+        )
+    logger.info(
+        "reconcile_install_artifacts: removed legacy uv tool root %s after "
+        "%s of unchanged content",
+        artifact,
+        _LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE,
+    )
+
+
 _RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path, ManagedHome], None]] = {
     ".claude/plugins/cache/autoskillit-local/autoskillit": (
         _enqueue_legacy_installed_plugin_versions
     ),
+    ".local/share/uv/tools/autoskillit": _enqueue_legacy_uv_tool_root,
 }
 
 

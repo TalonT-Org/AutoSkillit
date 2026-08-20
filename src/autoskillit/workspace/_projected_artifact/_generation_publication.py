@@ -21,11 +21,9 @@ from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
     LegacyRetiringEvidence,
-    ManagedHome,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
-    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     RetirementOutcome,
     RetiringAppendResult,
@@ -149,7 +147,7 @@ def _discard_unpublished_generation(generation_root: Path) -> None:
 
 def publish_generation(
     *,
-    home: ManagedHome,
+    home: Path,
     plugin_ref: str,
     version: str,
     semantic_key: str,
@@ -163,14 +161,9 @@ def publish_generation(
     Returns the identity of the newly published generation.
     """
     incarnation_id = new_plugin_artifact_incarnation_id()
-    version_root = generation_version_root(home.root, plugin_ref, version)
-    generation_root = generation_artifact_root(
-        home.root,
-        plugin_ref,
-        version,
-        incarnation_id,
-    )
-    selector = generation_selector_path(home.root, plugin_ref, version)
+    version_root = generation_version_root(home, plugin_ref, version)
+    generation_root = generation_artifact_root(home, plugin_ref, version, incarnation_id)
+    selector = generation_selector_path(home, plugin_ref, version)
     lease_path = installed_plugin_artifact_lease_path(generation_root)
 
     version_root.mkdir(parents=True, exist_ok=True)
@@ -217,7 +210,7 @@ def publish_generation(
                     f"staged {staged_digest}, published {identity.artifact_digest}"
                 )
 
-            prior_target = resolve_current_generation(home.root, plugin_ref, version)
+            prior_target = resolve_current_generation(home, plugin_ref, version)
             try:
                 _replace_symlink(selector, generation_root)
             except OSError:
@@ -273,7 +266,123 @@ def publish_generation(
     )
 
 
-def _select_plugin_generation(home: ManagedHome, plugin_ref: str, generation_root: Path) -> None:
+def publish_install_root_generation(
+    *,
+    home: Path,
+    install_ref: str,
+    version: str,
+    semantic_key: str,
+    incarnation_id: str,
+    staged_root: Path,
+) -> PluginArtifactIdentity:
+    """Finalize an install-root generation whose content is already staged.
+
+    Unlike ``publish_generation``, the caller has already materialized
+    ``staged_root`` directly — an installer (``uv tool install``) writes its
+    own destination tree and offers no staging-directory handoff, so content
+    creation happens before this function is ever called, at a location the
+    caller chose via ``core.generation_staging_root``. This performs
+    everything ``publish_generation`` does *after* staging: digest, atomic
+    move into the version-keyed generation path, lease, manifest, digest
+    verification, the atomic selector flip (the sole commit point), the
+    version-independent selector update, and enqueueing every previously
+    selected generation across all versions for retirement.
+
+    Must be called under ``_InstallLock`` by the caller, exactly like
+    ``publish_generation``.
+    """
+    version_root = generation_version_root(home, install_ref, version)
+    generation_root = generation_artifact_root(home, install_ref, version, incarnation_id)
+    selector = generation_selector_path(home, install_ref, version)
+    lease_path = installed_plugin_artifact_lease_path(generation_root)
+
+    version_root.mkdir(parents=True, exist_ok=True)
+
+    staged_digest = directory_tree_digest(staged_root, allow_symlinks=True, ignore_bytecode=True)
+    _fsync_tree_contents(staged_root)
+
+    # A venv's console scripts bake an absolute shebang path at creation time
+    # (uv/venv are not relocatable), so the caller must have installed
+    # directly at `generation_root` rather than at a separate staging
+    # location it expects this function to move into place -- unlike
+    # `publish_generation`'s sanitized, path-agnostic plugin content, which
+    # tolerates the copy-then-rename dance freely.
+    promoted = False
+    safe_to_discard = True
+    try:
+        if staged_root != generation_root:
+            os.rename(staged_root, generation_root)
+        promoted = True
+        _fsync_directory(version_root)
+
+        with ArtifactLease.acquire_exclusive(lease_path, blocking=True):
+            identity = write_installed_plugin_artifact_manifest_locked(
+                generation_root,
+                semantic_key=semantic_key,
+                action="publish_install_root_generation",
+                incarnation_id=incarnation_id,
+                allow_symlinks=True,
+                ignore_bytecode=True,
+            )
+
+            if identity.artifact_digest != staged_digest:
+                raise RuntimeError(
+                    "install-root generation digest changed between staging "
+                    f"and publication: staged {staged_digest}, published "
+                    f"{identity.artifact_digest}"
+                )
+
+            prior_target = resolve_current_generation(home, install_ref, version)
+            try:
+                _replace_symlink(selector, generation_root)
+            except OSError:
+                safe_to_discard = False
+                try:
+                    if prior_target is None:
+                        selector.unlink(missing_ok=True)
+                        _fsync_directory(version_root)
+                    else:
+                        _replace_symlink(selector, prior_target)
+                    safe_to_discard = True
+                except OSError as restore_error:
+                    logger.error(
+                        "install_root_generation_selector_restore_failed: prior=%s",
+                        prior_target,
+                        exc_info=restore_error,
+                    )
+                raise
+            safe_to_discard = False
+    except Exception:
+        if promoted and safe_to_discard:
+            _discard_unpublished_generation(generation_root)
+            _fsync_directory(version_root)
+        raise
+
+    log_plugin_artifact_lifecycle(
+        logger,
+        action="publish_install_root_generation",
+        outcome="succeeded",
+        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
+        semantic_key=semantic_key,
+        incarnation=incarnation_id,
+    )
+
+    _select_plugin_generation(home, install_ref, generation_root)
+    prune_stale_generations(
+        home, install_ref, artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION
+    )
+
+    return PluginArtifactIdentity(
+        semantic_key=semantic_key,
+        incarnation_id=incarnation_id,
+        manifest_schema_version=identity.manifest_schema_version,
+        artifact_digest=identity.artifact_digest,
+        managed_path=generation_root,
+        manifest_path=installed_plugin_artifact_manifest_path(generation_root),
+    )
+
+
+def _select_plugin_generation(home: Path, plugin_ref: str, generation_root: Path) -> None:
     """Point the version-independent selector at the newly published generation.
 
     Best-effort, mirroring the retirement enqueue below it: the per-version flip
@@ -281,7 +390,7 @@ def _select_plugin_generation(home: ManagedHome, plugin_ref: str, generation_roo
     persistent failure fails safe — the stale target stays protected by
     ``_is_selected_generation`` and is over-retained rather than reclaimed.
     """
-    selector = generation_plugin_selector_path(home.root, plugin_ref)
+    selector = generation_plugin_selector_path(home, plugin_ref)
     try:
         selector.parent.mkdir(parents=True, exist_ok=True)
         _replace_symlink(selector, generation_root)
@@ -293,7 +402,7 @@ def _select_plugin_generation(home: ManagedHome, plugin_ref: str, generation_roo
         )
 
 
-def _is_selected_generation(home: ManagedHome, plugin_ref: str, path: Path) -> bool:
+def _is_selected_generation(home: Path, plugin_ref: str, path: Path) -> bool:
     """Return whether *path* is still selected and therefore must not be retired.
 
     Once the plugin-level selector exists it is authoritative. It names the
@@ -305,16 +414,12 @@ def _is_selected_generation(home: ManagedHome, plugin_ref: str, path: Path) -> b
     flip failure — fall back to per-version protection, which over-retains
     rather than deleting something still in use.
     """
-    plugin_selected = resolve_current_generation_for_plugin(home.root, plugin_ref)
+    plugin_selected = resolve_current_generation_for_plugin(home, plugin_ref)
     if plugin_selected is None:
-        return path == resolve_current_generation(home.root, plugin_ref, path.parent.name)
+        return path == resolve_current_generation(home, plugin_ref, path.parent.name)
     if path == plugin_selected:
         return True
-    return path == resolve_current_generation(
-        home.root,
-        plugin_ref,
-        plugin_selected.parent.name,
-    )
+    return path == resolve_current_generation(home, plugin_ref, plugin_selected.parent.name)
 
 
 class GenerationArtifactRetirementOwner:
@@ -327,13 +432,20 @@ class GenerationArtifactRetirementOwner:
     without ever removing it.
     """
 
-    def __init__(self, managed_root: Path, *, home: ManagedHome, plugin_ref: str) -> None:
-        self._home = home
+    def __init__(
+        self,
+        managed_root: Path,
+        *,
+        home: Path,
+        plugin_ref: str,
+        artifact_kind: PluginArtifactKind = PluginArtifactKind.PLUGIN_GENERATION,
+    ) -> None:
+        self._home = Path(home)
         self._plugin_ref = plugin_ref
+        self._artifact_kind = artifact_kind
         self._retirement = PluginArtifactRetirementEngine(
-            home=home,
             managed_root=managed_root,
-            artifact_kind=PluginArtifactKind.PLUGIN_GENERATION,
+            artifact_kind=artifact_kind,
             manifest_path=self.manifest_path,
             lease_path=self.lease_path,
             current_identity=self._current_identity,
@@ -357,13 +469,10 @@ class GenerationArtifactRetirementOwner:
         self,
         identity: PluginArtifactIdentity,
         not_before: datetime,
-    ) -> RetiringAppendResult | None:
+    ) -> RetiringAppendResult:
         return self._retirement.enqueue_retirement(identity, not_before)
 
-    def cancel_obsolete_retirements(
-        self,
-        identity: PluginArtifactIdentity,
-    ) -> tuple[str, ...] | None:
+    def cancel_obsolete_retirements(self, identity: PluginArtifactIdentity) -> tuple[str, ...]:
         return self._retirement.cancel_obsolete_retirements(identity)
 
     def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
@@ -373,16 +482,22 @@ class GenerationArtifactRetirementOwner:
             raise PluginArtifactValidationError(
                 f"generation is outside managed root: {managed_path}"
             )
+        is_install_root = self._artifact_kind is PluginArtifactKind.INSTALL_ROOT_GENERATION
         return read_installed_plugin_artifact_identity(
             managed_path,
             manifest_path=self.manifest_path(managed_path),
+            allow_symlinks=is_install_root,
+            ignore_bytecode=is_install_root,
         )
 
     def _current_identity(self, record: RetiringArtifactRecord) -> PluginArtifactIdentity:
+        is_install_root = self._artifact_kind is PluginArtifactKind.INSTALL_ROOT_GENERATION
         return read_installed_plugin_artifact_identity(
             record.managed_path,
             expected_semantic_key=record.semantic_key,
             manifest_path=self.manifest_path(record.managed_path),
+            allow_symlinks=is_install_root,
+            ignore_bytecode=is_install_root,
         )
 
     def try_reclaim(self, record: RetiringArtifactRecord, now: datetime) -> RetirementOutcome:
@@ -400,7 +515,12 @@ class GenerationArtifactRetirementOwner:
         )
 
 
-def prune_stale_generations(home: ManagedHome, plugin_ref: str) -> int:
+def prune_stale_generations(
+    home: Path,
+    plugin_ref: str,
+    *,
+    artifact_kind: PluginArtifactKind = PluginArtifactKind.PLUGIN_GENERATION,
+) -> int:
     """Queue every superseded generation across all versions for retirement.
 
     Enqueue-only: nothing is deleted here. Actual removal flows through
@@ -416,10 +536,12 @@ def prune_stale_generations(home: ManagedHome, plugin_ref: str) -> int:
     candidate) on every launch, since publication is the only event that can
     create staleness.
     """
-    store_root = generation_store_root(home.root, plugin_ref)
+    store_root = generation_store_root(home, plugin_ref)
     if not store_root.is_dir():
         return 0
-    owner = GenerationArtifactRetirementOwner(store_root, home=home, plugin_ref=plugin_ref)
+    owner = GenerationArtifactRetirementOwner(
+        store_root, home=home, plugin_ref=plugin_ref, artifact_kind=artifact_kind
+    )
     candidates: list[Path] = []
     for version_dir in sorted(store_root.iterdir(), key=lambda item: item.name):
         if version_dir.name.startswith(".") or version_dir.is_symlink():
@@ -455,22 +577,14 @@ def prune_stale_generations(home: ManagedHome, plugin_ref: str) -> int:
         try:
             try:
                 identity = owner.identity_for_path(candidate)
-            except (
-                PluginArtifactUnavailableError,
-                PluginArtifactValidationError,
-                OSError,
-            ) as exc:
+            except (PluginArtifactValidationError, OSError) as exc:
                 logger.warning(
                     "generation_prune_validation_failed: %s: %s",
                     candidate,
                     exc,
                 )
                 continue
-            appended = owner.enqueue_retirement(identity, not_before)
-            if appended is None:
-                logger.warning("generation_prune_queue_unreadable: %s", candidate)
-                continue
-            created += int(appended.created)
+            created += int(owner.enqueue_retirement(identity, not_before).created)
         finally:
             writer.close_preserving()
     return created

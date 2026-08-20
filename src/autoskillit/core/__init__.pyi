@@ -16,10 +16,11 @@ from ._delivery_bounds import (
 from ._delivery_bounds import (
     resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
 )
+from ._entrypoint_shim import entrypoint_shim_path as entrypoint_shim_path
+from ._entrypoint_shim import render_entrypoint_shim as render_entrypoint_shim
+from ._entrypoint_shim import write_entrypoint_shim as write_entrypoint_shim
 from ._execution_marker import execution_marker as execution_marker
-from ._install_binding import INSTALL_STALENESS_REMEDY as INSTALL_STALENESS_REMEDY
 from ._install_binding import InstallBinding as InstallBinding
-from ._install_binding import InstallStalenessRemedy as InstallStalenessRemedy
 from ._install_binding import (
     install_binding_matches_current_state as install_binding_matches_current_state,
 )
@@ -47,6 +48,9 @@ from ._plugin_artifact_identity import (
     generation_selector_path as generation_selector_path,
 )
 from ._plugin_artifact_identity import (
+    generation_staging_root as generation_staging_root,
+)
+from ._plugin_artifact_identity import (
     generation_store_root as generation_store_root,
 )
 from ._plugin_artifact_identity import (
@@ -67,7 +71,6 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     installed_plugin_cache_dir as installed_plugin_cache_dir,
 )
-from ._plugin_artifact_identity import is_python_bytecode_path as is_python_bytecode_path
 from ._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
 )
@@ -95,6 +98,7 @@ from ._plugin_cache import remove_retiring_records as remove_retiring_records
 from ._plugin_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from ._plugin_cache import sample_kitchen_process_identity as sample_kitchen_process_identity
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
+from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
@@ -214,6 +218,7 @@ from .io import decode_versioned_json_bytes as decode_versioned_json_bytes
 from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
+from .io import is_python_bytecode_path as is_python_bytecode_path
 from .io import is_yaml_mapping_node as is_yaml_mapping_node
 from .io import load_yaml as load_yaml
 from .io import mapping_entry_byte_ranges_from_yaml as mapping_entry_byte_ranges_from_yaml
@@ -1195,6 +1200,7 @@ from .types import detect_body_marker as detect_body_marker
 from .types import (
     encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,
 )
+from .types import environment_pinned_path_segments as environment_pinned_path_segments
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name

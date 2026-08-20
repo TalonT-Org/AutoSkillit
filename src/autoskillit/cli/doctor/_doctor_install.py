@@ -19,7 +19,7 @@ def _format_upgrade_cmd(info: object) -> str:
     from autoskillit.cli.install._install_info import upgrade_command
 
     cmd = upgrade_command(info)  # type: ignore[arg-type]
-    return " ".join(cmd) if cmd else "autoskillit update"
+    return " ".join(cmd.argv) if cmd else "autoskillit update"
 
 
 def _check_autoskillit_on_path() -> DoctorResult:

@@ -22,6 +22,13 @@ assignment (reached at import time via ``cli/__init__.py`` -> ``cli/_hooks.py``
 and ``execution/backends/__init__.py`` -> ``execution/backends/_codex_hooks.py``)
 and by the MCP server's ``run_startup_drift_check``; no additional explicit
 seal-forcing call is needed at any entry point.
+
+Issue #4597 Phase 3: the same first-access seal also best-effort acquires and
+holds a shared ``ArtifactLease`` on this process's own install-root
+generation (see ``_acquire_self_lease``), for the process's entire lifetime.
+This is what makes the retirement engine's reclaim sweep durably refuse to
+delete a root a live process is reading from, independent of the 24-hour
+retirement grace window or how many subsequent versions have superseded it.
 """
 
 from __future__ import annotations
@@ -31,6 +38,57 @@ import importlib.metadata
 import importlib.resources as ir
 from dataclasses import dataclass
 from pathlib import Path
+
+_SELF_LEASE_HANDLE: object | None = None
+"""Process-lifetime handle for the self-held lease. Intentionally never
+explicitly released — the descriptor closes naturally at process exit, which
+is exactly when it should stop protecting this root."""
+
+
+def _acquire_self_lease(root: Path, version: str) -> None:
+    """Best-effort: hold a shared lease on this process's own install-root
+    generation for the process's lifetime.
+
+    Finds the generation by matching ``root`` (this process's ``pkg_root()``)
+    against every incarnation directory under the install-root generation
+    store's version directory via ``is_relative_to`` — robust to uv's exact
+    internal venv layout, unlike assuming a fixed parent-directory depth.
+
+    Best-effort and silent on any failure: a pre-Phase-3 (legacy shared-root)
+    install, a local editable/dev checkout, or any process whose root simply
+    isn't under the generation store has nothing to lease here.
+    ``install_binding_matches_current_state()`` remains the correct backstop
+    for those shapes.
+    """
+    global _SELF_LEASE_HANDLE
+    try:
+        from ._plugin_artifact_identity import (
+            generation_version_root,
+            installed_plugin_artifact_lease_path,
+        )
+        from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY
+        from .runtime.artifact_lease import ArtifactLease
+
+        canonical_root = root.resolve()
+        version_root = generation_version_root(Path.home(), _AUTOSKILLIT_INSTALL_ROOT_KEY, version)
+        if not version_root.is_dir():
+            return
+        for incarnation_dir in version_root.iterdir():
+            if incarnation_dir.name.startswith(".") or incarnation_dir.is_symlink():
+                continue
+            if not incarnation_dir.is_dir():
+                continue
+            try:
+                if not canonical_root.is_relative_to(incarnation_dir.resolve()):
+                    continue
+            except OSError:
+                continue
+            _SELF_LEASE_HANDLE = ArtifactLease.acquire_existing_shared(
+                installed_plugin_artifact_lease_path(incarnation_dir)
+            )
+            return
+    except Exception:
+        return
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,9 +106,11 @@ def resolve_install_binding() -> InstallBinding:
     """Seal this process's install root, version, and identity at first access."""
     root = Path(str(ir.files("autoskillit")))
     stat_result = root.stat()
+    version = importlib.metadata.version("autoskillit")
+    _acquire_self_lease(root, version)
     return InstallBinding(
         root=root,
-        version=importlib.metadata.version("autoskillit"),
+        version=version,
         device=stat_result.st_dev,
         inode=stat_result.st_ino,
     )
@@ -69,24 +129,3 @@ def install_binding_matches_current_state(binding: InstallBinding) -> bool:
     except OSError:
         return False
     return stat_result.st_dev == binding.device and stat_result.st_ino == binding.inode
-
-
-@dataclass(frozen=True, slots=True)
-class InstallStalenessRemedy:
-    """One wording for "this process's identity may be stale" (B-8).
-
-    Shared by the sealed-binding replacement probe
-    (``assert_generator_process_fresh``) and the content-hash editable-install
-    detector (``recipe._api_cache._check_process_staleness``) so the two
-    subsystems never hand an operator contradictory restart instructions for
-    the same underlying fact. Phase 3's C-6 deletes this remedy entirely once
-    immutable install roots make staleness unreachable; unifying it here
-    first makes that a single deletion, not two.
-    """
-
-    remedy: str
-
-
-INSTALL_STALENESS_REMEDY = InstallStalenessRemedy(
-    remedy="Restart the affected process — or, inside the MCP server, call reload_session."
-)

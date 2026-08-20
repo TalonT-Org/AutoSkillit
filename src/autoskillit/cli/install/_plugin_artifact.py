@@ -489,12 +489,14 @@ class DefaultPluginRetirementCoordinator:
         projection_owner: PluginArtifactRetirementOwner,
         installed_owner: PluginArtifactRetirementOwner,
         generation_owner: PluginArtifactRetirementOwner,
+        install_root_generation_owner: PluginArtifactRetirementOwner,
     ) -> None:
         self._home = home
         self._owners: dict[PluginArtifactKind, PluginArtifactRetirementOwner] = {
             PluginArtifactKind.PROJECTION: projection_owner,
             PluginArtifactKind.INSTALLED_PLUGIN: installed_owner,
             PluginArtifactKind.PLUGIN_GENERATION: generation_owner,
+            PluginArtifactKind.INSTALL_ROOT_GENERATION: install_root_generation_owner,
         }
         self._managed_roots = {kind: owner.managed_root for kind, owner in self._owners.items()}
 
@@ -555,6 +557,7 @@ def default_plugin_retirement_coordinator(
     its ``managed_root`` and never removes it, so a misrouted record is
     re-rejected on every sweep for the life of the install.
     """
+    from autoskillit.core import _AUTOSKILLIT_INSTALL_ROOT_KEY
     from autoskillit.workspace import (
         GenerationArtifactRetirementOwner,
         ProjectedPluginRetirementOwner,
@@ -571,6 +574,12 @@ def default_plugin_retirement_coordinator(
         home=resolved_home,
         plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
     )
+    install_root_generation_owner = GenerationArtifactRetirementOwner(
+        generation_store_root(home, _AUTOSKILLIT_INSTALL_ROOT_KEY),
+        home=home,
+        plugin_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
+        artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+    )
     return DefaultPluginRetirementCoordinator(
         home=resolved_home,
         projection_owner=ProjectedPluginRetirementOwner(
@@ -579,6 +588,7 @@ def default_plugin_retirement_coordinator(
         ),
         installed_owner=installed_owner,
         generation_owner=generation_owner,
+        install_root_generation_owner=install_root_generation_owner,
     )
 
 

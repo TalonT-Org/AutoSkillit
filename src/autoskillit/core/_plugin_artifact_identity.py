@@ -6,7 +6,7 @@ import stat
 from pathlib import Path
 
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR
-from .io import directory_tree_digest, read_versioned_json
+from .io import directory_tree_digest, is_python_bytecode_path, read_versioned_json
 from .types import (
     PluginArtifactIdentity,
     PluginArtifactKind,
@@ -48,6 +48,19 @@ def generation_store_root(home: Path, plugin_ref: str) -> Path:
 def generation_version_root(home: Path, plugin_ref: str, version: str) -> Path:
     """Return the version directory inside the generation store."""
     return generation_store_root(home, plugin_ref) / version
+
+
+def generation_staging_root(home: Path, plugin_ref: str) -> Path:
+    """Return the un-versioned staging area for a plugin's generation store.
+
+    Used by callers that must materialize content before a version is known
+    (e.g. installing a floating VCS ref) and only discover the version
+    afterward, moving the staged tree into its final version-keyed path once
+    it does. Named with a leading dot so ``prune_stale_generations``'s
+    version-directory scan, which already skips dotfiles, never mistakes it
+    for a version.
+    """
+    return generation_store_root(home, plugin_ref) / ".staging"
 
 
 def generation_artifact_root(
@@ -152,13 +165,6 @@ def installed_plugin_artifact_manifest_payload(
     }
 
 
-def is_python_bytecode_path(path: Path) -> bool:
-    """Return whether *path* names interpreter-generated Python bytecode."""
-    return (path.name == "__pycache__" and path.is_dir()) or (
-        path.name.endswith((".pyc", ".pyo")) and path.is_file()
-    )
-
-
 def _classify_bytecode_contamination(root: Path) -> str:
     """Scan an artifact tree for bytecode contamination.
 
@@ -184,8 +190,20 @@ def read_installed_plugin_artifact_identity(
     *,
     expected_semantic_key: str | None = None,
     manifest_path: Path | None = None,
+    allow_symlinks: bool = False,
+    ignore_bytecode: bool = False,
 ) -> PluginArtifactIdentity:
-    """Validate one installed artifact using the launch-time identity contract."""
+    """Validate one installed artifact using the launch-time identity contract.
+
+    ``allow_symlinks`` defaults to False (sanitized plugin content must never
+    contain one); install-root generations (issue #4597 Phase 3) are real
+    venvs that always do (``lib64 -> lib``) and must pass ``True``.
+
+    ``ignore_bytecode`` defaults to False; install-root generations run their
+    own interpreter from inside their tree, which writes ``__pycache__``
+    merely by being imported — must pass ``True`` there or the generation
+    fails its own digest the moment it is actually used.
+    """
     supplied_root = Path(managed_path)
     if not supplied_root.is_absolute():
         raise PluginArtifactValidationError(
@@ -293,7 +311,9 @@ def read_installed_plugin_artifact_identity(
             f"match directory name {canonical_root.name!r}"
         )
     try:
-        observed_digest = directory_tree_digest(canonical_root)
+        observed_digest = directory_tree_digest(
+            canonical_root, allow_symlinks=allow_symlinks, ignore_bytecode=ignore_bytecode
+        )
     except OSError as exc:
         raise PluginArtifactUnavailableError(
             f"installed plugin artifact cannot be read for digest: {canonical_root}"

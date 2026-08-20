@@ -26,6 +26,6 @@ type contract and were the root cause of issue #4485. An AST-based
 architectural guard at `tests/arch/test_maintenance_install_argv_contract.py`
 makes this structural invariant permanent.
 
-`app.py` is the Click application root; all sub-packages register their subcommand groups
-against the root Click group. `_serve_guard.py` was extracted from `app.py` to isolate
+`app.py` is the cyclopts application root; all sub-packages register their subcommand groups
+against the root cyclopts `App` via `app.command(...)`. `_serve_guard.py` was extracted from `app.py` to isolate
 the asyncio/signal machinery for testability.

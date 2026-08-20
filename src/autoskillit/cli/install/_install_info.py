@@ -12,10 +12,12 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
+from types import MappingProxyType
 
 from autoskillit.core import _is_stable_track, get_logger, parse_direct_url
 
@@ -157,14 +159,57 @@ def dismissal_window(info: InstallInfo) -> timedelta:
     return _STABLE_DISMISS_WINDOW
 
 
-def upgrade_command(info: InstallInfo) -> list[str] | None:
-    """Build the track-aware upgrade command, pinned to this Python minor."""
+@dataclass(frozen=True, slots=True)
+class UpgradeCommand:
+    """Track-aware upgrade argv, plus any environment overrides it requires.
+
+    Environment overrides are non-empty only for the GIT_VCS dev track: it
+    installs into a caller-chosen destination via ``UV_TOOL_DIR`` rather than
+    force-replacing the single shared uv tool root. ``uv tool install`` (uv
+    0.9.21) has no ``--target``/per-install destination flag — ``UV_TOOL_DIR``
+    is the sole supported redirection mechanism, confirmed by spike against a
+    real git-sourced install.
+    """
+
+    argv: list[str]
+    env: Mapping[str, str] = field(default_factory=dict)
+
+
+def upgrade_command(
+    info: InstallInfo,
+    *,
+    install_root_destination: Path | None = None,
+) -> UpgradeCommand | None:
+    """Build the track-aware upgrade command, pinned to this Python minor.
+
+    ``install_root_destination``, when given, redirects the GIT_VCS dev-track
+    install into that directory via ``UV_TOOL_DIR`` instead of force-replacing
+    the shared uv-managed tool root. ``UV_TOOL_BIN_DIR`` is redirected
+    alongside it into a sibling throwaway directory so uv's own generated
+    console-script symlink never lands at ``~/.local/bin/autoskillit`` and
+    clobbers the AutoSkillit-owned entrypoint shim published there. Ignored by
+    every other branch — the STABLE and LOCAL_EDITABLE tracks are unchanged.
+    """
     if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
-        return ["uv", "pip", "install", "-e", str(info.editable_source)]
+        return UpgradeCommand(argv=["uv", "pip", "install", "-e", str(info.editable_source)])
     if info.install_type != InstallType.GIT_VCS:
         return None
     python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
     track = classify_track(info)
-    if track == InstallTrack.DEV:
-        return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP, "--python", python_pin]
-    return ["uv", "tool", "upgrade", "autoskillit", "--python", python_pin]
+    if track != InstallTrack.DEV:
+        return UpgradeCommand(
+            argv=["uv", "tool", "upgrade", "autoskillit", "--python", python_pin]
+        )
+    argv = ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP, "--python", python_pin]
+    if install_root_destination is None:
+        return UpgradeCommand(argv=argv)
+    bin_dir = install_root_destination.parent / f".{install_root_destination.name}-bin"
+    return UpgradeCommand(
+        argv=argv,
+        env=MappingProxyType(
+            {
+                "UV_TOOL_DIR": str(install_root_destination),
+                "UV_TOOL_BIN_DIR": str(bin_dir),
+            }
+        ),
+    )

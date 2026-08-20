@@ -15,7 +15,6 @@ from typing import cast
 
 from autoskillit.core import (
     DIRECT_PREFIX,
-    INSTALL_STALENESS_REMEDY,
     SKILL_PROJECTION_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
@@ -99,6 +98,17 @@ def assert_generator_process_fresh() -> None:
     Called at the top of :func:`acquire_launch_binding`, this probe refuses a
     deleted or replaced installation with a typed, actionable error.
 
+    Under Phase 3's immutable, version-addressed install roots (issue #4597),
+    an AutoSkillit-initiated upgrade never mutates or deletes a root any live
+    process is reading from — it always publishes a fresh generation instead,
+    and the retirement engine refuses to reclaim a superseded root until both
+    a grace window has elapsed and its lease is uncontended. This probe is
+    therefore not "restart after every upgrade" — that hazard is gone — it is
+    a backstop against a scenario the transaction guarantees not to cause on
+    its own: external tampering (something other than AutoSkillit removed or
+    replaced the tree), disk corruption, or an install shaped by a version
+    older than #4597's immutable-root scheme.
+
     Checks:
     1. ``pkg_root()`` must still be a directory and contain ``hooks/_dispatch.py``.
     2. The sealed install root (``InstallBinding``, captured once at this
@@ -113,15 +123,18 @@ def assert_generator_process_fresh() -> None:
     if not source.is_dir() or not dispatcher.is_file():
         raise StaleGeneratorError(
             f"Generator installation deleted: {source} no longer exists or is "
-            f"missing hooks/_dispatch.py.  {INSTALL_STALENESS_REMEDY.remedy}"
+            "missing hooks/_dispatch.py. This should not happen under "
+            "AutoSkillit's own immutable install-root lifecycle; if it does, "
+            "the tree was altered outside that lifecycle."
         )
     binding = resolve_install_binding()
     if not install_binding_matches_current_state(binding):
         raise StaleGeneratorError(
             f"Generator installation replaced under this process: {binding.root} "
             f"no longer matches the identity sealed at this process's first access "
-            f"(device={binding.device}, inode={binding.inode}). "
-            f"{INSTALL_STALENESS_REMEDY.remedy}"
+            f"(device={binding.device}, inode={binding.inode}). This should not "
+            "happen under AutoSkillit's own immutable install-root lifecycle; if "
+            "it does, the tree was altered outside that lifecycle."
         )
 
 

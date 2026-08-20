@@ -13,6 +13,16 @@ any of the following conditions fire:
 All three conditions are consolidated into a single prompt listing each reason.
 Answering `Y` runs the appropriate upgrade command followed by `autoskillit install`.
 
+For the `develop`-tracking (dev) branch, the upgrade command no longer force-replaces
+the shared `uv`-managed tool root in place. It installs into a fresh, version-addressed
+destination via `UV_TOOL_DIR` (`uv tool install` in `uv` 0.9.21 has no `--target` flag —
+`UV_TOOL_DIR` is the sole supported redirection) and publishes it as a new generation
+under `~/.autoskillit/plugin-generations/autoskillit-install/`. Any AutoSkillit process
+already running keeps executing out of the generation it resolved at startup — see
+[Runtime Health](version-pipeline.md#runtime-health) for how the exec-time entrypoint
+shim makes that possible. The `stable` and `local-editable` tracks are unaffected: they
+still run `uv tool upgrade` / `uv pip install -e` against the existing install in place.
+
 ## Branch-aware dismissal windows
 
 Dismissal windows vary by install type to balance convenience and safety:
@@ -59,6 +69,19 @@ Update checks read `direct_url.json` from the installed package metadata
 (populated by `uv` or `pip` at install time).  The `~/.autoskillit/dev` marker
 file is no longer consulted — install classification is derived entirely from
 `direct_url.json`.
+
+`detect_install()` reads this metadata via
+`importlib.metadata.Distribution.from_name("autoskillit")`, which resolves
+against the *currently running* interpreter's own site-packages — wherever
+that happens to live. For a dev-track install this is inside whichever
+version-addressed generation directory
+(`~/.autoskillit/plugin-generations/autoskillit-install/{version}/{incarnation_id}/`)
+the running process resolved into at exec time. `uv tool install` still writes
+its own `dist-info/direct_url.json` into that generation's venv with
+`vcs_info.commit_id` and `vcs_info.requested_revision` populated exactly as
+before, so `InstallType.GIT_VCS` classification is unaffected by which
+generation is currently selected — confirmed by spike against a real
+git-sourced install.
 
 Use `autoskillit doctor` to inspect the current classification:
 

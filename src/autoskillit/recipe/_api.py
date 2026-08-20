@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, cast
 
 from autoskillit.core import (
-    INSTALL_STALENESS_REMEDY,
     BackendCapabilities,
     FinalizedRecipeProjection,
     ProcessStaleError,
@@ -233,7 +232,7 @@ def load_and_validate(
             _api_cache._clear_stale_caches()
         raise ProcessStaleError(
             "Process is running stale code — package directory was modified on disk "
-            f"since server startup. {INSTALL_STALENESS_REMEDY.remedy}"
+            "since server startup."
         )
 
     _pdir = project_dir if project_dir is not None else Path.cwd()

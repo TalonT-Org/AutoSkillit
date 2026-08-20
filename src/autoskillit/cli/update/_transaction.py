@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import IntEnum, StrEnum
 from pathlib import Path
 from types import MappingProxyType
@@ -35,17 +35,25 @@ from autoskillit.cli.install._install_info import (
 )
 from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
     _MAINTENANCE_EXTRAS,
     _installed_plugins_path,
+    _InstallLock,
     build_maintenance_env,
+    generation_artifact_root,
+    generation_staging_root,
     get_logger,
+    installed_plugin_semantic_key,
     is_git_main_checkout,
     is_git_worktree,
+    new_plugin_artifact_incarnation_id,
+    write_entrypoint_shim,
 )
 from autoskillit.workspace import (
     PublicationObligation,
     clear_obligation,
+    publish_install_root_generation,
     update_obligation_expected_version,
     write_obligation,
 )
@@ -79,6 +87,7 @@ class UpdateTransactionPhase(StrEnum):
     UPGRADE_SUBPROCESS_GATE = "upgrade-subprocess-gate"
     IRREVERSIBLE_PIVOT = "irreversible-pivot"
     FRESH_VERSION_METADATA_GATE = "fresh-version-metadata-gate"
+    INSTALL_ROOT_GENERATION_PUBLICATION = "install-root-generation-publication"
     INSTALL_CHILD_INVOCATION = "install-child-invocation"
     INSTALL_STATUS_RECONSTRUCTION = "install-status-reconstruction"
     POST_UPDATE_ARTIFACT_VERIFICATION = "post-update-artifact-verification"
@@ -377,7 +386,12 @@ def run_update_transaction(
 
     progress.enter(UpdateTransactionPhase.SAFETY_CAPABILITY_PREFLIGHT)
     info = detect_install()
-    command = upgrade_command(info)
+    install_root_incarnation_id = new_plugin_artifact_incarnation_id()
+    install_root_staging = (
+        generation_staging_root(resolved_home, _AUTOSKILLIT_INSTALL_ROOT_KEY)
+        / install_root_incarnation_id
+    )
+    command = upgrade_command(info, install_root_destination=install_root_staging)
     if command is None:
         return _upgrade_failure(
             progress,
@@ -446,11 +460,19 @@ def run_update_transaction(
                     progress,
                     f"Could not record the publication obligation: {exc}",
                 )
+        if command.env:
+            try:
+                install_root_staging.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                return _upgrade_failure(
+                    progress,
+                    f"Could not create the install-root staging directory: {exc}",
+                )
         try:
             upgrade_result = runner(
-                command,
+                command.argv,
                 check=False,
-                env=maintenance_env,
+                env={**maintenance_env, **command.env},
                 cwd=working_dir,
             )
         except OSError as exc:
@@ -466,8 +488,20 @@ def run_update_transaction(
         progress.enter(UpdateTransactionPhase.IRREVERSIBLE_PIVOT)
         progress.enter(UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE)
         try:
+            # A retargeted install landed at install_root_staging, not at any
+            # path the ambient PATH or the pre-pivot entrypoint resolves to —
+            # probe that binary directly rather than the default ambient
+            # resolution _default_fresh_version_prober would otherwise use.
+            probe_info = (
+                replace(
+                    info,
+                    entrypoint=install_root_staging / "autoskillit" / "bin" / "autoskillit",
+                )
+                if command.env
+                else info
+            )
             expected_version = _resolve_fresh_version(
-                info=info,
+                info=probe_info,
                 maintenance_env=maintenance_env,
                 runner=runner,
                 fresh_version_prober=fresh_version_prober,
@@ -485,6 +519,70 @@ def run_update_transaction(
                 progress,
                 f"Could not verify post-upgrade autoskillit metadata: {exc}",
             )
+
+        progress.enter(UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION)
+        if command.env:
+            # Only the retargeted GIT_VCS dev track staged content via
+            # UV_TOOL_DIR — the STABLE/LOCAL_EDITABLE branches upgraded the
+            # shared uv-managed root in place and have nothing to finalize.
+            #
+            # install_root_staging is a disposable probe copy, not the
+            # published artifact: uv/venv console scripts bake an absolute
+            # shebang path at creation time, so a tree once written cannot be
+            # relocated afterward. The install above ran only to learn
+            # expected_version. A second, near-free install (uv's local
+            # cache makes a repeat install of the same resolved commit a
+            # cache hit — verified by spike) writes the real, permanent copy
+            # directly at its final version+incarnation-keyed path.
+            generation_root = generation_artifact_root(
+                resolved_home,
+                _AUTOSKILLIT_INSTALL_ROOT_KEY,
+                expected_version,
+                install_root_incarnation_id,
+            )
+            try:
+                generation_root.parent.mkdir(parents=True, exist_ok=True)
+                final_bin_dir = generation_root.parent / f".{generation_root.name}-bin"
+                final_result = runner(
+                    command.argv,
+                    check=False,
+                    env={
+                        **maintenance_env,
+                        "UV_TOOL_DIR": str(generation_root),
+                        "UV_TOOL_BIN_DIR": str(final_bin_dir),
+                    },
+                    cwd=working_dir,
+                )
+            except OSError as exc:
+                return _upgrade_failure(
+                    progress,
+                    f"Could not start the install-root generation install: {exc}",
+                )
+            if final_result.returncode != 0:
+                return _upgrade_failure(
+                    progress,
+                    _process_finding("install-root generation install", final_result.returncode),
+                )
+            try:
+                with _InstallLock():
+                    publish_install_root_generation(
+                        home=resolved_home,
+                        install_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
+                        version=expected_version,
+                        semantic_key=installed_plugin_semantic_key(
+                            _AUTOSKILLIT_INSTALL_ROOT_KEY,
+                            expected_version,
+                        ),
+                        incarnation_id=install_root_incarnation_id,
+                        staged_root=generation_root,
+                    )
+                write_entrypoint_shim(resolved_home)
+            except Exception as exc:
+                _report_post_pivot_failure("update_install_root_generation_publish_failed")
+                return _upgrade_failure(
+                    progress,
+                    f"Could not publish the install-root generation: {exc}",
+                )
 
         if require_registered_plugin:
             # Post-pivot journal touch; update_obligation_expected_version()
@@ -565,7 +663,6 @@ def run_update_transaction(
         try:
             from autoskillit.core import (
                 installed_plugin_artifact_manifest_path,
-                installed_plugin_semantic_key,
                 read_installed_plugin_artifact_identity,
                 resolve_current_generation,
             )
@@ -633,3 +730,6 @@ def run_update_transaction(
         )
     finally:
         shutil.rmtree(working_dir, ignore_errors=True)
+        # Cleared by a successful publish_install_root_generation() rename; a
+        # leftover here means a failure occurred before or during finalize.
+        shutil.rmtree(install_root_staging, ignore_errors=True)

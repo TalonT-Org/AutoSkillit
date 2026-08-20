@@ -24,7 +24,7 @@ from autoskillit.cli.install._install_contract import (
     InstallProcessStatus,
     InstallRequest,
     InstallResult,
-    MaintenanceInstallArgv,
+    MaintenanceSubprocessInvocation,
     result_from_process_status,
 )
 from autoskillit.cli.install._install_info import (
@@ -36,6 +36,7 @@ from autoskillit.cli.install._install_info import (
 from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
+    _MAINTENANCE_EXTRAS,
     _installed_plugins_path,
     build_maintenance_env,
     get_logger,
@@ -60,10 +61,6 @@ __all__ = [
     "run_update_transaction",
 ]
 
-_MAINTENANCE_EXTRAS = {
-    "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
-    "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-}
 logger = get_logger(__name__)
 
 _ProcessRunner = Callable[..., subprocess.CompletedProcess[Any]]
@@ -238,6 +235,8 @@ def _default_fresh_version_prober(
     info: InstallInfo,
     maintenance_env: Mapping[str, str],
     runner: _ProcessRunner,
+    *,
+    cwd: Path,
 ) -> str:
     """Read the post-pivot version from a newly launched CLI process."""
     entrypoint = resolve_autoskillit_entrypoint(
@@ -250,11 +249,15 @@ def _default_fresh_version_prober(
             "post-upgrade version (neither the pre-pivot ambient PATH nor "
             "the maintenance environment's PATH could locate one)."
         )
+    invocation = MaintenanceSubprocessInvocation.for_version_probe(
+        entrypoint, environment=maintenance_env, cwd=cwd
+    )
     result = runner(
-        [str(entrypoint), "--version"],
+        list(invocation.argv),
         check=False,
-        env=maintenance_env,
-        capture_output=True,
+        env=invocation.env,
+        cwd=invocation.cwd,
+        capture_output=invocation.capture_output,
         text=True,
     )
     if result.returncode != 0:
@@ -274,11 +277,12 @@ def _resolve_fresh_version(
     maintenance_env: Mapping[str, str],
     runner: _ProcessRunner,
     fresh_version_prober: _VersionProber | None,
+    cwd: Path,
 ) -> str:
     """Resolve post-pivot version truth through the configured subprocess probe."""
     if fresh_version_prober is not None:
         return fresh_version_prober(info, maintenance_env, runner)
-    return _default_fresh_version_prober(info, maintenance_env, runner)
+    return _default_fresh_version_prober(info, maintenance_env, runner, cwd=cwd)
 
 
 def _map_install_result(
@@ -467,6 +471,7 @@ def run_update_transaction(
                 maintenance_env=maintenance_env,
                 runner=runner,
                 fresh_version_prober=fresh_version_prober,
+                cwd=working_dir,
             )
             if Version(expected_version) <= Version(current_version):
                 return _upgrade_failure(
@@ -500,17 +505,21 @@ def run_update_transaction(
             require_registered_plugin=request.require_registered_plugin,
             expected_version=expected_version,
         )
-        install_command = MaintenanceInstallArgv(
-            entrypoint=Path("autoskillit"),
-            expected_version=expected_version,
-        ).to_argv(require_registered_plugin=require_registered_plugin)
+        install_invocation = MaintenanceSubprocessInvocation.for_install(
+            Path("autoskillit"),
+            expected_version,
+            environment=maintenance_env,
+            cwd=working_dir,
+            require_registered_plugin=require_registered_plugin,
+        )
         progress.enter(UpdateTransactionPhase.INSTALL_CHILD_INVOCATION)
         try:
             install_process = runner(
-                install_command,
+                list(install_invocation.argv),
                 check=False,
-                env=maintenance_env,
-                cwd=working_dir,
+                env=install_invocation.env,
+                cwd=install_invocation.cwd,
+                capture_output=install_invocation.capture_output,
             )
         except OSError as exc:
             _report_post_pivot_failure("update_install_child_launch_failed")

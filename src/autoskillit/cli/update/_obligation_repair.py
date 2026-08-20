@@ -11,7 +11,9 @@ that may itself be reading that state.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -20,7 +22,7 @@ from typing import Any
 
 from packaging.version import InvalidVersion, Version
 
-from autoskillit.cli.install._install_contract import MaintenanceInstallArgv
+from autoskillit.cli.install._install_contract import MaintenanceSubprocessInvocation
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     get_logger,
@@ -131,69 +133,111 @@ def attempt_obligation_repair(
     child_env = dict(env)
     child_env["HOME"] = str(home)
 
-    # A maintenance install does not change the distribution version, so probe once.
+    # A scratch, non-repo cwd for both maintenance children below — the same
+    # hazard _transaction.py's is_git_worktree/is_git_main_checkout check
+    # exists to prevent, applied here since this function's caller cwd may
+    # be an arbitrary project directory (possibly a git worktree).
+    maintenance_parent = home / ".autoskillit"
     try:
-        version_check = runner(
-            [str(repair_entrypoint), "--version"],
-            check=False,
-            env=child_env,
-            capture_output=True,
-            text=True,
-        )
+        maintenance_parent.mkdir(parents=True, exist_ok=True)
+        working_dir = Path(tempfile.mkdtemp(prefix="obligation-repair-", dir=maintenance_parent))
     except OSError as exc:
         return ObligationRepairResult(
             outcome=ObligationRepairOutcome.FAILED,
-            findings=(f"obligation_repair_probe_failed: {exc}",),
+            findings=(f"Could not create the obligation repair working directory: {exc}",),
         )
-    if version_check.returncode != 0:
-        return ObligationRepairResult(
-            outcome=ObligationRepairOutcome.FAILED,
-            findings=(
-                "obligation_repair_probe_failed: --version returned "
-                f"{version_check.returncode}: {version_check.stderr.strip()}",
-            ),
-        )
-    probed_version = (version_check.stdout or "").strip()
-    if not probed_version or _valid_version_or_unknown(probed_version) is None:
-        return ObligationRepairResult(
-            outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
-            findings=(f"obligation_repair_probe_unparseable: {probed_version!r}",),
-        )
-
-    # A stale persisted version would be rejected by the install child.
-    persisted_version = _valid_version_or_unknown(obligation.expected_version)
-    if persisted_version is not None and persisted_version != probed_version:
-        return ObligationRepairResult(
-            outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
-            findings=(
-                f"obligation_stale: expected {persisted_version}, observed {probed_version}",
-            ),
-        )
-
-    install_argv = MaintenanceInstallArgv(
-        entrypoint=repair_entrypoint,
-        expected_version=probed_version,
-    ).to_argv()
 
     try:
-        install_result = runner(
-            install_argv,
-            check=False,
-            env=child_env,
-        )
-    except OSError as exc:
-        return ObligationRepairResult(
-            outcome=ObligationRepairOutcome.FAILED,
-            findings=(f"Could not launch obligation repair install: {exc}",),
-        )
-    if install_result.returncode != 0:
-        return ObligationRepairResult(
-            outcome=ObligationRepairOutcome.FAILED,
-            findings=(
-                "autoskillit install --maintenance-update exited with "
-                f"status {install_result.returncode}",
-            ),
-        )
+        # A maintenance install does not change the distribution version, so probe once.
+        try:
+            probe_invocation = MaintenanceSubprocessInvocation.for_version_probe(
+                repair_entrypoint, environment=child_env, cwd=working_dir
+            )
+        except ValueError as exc:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=(f"obligation_repair_invocation_invalid: {exc}",),
+            )
+        try:
+            version_check = runner(
+                list(probe_invocation.argv),
+                check=False,
+                env=probe_invocation.env,
+                cwd=probe_invocation.cwd,
+                capture_output=probe_invocation.capture_output,
+                text=True,
+            )
+        except OSError as exc:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=(f"obligation_repair_probe_failed: {exc}",),
+            )
+        if version_check.returncode != 0:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=(
+                    "obligation_repair_probe_failed: --version returned "
+                    f"{version_check.returncode}: {version_check.stderr.strip()}",
+                ),
+            )
+        probed_version = (version_check.stdout or "").strip()
+        if not probed_version or _valid_version_or_unknown(probed_version) is None:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
+                findings=(f"obligation_repair_probe_unparseable: {probed_version!r}",),
+            )
+
+        # A stale persisted version would be rejected by the install child.
+        persisted_version = _valid_version_or_unknown(obligation.expected_version)
+        if persisted_version is not None and persisted_version != probed_version:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
+                findings=(
+                    f"obligation_stale: expected {persisted_version}, observed {probed_version}",
+                ),
+            )
+
+        # obligation is not None here (checked at function entry) — the sole
+        # reason this repair runs is to complete a registered-plugin
+        # publication obligation, so the install child must always ask for
+        # republication, not silently fall back to InstallOutcome.NOT_REQUIRED.
+        try:
+            install_invocation = MaintenanceSubprocessInvocation.for_install(
+                repair_entrypoint,
+                probed_version,
+                environment=child_env,
+                cwd=working_dir,
+                require_registered_plugin=True,
+            )
+        except ValueError as exc:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=(f"obligation_repair_invocation_invalid: {exc}",),
+            )
+
+        try:
+            install_result = runner(
+                list(install_invocation.argv),
+                check=False,
+                env=install_invocation.env,
+                cwd=install_invocation.cwd,
+                capture_output=install_invocation.capture_output,
+            )
+        except OSError as exc:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=(f"Could not launch obligation repair install: {exc}",),
+            )
+        if install_result.returncode != 0:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=(
+                    "autoskillit install --maintenance-update exited with "
+                    f"status {install_result.returncode}",
+                ),
+            )
+    finally:
+        shutil.rmtree(working_dir, ignore_errors=True)
 
     cache_dir = installed_plugin_cache_dir(home, "autoskillit")
     try:

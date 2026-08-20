@@ -32,6 +32,7 @@ class RunSkillCompletionReceipt:
     success: bool
     result_digest: str
     started_at: float
+    fault_domain: str = "logic"
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,7 @@ class DefaultRunSkillCompletionAuthority:
         self._delivered: dict[str, RunSkillCompletionReceipt] = {}
         self._recovered: set[str] = set()
         self._acknowledged: dict[str, _AcknowledgedReceipt] = {}
+        self._most_recent_acknowledged_id: str | None = None
         self._credits: dict[tuple[str, str, str, str, str], set[str]] = {}
 
     def admission(self, tool_name: str) -> tuple[bool, str]:
@@ -144,6 +146,7 @@ class DefaultRunSkillCompletionAuthority:
         success: bool,
         result_digest: str,
         child_session_id: str = "",
+        fault_domain: str = "logic",
     ) -> RunSkillCompletionReceipt:
         """Atomically replace an in-flight invocation with a draft receipt."""
         with self._lock:
@@ -165,6 +168,7 @@ class DefaultRunSkillCompletionAuthority:
                 success=success,
                 result_digest=result_digest,
                 started_at=invocation.started_at,
+                fault_domain=fault_domain,
             )
             self._drafts[receipt.receipt_id] = receipt
             return receipt
@@ -245,7 +249,22 @@ class DefaultRunSkillCompletionAuthority:
                 self._credits.setdefault(self._credit_key(delivered_receipt), set()).add(
                     receipt_id
                 )
+            self._most_recent_acknowledged_id = receipt_id
             return delivered_receipt
+
+    def most_recent_acknowledged(self) -> RunSkillCompletionReceipt | None:
+        """Return the most recently acknowledged receipt, or ``None`` if none exists.
+
+        The at-most-one in-flight invariant does not bound how many receipts
+        accumulate in ``_acknowledged`` between ``clear_if_idle()`` calls, so
+        this is the only "what happened last" query — every prior read
+        required an already-known ``receipt_id``.
+        """
+        with self._lock:
+            if self._most_recent_acknowledged_id is None:
+                return None
+            acknowledged = self._acknowledged.get(self._most_recent_acknowledged_id)
+            return acknowledged.receipt if acknowledged is not None else None
 
     def apply_acknowledged_tracker_outcome(
         self,
@@ -348,6 +367,7 @@ class DefaultRunSkillCompletionAuthority:
             self._credits.clear()
             self._recovered.clear()
             self._acknowledged.clear()
+            self._most_recent_acknowledged_id = None
             return True
 
     @staticmethod

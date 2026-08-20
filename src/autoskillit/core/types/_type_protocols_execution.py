@@ -78,6 +78,7 @@ class RunSkillCompletionAuthority(Protocol):
         success: bool,
         result_digest: str,
         child_session_id: str = "",
+        fault_domain: str = "logic",
     ) -> Any: ...
 
     def abort(self, invocation_id: str) -> bool: ...
@@ -123,6 +124,8 @@ class RunSkillCompletionAuthority(Protocol):
     ) -> Mapping[str, Any]: ...
 
     def clear_if_idle(self) -> bool: ...
+
+    def most_recent_acknowledged(self) -> Any: ...
 
 
 @runtime_checkable

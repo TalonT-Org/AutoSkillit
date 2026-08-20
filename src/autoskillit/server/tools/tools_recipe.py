@@ -203,6 +203,11 @@ async def load_recipe(
       access that the orchestrator does not.
     - Your ONLY job is to route to the correct next step and pass the
       required arguments. The downstream skill does the actual work.
+    - INFRASTRUCTURE FAULT OVERRIDE — checked BEFORE on_failure, for run_skill only:
+      when the result JSON contains "infra_fault_domain": "infrastructure", the
+      step's on_failure route MUST NOT be followed. The environment faulted,
+      not the work. Halt the pipeline and report the environment fault instead
+      of routing to on_failure.
 
     FAILURE PREDICATES — when to follow on_failure:
     - test_check: {"passed": false}

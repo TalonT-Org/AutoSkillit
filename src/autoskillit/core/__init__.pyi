@@ -99,6 +99,8 @@ from ._plugin_ids import parse_installed_plugin_semantic_key as parse_installed_
 from ._plugin_ids import project_agent_tool_name as project_agent_tool_name
 from ._plugin_ids import registered_install_paths as registered_install_paths
 from ._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
+from ._startup_warm import WARM_MODULE_NAMES as WARM_MODULE_NAMES
+from ._startup_warm import warm_failure_path_imports as warm_failure_path_imports
 from ._step_context import current_order_id as current_order_id
 from ._step_context import current_step_name as current_step_name
 from ._terminal_table import TerminalColumn as TerminalColumn
@@ -331,6 +333,7 @@ from .tool_sequence_analysis import (
 from .tool_sequence_analysis import render_adjacency_table as render_adjacency_table
 from .tool_sequence_analysis import render_dot as render_dot
 from .tool_sequence_analysis import render_mermaid as render_mermaid
+from .types import _MAINTENANCE_EXTRAS as _MAINTENANCE_EXTRAS
 from .types import _MAX_ASSOCIATION_FILES as _MAX_ASSOCIATION_FILES
 from .types import _MAX_REFERENCED_ARTIFACTS_PER_CALL as _MAX_REFERENCED_ARTIFACTS_PER_CALL
 from .types import _PLAN_ASSOCIATION_DOMAIN as _PLAN_ASSOCIATION_DOMAIN
@@ -831,6 +834,7 @@ from .types import ExplorationVectorApplicabilityId as ExplorationVectorApplicab
 from .types import ExplorationVectorDef as ExplorationVectorDef
 from .types import ExplorationVectorDisposition as ExplorationVectorDisposition
 from .types import FailureRecord as FailureRecord
+from .types import FaultDomain as FaultDomain
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
@@ -865,6 +869,7 @@ from .types import IdempotencyNamespace as IdempotencyNamespace
 from .types import IdempotencyRecord as IdempotencyRecord
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
+from .types import InfrastructureFaultError as InfrastructureFaultError
 from .types import InputContractResolver as InputContractResolver
 from .types import InputPreflightResolver as InputPreflightResolver
 from .types import InputSpec as InputSpec
@@ -900,6 +905,7 @@ from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
 from .types import MaintenanceInstallArgv as MaintenanceInstallArgv
+from .types import MaintenanceSubprocessInvocation as MaintenanceSubprocessInvocation
 from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
 from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
 from .types import ManagedHeadlessSessionLineageRef as ManagedHeadlessSessionLineageRef
@@ -1111,6 +1117,7 @@ from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
+from .types import StaleGeneratorError as StaleGeneratorError
 from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope

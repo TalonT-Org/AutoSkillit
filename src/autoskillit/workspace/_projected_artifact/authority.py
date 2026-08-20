@@ -36,6 +36,7 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillSource,
     SkillSourceRef,
+    StaleGeneratorError,
     _InstallLock,
     get_logger,
     log_plugin_artifact_lifecycle,
@@ -87,10 +88,6 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
 ]
-
-
-class StaleGeneratorError(Exception):
-    """The generating process's installation is stale or deleted."""
 
 
 def assert_generator_process_fresh() -> None:

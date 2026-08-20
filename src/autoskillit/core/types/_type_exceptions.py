@@ -6,6 +6,7 @@ __all__ = [
     "BoundedDeliveryRoundTripBudgetExceededError",
     "CapabilityNotSupportedError",
     "ChildSpawnCardinalityError",
+    "InfrastructureFaultError",
     "PluginArtifactContentionError",
     "PluginArtifactPublicationError",
     "PluginArtifactUnavailableError",
@@ -16,15 +17,45 @@ __all__ = [
     "RecipeDeliveryBudgetError",
     "RecipeExemptionFitnessError",
     "RecipeNotFoundError",
+    "StaleGeneratorError",
 ]
+
+
+class InfrastructureFaultError(Exception):
+    """Marker base for faults that are a property of the environment, not the work.
+
+    Raised when the package install, a plugin artifact, or a process's own
+    identity has been invalidated by something outside the running attempt —
+    the install root was replaced, an artifact is contended, a filesystem read
+    was transiently unavailable — never because the work being attempted was
+    wrong. gRPC's ``FAILED_PRECONDITION`` states the same split canonically:
+    "the client should not retry until the system state has been explicitly
+    fixed." That is this error's contract, and why classifying it sets
+    ``needs_retry=False`` rather than treating it as a logic crash.
+
+    Derives from ``Exception`` only — never ``RuntimeError`` or ``OSError`` —
+    so that joining this marker onto an existing hierarchy (the four
+    ``PluginArtifact*Error`` classes are ``RuntimeError`` subclasses,
+    ``ProcessStaleError`` is a ``RecipeLoadError`` subclass) never widens which
+    pre-existing ``except RuntimeError``/``except OSError`` handlers catch it.
+
+    Deliberately NOT marked: ``PluginArtifactValidationError`` (artifact
+    content is corrupt — a genuine integrity fault with its own self-heal
+    path) and ``PluginArtifactPublicationError`` (a publish failure may
+    indicate a real defect, not an environment fault).
+    """
 
 
 class RecipeLoadError(Exception):
     """Base exception for load_and_validate failures."""
 
 
-class ProcessStaleError(RecipeLoadError):
+class ProcessStaleError(RecipeLoadError, InfrastructureFaultError):
     """MCP server process is running stale code — restart required."""
+
+
+class StaleGeneratorError(InfrastructureFaultError):
+    """The generating process's installation is stale or deleted."""
 
 
 class RecipeNotFoundError(RecipeLoadError):
@@ -98,7 +129,7 @@ class ChildSpawnCardinalityError(SkillContractError):
     """A child spawn does not declare exactly one valid cardinality authority."""
 
 
-class PluginArtifactContentionError(RuntimeError):
+class PluginArtifactContentionError(RuntimeError, InfrastructureFaultError):
     """A plugin artifact cannot be read or mutated while another owner holds it."""
 
 
@@ -106,8 +137,14 @@ class PluginArtifactPublicationError(RuntimeError):
     """A complete plugin artifact incarnation could not be published."""
 
 
-class PluginArtifactUnavailableError(RuntimeError):
-    """A plugin artifact could not be read because of a retryable filesystem error."""
+class PluginArtifactUnavailableError(RuntimeError, InfrastructureFaultError):
+    """A plugin artifact could not be read because of an unavailable filesystem.
+
+    Not retryable in-process: whatever the filesystem might do on a second
+    attempt, the process that observed the fault cannot safely continue while
+    its own install identity may be mid-replacement. The correct disposition
+    is halt-and-report, not retry — see ``InfrastructureFaultError``.
+    """
 
 
 class PluginArtifactValidationError(RuntimeError):

@@ -30,6 +30,7 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
     select_child_session_deadline,
+    warm_failure_path_imports,
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._checkpoint_bridge import (
@@ -273,6 +274,7 @@ async def execute_dispatch(
     Orchestrates: lock → validate → quota → prompt → dispatch → parse → state → cleanup.
     Returns DispatchResult wrapping the outcome plus the per-dispatch state path.
     """
+    warm_failure_path_imports()
     effective_name = dispatch_name or recipe
     provenance = provenance or DispatchProvenanceTracker()
 

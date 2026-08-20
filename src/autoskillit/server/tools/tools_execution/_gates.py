@@ -239,12 +239,14 @@ def _finalize_run_skill_completion(
         }
     success = payload.get("success") is True
     classification = str(payload.get("subtype") or ("success" if success else "failed"))
+    fault_domain = str(payload.get("infra_fault_domain") or "logic")
     receipt = authority.draft(
         invocation_id,
         classification=classification,
         success=success,
         result_digest=compute_bytes_hash(rendered.encode("utf-8")),
         child_session_id=child_session_id,
+        fault_domain=fault_domain,
     )
     payload["receipt_id"] = receipt.receipt_id
     finalized = FinalizedRunSkillCompletionResponse(

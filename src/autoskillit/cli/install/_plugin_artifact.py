@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     ArtifactLease,
+    InfrastructureFaultError,
     LegacyRetiringEvidence,
     ManagedHome,
     PluginArtifactIdentity,
@@ -195,12 +196,13 @@ class InstalledPluginArtifactAuthority:
     ) -> PluginLaunchBinding:
         """Resolve current generation, acquire a shared reader lease, validate.
 
-        If validation of the current generation fails, attempts a single
-        self-heal republish from source before propagating the error.
+        If validation of the current generation fails — including the
+        freshness probe finding the generator installation itself stale or
+        deleted — attempts a single self-heal republish from source before
+        propagating the error.
         """
         from autoskillit.workspace import assert_generator_process_fresh
 
-        assert_generator_process_fresh()
         del backend
         if not load_mode.consumes_artifact:
             raise PluginArtifactValidationError(
@@ -218,8 +220,9 @@ class InstalledPluginArtifactAuthority:
             return self._acquire_from_root(self._root, load_mode)
 
         try:
+            assert_generator_process_fresh()
             return self._acquire_from_root(generation_dir, load_mode)
-        except PluginArtifactValidationError:
+        except (PluginArtifactValidationError, InfrastructureFaultError):
             healed = self._self_heal_republish()
             if healed is None:
                 raise

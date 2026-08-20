@@ -18,12 +18,14 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     CODEX_SESSIONS_SUBDIR,
+    InfrastructureFaultError,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
     extract_skill_name,
     get_logger,
     read_tracker_authority,
+    warm_failure_path_imports,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -141,6 +143,7 @@ async def run_skill(
 
     Never raises.
     """
+    warm_failure_path_imports()
     if (tier_gate := _require_orchestrator_exact("run_skill")) is not None:
         return tier_gate
     if (gate := _require_enabled()) is not None:
@@ -391,6 +394,21 @@ async def run_skill(
             if (terminal := _te_pkg._prepare_dispatch_session(state)) is not None:
                 return terminal
             return await _te_pkg._execute_and_finalize_run_skill(state)
+    except InfrastructureFaultError as exc:
+        logger.error("run_skill unhandled infrastructure fault", exc_info=True)
+        _unhandled_infra_fault_result = SkillResult.infrastructure_fault(
+            exception=exc,
+            skill_command=skill_command,
+            order_id=order_id,
+        )
+        if state is not None and state._completion_invocation_id:
+            return _te_pkg._finalize_run_skill_completion(
+                state.tool_ctx,
+                state._completion_invocation_id,
+                _unhandled_infra_fault_result.to_json(),
+                child_session_id=_unhandled_infra_fault_result.session_id,
+            )
+        return _unhandled_infra_fault_result.to_json()
     except Exception as exc:
         logger.error("run_skill unhandled exception", exc_info=True)
         _unhandled_result = SkillResult.crashed(

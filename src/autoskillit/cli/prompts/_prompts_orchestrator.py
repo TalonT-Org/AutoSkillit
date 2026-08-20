@@ -156,6 +156,17 @@ ROUTING RULES — MANDATORY:
   access that the orchestrator does not.
 - Your ONLY job is to route to the correct next step and pass the
   required arguments. The downstream skill does the actual work.
+- INFRASTRUCTURE FAULT OVERRIDE — checked BEFORE on_failure, for run_skill only:
+  when the result JSON contains "infra_fault_domain": "infrastructure", the
+  step's on_failure route MUST NOT be followed. This means the environment
+  faulted — the package install was replaced, a plugin artifact was
+  contended, a filesystem read was transiently unavailable — not that the
+  work itself failed. The client should not retry until the system state has
+  been explicitly fixed (the same distinction gRPC's FAILED_PRECONDITION
+  makes). Halt the pipeline and report the environment fault to the operator
+  instead of routing to on_failure, and do not release claims or remove
+  clones on this result without first getting explicit operator confirmation
+  — those tools refuse by default after an infrastructure fault.
 
 FAILURE PREDICATES — when to follow on_failure:
 - test_check: "passed: False" in output

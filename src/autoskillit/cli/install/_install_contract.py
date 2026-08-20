@@ -2,7 +2,9 @@
 
 This module is intentionally a dependency leaf: it performs no I/O and builds
 on the IL-0 typed maintenance-install boundary. Call sites that spawn the child
-subprocess must use ``MaintenanceInstallArgv.to_argv()`` to construct their argv.
+subprocess must use ``MaintenanceSubprocessInvocation.for_install()`` or
+``.for_version_probe()`` to construct the complete argv + env + cwd + stdio
+invocation — never hand-build any one of those four independently.
 """
 
 from __future__ import annotations
@@ -10,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
-from autoskillit.core import InstallMode, MaintenanceInstallArgv
+from autoskillit.core import InstallMode, MaintenanceInstallArgv, MaintenanceSubprocessInvocation
 
 __all__ = [
     "InstallFailureKind",
@@ -20,6 +22,7 @@ __all__ = [
     "InstallRequest",
     "InstallResult",
     "MaintenanceInstallArgv",
+    "MaintenanceSubprocessInvocation",
     "process_status_for_result",
     "result_from_process_status",
 ]

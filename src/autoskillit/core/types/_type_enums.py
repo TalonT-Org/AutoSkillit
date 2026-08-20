@@ -41,6 +41,7 @@ __all__ = [
     "IssueLabelState",
     "DispatchGateType",
     "ClaudeContentBlockType",
+    "FaultDomain",
     "InfraExitCategory",
     "BackendEventKind",
     "CodexEventType",
@@ -102,6 +103,24 @@ class InfraExitCategory(StrEnum):
     API_ERROR = "api_error"
     PROCESS_KILLED = "process_killed"
     RATE_LIMITED = "rate_limited"
+
+
+class FaultDomain(StrEnum):
+    """Whether a SkillResult's failure belongs to the environment or the work.
+
+    Populated from exception type at the classifying catch site (see
+    ``InfrastructureFaultError``), never cross-populated with
+    ``InfraOutcome.exit_category`` — that field is populated separately, by
+    post-launch text analysis of subprocess output, and answers a different
+    question. An ``infrastructure_fault`` result has ``exit_category=""``;
+    an existing rate-limited/API-error result has the default
+    ``fault_domain=LOGIC``. Uses the same two string values as
+    ``fleet.state_types.ErrorCodeCategory`` so the two layers share one
+    vocabulary rather than drifting into two.
+    """
+
+    LOGIC = "logic"
+    INFRASTRUCTURE = "infrastructure"
 
 
 class MergeFailedStep(StrEnum):

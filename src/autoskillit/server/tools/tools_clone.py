@@ -18,7 +18,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CAMPAIGN_ID_ENV_VAR, get_logger
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server._guards import _require_enabled, _require_no_infrastructure_fault
 from autoskillit.server._misc import clone_registry
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._recipe_segment_delivery import (
@@ -139,6 +139,7 @@ async def remove_clone(
     clone_path: str,
     keep: str = "false",
     step_name: str = "",
+    infrastructure_fault_override_reason: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Remove a pipeline clone directory.
@@ -154,10 +155,19 @@ async def remove_clone(
         clone_path: Absolute path to the clone directory to remove.
         keep: Pass "true" to preserve the directory (debugging). Default "false".
         step_name: Optional YAML step key for wall-clock timing accumulation.
+        infrastructure_fault_override_reason: Required to proceed when the most
+            recently completed step ended in an infrastructure fault. Absent by
+            default so refusal is the default path, not an opt-in.
     """
     try:
         if (gate := _require_enabled()) is not None:
             return gate
+        if (
+            fault_gate := _require_no_infrastructure_fault(
+                "remove_clone", override_reason=infrastructure_fault_override_reason
+            )
+        ) is not None:
+            return fault_gate
         with structlog.contextvars.bound_contextvars(tool="remove_clone", clone_path=clone_path):
             logger.info("remove_clone", clone_path=clone_path, keep=keep)
             await _notify(

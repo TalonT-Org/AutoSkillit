@@ -712,6 +712,10 @@ def main() -> None:
     """Entry point for autoskillit."""
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
     if _first_arg != "serve":
+        from autoskillit.core import warm_failure_path_imports
+
+        warm_failure_path_imports()
+
         from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
 
         evict_direct_mcp_entry(_user_claude_json_path())
@@ -735,7 +739,14 @@ def main() -> None:
                         finding=finding,
                     )
 
-        from autoskillit.cli.update._update_checks import run_update_checks
+        # Defence in depth alongside A-6's env fix: a self-invoked subcommand
+        # must not be able to prompt even if a future spawn site forgets the
+        # skip-flag env. "update" is included (unlike the repair set above)
+        # because the explicit `autoskillit update` command is itself the
+        # authoritative caller of run_update_transaction() and is actively
+        # corrupted by the automatic pre-check racing it — see _update.py.
+        if _first_arg not in {"install", "--version", "update"}:
+            from autoskillit.cli.update._update_checks import run_update_checks
 
-        run_update_checks()
+            run_update_checks()
     app()

@@ -106,6 +106,13 @@ def _resume_reason_guidance(kill_reason: str) -> str:
             "Kill reason: transient infrastructure failure (API error or process kill). "
             "Resume is safe — retry immediately."
         )
+    if kill_reason == RetryReason.NONE:
+        return (
+            "Kill reason: none — the session ended before any subprocess launched "
+            "(a crash or infrastructure fault at admission/launch time). Standard "
+            "resume does not apply here: there is no partial subprocess run to "
+            "continue. Start a fresh session instead."
+        )
     return "Kill reason: unknown. Resume with standard recovery."
 
 

@@ -20,6 +20,8 @@ Every test here fails against the pre-fix code.
 
 from __future__ import annotations
 
+import os
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -32,6 +34,7 @@ from autoskillit.core import (
     RetirementOutcome,
     _InstallLock,
     generation_plugin_selector_path,
+    generation_selector_path,
     is_reclaimable_artifact_path,
     managed_home_for,
     read_retiring_cache,
@@ -305,6 +308,53 @@ def test_install_root_generation_publish_is_atomic_and_rolls_back(
     assert remaining == [], (
         f"the partially published 1.0.1 generation must be discarded, found: {remaining}"
     )
+
+
+def test_install_root_selector_is_never_absent_during_flip(home: Path) -> None:
+    """C-1: the selector must never be observably absent at any instant across a flip.
+
+    ``_replace_symlink()`` (``_generation_publication.py``) is temp-link ->
+    ``os.replace`` -> fsync — atomic on POSIX by construction, unlike an
+    ``unlink`` + ``symlink`` pair, which has a real window where the path
+    resolves to nothing. ``tests/infra/test_plugin_source_ratchets.py``
+    already pins that ``_replace_symlink`` calls ``os.replace`` exactly once
+    and never ``unlink`` on the live path — a static guard against the wrong
+    shape being reintroduced. This is the dynamic complement the plan calls
+    for: a reader polling the real selector throughout a live flip must never
+    observe it missing, proving the atomicity empirically rather than only
+    by call-shape inspection.
+    """
+    version = "1.0.0"
+    _publish_install_root(home, version)
+    selector = generation_selector_path(home, _INSTALL_ROOT_REF, version)
+
+    stop = threading.Event()
+    violations: list[str] = []
+    observed_targets: set[str] = set()
+
+    def _poll_selector() -> None:
+        while not stop.is_set():
+            try:
+                observed_targets.add(os.readlink(selector))
+            except FileNotFoundError:
+                violations.append("selector missing")
+            except OSError as exc:
+                violations.append(f"unexpected error reading selector: {exc}")
+
+    poller = threading.Thread(target=_poll_selector, daemon=True)
+    poller.start()
+    try:
+        # Republishing the same version repeatedly flips this exact
+        # selector between successive incarnations -- the live mechanism
+        # under test, not a synthetic stand-in for it.
+        for _ in range(30):
+            _publish_install_root(home, version)
+    finally:
+        stop.set()
+        poller.join(timeout=5)
+
+    assert violations == [], f"selector was observed absent or broken: {violations[:5]}"
+    assert observed_targets, "poller never actually observed the selector -- test proves nothing"
 
 
 def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:

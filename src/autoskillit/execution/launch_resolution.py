@@ -315,6 +315,13 @@ class DefaultLaunchResolver:
         selected_backend: str,
         authority_key_path: str,
     ) -> None:
+        """Reject the launch when ``model`` is native to a backend other than ``selected_backend``.
+
+        Degrades open (accepts) when no backend declares ``model`` as one of its own
+        native ids — an id owned by no backend is undecidable, not foreign, so it is
+        let through. This means each backend's ``native_model_ids`` freshness matters;
+        see ``CODEX_MODEL_ALIASES_LAST_VERIFIED``.
+        """
         if not model:
             return
         owners = self._native_model_owners(model)

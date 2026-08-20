@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Benchmark Representativeness Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Generalizability
 **Primary Question:** "Does this generalize beyond the test bed?"
 **Focus:** Task Distribution, Scenario Coverage, Missing Regions, Dataset Selection, Generalization Claims

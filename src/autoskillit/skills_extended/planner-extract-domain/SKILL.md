@@ -32,6 +32,8 @@ semantic_requirements:
 
 # planner-extract-domain
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 Extract domain knowledge, naming conventions, and structural patterns specific to the project. Optional step — failure is non-fatal and the planner recipe continues without domain context.
 
 ## When to Use

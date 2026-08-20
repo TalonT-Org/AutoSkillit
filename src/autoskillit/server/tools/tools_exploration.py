@@ -15,6 +15,7 @@ from autoskillit.core import (
     ContinuationCursor,
     EvidencePage,
     ExplorationContextStoreProtocol,
+    ExplorationFailureCode,
     ExplorationQuerySpec,
     NodeKey,
     get_logger,
@@ -26,6 +27,7 @@ from autoskillit.pipeline import (
     EXPLORER_INELIGIBLE_SESSION_TYPES,
     CapabilityResolutionStatus,
     OwnerBoundExplorationContextStore,
+    bind_session_scoped_durable,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -34,10 +36,23 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 _MAX_QUERY_LENGTH = 4_096
 _MAX_QUERY_RESULTS = 100
 _MAX_RESPONSE_PAGE_SIZE = 100
-_FAILURE_INVALID_REQUEST = "invalid_exploration_request"
-_FAILURE_CONTEXT_UNAVAILABLE = "exploration_context_unavailable"
-_FAILURE_BROKER_UNAVAILABLE = "exploration_broker_unavailable"
+_FAILURE_INVALID_REQUEST = ExplorationFailureCode.INVALID_REQUEST
+_FAILURE_CONTEXT_UNAVAILABLE = ExplorationFailureCode.CONTEXT_UNAVAILABLE
+_FAILURE_BROKER_UNAVAILABLE = ExplorationFailureCode.BROKER_UNAVAILABLE
+_FAILURE_UNEXPECTED_INTERNAL_ERROR = ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR
 logger = get_logger(__name__)
+
+
+class BindSessionScopedFailed(Exception):
+    """store.bind_session_scoped raised for a reason the store doesn't already name."""
+
+
+class EnableComponentsFailed(Exception):
+    """ctx.enable_components raised while granting exploration visibility."""
+
+
+class StoreUnavailable(Exception):
+    """No exploration context store is configured for this session."""
 
 
 class _NodeKeyPayload(TypedDict):
@@ -238,7 +253,7 @@ def _fetch_page_from_launch_environment(
     if not 0 < page_size <= _MAX_RESPONSE_PAGE_SIZE:
         return _failure(_FAILURE_INVALID_REQUEST)
     if store is None:
-        raise RuntimeError("exploration context store is unavailable")
+        raise StoreUnavailable("exploration context store is unavailable")
     status, page = store.get_page_from_launch_environment(
         page_size=page_size,
         cursor=cursor,
@@ -274,7 +289,7 @@ async def submit_exploration_query(
         if request is None:
             return _failure(_FAILURE_INVALID_REQUEST)
         if store is None:
-            raise RuntimeError("exploration context store is unavailable")
+            raise StoreUnavailable("exploration context store is unavailable")
         status, page = store.submit_from_launch_environment(
             query=request,
             page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
@@ -296,9 +311,11 @@ async def submit_exploration_query(
             if page is None:
                 return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="accepted")
-    except Exception:
-        logger.warning("exploration query submission failed", exc_info=True)
+    except StoreUnavailable:
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("exploration query submission failed", exc_info=True)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -347,9 +364,11 @@ async def get_exploration_page(
                 if page is not None:
                     return _page_payload(page, status="ready")
         return result
-    except Exception:
-        logger.warning("exploration page retrieval failed", exc_info=True)
+    except StoreUnavailable:
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("exploration page retrieval failed", exc_info=True)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -394,9 +413,11 @@ async def resume_exploration_context(
                 if page is not None:
                     return _page_payload(page, status="resumed")
         return result
-    except Exception:
-        logger.warning("exploration context resumption failed", exc_info=True)
+    except StoreUnavailable:
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("exploration context resumption failed", exc_info=True)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -427,17 +448,11 @@ async def enable_exploration(
     try:
         session_type = _resolve_session_type()
         if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
-            return json.dumps(
-                {"status": "error", "code": "session_type_ineligible"},
-                separators=(",", ":"),
-            )
+            return _failure(ExplorationFailureCode.SESSION_TYPE_INELIGIBLE)
 
         store = _get_store()
         if not isinstance(store, OwnerBoundExplorationContextStore):
-            return json.dumps(
-                {"status": "error", "code": "exploration_store_unavailable"},
-                separators=(",", ":"),
-            )
+            return _failure(ExplorationFailureCode.STORE_UNAVAILABLE)
         from autoskillit.server import _get_ctx  # circular-break: composition root
 
         cwd = Path(project_dir) if project_dir else _get_ctx().project_dir
@@ -447,32 +462,83 @@ async def enable_exploration(
             project_root=cwd,
         )
         if session_id is None:
-            return json.dumps(
-                {"status": "error", "code": "no_session_id"},
-                separators=(",", ":"),
-            )
+            return _failure(ExplorationFailureCode.NO_SESSION_ID)
         repository_root = store.trusted_root
-        store.bind_session_scoped(
-            owner_id=f"uid:{os.getuid()}",
-            session_id=session_id,
-            cwd=cwd,
-            repository_root=repository_root,
-            source_identity=f"interactive:{session_id}",
-        )
+        # Durable, symmetric to bind_launch (which always writes a signed
+        # authority file): bind_session_scoped alone is in-process-memory
+        # only, lost on a server crash within the lease TTL. authority_home
+        # is a per-session subdirectory under the project's temp dir — real,
+        # writable, and unique per session_id so concurrent sessions never
+        # collide on the fixed authority filename (#4684 Fix E).
+        authority_home = _get_ctx().temp_dir / "exploration-session-authority" / session_id
+        authority_home.mkdir(parents=True, exist_ok=True)
+        try:
+            bind_session_scoped_durable(
+                store,
+                authority_home=authority_home,
+                owner_id=f"uid:{os.getuid()}",
+                session_id=session_id,
+                cwd=cwd,
+                repository_root=repository_root,
+                source_identity=f"interactive:{session_id}",
+            )
+        except (
+            OwnerBoundExplorationContextStore.TrustedRootMismatch,
+            OwnerBoundExplorationContextStore.InvalidSourceIdentity,
+            OwnerBoundExplorationContextStore.ServiceNotConfigured,
+            OwnerBoundExplorationContextStore.SnapshotStale,
+            OwnerBoundExplorationContextStore.StoreClosed,
+            OwnerBoundExplorationContextStore.CapacityExceeded,
+        ):
+            raise
+        except Exception as exc:
+            raise BindSessionScopedFailed(str(exc)) from exc
         exploration_enabled = False
         try:
-            await ctx.enable_components(tags={"exploration"})
+            try:
+                await ctx.enable_components(tags={"exploration"})
+            except Exception as exc:
+                raise EnableComponentsFailed(str(exc)) from exc
             exploration_enabled = True
         finally:
+            # Symmetric grant/revoke: if the tag never became visible, undo
+            # the lease too — a bound-but-invisible session is an orphan
+            # authority; disable_components is the mirror of enable_components,
+            # so a partial-success enable_components call never leaves the tag
+            # visible without a live lease behind it (#4684 Fix E). Each
+            # cleanup call is independently guarded so a failure in one
+            # cannot mask the original in-flight exception or skip the other.
             if not exploration_enabled:
-                store.cleanup_session(session_id)
+                try:
+                    store.cleanup_session(session_id)
+                except Exception:
+                    logger.warning("enable_exploration_cleanup_session_failed", exc_info=True)
+                try:
+                    await ctx.disable_components(tags={"exploration"})
+                except Exception:
+                    logger.warning("enable_exploration_disable_components_failed", exc_info=True)
         return json.dumps(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),
         )
-    except Exception:
-        logger.warning("exploration provisioning failed", exc_info=True)
-        return json.dumps(
-            {"status": "error", "code": "exploration_provisioning_failed"},
-            separators=(",", ":"),
-        )
+    except OwnerBoundExplorationContextStore.TrustedRootMismatch:
+        return _failure(ExplorationFailureCode.TRUSTED_ROOT_MISMATCH)
+    except OwnerBoundExplorationContextStore.InvalidSourceIdentity:
+        return _failure(ExplorationFailureCode.INVALID_SOURCE_IDENTITY)
+    except OwnerBoundExplorationContextStore.ServiceNotConfigured:
+        return _failure(ExplorationFailureCode.SERVICE_NOT_CONFIGURED)
+    except OwnerBoundExplorationContextStore.SnapshotStale:
+        return _failure(ExplorationFailureCode.SNAPSHOT_STALE)
+    except OwnerBoundExplorationContextStore.StoreClosed:
+        return _failure(ExplorationFailureCode.STORE_CLOSED)
+    except OwnerBoundExplorationContextStore.CapacityExceeded:
+        return _failure(ExplorationFailureCode.CAPACITY_EXCEEDED)
+    except BindSessionScopedFailed:
+        logger.warning("enable_exploration_bind_session_scoped_failed", exc_info=True)
+        return _failure(ExplorationFailureCode.BIND_FAILED)
+    except EnableComponentsFailed:
+        logger.warning("enable_exploration_enable_components_failed", exc_info=True)
+        return _failure(ExplorationFailureCode.ENABLE_COMPONENTS_FAILED)
+    except Exception:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning("enable_exploration: unexpected", exc_info=True)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)

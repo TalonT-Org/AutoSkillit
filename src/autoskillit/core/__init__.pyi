@@ -458,6 +458,7 @@ from .types import (
 )
 from .types import EVIDENCE_READER_ENV_FORWARD_VARS as EVIDENCE_READER_ENV_FORWARD_VARS
 from .types import EVIDENCE_READER_TOOLS as EVIDENCE_READER_TOOLS
+from .types import EXPLORATION_FAILURE_CODES as EXPLORATION_FAILURE_CODES
 from .types import EXPLORATION_TOOLS as EXPLORATION_TOOLS
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
@@ -481,6 +482,7 @@ from .types import KITCHEN_GATED_TOOLS as KITCHEN_GATED_TOOLS
 from .types import KITCHEN_SESSION_ID_ENV_VAR as KITCHEN_SESSION_ID_ENV_VAR
 from .types import KNOWN_BACKEND_NAMES as KNOWN_BACKEND_NAMES
 from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
+from .types import KNOWN_UNAFFECTED_SKILL_IDS as KNOWN_UNAFFECTED_SKILL_IDS
 from .types import LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY
 from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
 from .types import LAUNCH_CONTRACT_SCHEMA_VERSION as LAUNCH_CONTRACT_SCHEMA_VERSION
@@ -819,6 +821,7 @@ from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
 from .types import ExplorationDispatchConventions as ExplorationDispatchConventions
 from .types import ExplorationDispatchMaterialization as ExplorationDispatchMaterialization
 from .types import ExplorationDispatchRenderer as ExplorationDispatchRenderer
+from .types import ExplorationFailureCode as ExplorationFailureCode
 from .types import ExplorationVectorApplicabilityId as ExplorationVectorApplicabilityId
 from .types import ExplorationVectorDef as ExplorationVectorDef
 from .types import ExplorationVectorDisposition as ExplorationVectorDisposition

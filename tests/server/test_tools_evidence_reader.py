@@ -58,7 +58,6 @@ class _ErrorCode(StrEnum):
     AUTHORITY_PATH_INVALID = "authority_path_invalid"
     AUTHORITY_TAMPERED = "authority_tampered"
     AUTHORITY_UNAVAILABLE = "authority_unavailable"
-    BROKER_UNAVAILABLE = "evidence_reader_broker_unavailable"
     CALL_BUDGET_EXHAUSTED = "call_budget_exhausted"
     CALL_IN_FLIGHT = "call_in_flight"
     CAPABILITY_INVALID = "capability_invalid"
@@ -70,6 +69,7 @@ class _ErrorCode(StrEnum):
     RECEIPT_LIMIT_INVALID = "receipt_limit_invalid"
     SCOPE_MISMATCH = "scope_mismatch"
     TOOL_NOT_AUTHORIZED = "tool_not_authorized"
+    UNEXPECTED_INTERNAL_ERROR = "evidence_reader_unexpected_internal_error"
 
 
 class _ReceiptOutcome(StrEnum):
@@ -617,5 +617,5 @@ async def test_broker_boundary_never_raises_and_shields_cancellation(
     if failure == "cancelled":
         assert payload == {"status": "error", "code": "cancelled"}
     else:
-        assert payload == {"status": "error", "code": _ErrorCode.BROKER_UNAVAILABLE}
+        assert payload == {"status": "error", "code": _ErrorCode.UNEXPECTED_INTERNAL_ERROR}
     assert "private failure detail" not in json.dumps(payload)

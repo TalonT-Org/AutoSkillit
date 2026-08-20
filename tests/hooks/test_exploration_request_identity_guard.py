@@ -32,6 +32,18 @@ def _project(tmp_path: Path) -> Path:
     return root
 
 
+def _run_with_env(payload: object, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(_SCRIPT)],
+        input=payload if isinstance(payload, str) else json.dumps(payload),
+        text=True,
+        capture_output=True,
+        timeout=5,
+        env=env,
+        check=False,
+    )
+
+
 def _run(
     payload: object,
     root: Path,
@@ -49,15 +61,7 @@ def _run(
         env.pop("AUTOSKILLIT_AGENT_BACKEND", None)
     else:
         env["AUTOSKILLIT_AGENT_BACKEND"] = backend
-    return subprocess.run(
-        [sys.executable, str(_SCRIPT)],
-        input=payload if isinstance(payload, str) else json.dumps(payload),
-        text=True,
-        capture_output=True,
-        timeout=5,
-        env=env,
-        check=False,
-    )
+    return _run_with_env(payload, env)
 
 
 @pytest.mark.parametrize(
@@ -67,6 +71,21 @@ def _run(
         ("mcp__dev_autoskillit_v2__submit_exploration_query", "submit_exploration_query"),
         ("mcp__autoskillit_local__get_exploration_page", "get_exploration_page"),
         ("mcp__decorated_autoskillit__resume_exploration_context", "resume_exploration_context"),
+        # #4684 Fix A / Step 1.3: the actual production runtime tool names — every
+        # test above this point uses synthesized names; none is the real shape
+        # emitted by the plugin (mcp__plugin_autoskillit_autoskillit__*). The
+        # matcher regex (mcp__.*autoskillit.*__(...)\Z) is purpose-built to match
+        # it, but nothing previously asserted that end-to-end through subprocess.run.
+        ("mcp__plugin_autoskillit_autoskillit__enable_exploration", "enable_exploration"),
+        (
+            "mcp__plugin_autoskillit_autoskillit__submit_exploration_query",
+            "submit_exploration_query",
+        ),
+        ("mcp__plugin_autoskillit_autoskillit__get_exploration_page", "get_exploration_page"),
+        (
+            "mcp__plugin_autoskillit_autoskillit__resume_exploration_context",
+            "resume_exploration_context",
+        ),
     ],
 )
 def test_guard_preserves_input_and_injects_consumable_native_identity(
@@ -197,6 +216,50 @@ def test_guard_skips_codex_events(tmp_path: Path) -> None:
 
     assert result.stdout == ""
     assert not (root / ".autoskillit" / "temp" / "exploration-requests").exists()
+
+
+# #4684 Step 1.3: AUTOSKILLIT_AGENT_BACKEND x AUTOSKILLIT_HEADLESS env-var matrix.
+# The guard script checks both with exact equality (`== "codex"`, `== "1"`), not
+# truthiness — "true" is a truthy string in many languages' conventions but does
+# NOT equal "1", so it must NOT trigger the skip. This pins that distinction.
+# None represents the variable being unset (distinct from every real value).
+_BACKEND_VALUES: tuple[str | None, ...] = ("codex", "claude-code", None)
+_HEADLESS_VALUES: tuple[str | None, ...] = ("1", "true", "", None)
+
+
+@pytest.mark.parametrize("backend_value", _BACKEND_VALUES)
+@pytest.mark.parametrize("headless_value", _HEADLESS_VALUES)
+def test_guard_skip_matrix_uses_exact_equality_not_truthiness(
+    tmp_path: Path, headless_value: str | None, backend_value: str | None
+) -> None:
+    root = _project(tmp_path)
+    env = os.environ.copy()
+    env["AUTOSKILLIT_STATE_ROOT"] = str(root)
+    if headless_value is None:
+        env.pop("AUTOSKILLIT_HEADLESS", None)
+    else:
+        env["AUTOSKILLIT_HEADLESS"] = headless_value
+    if backend_value is None:
+        env.pop("AUTOSKILLIT_AGENT_BACKEND", None)
+    else:
+        env["AUTOSKILLIT_AGENT_BACKEND"] = backend_value
+
+    result = _run_with_env(
+        {
+            "tool_name": "mcp__autoskillit__enable_exploration",
+            "session_id": "native-session",
+            "tool_input": {},
+        },
+        env,
+    )
+
+    should_skip = headless_value == "1" or backend_value == "codex"
+    if should_skip:
+        assert result.stdout == "", (headless_value, backend_value, result.stdout)
+    else:
+        assert result.stdout != "", (headless_value, backend_value)
+        output = json.loads(result.stdout)["hookSpecificOutput"]
+        assert output["permissionDecision"] == "allow"
 
 
 def test_registry_matcher_is_decorated_name_tolerant_and_exact() -> None:

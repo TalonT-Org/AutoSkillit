@@ -41,6 +41,8 @@ semantic_requirements:
 
 # Chart Type Selection Visualization Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Typological
 **Primary Question:** "Which chart type is perceptually optimal for this data?"
 **Focus:** Encoding Channel Assignments, Cleveland-McGill Perceptual Hierarchy, Data-Type → Chart-Type Matrix

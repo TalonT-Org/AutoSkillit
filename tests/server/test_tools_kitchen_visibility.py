@@ -11,7 +11,7 @@ own per-concern files (`test_tools_kitchen_recipe_admission.py`,
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -43,6 +43,117 @@ async def test_open_kitchen_calls_enable_components_for_notification_backend(
                     await open_kitchen(ctx=mock_ctx)
 
     mock_ctx.enable_components.assert_called_once_with(tags={"kitchen"})
+
+
+# #4684 Fix D: open_kitchen auto-provisions exploration alongside kitchen when opted in
+@pytest.mark.anyio
+async def test_open_kitchen_auto_provisions_exploration_for_notification_backend_when_opted_in(
+    tmp_path, monkeypatch
+):
+    """open_kitchen must also call ctx.enable_components(tags={"exploration"}) when
+    agent_backend.auto_provision_exploration is True and the session type is eligible."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.backend.capabilities.supports_tool_list_changed = True
+    mock_ctx.config.agent_backend.auto_provision_exploration = True
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    await open_kitchen(ctx=mock_ctx)
+
+    mock_ctx.enable_components.assert_any_call(tags={"kitchen"})
+    mock_ctx.enable_components.assert_any_call(tags={"exploration"})
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_skips_exploration_for_notification_backend_without_opt_in(
+    tmp_path, monkeypatch
+):
+    """Default (auto_provision_exploration=False): open_kitchen must not grant the
+    exploration tag — the HMAC capability lease from enable_exploration stays the
+    sole route to broker tool visibility."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.backend.capabilities.supports_tool_list_changed = True
+    assert mock_ctx.config.agent_backend.auto_provision_exploration is False
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    await open_kitchen(ctx=mock_ctx)
+
+    calls = [c.kwargs.get("tags") for c in mock_ctx.enable_components.call_args_list]
+    assert {"exploration"} not in calls
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_auto_provisions_exploration_for_global_enable_backend(
+    tmp_path, monkeypatch
+):
+    """_use_global_enable branch: open_kitchen must also call
+    mcp.enable(tags={"exploration"}) when opted in and session type eligible."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.backend.capabilities.supports_tool_list_changed = False
+    mock_ctx.config.agent_backend.auto_provision_exploration = True
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch("autoskillit.server.tools.tools_kitchen.mcp") as mock_mcp:
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                        await open_kitchen(ctx=mock_ctx)
+
+    mock_mcp.enable.assert_any_call(tags={"kitchen"})
+    mock_mcp.enable.assert_any_call(tags={"exploration"})
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_skips_exploration_for_global_enable_backend_without_opt_in(
+    tmp_path, monkeypatch
+):
+    """_use_global_enable branch, default (auto_provision_exploration=False):
+    open_kitchen must not grant the exploration tag via mcp.enable — mirrors
+    test_open_kitchen_skips_exploration_for_notification_backend_without_opt_in
+    for the notification-backend branch."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.backend.capabilities.supports_tool_list_changed = False
+    assert mock_ctx.config.agent_backend.auto_provision_exploration is False
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch("autoskillit.server.tools.tools_kitchen.mcp") as mock_mcp:
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                        await open_kitchen(ctx=mock_ctx)
+
+    assert call(tags={"exploration"}) not in mock_mcp.enable.call_args_list
 
 
 # T-VISIBILITY-1b: open_kitchen skips enable_components for pre-revealed backend

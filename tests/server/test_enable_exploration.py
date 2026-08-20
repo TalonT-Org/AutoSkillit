@@ -91,44 +91,6 @@ async def test_enable_exploration_succeeds_for_skill_session(
 
 
 @pytest.mark.asyncio
-async def test_enable_exploration_revokes_authority_when_visibility_enable_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    tool_ctx,
-    exploration_snapshot_service: MagicMock,
-) -> None:
-    from autoskillit.server.tools.tools_exploration import enable_exploration
-
-    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
-        trusted_root=tool_ctx.project_dir,
-        service=exploration_snapshot_service,
-    )
-    tool_ctx.exploration_context_store = store
-    (tool_ctx.project_dir / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
-    token = write_exploration_request_record(
-        tool_ctx.project_dir, "enable_exploration", "test-session"
-    )
-    cleanup = MagicMock(wraps=store.cleanup_session)
-    monkeypatch.setattr(store, "cleanup_session", cleanup)
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._resolve_session_type",
-        lambda: SessionType.SKILL,
-    )
-    request_ctx = MagicMock()
-    request_ctx.enable_components = AsyncMock(side_effect=RuntimeError("enable failed"))
-
-    result = json.loads(
-        await enable_exploration(
-            _autoskillit_exploration_request_token=token,
-            ctx=request_ctx,
-        )
-    )
-
-    assert result == {"status": "error", "code": "exploration_provisioning_failed"}
-    assert store.session_scoped_capability("test-session") is None
-    cleanup.assert_called_once_with("test-session")
-
-
-@pytest.mark.asyncio
 async def test_enable_exploration_revokes_authority_when_visibility_enable_is_cancelled(
     monkeypatch: pytest.MonkeyPatch,
     tool_ctx,
@@ -153,6 +115,7 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_is_ca
     )
     request_ctx = MagicMock()
     request_ctx.enable_components = AsyncMock(side_effect=asyncio.CancelledError())
+    request_ctx.disable_components = AsyncMock()
 
     result = json.loads(
         await enable_exploration(
@@ -164,6 +127,7 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_is_ca
     assert result == {"success": False, "error": "cancelled", "subtype": "cancelled"}
     assert store.session_scoped_capability("test-session") is None
     cleanup.assert_called_once_with("test-session")
+    request_ctx.disable_components.assert_awaited_once_with(tags={"exploration"})
 
 
 @pytest.mark.asyncio

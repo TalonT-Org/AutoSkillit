@@ -37,6 +37,8 @@ semantic_requirements:
 
 # Process Flow Architecture Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Physiological
 **Primary Question:** "How does it behave?"
 **Focus:** Runtime Behavior, State Transitions, Decision Points, Control Flow

@@ -36,6 +36,7 @@ __all__ = [
     "SessionType",
     "session_type_for_skill_execution_role",
     "FleetErrorCode",
+    "ExplorationFailureCode",
     "FeatureLifecycle",
     "IssueLabelState",
     "DispatchGateType",
@@ -547,6 +548,32 @@ class FleetErrorCode(StrEnum):
     FLEET_RESET_INVALID_TARGET = "fleet_reset_invalid_target"
     FLEET_RESET_STILL_RUNNING = "fleet_reset_still_running"
     FLEET_INVALID_BACKEND = "fleet_invalid_backend"
+
+
+@unique
+class ExplorationFailureCode(StrEnum):
+    """Registered failure codes for the exploration broker's precondition chain.
+
+    Every enable_exploration/exploration-tool failure envelope must use one of
+    these codes. Unregistered "code" literals in tools_exploration.py are
+    rejected by tests/contracts/test_exploration_failure_code_registry.py.
+    """
+
+    INVALID_REQUEST = "invalid_exploration_request"
+    CONTEXT_UNAVAILABLE = "exploration_context_unavailable"
+    BROKER_UNAVAILABLE = "exploration_broker_unavailable"
+    SESSION_TYPE_INELIGIBLE = "session_type_ineligible"
+    STORE_UNAVAILABLE = "exploration_store_unavailable"
+    NO_SESSION_ID = "no_session_id"
+    BIND_FAILED = "bind_failed"
+    ENABLE_COMPONENTS_FAILED = "enable_components_failed"
+    TRUSTED_ROOT_MISMATCH = "trusted_root_mismatch"
+    INVALID_SOURCE_IDENTITY = "invalid_source_identity"
+    SERVICE_NOT_CONFIGURED = "service_not_configured"
+    SNAPSHOT_STALE = "snapshot_stale"
+    STORE_CLOSED = "store_closed"
+    CAPACITY_EXCEEDED = "capacity_exceeded"
+    UNEXPECTED_INTERNAL_ERROR = "unexpected_internal_error"
 
 
 class FeatureLifecycle(StrEnum):

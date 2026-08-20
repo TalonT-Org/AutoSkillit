@@ -167,7 +167,10 @@ def test_bundled_agent_catalog_loads_with_unique_digests() -> None:
 def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
     definitions = {definition.name: definition for definition in load_bundled_agent_definitions()}
 
-    assert len(definitions) == 22
+    # #4684 Rectify 2.12 added pluginless-explorer.md (a terminal explorer
+    # specialist, not a skill-child-role — no _SKILL_CHILD_ROLE_EXPECTATIONS
+    # entry needed, same as semantic-code-navigator/repository-impact-profiler).
+    assert len(definitions) == 23
     assert _SKILL_CHILD_ROLE_EXPECTATIONS.keys() <= definitions.keys()
     for name, (
         expected_tools,

@@ -376,7 +376,9 @@ class CodexBackend(BackendCmdBuilderBase):
         headless_extras = _codex_exec_extras(session_type="")
         _merge_caller_env_extras(headless_extras, env_extras)
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
-        return CmdSpec(cmd=tuple(cmd), env=env)
+        return CmdSpec(
+            cmd=tuple(cmd), env=env, force_inactive_agent_teams=force_inactive_agent_teams
+        )
 
     def build_skill_session_cmd(
         self,
@@ -553,6 +555,7 @@ class CodexBackend(BackendCmdBuilderBase):
             is_resume=bool(resume_session_id),
             process_idle_timeout_ms=stream_idle_timeout_ms,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def build_food_truck_cmd(
@@ -684,6 +687,7 @@ class CodexBackend(BackendCmdBuilderBase):
             is_resume=bool(resume_session_id),
             process_idle_timeout_ms=stream_idle_timeout_ms,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def build_interactive_cmd(
@@ -806,6 +810,7 @@ class CodexBackend(BackendCmdBuilderBase):
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def build_resume_cmd(
@@ -862,6 +867,7 @@ class CodexBackend(BackendCmdBuilderBase):
             env=env,
             is_resume=True,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def validate_session_layout(

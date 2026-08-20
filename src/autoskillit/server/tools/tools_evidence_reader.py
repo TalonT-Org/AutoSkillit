@@ -65,7 +65,11 @@ logger = get_logger(__name__)
 _DEFAULT_PAGE_SIZE = 64_000
 _MAX_PAGE_SIZE = 64_000
 _BROKER_TIMEOUT_SECONDS = 5.0
-_BROKER_UNAVAILABLE = "evidence_reader_broker_unavailable"
+# Distinct from any already-typed EvidenceReaderError.code (handled inside
+# _serve_page, which never lets EvidenceReaderError escape); this is the
+# terminal, non-opaque code for a truly unclassified failure that reaches
+# the tool-level except Exception below.
+_UNEXPECTED_INTERNAL_ERROR = "evidence_reader_unexpected_internal_error"
 _DELEGATE_TIMEOUT_SECONDS = 300.0
 _READER_POLICY = "read-only"
 _PILOT_ROLE = "pr-source-reader"
@@ -561,7 +565,7 @@ async def read_authorized_artifact(page_size: int | None = None) -> str:
         )
     except Exception:
         logger.warning("authorized evidence artifact read failed closed", exc_info=True)
-        return _delegate_outcome("error", _BROKER_UNAVAILABLE)
+        return _delegate_outcome("error", _UNEXPECTED_INTERNAL_ERROR)
 
 
 @mcp.tool(
@@ -591,4 +595,4 @@ async def get_authorized_artifact_page(
         )
     except Exception:
         logger.warning("authorized evidence artifact pagination failed closed", exc_info=True)
-        return _delegate_outcome("error", _BROKER_UNAVAILABLE)
+        return _delegate_outcome("error", _UNEXPECTED_INTERNAL_ERROR)

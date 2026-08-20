@@ -26,10 +26,14 @@ from autoskillit.core import (
     get_logger,
     sweep_stale_markers,
 )
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
 from autoskillit.pipeline import (
     KITCHEN_EFFECT_RECIPE_SERVING,
     KitchenOpenPhase,
     advance_kitchen_phase,
+    exploration_auto_provision_eligible,
     transition_abort,
     transition_ambiguous,
     transition_confirm,
@@ -406,6 +410,15 @@ async def open_kitchen(
                 _kctx_pre.backend is not None
                 and not _kctx_pre.backend.capabilities.supports_tool_list_changed
             )
+            # #4684 Fix D: auto-provision the exploration tag alongside kitchen/
+            # plan-review when opted in and the session type is eligible to bind
+            # exploration authority. Visibility-only — the per-call HMAC capability
+            # lease minted by enable_exploration remains the authorization boundary
+            # regardless of tag visibility.
+            _auto_provision_exploration = exploration_auto_provision_eligible(
+                auto_provision=_kctx_pre.config.agent_backend.auto_provision_exploration,
+                session_type=_resolve_session_type(),
+            )
             if _use_global_enable:
                 # Issue #4399: when the backend can't process tool/list_changed
                 # notifications, ctx.enable_components() is skipped.
@@ -420,6 +433,8 @@ async def open_kitchen(
                 if _transition_start(tool_ctx, "client_visibility"):
                     _tk_pkg.mcp.enable(tags={"kitchen"})
                     _tk_pkg.mcp.enable(tags={"plan-review"})
+                    if _auto_provision_exploration:
+                        _tk_pkg.mcp.enable(tags={"exploration"})
                     transition_confirm(
                         tool_ctx,
                         "client_visibility",
@@ -446,6 +461,8 @@ async def open_kitchen(
                 if _transition_start(tool_ctx, "client_visibility"):
                     try:
                         await ctx.enable_components(tags={"kitchen"})
+                        if _auto_provision_exploration:
+                            await ctx.enable_components(tags={"exploration"})
                     except Exception as exc:
                         transition_ambiguous(tool_ctx, "client_visibility", exc)
                         logger.warning(

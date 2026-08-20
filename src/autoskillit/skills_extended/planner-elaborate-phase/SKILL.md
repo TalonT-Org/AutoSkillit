@@ -29,6 +29,8 @@ semantic_requirements:
 
 # planner-elaborate-phase
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 Standalone parallel worker for Phase Pass 1. Each instance receives the full plan
 snapshot (each phase in condensed form) and a target phase ID. It explores the codebase
 independently and writes a single elaborated phase result. No dependency on

@@ -75,4 +75,13 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         ),
         parity_fixture=None,
     ),
+    "AUTOSKILLIT_COOK_REAL_ROOT_SMOKE": HarnessEnvOverride(
+        var="AUTOSKILLIT_COOK_REAL_ROOT_SMOKE",
+        value="1",
+        justification=(
+            "Enables only the opt-in cook-loop real-project-root composition gate "
+            "(#4684); ordinary test tasks leave it disabled."
+        ),
+        parity_fixture=None,
+    ),
 }

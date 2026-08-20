@@ -32,6 +32,8 @@ semantic_requirements:
 
 # planner-analyze
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 Detect language, framework, test infrastructure, project structure, and existing patterns in the target project. Produces `analysis.json` used by subsequent planner skills.
 
 ## When to Use

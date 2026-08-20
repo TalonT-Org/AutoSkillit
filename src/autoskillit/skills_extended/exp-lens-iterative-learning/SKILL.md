@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Iterative Learning Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Decision-Theoretic
 **Primary Question:** "How does this maximize learning per cost?"
 **Focus:** Factor Selection, Interaction Probing, Adaptive Allocation, Stopping Rules, Next-Experiment Planning

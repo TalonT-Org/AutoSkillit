@@ -105,6 +105,12 @@ class RunSkillConfig:
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
     exit_after_stop_delay_ms: int = 2000
+    # Declared and __post_init__-validated against exit_after_stop_delay_ms, but
+    # never threaded into execution/process/__init__.py's run_managed_async(...)/
+    # run_managed_sync(...) natural_exit_grace_seconds parameter at either call
+    # site (_llm_triage.py, execution/process/__init__.py) — the parameter always
+    # falls back to its own hardcoded default regardless of this config value.
+    # inert-tracked:#4693
     natural_exit_grace_seconds: float = 3.0
     idle_output_timeout: int = 1000
     max_suppression_seconds: int = 1800
@@ -595,6 +601,11 @@ class ProviderProfileDef:
     base_url: str | None = None
     timeout_seconds: int | None = None
     api_key_env: str | None = None
+    # Declared and __post_init__-validated (must be positive), but
+    # server/_guards.py's _profile_to_env(...) — the sole place ProviderProfileDef
+    # fields become effective behavior — reads base_url/timeout_seconds/
+    # api_key_env/raw_env only; context_window is never consumed.
+    # inert-tracked:#4693
     context_window: int | None = None
     raw_env: dict[str, str] = field(default_factory=dict)
 
@@ -717,6 +728,14 @@ class AgentBackendConfig:
     # to False — repositories with the option disabled remain byte-for-byte
     # unchanged. Independent from join.required. Refs #4575.
     force_inactive_agent_teams: bool = False
+    # When True, open_kitchen (both visibility branches) and _pre_reveal_kitchen
+    # pre-apply the "exploration" tag reveal alongside kitchen/plan-review, for
+    # session types eligible to bind exploration authority. Defaults to False —
+    # the HMAC capability lease remains the authorization boundary regardless;
+    # this only auto-provisions the weaker visibility gate. consumer:
+    # server/tools/tools_kitchen/_open_kitchen.py open_kitchen,
+    # server/_lifespan/_session_boots.py _pre_reveal_kitchen. Refs #4684.
+    auto_provision_exploration: bool = False
 
     def __post_init__(self) -> None:
         if not self.backend:

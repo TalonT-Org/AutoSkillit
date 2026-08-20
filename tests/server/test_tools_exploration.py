@@ -292,14 +292,70 @@ async def test_submit_preserves_default_query_and_page_limits(
     assert store.submitted_page_size == 100
 
 
-@pytest.mark.parametrize(
-    "tool_name",
-    [
-        "submit_exploration_query",
-        "get_exploration_page",
-        "resume_exploration_context",
-    ],
+_SIBLING_TOOL_NAMES = (
+    "submit_exploration_query",
+    "get_exploration_page",
+    "resume_exploration_context",
 )
+
+
+async def _call_sibling_tool(tools_exploration: object, tool_name: str) -> str:
+    if tool_name == "submit_exploration_query":
+        return await tools_exploration.submit_exploration_query("needle")  # type: ignore[attr-defined]
+    if tool_name == "get_exploration_page":
+        return await tools_exploration.get_exploration_page()  # type: ignore[attr-defined]
+    return await tools_exploration.resume_exploration_context()  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("tool_name", _SIBLING_TOOL_NAMES)
+@pytest.mark.asyncio
+async def test_sibling_tool_returns_broker_unavailable_when_store_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+) -> None:
+    """No store configured is a named, distinguishable code — not the opaque
+    catch-all it collapsed into before #4684's REQ-017 remediation."""
+    from autoskillit.core import ExplorationFailureCode
+    from autoskillit.server.tools import tools_exploration
+
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: None)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+
+    result = await _call_sibling_tool(tools_exploration, tool_name)
+
+    assert json.loads(result) == {
+        "status": "error",
+        "code": ExplorationFailureCode.BROKER_UNAVAILABLE.value,
+    }
+
+
+@pytest.mark.parametrize("tool_name", _SIBLING_TOOL_NAMES)
+@pytest.mark.asyncio
+async def test_sibling_tool_returns_unexpected_internal_error_for_unnamed_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+) -> None:
+    """A genuinely unclassified exception gets its own distinguishable code —
+    never silently reused for the BROKER_UNAVAILABLE case above, and never
+    re-raised (preserves the "Never raises" contract)."""
+    from autoskillit.core import ExplorationFailureCode
+    from autoskillit.server.tools import tools_exploration
+
+    def _boom() -> None:
+        raise ValueError("unrelated internal failure")
+
+    monkeypatch.setattr(tools_exploration, "_get_store", _boom)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+
+    result = await _call_sibling_tool(tools_exploration, tool_name)
+
+    assert json.loads(result) == {
+        "status": "error",
+        "code": ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR.value,
+    }
+
+
+@pytest.mark.parametrize("tool_name", _SIBLING_TOOL_NAMES)
 @pytest.mark.asyncio
 async def test_terminal_authority_returns_before_request_identity_consumption(
     monkeypatch: pytest.MonkeyPatch,

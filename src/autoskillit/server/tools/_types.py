@@ -224,6 +224,7 @@ class KitchenStatusResult(TypedDict, total=False):
     github_token_configured: bool
     github_default_repo: str
     tracker_authority: dict[str, Any]
+    broker_authority: str
     warning: str
     success: bool
     error: str

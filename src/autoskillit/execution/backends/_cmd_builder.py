@@ -81,4 +81,7 @@ class CmdBuilder:
             cwd=cwd,
             origin=origin,
             inherited_fds=inherited_fds,
+            # This partial CmdSpec is intermediate — callers copy only cmd/origin
+            # out of it into their own final CmdSpec, which carries the real value.
+            force_inactive_agent_teams=False,
         )

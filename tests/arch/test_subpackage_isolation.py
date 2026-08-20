@@ -1021,8 +1021,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # Bumped 24 -> 25: CI reported 25 Python files at SHA 869746ddc
         # (24 in the local git-tracked file set), so the cap must tolerate
         # whatever CI-side enumeration produced the +1 difference.
-        "pipeline": 18,  # +run_skill_completion server-owned receipt authority (#4457)
+        "pipeline": 19,  # +run_skill_completion server-owned receipt authority (#4457)
         # +kitchen transition authority
+        # +exploration_context_durable.py: durable (0600 HMAC-signed) session-scoped
+        # exploration authority, split from exploration_context.py to stay under its
+        # own REQ-CNST-010-E22 1100-line ceiling (#4684 Fix E)
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen

@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Severity Testing Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Falsificationist
 **Primary Question:** "Would this design have caught the error?"
 **Focus:** Adversarial Cases, Negative Controls, Falsification Tests, Easy-Pass Detection, Confirmatory Theater

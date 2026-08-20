@@ -38,6 +38,8 @@ semantic_requirements:
 
 # Sensitivity & Robustness Experimental Design Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Robustness
 **Primary Question:** "Which assumptions are load-bearing?"
 **Focus:** Ablation Structure, Preprocessing Sensitivity, Metric Sensitivity, Hyperparameter Sensitivity, Distribution Shift

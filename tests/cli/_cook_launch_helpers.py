@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,10 +36,42 @@ def arrange_cook(
     tmp_path: Path,
     *,
     config: AutomationConfig | None = None,
+    settings_content: dict | None = None,
+    project_dir_override: Path | None = None,
 ) -> list[CmdSpec]:
-    """Patch cook's materialization edges while retaining real backend builders."""
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
+    """Patch cook's materialization edges while retaining real backend builders.
+
+    settings_content, when given, is written as the project's
+    .claude/settings.local.json before cook runs — the composition #4684's
+    regression tests exercise (a real populated settings file, not an empty
+    tmp_path project directory). None (the default) writes nothing, matching
+    every pre-existing call site's behavior unchanged.
+
+    project_dir_override, when given, is used as the resolved project
+    directory instead of creating tmp_path/"project" — for the opt-in live
+    gate that exercises the real repository root's own .claude/settings.local.json
+    (test_cook_real_root_smoke.py). The generated managed-home/plugin
+    directories remain tmp_path-isolated regardless; only project_dir (and
+    therefore what settings.local.json read) changes. Callers passing an
+    override own creating/populating that directory themselves — this
+    function will not mkdir() or write settings_content into it, since doing
+    so on a real, pre-existing repository root would be destructive.
+    """
+    if project_dir_override is not None and settings_content is not None:
+        raise ValueError(
+            "arrange_cook() cannot combine settings_content with "
+            "project_dir_override — callers passing project_dir_override own "
+            "creating/populating that directory themselves."
+        )
+    if project_dir_override is not None:
+        project_dir = project_dir_override
+    else:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        if settings_content is not None:
+            claude_dir = project_dir / ".claude"
+            claude_dir.mkdir(parents=True, exist_ok=True)
+            (claude_dir / "settings.local.json").write_text(json.dumps(settings_content))
     generated_home = tmp_path / "managed-home"
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)

@@ -79,9 +79,13 @@ def assert_interactive_ordering(
     CmdOrigin is a public dataclass and callers could set it on a misordered cmd.
 
     Shape only, and backend-agnostic: environment content is never inspected
-    here. Environment policy belongs to the backend's own
+    here. The interactive content-policy check
+    (``_interactive_invocation_environment_policy``, gated on
+    ``spec.force_inactive_agent_teams``) lives solely behind the backend's own
     ``validate_interactive_invocation``, which can read the spec's declared
-    intent. See tests/execution/test_assert_interactive_ordering.py.
+    intent — see #4684 Fix D (single-enforcement-point). Calling it here too
+    would double-gate the same policy from two call sites.
+    See tests/execution/test_assert_interactive_ordering.py.
     """
     if value_bearing_flags is None:
         value_bearing_flags = _ALL_VALUE_BEARING_FLAGS

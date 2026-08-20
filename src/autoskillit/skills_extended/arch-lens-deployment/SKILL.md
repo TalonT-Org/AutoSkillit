@@ -37,6 +37,8 @@ semantic_requirements:
 
 # Deployment/Physical Architecture Lens
 
+> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
+
 **Philosophical Mode:** Physical
 **Primary Question:** "Where does it run?"
 **Focus:** Infrastructure Topology, Process Boundaries, Data Storage Locations, Network Communication

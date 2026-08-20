@@ -35,6 +35,18 @@ Dismissal windows vary by install type to balance convenience and safety:
 The window is determined at check time from the current `direct_url.json` —
 not from what was stored when you dismissed.
 
+**Recommendation: pin to a release tag and upgrade deliberately.** The
+`develop` track's HEAD advances 3.7–5.1 times per day, so a `develop`-tracking
+install finds a newer version on essentially every invocation — every one of
+those is a prompt (or an auto-accepted upgrade) you didn't ask for. Phase 3
+(see [Runtime Health](version-pipeline.md#runtime-health)) means an accepted
+upgrade can no longer destroy in-flight work on either track, but it does not
+reduce how often `develop` finds something to prompt about. Tracking a
+release tag or `stable` gets you the 7-day dismissal window above instead of
+`develop`'s 12 hours, and upgrading on your own schedule rather than
+`develop`'s. This is an operational choice, not a code change — nothing here
+requires it.
+
 Dismissal expires on two axes:
 
 1. **Time** — the window elapses.

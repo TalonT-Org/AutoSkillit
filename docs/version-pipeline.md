@@ -125,6 +125,14 @@ why the window is 30 days rather than the 24-hour generation-retirement
 grace, and why this path is scoped to the one, one-time migration artifact
 rather than a general mechanism.
 
+**Reducing prompt frequency is a separate, operational concern from surviving
+an upgrade.** Everything above prevents a concurrent upgrade from destroying
+a live process's work, on any track. It does not change how often `develop`
+finds a newer version to prompt about — see
+[the pinning recommendation](update-checks.md#branch-aware-dismissal-windows)
+in `update-checks.md` for reducing that frequency by tracking a release tag
+instead.
+
 ## Invariant for PRs
 
 Never include manual version bump commits in PRs. CI handles all bumps automatically on merge. Including a manual bump causes a conflict with the CI-committed bump and must be reverted.

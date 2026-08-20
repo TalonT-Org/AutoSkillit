@@ -6,11 +6,14 @@ mutable container.
 Access convention
 -----------------
 
-Fields without an underscore prefix are tool-function parameters passed into
-``run_skill``; fields with an underscore prefix are internal locals captured
-during dispatch and finalized. ``effective_*`` fields follow the same rule as
-internal locals (leading underscore) — they are dispatch-computed values that
-the finalize block consumes, not user-facing parameters.
+Fields without an underscore prefix are mostly tool-function parameters
+of ``run_skill`` (e.g. ``skill_command``, ``cwd``, ``skill_inputs``) and a
+handful of dispatch-computed values consumed by the finalize block (e.g.
+``invocation``, ``projection_context``, ``target_name``, ``child_skill_command``,
+``resolved_command``, ``write_spec``, ``closure_spec``, ``is_read_only``).
+Fields with a leading underscore are internal locals captured during
+dispatch and finalized. The convention is suggestive, not enforced; consult
+the section banner over each group when the boundary is unclear.
 
 Decomposition note (review Finding 3)
 --------------------------------------
@@ -257,7 +260,7 @@ class _RunSkillDispatchState:
     _ssm: SessionSkillManager | None
     _cleanup_dir: Path | None
     _codex_fallback: Path | None
-    # Default-bearing field placed last for the dataclass-ordering invariant.
-    # The empty-string seed matches the original `tools_execution.py` semantics
-    # (`_completion_invocation_id = ""` before finalize runs).
+    # Only field with a default. The empty-string seed matches the original
+    # `tools_execution.py` semantics (`_completion_invocation_id = ""` before
+    # finalize runs).
     _completion_invocation_id: str = ""

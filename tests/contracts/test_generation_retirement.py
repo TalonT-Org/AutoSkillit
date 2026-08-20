@@ -329,13 +329,20 @@ def test_install_root_selector_is_never_absent_during_flip(home: Path) -> None:
     selector = generation_selector_path(home, _INSTALL_ROOT_REF, version)
 
     stop = threading.Event()
+    started = threading.Event()
+    final_observed = threading.Event()
+    final_target: str | None = None
     violations: list[str] = []
     observed_targets: set[str] = set()
 
     def _poll_selector() -> None:
         while not stop.is_set():
             try:
-                observed_targets.add(os.readlink(selector))
+                target = os.readlink(selector)
+                observed_targets.add(target)
+                started.set()
+                if target == final_target:
+                    final_observed.set()
             except FileNotFoundError:
                 violations.append("selector missing")
             except OSError as exc:
@@ -344,17 +351,20 @@ def test_install_root_selector_is_never_absent_during_flip(home: Path) -> None:
     poller = threading.Thread(target=_poll_selector, daemon=True)
     poller.start()
     try:
+        assert started.wait(timeout=5), "poller never observed the initial selector"
         # Republishing the same version repeatedly flips this exact
         # selector between successive incarnations -- the live mechanism
         # under test, not a synthetic stand-in for it.
         for _ in range(30):
             _publish_install_root(home, version)
+        final_target = os.readlink(selector)
+        assert final_observed.wait(timeout=5), "poller never observed the final selector"
     finally:
         stop.set()
         poller.join(timeout=5)
 
     assert violations == [], f"selector was observed absent or broken: {violations[:5]}"
-    assert observed_targets, "poller never actually observed the selector -- test proves nothing"
+    assert len(observed_targets) >= 2, "poller never observed a selector transition"
 
 
 def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:

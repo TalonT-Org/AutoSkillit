@@ -378,12 +378,7 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
                         output_dir=state.output_dir,
                     )
 
-            # Vacancy sentinels are per-type identity checks, never a
-            # blanket falsy check: model is "==  ''" (a str param),
-            # stale_threshold/idle_output_timeout are "is None" (int
-            # params) — an explicit caller idle_output_timeout=0 (the
-            # documented "disabled for this step" value) must survive
-            # untouched. See _EXECUTION_TUNING_STEP_FIELDS.
+            # Use each field's vacancy sentinel; zero is a valid explicit timeout.
             if (
                 state.effective_model == ""
                 and _recipe_step.model

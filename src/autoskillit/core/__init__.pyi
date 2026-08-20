@@ -918,6 +918,7 @@ from .types import MergeState as MergeState
 from .types import MigrationService as MigrationService
 from .types import ModelIdentity as ModelIdentity
 from .types import ModelItemId as ModelItemId
+from .types import ModelPinResolution as ModelPinResolution
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume

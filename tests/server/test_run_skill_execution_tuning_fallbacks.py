@@ -55,7 +55,7 @@ async def test_both_model_sources_empty_does_not_crash(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """Neither caller nor recipe step declares model -> "" reaches the executor
-    (downstream _resolve_model's tier-5 default_model applies from there; this
+    (downstream resolve_model_pin's tier-5 default_model applies from there; this
     only pins that the vacancy is left alone, not what the eventual default is)."""
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor

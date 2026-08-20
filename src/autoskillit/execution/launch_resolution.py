@@ -22,9 +22,13 @@ from autoskillit.core import (
     ResolvedLaunchContract,
     SecretEnvironmentBinding,
     SemanticLaunchPlan,
+    get_logger,
+    strip_context_window_suffix,
 )
 
 __all__ = ["DefaultLaunchResolver"]
+
+logger = get_logger(__name__)
 
 
 _DEFAULT_BACKEND_ALIASES = {
@@ -170,6 +174,17 @@ class DefaultLaunchResolver:
                 )
             fallback_routes.append(replace(route, backend=route_backend))
 
+        for model_value, model_source in (
+            (request.configured_model, request.configured_model_source),
+            (request.requested_model, request.requested_model_source),
+        ):
+            self._reject_backend_foreign_model(
+                model_value,
+                model_source,
+                selected_backend=selected_backend,
+                authority_key_path=selected_candidate.key_path,
+            )
+
         return LaunchPreparation(
             surface=request.surface,
             selected_backend=selected_backend,
@@ -279,6 +294,53 @@ class DefaultLaunchResolver:
 
         backend = self._canonical_backend(authority.backend, key_path=authority.key_path)
         return get_backend(backend)
+
+    @staticmethod
+    def _native_model_owners(model: str) -> tuple[str, ...]:
+        """Backends declaring ``model`` as one of their own native ids."""
+        from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
+
+        base = strip_context_window_suffix(model)
+        return tuple(
+            name
+            for name in sorted(BACKEND_REGISTRY)
+            if base in get_backend(name).capabilities.native_model_ids
+        )
+
+    def _reject_backend_foreign_model(
+        self,
+        model: str | None,
+        source: LaunchValueSource,
+        *,
+        selected_backend: str,
+        authority_key_path: str,
+    ) -> None:
+        """Reject the launch when ``model`` is native to a backend other than ``selected_backend``.
+
+        Degrades open (accepts) when no backend declares ``model`` as one of its own
+        native ids — an id owned by no backend is undecidable, not foreign, so it is
+        let through. This means each backend's ``native_model_ids`` freshness matters;
+        see ``CODEX_MODEL_ALIASES_LAST_VERIFIED``.
+        """
+        if not model:
+            return
+        owners = self._native_model_owners(model)
+        if not owners:
+            logger.info(
+                "model_backend_gate_degraded_open",
+                model=model,
+                selected_backend=selected_backend,
+                source=source.key_path,
+            )
+            return
+        if selected_backend in owners:
+            return
+        raise LaunchContractError(
+            f"model {model!r} resolved from {source.key_path} is native to backend "
+            f"{'/'.join(owners)}, but backend authority {authority_key_path} selected "
+            f"{selected_backend!r}; pin the backend and the model to the same target — "
+            f"a model may never change the selected backend"
+        )
 
     @staticmethod
     def _require_equal(field_name: str, expected: object, observed: object) -> None:

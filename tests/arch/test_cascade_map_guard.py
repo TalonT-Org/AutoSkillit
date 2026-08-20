@@ -783,6 +783,7 @@ _FIXTURE_MEDIATED_ENTRIES: dict[str, frozenset[str]] = {
             "execution/test_headless_synthesis.py",
             "execution/test_idle_output_env.py",
             "execution/test_managed_headless_attempt.py",
+            "execution/test_model_backend_launch_contract.py",
             "execution/test_write_evidence.py",
             "execution/test_zero_write_detection.py",
         }

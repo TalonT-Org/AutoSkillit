@@ -12,7 +12,10 @@ from autoskillit.core import (
     ClaudeFlags,
     CmdSpec,
     CodingAgentBackend,
+    LaunchValueSource,
+    LaunchValueSourceKind,
     ModelIdentity,
+    ModelPinResolution,
     SkillResult,
     get_logger,
 )
@@ -112,52 +115,81 @@ def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | No
     return _session_log_dir(cwd, backend)
 
 
-def _resolve_model(
+def resolve_model_pin(
     step_model: str,
     config: AutomationConfig,
     *,
     step_name: str = "",
     recipe_name: str = "",
-) -> str | None:
+    caller_key_path: str = "run_skill.model",
+) -> ModelPinResolution:
+    """Resolve the model to launch with, in descending priority order.
+
+    Tiers, checked in order: global ``model_override``; the recipe-scoped
+    override (when both ``recipe_name`` and ``step_name`` are given); the
+    step-scoped override; the caller-supplied ``step_model`` (attributed to
+    ``caller_key_path`` — pass the caller's own key path, e.g. ``"fleet.model"``
+    for food-truck dispatch, when it differs from the default
+    ``"run_skill.model"``); then ``default_model``. If no tier resolves, the
+    returned ``ModelPinResolution.model`` is ``""`` — the sentinel for "no
+    model configured" — which callers must treat as absence, not error.
+    """
     if config.model.model_override:
         logger.debug("model_resolved", tier="override", model=config.model.model_override)
-        return config.model.model_override
+        return ModelPinResolution(
+            config.model.model_override,
+            LaunchValueSource(LaunchValueSourceKind.GLOBAL, "model.model_override"),
+        )
     if recipe_name and step_name:
         recipe_model = config.model.recipe_overrides.get(recipe_name, {}).get(step_name)
         if recipe_model:
             logger.debug("model_resolved", tier="recipe_override", model=recipe_model)
-            return recipe_model
+            return ModelPinResolution(
+                recipe_model,
+                LaunchValueSource(
+                    LaunchValueSourceKind.RECIPE,
+                    f"model.recipe_overrides.{recipe_name}.{step_name}",
+                ),
+            )
     if step_name:
         step_override = config.model.step_overrides.get(step_name)
         if step_override:
             logger.debug("model_resolved", tier="step_override", model=step_override)
-            return step_override
+            return ModelPinResolution(
+                step_override,
+                LaunchValueSource(LaunchValueSourceKind.STEP, f"model.step_overrides.{step_name}"),
+            )
     if step_model:
         logger.debug("model_resolved", tier="step", model=step_model)
-        return step_model
+        return ModelPinResolution(
+            step_model,
+            LaunchValueSource(LaunchValueSourceKind.CALLER, caller_key_path),
+        )
     if config.model.default_model:
         logger.debug("model_resolved", tier="default", model=config.model.default_model)
-        return config.model.default_model
+        return ModelPinResolution(
+            config.model.default_model,
+            LaunchValueSource(LaunchValueSourceKind.DEFAULT, "model.default_model"),
+        )
     logger.debug("model_resolved", tier="none", model=None)
-    return None
+    default_key_path = f"{caller_key_path.rsplit('.', 1)[0]}.defaults"
+    return ModelPinResolution(
+        "", LaunchValueSource(LaunchValueSourceKind.DEFAULT, default_key_path)
+    )
 
 
 def resolve_model_identity(
-    step_model: str,
-    config: AutomationConfig,
+    pin: ModelPinResolution,
     *,
-    step_name: str = "",
-    recipe_name: str = "",
     profile_name: str = "",
 ) -> ModelIdentity:
-    """Wrap _resolve_model() with provider awareness.
+    """Attach provider awareness to an already-resolved model pin.
 
     For non-Anthropic providers, effective_model is left empty so the downstream
     argmax fallback in flush_session_log fires and extracts the real provider model
     from model_breakdown.
     """
-    resolved = _resolve_model(step_model, config, step_name=step_name, recipe_name=recipe_name)
-    configured = resolved or ""
+    configured = pin.model
     if profile_name and profile_name != "anthropic":
         return ModelIdentity.for_provider(
             configured=configured, effective="", profile=profile_name

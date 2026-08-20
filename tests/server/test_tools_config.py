@@ -138,7 +138,10 @@ def test_behavior_cases_cover_exact_public_and_registered_parameters() -> None:
 async def test_partial_updates_accumulate_in_live_config_and_snapshot(
     tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.execution.headless._headless_helpers import resolve_model_identity
+    from autoskillit.execution.headless._headless_helpers import (
+        resolve_model_identity,
+        resolve_model_pin,
+    )
     from autoskillit.server import _state
     from autoskillit.server.tools.tools_config import configure_order
 
@@ -150,14 +153,17 @@ async def test_partial_updates_accumulate_in_live_config_and_snapshot(
     observed = await _observe_headless_defaults(ctx, monkeypatch)
 
     assert observed["timeout"] == 400
-    assert resolve_model_identity("", ctx.config).configured_model == "opus"
+    assert resolve_model_identity(resolve_model_pin("", ctx.config)).configured_model == "opus"
     assert payload["config"]["order"]["timeout"] == 400
     assert payload["config"]["core"]["default_model"] == "opus"
 
 
 @pytest.mark.anyio
 async def test_shared_default_model_is_last_write_wins(tmp_path, monkeypatch) -> None:
-    from autoskillit.execution.headless._headless_helpers import resolve_model_identity
+    from autoskillit.execution.headless._headless_helpers import (
+        resolve_model_identity,
+        resolve_model_pin,
+    )
     from autoskillit.server import _state
     from autoskillit.server.tools.tools_config import configure_fleet, configure_order
 
@@ -169,8 +175,11 @@ async def test_shared_default_model_is_last_write_wins(tmp_path, monkeypatch) ->
 
     assert ctx.config.model.default_model == "haiku"
     assert payload["config"]["core"]["default_model"] == "haiku"
-    assert resolve_model_identity("", ctx.config).configured_model == "haiku"
-    assert resolve_model_identity("explicit", ctx.config).configured_model == "explicit"
+    assert resolve_model_identity(resolve_model_pin("", ctx.config)).configured_model == "haiku"
+    assert (
+        resolve_model_identity(resolve_model_pin("explicit", ctx.config)).configured_model
+        == "explicit"
+    )
 
 
 @pytest.mark.anyio
@@ -178,7 +187,10 @@ async def test_same_worktree_contexts_do_not_import_each_others_overrides(
     tmp_path,
     monkeypatch,
 ) -> None:
-    from autoskillit.execution.headless._headless_helpers import resolve_model_identity
+    from autoskillit.execution.headless._headless_helpers import (
+        resolve_model_identity,
+        resolve_model_pin,
+    )
     from autoskillit.server import _state
     from autoskillit.server.tools.tools_config import configure_order
 
@@ -194,9 +206,12 @@ async def test_same_worktree_contexts_do_not_import_each_others_overrides(
     observed_a = await _observe_headless_defaults(ctx_a, monkeypatch)
     observed_b = await _observe_headless_defaults(ctx_b, monkeypatch)
     assert observed_a["timeout"] == 401
-    assert resolve_model_identity("", ctx_a.config).configured_model == baseline_model
+    assert (
+        resolve_model_identity(resolve_model_pin("", ctx_a.config)).configured_model
+        == baseline_model
+    )
     assert observed_b["timeout"] == 7200
-    assert resolve_model_identity("", ctx_b.config).configured_model == "haiku"
+    assert resolve_model_identity(resolve_model_pin("", ctx_b.config)).configured_model == "haiku"
 
 
 @pytest.mark.anyio

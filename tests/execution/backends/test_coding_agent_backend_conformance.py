@@ -66,6 +66,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "mcp_config_capable": "OPTIONAL",
     "mcp_env_forward_vars": "OPTIONAL",
     "min_version": "OPTIONAL",
+    "native_model_ids": "REQUIRED",
     "patch_format": "OPTIONAL",
     "plugin_install_capable": "OPTIONAL",
     "protected_recipe_delivery_capable": "OPTIONAL",
@@ -152,6 +153,24 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         supports_tool_list_changed, triage_capable, write_detection_strategy.
         """
         assert isinstance(self.backend.capabilities, BackendCapabilities)
+
+    def test_native_model_ids_declares_backend_owned_ids(self) -> None:
+        """Exercises native_model_ids: Codex declares CODEX_VALID_MODEL_IDS, Claude Code
+        declares an empty set."""
+        from autoskillit.core import CODEX_VALID_MODEL_IDS
+
+        if self.backend.name == "codex":
+            assert self.backend.capabilities.native_model_ids == CODEX_VALID_MODEL_IDS
+        elif self.backend.name == "claude-code":
+            assert self.backend.capabilities.native_model_ids == frozenset()
+        else:
+            # Intentional sentinel: when a new backend is added to BACKEND_REGISTRY,
+            # add an elif branch above with explicit native_model_ids coverage rather
+            # than removing this guard.
+            pytest.fail(
+                f"test_native_model_ids_declares_backend_owned_ids has no coverage"
+                f" for backend {self.backend.name!r}"
+            )
 
     def test_hook_trust_policy_is_typed(self) -> None:
         """BackendCapabilities.hook_trust_policy — interactive hook review policy."""

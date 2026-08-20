@@ -36,6 +36,7 @@ __all__ = [
     "LaunchSurface",
     "LaunchValueSource",
     "LaunchValueSourceKind",
+    "ModelPinResolution",
     "ProviderBinding",
     "ResolvedLaunchContract",
     "SecretEnvironmentBinding",
@@ -195,6 +196,14 @@ class LaunchValueSource:
 
     def to_payload(self) -> Mapping[str, str]:
         return MappingProxyType({"kind": self.kind.value, "key_path": self.key_path})
+
+
+@dataclass(frozen=True, slots=True)
+class ModelPinResolution:
+    """One resolved model value with its typed config origin."""
+
+    model: str
+    source: LaunchValueSource
 
 
 @dataclass(frozen=True, slots=True)

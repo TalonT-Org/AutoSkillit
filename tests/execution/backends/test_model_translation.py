@@ -28,8 +28,14 @@ class TestCodexTranslateModel:
     def test_passthrough_native(self, model_id: str) -> None:
         assert CodexBackend().translate_model(model_id) == model_id
 
-    def test_unknown_passthrough(self) -> None:
-        assert CodexBackend().translate_model("custom-model-xyz") == "custom-model-xyz"
+    @pytest.mark.parametrize(
+        "model_id",
+        ["custom-model-xyz", "claude-opus-5"],
+        ids=["unknown", "claude_native_on_codex"],
+    )
+    def test_unknown_passthrough(self, model_id: str) -> None:
+        """Unrecognized or backend-foreign model ids pass through untranslated."""
+        assert CodexBackend().translate_model(model_id) == model_id
 
     def test_haiku_alias(self) -> None:
         assert CodexBackend().translate_model("haiku") == CODEX_MODEL_ALIASES["haiku"]
@@ -48,8 +54,14 @@ class TestClaudeTranslateModel:
             == f"{CLAUDE_MODEL_ALIASES['opus']}[1m]"
         )
 
-    def test_unknown_passthrough(self) -> None:
-        assert ClaudeCodeBackend().translate_model("custom-model-xyz") == "custom-model-xyz"
+    @pytest.mark.parametrize(
+        "model_id",
+        ["custom-model-xyz", "gpt-5.6-sol"],
+        ids=["unknown", "codex_native_on_claude"],
+    )
+    def test_unknown_passthrough(self, model_id: str) -> None:
+        """Unrecognized or backend-foreign model ids pass through untranslated."""
+        assert ClaudeCodeBackend().translate_model(model_id) == model_id
 
     def test_haiku_identity(self) -> None:
         assert ClaudeCodeBackend().translate_model("haiku") == "haiku"

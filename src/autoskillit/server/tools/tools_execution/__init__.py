@@ -30,42 +30,42 @@ import shutil  # noqa: F401 — mock.patch("...tools_execution.shutil.which") re
 # attribute lookup (tools_execution.shutil) before reaching .which, so the facade
 # needs its own shutil attribute even though it's a shared stdlib module object.
 from autoskillit.core import (
-    AuditResultOutcome,  # noqa: F401 — D5: read via _te_pkg in _run_skill_finalize.py
-    execution_marker,  # noqa: F401 — D5: read via _te_pkg in _run_skill_finalize.py
-    find_caller_session_id,  # noqa: F401 — D5: read via _te_pkg in _run_skill_session.py
+    AuditResultOutcome,  # noqa: F401
+    execution_marker,  # noqa: F401
+    find_caller_session_id,  # noqa: F401
     get_logger,
-    get_tool_def,  # noqa: F401 — D5: read via _te_pkg in _run_skill_admission.py
-    is_feature_enabled,  # noqa: F401 — D5: read via _te_pkg in _run_skill_prepare.py
-    read_registry,  # noqa: F401 — D5: read via _te_pkg in _run_skill_session.py
+    get_tool_def,  # noqa: F401
+    is_feature_enabled,  # noqa: F401
+    read_registry,  # noqa: F401
 )
 from autoskillit.server._explorer_projection import (
-    _cleanup_explorer_launch,  # noqa: F401 — D5: read via _te_pkg in _run_skill_dispatch.py
-    _explorer_launch_identity,  # noqa: F401 — D5: read via _te_pkg in _run_skill_prepare.py
-    _issue_explorer_binding_env,  # noqa: F401 — D5: read via _te_pkg in _run_skill_session.py
+    _cleanup_explorer_launch,  # noqa: F401
+    _explorer_launch_identity,  # noqa: F401
+    _issue_explorer_binding_env,  # noqa: F401
 )
 from autoskillit.server._misc import (
-    resolve_closure_write_dirs,  # noqa: F401 — D5: read via _te_pkg in _run_skill_session.py
+    resolve_closure_write_dirs,  # noqa: F401
 )
-from autoskillit.server._notify import _notify  # noqa: F401 — D5: read via _te_pkg widely
+from autoskillit.server._notify import _notify  # noqa: F401
 from autoskillit.server._progress_heartbeat import (
-    progress_heartbeat,  # noqa: F401 — D5: read via _te_pkg in _run_skill_finalize.py
+    progress_heartbeat,  # noqa: F401
 )
 from autoskillit.server._recipe_execution import (
     complete_audit_finalization_effects as _complete_audit_finalization_effects,  # noqa: F401
 )
 from autoskillit.server._recipe_segment_delivery import (
-    prepare_recipe_segment_delivery,  # noqa: F401 — D5: read via _te_pkg in _run_cmd/_run_python
+    prepare_recipe_segment_delivery,  # noqa: F401
 )
 from autoskillit.server._subprocess import (
-    _run_subprocess_captured,  # noqa: F401 — D5: read via _te_pkg in _run_cmd.py
+    _run_subprocess_captured,  # noqa: F401
 )
 from autoskillit.server.tools._backend_compat import (
-    _check_backend_compat,  # noqa: F401 — D5: read via _te_pkg in _run_skill_prepare.py
+    _check_backend_compat,  # noqa: F401
 )
 from autoskillit.server.tools._execution_helpers import (
-    _import_and_call,  # noqa: F401 — D5: read via _te_pkg in _run_python.py
+    _import_and_call,  # noqa: F401
     _RunSkillContractLifecycle,  # noqa: F401 — default_factory source; also re-exported
-    shape_execution_response,  # noqa: F401 — D5: read via _te_pkg in _run_python.py/finalize
+    shape_execution_response,  # noqa: F401
 )
 from autoskillit.server.tools._execution_helpers import (
     check_review_approach_plan_path as _check_review_approach_plan_path,  # noqa: F401
@@ -77,7 +77,7 @@ from autoskillit.server.tools._execution_helpers import (
     resolve_step_name_from_recipe as _resolve_step_name_from_recipe,  # noqa: F401
 )
 from autoskillit.server.tools._overlay_state import (
-    read_overlay,  # noqa: F401 — D5: read via _te_pkg in _gates.py
+    read_overlay,  # noqa: F401
 )
 from autoskillit.server.tools.tools_pipeline_tracker import (
     _release_context_tracker,  # noqa: F401 — re-exported for facade completeness

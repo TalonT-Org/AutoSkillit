@@ -26,8 +26,9 @@ from autoskillit.cli._serve_guard import serve_with_signal_guard
 from autoskillit.cli._validate import validate_app
 from autoskillit.cli.fleet import fleet_app
 from autoskillit.cli.ops import sessions_app
-from autoskillit.cli.session._session_cook import cook as cook_interactive
-from autoskillit.cli.session._session_order import _recipes_dir_for, order
+from autoskillit.cli.session import cook as cook_interactive
+from autoskillit.cli.session import order
+from autoskillit.cli.session._session_order import _recipes_dir_for
 from autoskillit.core import (
     AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
     AuditAdmissionStoreAuthority,

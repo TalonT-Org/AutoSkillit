@@ -53,7 +53,7 @@ from autoskillit.cli.prompts import (
     _build_open_kitchen_prompt,
     _build_orchestrator_prompt,
 )
-from autoskillit.cli.session._session_cook import cook
+from autoskillit.cli.session import cook
 from autoskillit.hook_registry import HookDriftResult
 
 doctor_cmd = _doctor_cmd

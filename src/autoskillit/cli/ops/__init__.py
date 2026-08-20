@@ -4,12 +4,12 @@ Each module exposes a single entry point consumed only by ``app.py``: report by
 default, mutate only behind an explicit ``--reap`` (or ``--reclaim``) flag.
 """
 
-from ._capture_store import run_capture_store
-from ._codex_attempts import run_codex_attempts
-from ._codex_orphans import run_codex_orphans
-from ._daemon_orphans import run_daemon_orphans
-from ._process_orphans import run_process_orphans
-from ._sessions import sessions_app
+from autoskillit.cli.ops._capture_store import run_capture_store
+from autoskillit.cli.ops._codex_attempts import run_codex_attempts
+from autoskillit.cli.ops._codex_orphans import run_codex_orphans
+from autoskillit.cli.ops._daemon_orphans import run_daemon_orphans
+from autoskillit.cli.ops._process_orphans import run_process_orphans
+from autoskillit.cli.ops._sessions import sessions_app
 
 __all__ = [
     "run_capture_store",

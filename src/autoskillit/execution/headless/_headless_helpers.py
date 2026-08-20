@@ -182,7 +182,7 @@ def resolve_model_identity(
     *,
     profile_name: str = "",
 ) -> ModelIdentity:
-    """Wrap resolve_model_pin() with provider awareness.
+    """Attach provider awareness to an already-resolved model pin.
 
     For non-Anthropic providers, effective_model is left empty so the downstream
     argmax fallback in flush_session_log fires and extracts the real provider model

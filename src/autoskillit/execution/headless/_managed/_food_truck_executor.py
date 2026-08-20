@@ -131,8 +131,9 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     f"{dispatch_backend.name!r}: {'; '.join(readiness.errors)}"
                 )
         cfg = self._ctx.config
+        caller_key_path = "fleet.model"
         model_pin = resolve_model_pin(
-            model, cfg, step_name=step_name, caller_key_path="fleet.model"
+            model, cfg, step_name=step_name, caller_key_path=caller_key_path
         )
         model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
         fleet_cfg = cfg.fleet
@@ -192,7 +193,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 cwd=cwd,
                 requested_model=model or None,
                 requested_model_source=(
-                    LaunchValueSource(LaunchValueSourceKind.CALLER, "fleet.model")
+                    LaunchValueSource(LaunchValueSourceKind.CALLER, caller_key_path)
                     if model
                     else default_source
                 ),

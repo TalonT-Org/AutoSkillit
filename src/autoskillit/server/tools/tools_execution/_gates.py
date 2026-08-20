@@ -131,10 +131,7 @@ def _has_active_locks(order_id: str) -> bool:
     from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
-    try:
-        overlay = _te_pkg.read_overlay(ctx.project_dir)
-    except OSError:
-        return False
+    overlay = _te_pkg.read_overlay(ctx.project_dir)
     locked_steps = overlay.get("locked_steps", {})
     if not locked_steps:
         return False

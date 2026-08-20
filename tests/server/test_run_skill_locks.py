@@ -99,6 +99,21 @@ def test_unresolved_lock_check_propagates_invalid_overlay(tool_ctx_kitchen_open,
         _has_active_locks("pipeline-1")
 
 
+def test_unresolved_lock_check_propagates_storage_failure(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
+    from autoskillit.server.tools import tools_execution
+
+    monkeypatch.setattr(
+        tools_execution,
+        "read_overlay",
+        MagicMock(side_effect=OSError("lock storage unavailable")),
+    )
+
+    with pytest.raises(OSError, match="lock storage unavailable"):
+        tools_execution._has_active_locks("pipeline-1")
+
+
 class TestRunSkillDeniesLockedStep:
     """Test 6: run_skill denies locked step."""
 

@@ -576,12 +576,19 @@ def run_update_transaction(
                         incarnation_id=install_root_incarnation_id,
                         staged_root=generation_root,
                     )
-                write_entrypoint_shim(resolved_home)
             except Exception as exc:
                 _report_post_pivot_failure("update_install_root_generation_publish_failed")
                 return _upgrade_failure(
                     progress,
                     f"Could not publish the install-root generation: {exc}",
+                )
+            try:
+                write_entrypoint_shim(resolved_home)
+            except Exception as exc:
+                _report_post_pivot_failure("update_entrypoint_shim_write_failed")
+                return _upgrade_failure(
+                    progress,
+                    f"Could not write the entrypoint shim: {exc}",
                 )
 
         if require_registered_plugin:

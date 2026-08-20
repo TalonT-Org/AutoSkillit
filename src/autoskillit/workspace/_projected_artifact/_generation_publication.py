@@ -145,6 +145,89 @@ def _discard_unpublished_generation(generation_root: Path) -> None:
             logger.warning("unpublished_generation_sidecar_removal_failed: %s: %s", path, exc)
 
 
+def _finalize_generation(
+    *,
+    home: Path,
+    artifact_ref: str,
+    version: str,
+    semantic_key: str,
+    incarnation_id: str,
+    generation_root: Path,
+    staged_digest: str,
+    action: str,
+    artifact_kind: PluginArtifactKind,
+    allow_symlinks: bool = False,
+    ignore_bytecode: bool = False,
+) -> PluginArtifactIdentity:
+    """Manifest, select, and retire around the per-version selector commit point."""
+    version_root = generation_version_root(home, artifact_ref, version)
+    selector = generation_selector_path(home, artifact_ref, version)
+    lease_path = installed_plugin_artifact_lease_path(generation_root)
+    safe_to_discard = True
+    try:
+        _fsync_directory(version_root)
+        with ArtifactLease.acquire_exclusive(lease_path, blocking=True):
+            identity = write_installed_plugin_artifact_manifest_locked(
+                generation_root,
+                semantic_key=semantic_key,
+                action=action,
+                incarnation_id=incarnation_id,
+                allow_symlinks=allow_symlinks,
+                ignore_bytecode=ignore_bytecode,
+            )
+            if identity.artifact_digest != staged_digest:
+                raise RuntimeError(
+                    f"generation digest changed between staging and publication: "
+                    f"staged {staged_digest}, published {identity.artifact_digest}"
+                )
+
+            prior_target = resolve_current_generation(home, artifact_ref, version)
+            try:
+                _replace_symlink(selector, generation_root)
+            except OSError:
+                safe_to_discard = False
+                try:
+                    if prior_target is None:
+                        selector.unlink(missing_ok=True)
+                        _fsync_directory(version_root)
+                    else:
+                        _replace_symlink(selector, prior_target)
+                    safe_to_discard = True
+                except OSError as restore_error:
+                    logger.error(
+                        "%s_selector_restore_failed: prior=%s",
+                        action,
+                        prior_target,
+                        exc_info=restore_error,
+                    )
+                raise
+            safe_to_discard = False
+    except Exception:
+        if safe_to_discard:
+            _discard_unpublished_generation(generation_root)
+            _fsync_directory(version_root)
+        raise
+
+    log_plugin_artifact_lifecycle(
+        logger,
+        action=action,
+        outcome="succeeded",
+        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
+        semantic_key=semantic_key,
+        incarnation=incarnation_id,
+    )
+    _select_plugin_generation(home, artifact_ref, generation_root)
+    prune_stale_generations(home, artifact_ref, artifact_kind=artifact_kind)
+    return PluginArtifactIdentity(
+        semantic_key=semantic_key,
+        incarnation_id=incarnation_id,
+        manifest_schema_version=identity.manifest_schema_version,
+        artifact_digest=identity.artifact_digest,
+        managed_path=generation_root,
+        manifest_path=installed_plugin_artifact_manifest_path(generation_root),
+    )
+
+
 def publish_generation(
     *,
     home: Path,
@@ -163,9 +246,6 @@ def publish_generation(
     incarnation_id = new_plugin_artifact_incarnation_id()
     version_root = generation_version_root(home, plugin_ref, version)
     generation_root = generation_artifact_root(home, plugin_ref, version, incarnation_id)
-    selector = generation_selector_path(home, plugin_ref, version)
-    lease_path = installed_plugin_artifact_lease_path(generation_root)
-
     version_root.mkdir(parents=True, exist_ok=True)
     _sweep_orphaned_staging(version_root)
 
@@ -176,8 +256,6 @@ def publish_generation(
             dir=version_root,
         )
     )
-    promoted = False
-    safe_to_discard = True
     try:
         # Copy the entire source tree
         shutil.copytree(source_root, staging / "content", dirs_exist_ok=False)
@@ -191,79 +269,19 @@ def publish_generation(
 
         # Move staging content to the final generation path
         os.rename(staging / "content", generation_root)
-        promoted = True
-        _fsync_directory(version_root)
-
-        # The immutable generation owns a stable lease sidecar before any
-        # reader can discover it through the selector.
-        with ArtifactLease.acquire_exclusive(lease_path, blocking=True):
-            identity = write_installed_plugin_artifact_manifest_locked(
-                generation_root,
-                semantic_key=semantic_key,
-                action="publish_generation",
-                incarnation_id=incarnation_id,
-            )
-
-            if identity.artifact_digest != staged_digest:
-                raise RuntimeError(
-                    f"generation digest changed between staging and publication: "
-                    f"staged {staged_digest}, published {identity.artifact_digest}"
-                )
-
-            prior_target = resolve_current_generation(home, plugin_ref, version)
-            try:
-                _replace_symlink(selector, generation_root)
-            except OSError:
-                safe_to_discard = False
-                try:
-                    if prior_target is None:
-                        selector.unlink(missing_ok=True)
-                        _fsync_directory(version_root)
-                    else:
-                        _replace_symlink(selector, prior_target)
-                    safe_to_discard = True
-                except OSError as restore_error:
-                    logger.error(
-                        "generation_selector_restore_failed: prior=%s",
-                        prior_target,
-                        exc_info=restore_error,
-                    )
-                raise
-            safe_to_discard = False
-    except Exception:
-        if promoted and safe_to_discard:
-            _discard_unpublished_generation(generation_root)
-            _fsync_directory(version_root)
-        raise
+        return _finalize_generation(
+            home=home,
+            artifact_ref=plugin_ref,
+            version=version,
+            semantic_key=semantic_key,
+            incarnation_id=incarnation_id,
+            generation_root=generation_root,
+            staged_digest=staged_digest,
+            action="publish_generation",
+            artifact_kind=PluginArtifactKind.PLUGIN_GENERATION,
+        )
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-
-    # Clean up the empty staging dir if the platform retained it.
-    try:
-        staging.rmdir()
-    except OSError:
-        pass
-
-    log_plugin_artifact_lifecycle(
-        logger,
-        action="publish_generation",
-        outcome="succeeded",
-        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
-        semantic_key=semantic_key,
-        incarnation=incarnation_id,
-    )
-
-    _select_plugin_generation(home, plugin_ref, generation_root)
-    prune_stale_generations(home, plugin_ref)
-
-    return PluginArtifactIdentity(
-        semantic_key=semantic_key,
-        incarnation_id=incarnation_id,
-        manifest_schema_version=identity.manifest_schema_version,
-        artifact_digest=identity.artifact_digest,
-        managed_path=generation_root,
-        manifest_path=installed_plugin_artifact_manifest_path(generation_root),
-    )
 
 
 def publish_install_root_generation(
@@ -295,9 +313,6 @@ def publish_install_root_generation(
     expected_root = generation_artifact_root(home, install_ref, version, incarnation_id)
     if generation_root != expected_root:
         raise ValueError(f"install-root generation must be materialized at {expected_root}")
-    selector = generation_selector_path(home, install_ref, version)
-    lease_path = installed_plugin_artifact_lease_path(generation_root)
-
     version_root.mkdir(parents=True, exist_ok=True)
 
     staged_digest = directory_tree_digest(
@@ -305,82 +320,18 @@ def publish_install_root_generation(
     )
     _fsync_tree_contents(generation_root)
 
-    # A venv's console scripts bake an absolute shebang path at creation time
-    # (uv/venv are not relocatable), so the caller must have installed
-    # directly at `generation_root` rather than at a separate staging
-    # location it expects this function to move into place -- unlike
-    # `publish_generation`'s sanitized, path-agnostic plugin content, which
-    # tolerates the copy-then-rename dance freely.
-    promoted = False
-    safe_to_discard = True
-    try:
-        promoted = True
-        _fsync_directory(version_root)
-
-        with ArtifactLease.acquire_exclusive(lease_path, blocking=True):
-            identity = write_installed_plugin_artifact_manifest_locked(
-                generation_root,
-                semantic_key=semantic_key,
-                action="publish_install_root_generation",
-                incarnation_id=incarnation_id,
-                allow_symlinks=True,
-                ignore_bytecode=True,
-            )
-
-            if identity.artifact_digest != staged_digest:
-                raise RuntimeError(
-                    "install-root generation digest changed between staging "
-                    f"and publication: staged {staged_digest}, published "
-                    f"{identity.artifact_digest}"
-                )
-
-            prior_target = resolve_current_generation(home, install_ref, version)
-            try:
-                _replace_symlink(selector, generation_root)
-            except OSError:
-                safe_to_discard = False
-                try:
-                    if prior_target is None:
-                        selector.unlink(missing_ok=True)
-                        _fsync_directory(version_root)
-                    else:
-                        _replace_symlink(selector, prior_target)
-                    safe_to_discard = True
-                except OSError as restore_error:
-                    logger.error(
-                        "install_root_generation_selector_restore_failed: prior=%s",
-                        prior_target,
-                        exc_info=restore_error,
-                    )
-                raise
-            safe_to_discard = False
-    except Exception:
-        if promoted and safe_to_discard:
-            _discard_unpublished_generation(generation_root)
-            _fsync_directory(version_root)
-        raise
-
-    log_plugin_artifact_lifecycle(
-        logger,
-        action="publish_install_root_generation",
-        outcome="succeeded",
-        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
-        semantic_key=semantic_key,
-        incarnation=incarnation_id,
-    )
-
-    _select_plugin_generation(home, install_ref, generation_root)
-    prune_stale_generations(
-        home, install_ref, artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION
-    )
-
-    return PluginArtifactIdentity(
+    return _finalize_generation(
+        home=home,
+        artifact_ref=install_ref,
+        version=version,
         semantic_key=semantic_key,
         incarnation_id=incarnation_id,
-        manifest_schema_version=identity.manifest_schema_version,
-        artifact_digest=identity.artifact_digest,
-        managed_path=generation_root,
-        manifest_path=installed_plugin_artifact_manifest_path(generation_root),
+        generation_root=generation_root,
+        staged_digest=staged_digest,
+        action="publish_install_root_generation",
+        artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+        allow_symlinks=True,
+        ignore_bytecode=True,
     )
 
 

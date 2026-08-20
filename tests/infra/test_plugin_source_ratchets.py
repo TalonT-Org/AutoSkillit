@@ -280,7 +280,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
     (
         "workspace/_projected_artifact/_generation_publication.py",
-        "_finalize_generation",
+        "publish_generation",
         "os.rename",
     ): (
         1,
@@ -298,7 +298,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
     (
         "workspace/_projected_artifact/_generation_publication.py",
-        "publish_generation",
+        "_finalize_generation",
         "selector.unlink",
     ): (
         1,

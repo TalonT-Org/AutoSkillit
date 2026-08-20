@@ -37,8 +37,10 @@ if _HOOKS_DIR not in sys.path:
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _FD_REDIRECT_RE,
+    _GIT_GLOBAL_FLAG_SPEC,
     _REDIRECT_OP_ONLY_RE,
     _REDIRECT_TOKEN_RE,
+    _FlagArity,
     command_verb,
     extract_interpreter_write_paths,
     extract_redirect_targets,
@@ -76,7 +78,18 @@ _WRITE_VERBS: frozenset[str] = frozenset(
     }
 )
 
-_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "-c"})
+# Every value-taking git global flag, derived at import time from
+# _GIT_GLOBAL_FLAG_SPEC in _command_classification.py. Hook scripts already
+# import from that module via sys.path (same as git_ops_guard.py in this
+# same package) so there is no separate "manual mirror" -- the spec table
+# is the single source of truth and any future addition automatically
+# extends this frozenset. A flag missing from this set is misread by the
+# loop below as a 1-token boolean skip, so its value gets mistaken for
+# the git subcommand -- e.g. `git --namespace refs/foo checkout -- file`
+# previously stopped the loop at `refs/foo`, never reaching `checkout`.
+_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
+    flag for flag, arity in _GIT_GLOBAL_FLAG_SPEC.items() if arity == _FlagArity.VALUE
+)
 
 
 def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:

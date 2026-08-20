@@ -12,21 +12,36 @@ import pytest
 import autoskillit.hooks._command_classification as command_classification
 import autoskillit.hooks._github_mutation_analysis as github_mutation_analysis
 from autoskillit.hooks._command_classification import (
+    _GIT_GLOBAL_FLAG_SPEC,
+    _FlagArity,
     command_verb,
+    extract_git_subcommand_and_flags,
     extract_interpreter_write_paths,
     extract_redirect_targets,
     has_interpreter_wrapped_command,
     has_interpreter_write,
     has_nested_shell,
+    is_allowed_protected_path_metadata_command,
     is_gh_command,
     tokenize_command_segments,
 )
 from autoskillit.hooks._github_mutation_analysis import (
+    _CURL_FLAG_SPEC,
+    _GH_API_FLAG_SPEC,
+    _GH_HELP_FLAGS,
     GitHubMutationAnalysis,
     GitHubMutationKind,
     GitHubMutationRecord,
     GitHubMutationStatus,
     analyze_github_mutations,
+)
+from tests.hooks._flag_form_matrix import (
+    FLAG_FORM_MATRIX,
+    GRAPHQL_CONTENT_MATRIX,
+    GRAPHQL_DELIVERY_MATRIX,
+    GRAPHQL_MATRIX_CONTENT_BODIES,
+    deliver_graphql_document,
+    graphql_delivery_is_inherently_safe,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -935,6 +950,42 @@ def test_strip_heredoc_bodies(command: str, expected_stripped: str) -> None:
     assert strip_heredoc_bodies(command) == expected_stripped
 
 
+class TestIsAllowedProtectedPathMetadataCommand:
+    def test_recognized_git_status_metadata_command_is_allowed(self) -> None:
+        assert is_allowed_protected_path_metadata_command(["git", "status"]) is True
+
+    def test_content_reading_git_subcommand_is_not_allowed(self) -> None:
+        assert is_allowed_protected_path_metadata_command(["git", "show", "HEAD"]) is False
+
+    def test_non_git_command_is_not_allowed(self) -> None:
+        assert is_allowed_protected_path_metadata_command(["cat", "file.py"]) is False
+
+    def test_unrecognized_global_git_flag_shift_is_not_allowed(self) -> None:
+        """Git subcommand shift (Part C, wiring check for the first of
+
+        extract_git_subcommand_and_flags's three callers): a real git
+        global flag absent from the old allowlist, space-separated, must
+        not shift subcommand detection onto the flag's value -- the
+        "<unresolved>" sentinel must be treated identically to None
+        (-> False), not accidentally matched against
+        _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS.
+        """
+        assert (
+            is_allowed_protected_path_metadata_command(
+                ["git", "--namespace", "refs/foo", "status"]
+            )
+            is True
+        )
+        # A genuinely unrecognized flag (not just one this allowlist predates)
+        # must fail closed to False, not be silently treated as safe metadata.
+        assert (
+            is_allowed_protected_path_metadata_command(
+                ["git", "--this-flag-does-not-exist", "val", "status"]
+            )
+            is False
+        )
+
+
 class TestAnalyzeGitHubMutations:
     def test_read_only_command_has_exact_empty_analysis(self) -> None:
         assert analyze_github_mutations("gh api /repos/o/r/pulls/7/reviews") == (
@@ -1819,6 +1870,472 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.NONE
         assert analysis.request_count == 0
         assert analysis.mutations == ()
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            (
+                "gh api graphql -f query='mutation { addReaction("
+                'input: {subjectId: "abc", content: THUMBS_UP}) '
+                "{ clientMutationId } }' --jq '.data.addReaction.clientMutationId'"
+            ),
+            "gh api /repos/o/r/issues -f title=Bug --template '{{.number}}'",
+            "gh api /repos/o/r/issues -f title=Bug -p custom-preview",
+        ],
+        ids=["jq", "template", "preview"],
+    )
+    def test_previously_unrecognized_gh_api_flags_no_longer_misparse_route(
+        self, command: str
+    ) -> None:
+        """AC1 reproduction (Issue #4655 Defect 1): --jq/--template/-p used to shift
+        the flag's own value into the route slot, tripping a false
+        request_cardinality_unresolved deny. The query bodies above deliberately
+        avoid `$`/`[` so this test isolates Defect 1 from Part B's Defect 2 fix.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert analysis.reason_code == ""
+
+    def test_unrecognized_gh_api_flag_has_a_distinguishable_reason_code(self) -> None:
+        """An unrecognized gh api flag must fail closed with its own reason code,
+
+        not the same request_cardinality_unresolved code a genuinely-ambiguous
+        route triggers -- proving the fix is architectural (unknown flags get an
+        honest, distinguishable outcome) rather than three more special-cased
+        branches under the same misleading reason code.
+        """
+        analysis = analyze_github_mutations(
+            "gh api /repos/o/r/issues --this-flag-does-not-exist zzz"
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unrecognized_gh_api_flag"
+        assert analysis.reason_code != "request_cardinality_unresolved"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            (
+                "gh api /repos/o/r/issues -X POST -F count=1 -f note=hi "
+                "--jq .id --template {{.id}} -p custom"
+            ),
+            (
+                "gh api /repos/o/r/issues --method=POST --field=count=1 "
+                "--raw-field=note=hi --jq=.id --template={{.id}} --preview=custom"
+            ),
+            "gh api /repos/o/r/issues -XPOST -Fcount=1 -fnote=hi -q.id -t{{.id}} -pcustom",
+        ],
+        ids=FLAG_FORM_MATRIX,
+    )
+    def test_gh_api_value_flag_grammar_resolves_identically_across_forms(
+        self, command: str
+    ) -> None:
+        """Extends the gh-issue-edit 5-form precedent to gh api's value-taking
+
+        flags. --method/-X, --field/-F, and --raw-field/-f already supported all
+        three forms via _flag_value (untested before this); --jq/-q, --template/-t,
+        and -p/--preview are newly recognized by this part's spec-driven engine.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert analysis.mutations[0].method == "POST"
+
+    @pytest.mark.parametrize("form", ["space", "equals"])
+    def test_gh_api_input_flag_supports_space_and_equals_forms(
+        self, form: str, tmp_path: Path
+    ) -> None:
+        (tmp_path / "body.json").write_text('{"title": "Bug"}', encoding="utf-8")
+        flag = "--input body.json" if form == "space" else "--input=body.json"
+        analysis = analyze_github_mutations(
+            f"gh api /repos/o/r/issues --method POST {flag}",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
+    def test_fully_single_quoted_graphql_document_resolves(self) -> None:
+        """AC2/AC3 reproduction (Issue #4655 Defect 2): a GraphQL mutation document
+
+        delivered inline via `-f query='...'`, fully single-quoted end-to-end,
+        legitimately contains `$`/`[` (GraphQL variables, list literals) --
+        this must resolve, not be misclassified as a dynamic shell value.
+        """
+        command = (
+            "gh api graphql -f query='mutation($id: ID!) "
+            "{ addLabels(labelIds: [$id]) { clientMutationId } }'"
+        )
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert analysis.reason_code == ""
+
+    @pytest.mark.parametrize(
+        "suffix",
+        [
+            ";echo done",
+            "|tee /tmp/x",
+            "&echo done",
+        ],
+        ids=["semicolon", "pipe", "ampersand"],
+    )
+    def test_single_quoted_graphql_followed_by_unseparated_shell_operator_resolves(
+        self, suffix: str
+    ) -> None:
+        """Regression pin for _SHELL_OPERATOR_CHARS strip introduced for the
+
+        AC2/AC3 fix above: a fully single-quoted GraphQL document immediately
+        followed by an unseparated shell operator (`, |`, `&`) must still
+        resolve. shlex.shlex(punctuation_chars=True) leaves the operator in
+        the previous token's source range; without the operator-chars strip
+        `fully_single_quoted` would mismatch `'<token>'` and the legitimate
+        mutation would be wrongly denied as dynamic_target.
+        """
+        command = (
+            "gh api graphql -f query='mutation($id: ID!) "
+            "{ addLabels(labelIds: [$id]) { clientMutationId } }'" + suffix
+        )
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert analysis.reason_code == ""
+
+    def test_unquoted_command_substitution_in_graphql_document_remains_denied(self) -> None:
+        """AC4 regression pin: the prior investigation explicitly warned a blanket
+
+        `$`/`[` relaxation would let a real command-substitution fragment through
+        -- this must remain denied as a first-class test, not an afterthought.
+        """
+        command = (
+            'gh api graphql -f query="mutation($id: ID!) '
+            '{ addLabels(labelIds: [`whoami`]) { clientMutationId } }"'
+        )
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "dynamic_target"
+
+    def test_identical_graphql_content_denied_when_not_single_quoted(self) -> None:
+        """Provenance-not-content proof: the exact same `$`/`[` GraphQL content,
+
+        delivered double-quoted instead of single-quoted, must remain denied --
+        proving the fix is provenance-based (quote type of the token), not a
+        character-set relaxation applied to GraphQL content generally.
+        """
+        command = (
+            'gh api graphql -f query="mutation($id: ID!) '
+            '{ addLabels(labelIds: [$id]) { clientMutationId } }"'
+        )
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "dynamic_target"
+
+    def test_partial_single_quote_run_is_not_fully_quoted(self) -> None:
+        """A single-quote run that closes and reopens concatenated with a
+
+        double-quoted segment must remain denied, proving "fully single-quoted
+        end-to-end" is enforced precisely -- not "starts with a quote character".
+        """
+        command = "gh api graphql -f query='mutation'\"($id)\""
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "dynamic_target"
+
+    @pytest.mark.parametrize("content", GRAPHQL_CONTENT_MATRIX)
+    @pytest.mark.parametrize("delivery", GRAPHQL_DELIVERY_MATRIX)
+    def test_graphql_delivery_content_matrix(
+        self, delivery: str, content: str, tmp_path: Path
+    ) -> None:
+        """REQ-065: the full delivery x content cross product the four
+
+        individually-named tests above (single-quoted-resolves,
+        command-substitution-denied, double-quoted-denied,
+        partial-quote-denied) each only sampled one cell of. Resolution
+        depends only on whether *delivery* is inherently safe (fully
+        single-quoted, or file content) or *content* has no dynamic-shell
+        trigger character at all -- see
+        graphql_delivery_is_inherently_safe's own docstring for the exact
+        rule. Every other cell must deny with reason_code ==
+        "dynamic_target".
+        """
+        command = deliver_graphql_document(
+            delivery, GRAPHQL_MATRIX_CONTENT_BODIES[content], tmp_path
+        )
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        if graphql_delivery_is_inherently_safe(delivery, content):
+            assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED, (
+                f"{delivery}/{content} unexpectedly unresolved: {analysis.reason_code}"
+            )
+            assert analysis.reason_code == ""
+        else:
+            assert analysis.status is GitHubMutationStatus.UNRESOLVED
+            assert analysis.reason_code == "dynamic_target"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh api /repos/o/r/issues -f title=Bug -X 'POST'",
+            "gh api /repos/o/r/issues -f title=Bug --method='POST'",
+            "gh api /repos/o/r/issues -f title=Bug -X'POST'",
+        ],
+        ids=FLAG_FORM_MATRIX,
+    )
+    def test_method_provenance_proof_single_quoted_resolves(self, command: str) -> None:
+        """--method/-X provenance proof (not GraphQL content): a genuinely
+
+        single-quoted method value must resolve -- proving the
+        _flag_value/_consume_argv_flag retyping is real provenance tracing, not
+        a fabricated ArgvToken(value, True) default, since none of the
+        GraphQL-focused tests above exercise the --method/-X extraction path
+        at all.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].method == "POST"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh api /repos/o/r/issues -f title=Bug -X POST$(whoami)",
+            "gh api /repos/o/r/issues -f title=Bug --method=POST$(whoami)",
+            "gh api /repos/o/r/issues -f title=Bug -XPOST$(whoami)",
+        ],
+        ids=FLAG_FORM_MATRIX,
+    )
+    def test_method_provenance_proof_unquoted_substitution_denied(self, command: str) -> None:
+        """Companion to the single-quoted proof above: the same forms, but with
+
+        a real command-substitution fragment appended inside the same
+        quoting (none here), must remain denied.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "dynamic_target"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh api /repos/o/r/issues -f title=Bug -X 'PO$ST'",
+            "gh api /repos/o/r/issues -f title=Bug --method='PO$ST'",
+            "gh api /repos/o/r/issues -f title=Bug -X'PO$ST'",
+        ],
+        ids=FLAG_FORM_MATRIX,
+    )
+    def test_method_provenance_proof_quoted_dynamic_looking_content_not_denied(
+        self, command: str
+    ) -> None:
+        """Deep provenance proof: a `$` appearing *inside* a fully single-quoted
+
+        method value must not trigger the dynamic-value check in any form --
+        the equals-form and bundled-form retyping must re-derive the value's
+        own quote provenance (see _argv_token_after_prefix), not inherit the
+        whole token's coarser flag, or a `--method=`/`-X` prefix sitting
+        outside the quotes would wrongly disqualify an otherwise safely
+        quoted value.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.reason_code != "dynamic_target"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh api /repos/o/r/issues -f title=Bug -X PO$ST",
+            "gh api /repos/o/r/issues -f title=Bug --method=PO$ST",
+            "gh api /repos/o/r/issues -f title=Bug -XPO$ST",
+        ],
+        ids=FLAG_FORM_MATRIX,
+    )
+    def test_method_provenance_proof_unquoted_dynamic_content_denied(self, command: str) -> None:
+        """Companion regression pin: the identical `$`-bearing content, not
+
+        quoted at all, must still deny in every form.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "dynamic_target"
+
+    def test_gh_release_notes_help_spoof_value_does_not_exempt_mutation(self) -> None:
+        """Help-spoof bypass (Part C): --notes is not a curated value-taking
+
+        flag in _GH_KNOWN_VALUE_FLAGS, so under the old "assume boolean,
+        advance 1" default, its own value '--help' would be misread as a
+        bare help flag on the next iteration -- incorrectly exempting the
+        whole command from mutation classification (the code's own comment
+        already named this spoofing risk as the reason the table exists;
+        the table was simply incomplete).
+        """
+        analysis = analyze_github_mutations("gh release create v1 --notes '--help'")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+
+    def test_unrecognized_boolean_flag_before_real_help_still_exempts(self) -> None:
+        """The default-arity flip's trade-off is one-directional and safe: a
+
+        genuinely-boolean unrecognized flag immediately followed by a real
+        --help still classifies as non-mutating (reached via normal
+        classification rather than the help-fast-path -- a missed
+        shortcut, never a bypass).
+        """
+        analysis = analyze_github_mutations("gh pr view --web --help")
+
+        assert analysis.status is GitHubMutationStatus.NONE
+
+    def test_curl_user_agent_flag_does_not_cause_false_cardinality_unresolved(self) -> None:
+        """curl overblock regression pin (Part C): -A/--user-agent is outside
+
+        curl's previously-covered value_flags tuple; its value must not be
+        misread as a second URL and denied as request_cardinality_unresolved.
+        """
+        analysis = analyze_github_mutations(
+            'curl -A "custom-agent/1.0" https://api.github.com/repos/x/y'
+        )
+
+        assert analysis.reason_code != "request_cardinality_unresolved"
+
+    def test_unrecognized_curl_flag_has_a_distinguishable_reason_code(self) -> None:
+        """curl's generalized rewire fails closed on a truly unrecognized flag,
+
+        matching gh api's Part A precedent -- distinguishable from
+        request_cardinality_unresolved.
+        """
+        analysis = analyze_github_mutations(
+            "curl --this-curl-flag-does-not-exist zzz https://api.github.com/repos/x/y"
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unrecognized_curl_flag"
+        assert analysis.reason_code != "request_cardinality_unresolved"
+
+    @pytest.mark.parametrize("flag", sorted(_GH_API_FLAG_SPEC))
+    def test_every_gh_api_spec_flag_is_recognized(self, flag: str) -> None:
+        """Generative coverage (Part D): every flag in _GH_API_FLAG_SPEC must
+
+        be recognized by _analyze_gh_api's engine, not fall through to
+        unrecognized_gh_api_flag. Parametrized directly from the spec
+        table's own keys (not a hand-maintained flag list) so this test can
+        never silently miss a flag added to the table later -- see
+        tests/arch/test_guard_flag_spec_coverage.py, which verifies this
+        parametrize genuinely iterates the full table.
+
+        -h/--help are routed through a command construction that places them
+        after an unrecognized `-`-prefixed token so _gh_args_have_bare_help_flag
+        treats them as that token's value and does NOT short-circuit
+        analyze_github_mutations before the spec engine sees them. Otherwise
+        the assertion below would vacuously pass for -h/--help because the
+        help exemption returns reason_code="" rather than exercising the spec
+        table at all.
+        """
+        if flag in _GH_HELP_FLAGS:
+            # Construct a command where -h/--help is preceded by an
+            # unrecognized `-`-prefixed token so _gh_args_have_bare_help_flag
+            # classifies -h as that token's value (not a bare help), forcing
+            # analyze_github_mutations down the spec-engine path this test
+            # is meant to cover.
+            command = f"gh api /repos/o/r/issues --header=val {flag}"
+        else:
+            command = f"gh api /repos/o/r/issues -f title=Bug {flag}"
+            if _GH_API_FLAG_SPEC[flag] == _FlagArity.VALUE:
+                command += " someval"
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.reason_code != "unrecognized_gh_api_flag"
+
+    @pytest.mark.parametrize("flag", sorted(_CURL_FLAG_SPEC))
+    def test_every_curl_spec_flag_is_recognized(self, flag: str) -> None:
+        """Generative coverage (Part D): every flag in _CURL_FLAG_SPEC must be
+
+        recognized by _analyze_curl_segment's engine, not fall through to
+        unrecognized_curl_flag.
+        """
+        command = f"curl {flag}"
+        if _CURL_FLAG_SPEC[flag] == _FlagArity.VALUE:
+            command += " someval"
+        command += " https://api.github.com/repos/o/r"
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.reason_code != "unrecognized_curl_flag"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh api -H",
+            "gh api /route -H",
+            "gh api /route --header",
+            "gh api /route --hostname",
+            "gh api /route --cache",
+        ],
+    )
+    def test_gh_api_value_flag_without_value_returns_missing_required_value(
+        self, command: str
+    ) -> None:
+        """Regression pin for the spec-engine dedup (post-validator follow-up):
+
+        dropping the gh api hand-rolled -H/--header/--hostname/--cache skip
+        logic in favor of the spec table engine lost the explicit
+        missing_required_value return -- _consume_argv_flag returns (None,
+        i+1, True) for VALUE-arity with no next token, indistinguishable from
+        BOOLEAN. The call site now re-checks the spec table to surface the
+        distinct missing-value error rather than silently passing.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "missing_required_value"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "curl --user-agent",
+            "curl --proxy",
+            "curl --cacert",
+            "curl --connect-timeout",
+        ],
+    )
+    def test_curl_value_flag_without_value_returns_missing_required_value(
+        self, command: str
+    ) -> None:
+        """Regression pin for the spec-engine dedup (post-validator follow-up):
+
+        the curl call site must surface missing-value for VALUE-arity flags
+        similarly to gh api, otherwise `curl --proxy` (no value) silently
+        passes _analyze_curl_segment's unrecognized-flag check and escapes
+        as a missing-required-value smell.
+        """
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "missing_required_value"
+
+
+@pytest.mark.parametrize("flag", sorted(_GIT_GLOBAL_FLAG_SPEC))
+def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
+    """Generative coverage (Part D): every flag in _GIT_GLOBAL_FLAG_SPEC must
+
+    be recognized by extract_git_subcommand_and_flags, not fall through to
+    the "<unresolved>" fail-closed sentinel.
+    """
+    segment = ["git", flag]
+    if _GIT_GLOBAL_FLAG_SPEC[flag] == _FlagArity.VALUE:
+        segment.append("someval")
+    segment.append("status")
+
+    result = extract_git_subcommand_and_flags(segment)
+
+    assert result is not None
+    assert result[0] != "<unresolved>"
 
 
 class TestSiblingWrappersDelegate:

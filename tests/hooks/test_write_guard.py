@@ -1078,6 +1078,15 @@ class TestExtractBashWriteTargetsNewFamilies:
         assert result is not None
         assert "/clone/src/main.py" in result
 
+    def test_git_namespace_flag_before_checkout_detected(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets(
+            "git --namespace refs/foo checkout -- /clone/src/main.py"
+        )
+        assert result is not None
+        assert "/clone/src/main.py" in result
+
     def test_git_with_flag_prefix_reset_hard_detected(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 

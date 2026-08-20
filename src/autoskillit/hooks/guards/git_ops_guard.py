@@ -22,9 +22,10 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    _GIT_GLOBAL_FLAGS,
-    _GIT_GLOBAL_FLAGS_WITH_VALUE,
+    _GIT_GLOBAL_FLAG_SPEC,
     _SHELL_OPS,
+    _consume_str_flag,
+    _FlagArity,
     command_verb_and_args,
     extract_git_subcommand_and_flags,
     extract_interpreter_command_payloads,
@@ -34,6 +35,9 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     has_nested_shell,
     tokenize_command_segments,
     tokenize_shell_payload_segments,
+)
+from _github_mutation_analysis import (  # type: ignore[import-not-found]  # noqa: E402
+    _DYNAMIC_SHELL_TOKEN_RE,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
@@ -74,36 +78,97 @@ _EXEMPT_SKILLS: frozenset[str] = frozenset()
 # in hook_registry.py — stdlib-only boundary prevents a shared import.
 _EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
 
-_DYNAMIC_TOKEN_RE = re.compile(r"[$`?\[]")
 _RAW_WRITE_VERBS = frozenset(
     {"cp", "mv", "install", "tee", "truncate", "rm", "unlink", "sed", "dd"}
 )
 
 
-def _extract_git_subcommand_and_remaining(
-    tokens: list[str], start: int
-) -> tuple[str, list[str]] | None:
-    """Starting at tokens[start] (the 'git' token), return (subcommand, remaining).
-
-    Skips global git flags and their value tokens to find the subcommand.
-    Returns None if no subcommand is found.
-    """
-    i = start + 1
-    while i < len(tokens):
-        token = tokens[i]
-        if token in _GIT_GLOBAL_FLAGS_WITH_VALUE:
-            i += 2
-            continue
-        if token in _GIT_GLOBAL_FLAGS:
-            i += 1
-            continue
-        if token.startswith("-"):
-            i += 1
-            continue
-        subcommand = token
-        remaining = tokens[i + 1 :]
-        return (subcommand, remaining)
-    return None
+# git fetch's own flag spec (distinct from _GIT_GLOBAL_FLAG_SPEC, git's
+# top-level global flags), verified against a live `git fetch -h` read.
+# Covers every fetch flag, including its `--no-X` negation form for each
+# boolean flag git itself documents as `--[no-]X`. Used by _classify_fetch
+# to correctly skip past an unrecognized fetch flag's value instead of
+# misreading it as the remote/refspec positional.
+_GIT_FETCH_BOOLEAN_FLAGS: frozenset[str] = frozenset(
+    {
+        "-v",
+        "--verbose",
+        "-q",
+        "--quiet",
+        "--all",
+        "--set-upstream",
+        "-a",
+        "--append",
+        "--atomic",
+        "-f",
+        "--force",
+        "-m",
+        "--multiple",
+        "-t",
+        "--tags",
+        "-n",
+        "--prefetch",
+        "-p",
+        "--prune",
+        "-P",
+        "--prune-tags",
+        "--dry-run",
+        "--porcelain",
+        "--write-fetch-head",
+        "-k",
+        "--keep",
+        "-u",
+        "--update-head-ok",
+        "--progress",
+        "--unshallow",
+        "--refetch",
+        "--update-shallow",
+        "-4",
+        "--ipv4",
+        "-6",
+        "--ipv6",
+        # --recurse-submodules[=<on-demand>] is optional-value; see
+        # _GIT_GLOBAL_FLAG_SPEC's --exec-path precedent for why BOOLEAN is
+        # the correct default (its `=`-form safely fails closed instead).
+        "--recurse-submodules",
+        "--negotiate-only",
+        "--auto-maintenance",
+        "--auto-gc",
+        "--show-forced-updates",
+        "--write-commit-graph",
+        "--stdin",
+    }
+)
+_GIT_FETCH_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "-j",
+        "--jobs",
+        "--depth",
+        "--shallow-since",
+        "--shallow-exclude",
+        "--deepen",
+        "--refmap",
+        "-o",
+        "--server-option",
+        "--negotiation-tip",
+        "--filter",
+        "--upload-pack",
+    }
+)
+_GIT_FETCH_FLAG_SPEC: dict[str, _FlagArity] = {
+    **{flag: _FlagArity.BOOLEAN for flag in _GIT_FETCH_BOOLEAN_FLAGS},
+    **{
+        f"--no-{flag.removeprefix('--')}": _FlagArity.BOOLEAN
+        for flag in _GIT_FETCH_BOOLEAN_FLAGS
+        if flag.startswith("--")
+    },
+    **{flag: _FlagArity.VALUE for flag in _GIT_FETCH_VALUE_FLAGS},
+    **{
+        f"--no-{flag.removeprefix('--')}": _FlagArity.BOOLEAN
+        for flag in _GIT_FETCH_VALUE_FLAGS
+        if flag.startswith("--")
+    },
+}
 
 
 _DELIMITERS_RE = re.compile(r"[\s,\[\]'\"()]+")
@@ -136,10 +201,17 @@ def _contains_blocked_git_op(cmd: str) -> tuple[str, ...] | None:
         # Only treat as a command start at position 0 or after a shell operator.
         if i != 0 and tokens[i - 1] not in _SHELL_OPS:
             continue
-        result = _extract_git_subcommand_and_remaining(tokens, i)
+        result = extract_git_subcommand_and_flags(tokens[i:])
         if result is None:
             continue
         subcommand, remaining = result
+        if subcommand == "<unresolved>":
+            # An unrecognized global git flag means the real subcommand
+            # could not be found at all -- deny unconditionally rather
+            # than matching against _BLOCKED_GIT_OPS's literal tuples,
+            # which "<unresolved>" can never equal (an unhandled case
+            # would silently fall through to "not blocked" here).
+            return (subcommand,)
         for op_tuple in _BLOCKED_GIT_OPS:
             if subcommand != op_tuple[0]:
                 continue
@@ -385,7 +457,7 @@ def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | N
     attempted = "<delete>" if delete else (positional[1] if len(positional) > 1 else "")
     if not attempted:
         return None
-    if _DYNAMIC_TOKEN_RE.search(target) or _DYNAMIC_TOKEN_RE.search(attempted):
+    if _DYNAMIC_SHELL_TOKEN_RE.search(target) or _DYNAMIC_SHELL_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
     if target == "HEAD" and no_deref:
         return ("HEAD", attempted, False)
@@ -434,7 +506,7 @@ def _classify_branch_position(subcommand: str, args: list[str]) -> tuple[str, st
             if index != marker_index + 1 and not token.startswith("-")
         ]
         attempted = other_positionals[0] if other_positionals else "HEAD"
-    if _DYNAMIC_TOKEN_RE.search(target) or _DYNAMIC_TOKEN_RE.search(attempted):
+    if _DYNAMIC_SHELL_TOKEN_RE.search(target) or _DYNAMIC_SHELL_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
     return (_normal_branch_ref(target), attempted, False)
 
@@ -447,7 +519,7 @@ def _classify_reset(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
     if not target:
         # Fail-closed: ambiguous on rev-parse failure — route to _all_threatened.
         return ("", "<unresolved>", True)
-    if _DYNAMIC_TOKEN_RE.search(attempted):
+    if _DYNAMIC_SHELL_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
     old_sha = _git_text(cwd, "rev-parse", target)
     attempted_sha = _resolve_attempted_sha(cwd, attempted)
@@ -466,7 +538,7 @@ def _refspec_targets(refspec: str, owned_refs: list[str]) -> list[str]:
     destination = refspec.split(":", 1)[1]
     if not destination:
         return []
-    if _DYNAMIC_TOKEN_RE.search(destination.replace("*", "")):
+    if _DYNAMIC_SHELL_TOKEN_RE.search(destination.replace("*", "")):
         return owned_refs
     destination = _normal_branch_ref(destination)
     if "*" not in destination:
@@ -491,11 +563,20 @@ def _classify_fetch(
             continue
         if token.startswith("--refmap="):
             refmaps.append(token.split("=", 1)[1])
-        elif token in ("--upload-pack", "-u", "--depth", "--deepen", "--shallow-since"):
-            index += 2
+            index += 1
             continue
-        elif not token.startswith("-"):
-            positional.append(token)
+        if token.startswith("-"):
+            _, next_index, recognized = _consume_str_flag(args, index, _GIT_FETCH_FLAG_SPEC)
+            if not recognized:
+                # An unrecognized fetch flag's value would otherwise be
+                # misread as the remote/refspec positional -- fail closed
+                # into the same ambiguous-deny idiom this function already
+                # uses for --stdin and an unreadable refmap config, rather
+                # than silently misclassifying the fetch destination.
+                return [("", "<unresolved>", True)]
+            index = next_index
+            continue
+        positional.append(token)
         index += 1
     if not positional:
         return []
@@ -562,7 +643,7 @@ def _classify_push(
         # ref if it lands in owned_refs — normalize before classifying.
         normalized = refspec if ":" in refspec else f"{refspec}:{refspec}"
         source, destination = normalized.removeprefix("+").split(":", 1)
-        if _DYNAMIC_TOKEN_RE.search(destination):
+        if _DYNAMIC_SHELL_TOKEN_RE.search(destination):
             return [("", "<unresolved>", True)]
         target = _normal_branch_ref(destination)
         if target in owned_refs:
@@ -577,6 +658,11 @@ def _classify_git_segment(
     if parsed is None:
         return []
     subcommand, args = parsed
+    if subcommand == "<unresolved>":
+        # An unrecognized global git flag means the real subcommand could
+        # not be found -- ambiguous-deny (route through _all_threatened
+        # against every owned ref), not "nothing to check here".
+        return [("", "<unresolved>", True)]
     cwd = str(context["execution_cwd"])
     owners = context["owners"]
     if not isinstance(owners, dict):
@@ -630,7 +716,7 @@ def _raw_write_targets(command: str, segments: list[list[str]]) -> tuple[list[st
         else:
             candidates = args[-1:]
         for candidate in candidates:
-            if _DYNAMIC_TOKEN_RE.search(candidate):
+            if _DYNAMIC_SHELL_TOKEN_RE.search(candidate):
                 ambiguous = True
             elif candidate:
                 targets.append(candidate)
@@ -704,13 +790,14 @@ def _git_segment_cwd(segment: list[str], cwd: str) -> str:
             current = candidate if candidate.is_absolute() else current / candidate
             index += 2
             continue
-        if token in _GIT_GLOBAL_FLAGS_WITH_VALUE:
-            index += 2
-            continue
-        if token in _GIT_GLOBAL_FLAGS or token.startswith("-"):
-            index += 1
-            continue
-        break
+        if not token.startswith("-"):
+            break
+        # -C's own value is captured above (needed to build `current`); every
+        # other global flag is just skipped past, same as before -- an
+        # unrecognized flag advances by one token rather than stopping, this
+        # is cwd-tracking, not the security-critical subcommand parse.
+        _, next_index, recognized = _consume_str_flag(args, index, _GIT_GLOBAL_FLAG_SPEC)
+        index = next_index if recognized else index + 1
     return str(current.resolve())
 
 
@@ -754,7 +841,7 @@ def _preflight_checked_out_ref_mutation(
                 current_cwd = ""
                 continue
             target_args = [arg for arg in args if arg not in ("-P", "--")]
-            if len(target_args) == 1 and not _DYNAMIC_TOKEN_RE.search(target_args[0]):
+            if len(target_args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(target_args[0]):
                 candidate = Path(target_args[0])
                 current_cwd = str(
                     (
@@ -768,7 +855,7 @@ def _preflight_checked_out_ref_mutation(
                 # later git segments classify against a stale cwd.
                 current_cwd = ""
                 continue
-        elif verb == "pushd" and len(args) == 1 and not _DYNAMIC_TOKEN_RE.search(args[0]):
+        elif verb == "pushd" and len(args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(args[0]):
             # pushd swaps cwd into the new dir; track it like cd.
             candidate = Path(args[0])
             current_cwd = str(

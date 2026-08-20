@@ -137,6 +137,7 @@ _PARITY_CORPUS: list[tuple[str, str]] = [
     ("cat /source/repo/README.md > /tmp/out.txt", "/workspace"),
     ("echo hello > /tmp/out.txt", "/workspace"),
     ("git checkout branch -- /path/file.txt", "/workspace"),
+    ("git --namespace refs/foo checkout -- /clone/src/main.py", "/workspace"),
     ("git reset --hard HEAD", "/workspace"),
     ("cat /a | grep foo > /b", "/workspace"),
     ("echo x > output.txt", "/workspace"),

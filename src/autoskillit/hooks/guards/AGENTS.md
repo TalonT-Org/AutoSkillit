@@ -69,10 +69,16 @@ defense-in-depth measure against privilege escalation:
 | `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
-| `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError) | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block |
+| `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError); or, in the separate headless destructive-op-blocking preflight, an unrecognized global git flag that leaves the real subcommand unresolved | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block. Separately, `_contains_blocked_git_op` cannot match `_BLOCKED_GIT_OPS`'s literal subcommand tuples against an unresolved subcommand, so it denies unconditionally the moment `extract_git_subcommand_and_flags` reports `"<unresolved>"`, rather than silently falling through to "not blocked" |
 | `pr_create_guard.py` | Hook config unreadable or malformed while the kitchen is open (OSError, JSONDecodeError, AttributeError, TypeError) | An unresolvable `recipe_allows_pr_create` authorization must not be read as permission to bypass the prepare_pr → compose_pr pipeline |
+| `unsafe_install_guard.py` | An unrecognized global pip flag leaves `pip`'s `install` token position unresolved | `_find_pip_install` cannot tell whether the command is a pip install at all; treating that the same as "definitely not an install" would silently skip the editable/system-install checks entirely, so it is threaded through as a distinct `"unresolved-pip-flags"` kind and denied unconditionally, matching the pre-existing `"unresolved-subprocess"` kind's treatment |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier (valid input, unrecognized value) = fail-closed.
+Before adding a fail-closed sentinel for an unresolved case, check what the guard's own
+consumer does with an empty/ambiguous result — if the consumer already treats empty-or-`None`
+as allow (e.g. `write_guard.py`'s `if not targets: sys.exit(0)`), a bolted-on sentinel does not
+fail closed, it silently produces an allow; fix the parse so the case resolves correctly
+instead.
 
 The checked-out-ref check is a preflight, not a repository lock. A concurrent branch
 switch after worktree enumeration leaves a residual race; do not infer stronger

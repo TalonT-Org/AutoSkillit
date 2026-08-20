@@ -8,12 +8,14 @@ _INTERPRETER_LINE_RE.
 from __future__ import annotations
 
 import ast
+import io
 import os
 import re
 import shlex
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from enum import StrEnum, auto
+from typing import Protocol, cast
 
 _INTERPRETER_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?|perl|ruby|node)\s+"
@@ -50,6 +52,12 @@ _WRITE_CALL_SITE_RE = re.compile(
 # Parentheses are tracked by the lexer as fused tokens (`(cmd` or `cmd)`)
 # and handled separately in extract_redirect_targets.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+# Single-character shell operators that shlex.shlex(punctuation_chars=True)
+# leaves sitting inside the previous token's source range. Used as the
+# trailing-strip set for tokenizer span capture so a token followed
+# immediately by an operator (no separating whitespace) does not appear to
+# contain that operator in its raw_span.
+_SHELL_OPERATOR_CHARS: str = ";|&"
 
 # Boundary-adjacency operator set for guards that scan raw shlex.split token
 # streams (pr_create, git_ops, planner_gh_discovery, artifact_download,
@@ -283,9 +291,38 @@ def _normalize_newlines_for_tokenize(command: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class ArgvToken:
+    """One argv token plus whether it was provably shell-inert.
+
+    `fully_single_quoted` is True only when the token's entire source span in
+    the shell command sat inside one unbroken `'...'` run -- nothing else
+    (unquoted text, a second quote group) contributed to it. A substring of
+    a token that was fully single-quoted end-to-end is itself still fully
+    single-quoted (the quotes bounded the whole token, not part of it), so
+    callers that slice `.text` (e.g. an `=`-form or bundled-short flag
+    value) inherit provenance unchanged rather than re-deriving it.
+
+    `raw_span` is the token's own rstripped source span in the shell command
+    (e.g. `"'value'"` for a single-quoted token) -- kept alongside the
+    coarser whole-token `fully_single_quoted` so a caller splitting `.text`
+    on a *bareword* boundary it independently knows about (e.g. gh's
+    `key=value` field syntax, where `key` is never itself quoted) can
+    re-derive the finer-grained provenance of the part *after* that
+    boundary, rather than inheriting the whole token's flag: a `key=` prefix
+    sitting outside any quotes does not disqualify a separately-quoted
+    value (see `_argv_token_value_after_key`).
+    """
+
+    text: str
+    fully_single_quoted: bool
+    raw_span: str
+
+
+@dataclass(frozen=True, slots=True)
 class _CommandSegment:
     tokens: list[str]
     redirect_syntax: list[bool]
+    argv_tokens: list[ArgvToken]
 
 
 def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
@@ -371,25 +408,62 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
             punctuation_chars=";&|",
         )
         lexer.whitespace_split = True
-        tokens = list(lexer)
+        # Drive the lexer token-by-token (rather than `list(lexer)`) so each
+        # token's own source span in *marked* can be read via instream.tell().
+        # The span must be exactly the characters this lexer itself consumed
+        # to produce the token, so comparing it against `'<token>'` tells us
+        # whether the token was one unbroken single-quote run with nothing
+        # else contributing, independent of shlex's own dequoting.
+        #
+        # With punctuation_chars=True, shlex does not consume operator
+        # characters (`;|&`) as their own tokens until the next call -- it
+        # leaves them sitting in the previous token's source range, so a
+        # naive `marked[start:end]` slice captures e.g. `'foo'` followed by
+        # an unseparated `;` as the single-quote token's span. Strip the
+        # trailing operator chars to recover the real span; this is the
+        # only place that knows about punctuation_chars' bundling quirk,
+        # so it lives here rather than at every consumer. shlex.shlex(str)
+        # always wraps a str instream in io.StringIO; the stub's Protocol
+        # just doesn't declare .tell().
+        instream = cast(io.StringIO, lexer.instream)
+        tokens: list[str] = []
+        fully_single_quoted: list[bool] = []
+        raw_spans: list[str] = []
+        while True:
+            start = instream.tell()
+            token = lexer.get_token()
+            if token is None:
+                break
+            span = marked[start : instream.tell()].rstrip(_SHELL_OPERATOR_CHARS)
+            tokens.append(token)
+            fully_single_quoted.append(span == f"'{token}'")
+            raw_spans.append(span)
     except (ValueError, TypeError):
         return []
 
     segments: list[_CommandSegment] = []
     current_tokens: list[str] = []
     current_redirect_syntax: list[bool] = []
-    for token in tokens:
+    current_argv_tokens: list[ArgvToken] = []
+    for token, quoted, raw_span in zip(tokens, fully_single_quoted, raw_spans, strict=True):
         if token in _SHELL_OPERATORS:
             if current_tokens:
-                segments.append(_CommandSegment(current_tokens, current_redirect_syntax))
+                segments.append(
+                    _CommandSegment(current_tokens, current_redirect_syntax, current_argv_tokens)
+                )
                 current_tokens = []
                 current_redirect_syntax = []
+                current_argv_tokens = []
         else:
             redirect = redirects.get(token)
-            current_tokens.append(redirect if redirect is not None else token)
+            restored = redirect if redirect is not None else token
+            current_tokens.append(restored)
             current_redirect_syntax.append(redirect is not None)
+            current_argv_tokens.append(ArgvToken(restored, quoted, raw_span))
     if current_tokens:
-        segments.append(_CommandSegment(current_tokens, current_redirect_syntax))
+        segments.append(
+            _CommandSegment(current_tokens, current_redirect_syntax, current_argv_tokens)
+        )
     return segments
 
 
@@ -398,15 +472,20 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     return [segment.tokens for segment in _tokenize_command_segments_with_redirects(command)]
 
 
-def _partition_output_redirects(
+def _partition_output_redirect_indices(
     tokens: Sequence[str],
     *,
     cwd: str,
     redirect_syntax: Sequence[bool] | None = None,
-) -> tuple[list[str], list[str], int]:
-    """Separate depth-zero output control from executable argv."""
+) -> tuple[list[int], list[str], int]:
+    """Core of _partition_output_redirects: which *tokens* indices are executable argv.
+
+    Shared so a caller threading a second, index-aligned parallel array (e.g.
+    ArgvToken quote provenance) can project it onto the same partitioning
+    decision without re-deriving the redirect-syntax logic independently.
+    """
     syntax = redirect_syntax if redirect_syntax is not None else [True] * len(tokens)
-    executable: list[str] = []
+    executable_indices: list[int] = []
     targets: list[str] = []
     file_redirect_count = 0
     depth = 0
@@ -417,23 +496,23 @@ def _partition_output_redirects(
             depth += 1
             if token.endswith(")") and len(token) > 1:
                 depth -= 1
-            executable.append(token)
+            executable_indices.append(i)
             i += 1
             continue
         if token == ")":
             if depth > 0:
                 depth -= 1
-            executable.append(token)
+            executable_indices.append(i)
             i += 1
             continue
         if token.endswith(")") and len(token) > 1:
             if depth > 0:
                 depth -= 1
-            executable.append(token)
+            executable_indices.append(i)
             i += 1
             continue
         if depth > 0 or not syntax[i]:
-            executable.append(token)
+            executable_indices.append(i)
             i += 1
             continue
         if _FD_DUPLICATION_RE.fullmatch(token):
@@ -457,7 +536,7 @@ def _partition_output_redirects(
         else:
             match = _REDIRECT_TOKEN_RE.fullmatch(token)
             if match is None:
-                executable.append(token)
+                executable_indices.append(i)
                 i += 1
                 continue
             file_redirect_count += 1
@@ -470,7 +549,39 @@ def _partition_output_redirects(
             resolved = resolve_write_target(target, cwd)
             if resolved is not None:
                 targets.append(resolved)
-    return (executable, targets, file_redirect_count)
+    return (executable_indices, targets, file_redirect_count)
+
+
+def _partition_output_redirects(
+    tokens: Sequence[str],
+    *,
+    cwd: str,
+    redirect_syntax: Sequence[bool] | None = None,
+) -> tuple[list[str], list[str], int]:
+    """Separate depth-zero output control from executable argv."""
+    executable_indices, targets, file_redirect_count = _partition_output_redirect_indices(
+        tokens, cwd=cwd, redirect_syntax=redirect_syntax
+    )
+    return ([tokens[i] for i in executable_indices], targets, file_redirect_count)
+
+
+def _select_executable_argv_tokens(
+    tokens: Sequence[str],
+    argv_tokens: Sequence[ArgvToken],
+    *,
+    cwd: str,
+    redirect_syntax: Sequence[bool] | None = None,
+) -> list[ArgvToken]:
+    """Project *argv_tokens* onto the same indices _partition_output_redirects
+
+    keeps as executable argv -- for callers threading ArgvToken quote
+    provenance through the same redirect-partitioning decision that
+    _partition_output_redirects already makes from *tokens* alone.
+    """
+    executable_indices, _targets, _count = _partition_output_redirect_indices(
+        tokens, cwd=cwd, redirect_syntax=redirect_syntax
+    )
+    return [argv_tokens[i] for i in executable_indices]
 
 
 def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
@@ -586,15 +697,20 @@ def _command_start_index(segment: list[str]) -> int | None:
     return start if start < len(segment) else None
 
 
-def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
-    """Return (verb, args) for *segment*, skipping env/wrappers/assignments.
+def _verb_start_index(segment: list[str]) -> int | None:
+    """Return the index of the command verb in *segment*, skipping shell
 
-    The verb is the raw executable token; args are the tokens after it. If
-    the segment ends inside a wrapper or a required wrapper value is
-    absent, returns ("", []).
+    keywords (do/then/elif/else), POSIX assignments, `env`, and wrapper
+    prefixes (sudo/nice/timeout/...). Returns None when the segment is
+    empty or ends inside a wrapper (missing a required value) -- the same
+    cases command_verb_and_args reports as ("", []). Exposed separately so
+    a caller threading a second, index-aligned parallel array (e.g.
+    ArgvToken quote provenance) can slice it at the same start point
+    command_verb_and_args computes for *segment* itself, rather than
+    re-deriving that decision independently.
     """
     if not segment:
-        return ("", [])
+        return None
     start = 0
     while start < len(segment):
         token = segment[start]
@@ -607,7 +723,7 @@ def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
         if token == "env":
             new_start = _consume_env(start + 1, segment)
             if new_start <= start:
-                return ("", [])
+                return None
             start = new_start
             continue
         if token in _COMMAND_WRAPPERS:
@@ -621,18 +737,29 @@ def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
             continue
         if token in _WRAPPERS_WITH_DURATION:
             if start + 1 >= len(segment):
-                return ("", [])
+                return None
             start += 2
             continue
         if token in _WRAPPERS_WITH_SHORT_FLAG:
             if start + 1 >= len(segment):
-                return ("", [])
+                return None
             if not segment[start + 1].startswith("-"):
-                return ("", [])
+                return None
             start += 2
             continue
         break
-    if start >= len(segment):
+    return start if start < len(segment) else None
+
+
+def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
+    """Return (verb, args) for *segment*, skipping env/wrappers/assignments.
+
+    The verb is the raw executable token; args are the tokens after it. If
+    the segment ends inside a wrapper or a required wrapper value is
+    absent, returns ("", []).
+    """
+    start = _verb_start_index(segment)
+    if start is None:
         return ("", [])
     return (segment[start], segment[start + 1 :])
 
@@ -668,6 +795,15 @@ def extract_git_subcommand_and_flags(
     Skips global git flags (and their value tokens) to find the subcommand,
     then returns (subcommand, remaining_tokens). Returns None if the segment
     is not a git command or has no subcommand.
+
+    Returns ("<unresolved>", []) when an unrecognized `-`-prefixed global
+    flag is encountered before the subcommand -- distinguishable from None
+    (not a git command, or the segment ends before a subcommand appears),
+    since this function's three callers treat the two differently: an
+    unrecognized flag means the real subcommand could not be found (fail
+    closed, ambiguous), not "there is no git subcommand here" (already
+    safe). See is_allowed_protected_path_metadata_command and
+    git_ops_guard.py's _classify_git_segment/_contains_blocked_git_op.
     """
     start = _command_start_index(segment)
     if start is None:
@@ -678,20 +814,234 @@ def extract_git_subcommand_and_flags(
     i = start + 1
     while i < len(segment):
         token = segment[i]
-        if token in _GIT_GLOBAL_FLAGS_WITH_VALUE:
-            i += 2  # skip flag and its value
-            continue
-        if token in _GIT_GLOBAL_FLAGS:
-            i += 1
-            continue
         if token.startswith("-"):
-            i += 1
+            _, next_i, recognized = _consume_str_flag(segment, i, _GIT_GLOBAL_FLAG_SPEC)
+            if not recognized:
+                return ("<unresolved>", [])
+            i = next_i
             continue
         # First non-flag token is the subcommand
         subcommand = token
         remaining = segment[i + 1 :]
         return (subcommand, remaining)
     return None
+
+
+class _FlagArity(StrEnum):
+    """Per-flag arity classification used by every {flag: arity} spec table.
+
+    BOOLEAN — the flag takes no value; the next token is its own argument.
+    VALUE — the flag takes exactly one value in the next token (or joined via
+    `=` for long forms, or glued onto a short form like -XPOST).
+
+    A StrEnum, not a plain Enum: this module is loaded under two different
+    names in the same process (the dotted `autoskillit.hooks.
+    _command_classification` package import, and the bare-name
+    `_command_classification` sys.path import _github_mutation_analysis.py's
+    module-scope cross-import uses -- see that module's docstring). The two
+    loads produce two distinct `_FlagArity` class objects, so an `is`
+    comparison between a value sourced from one and `_FlagArity.VALUE`
+    sourced from the other silently fails even though both represent the
+    same arity. StrEnum members compare equal by their underlying str value
+    across class identities (`A.VALUE == B.VALUE` is True even when `A is
+    not B`), so every comparison against `_FlagArity.VALUE`/`.BOOLEAN`
+    anywhere in the codebase must use `==`, never `is`.
+    """
+
+    BOOLEAN = auto()
+    VALUE = auto()
+
+
+def _argv_token_after_prefix(token: ArgvToken, prefix: str, value_text: str) -> ArgvToken:
+    """Return an ArgvToken for *value_text*, a known suffix of `token.text`
+
+    after a literal *prefix* the caller already knows (a flag name like
+    `--method=`/`-X`, or a gh field's `key=` bareword), with correctly
+    re-derived provenance rather than inheriting the whole token's coarser
+    `fully_single_quoted` flag: a *prefix* sitting outside any quotes does
+    not disqualify a separately-quoted value that follows it (e.g. the
+    common `-f query='...'` or `--jq='.id'` shapes). If the whole token is
+    already provably inert (fully_single_quoted, or an argv-payload/literal
+    token that never passed through shell parsing at all), the value
+    trivially inherits that. Otherwise, re-derive from the value's own raw
+    span directly: this can only ever *undershoot* (return False when the
+    value actually was safely quoted, in unusual prefix-quoting edge cases)
+    since a True result requires the exact bytes `'<value_text>'` to appear
+    literally in the raw command -- only possible if that span really was
+    one unbroken single-quote run, regardless of where *prefix* was assumed
+    to end.
+    """
+    if token.fully_single_quoted:
+        return ArgvToken(value_text, True, token.raw_span)
+    value_raw_span = token.raw_span[len(prefix) :].rstrip()
+    return ArgvToken(value_text, value_raw_span == f"'{value_text}'", value_raw_span)
+
+
+def _argv_token_value_after_key(token: ArgvToken, key: str) -> ArgvToken:
+    """Split `token.text` on its first '=' (with `key` already known to be
+
+    the part before it, e.g. from `token.text.partition("=")`) -- gh's
+    `-f`/`-F key=value` field syntax, where `key` is a bareword the caller
+    already knows. See `_argv_token_after_prefix` for the provenance rule.
+    """
+    _, _, value_text = token.text.partition("=")
+    return _argv_token_after_prefix(token, f"{key}=", value_text)
+
+
+def _consume_argv_flag(
+    tokens: Sequence[ArgvToken], i: int, spec: Mapping[str, _FlagArity]
+) -> tuple[ArgvToken | None, int, bool]:
+    """Consume the flag at tokens[i] against *spec*.
+
+    Returns (value_or_None, next_index, recognized). Handles the same three
+    forms _flag_value already supports for a single named flag -- space
+    (`--flag value`), `=`-joined long form (`--flag=value`), and bundled
+    short form (`-Xvalue`) -- but spec-driven across every flag in *spec* at
+    once, and CLI-agnostic: any consumer with its own {flag: arity} spec
+    table (gh api, curl, git's global flags, pip's global flags) shares this
+    one engine rather than hand-rolling its own argv-walking loop. If the
+    token at i is not '-'-prefixed, or not in spec (in any of its
+    recognized forms), recognized=False and next_index==i -- the caller
+    decides how to handle an unresolved token.
+    """
+    token = tokens[i]
+    if not token.text.startswith("-"):
+        return (None, i, False)
+
+    arity = spec.get(token.text)
+    if arity == _FlagArity.BOOLEAN:
+        return (None, i + 1, True)
+    if arity == _FlagArity.VALUE:
+        if i + 1 >= len(tokens):
+            return (None, i + 1, True)
+        return (tokens[i + 1], i + 2, True)
+
+    if token.text.startswith("--") and "=" in token.text:
+        long_flag, _, value = token.text.partition("=")
+        if spec.get(long_flag) == _FlagArity.VALUE:
+            return (
+                _argv_token_after_prefix(token, f"{long_flag}=", value),
+                i + 1,
+                True,
+            )
+
+    for flag, flag_arity in spec.items():
+        if (
+            flag_arity == _FlagArity.VALUE
+            and len(flag) == 2
+            and not flag.startswith("--")
+            and token.text.startswith(flag)
+            and token.text != flag
+        ):
+            value_text = token.text[len(flag) :]
+            return (
+                _argv_token_after_prefix(token, flag, value_text),
+                i + 1,
+                True,
+            )
+
+    return (None, i, False)
+
+
+def _consume_str_flag(
+    tokens: Sequence[str], i: int, spec: Mapping[str, _FlagArity]
+) -> tuple[str | None, int, bool]:
+    """String-only convenience wrapper around _consume_argv_flag for consumers
+
+    (git global-flag skipping, curl's non-dynamic-value-checked flags, pip's
+    global flags) that only need flag recognition/arity to correctly skip
+    past a flag (and its value, if any) -- not ArgvToken's quote-provenance
+    tracking, since these values never feed a dynamic-value check. Delegates
+    the actual algorithm entirely to _consume_argv_flag rather than
+    re-implementing it for plain strings.
+    """
+    argv_tokens = [ArgvToken(t, False, t) for t in tokens]
+    value, next_i, recognized = _consume_argv_flag(argv_tokens, i, spec)
+    return (value.text if value is not None else None, next_i, recognized)
+
+
+# Complete git global-flag allowlist, verified against a live `git --help`
+# read (its usage synopsis is git's own authoritative, exhaustive list of
+# top-level global options: `git [-v | --version] [-h | --help] [-C <path>]
+# [-c <name>=<value>] [--exec-path[=<path>]] [--html-path] [--man-path]
+# [--info-path] [-p | --paginate | -P | --no-pager] [--no-replace-objects]
+# [--bare] [--git-dir=<path>] [--work-tree=<path>] [--namespace=<name>]
+# [--config-env=<name>=<envvar>] <command> [<args>]`). Sourced from
+# _GIT_GLOBAL_FLAGS/_GIT_GLOBAL_FLAGS_WITH_VALUE above rather than
+# re-entering their members with a possibly-conflicting arity: 4 of
+# _GIT_GLOBAL_FLAGS's 6 members duplicate _GIT_GLOBAL_FLAGS_WITH_VALUE's
+# value-taking flags -- only --no-pager/--bare are genuinely boolean.
+_GIT_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
+    **{flag: _FlagArity.VALUE for flag in _GIT_GLOBAL_FLAGS_WITH_VALUE},
+    **{flag: _FlagArity.BOOLEAN for flag in (_GIT_GLOBAL_FLAGS - _GIT_GLOBAL_FLAGS_WITH_VALUE)},
+    "--namespace": _FlagArity.VALUE,
+    "--config-env": _FlagArity.VALUE,
+    # --exec-path[=<path>] is optional-value (usable bare, or with `=`); this
+    # module's binary arity model can't express "optional". BOOLEAN is the
+    # correct default for its common bare usage; the rare `=`-form
+    # invocation instead fails closed via the unrecognized-flag sentinel
+    # rather than being silently misparsed -- an acceptable trade-off for a
+    # flag that in practice is essentially never used in automation.
+    "--exec-path": _FlagArity.BOOLEAN,
+    "--html-path": _FlagArity.BOOLEAN,
+    "--man-path": _FlagArity.BOOLEAN,
+    "--info-path": _FlagArity.BOOLEAN,
+    "-p": _FlagArity.BOOLEAN,
+    "--paginate": _FlagArity.BOOLEAN,
+    "-P": _FlagArity.BOOLEAN,
+    "--no-replace-objects": _FlagArity.BOOLEAN,
+    "-v": _FlagArity.BOOLEAN,
+    "--version": _FlagArity.BOOLEAN,
+    "-h": _FlagArity.BOOLEAN,
+    "--help": _FlagArity.BOOLEAN,
+}
+
+# pip global-flag spec (flags accepted before the `install` subcommand),
+# verified against a live `pip --help` read. Covers the flags named by this
+# rectify's investigation (--index-url, --proxy, --retries, --timeout,
+# --cache-dir, --log) plus the pre-existing -r/-c/-t/-b/--requirement/
+# --constraint set _find_pip_install already recognized, plus pip's other
+# common general options, to correctly skip past a global flag (and its
+# value) to find the `install` token. Exposed for unsafe_install_guard.py
+# to import (see _find_pip_install).
+_PIP_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
+    "-r": _FlagArity.VALUE,
+    "--requirement": _FlagArity.VALUE,
+    "-c": _FlagArity.VALUE,
+    "--constraint": _FlagArity.VALUE,
+    "-t": _FlagArity.VALUE,
+    "-b": _FlagArity.VALUE,
+    "--index-url": _FlagArity.VALUE,
+    "--proxy": _FlagArity.VALUE,
+    "--retries": _FlagArity.VALUE,
+    "--timeout": _FlagArity.VALUE,
+    "--cache-dir": _FlagArity.VALUE,
+    "--log": _FlagArity.VALUE,
+    "--python": _FlagArity.VALUE,
+    "--keyring-provider": _FlagArity.VALUE,
+    "--exists-action": _FlagArity.VALUE,
+    "--trusted-host": _FlagArity.VALUE,
+    "--cert": _FlagArity.VALUE,
+    "--client-cert": _FlagArity.VALUE,
+    "--use-feature": _FlagArity.VALUE,
+    "--use-deprecated": _FlagArity.VALUE,
+    "--resume-retries": _FlagArity.VALUE,
+    "-h": _FlagArity.BOOLEAN,
+    "--help": _FlagArity.BOOLEAN,
+    "--debug": _FlagArity.BOOLEAN,
+    "--isolated": _FlagArity.BOOLEAN,
+    "--require-virtualenv": _FlagArity.BOOLEAN,
+    "-v": _FlagArity.BOOLEAN,
+    "--verbose": _FlagArity.BOOLEAN,
+    "-V": _FlagArity.BOOLEAN,
+    "--version": _FlagArity.BOOLEAN,
+    "-q": _FlagArity.BOOLEAN,
+    "--quiet": _FlagArity.BOOLEAN,
+    "--no-input": _FlagArity.BOOLEAN,
+    "--no-cache-dir": _FlagArity.BOOLEAN,
+    "--disable-pip-version-check": _FlagArity.BOOLEAN,
+    "--no-color": _FlagArity.BOOLEAN,
+}
 
 
 def _is_allowed_wc_flag(token: str) -> bool:

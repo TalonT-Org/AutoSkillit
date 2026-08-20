@@ -1176,17 +1176,28 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(issue #4479).",
     ),
     "hooks/_command_classification.py": (
-        1300,
+        1600,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
         "interpreter-write detection, protected-path reads, and recursive payload "
         "segmentation; the stdlib-only hook boundary and shared parser prevent "
         "policy drift across guard processes. Cap reduced to 1300 by #4665's "
         "decomposition of GitHub mutation cardinality/route authority into the "
-        "_github_mutation_analysis.py sibling under E26.",
+        "_github_mutation_analysis.py sibling under E26. Bumped to 1600 for Issue "
+        "#4655's rectify: ArgvToken threads quote provenance through the tokenizer "
+        "(_tokenize_command_segments_with_redirects, _partition_output_redirect_"
+        "indices/_select_executable_argv_tokens, _verb_start_index), and the CLI-"
+        "agnostic _FlagArity/_consume_argv_flag/_consume_str_flag spec-table engine "
+        "(plus _GIT_GLOBAL_FLAG_SPEC and _PIP_GLOBAL_FLAG_SPEC, and "
+        "extract_git_subcommand_and_flags's fail-closed unrecognized-global-flag fix) "
+        "-- these are shared, CLI-agnostic primitives every command-inspecting guard "
+        "consumes (git, curl, pip, and gh's own spec table in "
+        "_github_mutation_analysis.py, which imports this engine rather than "
+        "duplicating it), so they stay adjacent to the tokenizer they extend rather "
+        "than the gh-specific consumer module the split already separated them from.",
     ),
     "hooks/_github_mutation_analysis.py": (
-        1300,
+        1600,
         "REQ-CNST-010-E26: #4665 decomposes the GitHub mutation cardinality/route "
         "analysis out of _command_classification.py into this sibling module — the "
         "gh/curl possible-exec token check, gh issue edit's target/flag grammar, "
@@ -1194,7 +1205,28 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the recursive cardinality aggregator all share the same mutation authority "
         "and must stay adjacent to one another for test inspection (test_command_"
         "classification.py::TestAnalyzeGitHubMutations). Cap set to 1300 to bound "
-        "the shared mutation authority after decomposition.",
+        "the shared mutation authority after decomposition. Bumped to 1600 for Issue "
+        "#4655's rectify: _GH_API_FLAG_SPEC and _CURL_FLAG_SPEC (this module's own "
+        "gh-api/curl flag tables, consuming _command_classification's shared "
+        "_FlagArity/_consume_argv_flag engine via a module-scope import) replace "
+        "_analyze_gh_api/_analyze_curl_segment's ad-hoc if/elif flag chains so an "
+        "unrecognized flag fails closed with a distinguishable reason code instead of "
+        "being silently misparsed as a second route; and ArgvToken-typed "
+        "_flag_value/_analyze_gh_api/_analyze_curl_segment/_is_dynamic_shell_value/"
+        "_is_static_issue_edit_target/_issue_edit_request_count prove GraphQL "
+        "documents and flag values shell-inert from quote provenance rather than "
+        "content alone -- must stay adjacent to the mutation authority they feed.",
+    ),
+    "hooks/guards/git_ops_guard.py": (
+        1050,
+        "REQ-CNST-010-E28: Issue #4655's rectify moves this guard's checked-out-ref "
+        "dynamic-value check onto the shared _DYNAMIC_SHELL_TOKEN_RE regex, which "
+        "#4665's decomposition relocated to hooks/_github_mutation_analysis.py -- a "
+        "second module-scope import block (alongside the existing "
+        "_command_classification one) is needed since the two symbols now live in "
+        "different sibling modules. Cap bumped from the 1000-line default to give "
+        "this guard's own destructive-op/fetch/checked-out-ref classification room "
+        "without re-tripping the limit on the next small addition.",
     ),
     "session.py": (
         1060,

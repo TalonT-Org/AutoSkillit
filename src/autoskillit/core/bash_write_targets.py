@@ -55,7 +55,16 @@ _WRITE_VERBS: frozenset[str] = frozenset(
     }
 )
 
-_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "-c"})
+# Every value-taking git global flag, mirroring _command_classification.py's
+# _GIT_GLOBAL_FLAG_SPEC (source of truth; kept in sync manually -- this
+# module is an independent re-implementation for IL-0 import, see the
+# module docstring). A flag missing here is misread by the loop below as a
+# 1-token boolean skip, so its value gets mistaken for the git subcommand --
+# e.g. `git --namespace refs/foo checkout -- file` previously stopped the
+# loop at `refs/foo`, never reaching `checkout`.
+_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
+    {"-C", "--git-dir", "--work-tree", "-c", "--namespace", "--config-env"}
+)
 
 _COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
 _WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})

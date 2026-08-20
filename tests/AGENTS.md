@@ -229,6 +229,58 @@ tests/
 temp/                        # Temporary/working files (gitignored)
 ```
 
+## CLI Flag-Spec Coverage Convention
+
+Any guard that parses a CLI's argv by consulting a `{flag: _FlagArity}` spec table
+(e.g. `_GH_API_FLAG_SPEC`/`_CURL_FLAG_SPEC` in `hooks/_github_mutation_analysis.py`;
+`_GIT_GLOBAL_FLAG_SPEC`/`_PIP_GLOBAL_FLAG_SPEC` in `hooks/_command_classification.py`)
+**must** ship with:
+
+1. **A generative parametrized test** covering every flag in the table, parametrized
+   directly from the table's own keys — `@pytest.mark.parametrize("flag",
+   sorted(_MY_SPEC))` — not a hand-maintained flag list. A flag added to the table
+   later is automatically covered with no separate test-list edit; a hand-copied
+   list silently drifts out of sync the moment the table changes. Assert the flag
+   resolves without triggering the guard's own "unrecognized flag" fail-closed
+   outcome (see `tests/hooks/test_command_classification.py`'s
+   `test_every_gh_api_spec_flag_is_recognized`/`test_every_curl_spec_flag_is_recognized`/
+   `test_every_git_global_spec_flag_is_recognized` and
+   `tests/infra/test_unsafe_install_guard.py`'s
+   `test_every_pip_global_spec_flag_is_recognized` for the pattern).
+2. **A `tests/arch/test_guard_flag_spec_coverage.py` entry** — add the table name and
+   its candidate test file(s) to `_SPEC_TABLE_TEST_FILES` so the standing
+   architectural test enforces (1) exists, not just happens to today.
+3. **A live-CLI-`--help` contract test** (see
+   `tests/hooks/test_gh_api_flag_spec_contract.py`) asserting every value-taking flag
+   the installed CLI's `--help` actually lists is present in the spec table with
+   VALUE arity — this is what catches a *future* CLI release adding a flag, which
+   (1) and (2) cannot (they only check today's table against today's tests). Skip
+   gracefully only when the CLI binary is unavailable; never silently pass when the
+   binary is present but the help-text parser extracts zero flags — assert a sanity
+   floor first. If the CLI's flag surface is too large to exhaustively mirror (curl's
+   ~250 flags), scope the contract test explicitly to the flags your change actually
+   needs covered and say so in the test and the spec table's own module comment —
+   never let an exhaustiveness gap go unstated (see
+   `test_curl_flag_spec_covers_this_rectifys_named_flags`'s non-fatal
+   out-of-scope-flag print for the pattern).
+
+Reusable parametrize-matrix constants and builders for `tests/hooks/` test modules
+live in `tests/hooks/_flag_form_matrix.py` (mirroring the
+`tests/infra/_pretty_output_helpers.py` private-helper-module convention):
+`FLAG_FORM_MATRIX = ("space", "equals", "attached-short")` for a value-taking flag's
+three supported forms — not every flag supports every form (e.g. a flag with no short
+alias has no attached-short form); omit inapplicable entries at the call site. Also
+`GRAPHQL_DELIVERY_MATRIX` (the four ways a GraphQL document reaches `gh api graphql`'s
+`-f query=...`: inline-single-quoted, inline-double-quoted, inline-unquoted,
+input-file) and `GRAPHQL_CONTENT_MATRIX` (the four content shapes: plain,
+dollar-variable, list-literal, command-substitution), plus `deliver_graphql_document`/
+`graphql_delivery_is_inherently_safe` builders — crossed exhaustively at the
+classification layer in `test_command_classification.py`'s
+`test_graphql_delivery_content_matrix`, and sampled once per delivery form at the
+guard layer in `test_github_mutation_guard.py`'s
+`test_graphql_delivery_matrix_decision_matches_classification` to prove the guard's
+own decision wiring, not to re-derive the classification layer's own matrix.
+
 ## Retirement Registries
 
 Root `AGENTS.md` § 3.1 states the invariant once; this section is the authoritative

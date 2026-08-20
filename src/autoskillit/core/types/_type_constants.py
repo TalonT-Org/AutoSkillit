@@ -1,19 +1,11 @@
-"""Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants.
-
-Sibling imports remain within the IL-0 type package, with one exception:
-``environment_pinned_path_segments()`` needs ``autoskillit.core.paths.pkg_root``,
-imported the same way ``_type_install.py`` imports its ``core.paths`` helpers.
-"""
+"""Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants."""
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Mapping
 from hashlib import sha256
 from types import MappingProxyType
 from typing import Literal, NamedTuple
-
-from autoskillit.core.paths import pkg_root
 
 from ._type_enums import RemediationAction, SkillInvalidityKind
 from ._type_skill_semantics import SKILL_SEMANTIC_SCHEMA_VERSION
@@ -33,7 +25,6 @@ __all__ = [
     "RetiredArtifactShape",
     "DurableArtifactWriterDef",
     "DURABLE_ARTIFACT_WRITERS",
-    "environment_pinned_path_segments",
     "SkillContractRemediationDef",
     "SKILL_CONTRACT_REMEDIATIONS",
     "SKILL_COMMAND_PREFIX",
@@ -762,32 +753,6 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
 )
 
 _validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)
-
-
-# ---------------------------------------------------------------------------
-# Environment-pinned path segments — the shared relocatability denylist
-# consumed by the durable-artifact contract tests above and, per issue #4597
-# (C-7/T-C10), by the install-command-construction guard
-# (tests/arch/test_install_command_root_relocatability.py). Promoted from
-# tests/contracts/_relocatability_helpers.py, whose own docstring named this
-# module as the destination once a runtime validator needed the list.
-# ---------------------------------------------------------------------------
-
-
-def environment_pinned_path_segments() -> tuple[str, ...]:
-    """Path segments that must never appear in a durable relocatable artifact.
-
-    Returned as a function (not a module-level constant) because ``pkg_root()``
-    and ``sys.prefix`` are process-specific and must be evaluated at call time,
-    not at import time.
-    """
-    return (
-        "site-packages",
-        "/lib/python",
-        "uv/tools",
-        str(pkg_root()),
-        sys.prefix,
-    )
 
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(

@@ -1198,7 +1198,6 @@ from .types import detect_body_marker as detect_body_marker
 from .types import (
     encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,
 )
-from .types import environment_pinned_path_segments as environment_pinned_path_segments
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name

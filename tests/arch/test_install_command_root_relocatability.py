@@ -4,10 +4,7 @@ shared, non-versioned uv tool root.
 Issue #4597's Phase 3 (immutable version-addressed install roots) makes every
 install destination a caller-supplied, per-generation store path rather than
 the single shared uv tool root ``uv tool install`` defaults to. C-7 promoted
-the environment-pinned-path denylist (previously test-only, living in
-tests/contracts/_relocatability_helpers.py) to
-``core/types/_type_constants.py``'s ``environment_pinned_path_segments()`` so
-it can double as a runtime-reachable denylist for this guard. This test
+the shared test-only environment-pinned-path denylist. This test
 (T-C10) closes the corresponding regression path: a future edit to
 ``cli/install/_install_info.py``'s ``upgrade_command()`` (or any other
 install-command construction site) that hand-builds a
@@ -37,7 +34,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import environment_pinned_path_segments
+from tests.contracts._relocatability_helpers import environment_pinned_path_segments
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

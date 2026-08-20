@@ -20,7 +20,6 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.core._entrypoint_shim as _entrypoint_shim
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     entrypoint_shim_path,
@@ -104,7 +103,16 @@ def test_write_entrypoint_shim_writes_via_temp_file_and_os_replace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Writes must go through temp-file + ``os.replace`` so a concurrently
-    exec'ing reader never observes a partially written shim."""
+    exec'ing reader never observes a partially written shim.
+
+    ``write_entrypoint_shim()`` delegates to ``core.io.atomic_write()``
+    (the shared temp-file + ``os.replace`` + fsync primitive — REQ-CNST
+    requires every durable write in ``src/`` to route through it rather than
+    hand-rolling its own), so the spy is on ``core.io``'s own ``os.replace``,
+    not on anything in ``_entrypoint_shim`` itself.
+    """
+    import autoskillit.core.io as _io
+
     home = tmp_path / "home"
     real_replace = os.replace
     calls: list[tuple[Path, Path]] = []
@@ -113,7 +121,7 @@ def test_write_entrypoint_shim_writes_via_temp_file_and_os_replace(
         calls.append((Path(src), Path(dst)))  # type: ignore[arg-type]
         real_replace(src, dst)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(_entrypoint_shim.os, "replace", _spy_replace)
+    monkeypatch.setattr(_io.os, "replace", _spy_replace)
 
     write_entrypoint_shim(home)
 

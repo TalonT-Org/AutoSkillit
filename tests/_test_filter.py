@@ -181,14 +181,22 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     # +workspace: _install_state reads the plugin registry through
     # registered_install_paths() (IL-005 forbids reaching for cli.InstalledPluginsFile).
-    "_plugin_ids": frozenset({"core", "cli", "execution", "hook_registry", "server", "workspace"}),
+    "_plugin_ids": frozenset(
+        {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
+    ),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "_plugin_artifact_identity": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
     ),
-    "_plugin_cache": frozenset({"core", "cli", "fleet", "pipeline", "server", "workspace"}),
+"_plugin_cache": frozenset(
+        {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
+    ),
     "_type_persisted_formats": frozenset({"core", "execution", "fleet", "hooks"}),
     "_type_managed_home": frozenset({"cli", "core", "server", "workspace"}),
+    # write_entrypoint_shim() is called from cli/update/_transaction.py's
+    # INSTALL_ROOT_GENERATION_PUBLICATION phase (issue #4597 Phase 3).
+    "_entrypoint_shim": frozenset({"core", "cli"}),
+
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),

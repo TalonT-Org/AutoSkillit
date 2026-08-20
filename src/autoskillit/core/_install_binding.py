@@ -39,6 +39,10 @@ import importlib.resources as ir
 from dataclasses import dataclass
 from pathlib import Path
 
+from .logging import get_logger
+
+logger = get_logger(__name__)
+
 _SELF_LEASE_HANDLE: object | None = None
 """Process-lifetime handle for the self-held lease. Intentionally never
 explicitly released — the descriptor closes naturally at process exit, which
@@ -88,6 +92,7 @@ def _acquire_self_lease(root: Path, version: str) -> None:
             )
             return
     except Exception:
+        logger.warning("self_lease_acquisition_failed", exc_info=True)
         return
 
 

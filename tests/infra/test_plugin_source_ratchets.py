@@ -321,6 +321,74 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Removes the manifest and lease sidecars for the exact unpublished generation.",
     ),
     (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_install_root_generation",
+        "os.rename",
+    ): (
+        1,
+        "No-op when the caller already installed directly at the final destination "
+        "(the normal path, since a venv's baked shebang cannot survive being moved); "
+        "otherwise moves digest-verified staged content to its final generation path, "
+        "mirroring publish_generation()'s own rename.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_install_root_generation",
+        "selector.unlink",
+    ): (
+        1,
+        "Restores an absent pre-publication selector after a failed atomic flip, "
+        "mirroring publish_generation()'s own rollback.",
+    ),
+    (
+        "workspace/_install_state.py",
+        "_enqueue_legacy_uv_tool_root",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Removes the pre-Phase-3 shared uv tool root only once its content digest has "
+        "been observed unchanged across a 30-day grace window (issue #4597) -- no "
+        "manifest or lease infrastructure predates it, so digest-stability is the only "
+        "available signal.",
+    ),
+    (
+        "workspace/_install_state.py",
+        "_enqueue_legacy_uv_tool_root",
+        "evidence_path.unlink",
+    ): (
+        1,
+        "Removes the digest-stability evidence sidecar once the legacy root itself has "
+        "been successfully removed.",
+    ),
+    (
+        "smoke_utils/_cross_interpreter_upgrade.py",
+        "_publish_real_package_generation",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Discards the disposable probe install (staged only to learn the resolved "
+        "version) after the real, permanent install-root generation has been "
+        "published from a second, separate install directly at its final destination.",
+    ),
+    (
+        "smoke_utils/_cross_interpreter_upgrade.py",
+        "_assert_overlapping_install_survives",
+        "marker.unlink",
+    ): (
+        1,
+        "Clears a leftover coordination-sentinel file from a prior smoke run before "
+        "reusing the same scratch path; not an artifact of the plugin/generation store.",
+    ),
+    (
+        "smoke_utils/_cross_interpreter_upgrade.py",
+        "_assert_overlapping_install_survives",
+        "continue_file.unlink",
+    ): (
+        1,
+        "Clears a leftover coordination-sentinel file from a prior smoke run before "
+        "reusing the same scratch path; not an artifact of the plugin/generation store.",
+    ),
+    (
         "execution/backends/_codex_explorer_projection.py",
         "_atomically_replace_explorer_projection",
         "os.replace",

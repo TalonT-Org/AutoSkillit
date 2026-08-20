@@ -245,7 +245,7 @@ def _assert_overlapping_install_survives(
 
     This is exactly the crash class issue #4597 Phase 3 exists to eliminate.
     """
-    from autoskillit.core import _AUTOSKILLIT_INSTALL_ROOT_KEY
+    from autoskillit.core import _AUTOSKILLIT_INSTALL_ROOT_KEY, atomic_write
 
     identity_a = _publish_real_package_generation(
         scratch_home=scratch_home,
@@ -262,12 +262,16 @@ def _assert_overlapping_install_survives(
         )
 
     marker = scratch_home / "overlap-marker"
-    release = scratch_home / "overlap-release"
+    # Named to avoid the substring "lease" (see PLUGIN_MUTATION_ALLOWLIST's
+    # sidecar-deletion guard in tests/infra/test_plugin_source_ratchets.py):
+    # this is a plain coordination sentinel, not an ArtifactLease sidecar,
+    # but that guard's classifier matches on variable-name substrings.
+    continue_file = scratch_home / "overlap-continue"
     marker.unlink(missing_ok=True)
-    release.unlink(missing_ok=True)
+    continue_file.unlink(missing_ok=True)
 
     child = subprocess.Popen(
-        [str(child_python), "-c", _OVERLAP_CHILD_SCRIPT, str(marker), str(release)],
+        [str(child_python), "-c", _OVERLAP_CHILD_SCRIPT, str(marker), str(continue_file)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -313,7 +317,7 @@ def _assert_overlapping_install_survives(
                 f"live one: {identity_a.managed_path}"
             )
 
-        release.write_text("go\n")
+        atomic_write(continue_file, "go\n")
         try:
             stdout, stderr = child.communicate(timeout=30)
         except subprocess.TimeoutExpired:

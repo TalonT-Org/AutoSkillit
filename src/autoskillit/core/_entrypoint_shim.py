@@ -27,8 +27,9 @@ sync with those functions' actual output for
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from .io import atomic_write
 
 _SHIM_SOURCE = '''#!/usr/bin/env python3
 """AutoSkillit entrypoint shim - resolves once, execs, never re-consulted.
@@ -97,8 +98,8 @@ def write_entrypoint_shim(home: Path) -> bool:
     unnecessary durable-writer churn on every maintenance update, since the
     shim's content is expected to be stable across versions.
 
-    Writes via temp-file + ``os.replace`` so a concurrently exec'ing reader
-    never observes a partially written shim.
+    Writes via ``atomic_write()`` (temp-file + ``os.replace`` + fsync) so a
+    concurrently exec'ing reader never observes a partially written shim.
     """
     path = entrypoint_shim_path(home)
     source = render_entrypoint_shim()
@@ -108,9 +109,6 @@ def write_entrypoint_shim(home: Path) -> bool:
         existing = None
     if existing == source:
         return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(source)
-    temporary.chmod(0o755)
-    os.replace(temporary, path)
+    atomic_write(path, source, strict_durability=True)
+    path.chmod(0o755)
     return True

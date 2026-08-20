@@ -555,6 +555,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Interpreter bytecode suppression | `test_interpreter_bytecode_suppression.py` | `sys.executable`/`python3` interpreter-spawn sites under `hooks/`, `hook_registry.py`, or `_codex_hooks.py` missing the `-B` flag — must suppress bytecode writes unconditionally |
 | No ad-hoc env scrub duplication | `test_no_adhoc_env_workarounds.py` | New `monkeypatch.delenv(...)` / `os.environ.pop(...)` calls in tests for a var already scrubbed by conftest's `_scrub_ambient_env` autouse fixture, unless declared in `_INTENTIONAL_ENV_INPUT_SITES` |
 | tools_execution facade completeness | `test_tools_execution_facade.py` | A `tools_execution` submodule (other than `__init__.py`) importing a cross-submodule or test-patched symbol directly via `from ... import name` instead of reading it through the package facade (`_te_pkg.name(...)`) — defeats `mock.patch("...tools_execution.<name>")`; also `locals()` calls in any submodule |
+| No shared-root literal in install commands | `test_install_command_root_relocatability.py` | `cli/_install_info.py` string-constant literals naming an `environment_pinned_path_segments()` segment — install destinations must be built dynamically from `install_root_destination`, never a hardcoded shared/non-versioned path |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

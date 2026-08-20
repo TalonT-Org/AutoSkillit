@@ -30,6 +30,7 @@ from .types import (
     PluginArtifactKind,
     PluginArtifactUnavailableError,
     PluginArtifactValidationError,
+    QuarantinedRetiringRecord,
     RetirementOutcome,
     RetiringAppendResult,
     RetiringArtifactRecord,
@@ -64,6 +65,16 @@ _RETIRING_RECORD_FIELDS = frozenset(
         "retired_at",
         "not_before",
         "schema_version",
+    }
+)
+_LEGACY_RETIRING_EVIDENCE_FIELDS = frozenset(
+    {
+        "record_id",
+        "version",
+        "path",
+        "retired_at",
+        "recognized_kind",
+        "rejection_reason",
     }
 )
 
@@ -151,6 +162,8 @@ def _record_from_json(raw: object) -> RetiringArtifactRecord:
 def _legacy_from_json(raw: object) -> LegacyRetiringEvidence:
     if not isinstance(raw, dict):
         raise ValueError("legacy retiring evidence must be an object")
+    if frozenset(raw) != _LEGACY_RETIRING_EVIDENCE_FIELDS:
+        raise ValueError("legacy retiring evidence fields do not match the exact v2 schema")
     for field in ("record_id", "version", "path", "retired_at"):
         if not isinstance(raw.get(field), str):
             raise ValueError(f"legacy retiring evidence {field} must be a string")
@@ -208,17 +221,48 @@ def _read_retiring_cache_unlocked() -> RetiringCacheReadResult:
         legacy_raw = raw["legacy_evidence"]
         if not isinstance(records_raw, list) or not isinstance(legacy_raw, list):
             raise ValueError("v2 retirement arrays are malformed")
-        records = tuple(_record_from_json(item) for item in records_raw)
-        legacy_evidence = tuple(_legacy_from_json(item) for item in legacy_raw)
-        record_ids = tuple(record.record_id for record in records) + tuple(
-            item.record_id for item in legacy_evidence
+        records: list[RetiringArtifactRecord] = []
+        quarantined_records: list[QuarantinedRetiringRecord] = []
+        quarantined_record_ids: list[str] = []
+        for item in records_raw:
+            try:
+                records.append(_record_from_json(item))
+            except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                quarantined_records.append(
+                    QuarantinedRetiringRecord(
+                        raw_json=json.dumps(item, sort_keys=True),
+                        reason=str(exc),
+                    )
+                )
+                if isinstance(item, dict) and isinstance(item.get("record_id"), str):
+                    quarantined_record_ids.append(item["record_id"])
+        legacy_evidence: list[LegacyRetiringEvidence] = []
+        quarantined_legacy_evidence: list[QuarantinedRetiringRecord] = []
+        for item in legacy_raw:
+            try:
+                legacy_evidence.append(_legacy_from_json(item))
+            except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                quarantined_legacy_evidence.append(
+                    QuarantinedRetiringRecord(
+                        raw_json=json.dumps(item, sort_keys=True),
+                        reason=str(exc),
+                    )
+                )
+                if isinstance(item, dict) and isinstance(item.get("record_id"), str):
+                    quarantined_record_ids.append(item["record_id"])
+        record_ids = (
+            tuple(record.record_id for record in records)
+            + tuple(item.record_id for item in legacy_evidence)
+            + tuple(quarantined_record_ids)
         )
         if len(frozenset(record_ids)) != len(record_ids):
             raise ValueError("v2 retirement record IDs must be unique")
         return RetiringCacheReadResult(
             state=RetiringCacheState.EXACT_V2,
-            records=records,
-            legacy_evidence=legacy_evidence,
+            records=tuple(records),
+            legacy_evidence=tuple(legacy_evidence),
+            quarantined_records=tuple(quarantined_records),
+            quarantined_legacy_evidence=tuple(quarantined_legacy_evidence),
             schema_version=_RETIRING_CACHE_SCHEMA_VERSION,
         )
     except (
@@ -277,12 +321,16 @@ def _legacy_to_json(evidence: LegacyRetiringEvidence) -> dict[str, object]:
 def _write_retiring_cache_unlocked(
     records: tuple[RetiringArtifactRecord, ...],
     legacy_evidence: tuple[LegacyRetiringEvidence, ...],
+    quarantined_records: tuple[QuarantinedRetiringRecord, ...] = (),
+    quarantined_legacy_evidence: tuple[QuarantinedRetiringRecord, ...] = (),
 ) -> None:
     write_versioned_json(
         _retiring_cache_path(),
         {
-            "records": [_record_to_json(record) for record in records],
-            "legacy_evidence": [_legacy_to_json(item) for item in legacy_evidence],
+            "records": [_record_to_json(record) for record in records]
+            + [json.loads(item.raw_json) for item in quarantined_records],
+            "legacy_evidence": [_legacy_to_json(item) for item in legacy_evidence]
+            + [json.loads(item.raw_json) for item in quarantined_legacy_evidence],
         },
         schema_version=_RETIRING_CACHE_SCHEMA_VERSION,
         strict_durability=True,
@@ -368,7 +416,12 @@ def migrate_retiring_cache_v1(
             legacy_evidence=tuple(evidence),
             schema_version=_RETIRING_CACHE_SCHEMA_VERSION,
         )
-        _write_retiring_cache_unlocked(result.records, result.legacy_evidence)
+        _write_retiring_cache_unlocked(
+            result.records,
+            result.legacy_evidence,
+            quarantined_records=(),
+            quarantined_legacy_evidence=(),
+        )
         return result
     finally:
         fh.close()
@@ -397,7 +450,7 @@ def append_retiring_record(
     record: RetiringArtifactRecord,
     *,
     on_persisted: Callable[[str], None] | None = None,
-) -> RetiringAppendResult:
+) -> RetiringAppendResult | None:
     """Append one exact v2 record, preserving first-seen order and intent identity."""
     fh = _open_lock(_retiring_cache_lock())
     try:
@@ -405,21 +458,36 @@ def append_retiring_record(
         if state.state is RetiringCacheState.ABSENT:
             records: tuple[RetiringArtifactRecord, ...] = ()
             evidence: tuple[LegacyRetiringEvidence, ...] = ()
+            quarantined_records: tuple[QuarantinedRetiringRecord, ...] = ()
+            quarantined_evidence: tuple[QuarantinedRetiringRecord, ...] = ()
         elif state.state is RetiringCacheState.EXACT_V2:
             records = state.records
             evidence = state.legacy_evidence
+            quarantined_records = state.quarantined_records
+            quarantined_evidence = state.quarantined_legacy_evidence
         else:
-            raise RuntimeError(f"retiring cache is not mutable in state {state.state.value}")
+            return None
         intent = _retirement_intent(record)
         for existing in records:
             if existing.record_id == record.record_id and existing != record:
-                raise ValueError(
-                    f"retiring record_id is already bound to another record: {record.record_id}"
-                )
+                return None
             if _retirement_intent(existing) == intent:
                 return RetiringAppendResult(record_id=existing.record_id, created=False)
+        if any(item.record_id == record.record_id for item in evidence):
+            return None
+        if any(
+            isinstance(raw := json.loads(item.raw_json), dict)
+            and raw.get("record_id") == record.record_id
+            for item in (*quarantined_records, *quarantined_evidence)
+        ):
+            return None
         try:
-            _write_retiring_cache_unlocked((*records, record), evidence)
+            _write_retiring_cache_unlocked(
+                (*records, record),
+                evidence,
+                quarantined_records=quarantined_records,
+                quarantined_legacy_evidence=quarantined_evidence,
+            )
         except _AtomicWriteDurabilityError:
             if on_persisted is not None:
                 on_persisted(record.record_id)
@@ -431,7 +499,7 @@ def append_retiring_record(
         fh.close()
 
 
-def remove_retiring_records(record_ids: Iterable[str]) -> int:
+def remove_retiring_records(record_ids: Iterable[str]) -> int | None:
     """Remove exact records or migrated evidence by stable record ID."""
     ids = frozenset(record_ids)
     if not ids:
@@ -442,33 +510,31 @@ def remove_retiring_records(record_ids: Iterable[str]) -> int:
         if state.state is RetiringCacheState.ABSENT:
             return 0
         if state.state is not RetiringCacheState.EXACT_V2:
-            raise RuntimeError(f"retiring cache is not mutable in state {state.state.value}")
+            return None
         records = tuple(record for record in state.records if record.record_id not in ids)
         evidence = tuple(item for item in state.legacy_evidence if item.record_id not in ids)
         removed = len(state.records) - len(records) + len(state.legacy_evidence) - len(evidence)
         if removed:
-            _write_retiring_cache_unlocked(records, evidence)
+            _write_retiring_cache_unlocked(
+                records,
+                evidence,
+                quarantined_records=state.quarantined_records,
+                quarantined_legacy_evidence=state.quarantined_legacy_evidence,
+            )
         return removed
     finally:
         fh.close()
 
 
-def _read_exact_retiring_cache(*, operation: str) -> RetiringCacheReadResult | None:
-    state = read_retiring_cache()
-    if state.state is RetiringCacheState.ABSENT:
-        return None
-    if state.state is not RetiringCacheState.EXACT_V2:
-        raise RuntimeError(f"retiring cache cannot {operation} in state {state.state.value}")
-    return state
-
-
-def due_retiring_records(now: datetime) -> tuple[RetiringArtifactRecord, ...]:
+def due_retiring_records(now: datetime) -> tuple[RetiringArtifactRecord, ...] | None:
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("retirement sweep time must be timezone-aware")
     normalized_now = now.astimezone(UTC)
-    state = _read_exact_retiring_cache(operation="enumerate due records")
-    if state is None:
+    state = read_retiring_cache()
+    if state.state is RetiringCacheState.ABSENT:
         return ()
+    if state.state is not RetiringCacheState.EXACT_V2:
+        return None
     return tuple(record for record in state.records if record.not_before <= normalized_now)
 
 
@@ -500,7 +566,7 @@ class PluginArtifactRetirementEngine:
         lease_path: Callable[[Path], Path],
         current_identity: Callable[[RetiringArtifactRecord], PluginArtifactIdentity],
         logger: Any,
-        is_current: Callable[[Path], bool] | None = None,
+        is_current: Callable[[Path], bool] | None,
     ) -> None:
         self.managed_root = Path(managed_root).expanduser().resolve(strict=False)
         self.artifact_kind = artifact_kind
@@ -524,7 +590,7 @@ class PluginArtifactRetirementEngine:
         not_before: datetime,
         *,
         on_persisted: Callable[[str], None] | None = None,
-    ) -> RetiringAppendResult:
+    ) -> RetiringAppendResult | None:
         """Queue one exact incarnation after validating owner-specific paths."""
         if not self.contains(identity.managed_path):
             raise PluginArtifactValidationError(
@@ -554,6 +620,8 @@ class PluginArtifactRetirementEngine:
             ),
             on_persisted=on_persisted,
         )
+        if result is None:
+            return None
         log_plugin_artifact_lifecycle(
             self._logger,
             action="retire",
@@ -565,10 +633,24 @@ class PluginArtifactRetirementEngine:
         )
         return result
 
-    def cancel_obsolete_retirements(self, identity: PluginArtifactIdentity) -> tuple[str, ...]:
-        state = _read_exact_retiring_cache(operation="cancel obsolete records")
-        if state is None:
+    def cancel_obsolete_retirements(
+        self,
+        identity: PluginArtifactIdentity,
+    ) -> tuple[str, ...] | None:
+        state = read_retiring_cache()
+        if state.state is RetiringCacheState.ABSENT:
             return ()
+        if state.state is not RetiringCacheState.EXACT_V2:
+            log_plugin_artifact_lifecycle(
+                self._logger,
+                action="cancel_retirement",
+                outcome="deferred_unreadable_queue",
+                artifact_kind=self.artifact_kind.value,
+                semantic_key=identity.semantic_key,
+                incarnation=identity.incarnation_id,
+                contention_detail=f"retiring cache is unreadable: {state.state.value}",
+            )
+            return None
         record_ids = tuple(
             record.record_id
             for record in state.records
@@ -582,7 +664,8 @@ class PluginArtifactRetirementEngine:
         )
         if not record_ids:
             return ()
-        remove_retiring_records(record_ids)
+        if remove_retiring_records(record_ids) is None:
+            return None
         log_plugin_artifact_lifecycle(
             self._logger,
             action="cancel_retirement",
@@ -662,7 +745,12 @@ class PluginArtifactRetirementEngine:
                 )
                 staging_exists = staging_path.exists() or staging_path.is_symlink()
                 if not managed_exists and not manifest_exists and not staging_exists:
-                    remove_retiring_records((record.record_id,))
+                    if remove_retiring_records((record.record_id,)) is None:
+                        return self._log_reclaim(
+                            record,
+                            RetirementOutcome.DEFERRED_IO_ERROR,
+                            detail="retiring cache became unsafe while removing record",
+                        )
                     return RetirementOutcome.RECORD_REMOVED
                 if staging_exists:
                     if managed_exists or staging_path.is_symlink() or not staging_path.is_dir():
@@ -681,14 +769,24 @@ class PluginArtifactRetirementEngine:
                             detail=str(exc),
                         )
                     except PluginArtifactValidationError:
-                        remove_retiring_records((record.record_id,))
+                        if remove_retiring_records((record.record_id,)) is None:
+                            return self._log_reclaim(
+                                record,
+                                RetirementOutcome.DEFERRED_IO_ERROR,
+                                detail="retiring cache became unsafe while rejecting identity",
+                            )
                         return self._log_reclaim(
                             record,
                             RetirementOutcome.REJECTED_IDENTITY,
                             failed_validation=True,
                         )
                     if current != record.identity:
-                        remove_retiring_records((record.record_id,))
+                        if remove_retiring_records((record.record_id,)) is None:
+                            return self._log_reclaim(
+                                record,
+                                RetirementOutcome.DEFERRED_IO_ERROR,
+                                detail="retiring cache became unsafe while rejecting identity",
+                            )
                         return self._log_reclaim(
                             record,
                             RetirementOutcome.REJECTED_IDENTITY,
@@ -709,7 +807,12 @@ class PluginArtifactRetirementEngine:
                             f"retirement manifest is not removable: {record.manifest_path}"
                         )
                     shutil.rmtree(staging_path)
-                    remove_retiring_records((record.record_id,))
+                    if remove_retiring_records((record.record_id,)) is None:
+                        return self._log_reclaim(
+                            record,
+                            RetirementOutcome.DEFERRED_IO_ERROR,
+                            detail="retiring cache became unsafe after artifact removal",
+                        )
                 except OSError as exc:
                     return self._log_reclaim(
                         record,
@@ -752,7 +855,8 @@ class PluginArtifactRetirementEngine:
         if not path.exists():
             # Nothing left to protect (also covers a broken symlink: exists()
             # follows the link and is False when the target is gone).
-            remove_retiring_records((evidence.record_id,))
+            if remove_retiring_records((evidence.record_id,)) is None:
+                return RetirementOutcome.DEFERRED_IO_ERROR
             return RetirementOutcome.RECORD_REMOVED
         try:
             writer = ArtifactLease.acquire_exclusive(self._lease_path(path), blocking=False)
@@ -778,8 +882,12 @@ class PluginArtifactRetirementEngine:
             ):
                 # Cannot positively identify it; never delete on ambiguity.
                 return RetirementOutcome.LEGACY_EVIDENCE
-            created = self.enqueue_retirement(identity, now).created
-            remove_retiring_records((evidence.record_id,))
+            appended = self.enqueue_retirement(identity, now)
+            if appended is None:
+                return RetirementOutcome.DEFERRED_IO_ERROR
+            created = appended.created
+            if remove_retiring_records((evidence.record_id,)) is None:
+                return RetirementOutcome.DEFERRED_IO_ERROR
         finally:
             writer.close_preserving()
         return RetirementOutcome.RECLAIMED if created else RetirementOutcome.RECORD_REMOVED

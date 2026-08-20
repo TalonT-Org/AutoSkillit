@@ -330,9 +330,15 @@ class InstalledPluginArtifactAuthority:
                 expected_semantic_key=self._semantic_key,
                 manifest_path=installed_plugin_artifact_manifest_path(leased_root),
             )
-            InstalledPluginArtifactRetirementOwner(
+            cancelled = InstalledPluginArtifactRetirementOwner(
                 identity.managed_path.parent
             ).cancel_obsolete_retirements(identity)
+            if cancelled is None:
+                logger.warning(
+                    "installed_plugin_launch_queue_unreadable",
+                    semantic_key=identity.semantic_key,
+                    operation="cancel_obsolete_retirements",
+                )
             log_plugin_artifact_lifecycle(
                 logger,
                 action="acquire",
@@ -381,6 +387,8 @@ class InstalledPluginArtifactRetirementOwner:
             lease_path=installed_plugin_artifact_lease_path,
             current_identity=self._current_identity,
             logger=logger,
+            # The installed tree has no selector; the exclusive lease is the backstop.
+            is_current=None,
         )
 
     @property
@@ -396,7 +404,7 @@ class InstalledPluginArtifactRetirementOwner:
         not_before: datetime,
         *,
         on_persisted: Callable[[str], None] | None = None,
-    ) -> RetiringAppendResult:
+    ) -> RetiringAppendResult | None:
         return self._retirement.enqueue_retirement(
             identity,
             not_before,
@@ -406,7 +414,7 @@ class InstalledPluginArtifactRetirementOwner:
     def cancel_obsolete_retirements(
         self,
         identity: PluginArtifactIdentity,
-    ) -> tuple[str, ...]:
+    ) -> tuple[str, ...] | None:
         return self._retirement.cancel_obsolete_retirements(identity)
 
     @staticmethod
@@ -504,7 +512,10 @@ class DefaultPluginRetirementCoordinator:
                 continue
             outcomes.append(owner.try_promote_legacy_evidence(evidence, now))
         # Re-read after promotion so newly minted records reclaim in this pass.
-        for record in due_retiring_records(now):
+        due = due_retiring_records(now)
+        if due is None:
+            return tuple(outcomes)
+        for record in due:
             record_owner = self._owners.get(record.artifact_kind)
             if record_owner is None:
                 outcomes.append(RetirementOutcome.REJECTED_IDENTITY)

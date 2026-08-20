@@ -10,6 +10,7 @@ import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 
 import psutil
 import pytest
@@ -342,24 +343,27 @@ def test_retirement_deduplication_ignores_regenerated_deadline(
         not_before=original.not_before + timedelta(minutes=5),
     )
 
-    assert append_retiring_record(original).created is True
+    original_result = append_retiring_record(original)
+    assert original_result is not None
+    assert original_result.created is True
     repeated_result = append_retiring_record(repeated_scan)
 
+    assert repeated_result is not None
     assert repeated_result.created is False
     assert repeated_result.record_id == original.record_id
     assert read_retiring_cache().records == (original,)
 
 
 @pytest.mark.parametrize(
-    ("state_name", "cache_bytes"),
+    ("_state_name", "cache_bytes"),
     [
         ("corrupt", b"{not-json"),
         ("unsupported_future", b'{"schema_version":99,"records":[]}'),
         ("legacy_v1", b'{"schema_version":1,"retiring":[]}'),
     ],
 )
-def test_unsafe_retirement_state_is_not_collapsed_to_empty(
-    state_name: str,
+def test_unsafe_retirement_state_reports_unverifiable_and_never_empties(
+    _state_name: str,
     cache_bytes: bytes,
     monkeypatch,
     tmp_path: Path,
@@ -383,13 +387,13 @@ def test_unsafe_retirement_state_is_not_collapsed_to_empty(
         manifest_path=lambda path: path.parent / f".{path.name}.manifest.json",
         lease_path=lambda path: path.parent / f".{path.name}.lease",
         current_identity=lambda _record: identity,
-        logger=None,
+        logger=Mock(),
+        is_current=None,
     )
 
-    with pytest.raises(RuntimeError, match=state_name):
-        due_retiring_records(datetime.now(UTC))
-    with pytest.raises(RuntimeError, match=state_name):
-        engine.cancel_obsolete_retirements(identity)
+    assert due_retiring_records(datetime.now(UTC)) is None
+    # Could-not-verify must never be confusable with verified-nothing-to-do.
+    assert engine.cancel_obsolete_retirements(identity) is None
     assert cache.read_bytes() == cache_bytes
 
 
@@ -404,7 +408,7 @@ class TestRetiringCacheSchemaValidation:
 
         _reset_schema_drift_logged_for_tests()
 
-    def test_future_schema_is_preserved_and_mutation_fails_closed(
+    def test_future_schema_is_preserved_and_mutation_is_refused(
         self,
         monkeypatch,
         tmp_path,
@@ -419,8 +423,7 @@ class TestRetiringCacheSchemaValidation:
         result = read_retiring_cache()
 
         assert result.state is RetiringCacheState.UNSUPPORTED_FUTURE
-        with pytest.raises(RuntimeError, match="unsupported_future"):
-            append_retiring_record(_retiring_record(tmp_path))
+        assert append_retiring_record(_retiring_record(tmp_path)) is None
         assert cache.read_bytes() == before
 
     @pytest.mark.parametrize(
@@ -434,7 +437,7 @@ class TestRetiringCacheSchemaValidation:
             ("artifact_digest", "z" * 64),
         ],
     )
-    def test_v2_record_fields_require_exact_json_types(
+    def test_v2_record_fields_are_quarantined_not_interpreted(
         self,
         monkeypatch,
         tmp_path,
@@ -450,10 +453,11 @@ class TestRetiringCacheSchemaValidation:
 
         result = read_retiring_cache()
 
-        assert result.state is RetiringCacheState.CORRUPT
+        assert result.state is RetiringCacheState.EXACT_V2
         assert result.records == ()
+        assert len(result.quarantined_records) == 1
 
-    def test_v2_record_rejects_unexpected_fields(
+    def test_v2_record_unexpected_fields_are_quarantined_not_interpreted(
         self,
         monkeypatch,
         tmp_path,
@@ -467,8 +471,9 @@ class TestRetiringCacheSchemaValidation:
 
         result = read_retiring_cache()
 
-        assert result.state is RetiringCacheState.CORRUPT
+        assert result.state is RetiringCacheState.EXACT_V2
         assert result.records == ()
+        assert len(result.quarantined_records) == 1
 
     def test_v2_cache_rejects_duplicate_record_ids(
         self,
@@ -550,7 +555,7 @@ class TestRetiringCacheSchemaValidation:
 
         assert result.state is RetiringCacheState.CORRUPT
 
-    def test_legacy_evidence_fields_are_not_coerced(
+    def test_legacy_evidence_fields_are_quarantined_not_coerced(
         self,
         monkeypatch,
         tmp_path,
@@ -579,7 +584,9 @@ class TestRetiringCacheSchemaValidation:
 
         result = read_retiring_cache()
 
-        assert result.state is RetiringCacheState.CORRUPT
+        assert result.state is RetiringCacheState.EXACT_V2
+        assert result.legacy_evidence == ()
+        assert len(result.quarantined_legacy_evidence) == 1
 
     def test_explicit_v1_migration_preserves_active_registry(
         self,

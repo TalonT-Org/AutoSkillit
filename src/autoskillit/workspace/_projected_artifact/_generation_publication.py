@@ -24,6 +24,7 @@ from autoskillit.core import (
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
+    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     RetirementOutcome,
     RetiringAppendResult,
@@ -345,10 +346,13 @@ class GenerationArtifactRetirementOwner:
         self,
         identity: PluginArtifactIdentity,
         not_before: datetime,
-    ) -> RetiringAppendResult:
+    ) -> RetiringAppendResult | None:
         return self._retirement.enqueue_retirement(identity, not_before)
 
-    def cancel_obsolete_retirements(self, identity: PluginArtifactIdentity) -> tuple[str, ...]:
+    def cancel_obsolete_retirements(
+        self,
+        identity: PluginArtifactIdentity,
+    ) -> tuple[str, ...] | None:
         return self._retirement.cancel_obsolete_retirements(identity)
 
     def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
@@ -440,14 +444,22 @@ def prune_stale_generations(home: Path, plugin_ref: str) -> int:
         try:
             try:
                 identity = owner.identity_for_path(candidate)
-            except (PluginArtifactValidationError, OSError) as exc:
+            except (
+                PluginArtifactUnavailableError,
+                PluginArtifactValidationError,
+                OSError,
+            ) as exc:
                 logger.warning(
                     "generation_prune_validation_failed: %s: %s",
                     candidate,
                     exc,
                 )
                 continue
-            created += int(owner.enqueue_retirement(identity, not_before).created)
+            appended = owner.enqueue_retirement(identity, not_before)
+            if appended is None:
+                logger.warning("generation_prune_queue_unreadable: %s", candidate)
+                continue
+            created += int(appended.created)
         finally:
             writer.close_preserving()
     return created

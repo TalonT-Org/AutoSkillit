@@ -383,6 +383,8 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
             manifest_path=installed_plugin_artifact_manifest_path(record.managed_path),
         ),
         logger=logger,
+        # The installed tree has no selector; the exclusive lease is the backstop.
+        is_current=None,
     )
     deadline = datetime.now(UTC) + timedelta(hours=6)
     candidates = sorted(
@@ -413,7 +415,11 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
             )
             continue
         try:
-            engine.enqueue_retirement(identity, deadline)
+            if engine.enqueue_retirement(identity, deadline) is None:
+                logger.warning(
+                    "reconcile_install_artifacts: retiring queue unreadable, skipped %s",
+                    candidate,
+                )
         except (PluginArtifactValidationError, OSError, RuntimeError, ValueError) as exc:
             logger.warning(
                 "reconcile_install_artifacts: could not enqueue legacy version %s: %s",

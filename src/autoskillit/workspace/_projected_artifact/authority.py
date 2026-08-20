@@ -645,9 +645,17 @@ class ProjectedPluginArtifactAuthority:
         identity: PluginArtifactIdentity,
         reader: ArtifactLease,
     ) -> PluginLaunchBinding:
-        owner = ProjectedPluginRetirementOwner(plan.destination.parent)
+        owner = ProjectedPluginRetirementOwner(
+            plan.destination.parent,
+            active_key=plan.semantic_key,
+        )
         try:
-            owner.cancel_obsolete_retirements(identity)
+            if owner.cancel_obsolete_retirements(identity) is None:
+                logger.warning(
+                    "projected_plugin_launch_queue_unreadable",
+                    semantic_key=identity.semantic_key,
+                    operation="cancel_obsolete_retirements",
+                )
             prune_stale_projections(
                 plan.destination.parent,
                 active_key=plan.semantic_key,

@@ -81,6 +81,13 @@ repos:
         files: ^src/autoskillit/.*\.py$
         pass_filenames: false
 
+      - id: check-launch-path-totality
+        name: Check launch-path retirement functions are total
+        language: system
+        entry: python scripts/check_launch_path_totality.py
+        files: ^src/autoskillit/.*\.py$
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

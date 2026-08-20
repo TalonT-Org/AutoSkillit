@@ -98,6 +98,8 @@ from ._type_results_execution import *  # noqa: F401, F403
 from ._type_results_execution import __all__ as _results_execution_all
 from ._type_resume import *  # noqa: F401, F403
 from ._type_resume import __all__ as _resume_all
+from ._type_retirement_backstops import *  # noqa: F401, F403
+from ._type_retirement_backstops import __all__ as _retirement_backstops_all
 from ._type_session_env import *  # noqa: F401, F403
 from ._type_session_env import __all__ as _session_env_all
 from ._type_skill_contract import *  # noqa: F401, F403
@@ -143,6 +145,7 @@ __all__ = (
     + _native_shell_capture_all
     + _phoropter_all
     + _plugin_source_all
+    + _retirement_backstops_all
     + _protocols_logging_all
     + _protocols_execution_all
     + _protocols_github_all

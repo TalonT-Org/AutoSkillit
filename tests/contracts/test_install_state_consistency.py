@@ -684,10 +684,12 @@ class TestRetiredArtifactShapeRegistry:
         assert reconcile_install_artifacts() == ()
         assert reconcile_install_artifacts() == ()
 
+    @pytest.mark.parametrize("failure", ["exception", "unverifiable"])
     def test_legacy_retirement_enqueue_failure_does_not_abort_reconciliation(
         self,
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
+        failure: str,
     ) -> None:
         from autoskillit.core import PluginArtifactRetirementEngine
         from autoskillit.workspace import (
@@ -705,7 +707,8 @@ class TestRetiredArtifactShapeRegistry:
         )
 
         def fail_enqueue(*_args: object, **_kwargs: object) -> None:
-            raise ValueError("corrupt retirement cache")
+            if failure == "exception":
+                raise ValueError("corrupt retirement cache")
 
         monkeypatch.setattr(
             PluginArtifactRetirementEngine,

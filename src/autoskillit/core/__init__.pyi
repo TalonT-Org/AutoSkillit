@@ -951,6 +951,7 @@ from .types import PluginArtifactValidationError as PluginArtifactValidationErro
 from .types import PluginLaunchBinding as PluginLaunchBinding
 from .types import PluginLoadMode as PluginLoadMode
 from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
+from .types import QuarantinedRetiringRecord as QuarantinedRetiringRecord
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PreLaunchReadiness as PreLaunchReadiness
@@ -1041,6 +1042,8 @@ from .types import RetiringAppendResult as RetiringAppendResult
 from .types import RetiringArtifactRecord as RetiringArtifactRecord
 from .types import RetiringCacheReadResult as RetiringCacheReadResult
 from .types import RetiringCacheState as RetiringCacheState
+from .types import RETIREMENT_BACKSTOP_LEDGER as RETIREMENT_BACKSTOP_LEDGER
+from .types import RetirementBackstopDef as RetirementBackstopDef
 from .types import RetryReason as RetryReason
 from .types import ReviewFindingDispositionKind as ReviewFindingDispositionKind
 from .types import ReviewOperationState as ReviewOperationState

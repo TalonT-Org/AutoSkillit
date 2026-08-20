@@ -89,11 +89,16 @@ def test_exact_append_is_ordered_idempotent_and_removed_by_record_id(
         not_before=deadline,
     )
 
-    assert append_retiring_record(first).created is True
-    assert append_retiring_record(second).created is True
+    first_result = append_retiring_record(first)
+    second_result = append_retiring_record(second)
+    assert first_result is not None
+    assert second_result is not None
+    assert first_result.created is True
+    assert second_result.created is True
     duplicate = replace(second, record_id="different-id")
     duplicate_result = append_retiring_record(duplicate)
 
+    assert duplicate_result is not None
     assert duplicate_result.record_id == second.record_id
     assert duplicate_result.created is False
     assert read_retiring_cache().records == (first, second)

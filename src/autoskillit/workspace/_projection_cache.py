@@ -375,7 +375,7 @@ PROJECTION_CACHE_KEY_EXCLUSIONS: Mapping[str, str] = MappingProxyType(
 class ProjectedPluginRetirementOwner:
     """Exact-identity retirement owner for projected plugin generations."""
 
-    def __init__(self, managed_root: Path) -> None:
+    def __init__(self, managed_root: Path, *, active_key: str | None = None) -> None:
         self._retirement = PluginArtifactRetirementEngine(
             managed_root=managed_root,
             artifact_kind=PluginArtifactKind.PROJECTION,
@@ -383,6 +383,7 @@ class ProjectedPluginRetirementOwner:
             lease_path=self.lease_path,
             current_identity=self._current_identity,
             logger=logger,
+            is_current=lambda path: active_key is not None and path.name == active_key,
         )
 
     @property
@@ -404,13 +405,13 @@ class ProjectedPluginRetirementOwner:
         self,
         identity: PluginArtifactIdentity,
         not_before: datetime,
-    ) -> RetiringAppendResult:
+    ) -> RetiringAppendResult | None:
         return self._retirement.enqueue_retirement(identity, not_before)
 
     def cancel_obsolete_retirements(
         self,
         identity: PluginArtifactIdentity,
-    ) -> tuple[str, ...]:
+    ) -> tuple[str, ...] | None:
         return self._retirement.cancel_obsolete_retirements(identity)
 
     def try_promote_legacy_evidence(
@@ -468,7 +469,7 @@ def prune_stale_projections(
 ) -> int:
     """Queue exact stale incarnations without mutating reader-held artifacts."""
     root = Path(projections_root).expanduser().resolve(strict=False)
-    owner = ProjectedPluginRetirementOwner(root)
+    owner = ProjectedPluginRetirementOwner(root, active_key=active_key)
     with _InstallLock():
         if not root.is_dir():
             return 0
@@ -502,7 +503,21 @@ def prune_stale_projections(
                         error=str(exc),
                     )
                     continue
-                created += int(owner.enqueue_retirement(identity, not_before).created)
+                except PluginArtifactUnavailableError as exc:
+                    logger.warning(
+                        "projected_plugin_prune_identity_unavailable",
+                        projection_path=str(candidate),
+                        error=str(exc),
+                    )
+                    continue
+                appended = owner.enqueue_retirement(identity, not_before)
+                if appended is None:
+                    logger.warning(
+                        "projected_plugin_prune_queue_unreadable",
+                        projection_path=str(candidate),
+                    )
+                    continue
+                created += int(appended.created)
         finally:
             writer.close_preserving()
     return created

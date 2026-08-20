@@ -58,33 +58,13 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
     assert second.execution_role.value == "orchestrator"
 
 
-def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeypatch) -> None:
+def test_project_local_rewrite_reclassifies_with_process_cache(
+    tmp_path, evidence_cache, scan_calls
+) -> None:
     """Changed canonical bytes must bypass a resident semantic classification."""
     import autoskillit.workspace.skill_capabilities as capability_module
     from autoskillit.workspace.skills import DefaultSkillResolver
 
-    cache = capability_module._SkillCapabilityEvidenceCache(
-        max_entries=capability_module._SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES,
-        max_bytes=capability_module._SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES,
-        max_input_bytes=(capability_module._SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_INPUT_BYTES),
-    )
-    monkeypatch.setattr(
-        capability_module,
-        "_SKILL_CAPABILITY_EVIDENCE_CACHE",
-        cache,
-    )
-    scan_keys: list[tuple[str, str]] = []
-    original_scanner = capability_module._scan_skill_capability_evidence_uncached
-
-    def recording_scanner(content: str, effective_name: str):
-        scan_keys.append((content, effective_name))
-        return original_scanner(content, effective_name)
-
-    monkeypatch.setattr(
-        capability_module,
-        "_scan_skill_capability_evidence_uncached",
-        recording_scanner,
-    )
     project = tmp_path / "project"
     skill_root = project / ".claude" / "skills"
     skill_path = _write_effective_skill(
@@ -128,7 +108,7 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
     assert second_evidence[0].source == "Call `test_check()` for the second sentinel."
     assert second_evidence[0].source_span == (7, 7)
     assert not second.invalidities
-    assert scan_keys == [
+    assert scan_calls == [
         (first.canonical_content, "cache-rewrite-target"),
         (second.canonical_content, "cache-rewrite-target"),
     ]

@@ -158,6 +158,24 @@ def evidence_cache(monkeypatch):
 
 
 @pytest.fixture
+def make_evidence_cache(monkeypatch):
+    """Factory fixture for tests that need a non-default cache size."""
+
+    def _factory(*, max_entries: int) -> object:
+        import autoskillit.workspace.skill_capabilities as capabilities
+
+        cache = capabilities._SkillCapabilityEvidenceCache(
+            max_entries=max_entries,
+            max_bytes=1024 * 1024,
+            max_input_bytes=64 * 1024,
+        )
+        monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+        return cache
+
+    return _factory
+
+
+@pytest.fixture
 def scan_calls(monkeypatch):
     import autoskillit.workspace.skill_capabilities as capabilities
 

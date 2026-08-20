@@ -14,17 +14,6 @@ handful of dispatch-computed values consumed by the finalize block (e.g.
 Fields with a leading underscore are internal locals captured during
 dispatch and finalized. The convention is suggestive, not enforced; consult
 the section banner over each group when the boundary is unclear.
-
-Decomposition note (review Finding 3)
---------------------------------------
-
-The dataclass has ~150 fields spanning 8 commented section groups. The PR
-review recommended splitting into purpose-bounded sub-dataclasses. Deferred to
-the Step 2 dispatch/finalize split, where the empirical call graph will
-establish which fields are read together. Sub-dataclasses inside this file are
-permitted at any time without affecting the
-``test_tools_execution_decomposition_has_expected_siblings`` test, which checks
-sibling filenames only.
 """
 
 from __future__ import annotations
@@ -261,7 +250,4 @@ class _RunSkillDispatchState:
     _ssm: SessionSkillManager | None
     _cleanup_dir: Path | None
     _codex_fallback: Path | None
-    # Only field with a default. The empty-string seed matches the original
-    # `tools_execution.py` semantics (`_completion_invocation_id = ""` before
-    # finalize runs).
-    _completion_invocation_id: str = ""
+    _completion_invocation_id: str | None = None

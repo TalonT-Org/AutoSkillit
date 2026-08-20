@@ -217,4 +217,6 @@ __all__ = [
     "reset_dispatch_artifacts",
     "resolve_worktrees_dir",
     "update_campaign_state",
+    "WARM_MODULE_NAMES",
+    "warm_failure_path_imports",
 ]

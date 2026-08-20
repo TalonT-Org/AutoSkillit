@@ -20,6 +20,7 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
 )
+from autoskillit.fleet import warm_failure_path_imports as warm_failure_path_imports
 
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, CodingAgentBackend

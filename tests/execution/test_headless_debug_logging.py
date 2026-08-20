@@ -214,11 +214,6 @@ class TestResolveModelLogging:
         assert pin.model == "sonnet"
 
     def test_recipe_override_miss_falls_through_to_default(self):
-        """A recipe-name hit with a step-key miss does not jump straight to
-        default_model — resolution still falls through the step_overrides
-        and step_model (caller-arg) tiers first. This case only lands on
-        default_model because the fixture leaves both of those tiers empty.
-        """
         from autoskillit.execution.headless import resolve_model_pin
 
         cfg = self._make_config(default="haiku")
@@ -226,3 +221,16 @@ class TestResolveModelLogging:
         pin = resolve_model_pin("", cfg, step_name="other-step", recipe_name="impl")
         assert pin.model == "haiku"
         assert pin.source.key_path == "model.default_model"
+
+    def test_step_override_wins_after_recipe_miss(self):
+        """Proves resolution actually visits the step_overrides tier after a
+        recipe-name-hit/step-key-miss, rather than jumping straight to
+        default_model once the recipe lookup misses."""
+        from autoskillit.execution.headless import resolve_model_pin
+
+        cfg = self._make_config(default="haiku")
+        cfg.model.recipe_overrides = {"impl": {"plan": "opus"}}
+        cfg.model.step_overrides = {"other-step": "sonnet"}
+        pin = resolve_model_pin("", cfg, step_name="other-step", recipe_name="impl")
+        assert pin.model == "sonnet"
+        assert pin.source.key_path == "model.step_overrides.other-step"

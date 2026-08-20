@@ -27,7 +27,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.cli._plugin_artifact import InstalledPluginArtifactAuthority
+from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactAuthority
 from autoskillit.core import (
     ManagedHeadlessSessionKind,
     NativeShellCaptureMode,

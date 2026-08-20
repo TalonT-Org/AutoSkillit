@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         InstallRequest,
         InstallResult,
         MaintenanceInstallArgv,
+        MaintenanceSubprocessInvocation,
         process_status_for_result,
         result_from_process_status,
     )
@@ -62,6 +63,7 @@ __all__ = [
     "InstallRequest",
     "InstallResult",
     "MaintenanceInstallArgv",
+    "MaintenanceSubprocessInvocation",
     "process_status_for_result",
     "result_from_process_status",
     "InstallType",
@@ -103,6 +105,10 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "MaintenanceInstallArgv": (
         "autoskillit.cli.install._install_contract",
         "MaintenanceInstallArgv",
+    ),
+    "MaintenanceSubprocessInvocation": (
+        "autoskillit.cli.install._install_contract",
+        "MaintenanceSubprocessInvocation",
     ),
     "process_status_for_result": (
         "autoskillit.cli.install._install_contract",

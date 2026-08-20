@@ -568,7 +568,7 @@ class TestInstalledPluginArtifactAuthority:
         from unittest.mock import Mock
 
         import autoskillit.workspace as workspace_pkg
-        from autoskillit.cli._plugin_artifact import (
+        from autoskillit.cli.install._plugin_artifact import (
             InstalledPluginArtifactAuthority,
             publish_installed_plugin_artifact,
         )

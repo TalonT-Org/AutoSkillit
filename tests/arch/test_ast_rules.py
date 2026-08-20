@@ -1566,14 +1566,14 @@ def test_arch012_permits_version_as_namespace_key() -> None:
     with no exemption list, because none of the near-miss sites below share
     the flagged shape:
 
-      - ``execution/backends/_codex_hooks.py``, ``cli/_plugin_artifact.py``,
+      - ``execution/backends/_codex_hooks.py``, ``cli/install/_plugin_artifact.py``,
         ``migration/engine.py``: ``__version__`` used as a namespace-key
         *function argument*, never inside a ``Compare`` node.
       - ``cli/update/_transaction.py``, ``cli/doctor/_doctor_fleet.py``,
         ``recipe/rules/rules_inputs.py``, ``cli/update/_update_checks.py``:
         version comparisons wrapped in ``packaging.version.Version(...)`` --
         neither operand is a bare frozen-reference Name/Attribute.
-      - ``cli/_marketplace.py``, ``recipe/rules/campaign/rules_campaign_flow.py``,
+      - ``cli/install/_marketplace.py``, ``recipe/rules/campaign/rules_campaign_flow.py``,
         ``version.py``: a live read compared against a plain parameter or a
         JSON-derived value, never against ``__version__``/
         ``AUTOSKILLIT_INSTALLED_VERSION``.

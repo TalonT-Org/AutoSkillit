@@ -9,7 +9,7 @@ tests/contracts/_relocatability_helpers.py) to
 ``core/types/_type_constants.py``'s ``environment_pinned_path_segments()`` so
 it can double as a runtime-reachable denylist for this guard. This test
 (T-C10) closes the corresponding regression path: a future edit to
-``cli/_install_info.py``'s ``upgrade_command()`` (or any other
+``cli/install/_install_info.py``'s ``upgrade_command()`` (or any other
 install-command construction site) that hand-builds a
 ``UV_TOOL_DIR``/``UV_TOOL_BIN_DIR`` value naming the shared, non-versioned
 root instead of deriving it from ``install_root_destination`` would silently
@@ -46,7 +46,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 # upgrade` process. See the module docstring for what this guard protects
 # against.
 _INSTALL_COMMAND_CONSTRUCTION_FILES: tuple[Path, ...] = (
-    Path("src/autoskillit/cli/_install_info.py"),
+    Path("src/autoskillit/cli/install/_install_info.py"),
 )
 
 

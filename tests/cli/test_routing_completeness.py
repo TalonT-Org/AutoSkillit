@@ -104,7 +104,7 @@ def test_infrastructure_fault_override_is_documented() -> None:
     `to_json()` never emits would still pass a value-only check, which is
     exactly the failure mode this test exists to catch.
     """
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.cli.prompts._prompts_orchestrator import _build_orchestrator_prompt
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
 

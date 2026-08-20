@@ -747,12 +747,9 @@ def test_requested_model_is_gated_with_its_own_key_path() -> None:
 
 
 def test_claude_model_id_on_codex_backend_is_accepted() -> None:
-    """Documents the gate's one-directional decidability limit.
-
-    No Claude-side native-id allowlist exists, so a Claude model pinned onto
-    the Codex backend (the mirrored incident to the one this gate closes) is
-    knowingly out of the gate's reach.
-    """
+    """Claude model on codex backend is accepted: no Claude-side
+    native_model_ids allowlist exists, so this direction is undecidable
+    (see BackendCapabilities.native_model_ids)."""
     candidate = _authority(
         "codex",
         BackendAuthorityKind.GLOBAL,
@@ -770,12 +767,8 @@ def test_claude_model_id_on_codex_backend_is_accepted() -> None:
 @pytest.mark.parametrize("backend", ["claude-code", "codex"])
 @pytest.mark.parametrize("model", ["MiniMax-M3", "gpt-9.9-unreleased"])
 def test_model_owned_by_no_backend_is_accepted(model: str, backend: str) -> None:
-    """An id absent from every backend's native_model_ids has no owner.
-
-    This is deliberately fail-open: refusing an unowned id would wrongly
-    reject provider-profile models and future-dated ids the gate cannot know
-    about yet.
-    """
+    """Deliberately fail-open — see BackendCapabilities.native_model_ids for
+    the rationale (provider-profile models, future-dated ids)."""
     candidate = _authority(
         backend,
         BackendAuthorityKind.GLOBAL,

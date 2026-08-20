@@ -3,7 +3,7 @@
 ``attempt_obligation_repair`` spawns two children — a ``--version`` probe and
 an ``install --maintenance-update`` child — both built via
 ``MaintenanceSubprocessInvocation`` (see
-``autoskillit.core.MaintenanceSubprocessInvocation.for_version_probe`` /
+``autoskillit.cli.install.MaintenanceSubprocessInvocation.for_version_probe`` /
 ``.for_install``). This module pins two contracts that regressed pre-Phase-1:
 
 1. Both children's env must carry the maintenance recursion guards

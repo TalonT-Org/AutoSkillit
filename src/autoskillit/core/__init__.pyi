@@ -345,7 +345,6 @@ from .tool_sequence_analysis import (
 from .tool_sequence_analysis import render_adjacency_table as render_adjacency_table
 from .tool_sequence_analysis import render_dot as render_dot
 from .tool_sequence_analysis import render_mermaid as render_mermaid
-from .types import _MAINTENANCE_EXTRAS as _MAINTENANCE_EXTRAS
 from .types import _MAX_ASSOCIATION_FILES as _MAX_ASSOCIATION_FILES
 from .types import _MAX_REFERENCED_ARTIFACTS_PER_CALL as _MAX_REFERENCED_ARTIFACTS_PER_CALL
 from .types import _PLAN_ASSOCIATION_DOMAIN as _PLAN_ASSOCIATION_DOMAIN
@@ -917,7 +916,6 @@ from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
 from .types import MaintenanceInstallArgv as MaintenanceInstallArgv
-from .types import MaintenanceSubprocessInvocation as MaintenanceSubprocessInvocation
 from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
 from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
 from .types import ManagedHeadlessSessionLineageRef as ManagedHeadlessSessionLineageRef

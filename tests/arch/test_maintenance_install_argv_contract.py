@@ -14,7 +14,7 @@ equal to ``--maintenance-update``. Found literals are reported as
 violations with file:line:violation-line-number.
 
 Issue #4597 (A-6) followed up by introducing
-``MaintenanceSubprocessInvocation`` (``core/types/_type_install.py``), whose
+``MaintenanceSubprocessInvocation`` (``cli/install/_install_contract.py``), whose
 ``for_version_probe()``/``for_install()`` factories bundle argv + env + a
 validated cwd + an explicit stdio disposition so a spawn site cannot supply
 one without the others. The module-level scan above only proves the absence

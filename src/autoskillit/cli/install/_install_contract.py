@@ -1,7 +1,6 @@
 """Typed install boundary shared by CLI callers and install implementations.
 
-This module is intentionally a dependency leaf: it performs no I/O and builds
-on the IL-0 typed maintenance-install boundary. Call sites that spawn the child
+This module owns the CLI maintenance-child invocation boundary. Call sites that spawn the child
 subprocess must use ``MaintenanceSubprocessInvocation.for_install()`` or
 ``.for_version_probe()`` to construct the complete argv + env + cwd + stdio
 invocation — never hand-build any one of those four independently.
@@ -9,10 +8,18 @@ invocation — never hand-build any one of those four independently.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
+from pathlib import Path
 
-from autoskillit.core import InstallMode, MaintenanceInstallArgv, MaintenanceSubprocessInvocation
+from autoskillit.core import (
+    InstallMode,
+    MaintenanceInstallArgv,
+    build_maintenance_env,
+    is_git_main_checkout,
+    is_git_worktree,
+)
 
 __all__ = [
     "InstallFailureKind",
@@ -26,6 +33,64 @@ __all__ = [
     "process_status_for_result",
     "result_from_process_status",
 ]
+
+_MAINTENANCE_EXTRAS: Mapping[str, str] = {
+    "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+    "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+}
+
+
+def _validated_maintenance_cwd(cwd: Path) -> Path:
+    if is_git_worktree(cwd) or is_git_main_checkout(cwd):
+        raise ValueError(
+            f"Refusing to build a maintenance subprocess invocation with cwd "
+            f"inside a git repository: {cwd}"
+        )
+    return cwd
+
+
+@dataclass(frozen=True, slots=True)
+class MaintenanceSubprocessInvocation:
+    """Complete maintenance-child argv, environment, cwd, and stdio policy."""
+
+    argv: tuple[str, ...]
+    env: Mapping[str, str]
+    cwd: Path
+    capture_output: bool = True
+
+    @classmethod
+    def for_version_probe(
+        cls,
+        entrypoint: Path,
+        *,
+        environment: Mapping[str, str],
+        cwd: Path,
+    ) -> MaintenanceSubprocessInvocation:
+        return cls(
+            argv=(str(entrypoint), "--version"),
+            env=build_maintenance_env(environment, _MAINTENANCE_EXTRAS),
+            cwd=_validated_maintenance_cwd(cwd),
+        )
+
+    @classmethod
+    def for_install(
+        cls,
+        entrypoint: Path,
+        expected_version: str,
+        *,
+        environment: Mapping[str, str],
+        cwd: Path,
+        require_registered_plugin: bool = False,
+    ) -> MaintenanceSubprocessInvocation:
+        argv = MaintenanceInstallArgv(
+            entrypoint=entrypoint,
+            expected_version=expected_version,
+        ).to_argv(require_registered_plugin=require_registered_plugin)
+        return cls(
+            argv=tuple(argv),
+            env=build_maintenance_env(environment, _MAINTENANCE_EXTRAS),
+            cwd=_validated_maintenance_cwd(cwd),
+        )
 
 
 class InstallOutcome(StrEnum):

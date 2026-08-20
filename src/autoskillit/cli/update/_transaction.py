@@ -18,6 +18,7 @@ from typing import Any, assert_never
 from packaging.version import Version
 
 from autoskillit.cli.install._install_contract import (
+    _MAINTENANCE_EXTRAS,
     InstallFailureKind,
     InstallMode,
     InstallOutcome,
@@ -37,7 +38,6 @@ from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
-    _MAINTENANCE_EXTRAS,
     _installed_plugins_path,
     _InstallLock,
     build_maintenance_env,

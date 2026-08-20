@@ -8,11 +8,11 @@ from typing import cast
 
 import pytest
 
-from autoskillit.workspace.skill_capabilities import _SkillCapabilityEvidenceCache
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
+from autoskillit.workspace.skill_capabilities import _SkillCapabilityEvidenceCache
 
 _UNSET = object()
 

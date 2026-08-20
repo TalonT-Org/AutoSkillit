@@ -34,9 +34,7 @@ class TestCodexTranslateModel:
         ids=["unknown", "claude_native_on_codex"],
     )
     def test_unknown_passthrough(self, model_id: str) -> None:
-        """translate_model is an alias mapper, not a validator; on the headless dispatch
-        path, backend-foreign model ids are refused pre-launch by
-        DefaultLaunchResolver.prepare()."""
+        """Unrecognized or backend-foreign model ids pass through untranslated."""
         assert CodexBackend().translate_model(model_id) == model_id
 
     def test_haiku_alias(self) -> None:
@@ -62,9 +60,7 @@ class TestClaudeTranslateModel:
         ids=["unknown", "codex_native_on_claude"],
     )
     def test_unknown_passthrough(self, model_id: str) -> None:
-        """translate_model is an alias mapper, not a validator; on the headless dispatch
-        path, backend-foreign model ids are refused pre-launch by
-        DefaultLaunchResolver.prepare()."""
+        """Unrecognized or backend-foreign model ids pass through untranslated."""
         assert ClaudeCodeBackend().translate_model(model_id) == model_id
 
     def test_haiku_identity(self) -> None:

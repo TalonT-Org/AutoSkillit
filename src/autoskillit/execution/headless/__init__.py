@@ -197,8 +197,13 @@ async def run_headless_core(
         skill_command=original_skill_command[:SKILL_COMMAND_DISPLAY_MAX],
         step_name=step_name or None,
     ):
+        caller_key_path = "run_skill.model"
         model_pin = resolve_model_pin(
-            model, ctx.config, step_name=step_name, recipe_name=recipe_name
+            model,
+            ctx.config,
+            step_name=step_name,
+            recipe_name=recipe_name,
+            caller_key_path=caller_key_path,
         )
         model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
         add_dirs_tuple = tuple(add_dirs)
@@ -288,7 +293,7 @@ async def run_headless_core(
             cwd=cwd,
             requested_model=model or None,
             requested_model_source=(
-                LaunchValueSource(LaunchValueSourceKind.CALLER, "run_skill.model")
+                LaunchValueSource(LaunchValueSourceKind.CALLER, caller_key_path)
                 if model
                 else default_source
             ),

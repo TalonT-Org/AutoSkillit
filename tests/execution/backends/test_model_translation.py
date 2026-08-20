@@ -28,14 +28,16 @@ class TestCodexTranslateModel:
     def test_passthrough_native(self, model_id: str) -> None:
         assert CodexBackend().translate_model(model_id) == model_id
 
-    def test_unknown_passthrough(self) -> None:
+    @pytest.mark.parametrize(
+        "model_id",
+        ["custom-model-xyz", "claude-opus-5"],
+        ids=["unknown", "claude_native_on_codex"],
+    )
+    def test_unknown_passthrough(self, model_id: str) -> None:
         """translate_model is an alias mapper, not a validator; on the headless dispatch
         path, backend-foreign model ids are refused pre-launch by
-        DefaultLaunchResolver.prepare() (#4238)."""
-        assert CodexBackend().translate_model("custom-model-xyz") == "custom-model-xyz"
-
-    def test_codex_backend_passes_claude_native_id_through_untranslated(self) -> None:
-        assert CodexBackend().translate_model("claude-opus-5") == "claude-opus-5"
+        DefaultLaunchResolver.prepare()."""
+        assert CodexBackend().translate_model(model_id) == model_id
 
     def test_haiku_alias(self) -> None:
         assert CodexBackend().translate_model("haiku") == CODEX_MODEL_ALIASES["haiku"]
@@ -54,14 +56,16 @@ class TestClaudeTranslateModel:
             == f"{CLAUDE_MODEL_ALIASES['opus']}[1m]"
         )
 
-    def test_unknown_passthrough(self) -> None:
+    @pytest.mark.parametrize(
+        "model_id",
+        ["custom-model-xyz", "gpt-5.6-sol"],
+        ids=["unknown", "codex_native_on_claude"],
+    )
+    def test_unknown_passthrough(self, model_id: str) -> None:
         """translate_model is an alias mapper, not a validator; on the headless dispatch
         path, backend-foreign model ids are refused pre-launch by
-        DefaultLaunchResolver.prepare() (#4238)."""
-        assert ClaudeCodeBackend().translate_model("custom-model-xyz") == "custom-model-xyz"
-
-    def test_claude_backend_passes_codex_native_id_through_untranslated(self) -> None:
-        assert ClaudeCodeBackend().translate_model("gpt-5.6-sol") == "gpt-5.6-sol"
+        DefaultLaunchResolver.prepare()."""
+        assert ClaudeCodeBackend().translate_model(model_id) == model_id
 
     def test_haiku_identity(self) -> None:
         assert ClaudeCodeBackend().translate_model("haiku") == "haiku"

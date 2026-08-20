@@ -99,6 +99,7 @@ class TestModuleCascadeCore:
             "_terminal_table",
             "_plugin_artifact_identity",
             "_plugin_cache",
+            "_entrypoint_shim",
             "github_url",
             "paths",
             "_install_binding",

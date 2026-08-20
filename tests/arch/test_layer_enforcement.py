@@ -24,6 +24,7 @@ from tests.arch._helpers import (
     _is_mcp_tool_decorator,
     _rel,
     _runtime_import_froms,
+    _tool_module_paths,
 )
 from tests.arch._rules import RuleDescriptor
 
@@ -200,18 +201,9 @@ def test_all_mcp_tools_are_registered() -> None:
     expected = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
     server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
-    tool_sources: list[Path] = []
-    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
-        tool_sources.append(py_file)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
+    tool_sources = list(server_dir.glob("*.py")) + _tool_module_paths(
+        server_dir / "tools", flat_pattern="*.py"
+    )
     for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
@@ -234,18 +226,9 @@ def test_gated_tools_call_require_enabled_first() -> None:
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
 
-    tool_sources: list[Path] = []
-    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
-        tool_sources.append(py_file)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
+    tool_sources = list(server_dir.glob("*.py")) + _tool_module_paths(
+        server_dir / "tools", flat_pattern="*.py"
+    )
 
     for py_file in tool_sources:
         src = py_file.read_text()
@@ -493,19 +476,7 @@ def test_direct_executor_callers_check_backend_compat() -> None:
     Discovers every server tool module so new direct executor callers cannot
     silently escape the invariant.
     """
-    target_files: list[Path] = []
-    for py_file in (SRC_ROOT / "server" / "tools").glob("*.py"):
-        target_files.append(py_file)
-    for pkg_dir in (SRC_ROOT / "server" / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            target_files.append(submodule)
-    target_files.sort()
+    target_files = _tool_module_paths(SRC_ROOT / "server" / "tools", flat_pattern="*.py")
 
     compat_calls = {
         "_check_backend_compat",
@@ -1205,19 +1176,7 @@ def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
     """
     server_dir = SRC_ROOT / "server"
     violations = []
-    tool_sources: list[Path] = []
-    for path in (server_dir / "tools").glob("tools_*.py"):
-        tool_sources.append(path)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
-    tool_sources.sort()
+    tool_sources = _tool_module_paths(server_dir / "tools")
 
     for path in tool_sources:
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -1245,19 +1204,7 @@ def test_all_tool_extra_keys_are_not_reserved() -> None:
 
     server_dir = SRC_ROOT / "server"
     violations = []
-    tool_sources: list[Path] = []
-    for path in (server_dir / "tools").glob("tools_*.py"):
-        tool_sources.append(path)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
-    tool_sources.sort()
+    tool_sources = _tool_module_paths(server_dir / "tools")
 
     for path in tool_sources:
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -1582,18 +1529,7 @@ def test_tool_subset_tags_match_decorators() -> None:
     server_dir = SRC_ROOT / "server"
     decorator_tags: dict[str, frozenset[str]] = {}
 
-    tool_sources: list[Path] = []
-    for py_file in (server_dir / "tools").glob("*.py"):
-        tool_sources.append(py_file)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
+    tool_sources = _tool_module_paths(server_dir / "tools", flat_pattern="*.py")
     for py_file in tool_sources:
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
@@ -2002,19 +1938,7 @@ def test_tools_with_path_params_validate_existence():
     """Every tool accepting worktree_path or cwd must validate directory existence."""
     missing_guards: list[str] = []
 
-    tool_sources: list[Path] = []
-    for py_file in _TOOLS_DIR.glob("tools_*.py"):
-        tool_sources.append(py_file)
-    for pkg_dir in _TOOLS_DIR.iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
-    tool_sources.sort()
+    tool_sources = _tool_module_paths(_TOOLS_DIR)
 
     for py_file in tool_sources:
         source = py_file.read_text()

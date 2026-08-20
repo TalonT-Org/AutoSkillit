@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._helpers import _tool_module_paths
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit"
@@ -134,22 +136,7 @@ def test_req_imp_001_no_cross_package_submodule_imports() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _collect_tools_files() -> list[Path]:
-    tools_dir = SRC / "server" / "tools"
-    files = list(tools_dir.glob("tools_*.py"))
-    for pkg_dir in tools_dir.iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            files.append(submodule)
-    return files
-
-
-TOOLS_FILES = _collect_tools_files()
+TOOLS_FILES = _tool_module_paths(SRC / "server" / "tools")
 
 
 @pytest.mark.parametrize("path", TOOLS_FILES, ids=lambda p: p.name)

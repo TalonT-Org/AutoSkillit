@@ -30,6 +30,17 @@ PROCESS_KILL_PY = SRC_ROOT / "execution" / "process" / "_process_kill.py"
 PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "process" / "_process_monitor.py"
 PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
 
+
+def _tool_module_paths(tools_dir: Path, *, flat_pattern: str = "tools_*.py") -> list[Path]:
+    """Return flat tool modules and modules from ``tools_*`` packages."""
+    files = list(tools_dir.glob(flat_pattern))
+    for package_dir in tools_dir.iterdir():
+        if not package_dir.is_dir() or not package_dir.name.startswith("tools_"):
+            continue
+        files.extend(path for path in package_dir.glob("*.py") if path.name != "__init__.py")
+    return sorted(files)
+
+
 # ── Section A: AST visitor infrastructure ─────────────────────────────────────
 
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})

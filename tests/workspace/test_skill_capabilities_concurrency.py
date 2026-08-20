@@ -141,14 +141,9 @@ def test_synchronized_warm_callers_reuse_resident_identity(evidence_cache, scan_
 
 
 def test_waiter_receives_builder_tuple_after_resident_eviction(
-    monkeypatch,
+    make_evidence_cache, monkeypatch
 ) -> None:
-    cache = capabilities._SkillCapabilityEvidenceCache(
-        max_entries=1,
-        max_bytes=1024 * 1024,
-        max_input_bytes=64 * 1024,
-    )
-    monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+    cache = make_evidence_cache(max_entries=1)
     first_content = _document("first", "Call test_check().")
     second_content = _document("second", "Call test_check().")
     scanner_entered = Event()
@@ -203,14 +198,9 @@ def test_waiter_receives_builder_tuple_after_resident_eviction(
 
 
 def test_resuming_waiter_refreshes_same_resident_generation_to_mru(
-    monkeypatch, scan_calls
+    make_evidence_cache, monkeypatch, scan_calls
 ) -> None:
-    cache = capabilities._SkillCapabilityEvidenceCache(
-        max_entries=2,
-        max_bytes=1024 * 1024,
-        max_input_bytes=64 * 1024,
-    )
-    monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+    cache = make_evidence_cache(max_entries=2)
     first_content = _document("first", "Call test_check().")
     second_content = _document("second", "Call test_check().")
     third_content = _document("third", "Call test_check().")

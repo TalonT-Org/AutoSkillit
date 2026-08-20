@@ -162,8 +162,7 @@ ROUTING RULES — MANDATORY:
   faulted — the package install was replaced, a plugin artifact was
   contended, a filesystem read was transiently unavailable — not that the
   work itself failed. The client should not retry until the system state has
-  been explicitly fixed (the same distinction gRPC's FAILED_PRECONDITION
-  makes). Halt the pipeline and report the environment fault to the operator
+  been explicitly fixed. Halt the pipeline and report the environment fault to the operator
   instead of routing to on_failure, and do not release claims or remove
   clones on this result without first getting explicit operator confirmation
   — those tools refuse by default after an infrastructure fault.

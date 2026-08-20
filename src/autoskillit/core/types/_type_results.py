@@ -713,10 +713,9 @@ class SkillResult:
 
         Sibling to ``crashed()``/``cancelled()``, for exceptions deriving from
         ``InfrastructureFaultError``. ``needs_retry=False`` deliberately: the
-        environment is still broken, so retrying in-process cannot help — this
-        is gRPC's ``FAILED_PRECONDITION``, not a transient failure. The result
-        is distinguished from a logic crash by ``fault_domain``, not by retry
-        semantics.
+        environment is still broken, so retrying in-process cannot help. The
+        result is distinguished from a logic crash by ``fault_domain``, not by
+        retry semantics.
         """
         _result = f"{type(exception).__name__}: {exception}"
         if skill_command:

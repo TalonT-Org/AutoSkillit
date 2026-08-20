@@ -82,6 +82,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "tools_evidence_reader",
         # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
         "_generation_publication",
+        # _LEGACY_UV_TOOL_ROOT_RETIREMENT_GRACE = timedelta(hours=24) (#4597 Phase 3)
+        "_install_state",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_install_info",  # cli/install/_install_info.py: window constants (see comment above)
         # KITCHEN_GUARDED_COMMANDS: frozenset[str]
@@ -142,9 +144,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_capture_lifecycle",
         # join ledger alphabet/filename constants resolved once at import time.
         "_join_ledger",  # hooks/_join_ledger.py: _BATCH_ID_ALPHABET, LEDGER_FILENAME
-        # INSTALL_STALENESS_REMEDY = InstallStalenessRemedy(...) — the single
-        # shared remedy text (B-8, issue #4597), derived once at import time.
-        "_install_binding",
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1032,7 +1031,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # identity B-1/B-2 route pkg_root() through — a single IL-0 module
         # kept separate from paths.py so paths.py's own "zero autoskillit
         # imports" character stays intact).
-        "core": 34,
+        # +_entrypoint_shim.py (#4597 rectify phase 3: the exec-time
+        # entrypoint shim renderer/writer — stdlib-only and version-
+        # independent by design, kept separate from the generation-store
+        # publish machinery it is written alongside).
+        "core": 35,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         "core/types": 56,
@@ -1150,6 +1153,15 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    "core/types/_type_constants.py": (
+        1050,
+        "REQ-CNST-010-E29: #4597 Phase 3 added a RETIRED_INSTALL_ARTIFACT_SHAPES entry "
+        "for the pre-immutable-roots shared uv tool root and two DURABLE_ARTIFACT_WRITERS "
+        "entries (the entrypoint shim, the install-root generation writer). Both registries "
+        "are append-only forcing functions per the file's own model comment; splitting them "
+        "out of this module would separate them from the frozensets and validation "
+        "functions their own docstrings and tests reference by exact module path.",
+    ),
     "core/_plugin_cache.py": (
         1400,
         "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "

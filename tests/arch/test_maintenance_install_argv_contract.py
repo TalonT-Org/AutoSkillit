@@ -193,19 +193,46 @@ def _is_attribute_of(node: ast.expr | None, var_name: str, attr: str) -> bool:
     )
 
 
+def _invocation_var_names(tree: ast.AST) -> frozenset[str]:
+    """Return every local name assigned directly from a
+    ``MaintenanceSubprocessInvocation.for_version_probe()``/``.for_install()``
+    call — i.e. names that actually carry the typed, env/cwd/stdio-bundled
+    contract, as opposed to any other variable that merely happens to expose
+    an ``.argv`` attribute (e.g. the unrelated ``UpgradeCommand`` returned by
+    ``upgrade_command()``, issue #4597 Phase 3). Single-target ``Name =
+    <factory call>`` assignments only — the residual gap docstring above
+    already accepts that laundering through an alias or destructuring defeats
+    this scan.
+    """
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and _is_invocation_factory_call(node.value) is not None:
+            names.add(target.id)
+    return frozenset(names)
+
+
 def _scan_runner_calls_for_invocation_attrs(tree: ast.AST) -> list[str]:
     """Return violations for runner() calls that spawn off an invocation's
     argv but source ``env=``/``cwd=`` from something other than that same
     invocation's ``.env``/``.cwd`` attributes.
 
     A call is scoped into this check only when its argv argument is already
-    ``<var>.argv`` (or ``list(<var>.argv)``) — i.e. only calls that are
-    already spawning a MaintenanceSubprocessInvocation-built child. This
-    deliberately excludes subprocess calls unrelated to the typed contract,
-    such as the plain package-upgrade command spawn in
-    ``run_update_transaction``, which never claims to route through an
-    invocation's argv in the first place.
+    ``<var>.argv`` (or ``list(<var>.argv)``) *and* ``<var>`` was assigned
+    directly from a ``MaintenanceSubprocessInvocation`` factory call (see
+    ``_invocation_var_names``) — i.e. only calls that are already spawning a
+    MaintenanceSubprocessInvocation-built child. This deliberately excludes
+    subprocess calls unrelated to the typed contract, such as the
+    ``UpgradeCommand``-driven package-upgrade command spawns in
+    ``run_update_transaction``, which never claim to route through an
+    invocation's argv in the first place — they carry their own, differently
+    shaped contract (an additive ``env`` overlay merged into the caller's
+    validated base env, no ``cwd`` field at all since the caller's
+    ``working_dir`` is shared across every spawn in that function).
     """
+    invocation_vars = _invocation_var_names(tree)
     violations: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
@@ -220,7 +247,7 @@ def _scan_runner_calls_for_invocation_attrs(tree: ast.AST) -> list[str]:
             argv_var = _invocation_var_from_argv_arg(arg)
             if argv_var is not None:
                 break
-        if argv_var is None:
+        if argv_var is None or argv_var not in invocation_vars:
             continue
         kwargs = {kw.arg: kw.value for kw in node.keywords if kw.arg is not None}
         if not _is_attribute_of(kwargs.get("env"), argv_var, "env"):
@@ -252,18 +279,40 @@ def test_scan_detects_invocation_factory_call_missing_kwargs() -> None:
     assert "cwd" in violations[0]
 
 
+_INVOCATION_ASSIGN = (
+    "invocation = MaintenanceSubprocessInvocation.for_install(entrypoint, version, "
+    "environment=env, cwd=cwd)\n"
+)
+
+
 def test_scan_detects_runner_call_bypassing_invocation_attrs() -> None:
     """Sanity-check the runner-call scanner against synthetic ASTs."""
-    compliant = ast.parse("runner(list(invocation.argv), env=invocation.env, cwd=invocation.cwd)")
+    compliant = ast.parse(
+        _INVOCATION_ASSIGN
+        + "runner(list(invocation.argv), env=invocation.env, cwd=invocation.cwd)"
+    )
     assert _scan_runner_calls_for_invocation_attrs(compliant) == []
 
-    raw_env = ast.parse("runner(list(invocation.argv), env=dict(os.environ), cwd=invocation.cwd)")
+    raw_env = ast.parse(
+        _INVOCATION_ASSIGN
+        + "runner(list(invocation.argv), env=dict(os.environ), cwd=invocation.cwd)"
+    )
     violations = _scan_runner_calls_for_invocation_attrs(raw_env)
     assert len(violations) == 1
     assert "env=" in violations[0]
 
     unrelated_call = ast.parse("runner(command, env=maintenance_env, cwd=working_dir)")
     assert _scan_runner_calls_for_invocation_attrs(unrelated_call) == []
+
+    # issue #4597 Phase 3: a variable exposing its own unrelated `.argv`
+    # attribute (e.g. `UpgradeCommand`, never built via
+    # `MaintenanceSubprocessInvocation.for_*()`) must not be mistaken for an
+    # invocation spawn just because the syntax happens to match.
+    unrelated_argv_attr = ast.parse(
+        "command = upgrade_command(info, install_root_destination=dest)\n"
+        "runner(command.argv, env={**maintenance_env, **command.env}, cwd=working_dir)"
+    )
+    assert _scan_runner_calls_for_invocation_attrs(unrelated_argv_attr) == []
 
 
 def test_every_maintenance_install_spawn_binds_env_and_stdio() -> None:
@@ -313,6 +362,7 @@ def test_every_maintenance_install_spawn_binds_env_and_stdio() -> None:
     invocation_backed_runner_call_count = 0
     for py_file in _SPAWN_SITE_FILES:
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        invocation_vars = _invocation_var_names(tree)
         for node in ast.walk(tree):
             if _is_invocation_factory_call(node) is not None:
                 factory_call_count += 1
@@ -320,7 +370,7 @@ def test_every_maintenance_install_spawn_binds_env_and_stdio() -> None:
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
                 and node.func.id not in {"list", "tuple"}
-                and any(_invocation_var_from_argv_arg(arg) is not None for arg in node.args)
+                and any(_invocation_var_from_argv_arg(arg) in invocation_vars for arg in node.args)
             ):
                 invocation_backed_runner_call_count += 1
     assert factory_call_count == 4, (

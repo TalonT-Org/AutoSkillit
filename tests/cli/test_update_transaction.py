@@ -19,7 +19,12 @@ from autoskillit.cli.install._install_contract import (
     InstallOutcome,
     InstallProcessStatus,
 )
-from autoskillit.cli.install._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import (
+    _INSTALL_FROM_DEVELOP,
+    InstallInfo,
+    InstallType,
+    UpgradeCommand,
+)
 from autoskillit.cli.update._transaction import (
     IRREVERSIBLE_PIVOT_PHASE,
     UPDATE_TRANSACTION_PHASES,
@@ -27,6 +32,7 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionPhase,
     run_update_transaction,
 )
+from autoskillit.core import _AUTOSKILLIT_INSTALL_ROOT_KEY, generation_staging_root
 from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
 from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 from tests.conftest import production_interpreter_env
@@ -131,7 +137,7 @@ def _prepare(
     monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", _info)
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.upgrade_command",
-        lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
+        lambda _info, **_kw: UpgradeCommand(argv=["uv", "tool", "upgrade", "autoskillit"]),
     )
     if stub_git_checks:
         monkeypatch.setattr(
@@ -258,7 +264,7 @@ import tempfile
 from pathlib import Path
 
 import autoskillit.cli.update._transaction as t
-from autoskillit.cli.install._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType, UpgradeCommand
 
 
 def _info():
@@ -266,7 +272,9 @@ def _info():
 
 
 t.detect_install = _info
-t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.upgrade_command = lambda _info, **_kw: UpgradeCommand(
+    argv=["uv", "tool", "upgrade", "autoskillit"]
+)
 t.is_git_worktree = lambda _p: False
 t.is_git_main_checkout = lambda _p: False
 
@@ -385,7 +393,7 @@ import tempfile
 from pathlib import Path
 
 import autoskillit.cli.update._transaction as t
-from autoskillit.cli.install._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType, UpgradeCommand
 
 
 def _info():
@@ -393,7 +401,9 @@ def _info():
 
 
 t.detect_install = _info
-t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.upgrade_command = lambda _info, **_kw: UpgradeCommand(
+    argv=["uv", "tool", "upgrade", "autoskillit"]
+)
 t.is_git_worktree = lambda _p: False
 t.is_git_main_checkout = lambda _p: False
 
@@ -491,7 +501,7 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
     )
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.upgrade_command",
-        lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
+        lambda _info, **_kw: UpgradeCommand(argv=["uv", "tool", "upgrade", "autoskillit"]),
     )
     monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
     monkeypatch.setattr(
@@ -519,7 +529,7 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
     assert probe_kwargs["env"]["PATH"] == "/bin"
 
 
-def test_update_transaction_declares_exact_twelve_phase_pivot_contract() -> None:
+def test_update_transaction_declares_exact_thirteen_phase_pivot_contract() -> None:
     assert UPDATE_TRANSACTION_PHASES == (
         UpdateTransactionPhase.CALLER_ENV_CAPTURE,
         UpdateTransactionPhase.PRE_UPDATE_EVIDENCE_CAPTURE,
@@ -529,13 +539,93 @@ def test_update_transaction_declares_exact_twelve_phase_pivot_contract() -> None
         UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE,
         UpdateTransactionPhase.IRREVERSIBLE_PIVOT,
         UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE,
+        UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION,
         UpdateTransactionPhase.INSTALL_CHILD_INVOCATION,
         UpdateTransactionPhase.INSTALL_STATUS_RECONSTRUCTION,
         UpdateTransactionPhase.POST_UPDATE_ARTIFACT_VERIFICATION,
         UpdateTransactionPhase.RESULT_FINALIZATION,
     )
-    assert len(UPDATE_TRANSACTION_PHASES) == 12
+    assert len(UPDATE_TRANSACTION_PHASES) == 13
     assert IRREVERSIBLE_PIVOT_PHASE is UPDATE_TRANSACTION_PHASES[6]
+
+
+def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The real, unmocked ``upgrade_command()`` determines the argv/env that
+    reach the subprocess boundary for a GIT_VCS dev-track install.
+
+    Every other test in this file mocks ``upgrade_command`` away and
+    therefore never exercises its real implementation against the real
+    transaction — this closes that gap.
+    """
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.detect_install",
+        lambda: InstallInfo(InstallType.GIT_VCS, "abc123", "develop", "https://x", None),
+    )
+    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
+    )
+
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
+        calls.append((list(cmd), kwargs))
+        if len(calls) in (1, 2):
+            # Stand in for `uv tool install`'s real effect on both installs of
+            # the real, unmocked upgrade_command()'s two-install design: a
+            # disposable probe install (call 1, into UV_TOOL_DIR's staging
+            # destination) purely to discover expected_version, then a second,
+            # near-free install (call 2) writing the real content directly at
+            # its permanent version+incarnation-keyed destination -- never
+            # renamed afterward, since a venv's console-script shebang bakes
+            # an absolute path at install time. The real post-pivot
+            # publish_install_root_generation() call needs actual content at
+            # whichever destination each call's own UV_TOOL_DIR names.
+            destination = Path(kwargs["env"]["UV_TOOL_DIR"])
+            entrypoint = destination / "autoskillit" / "bin" / "autoskillit"
+            entrypoint.parent.mkdir(parents=True, exist_ok=True)
+            entrypoint.write_text("#!/bin/sh\necho fake\n")
+            entrypoint.chmod(0o755)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=runner,
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED, result.findings
+    assert len(calls) == 3
+    python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
+    expected_upgrade_argv = [
+        "uv",
+        "tool",
+        "install",
+        "--force",
+        _INSTALL_FROM_DEVELOP,
+        "--python",
+        python_pin,
+    ]
+    probe_argv, probe_kwargs = calls[0]
+    assert probe_argv == expected_upgrade_argv
+    staging_root_prefix = str(generation_staging_root(tmp_path, _AUTOSKILLIT_INSTALL_ROOT_KEY))
+    assert str(probe_kwargs["env"]["UV_TOOL_DIR"]).startswith(staging_root_prefix)
+
+    final_argv, final_kwargs = calls[1]
+    assert final_argv == expected_upgrade_argv
+    final_destination = str(final_kwargs["env"]["UV_TOOL_DIR"])
+    assert not final_destination.startswith(staging_root_prefix)
+    assert "/plugin-generations/autoskillit-install/1.1.0/" in final_destination
+
+    install_argv = calls[2][0]
+    assert install_argv[:2] == ["autoskillit", "install"]
+    assert "--require-registered-plugin" not in install_argv
+    assert result.phase_history == UPDATE_TRANSACTION_PHASES
 
 
 def test_claudecode_with_existing_registration_defers_before_mutation(
@@ -1421,7 +1511,7 @@ def test_no_obligation_for_failures_before_upgrade_subprocess(
     if failure_point == "unknown_install_type":
         monkeypatch.setattr(
             "autoskillit.cli.update._transaction.upgrade_command",
-            lambda _info: None,
+            lambda _info, **_kw: None,
         )
     elif failure_point == "claudecode_deferral":
         base_env["CLAUDECODE"] = "1"

@@ -33,7 +33,7 @@ def _resolve(dotted: str) -> object:
 
 
 def _assert_relocatable(content: str) -> None:
-    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+    from autoskillit.core import environment_pinned_path_segments
 
     for segment in environment_pinned_path_segments():
         assert segment not in content, f"durable output contains forbidden segment {segment!r}"

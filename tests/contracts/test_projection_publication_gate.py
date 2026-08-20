@@ -541,6 +541,18 @@ class TestStaleGeneratorRefusal:
     def test_deleted_pkg_root_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Backstop coverage, not the primary defense (issue #4597 Phase 3).
+
+        Phase 3's immutable, version-addressed install-root generations plus
+        the self-held lease acquired in ``resolve_install_binding()`` (see
+        ``test_generator_root_cannot_be_deleted_while_referenced`` below) make
+        this branch unreachable via AutoSkillit's own upgrade lifecycle: an
+        AutoSkillit-initiated update never mutates or deletes a root a live
+        process is reading from. This probe — and this test — remain as a
+        backstop for installs outside that lifecycle (a dev/editable checkout
+        has no generation store to lease at all) and for external tampering,
+        which no lease can prevent.
+        """
         import autoskillit.workspace._projected_artifact.authority as _auth
         from autoskillit.workspace._projected_artifact.authority import (
             StaleGeneratorError,
@@ -551,6 +563,100 @@ class TestStaleGeneratorRefusal:
         monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
         with pytest.raises(StaleGeneratorError, match="no longer exists"):
             assert_generator_process_fresh()
+
+    def test_generator_root_cannot_be_deleted_while_referenced(self, tmp_path: Path) -> None:
+        """Positive contract (issue #4597 Phase 3, C-1/C-5/C-6): a live
+        reference protects an install-root generation from reclaim even
+        after it is superseded and its retirement grace window has elapsed.
+
+        This is what makes ``test_deleted_pkg_root_raises`` above a backstop
+        rather than the primary defense: ``resolve_install_binding()`` seals
+        a shared lease on the process's own install-root generation at first
+        access (``core._install_binding._acquire_self_lease``), and the
+        retirement engine's ``try_reclaim`` refuses a nonblocking exclusive
+        acquisition against that held shared lease regardless of how long
+        ago the generation was superseded.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        from autoskillit.core import (
+            _AUTOSKILLIT_INSTALL_ROOT_KEY,
+            _InstallLock,
+            due_retiring_records,
+            generation_staging_root,
+            installed_plugin_semantic_key,
+            new_plugin_artifact_incarnation_id,
+        )
+        from autoskillit.core._plugin_artifact_identity import (
+            installed_plugin_artifact_lease_path,
+        )
+        from autoskillit.core.runtime.artifact_lease import ArtifactLease
+        from autoskillit.core.types import (
+            PluginArtifactIdentity,
+            PluginArtifactKind,
+            RetirementOutcome,
+        )
+        from autoskillit.workspace import (
+            GenerationArtifactRetirementOwner,
+            publish_install_root_generation,
+        )
+
+        install_ref = _AUTOSKILLIT_INSTALL_ROOT_KEY
+
+        def _publish(version: str) -> PluginArtifactIdentity:
+            incarnation_id = new_plugin_artifact_incarnation_id()
+            staging = generation_staging_root(tmp_path, install_ref) / incarnation_id
+            staging.mkdir(parents=True)
+            (staging / "marker").write_text(version)
+            with _InstallLock():
+                return publish_install_root_generation(
+                    home=tmp_path,
+                    install_ref=install_ref,
+                    version=version,
+                    semantic_key=installed_plugin_semantic_key(install_ref, version),
+                    incarnation_id=incarnation_id,
+                    staged_root=staging,
+                )
+
+        old_identity = _publish("1.0.0")
+
+        # Simulate what resolve_install_binding() does at process first-access:
+        # hold a shared lease on this process's own generation for its lifetime.
+        self_lease = ArtifactLease.acquire_existing_shared(
+            installed_plugin_artifact_lease_path(old_identity.managed_path)
+        )
+        try:
+            # A newer version supersedes the old one.
+            _publish("1.0.1")
+
+            owner = GenerationArtifactRetirementOwner(
+                tmp_path / ".autoskillit" / "plugin-generations" / "autoskillit-install",
+                home=tmp_path,
+                plugin_ref=install_ref,
+                artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+            )
+            far_future = datetime.now(UTC) + timedelta(hours=1)
+            enqueue_result = owner.enqueue_retirement(old_identity, not_before=far_future)
+            assert enqueue_result.created
+
+            past_due = datetime.now(UTC) + timedelta(hours=2)
+            (record,) = [
+                r
+                for r in due_retiring_records(past_due)
+                if r.record_id == enqueue_result.record_id
+            ]
+
+            outcome = owner.try_reclaim(record, past_due)
+            assert outcome is RetirementOutcome.DEFERRED_CONTENDED
+            assert old_identity.managed_path.is_dir()
+
+            self_lease.close()
+            outcome_after_release = owner.try_reclaim(record, past_due)
+            assert outcome_after_release is RetirementOutcome.RECLAIMED
+            assert not old_identity.managed_path.exists()
+        finally:
+            if not self_lease.closed:
+                self_lease.close()
 
     def test_version_skew_cannot_be_constructed_under_a_sealed_binding(
         self, monkeypatch: pytest.MonkeyPatch

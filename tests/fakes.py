@@ -17,7 +17,6 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import INSTALL_STALENESS_REMEDY
 from autoskillit.core.types import (
     BackendAuthority,
     CIRunScope,
@@ -1087,7 +1086,7 @@ class InMemoryRecipeRepository(RecipeRepository):
             if session_type() is not SessionType.FLEET:
                 raise ProcessStaleError(
                     "Process is running stale code — package directory was modified on disk "
-                    f"since server startup. {INSTALL_STALENESS_REMEDY.remedy}"
+                    "since server startup."
                 )
         if name not in self._validated and name not in self._recipes:
             raise RecipeNotFoundError(f"No recipe named '{name}' found")

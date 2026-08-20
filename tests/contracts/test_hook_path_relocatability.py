@@ -33,7 +33,7 @@ def test_generate_hooks_json_commands_are_relocatable() -> None:
     """Every command produced by generate_hooks_json() uses the plugin-root
     token and contains no process-local path segment.
     """
-    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+    from autoskillit.core import environment_pinned_path_segments
 
     forbidden_segments = environment_pinned_path_segments()
     data = generate_hooks_json()
@@ -109,7 +109,7 @@ def test_self_healed_bundled_hooks_json_is_relocatable(
     run_startup_drift_check()
 
     regenerated = (hooks_dir / "hooks.json").read_text()
-    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+    from autoskillit.core import environment_pinned_path_segments
 
     for segment in environment_pinned_path_segments():
         assert segment not in regenerated, (

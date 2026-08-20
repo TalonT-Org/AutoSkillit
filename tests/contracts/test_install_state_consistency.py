@@ -281,7 +281,7 @@ class TestVerifyInstallState:
 
         _publish_generation(home, __version__)
 
-        def fail_digest(_path: Path) -> str:
+        def fail_digest(_path: Path, **_kwargs: object) -> str:
             raise PermissionError("injected diagnostic read failure")
 
         monkeypatch.setattr(plugin_artifact_identity, "directory_tree_digest", fail_digest)
@@ -430,7 +430,7 @@ class TestVerifyInstallState:
 
         identity = _queue_registered_retirement(home)
 
-        def fail_digest(_path: Path) -> str:
+        def fail_digest(_path: Path, **_kwargs: object) -> str:
             raise PermissionError("injected diagnostic read failure")
 
         monkeypatch.setattr(

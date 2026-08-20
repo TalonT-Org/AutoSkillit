@@ -15,9 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import pkg_root
+from autoskillit.core import environment_pinned_path_segments, pkg_root
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH, PLUGIN_ROOT_TOKEN
-from tests.contracts._relocatability_helpers import environment_pinned_path_segments
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 

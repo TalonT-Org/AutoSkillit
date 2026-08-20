@@ -233,6 +233,131 @@ def test_every_artifact_kind_has_a_registered_owner(home: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Install-root generations (issue #4597 Phase 3): atomic publish, reclaim safety
+# ---------------------------------------------------------------------------
+
+_INSTALL_ROOT_REF = "autoskillit-install@autoskillit-local"
+
+
+def _publish_install_root(home: Path, version: str) -> PluginArtifactIdentity:
+    from autoskillit.core import (
+        _InstallLock,
+        generation_staging_root,
+        installed_plugin_semantic_key,
+        new_plugin_artifact_incarnation_id,
+    )
+    from autoskillit.workspace import publish_install_root_generation
+
+    incarnation_id = new_plugin_artifact_incarnation_id()
+    staging = generation_staging_root(home, _INSTALL_ROOT_REF) / incarnation_id
+    staging.mkdir(parents=True)
+    (staging / "marker").write_text(version, encoding="utf-8")
+    with _InstallLock():
+        return publish_install_root_generation(
+            home=home,
+            install_ref=_INSTALL_ROOT_REF,
+            version=version,
+            semantic_key=installed_plugin_semantic_key(_INSTALL_ROOT_REF, version),
+            incarnation_id=incarnation_id,
+            staged_root=staging,
+        )
+
+
+def test_install_root_generation_publish_is_atomic_and_rolls_back(
+    home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-C7: a failed flip leaves the prior selector intact and discards the partial root.
+
+    Mirrors ``publish_generation()``'s own rollback contract
+    (``_generation_publication.py``): the selector flip is the sole commit
+    point, so a failure during or after it must never leave the tree in a
+    state where a partially published generation looks selected, or where
+    the previously selected one stops resolving.
+    """
+    import autoskillit.workspace._projected_artifact._generation_publication as gen_pub
+    from autoskillit.core import resolve_current_generation
+
+    first = _publish_install_root(home, "1.0.0")
+
+    real_replace_symlink = gen_pub._replace_symlink
+    call_count = 0
+
+    def _flaky_replace_symlink(path: Path, target: Path) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise OSError("simulated flip failure")
+        real_replace_symlink(path, target)
+
+    monkeypatch.setattr(gen_pub, "_replace_symlink", _flaky_replace_symlink)
+
+    with pytest.raises(OSError, match="simulated flip failure"):
+        _publish_install_root(home, "1.0.1")
+
+    assert resolve_current_generation(home, _INSTALL_ROOT_REF, "1.0.0") == first.managed_path, (
+        "the prior selector must still resolve after a failed flip"
+    )
+    version_root = home / ".autoskillit" / "plugin-generations" / "autoskillit-install" / "1.0.1"
+    remaining = (
+        [p for p in version_root.iterdir() if not p.is_symlink()] if version_root.is_dir() else []
+    )
+    assert remaining == [], (
+        f"the partially published 1.0.1 generation must be discarded, found: {remaining}"
+    )
+
+
+def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:
+    """T-C8: a held shared lease defers reclaim regardless of grace or supersession.
+
+    The same gate as ``core/_plugin_cache.py``'s ``try_reclaim`` — exercised
+    here specifically for the ``INSTALL_ROOT_GENERATION`` routing kind, which
+    ``prune_stale_generations``/``GenerationArtifactRetirementOwner`` must
+    honor identically to the plugin-generation kind they were built for.
+    """
+    from autoskillit.core import (
+        due_retiring_records,
+    )
+    from autoskillit.core._plugin_artifact_identity import (
+        installed_plugin_artifact_lease_path,
+    )
+    from autoskillit.core.runtime.artifact_lease import ArtifactLease
+    from autoskillit.workspace import GenerationArtifactRetirementOwner
+
+    old = _publish_install_root(home, "1.0.0")
+    held_lease = ArtifactLease.acquire_existing_shared(
+        installed_plugin_artifact_lease_path(old.managed_path)
+    )
+    try:
+        _publish_install_root(home, "1.0.1")
+
+        owner = GenerationArtifactRetirementOwner(
+            home / ".autoskillit" / "plugin-generations" / "autoskillit-install",
+            home=home,
+            plugin_ref=_INSTALL_ROOT_REF,
+            artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+        )
+        far_future = datetime.now(UTC) + timedelta(hours=1)
+        enqueued = owner.enqueue_retirement(old, not_before=far_future)
+        assert enqueued.created
+
+        past_due = datetime.now(UTC) + timedelta(hours=2)
+        (record,) = [
+            r for r in due_retiring_records(past_due) if r.record_id == enqueued.record_id
+        ]
+
+        assert owner.try_reclaim(record, past_due) is RetirementOutcome.DEFERRED_CONTENDED
+        assert old.managed_path.is_dir()
+
+        held_lease.close()
+        assert owner.try_reclaim(record, past_due) is RetirementOutcome.RECLAIMED
+        assert not old.managed_path.exists()
+    finally:
+        if not held_lease.closed:
+            held_lease.close()
+
+
+# ---------------------------------------------------------------------------
 # The version-independent selector Codex pins
 # ---------------------------------------------------------------------------
 

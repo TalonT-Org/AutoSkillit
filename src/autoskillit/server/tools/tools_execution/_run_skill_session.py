@@ -82,9 +82,6 @@ def _mint_fresh_explorer_binding(
 
 
 def _prepare_dispatch_session(state: _RunSkillDispatchState) -> str | None:
-    # Narrow the widened Optional state fields this phase reads: each was set by
-    # an earlier phase (dispatch/prepare) and is guaranteed present by the time
-    # dispatch reaches session (see the equivalent note in _run_skill_finalize.py).
     assert state.resolved_command is not None
     assert state.write_watch_dirs is not None
     assert state._contract_store is not None

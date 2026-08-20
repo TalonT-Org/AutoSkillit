@@ -43,10 +43,6 @@ async def _execute_and_finalize_run_skill(state: _RunSkillDispatchState) -> str:
         state.contract_lifecycle.observe_candidate(candidate_session_id)
 
     state._start = time.monotonic()
-    # Narrow the widened Optional state fields this phase reads: each was set by
-    # an earlier phase (prepare/session) and is guaranteed present by the time
-    # dispatch reaches finalize (D7's widening trades a loud AttributeError for a
-    # silent wrong default only on a mistyped field name, not on ordinary reads).
     assert state._cfg is not None
     assert state.tool_ctx.executor is not None
     assert state.resolved_command is not None

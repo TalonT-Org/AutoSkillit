@@ -95,6 +95,7 @@ if TYPE_CHECKING:
     from autoskillit.server.tools._native_shell_capture._lineage import (
         SkillNativeShellLineagePreparation,
     )
+    from autoskillit.server.tools.tools_execution import _ExplorerLaunchLease
 
 
 @dataclass(slots=True, kw_only=True)
@@ -135,7 +136,7 @@ class _RunSkillDispatchState:
     _tracker_lease: ArtifactLease | None
     _cleanup_session_id: str | None
     _explorer_parent_identity: tuple[Path, str] | None
-    _explorer_launch_lease: Any  # _ExplorerLaunchLease | None (defined in tools_execution.py)
+    _explorer_launch_lease: _ExplorerLaunchLease | None
 
     # --- Resolved contracts (execution + audit/preflight) ---
     _installed_execution: InstalledRecipeExecution | None

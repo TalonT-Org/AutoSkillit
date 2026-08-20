@@ -106,11 +106,6 @@ class MaintenanceSubprocessInvocation:
     environment, a validated working directory, and an explicit stdio
     capture disposition — so a spawn site cannot supply argv without env,
     env without a validated cwd, or leave stdio to inherit by omission.
-    This is *Introduce Parameter Object* applied to a process invocation,
-    the same shape ``subprocess.Popen``'s ecosystem peers converge on
-    (Java's ``ProcessBuilder``, Rust's ``std::process::Command``, Go's
-    ``exec.Cmd`` all bundle program + args + cwd + env + stdio together).
-
     Argv shape is NOT uniform across callers — a ``--version`` probe and a
     full ``install --maintenance-update`` invocation build different argv —
     so this type does not itself construct argv from a single template.

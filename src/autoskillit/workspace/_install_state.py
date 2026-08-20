@@ -366,10 +366,7 @@ def _derived_version_findings(package_version: str) -> list[InstallStateFinding]
     return findings
 
 
-def _enqueue_legacy_installed_plugin_versions(
-    artifact: Path,
-    home: ManagedHome,
-) -> None:
+def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
     """Enqueue every version subdirectory of the legacy Claude-cache root.
 
     Best-effort per candidate: a version directory that fails to validate or
@@ -380,12 +377,11 @@ def _enqueue_legacy_installed_plugin_versions(
 
     running_version = importlib.metadata.version("autoskillit")
     running_generation = resolve_current_generation(
-        home.root,
+        _home(),
         _AUTOSKILLIT_PLUGIN_KEY,
         running_version,
     )
     engine = PluginArtifactRetirementEngine(
-        home=home,
         managed_root=artifact,
         artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
         manifest_path=installed_plugin_artifact_manifest_path,
@@ -467,46 +463,14 @@ def _legacy_uv_tool_root_evidence_path(artifact: Path) -> Path:
     return artifact.parent / f".{artifact.name}.autoskillit-legacy-retirement.json"
 
 
-def _enqueue_legacy_uv_tool_root(artifact: Path, home: ManagedHome) -> None:
-    """Remove the pre-Phase-3 shared uv tool root once its content is provably idle.
+def _enqueue_legacy_uv_tool_root(artifact: Path) -> None:
+    """Retire a legacy shared uv root after 30 days with an unchanged digest.
 
-    Unlike the legacy Claude-cache tree above, this directory is uv's own venv —
-    materialized directly by ``uv tool install`` before Phase 3 introduced
-    generation-keyed publication — so it was never one of our manifest-bearing
-    incarnations and carries no lease a live pre-upgrade process could hold:
-    ``_acquire_self_lease()`` (``core/_install_binding.py``) is explicit that a
-    legacy shared-root process "has nothing to lease here." The only available
-    liveness signal is whether the tree's content is still changing — a
-    still-running interpreter lazily importing modules keeps writing fresh
-    ``__pycache__`` entries into it, which changes its digest.
-
-    This records a content digest plus a first-observed-stable timestamp in a
-    sidecar next to the artifact and only removes the tree once that exact
-    digest has been observed, unchanged, across a full grace window. Any
-    digest change resets the window rather than ever authorizing deletion —
-    fail-closed by construction, the same mtime-grace idiom
-    ``_sweep_orphaned_staging`` uses for abandoned publish staging directories.
-
-    **This is a heuristic, not a liveness guarantee, and the grace window is
-    deliberately long (30 days, not the 24-hour generation-retirement grace)
-    to reflect that.** Unlike the lease-gated retirement engine everywhere
-    else in this system, a digest that stops changing does not prove nothing
-    references the tree — a live process that is simply idle (imports
-    everything it needs at startup, then makes no further imports) looks
-    identical to a dead one by this signal alone. Reintroducing that failure
-    mode is exactly what issue #4597 exists to eliminate, so this path is
-    scoped narrowly: it only ever touches the one, one-time, pre-Phase-3
-    migration artifact, and the long window plus C-8's operational
-    recommendation (pin to release tags, upgrade deliberately) are the
-    accepted mitigation rather than a fresh liveness-detection subsystem for
-    a shape nothing will create again after this migration completes.
-
-    The ``home`` argument is unused but accepted for type compatibility with
-    ``_RETIRE_VIA_ENGINE_HANDLERS: Callable[[Path, ManagedHome], None]`` —
-    the handler does not need ManagedHome-bound paths because the artifact
-    argument is the resolved legacy shared root.
+    Legacy roots have no reader lease, so digest stability is only a migration
+    heuristic, not proof that no idle process still references the tree. Any
+    content change resets the grace window before deletion is considered.
     """
-    del home  # type-compatibility shim only; handler does not need ManagedHome
+
     evidence_path = _legacy_uv_tool_root_evidence_path(artifact)
     try:
         digest = directory_tree_digest(artifact, allow_symlinks=True)
@@ -580,7 +544,7 @@ def _enqueue_legacy_uv_tool_root(artifact: Path, home: ManagedHome) -> None:
     )
 
 
-_RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path, ManagedHome], None]] = {
+_RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path], None]] = {
     ".claude/plugins/cache/autoskillit-local/autoskillit": (
         _enqueue_legacy_installed_plugin_versions
     ),
@@ -631,7 +595,7 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
                     f"no retire_via_engine handler registered for {key!r} — "
                     "add one to _RETIRE_VIA_ENGINE_HANDLERS in this module"
                 )
-            handler(artifact, resolved_home)
+            handler(artifact)
             logger.info(
                 "reconcile_install_artifacts: %s enqueued for engine-gated retirement "
                 "(retired in %s, disposition=%s)",

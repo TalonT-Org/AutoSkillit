@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import StrEnum
@@ -171,8 +171,12 @@ class UpgradeCommand:
     real git-sourced install.
     """
 
-    argv: list[str]
+    argv: Sequence[str]
     env: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "argv", tuple(self.argv))
+        object.__setattr__(self, "env", MappingProxyType(dict(self.env)))
 
 
 def upgrade_command(

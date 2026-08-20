@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import FaultDomain
 from autoskillit.core import FleetErrorCode as FEC
 from autoskillit.fleet.state_recovery import has_failed_dispatch
 from autoskillit.fleet.state_types import CampaignState, DispatchRecord, DispatchStatus
@@ -39,15 +40,12 @@ class TestTimeoutIsInfrastructureFailure:
 class TestAllFleetErrorCodesHaveCategory:
     def test_all_fleet_error_codes_have_infrastructure_or_logic_category(self):
         """Every FleetErrorCode must have an explicit infrastructure/logic classification."""
-        from autoskillit.fleet.state_types import (
-            ErrorCodeCategory,
-            get_error_category,
-        )
+        from autoskillit.fleet.state_types import get_error_category
 
         for code in FEC:
             if code.startswith("fleet_"):
                 category = get_error_category(code)
                 assert category in (
-                    ErrorCodeCategory.INFRASTRUCTURE,
-                    ErrorCodeCategory.LOGIC,
+                    FaultDomain.INFRASTRUCTURE,
+                    FaultDomain.LOGIC,
                 ), f"{code} has no explicit category"

@@ -115,8 +115,8 @@ class FaultDomain(StrEnum):
     question. An ``infrastructure_fault`` result has ``exit_category=""``;
     an existing rate-limited/API-error result has the default
     ``fault_domain=LOGIC``. Uses the same two string values as
-    ``fleet.state_types.ErrorCodeCategory`` so the two layers share one
-    vocabulary rather than drifting into two.
+    fleet error categorization imports this enum directly so both layers use
+    one authority.
     """
 
     LOGIC = "logic"

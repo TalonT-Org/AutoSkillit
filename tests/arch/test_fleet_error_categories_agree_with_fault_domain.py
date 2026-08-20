@@ -1,12 +1,4 @@
-"""Cross-layer agreement between ``FaultDomain`` and fleet ``ErrorCodeCategory``.
-
-``autoskillit.core.types.FaultDomain`` (populated at IL-0 exception-classification
-sites via ``InfrastructureFaultError``) and ``autoskillit.fleet.state_types.
-ErrorCodeCategory`` (populated at the fleet layer via ``_ERROR_CODE_CATEGORIES``)
-are two independent taxonomies answering the same infrastructure-vs-logic
-question at different layers. Nothing in the type system forces them to stay
-in lexical or semantic agreement — this file is that guard.
-"""
+"""Cross-layer agreement between infrastructure exceptions and fleet categories."""
 
 from __future__ import annotations
 
@@ -18,27 +10,9 @@ from autoskillit.core import (
     InfrastructureFaultError,
     ProcessStaleError,
 )
-from autoskillit.fleet.state_types import ErrorCodeCategory, get_error_category
+from autoskillit.fleet.state_types import get_error_category
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
-
-
-def test_fault_domain_and_error_code_category_share_string_values() -> None:
-    """FaultDomain and ErrorCodeCategory must use the identical string vocabulary.
-
-    Both enums independently declare LOGIC/INFRASTRUCTURE members with the
-    same string values ("logic" / "infrastructure") rather than one importing
-    the other. This test is the lexical tripwire: if either enum's member
-    values drift (renamed, respelled, or a new member added to only one
-    side), this fails immediately instead of the two taxonomies silently
-    diverging into separate vocabularies.
-    """
-    fault_domain_values = {member.value for member in FaultDomain}
-    error_code_category_values = {member.value for member in ErrorCodeCategory}
-
-    assert fault_domain_values == {"logic", "infrastructure"}
-    assert error_code_category_values == {"logic", "infrastructure"}
-    assert fault_domain_values == error_code_category_values
 
 
 # Confirmed exception<->FleetErrorCode correspondences. Populated only with
@@ -60,7 +34,7 @@ _CONFIRMED_INFRASTRUCTURE_FAULT_PAIRS: list[tuple[type[Exception], FleetErrorCod
 def test_infrastructure_fault_error_subclasses_agree_with_fleet_categorization(
     exception_type: type[Exception], fleet_error_code: FleetErrorCode
 ) -> None:
-    """IL-0 InfrastructureFaultError classification must agree with fleet ErrorCodeCategory.
+    """IL-0 InfrastructureFaultError classification must agree with fleet categorization.
 
     ``tests/fleet/test_error_code_categorization.py::TestAllFleetErrorCodesHaveCategory``
     only asserts every ``FleetErrorCode`` has *some* explicit category — it says
@@ -80,4 +54,4 @@ def test_infrastructure_fault_error_subclasses_agree_with_fleet_categorization(
     anything the fleet layer has no code for.
     """
     assert issubclass(exception_type, InfrastructureFaultError)
-    assert get_error_category(fleet_error_code) is ErrorCodeCategory.INFRASTRUCTURE
+    assert get_error_category(fleet_error_code) is FaultDomain.INFRASTRUCTURE

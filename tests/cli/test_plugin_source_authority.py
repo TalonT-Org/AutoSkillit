@@ -536,3 +536,81 @@ class TestInstalledPluginArtifactAuthority:
                 backend=object(),
                 load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )
+
+    def test_stale_generator_reaches_self_heal(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Phase 1 (issue #4597), A-9: the freshness probe now runs *inside*
+        the ``try`` guarding the generation-dir branch, and the ``except``
+        clause was widened to ``InfrastructureFaultError`` — so a
+        ``StaleGeneratorError`` the probe raises (it is an
+        ``InfrastructureFaultError`` subclass) is caught and routed into
+        ``_self_heal_republish()`` instead of propagating uncaught.
+
+        Reaching that branch at all requires ``generation_dir is not None``
+        (see ``resolve_current_generation``), so this test plants a real
+        ``current`` selector in the generation store before calling
+        ``acquire_launch_binding``. ``assert_generator_process_fresh`` is
+        monkeypatched on ``autoskillit.workspace`` — the package attribute the
+        method's deferred ``from autoskillit.workspace import
+        assert_generator_process_fresh`` re-resolves on every call, not a name
+        cached in ``_plugin_artifact``'s own module namespace, which is why
+        patching there would not be observed. ``_self_heal_republish`` is
+        monkeypatched on the authority instance to hand back a *separately*,
+        genuinely published installed root, so the resumed
+        ``_acquire_from_root`` call has something real to lease and validate
+        without exercising the real republish machinery (which re-imports its
+        own ``pkg_root`` binding at call time — irrelevant here since the
+        method itself is replaced).
+        """
+        from unittest.mock import Mock
+
+        import autoskillit.workspace as workspace_pkg
+        from autoskillit.cli._plugin_artifact import (
+            InstalledPluginArtifactAuthority,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import PluginLoadMode, StaleGeneratorError
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        version = "1.2.3"
+        root = _installed_root(tmp_path, version)
+        semantic_key = "autoskillit@autoskillit-local:1.2.3"
+
+        # A current generation must exist, or acquire_launch_binding takes the
+        # no-generation-store legacy fallback, which never runs the probe.
+        gen_version_root = (
+            tmp_path / ".autoskillit" / "plugin-generations" / "autoskillit" / version
+        )
+        stale_generation = gen_version_root / "stale-incarnation"
+        stale_generation.mkdir(parents=True)
+        (gen_version_root / "current").symlink_to(stale_generation)
+
+        # A genuinely published installed root standing in for what a real
+        # self-heal republish would produce.
+        healed_root = tmp_path / "healed-generation" / version
+        healed_root.mkdir(parents=True)
+        (healed_root / "plugin.json").write_text("healed content")
+        publish_installed_plugin_artifact(healed_root, semantic_key=semantic_key)
+
+        def raise_stale() -> None:
+            raise StaleGeneratorError("test")
+
+        monkeypatch.setattr(workspace_pkg, "assert_generator_process_fresh", raise_stale)
+
+        authority = InstalledPluginArtifactAuthority(root, semantic_key=semantic_key)
+        heal_mock = Mock(return_value=healed_root)
+        monkeypatch.setattr(authority, "_self_heal_republish", heal_mock)
+
+        binding = authority.acquire_launch_binding(
+            backend=object(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        try:
+            heal_mock.assert_called_once_with()
+            assert binding.plugin_dir == healed_root
+            assert not binding.closed
+        finally:
+            binding.close()

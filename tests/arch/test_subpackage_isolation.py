@@ -1014,7 +1014,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 21,  # +session_index strict byte-bounded retained-index reads (#4514)
         # +evidence_reader sterile reader lifecycle (#4585)
         # +agent_definition native-role authority (#4443).
-        "core": 32,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
+        "core": 33,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
@@ -1022,6 +1022,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         "core/types": 56,
+
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1281,7 +1282,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
     ),
     "fleet/_api.py": (
-        1590,
+        1595,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them. Bumped to 1200 by the "
@@ -1292,7 +1293,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
         "shell lineage decision and provenance snapshot remain on the same dispatch "
         "transaction boundary after conflict resolution. Bumped to 1590 for shared "
-        "tracker-authority retention and cleanup on every dispatch outcome boundary.",
+        "tracker-authority retention and cleanup on every dispatch outcome boundary. "
+        "Bumped to 1595 for #4597 rectify: warm_failure_path_imports() call at the "
+        "fleet-dispatch entry point, one of the three self-invocation entry points "
+        "this mid-session-upgrade-immunity fix warms.",
     ),
     "server/_recipe_delivery.py": (
         750,

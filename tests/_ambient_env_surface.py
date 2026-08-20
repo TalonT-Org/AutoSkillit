@@ -539,7 +539,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "The `env_var` function parameter of _resolve_int() is supplied dynamically per caller;"
         "not a module-level literal or resolvable constant."
     ),
-    "server/_guards.py:361": (
+    "server/_guards.py:401": (
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
@@ -579,7 +579,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
-    "cli/update/_transaction.py:350": (
+    "cli/update/_transaction.py:354": (
         "Unfiltered dict(os.environ if base_env is None else base_env) snapshot captured for"
         "update-transaction diagnostics/rollback comparison, not for a spawned child process."
     ),

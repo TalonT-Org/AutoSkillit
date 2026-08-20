@@ -95,6 +95,7 @@ class TestModuleCascadeCore:
             "feature_flags",
             "branch_guard",
             "_plugin_ids",
+            "_startup_warm",
             "_terminal_table",
             "_plugin_artifact_identity",
             "_plugin_cache",

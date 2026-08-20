@@ -90,6 +90,40 @@ def _grant_success_credit(tool_ctx, tmp_path, step_name, pipeline_id="test-kitch
     )
 
 
+def _seed_acknowledged_receipt(tool_ctx, *, fault_domain, step_name="seed-step"):
+    """Drive one begin/draft/publish/acknowledge cycle, untethered to any tracker.
+
+    Used by infrastructure-fault-gate tests that only need
+    ``most_recent_acknowledged()`` to reflect a receipt of a given
+    ``fault_domain`` — not a real tracker-bound success credit.
+    """
+    authority = tool_ctx.run_skill_completion
+    assert authority is not None
+    invocation_id = authority.begin(
+        kitchen_id=tool_ctx.kitchen_id,
+        request_session_id="request-session",
+        tracker_order_id="",
+        tracker_path="",
+        tracker_kitchen_id="",
+        tracker_incarnation_id="",
+        step_name=step_name,
+    )
+    is_infrastructure = fault_domain == "infrastructure"
+    receipt = authority.draft(
+        invocation_id,
+        classification="failed" if is_infrastructure else "success",
+        success=not is_infrastructure,
+        result_digest="digest",
+        fault_domain=fault_domain,
+    )
+    authority.publish(receipt.receipt_id)
+    return authority.acknowledge(
+        receipt.receipt_id,
+        kitchen_id=tool_ctx.kitchen_id,
+        request_session_id="request-session",
+    )
+
+
 def _ack_direct_run_skill_result(tool_ctx, payload):
     """Simulate the outer delivery boundary for a directly called handler."""
     from autoskillit.core import TrackerAuthorityTarget

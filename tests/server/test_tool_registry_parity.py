@@ -147,6 +147,7 @@ def test_recipe_delivery_tool_classifications_are_exact() -> None:
                 "fail_label",
                 "close_issue",
                 "step_name",
+                "infrastructure_fault_override_reason",
             ),
         ),
     ],

@@ -477,9 +477,14 @@ def test_expected_version_present_uses_full_verification(
             "--maintenance-update",
             "--expected-version",
             "1.1.0",
+            "--require-registered-plugin",
         ],
     ]
-    assert captured_kwargs[1]["env"] == {"HOME": str(home)}
+    assert captured_kwargs[1]["env"] == {
+        "HOME": str(home),
+        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+    }
 
 
 def test_mismatched_generation_identity_keeps_obligation(
@@ -610,6 +615,7 @@ def test_unknown_version_probes_then_verifies_exact_state(
             "--maintenance-update",
             "--expected-version",
             "1.1.0",
+            "--require-registered-plugin",
         ],
     ]
 
@@ -1001,7 +1007,9 @@ def test_valid_obligation_probe_first_then_install_clears(
 
     assert result.outcome is m.ObligationRepairOutcome.CLEARED
     assert read_obligation(tmp_path) is None
-    # Probe FIRST, install SECOND; install carries --expected-version 1.1.0.
+    # Probe FIRST, install SECOND; install carries --expected-version 1.1.0
+    # and --require-registered-plugin (obligation-repair always asks for
+    # republication — the reason it runs at all).
     assert calls == [
         [str(Path("autoskillit")), "--version"],
         [
@@ -1010,6 +1018,7 @@ def test_valid_obligation_probe_first_then_install_clears(
             "--maintenance-update",
             "--expected-version",
             "1.1.0",
+            "--require-registered-plugin",
         ],
     ]
 

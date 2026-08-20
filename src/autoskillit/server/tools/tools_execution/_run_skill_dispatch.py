@@ -143,7 +143,6 @@ async def run_skill(
 
     Never raises.
     """
-    warm_failure_path_imports()
     if (tier_gate := _require_orchestrator_exact("run_skill")) is not None:
         return tier_gate
     if (gate := _require_enabled()) is not None:
@@ -184,6 +183,7 @@ async def run_skill(
         is not None
     ):
         return _plan_path_denial
+    warm_failure_path_imports()
     state: _RunSkillDispatchState | None = None
     try:
         from autoskillit.server import _get_ctx  # circular-break

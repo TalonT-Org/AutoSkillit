@@ -1183,6 +1183,7 @@ class TestBuildSkillResultCrossValidation:
         "audit_attempt_id",
         "infra_exit_category",
         "infra_cleanup_incomplete",
+        "infra_fault_domain",
         "api_retry_count",
         "api_retry_last_error",
         "api_retry_last_status",
@@ -2792,6 +2793,288 @@ class TestCrashSessionLog:
             call_kwargs = mock_logger.error.call_args
             assert call_kwargs[1].get("exc_info")
             assert result.success is False
+
+
+class TestInfrastructureFaultClassification:
+    """First-attempt InfrastructureFaultError is classified as infrastructure_fault,
+    distinctly from an ordinary crash — regression guard for issue #4597.
+
+    Extends the raising_runner pattern from TestCrashSessionLog: instead of raising
+    from the runner itself, the fault is raised from plugin_authority.acquire_launch_binding,
+    which _run_headless_attempt calls before ever invoking the runner.
+    """
+
+    @pytest.mark.anyio
+    async def test_stale_generator_is_classified_as_infrastructure_not_crash(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
+        """A StaleGeneratorError acquiring the launch binding yields infrastructure_fault."""
+        from autoskillit.core import FaultDomain, StaleGeneratorError
+        from autoskillit.execution.headless import run_headless_core
+
+        def raising_acquire(*args: object, **kwargs: object) -> None:
+            raise StaleGeneratorError("generator install is stale")
+
+        monkeypatch.setattr(tool_ctx.plugin_authority, "acquire_launch_binding", raising_acquire)
+
+        skill_result = await run_headless_core(
+            "/investigate test", cwd=str(tmp_path), ctx=tool_ctx
+        )
+
+        assert skill_result.success is False
+        assert skill_result.subtype == "infrastructure_fault"
+        assert skill_result.infra.fault_domain is FaultDomain.INFRASTRUCTURE
+        assert skill_result.needs_retry is False
+        assert "StaleGeneratorError" in skill_result.result
+
+    @pytest.mark.anyio
+    async def test_plain_runtime_error_at_same_site_still_classified_as_crashed(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
+        """An ordinary RuntimeError at the identical call site stays a logic crash.
+
+        Companion to test_stale_generator_is_classified_as_infrastructure_not_crash:
+        proves the new InfrastructureFaultError handler doesn't over-broadly
+        reclassify ordinary crashes raised from the same acquisition call.
+        """
+        from autoskillit.core import FaultDomain
+        from autoskillit.execution.headless import run_headless_core
+
+        def raising_acquire(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("acquisition failed for a mundane reason")
+
+        monkeypatch.setattr(tool_ctx.plugin_authority, "acquire_launch_binding", raising_acquire)
+
+        skill_result = await run_headless_core(
+            "/investigate test", cwd=str(tmp_path), ctx=tool_ctx
+        )
+
+        assert skill_result.success is False
+        assert skill_result.subtype == "crashed"
+        assert skill_result.infra.fault_domain is FaultDomain.LOGIC
+        assert "RuntimeError" in skill_result.result
+
+
+class TestInfrastructureFaultHandlerPrecedence:
+    """AST-based structural guard over the launch-attempt call graph.
+
+    Every ``except InfrastructureFaultError`` handler must precede any
+    ``except Exception``/``except BaseException`` handler in the same try, and
+    must either bare-raise or construct an infrastructure_fault SkillResult — never
+    silently swallow. The call graph is traced outward from _execute_claude_headless
+    (not hardcoded) so a handler added to a NEW function later cannot silently
+    escape the check — "scoping this to one function is the trap".
+    """
+
+    def test_infrastructure_fault_catch_precedes_generic_except(self) -> None:
+        import ast
+        import inspect
+        import textwrap
+
+        from autoskillit.execution.headless import _headless_execute as hx_module
+        from autoskillit.execution.headless import _headless_launch as hl_module
+
+        def _source(func: object) -> str:
+            return textwrap.dedent(inspect.getsource(func))  # type: ignore[arg-type]
+
+        def _called_names(func: object) -> set[str]:
+            """Direct call targets referenced anywhere in func's body.
+
+            Covers plain Name calls (e.g. _attempt_contract_nudge(...)) and
+            single-level Attribute calls on a module alias (e.g. _diag.log_launch(...)).
+            """
+            tree = ast.parse(_source(func))
+            names: set[str] = set()
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                target = node.func
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+                elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+                    names.add(f"{target.value.id}.{target.attr}")
+            return names
+
+        def _resolve(name: str, module: object) -> object | None:
+            if "." in name:
+                base, attr = name.split(".", 1)
+                base_obj = getattr(module, base, None)
+                if base_obj is None or not inspect.ismodule(base_obj):
+                    return None
+                return getattr(base_obj, attr, None)
+            return getattr(module, name, None)
+
+        # BFS the call graph starting at _execute_claude_headless, staying inside the
+        # autoskillit.execution.headless package. Nothing here names _headless_launch,
+        # _run_headless_attempt, or _attempt_contract_nudge as a fixed target — they
+        # are discovered because _execute_claude_headless calls them.
+        start = hx_module._execute_claude_headless
+        visited: dict[str, object] = {f"{start.__module__}.{start.__qualname__}": start}
+        queue: list[tuple[object, object]] = [(start, hx_module)]
+        while queue:
+            func, home_module = queue.pop()
+            for name in _called_names(func):
+                resolved = (
+                    _resolve(name, home_module)
+                    or _resolve(name, hx_module)
+                    or _resolve(name, hl_module)
+                )
+                if resolved is None or not (
+                    inspect.isfunction(resolved) or inspect.iscoroutinefunction(resolved)
+                ):
+                    continue
+                module_name = getattr(resolved, "__module__", "") or ""
+                if not module_name.startswith("autoskillit.execution.headless"):
+                    continue
+                key = f"{module_name}.{resolved.__qualname__}"
+                if key in visited:
+                    continue
+                visited[key] = resolved
+                target_module = inspect.getmodule(resolved) or home_module
+                queue.append((resolved, target_module))
+
+        assert hl_module._attempt_contract_nudge.__qualname__ in {
+            k.rsplit(".", 1)[-1] for k in visited
+        }, "call-graph trace must reach _attempt_contract_nudge from _execute_claude_headless"
+
+        def _handler_kind(handler: ast.ExceptHandler) -> str | None:
+            if handler.type is None:
+                return "bare"
+            if isinstance(handler.type, ast.Name):
+                return handler.type.id
+            if isinstance(handler.type, ast.Attribute):
+                return handler.type.attr
+            return None
+
+        def _handler_is_safe(handler: ast.ExceptHandler) -> bool:
+            """Bare re-raise, or constructs an infrastructure_fault SkillResult."""
+            for stmt in ast.walk(handler):
+                if isinstance(stmt, ast.Raise) and stmt.exc is None and stmt.cause is None:
+                    return True
+                if (
+                    isinstance(stmt, ast.Call)
+                    and isinstance(stmt.func, ast.Attribute)
+                    and stmt.func.attr == "infrastructure_fault"
+                ):
+                    return True
+            return False
+
+        checked_sites: list[str] = []
+        for key, func in visited.items():
+            tree = ast.parse(_source(func))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Try):
+                    continue
+                kinds = [_handler_kind(h) for h in node.handlers]
+                if "InfrastructureFaultError" not in kinds:
+                    continue
+                infra_index = kinds.index("InfrastructureFaultError")
+                broad_indices = [
+                    i for i, k in enumerate(kinds) if k in ("Exception", "BaseException")
+                ]
+                for broad_index in broad_indices:
+                    assert infra_index < broad_index, (
+                        f"{key}: except InfrastructureFaultError at handler {infra_index} "
+                        f"must precede the broad except at handler {broad_index} "
+                        f"(line {node.handlers[broad_index].lineno})"
+                    )
+                infra_handler = node.handlers[infra_index]
+                assert _handler_is_safe(infra_handler), (
+                    f"{key}: except InfrastructureFaultError handler at line "
+                    f"{infra_handler.lineno} must bare-raise or build an "
+                    f"infrastructure_fault SkillResult, not swallow the fault"
+                )
+                checked_sites.append(f"{key}:{node.lineno}")
+
+        # Verified handler inventory (issue #4597 phase 1): the first-attempt try in
+        # _execute_claude_headless (3 handlers: InfrastructureFaultError, Exception,
+        # BaseException), the nudge-attempt try and the clone-guard try in
+        # _execute_claude_headless (each: InfrastructureFaultError, BaseException),
+        # and _attempt_contract_nudge's own try (OSError, InfrastructureFaultError,
+        # Exception) — 4 sites total.
+        assert len(checked_sites) == 4, (
+            f"expected 4 except-InfrastructureFaultError sites on the traced launch "
+            f"call graph, found {len(checked_sites)}: {checked_sites}"
+        )
+
+
+class TestNudgeInfrastructureFaultPropagation:
+    """Behavioral companion to TestInfrastructureFaultHandlerPrecedence.
+
+    Drives the nudge branch (needs_retry + retry_reason=CONTRACT_RECOVERY) and proves
+    an InfrastructureFaultError raised while acquiring the nudge's own plugin binding
+    propagates out of run_headless_core rather than being silently absorbed back into
+    the prior attempt's needs_retry result.
+    """
+
+    @pytest.mark.anyio
+    async def test_nudge_path_does_not_swallow_infrastructure_fault(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
+        from autoskillit.core import FaultDomain, RetryReason, SkillResult, StaleGeneratorError
+        from autoskillit.core.types import KillReason
+        from autoskillit.execution.headless import run_headless_core
+        from autoskillit.execution.headless._headless_recovery import _PathHint
+
+        first_attempt_result = SkillResult(
+            success=False,
+            result="missing structured output token",
+            session_id="nudge-target-session",
+            subtype="empty_output",
+            is_error=False,
+            exit_code=0,
+            needs_retry=True,
+            retry_reason=RetryReason.CONTRACT_RECOVERY,
+            stderr="",
+            kill_reason=KillReason.NATURAL_EXIT,
+        )
+
+        def fake_build_skill_result(*args: object, **kwargs: object) -> SkillResult:
+            return first_attempt_result
+
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_execute._build_skill_result",
+            fake_build_skill_result,
+        )
+        # Force the nudge branch's hint extraction to succeed so _attempt_contract_nudge
+        # proceeds all the way to acquiring its own plugin binding, rather than
+        # short-circuiting to None on "no hints".
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_launch._extract_missing_token_hints",
+            lambda *a, **kw: [_PathHint("OUTPUT_PATH", "/tmp/nudge-output.txt")],
+        )
+
+        original_acquire = tool_ctx.plugin_authority.acquire_launch_binding
+        call_count = {"n": 0}
+
+        def flaky_acquire(*args: object, **kwargs: object):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # First attempt's own binding acquisition succeeds normally.
+                return original_acquire(*args, **kwargs)
+            # The nudge's own binding acquisition hits a stale install.
+            raise StaleGeneratorError("generator install is stale mid-nudge")
+
+        monkeypatch.setattr(tool_ctx.plugin_authority, "acquire_launch_binding", flaky_acquire)
+
+        with pytest.raises(StaleGeneratorError) as excinfo:
+            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
+
+        assert call_count["n"] == 2, (
+            "expected exactly two plugin-binding acquisitions: the first attempt and "
+            "the nudge attempt — the exception must be raised, not silently returned "
+            "as the prior attempt's needs_retry result"
+        )
+
+        # The exception escaping run_headless_core (rather than a stale SkillResult
+        # being returned) is the proof of "not silently kept". Downstream layers
+        # (server.tools_execution.run_skill) catch precisely this exception type and
+        # build the final SkillResult from it via the same production factory used
+        # at every other infrastructure_fault catch site.
+        final_skill_result = SkillResult.infrastructure_fault(exception=excinfo.value)
+        assert final_skill_result.subtype == "infrastructure_fault"
+        assert final_skill_result.infra.fault_domain is FaultDomain.INFRASTRUCTURE
+        assert final_skill_result.needs_retry is False
 
 
 class TestCancelledSessionLog:

@@ -117,4 +117,5 @@ def test_obligation_repair_e2e_clears_obligation_with_typed_argv(
         "--maintenance-update",
         "--expected-version",
         "1.1.0",
+        "--require-registered-plugin",
     ]

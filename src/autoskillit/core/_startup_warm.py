@@ -32,7 +32,11 @@ from __future__ import annotations
 
 import importlib
 
+from .logging import get_logger
+
 __all__ = ["WARM_MODULE_NAMES", "warm_failure_path_imports"]
+
+logger = get_logger(__name__)
 
 # The verified members of finding #13's set: modules reached by a
 # function-local `autoskillit` import on a genuine except/finally path (or,
@@ -73,4 +77,4 @@ def warm_failure_path_imports() -> None:
         try:
             importlib.import_module(name)
         except Exception:
-            pass
+            logger.debug("startup_warm_import_failed", module=name, exc_info=True)

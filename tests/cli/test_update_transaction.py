@@ -1216,7 +1216,13 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
         **kwargs: Any,
     ) -> subprocess.CompletedProcess[Any]:
         calls.append((list(cmd), kwargs))
-        assert set(kwargs) == {"check", "env", "cwd"}
+        # Call 1 is the upgrade-command spawn (unified env+cwd, stdio
+        # inherited by design). Call 2 is the install-child spawn via
+        # MaintenanceSubprocessInvocation, which also carries capture_output.
+        expected_kwargs = {"check", "env", "cwd"} | (
+            {"capture_output"} if len(calls) > 1 else set()
+        )
+        assert set(kwargs) == expected_kwargs
         assert kwargs["check"] is False
         if len(calls) == 1:
             return subprocess.CompletedProcess(cmd, 0)
@@ -1236,7 +1242,11 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
     assert len(calls) == 2
     upgrade_kwargs = calls[0][1]
     install_kwargs = calls[1][1]
-    assert upgrade_kwargs["env"] is install_kwargs["env"]
+    # MaintenanceSubprocessInvocation.for_install() re-derives env from the
+    # same sealed maintenance_env via build_maintenance_env() (idempotent,
+    # deterministic) rather than reusing the object — content equality is
+    # the load-bearing invariant here, not object identity.
+    assert upgrade_kwargs["env"] == install_kwargs["env"]
     assert upgrade_kwargs["cwd"] == install_kwargs["cwd"]
     maintenance_env = install_kwargs["env"]
     assert maintenance_env["HOME"] == str(home)

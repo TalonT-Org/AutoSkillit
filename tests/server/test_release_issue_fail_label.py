@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from autoskillit.server.tools.tools_issue_labels import claim_issue, release_issue
+from tests.server._pipeline_test_helpers import _seed_acknowledged_receipt
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -83,6 +84,34 @@ class TestReleaseIssueFailLabel:
         assert "in-progress" in swap_call.kwargs["remove_labels"]
         assert "fail" in swap_call.kwargs["remove_labels"]
         assert "queued" in swap_call.kwargs["remove_labels"]
+
+    @pytest.mark.anyio
+    async def test_release_issue_refuses_after_infrastructure_fault(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """release_issue refuses without an override once an infrastructure fault
+        has been acknowledged, and proceeds when an override reason is given."""
+        mock_client = AsyncMock()
+        mock_client.swap_labels.return_value = {"success": True, "labels": []}
+        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
+        _seed_acknowledged_receipt(tool_ctx_kitchen_open, fault_domain="infrastructure")
+
+        refused = json.loads(
+            await release_issue(issue_url="https://github.com/owner/repo/issues/42")
+        )
+        assert refused["success"] is False
+        assert refused["subtype"] == "gate_error"
+        assert "infrastructure" in refused["result"]
+        mock_client.swap_labels.assert_not_called()
+
+        proceeded = json.loads(
+            await release_issue(
+                issue_url="https://github.com/owner/repo/issues/42",
+                infrastructure_fault_override_reason="operator confirmed",
+            )
+        )
+        assert proceeded["success"] is True
+        mock_client.swap_labels.assert_called_once()
 
 
 class TestClaimIssueFailLabelCleanup:

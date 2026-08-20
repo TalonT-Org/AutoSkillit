@@ -22,10 +22,13 @@ from autoskillit.core import (
     ResolvedLaunchContract,
     SecretEnvironmentBinding,
     SemanticLaunchPlan,
+    get_logger,
     strip_context_window_suffix,
 )
 
 __all__ = ["DefaultLaunchResolver"]
+
+logger = get_logger(__name__)
 
 
 _DEFAULT_BACKEND_ALIASES = {
@@ -315,7 +318,15 @@ class DefaultLaunchResolver:
         if not model:
             return
         owners = self._native_model_owners(model)
-        if not owners or selected_backend in owners:
+        if not owners:
+            logger.info(
+                "model_backend_gate_degraded_open",
+                model=model,
+                selected_backend=selected_backend,
+                source=source.key_path,
+            )
+            return
+        if selected_backend in owners:
             return
         raise LaunchContractError(
             f"model {model!r} resolved from {source.key_path} is native to backend "

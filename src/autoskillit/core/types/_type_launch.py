@@ -200,12 +200,7 @@ class LaunchValueSource:
 
 @dataclass(frozen=True, slots=True)
 class ModelPinResolution:
-    """One resolved model value with its typed config origin.
-
-    Gives the model axis the provenance the backend axis already carries,
-    reusing the LaunchValueSource wrapper defined beside it rather than
-    BackendPinResolution's flat NamedTuple shape.
-    """
+    """One resolved model value with its typed config origin."""
 
     model: str
     source: LaunchValueSource

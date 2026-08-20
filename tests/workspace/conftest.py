@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+from autoskillit.workspace.skill_capabilities import _SkillCapabilityEvidenceCache
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
@@ -145,10 +146,10 @@ def codex_env():
 
 
 @pytest.fixture
-def evidence_cache(monkeypatch):
+def evidence_cache(monkeypatch) -> _SkillCapabilityEvidenceCache:
     import autoskillit.workspace.skill_capabilities as capabilities
 
-    cache = capabilities._SkillCapabilityEvidenceCache(
+    cache = _SkillCapabilityEvidenceCache(
         max_entries=32,
         max_bytes=1024 * 1024,
         max_input_bytes=64 * 1024,
@@ -161,10 +162,10 @@ def evidence_cache(monkeypatch):
 def make_evidence_cache(monkeypatch):
     """Factory fixture for tests that need a non-default cache size."""
 
-    def _factory(*, max_entries: int) -> object:
+    def _factory(*, max_entries: int) -> _SkillCapabilityEvidenceCache:
         import autoskillit.workspace.skill_capabilities as capabilities
 
-        cache = capabilities._SkillCapabilityEvidenceCache(
+        cache = _SkillCapabilityEvidenceCache(
             max_entries=max_entries,
             max_bytes=1024 * 1024,
             max_input_bytes=64 * 1024,

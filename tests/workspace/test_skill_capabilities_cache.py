@@ -160,13 +160,10 @@ def test_cold_and_warm_mixed_corpus_preserves_complete_evidence(
     assert len(scan_calls) == 1
 
 
-def test_entry_count_lru_refresh_and_eviction_are_deterministic(monkeypatch, scan_calls) -> None:
-    cache = capabilities._SkillCapabilityEvidenceCache(
-        max_entries=2,
-        max_bytes=1024 * 1024,
-        max_input_bytes=64 * 1024,
-    )
-    monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+def test_entry_count_lru_refresh_and_eviction_are_deterministic(
+    make_evidence_cache, scan_calls
+) -> None:
+    cache = make_evidence_cache(max_entries=2)
     documents = {
         name: _document(name, f"Plain content for {name}.") for name in ("alpha", "beta", "gamma")
     }

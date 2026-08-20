@@ -263,8 +263,7 @@ class DefaultRunSkillCompletionAuthority:
         with self._lock:
             if self._most_recent_acknowledged_id is None:
                 return None
-            acknowledged = self._acknowledged.get(self._most_recent_acknowledged_id)
-            return acknowledged.receipt if acknowledged is not None else None
+            return self._acknowledged[self._most_recent_acknowledged_id].receipt
 
     def apply_acknowledged_tracker_outcome(
         self,

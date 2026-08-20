@@ -171,33 +171,21 @@ def _publish_real_package_generation(
 ) -> PluginArtifactIdentity:
     """Publish one immutable install-root generation of the real autoskillit source.
 
-    Mirrors ``run_update_transaction()``'s ``INSTALL_ROOT_GENERATION_PUBLICATION``
-    phase (``cli/update/_transaction.py``) precisely: a disposable probe
-    install into a fresh staging location (discarded, exists only because a
-    real caller would not yet know ``version``), then a second, near-free
-    install (uv's local cache makes a repeat install of the same resolved
-    source nearly instant) writing the real, permanent copy directly at its
-    version+incarnation-keyed destination — never renamed afterward.
+    Writes the permanent copy directly at its version-and-incarnation-keyed
+    destination, matching the post-version-probe publication path.
     """
     from autoskillit.core import (
         _InstallLock,
         generation_artifact_root,
-        generation_staging_root,
         installed_plugin_semantic_key,
         new_plugin_artifact_incarnation_id,
     )
     from autoskillit.workspace import publish_install_root_generation
 
     incarnation_id = new_plugin_artifact_incarnation_id()
-    staging = generation_staging_root(scratch_home, install_ref) / incarnation_id
-    staging.mkdir(parents=True, exist_ok=True)
-    _run_uv_generation_install(source_root, staging, python_pin, env)
-
     generation_root = generation_artifact_root(scratch_home, install_ref, version, incarnation_id)
     generation_root.parent.mkdir(parents=True, exist_ok=True)
     _run_uv_generation_install(source_root, generation_root, python_pin, env)
-
-    shutil.rmtree(staging, ignore_errors=True)
 
     with _InstallLock():
         return publish_install_root_generation(

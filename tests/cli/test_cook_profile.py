@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +22,8 @@ from autoskillit.core import (
     RepositoryProfileId,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
     SkillSource,
     ValidatedAddDir,
     pkg_root,
@@ -32,6 +35,10 @@ from autoskillit.workspace import (
     SkillCatalogEntry,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
+from tests.contracts.test_skill_admission_ledger import (
+    COOK_SESSION_COMBINATION,
+    SKILL_ADMISSION_LEDGER,
+)
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -257,16 +264,12 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
     assert "anthropic" in err or "openai" in err
 
 
-def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.core import (
-        CookSessionHandle,
-        HookTrustPolicy,
-        ManagedSessionHome,
-        ValidatedAddDir,
-    )
-
+def _run_finalized_profile_cook(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    skill_adapter: Callable[[SkillSemanticPlan], SkillSemanticAdaptationResult],
+) -> tuple[dict[str, object], Path, MagicMock]:
     generated_home = tmp_path / "generated-home"
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
@@ -280,6 +283,8 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
         projection_context: SkillProjectionContextAuthority,
     ):
         assert projection_context.catalog == compilation.catalog
+        assert isinstance(compilation, CompiledSessionSkillCatalog)
+        captured["compilation"] = compilation
         yield ManagedSessionHome(
             launch_id=launch_id,
             generated_home=generated_home,
@@ -308,7 +313,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
             skill_injection_capable=True,
             plugin_install_capable=False,
         )
-        adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
+        adapt_skill_semantics = staticmethod(skill_adapter)
 
         def binary_name(self) -> str:
             return "codex"
@@ -399,6 +404,18 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     ):
         cook_module.cook(profile="minimax", backend=_Backend())
 
+    return captured, generated_home, bind_session_owner
+
+
+def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured, generated_home, bind_session_owner = _run_finalized_profile_cook(
+        monkeypatch,
+        tmp_path,
+        skill_adapter=adapt_test_skill_semantics,
+    )
+
     spec = captured["validated"]
     assert spec is captured["child"]
     assert isinstance(spec, CmdSpec)
@@ -410,6 +427,28 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert any("sqlite_home=" in arg and str(generated_home) in arg for arg in spec.cmd)
     assert captured["pass_fds"] == (3, 5)
     bind_session_owner.assert_called_once_with(tmp_path, captured["launch_id"], 1)
+
+
+def test_cook_compiles_catalog_with_real_codex_admission(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured, _generated_home, _bind_session_owner = _run_finalized_profile_cook(
+        monkeypatch,
+        tmp_path,
+        skill_adapter=CodexBackend().adapt_skill_semantics,
+    )
+    compilation = captured["compilation"]
+    assert isinstance(compilation, CompiledSessionSkillCatalog)
+    actual = {skill.name: "admitted" for skill in compilation.catalog.skills}
+    actual.update({item.skill: item.operation.value for item in compilation.unavailable})
+    expected = {
+        skill_name: backend_statuses[compilation.backend]
+        for skill_name, backend_statuses in SKILL_ADMISSION_LEDGER[
+            COOK_SESSION_COMBINATION
+        ].items()
+    }
+
+    assert actual == expected
 
 
 def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> None:

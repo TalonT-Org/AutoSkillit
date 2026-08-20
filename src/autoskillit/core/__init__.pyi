@@ -16,8 +16,8 @@ from ._delivery_bounds import (
 from ._delivery_bounds import (
     resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
 )
+from ._entrypoint_shim import ENTRYPOINT_SHIM_SOURCE as ENTRYPOINT_SHIM_SOURCE
 from ._entrypoint_shim import entrypoint_shim_path as entrypoint_shim_path
-from ._entrypoint_shim import render_entrypoint_shim as render_entrypoint_shim
 from ._entrypoint_shim import write_entrypoint_shim as write_entrypoint_shim
 from ._execution_marker import execution_marker as execution_marker
 from ._install_binding import InstallBinding as InstallBinding

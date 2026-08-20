@@ -1,6 +1,6 @@
 """Tests for the AutoSkillit-owned exec-time entrypoint shim.
 
-Covers ``render_entrypoint_shim`` / ``entrypoint_shim_path`` /
+Covers ``ENTRYPOINT_SHIM_SOURCE`` / ``entrypoint_shim_path`` /
 ``write_entrypoint_shim`` (pure path and I/O logic) plus the shim's own
 rendered source, which is executed as a real subprocess to prove the
 single-resolution property described in ``core/_entrypoint_shim.py``'s
@@ -22,9 +22,9 @@ import pytest
 
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
+    ENTRYPOINT_SHIM_SOURCE,
     entrypoint_shim_path,
     generation_plugin_selector_path,
-    render_entrypoint_shim,
     write_entrypoint_shim,
 )
 
@@ -45,7 +45,7 @@ def test_shim_selector_literal_matches_generation_plugin_selector_path(tmp_path:
     segments = expected.relative_to(home).parts
     assert segments == (".autoskillit", "plugin-generations", "autoskillit-install", "current")
 
-    source = render_entrypoint_shim()
+    source = ENTRYPOINT_SHIM_SOURCE
     cursor = 0
     for segment in segments:
         needle = f'"{segment}"'
@@ -75,7 +75,7 @@ def test_write_entrypoint_shim_creates_executable_file_on_first_call(tmp_path: P
 
     path = entrypoint_shim_path(home)
     assert changed is True
-    assert path.read_text() == render_entrypoint_shim()
+    assert path.read_text() == ENTRYPOINT_SHIM_SOURCE
     assert os.access(path, os.X_OK)
     assert stat.S_IMODE(path.stat().st_mode) == 0o755
 
@@ -96,7 +96,7 @@ def test_write_entrypoint_shim_rewrites_stale_content(tmp_path: Path) -> None:
     changed = write_entrypoint_shim(home)
 
     assert changed is True
-    assert path.read_text() == render_entrypoint_shim()
+    assert path.read_text() == ENTRYPOINT_SHIM_SOURCE
 
 
 def test_write_entrypoint_shim_writes_via_temp_file_and_os_replace(
@@ -176,7 +176,7 @@ def _write_executable(path: Path, source: str) -> None:
 
 def _install_shim(tmp_path: Path) -> Path:
     shim_path = tmp_path / "autoskillit-shim"
-    _write_executable(shim_path, render_entrypoint_shim())
+    _write_executable(shim_path, ENTRYPOINT_SHIM_SOURCE)
     return shim_path
 
 

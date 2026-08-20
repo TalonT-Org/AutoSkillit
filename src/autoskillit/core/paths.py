@@ -68,13 +68,9 @@ def default_log_dir() -> Path:
 def pkg_root() -> Path:
     """Return the canonical autoskillit package root directory.
 
-    Returns the sealed root captured by ``resolve_install_binding()`` at this
-    process's first access — never re-derived, so every one of this
-    function's ~48 call sites sees the same path for the process's lifetime
-    even if the on-disk install is later replaced at the same path. Before
-    B-2 this re-derived the path live on every call via
-    ``importlib.resources.files('autoskillit')``; that resolution now lives
-    in ``core/_install_binding.py``, sealed once instead.
+    The root is sealed by ``resolve_install_binding()`` on first access and
+    remains stable for the process lifetime even if the on-disk install is
+    later replaced at the same path.
     """
     return resolve_install_binding().root
 

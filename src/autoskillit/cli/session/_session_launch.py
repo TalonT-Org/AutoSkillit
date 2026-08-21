@@ -10,7 +10,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, NoReturn, overload
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
@@ -37,7 +37,10 @@ if TYPE_CHECKING:
         ResumeSpec,
         ValidatedAddDir,
     )
-    from autoskillit.workspace import CompiledSessionSkillCatalog, SkillExclusion
+    from autoskillit.workspace import (
+        CompiledSessionSkillCatalog,
+        SkillExclusion,
+    )
 
 logger = get_logger(__name__)
 
@@ -62,6 +65,53 @@ def render_skill_catalog_exclusions(exclusions: tuple[SkillExclusion, ...]) -> N
         print(f"WARNING: excluded project-local skill {exclusion.name!r} at {exclusion.path}")
         if hint:
             print(f"  hint: {hint}")
+
+
+def render_skill_unavailability(compilation: CompiledSessionSkillCatalog) -> None:
+    """Print one deterministic operator warning per refusal reason."""
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for item in compilation.unavailable:
+        grouped.setdefault((item.operation.value, item.diagnostic), []).append(item.skill)
+    for (operation, diagnostic), skill_names in sorted(grouped.items()):
+        names = ", ".join(sorted(skill_names))
+        print(
+            f"{len(skill_names)} skills unavailable on this backend "
+            f"({operation}: {diagnostic}): {names}"
+        )
+
+
+@overload
+def append_skill_unavailability(
+    system_prompt: None,
+    skill_compilation: CompiledSessionSkillCatalog,
+) -> None: ...
+
+
+@overload
+def append_skill_unavailability(
+    system_prompt: str,
+    skill_compilation: CompiledSessionSkillCatalog,
+) -> str: ...
+
+
+def append_skill_unavailability(
+    system_prompt: str | None,
+    skill_compilation: CompiledSessionSkillCatalog,
+) -> str | None:
+    """Append the canonical machine-readable refusal payload to a prompt."""
+    if system_prompt is None or not skill_compilation.unavailable:
+        return system_prompt
+    unavailable_json = json.dumps(
+        skill_compilation.unavailability_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    block = (
+        f"<autoskillit_skill_unavailability>{unavailable_json}</autoskillit_skill_unavailability>"
+    )
+    if block in system_prompt:
+        return system_prompt
+    return f"{system_prompt.rstrip()}\n\n{block}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -506,17 +556,7 @@ def _launch_cook_session(
     _max_reloads = 10
     _max_infra_resumes = 3
     launch_project_dir = (project_dir if project_dir is not None else Path.cwd()).resolve()
-    if skill_compilation.unavailable:
-        unavailable_json = json.dumps(
-            skill_compilation.unavailability_payload,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        system_prompt = (
-            f"{system_prompt.rstrip()}\n\n"
-            f"<autoskillit_skill_unavailability>{unavailable_json}"
-            "</autoskillit_skill_unavailability>"
-        )
+    system_prompt = append_skill_unavailability(system_prompt, skill_compilation)
 
     current_resume_spec: ResumeSpec = resume_spec
     _current_initial_message = initial_message

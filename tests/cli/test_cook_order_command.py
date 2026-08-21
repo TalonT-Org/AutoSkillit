@@ -143,19 +143,62 @@ class TestCLIOrderCommand:
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """order passes correct flags to subprocess.run."""
+        from autoskillit.core import SkillSemanticOperation
+        from autoskillit.workspace import (
+            CompiledSessionSkillCatalog,
+            EffectiveSkillCatalog,
+            SkillUnavailableMetadata,
+        )
+
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        configure_popen(mock_run, returncode=0)
+        process = configure_popen(mock_run, returncode=0)
+        expected_warning = (
+            "1 skills unavailable on this backend "
+            "(required_join: fixed join unavailable): investigate"
+        )
+        warning_visible_at_launch: list[bool] = []
 
-        cli.order("test-script")
+        def launch(*_args: object, **_kwargs: object) -> InteractiveProcessStub:
+            warning_visible_at_launch.append(
+                expected_warning in capsys.readouterr().out.splitlines()
+            )
+            return process
+
+        mock_run.side_effect = launch
+
+        def compile_with_refusal(
+            catalog: EffectiveSkillCatalog,
+            _backend: object,
+        ) -> CompiledSessionSkillCatalog:
+            return CompiledSessionSkillCatalog(
+                backend="limited",
+                catalog=catalog,
+                unavailable=(
+                    SkillUnavailableMetadata(
+                        skill="investigate",
+                        backend="limited",
+                        operation=SkillSemanticOperation.REQUIRED_JOIN,
+                        diagnostic="fixed join unavailable",
+                    ),
+                ),
+            )
+
+        with patch(
+            "autoskillit.cli.session._session_order.compile_session_skill_catalog",
+            side_effect=compile_with_refusal,
+        ):
+            cli.order("test-script")
 
         mock_run.assert_called_once()
+        assert warning_visible_at_launch == [True]
         cmd = mock_run.call_args[0][0]
         assert Path(cmd[0]).is_absolute()
         assert Path(cmd[0]).name == "claude"

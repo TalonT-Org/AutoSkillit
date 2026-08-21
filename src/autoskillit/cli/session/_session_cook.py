@@ -13,9 +13,11 @@ from typing import TYPE_CHECKING
 
 from autoskillit.cli.session._session_launch import (
     _exit_launch_preparation_error,
+    append_skill_unavailability,
     prepare_interactive_launch,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
+    render_skill_unavailability,
 )
 from autoskillit.core import (
     PluginLaunchBinding,
@@ -269,6 +271,8 @@ def cook(
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(session_catalog.exclusions)
     skill_compilation = compile_session_skill_catalog(session_catalog, backend)
+    render_skill_unavailability(skill_compilation)
+    cook_system_prompt = append_skill_unavailability(cook_system_prompt, skill_compilation)
     session_catalog = skill_compilation.catalog
     requires_resolved_exploration_profile = any(
         vector.disposition is ExplorationVectorDisposition.MIGRATED

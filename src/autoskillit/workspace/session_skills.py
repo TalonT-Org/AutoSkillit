@@ -394,7 +394,16 @@ def _materialize_codex_profile_skill_infos(
         skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
         execution_role=SkillExecutionRole.SESSION,
     )
-    catalog = compile_session_skill_catalog(catalog, backend).catalog
+    compilation = compile_session_skill_catalog(catalog, backend)
+    for unavailable in compilation.unavailable:
+        logger.warning(
+            "codex_profile_skill_unavailable",
+            skill=unavailable.skill,
+            backend=unavailable.backend,
+            operation=unavailable.operation.value,
+            diagnostic=unavailable.diagnostic,
+        )
+    catalog = compilation.catalog
     materialize_agent_skill_tree(
         session_dir / backend.conventions.skills_subdir,
         catalog,

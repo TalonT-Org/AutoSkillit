@@ -94,19 +94,19 @@ Apply the same failure rules as static dispatches. On any food truck failure:
 """
 
 
-def _resume_reason_guidance(kill_reason: str) -> str:
+def _resume_reason_guidance(retry_reason: str) -> str:
     """Return reason-specific resume guidance for the L3 campaign dispatcher."""
-    if kill_reason == RetryReason.IDLE_STALL:
+    if retry_reason == RetryReason.IDLE_STALL:
         return (
             "Kill reason: idle timeout (session was waiting for an external event). "
             "Resume is safe — the session likely has partial progress on disk."
         )
-    if kill_reason == RetryReason.RESUME:
+    if retry_reason == RetryReason.RESUME:
         return (
             "Kill reason: transient infrastructure failure (API error or process kill). "
             "Resume is safe — retry immediately."
         )
-    if kill_reason == RetryReason.NONE:
+    if retry_reason == RetryReason.NONE:
         return (
             "Kill reason: none — the session ended before any subprocess launched "
             "(a crash or infrastructure fault at admission/launch time). Standard "

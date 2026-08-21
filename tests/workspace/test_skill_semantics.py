@@ -575,7 +575,7 @@ def test_projection_binding_records_mixed_admission_and_reuses_exact_adaptation(
 def test_projection_binding_propagates_unexpected_adapter_contract_error(
     tmp_path: Path,
 ) -> None:
-    from autoskillit.core import SkillContractError, SkillExecutionRole
+    from autoskillit.core import BackendConventions, SkillContractError, SkillExecutionRole
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillCatalogEntry,
@@ -600,8 +600,10 @@ def test_projection_binding_propagates_unexpected_adapter_contract_error(
     def fail_adaptation(_plan):
         raise SkillContractError("unexpected projection adapter contract failure")
 
+    conventions = BackendConventions(skills_subdir=Path(".agents/skills"))
     backend = SimpleNamespace(
         name="broken",
+        conventions=conventions,
         adapt_skill_semantics=fail_adaptation,
     )
 
@@ -610,5 +612,10 @@ def test_projection_binding_propagates_unexpected_adapter_contract_error(
         match="^unexpected projection adapter contract failure$",
     ):
         build_skill_projection_binding(
-            SkillProjectionContext(cwd=tmp_path, catalog=catalog, backend=backend)
+            SkillProjectionContext(
+                cwd=tmp_path,
+                catalog=catalog,
+                backend=backend,
+                conventions=conventions,
+            )
         )

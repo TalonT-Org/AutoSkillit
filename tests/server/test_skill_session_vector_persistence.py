@@ -126,7 +126,7 @@ Inspect consumers.
     assert contract.execution_identity is identity
 
     store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
-    correlation_key = store.create_provisional(contract, snapshot)
+    correlation_key = store.create_provisional(contract=contract, snapshot=snapshot)
     store.finalize(correlation_key, "resume-vector")
     loaded = store.load("resume-vector").contract
     monkeypatch.setattr(

@@ -83,6 +83,7 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
                 return
             diagnostics.extend(chunk)
             del diagnostics[:-8192]
+            accumulated = bytes(diagnostics).lower()
             if b"\x1b[6n" in chunk:
                 os.write(master_fd, b"\x1b[1;1R")
             if b"\x1b]10;?\x1b\\" in chunk:
@@ -93,8 +94,8 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
                 responded.add("theme")
                 os.write(master_fd, b"\r")
             if (
-                b"trust" in chunk
-                and (b"folder" in chunk or b"directory" in chunk)
+                b"trust" in accumulated
+                and (b"folder" in accumulated or b"directory" in accumulated)
                 and "trust" not in responded
             ):
                 responded.add("trust")

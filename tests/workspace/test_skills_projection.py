@@ -9,6 +9,7 @@ import pytest
 
 import autoskillit.workspace.skills as _skills_mod
 from autoskillit.core.types import (
+    BackendConventions,
     SkillContractError,
     SkillExecutionRole,
     SkillSource,
@@ -260,7 +261,6 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
         SkillSemanticAdaptationResult,
         SkillSemanticOperation,
     )
-    from autoskillit.execution.backends import ClaudeCodeBackend
     from autoskillit.workspace import (
         EffectiveSkillInvocation,
         SkillProjectionContext,
@@ -311,15 +311,15 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
     )
     diagnostic = "dependency requires unavailable fixed-set fan-in"
 
-    monkeypatch.setattr(
-        ClaudeCodeBackend,
-        "adapt_skill_semantics",
-        lambda _backend, _plan: SkillSemanticAdaptationResult(
+    conventions = BackendConventions(skills_subdir=Path(".agents/skills"))
+    backend = SimpleNamespace(
+        name="test-backend",
+        conventions=conventions,
+        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult(
             unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
             diagnostic=diagnostic,
         ),
     )
-    backend = ClaudeCodeBackend()
 
     binding = build_skill_projection_binding(
         SkillProjectionContext(
@@ -327,7 +327,7 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
             project_root=tmp_path,
             invocation=invocation,
             backend=backend,
-            conventions=backend.conventions,
+            conventions=conventions,
         )
     )
 

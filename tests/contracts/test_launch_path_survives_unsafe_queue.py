@@ -316,6 +316,7 @@ def test_quarantined_record_id_collision_condemns_the_cache(
 def test_cook_command_survives_a_corrupt_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     state = build_plugin_artifact_state(
         tmp_path / "home",
@@ -333,16 +334,9 @@ def test_cook_command_survives_a_corrupt_queue(
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_bytes(b"{not-json")
 
-    _flush_structlog_proxy_caches()
-    try:
-        with structlog.testing.capture_logs() as logs:
-            cli.cook(backend=backend)
-    finally:
-        _flush_structlog_proxy_caches()
+    cli.cook(backend=backend)
+    captured = capsys.readouterr()
 
     assert len(backend.build_calls) == 2
-    assert any(
-        entry.get("event") == "plugin_artifact_lifecycle"
-        and entry.get("outcome") == "deferred_unreadable_queue"
-        for entry in logs
-    )
+    assert '"event": "plugin_artifact_lifecycle"' in captured.err
+    assert '"outcome": "deferred_unreadable_queue"' in captured.err

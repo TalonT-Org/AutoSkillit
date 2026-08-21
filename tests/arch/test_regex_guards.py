@@ -251,13 +251,17 @@ def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> Non
 
     # The orchestrator must keep using the flag-spec engine + segment tokenizers
     # from _command_classification. The minimal set is the engine pair
-    # (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) plus the segment tokenizers.
+    # (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) plus the segment tokenizers
+    # actually consumed by the orchestrator's handlers.
     required_command_classification = {
         "_consume_str_flag",
         "_GIT_GLOBAL_FLAG_SPEC",
         "tokenize_command_segments",
         "tokenize_shell_payload_segments",
         "command_verb_and_args",
+        "extract_interpreter_command_payloads",
+        "extract_interpreter_write_paths",
+        "extract_redirect_targets",
     }
     missing = required_command_classification - set(imports_from_command_classification)
     assert not missing, (

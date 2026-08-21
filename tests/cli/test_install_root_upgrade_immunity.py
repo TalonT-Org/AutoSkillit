@@ -166,7 +166,14 @@ def fake_git_source(tmp_path: Path) -> Path:
             "init",
         ],
     ):
-        subprocess.run(cmd, cwd=repo, env=env, check=True, capture_output=True)
+        subprocess.run(
+            cmd,
+            cwd=repo,
+            env=env,
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
     return repo
 
 
@@ -188,7 +195,14 @@ def _bump_source_version(source: Path, version: str) -> None:
         _PYPROJECT.replace('version = "0.0.0"', f'version = "{version}"')
     )
     env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t.com"}
-    subprocess.run(["git", "add", "-A"], cwd=source, env=env, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "-A"],
+        cwd=source,
+        env=env,
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
     subprocess.run(
         [
             "git",
@@ -205,6 +219,7 @@ def _bump_source_version(source: Path, version: str) -> None:
         env=env,
         check=True,
         capture_output=True,
+        timeout=30,
     )
 
 

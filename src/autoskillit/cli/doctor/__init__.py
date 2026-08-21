@@ -62,6 +62,7 @@ from ._doctor_mcp import (
     _check_plugin_cache_integrity,
     _check_stale_mcp_servers,
 )
+from ._doctor_repair import collect_retiring_cache_repair_results
 from ._doctor_runtime import (
     _check_backend_version,
     _check_claude_binary,
@@ -83,7 +84,7 @@ from ._doctor_skills import (
     _check_skill_capability_authenticity,
 )
 from ._doctor_types import _NON_PROBLEM as _NON_PROBLEM
-from ._doctor_types import DoctorResult, _format_results
+from ._doctor_types import DoctorResult, _print_doctor_results
 
 logger = get_logger(__name__)
 
@@ -260,20 +261,6 @@ def _collect_doctor_results() -> list[DoctorResult]:
     return results
 
 
-def _print_doctor_results(
-    results: list[DoctorResult],
-    *,
-    output_json: bool,
-    include_info: bool = False,
-) -> None:
-    for line in _format_results(
-        results,
-        output_json=output_json,
-        include_info=include_info,
-    ):
-        print(line)
-
-
 def run_doctor(*, output_json: bool = False) -> None:
     """Run the read-only diagnostic entry point."""
     _print_doctor_results(_collect_doctor_results(), output_json=output_json)
@@ -281,29 +268,8 @@ def run_doctor(*, output_json: bool = False) -> None:
 
 def run_doctor_repairs(*, output_json: bool = False) -> None:
     """Run the opt-in safe repair action, then report post-repair diagnostics."""
-    from autoskillit.core import repair_corrupt_retiring_cache
-
-    repair = repair_corrupt_retiring_cache()
     results = _collect_doctor_results()
-    if repair.repaired:
-        message = (
-            f"Retiring cache repaired; original bytes preserved at {repair.sidecar}; "
-            f"salvaged={repair.salvaged}, quarantined={repair.quarantined}."
-        )
-    elif repair.state.value == "unsupported_future":
-        message = (
-            "Retiring cache was not repaired because its schema is newer than this "
-            "AutoSkillit version; upgrade before rewriting it."
-        )
-    else:
-        message = f"Retiring cache repair was not needed (state={repair.state.value})."
-    results.append(
-        DoctorResult(
-            severity=Severity.INFO,
-            check="retiring_cache_repair",
-            message=message,
-        )
-    )
+    results.extend(collect_retiring_cache_repair_results())
     _print_doctor_results(
         results,
         output_json=output_json,

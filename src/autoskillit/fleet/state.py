@@ -50,6 +50,7 @@ from autoskillit.fleet.state_types import (
     DispatchStatus,
     GateRecordResult,
     ResumeDecision,
+    _clear_dispatch_for_retry,
     _resume_lock,
     _validate_transition,
 )
@@ -166,39 +167,6 @@ class DispatchStateHandle:
         if not state_path.exists():
             raise FileNotFoundError(f"Cannot resume dispatch: state file missing at {state_path}")
         return cls(state_path=state_path, identity=identity)
-
-
-def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
-    """Clear a dispatch record for retry."""
-    _validate_transition(d.status, DispatchStatus.PENDING, d.name)
-
-    # Snapshot all non-identity fields before resetting
-    snapshot: dict[str, Any] = {}
-    for f in dataclasses.fields(d):
-        if f.name in _RETRY_IDENTITY_FIELDS:
-            continue
-        val = getattr(d, f.name)
-        if f.name == "status":
-            snapshot[f.name] = str(val)
-        elif isinstance(val, dict):
-            snapshot[f.name] = dict(val)
-        else:
-            snapshot[f.name] = val
-    d.attempt_history.append(snapshot)
-
-    # Reset all non-identity fields to their defaults
-    for f in dataclasses.fields(d):
-        if f.name in _RETRY_IDENTITY_FIELDS:
-            continue
-        default = (
-            f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
-        )
-        if default is dataclasses.MISSING:
-            raise RuntimeError(
-                f"Field {f.name!r} has neither a default nor a default_factory; "
-                "cannot reset to default for retry"
-            )
-        setattr(d, f.name, default)
 
 
 def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:

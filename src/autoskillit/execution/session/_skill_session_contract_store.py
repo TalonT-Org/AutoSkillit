@@ -25,6 +25,7 @@ from autoskillit.core import (
     StoredSkillSessionContract,
     atomic_write,
     default_log_dir,
+    read_versioned_json,
     write_versioned_json,
 )
 
@@ -265,7 +266,14 @@ class DefaultSkillSessionContractStore:
             )
         if observed_version != _STORE_MANIFEST_SCHEMA_VERSION:
             raise ValueError("Invalid or unsupported skill session contract manifest")
-        return loaded
+        validated = read_versioned_json(
+            manifest_path,
+            _STORE_MANIFEST_SCHEMA_VERSION,
+            raise_io_errors=True,
+        )
+        if validated is None:
+            raise ValueError("Invalid skill session contract manifest")
+        return validated
 
     def _write_manifest(self, entry: Path, manifest: Mapping[str, Any]) -> None:
         self._ensure_contained(entry)

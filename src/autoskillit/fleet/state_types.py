@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 import uuid
@@ -735,6 +736,37 @@ def _validate_transition(current: str, new: str, dispatch_name: str) -> None:
     if allowed is not None and new not in allowed:
         msg = f"Invalid transition for dispatch '{dispatch_name}': {current!r} -> {new!r}"
         raise ValueError(msg)
+
+
+def _clear_dispatch_for_retry(dispatch: DispatchRecord) -> None:
+    """Snapshot and reset the non-identity fields of a retryable dispatch."""
+    _validate_transition(dispatch.status, DispatchStatus.PENDING, dispatch.name)
+    snapshot: dict[str, Any] = {}
+    for field_def in dataclasses.fields(dispatch):
+        if field_def.name in _RETRY_IDENTITY_FIELDS:
+            continue
+        value = getattr(dispatch, field_def.name)
+        snapshot[field_def.name] = (
+            str(value)
+            if field_def.name == "status"
+            else dict(value)
+            if isinstance(value, dict)
+            else value
+        )
+    dispatch.attempt_history.append(snapshot)
+    for field_def in dataclasses.fields(dispatch):
+        if field_def.name in _RETRY_IDENTITY_FIELDS:
+            continue
+        default = (
+            field_def.default_factory()
+            if field_def.default_factory is not dataclasses.MISSING
+            else field_def.default
+        )
+        if default is dataclasses.MISSING:
+            raise RuntimeError(
+                f"Field {field_def.name!r} has no default; cannot reset it for retry"
+            )
+        setattr(dispatch, field_def.name, default)
 
 
 @dataclass(frozen=True, slots=True)

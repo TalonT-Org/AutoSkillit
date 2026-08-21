@@ -518,6 +518,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Clone network timeouts | `test_clone_timeouts.py` | `subprocess.run()` with git network subcommands (clone/fetch/pull/push/ls-remote) in `clone.py` without `timeout=` |
 | Dispatch timeout resolver | `test_dispatch_timeout_guard.py` | `_run_dispatch` using hardcoded timeout instead of `resolve_dispatch_timeout()` |
 | Doctor read-only | `test_doctor_readonly.py` | `run_doctor()` performing filesystem writes (REQ-DOCTOR-READONLY) |
+| Persisted enum decoding | `test_persisted_enum_decoding.py` | Bare persisted-enum construction in registered decoders instead of tolerant construction or record quarantine |
 | No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup in `session_log.py` or `tool_sequence_analysis.py` — dedup is pre-applied |
 | GFM table rendering | `test_gfm_rendering_guard.py` | GFM table rendering bypassing `_render_gfm_table()` — all table output must route through it |
 | CLI prompts via timed_prompt | `test_input_tty_contracts.py` | `input()` calls in `src/autoskillit/cli/` not routed through `timed_prompt()` |

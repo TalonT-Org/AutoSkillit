@@ -48,3 +48,18 @@ def _format_results(
             if r.severity not in _NON_PROBLEM or (include_info and r.severity is Severity.INFO)
         ]
     return [f"{r.severity}: {r.message}" for r in results]
+
+
+def _print_doctor_results(
+    results: list[DoctorResult],
+    *,
+    output_json: bool,
+    include_info: bool = False,
+) -> None:
+    """Send one formatted doctor result set to the CLI output stream."""
+    for line in _format_results(
+        results,
+        output_json=output_json,
+        include_info=include_info,
+    ):
+        print(line)

@@ -438,9 +438,9 @@ def resume_campaign_from_state(
     """
     from autoskillit.fleet.state import (  # noqa: PLC0415
         CampaignStateMutator,
-        _clear_dispatch_for_retry,
         read_state,
     )
+    from autoskillit.fleet.state_types import _clear_dispatch_for_retry  # noqa: PLC0415
 
     # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
     # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the

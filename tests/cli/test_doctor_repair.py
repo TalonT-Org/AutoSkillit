@@ -85,7 +85,7 @@ def test_repair_reports_the_quarantine_sidecar(tmp_path, monkeypatch, capsys, ou
         )
         assert str(sidecar) in repair["message"]
     else:
-        assert "INFO:" in output
+        assert "info:" in output
         assert str(sidecar) in output
     assert "salvaged=0, quarantined=0" in output
 

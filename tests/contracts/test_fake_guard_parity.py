@@ -89,7 +89,11 @@ def _protocol_names(core_root: Path) -> set[str]:
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
-            if any(isinstance(base, ast.Name) and base.id == "Protocol" for base in node.bases):
+            if any(
+                (isinstance(base, ast.Name) and base.id == "Protocol")
+                or (isinstance(base, ast.Attribute) and base.attr == "Protocol")
+                for base in node.bases
+            ):
                 names.add(node.name)
     return names
 
@@ -123,6 +127,14 @@ def _enrolled_in_a_contract_suite(fake_name: str, contracts_dir: Path) -> bool:
         ):
             return True
     return False
+
+
+def test_protocol_scan_accepts_qualified_protocol_bases(tmp_path: Path) -> None:
+    (tmp_path / "qualified.py").write_text(
+        "import typing\n\nclass QualifiedProtocol(typing.Protocol):\n    pass\n"
+    )
+
+    assert _protocol_names(tmp_path) == {"QualifiedProtocol"}
 
 
 def test_every_fake_is_enrolled_in_a_shared_contract_suite() -> None:

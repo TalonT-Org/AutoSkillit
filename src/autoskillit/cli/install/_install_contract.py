@@ -28,13 +28,14 @@ __all__ = [
     "InstallProcessStatus",
     "InstallRequest",
     "InstallResult",
+    "MAINTENANCE_EXTRAS",
     "MaintenanceInstallArgv",
     "MaintenanceSubprocessInvocation",
     "process_status_for_result",
     "result_from_process_status",
 ]
 
-_MAINTENANCE_EXTRAS: Mapping[str, str] = {
+MAINTENANCE_EXTRAS: Mapping[str, str] = {
     "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
     "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
 }
@@ -70,7 +71,7 @@ class MaintenanceSubprocessInvocation:
     ) -> MaintenanceSubprocessInvocation:
         return cls(
             argv=(str(entrypoint), "--version"),
-            env=build_maintenance_env(environment, _MAINTENANCE_EXTRAS),
+            env=build_maintenance_env(environment, MAINTENANCE_EXTRAS),
             cwd=_validated_maintenance_cwd(cwd),
         )
 
@@ -90,7 +91,7 @@ class MaintenanceSubprocessInvocation:
         ).to_argv(require_registered_plugin=require_registered_plugin)
         return cls(
             argv=tuple(argv),
-            env=build_maintenance_env(environment, _MAINTENANCE_EXTRAS),
+            env=build_maintenance_env(environment, MAINTENANCE_EXTRAS),
             cwd=_validated_maintenance_cwd(cwd),
         )
 

@@ -18,7 +18,7 @@ from typing import Any, assert_never
 from packaging.version import Version
 
 from autoskillit.cli.install._install_contract import (
-    _MAINTENANCE_EXTRAS,
+    MAINTENANCE_EXTRAS,
     InstallFailureKind,
     InstallMode,
     InstallOutcome,
@@ -412,7 +412,7 @@ def run_update_transaction(
 
     progress.enter(UpdateTransactionPhase.MAINTENANCE_CONTEXT_CONSTRUCTION)
     try:
-        maintenance_env = build_maintenance_env(environment, _MAINTENANCE_EXTRAS)
+        maintenance_env = build_maintenance_env(environment, MAINTENANCE_EXTRAS)
     except (TypeError, ValueError) as exc:
         return _upgrade_failure(
             progress,

@@ -17,7 +17,6 @@ from autoskillit._recipe_delivery_framing import (
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
-    INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE,
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
@@ -39,6 +38,9 @@ from autoskillit.core import (
     resolve_general_output_token_limit,
     resolve_recipe_delivery_decision,
     resolve_recipe_envelope_byte_limit,
+)
+from autoskillit.core import (
+    INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE as _FAULT_CLAUSE,
 )
 from autoskillit.execution import (
     RecipeDeliveryReceiptLedger,
@@ -105,10 +107,7 @@ if TYPE_CHECKING:
 
 def document_recipe_delivery_contract(function: Any) -> Any:
     """Append the generated Codex contract before FastMCP reads a tool docstring."""
-    description = (function.__doc__ or "").replace(
-        "{INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE}",
-        INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE,
-    )
+    description = (function.__doc__ or "").replace("{INFRA_FAULT}", _FAULT_CLAUSE)
     function.__doc__ = f"{description.rstrip()}\n\n{codex_recipe_delivery_calling_contract()}\n"
     return function
 

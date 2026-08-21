@@ -1,10 +1,10 @@
 """Skill-contract remediation registry.
 
-Issue #4735: this shard was extracted from ``_type_constants.py`` to keep the
-facade under 750 lines. The forcing-function guards (uniqueness of kinds,
-bijection with ``SkillInvalidityKind``) run at module load time and must
-remain intact — they are what make adding a new ``SkillInvalidityKind``
-member a CI-blocking event unless a remediation is registered.
+Issue #4735: this shard was extracted from ``_type_constants.py``. The
+forcing-function guards (uniqueness of kinds, bijection with
+``SkillInvalidityKind``) run at module load time and must remain intact —
+they are what make adding a new ``SkillInvalidityKind`` member a CI-blocking
+event unless a remediation is registered.
 
 ``SKILL_SEMANTIC_SCHEMA_VERSION`` is imported because two f-string hints in
 ``_SKILL_CONTRACT_REMEDIATION_DEFS`` reference it; omitting the import raises

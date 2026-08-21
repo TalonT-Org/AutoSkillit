@@ -740,13 +740,8 @@ def main() -> None:
                         finding=finding,
                     )
 
-        # Defence in depth alongside the maintenance-child skip flags: a
-        # self-invoked subcommand
-        # must not be able to prompt even if a future spawn site forgets the
-        # skip-flag env. "update" is included (unlike the repair set above)
-        # because the explicit `autoskillit update` command is itself the
-        # authoritative caller of run_update_transaction() and is actively
-        # corrupted by the automatic pre-check racing it — see _update.py.
+        # Self-invoked maintenance commands must never prompt. Explicit update
+        # also skips the automatic pre-check, which would race its own transaction.
         if _first_arg not in {"install", "--version", "update"}:
             from autoskillit.cli.update._update_checks import run_update_checks
 

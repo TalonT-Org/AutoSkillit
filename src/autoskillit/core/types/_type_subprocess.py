@@ -229,6 +229,7 @@ class SubprocessRunner(Protocol):
         pty_mode: bool = False,
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
+        natural_exit_grace_seconds: float = 3.0,
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,

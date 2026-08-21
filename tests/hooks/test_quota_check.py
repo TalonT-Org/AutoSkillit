@@ -592,25 +592,25 @@ def test_log_dir_resolvers_stay_in_sync(monkeypatch):
     from autoskillit.hooks._hook_settings import resolve_quota_log_dir as _resolve_quota_log_dir
     from autoskillit.hooks.token_summary_hook import _log_root
 
-    def assert_defaults_match() -> None:
+    def assert_defaults_match(expected: Path) -> None:
         quota_path = _resolve_quota_log_dir()
         session_path = resolve_log_dir("")
 
         assert quota_path is not None, "resolve_quota_log_dir() must not return None"
-        assert quota_path == session_path == default_log_dir() == _log_root()
+        assert quota_path == session_path == default_log_dir() == _log_root() == expected
 
     # Case 1: platform default (no env overrides)
     monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    assert_defaults_match()
+    assert_defaults_match(default_log_dir())
 
     # Case 2: XDG_DATA_HOME override
     monkeypatch.setenv("XDG_DATA_HOME", "/tmp/xdg-test")
-    assert_defaults_match()
+    assert_defaults_match(Path("/tmp/xdg-test/autoskillit/logs"))
 
     # Case 3: canonical AUTOSKILLIT_LOG_DIR override wins over XDG_DATA_HOME
     monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", "/tmp/autoskillit-logs")
-    assert_defaults_match()
+    assert_defaults_match(Path("/tmp/autoskillit-logs"))
 
     # An explicit nonempty session log directory still has highest precedence.
     assert resolve_log_dir("/tmp/explicit-logs") == Path("/tmp/explicit-logs")

@@ -58,5 +58,16 @@ RETIREMENT_BACKSTOP_LEDGER: Mapping[PluginArtifactKind, RetirementBackstopDef] =
                 "the exclusive lease protect concurrently bound generations."
             ),
         ),
+        PluginArtifactKind.INSTALL_ROOT_GENERATION: RetirementBackstopDef(
+            artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+            owner_qualname="GenerationArtifactRetirementOwner",
+            wires_is_current=True,
+            wires_current_identity=True,
+            exclusive_lease_backstop=True,
+            rationale=(
+                "The install-root selector blocks the selected path; exact identity and "
+                "the exclusive lease protect concurrently bound generations."
+            ),
+        ),
     }
 )

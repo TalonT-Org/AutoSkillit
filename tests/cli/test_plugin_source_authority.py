@@ -580,7 +580,11 @@ class TestInstalledPluginArtifactAuthority:
         # attribute on every call, so patch the package rather than its caller module.
         monkeypatch.setattr(workspace_pkg, "assert_generator_process_fresh", raise_stale)
 
-        authority = InstalledPluginArtifactAuthority(root, semantic_key=semantic_key)
+        authority = InstalledPluginArtifactAuthority(
+            root,
+            home=managed_home(),
+            semantic_key=semantic_key,
+        )
         heal_mock = Mock(return_value=healed_root)
         monkeypatch.setattr(authority, "_self_heal_republish", heal_mock)
 

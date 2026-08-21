@@ -33,6 +33,7 @@ from autoskillit.core import (
     NativeShellCaptureMode,
     PluginLoadMode,
     StaleGeneratorError,
+    managed_home_for,
     resolve_native_shell_capture_decision,
 )
 from autoskillit.execution.session._managed_headless_session_lineage import (
@@ -78,7 +79,11 @@ def _installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, An
     current_generation.mkdir(parents=True)
     (gen_version_root / "current").symlink_to(current_generation)
 
-    authority = InstalledPluginArtifactAuthority(root, semantic_key="contract-semantic-key")
+    authority = InstalledPluginArtifactAuthority(
+        root,
+        home=managed_home_for(tmp_path),
+        semantic_key="contract-semantic-key",
+    )
     # Self-heal republish is exercised elsewhere (test_installed_authority_also_
     # refuses_stale_generator); mocked here so this shared contract exercises
     # only the freshness probe every implementation shares, not the unrelated

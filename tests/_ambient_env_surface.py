@@ -579,7 +579,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
-    "cli/update/_transaction.py:370": (
+    "cli/update/_transaction.py:371": (
         "Unfiltered dict(os.environ if base_env is None else base_env) snapshot captured for"
         "update-transaction diagnostics/rollback comparison, not for a spawned child process."
     ),
@@ -644,7 +644,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for a same-host hook-script subprocess; only"
         "PYTHONDONTWRITEBYTECODE is added on top."
     ),
-    "smoke_utils/_cross_interpreter_upgrade.py:340": (
+    "smoke_utils/_cross_interpreter_upgrade.py:341": (
         "Unfiltered dict(os.environ) base for a smoke-test cross-interpreter upgrade subprocess"
         "sandboxed to a scratch HOME/XDG tree overridden immediately after."
     ),

@@ -47,6 +47,7 @@ from autoskillit.smoke_utils import (
     select_experimental_review_dispatch,
     validate_experimental_auditor_outputs,
 )
+from tests.conftest import production_interpreter_env
 from tests.infra._token_summary_helpers import _resolve_session_label
 
 pytestmark = [pytest.mark.medium]
@@ -6823,6 +6824,7 @@ def test_overlap_child_script_survives_release(tmp_path: Path) -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=production_interpreter_env(),
     )
     try:
         deadline = time.time() + 10

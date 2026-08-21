@@ -31,6 +31,7 @@ from autoskillit.core import (
     new_plugin_artifact_incarnation_id,
 )
 from autoskillit.workspace import publish_install_root_generation
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.large]
 
@@ -482,7 +483,7 @@ def test_install_detection_survives_versioned_roots(tmp_path: Path, fake_git_sou
         text=True,
         timeout=15,
         env={
-            **os.environ,
+            **production_interpreter_env(),
             "PYTHONPATH": os.pathsep.join(
                 (str(Path(__file__).parents[2] / "src"), str(site_packages))
             ),

@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+from tests.conftest import production_interpreter_env
+
 
 def clean_subprocess_env() -> dict[str, str]:
     """Build a minimal environment for import-isolation subprocesses."""
@@ -30,7 +32,7 @@ def clean_subprocess_env() -> dict[str, str]:
 
 def run_import_subprocess(code: str) -> subprocess.CompletedProcess[str]:
     """Run import-checking code, retrying once after transient venv churn."""
-    env = clean_subprocess_env()
+    env = production_interpreter_env()
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,

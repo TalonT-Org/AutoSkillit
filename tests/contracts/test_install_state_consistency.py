@@ -151,7 +151,10 @@ def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
         live,
         semantic_key=f"autoskillit@autoskillit-local:{__version__}",
     )
-    InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
+    InstalledPluginArtifactRetirementOwner(
+        live.parent,
+        home=managed_home_for(home),
+    ).enqueue_retirement(
         identity,
         datetime.now(UTC) + timedelta(hours=6),
     )
@@ -476,7 +479,7 @@ class TestVerifyInstallState:
         )
         assert finding.severity is Severity.WARNING
 
-    def test_corrupt_retirement_cache_is_an_explicit_error(self, home: Path) -> None:
+    def test_corrupt_retirement_cache_names_a_real_remediation(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
 
         cache = home / ".autoskillit" / "retiring_cache.json"
@@ -489,9 +492,9 @@ class TestVerifyInstallState:
 
         assert finding.severity is Severity.ERROR
         assert "retiring_cache.json" in finding.message
-        assert "autoskillit install" in finding.message
+        assert "autoskillit doctor --repair" in finding.message
 
-    def test_future_retirement_cache_schema_is_an_explicit_error(self, home: Path) -> None:
+    def test_future_retirement_cache_names_safe_upgrade_guidance(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
 
         cache = home / ".autoskillit" / "retiring_cache.json"
@@ -506,7 +509,8 @@ class TestVerifyInstallState:
 
         assert finding.severity is Severity.ERROR
         assert "schema 99" in finding.message
-        assert "autoskillit install" in finding.message
+        assert "autoskillit doctor --repair" not in finding.message
+        assert "Upgrade AutoSkillit" in finding.message
 
     def test_version_drift_names_each_derived_file(self, home: Path) -> None:
         """Three files carry a version and all three are derived.

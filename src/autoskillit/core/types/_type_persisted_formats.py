@@ -66,6 +66,7 @@ PERSISTED_FORMAT_LEDGER: Mapping[str, PersistedFormatDef] = MappingProxyType(
                         PROJECTION=1,
                         INSTALLED_PLUGIN=1,
                         PLUGIN_GENERATION=2,
+                        INSTALL_ROOT_GENERATION=2,
                     ),
                     tolerance=PersistedEnumTolerance.QUARANTINE_RECORD,
                 ),

@@ -192,7 +192,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
     ),
     "_type_persisted_formats": frozenset({"core", "execution", "fleet", "hooks"}),
-    "_type_managed_home": frozenset({"cli", "core", "server", "workspace"}),
+    "_type_managed_home": frozenset({"cli", "core", "server", "smoke_utils", "workspace"}),
     # write_entrypoint_shim() is called from cli/update/_transaction.py's
     # INSTALL_ROOT_GENERATION_PUBLICATION phase (issue #4597 Phase 3).
     "_entrypoint_shim": frozenset({"core", "cli"}),

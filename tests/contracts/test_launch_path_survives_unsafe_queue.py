@@ -104,7 +104,7 @@ def _unsafe_cache_bytes(kind: str, identity: PluginArtifactIdentity) -> bytes:
     unknown = _record_payload(
         identity,
         record_id="unknown-record",
-        artifact_kind="install_root_generation",
+        artifact_kind="future_artifact_kind",
     )
     return json.dumps(_v2_payload(records=[unknown]), sort_keys=True).encode()
 

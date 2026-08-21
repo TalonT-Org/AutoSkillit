@@ -542,29 +542,7 @@ class TestInstalledPluginArtifactAuthority:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Phase 1 (issue #4597), A-9: the freshness probe now runs *inside*
-        the ``try`` guarding the generation-dir branch, and the ``except``
-        clause was widened to ``InfrastructureFaultError`` — so a
-        ``StaleGeneratorError`` the probe raises (it is an
-        ``InfrastructureFaultError`` subclass) is caught and routed into
-        ``_self_heal_republish()`` instead of propagating uncaught.
-
-        Reaching that branch at all requires ``generation_dir is not None``
-        (see ``resolve_current_generation``), so this test plants a real
-        ``current`` selector in the generation store before calling
-        ``acquire_launch_binding``. ``assert_generator_process_fresh`` is
-        monkeypatched on ``autoskillit.workspace`` — the package attribute the
-        method's deferred ``from autoskillit.workspace import
-        assert_generator_process_fresh`` re-resolves on every call, not a name
-        cached in ``_plugin_artifact``'s own module namespace, which is why
-        patching there would not be observed. ``_self_heal_republish`` is
-        monkeypatched on the authority instance to hand back a *separately*,
-        genuinely published installed root, so the resumed
-        ``_acquire_from_root`` call has something real to lease and validate
-        without exercising the real republish machinery (which re-imports its
-        own ``pkg_root`` binding at call time — irrelevant here since the
-        method itself is replaced).
-        """
+        """A stale current generation is caught and routed through self-healing."""
         from unittest.mock import Mock
 
         import autoskillit.workspace as workspace_pkg
@@ -598,6 +576,8 @@ class TestInstalledPluginArtifactAuthority:
         def raise_stale() -> None:
             raise StaleGeneratorError("test")
 
+        # The production method resolves this deferred import from the package
+        # attribute on every call, so patch the package rather than its caller module.
         monkeypatch.setattr(workspace_pkg, "assert_generator_process_fresh", raise_stale)
 
         authority = InstalledPluginArtifactAuthority(root, semantic_key=semantic_key)

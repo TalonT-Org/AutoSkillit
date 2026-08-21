@@ -99,6 +99,26 @@ def test_write_entrypoint_shim_rewrites_stale_content(tmp_path: Path) -> None:
     assert path.read_text() == ENTRYPOINT_SHIM_SOURCE
 
 
+def test_write_entrypoint_shim_preserves_existing_file_read_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    path = entrypoint_shim_path(home)
+    path.parent.mkdir(parents=True)
+    path.write_text("existing")
+    original_read_text = Path.read_text
+
+    def fail_for_shim(candidate: Path, *args: object, **kwargs: object) -> str:
+        if candidate == path:
+            raise PermissionError("shim unreadable")
+        return original_read_text(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_for_shim)
+
+    with pytest.raises(PermissionError, match="shim unreadable"):
+        write_entrypoint_shim(home)
+
+
 def test_write_entrypoint_shim_writes_via_temp_file_and_os_replace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -98,7 +98,7 @@ def write_entrypoint_shim(home: Path) -> bool:
     source = ENTRYPOINT_SHIM_SOURCE
     try:
         existing = path.read_text()
-    except OSError:
+    except FileNotFoundError:
         existing = None
     if existing == source:
         return False

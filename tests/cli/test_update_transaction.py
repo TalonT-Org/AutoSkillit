@@ -651,22 +651,7 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
 
 
-@pytest.mark.parametrize(
-    ("failure_point", "expected_finding"),
-    [
-        ("final_install_oserror", "Could not start the install-root generation install"),
-        ("final_install_nonzero", "install-root generation install exited with status 7"),
-        ("publication_error", "Could not publish the install-root generation"),
-        ("publication_infrastructure_fault", None),
-        ("shim_error", "Could not write the entrypoint shim"),
-    ],
-)
-def test_dev_track_post_pivot_publication_failures_are_terminal(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    failure_point: str,
-    expected_finding: str | None,
-) -> None:
+def _prepare_dev_track_publication(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.detect_install",
         lambda: InstallInfo(InstallType.GIT_VCS, "abc123", "develop", "https://x", None),
@@ -675,26 +660,12 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
     )
-    if failure_point == "publication_error":
-        monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.publish_install_root_generation",
-            lambda **_kwargs: (_ for _ in ()).throw(OSError("simulated publication failure")),
-        )
-    if failure_point == "publication_infrastructure_fault":
-        monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.publish_install_root_generation",
-            lambda **_kwargs: (_ for _ in ()).throw(
-                InfrastructureFaultError("simulated infrastructure fault")
-            ),
-        )
-    if failure_point == "shim_error":
-        monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.write_entrypoint_shim",
-            lambda _home: (_ for _ in ()).throw(OSError("simulated shim failure")),
-        )
 
-    calls: list[tuple[list[str], dict[str, Any]]] = []
 
+def _publication_runner(
+    calls: list[tuple[list[str], dict[str, Any]]],
+    failure_point: str | None = None,
+) -> Callable[..., subprocess.CompletedProcess[Any]]:
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         calls.append((list(cmd), kwargs))
         if len(calls) == 2:
@@ -710,25 +681,44 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
         entrypoint.chmod(0o755)
         return subprocess.CompletedProcess(cmd, 0)
 
-    if failure_point == "publication_infrastructure_fault":
-        with pytest.raises(InfrastructureFaultError, match="simulated infrastructure fault"):
-            run_update_transaction(
-                home=tmp_path,
-                base_env={"PATH": "/bin"},
-                version_reader=lambda _name: "1.0.0",
-                fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
-                process_runner=runner,
-            )
-        assert len(calls) == 2
-        assert not Path(calls[1][1]["env"]["UV_TOOL_BIN_DIR"]).exists()
-        return
+    return runner
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "expected_finding"),
+    [
+        ("final_install_oserror", "Could not start the install-root generation install"),
+        ("final_install_nonzero", "install-root generation install exited with status 7"),
+        ("publication_error", "Could not publish the install-root generation"),
+        ("shim_error", "Could not write the entrypoint shim"),
+    ],
+)
+def test_dev_track_post_pivot_publication_failures_are_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure_point: str,
+    expected_finding: str,
+) -> None:
+    _prepare_dev_track_publication(monkeypatch)
+    if failure_point == "publication_error":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.publish_install_root_generation",
+            lambda **_kwargs: (_ for _ in ()).throw(OSError("simulated publication failure")),
+        )
+    if failure_point == "shim_error":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.write_entrypoint_shim",
+            lambda _home: (_ for _ in ()).throw(OSError("simulated shim failure")),
+        )
+
+    calls: list[tuple[list[str], dict[str, Any]]] = []
 
     result = run_update_transaction(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: "1.0.0",
         fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
-        process_runner=runner,
+        process_runner=_publication_runner(calls, failure_point),
     )
 
     assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
@@ -737,10 +727,36 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
         UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION,
         UpdateTransactionPhase.RESULT_FINALIZATION,
     )
-    assert result.findings and expected_finding is not None
+    assert result.findings
     assert expected_finding in result.findings[0]
     if failure_point == "final_install_oserror":
         assert "/plugin-generations/autoskillit-install/1.1.0/" in result.findings[0]
+    assert len(calls) == 2
+    assert not Path(calls[1][1]["env"]["UV_TOOL_BIN_DIR"]).exists()
+
+
+def test_dev_track_publication_infrastructure_fault_propagates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _prepare_dev_track_publication(monkeypatch)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.publish_install_root_generation",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            InfrastructureFaultError("simulated infrastructure fault")
+        ),
+    )
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    with pytest.raises(InfrastructureFaultError, match="simulated infrastructure fault"):
+        run_update_transaction(
+            home=tmp_path,
+            base_env={"PATH": "/bin"},
+            version_reader=lambda _name: "1.0.0",
+            fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+            process_runner=_publication_runner(calls),
+        )
+
     assert len(calls) == 2
     assert not Path(calls[1][1]["env"]["UV_TOOL_BIN_DIR"]).exists()
 

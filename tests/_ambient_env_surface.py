@@ -644,7 +644,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for a same-host hook-script subprocess; only"
         "PYTHONDONTWRITEBYTECODE is added on top."
     ),
-    "smoke_utils/_cross_interpreter_upgrade.py:341": (
+    "smoke_utils/_cross_interpreter_upgrade.py:337": (
         "Unfiltered dict(os.environ) base for a smoke-test cross-interpreter upgrade subprocess"
         "sandboxed to a scratch HOME/XDG tree overridden immediately after."
     ),

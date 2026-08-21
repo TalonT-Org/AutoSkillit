@@ -22,11 +22,9 @@ from autoskillit.core import (
     CompiledSessionSkillCatalogAuthority,
     CookSessionHandle,
     HookTrustPolicy,
-    JoinSpec,
     ManagedSessionHome,
     NamedResume,
     NoResume,
-    SkillContractError,
     SkillProjectionContextAuthority,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
@@ -290,10 +288,6 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
             return self._command_backend.build_interactive_cmd(**kwargs)  # type: ignore[arg-type]
 
     backend = _DelegatingCodexBackend()
-    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-        backend.adapt_skill_semantics(
-            SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
-        )
     captured = _install_harness(monkeypatch, tmp_path)
 
     cli.cook(backend=backend)

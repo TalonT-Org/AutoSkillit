@@ -49,7 +49,8 @@ def test_shim_selector_literal_matches_generation_plugin_selector_path(tmp_path:
     cursor = 0
     for segment in segments:
         needle = f'"{segment}"'
-        found = source.index(needle, cursor)
+        found = source.find(needle, cursor)
+        assert found >= 0, f"entrypoint shim is missing selector segment {segment!r}"
         cursor = found + len(needle)
 
 

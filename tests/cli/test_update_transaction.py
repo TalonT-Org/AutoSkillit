@@ -628,6 +628,70 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
 
 
+@pytest.mark.parametrize(
+    ("failure_point", "expected_finding"),
+    [
+        ("final_install_oserror", "Could not start the install-root generation install"),
+        ("final_install_nonzero", "install-root generation install exited with status 7"),
+        ("publication_error", "Could not publish the install-root generation"),
+        ("shim_error", "Could not write the entrypoint shim"),
+    ],
+)
+def test_dev_track_post_pivot_publication_failures_are_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure_point: str,
+    expected_finding: str,
+) -> None:
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.detect_install",
+        lambda: InstallInfo(InstallType.GIT_VCS, "abc123", "develop", "https://x", None),
+    )
+    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
+    )
+    if failure_point == "publication_error":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.publish_install_root_generation",
+            lambda **_kwargs: (_ for _ in ()).throw(OSError("simulated publication failure")),
+        )
+    if failure_point == "shim_error":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.write_entrypoint_shim",
+            lambda _home: (_ for _ in ()).throw(OSError("simulated shim failure")),
+        )
+
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        calls.append((list(cmd), kwargs))
+        if len(calls) == 2 and failure_point == "final_install_oserror":
+            raise OSError("simulated final install launch failure")
+        if len(calls) == 2 and failure_point == "final_install_nonzero":
+            return subprocess.CompletedProcess(cmd, 7)
+        destination = Path(kwargs["env"]["UV_TOOL_DIR"])
+        entrypoint = destination / "autoskillit" / "bin" / "autoskillit"
+        entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        entrypoint.write_text("#!/bin/sh\necho fake\n")
+        entrypoint.chmod(0o755)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=runner,
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
+    assert result.irreversible_pivot_crossed is True
+    assert result.phase_history[-1] is UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION
+    assert result.findings and expected_finding in result.findings[0]
+    assert len(calls) == 2
+
+
 def test_claudecode_with_existing_registration_defers_before_mutation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

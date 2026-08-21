@@ -45,12 +45,9 @@ def test_staging_reads_the_sealed_root_not_a_live_lookup(
     ``_stage_projected_plugin_artifact()`` itself. Poisoning
     ``resolve_install_binding`` (imported into this module, the name any
     call inside staging would actually resolve) to raise, then successfully
-    staging real content from the plan, proves staging — and every helper it
-    calls (``_copy_non_skill_plugin_assets``, ``_render_agent_definitions``,
-    ``materialize_agent_skill_tree``, ``write_generated_hooks_json``,
-    ``validate_staged_plugin_hooks``) — never calls it. A future regression
-    that adds such a call anywhere in that chain fails this test instead of
-    shipping silently.
+    staging real content from the plan proves this module does not perform a
+    second resolution. Helpers imported from other modules bind their own
+    names and are outside this monkeypatch's claim.
     """
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     plugin_authority = project_default_plugin_authority(

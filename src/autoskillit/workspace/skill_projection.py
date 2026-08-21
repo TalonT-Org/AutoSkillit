@@ -136,7 +136,6 @@ def build_skill_projection_binding(
                     )
                 )
                 continue
-            adaptation.validate_for(skill.semantic_plan, backend=backend.name)
         documents[skill.name] = project_agent_skill_document(
             skill,
             projection_context,

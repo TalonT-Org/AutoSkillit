@@ -172,7 +172,7 @@ def _admit_new_record(
 
 def _scan_and_adopt_orphans(
     store: Any,
-    lifecycle_error: Any = None,
+    lifecycle_error: type[RuntimeError],
 ) -> OrphanAdoptionOutcome:
     """Run the directory-reconciliation orphan-adoption sweep.
 
@@ -182,12 +182,6 @@ def _scan_and_adopt_orphans(
     without ``_admission`` needing to import from ``_store`` (which would
     create a circular import at module load time).
     """
-    if lifecycle_error is None:
-        raise TypeError(
-            "_scan_and_adopt_orphans requires a concrete lifecycle_error "
-            "exception class; the wrapper in _store.py always supplies "
-            "CaptureLifecycleError."
-        )
     return _sweep_scan_and_adopt_orphans(
         store,
         lifecycle_error=lifecycle_error,

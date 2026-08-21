@@ -99,12 +99,15 @@ def test_capture_lifecycle_store_class_resolves_through_facade() -> None:
 
 
 def test_admission_helpers_resolvable_through_package() -> None:
-    """Module-level functions must be importable from ``_admission`` and
-    perform the documented work for a stub store — not just be callable.
+    """Module-level functions must be importable from ``_admission``.
 
-    Each helper is invoked against a minimal stub that exposes the
-    attributes the helper reaches into. The stub records the call so we
-    verify dispatch occurred (not just that the function exists).
+    The other admission helpers are exercised end-to-end via the wrapper
+    delegation tests below — they each reach into specific private
+    attributes of the store that would require elaborate stubs to invoke
+    directly. ``_scan_and_adopt_orphans`` is the one helper that has no
+    such dependency and exercises the new required ``lifecycle_error``
+    keyword by asserting that omitting it raises TypeError at the call
+    site (Python's "missing 1 required keyword-only argument" message).
     """
     from autoskillit.hooks._capture_lifecycle._admission import (
         _acquire_flock,
@@ -118,8 +121,8 @@ def test_admission_helpers_resolvable_through_package() -> None:
     assert callable(_admit_new_record)
     assert callable(_scan_and_adopt_orphans)
 
-    # _scan_and_adopt_orphans: ensure the None-lifecycle_error guard fires
-    # with a clear TypeError so callers cannot silently mis-use it.
+    # _scan_and_adopt_orphans: mandatory lifecycle_error kwarg — the
+    # wrapper in _store.py always supplies CaptureLifecycleError.
     with pytest.raises(TypeError, match="lifecycle_error"):
         _scan_and_adopt_orphans(store=object())  # type: ignore[arg-type]
 

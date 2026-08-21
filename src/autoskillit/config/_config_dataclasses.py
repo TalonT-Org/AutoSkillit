@@ -31,12 +31,8 @@ class ConfigSchemaError(ValueError):
 _SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
 _METADATA_KEYS: frozenset[str] = frozenset({"version"})
 
-# Profile fields that have been retired from providers.profiles.<name>.
-# Values are YAML field names. Resolved by ProvidersConfig.resolved_profiles,
-# which silently drops them before constructing ProviderProfileDef. New
-# entries must include a trailing comment naming the retiring version and
-# the tracking issue. Append-only; never remove an entry. Fail-fast module-
-# load assertion below enforces lowercase — no exceptions.
+# Retired profile YAML keys. Append-only; entries require a trailing comment
+# naming the retiring version and tracking issue.
 RETIRED_PROFILE_KEYS: frozenset[str] = frozenset(
     {
         # Removed in 0.10.1007. No consumer existed: _profile_to_env projects
@@ -45,9 +41,7 @@ RETIRED_PROFILE_KEYS: frozenset[str] = frozenset(
     }
 )
 
-# Module-load fail-fast on shape violations (mirrors the lowercase / tuple
-# assertion enforced for RETIRED_CONFIG_KEYS above). Use raise AssertionError
-# (not bare assert) so the check survives `python -O`.
+# Fail fast at module load; an explicit raise keeps the check active under `python -O`.
 _NON_LOWER_RETIRED_PROFILE_KEYS = sorted(
     k for k in RETIRED_PROFILE_KEYS if not isinstance(k, str) or k != k.lower()
 )
@@ -720,11 +714,7 @@ class ProvidersConfig:
             base_url = copy.pop("base_url", None)
             timeout_str = copy.pop("timeout_seconds", None)
             api_key_env = copy.pop("api_key_env", None)
-            # Silently drop retired profile keys per RETIRED_PROFILE_KEYS policy.
-            # Silent (no warning) because the registry is the canonical
-            # migration surface — users get the same behavior whether the key
-            # is removed in 0.10.1007 or in any later version. The loop runs
-            # BEFORE raw_env=copy so retired keys do not leak into the catch-all.
+            # Drop retired keys before raw_env captures the remaining provider fields.
             for retired_key in RETIRED_PROFILE_KEYS:
                 copy.pop(retired_key, None)
             result[name] = ProviderProfileDef(

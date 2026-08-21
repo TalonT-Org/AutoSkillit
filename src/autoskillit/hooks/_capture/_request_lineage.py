@@ -362,7 +362,7 @@ def _producer_validate_int(value: object, expected: int, field_name: str) -> Non
 
 def _consumer_validate_int(value: object, expected: int, field_name: str) -> None:
     if type(value) is not int or value != expected:
-        raise CaptureProtocolError(f"unsupported {field_name}")
+        raise CaptureProtocolError(f"invalid {field_name}")
 
 
 def _validate_nonnegative_int(value: object, field_name: str) -> None:

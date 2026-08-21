@@ -35,7 +35,7 @@ from autoskillit.workspace import (
     SkillCatalogEntry,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
-from tests.contracts.test_skill_admission_ledger import (
+from tests.contracts._skill_admission_ledger import (
     COOK_SESSION_COMBINATION,
     SKILL_ADMISSION_LEDGER,
 )

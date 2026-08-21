@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -246,8 +247,6 @@ def _install_root_generation(
     generation_root = generation_artifact_root(home, _INSTALL_REF, version, incarnation_id)
     generation_root.parent.mkdir(parents=True, exist_ok=True)
     _run_uv_install(source, generation_root, python_pin)
-
-    import shutil
 
     shutil.rmtree(staging, ignore_errors=True)
 
@@ -507,8 +506,6 @@ def test_install_detection_survives_versioned_roots(tmp_path: Path, fake_git_sou
         },
     )
     assert result.returncode == 0, result.stderr
-    import json
-
     payload = json.loads(result.stdout)
     assert payload["install_type"] == "git-vcs"
     assert payload["commit_id"]

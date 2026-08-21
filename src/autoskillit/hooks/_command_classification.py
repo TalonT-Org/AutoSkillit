@@ -803,7 +803,9 @@ def extract_git_subcommand_and_flags(
     unrecognized flag means the real subcommand could not be found (fail
     closed, ambiguous), not "there is no git subcommand here" (already
     safe). See is_allowed_protected_path_metadata_command and
-    git_ops_guard.py's _classify_git_segment/_contains_blocked_git_op.
+    `_git_command_classification._classify_git_segment` /
+    `_git_command_classification._contains_blocked_git_op` (moved from
+    `git_ops_guard.py` per Step 9 of #4665).
     """
     start = _command_start_index(segment)
     if start is None:

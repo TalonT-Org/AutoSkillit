@@ -697,6 +697,8 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         calls.append((list(cmd), kwargs))
+        if len(calls) == 2:
+            Path(kwargs["env"]["UV_TOOL_BIN_DIR"]).mkdir(parents=True)
         if len(calls) == 2 and failure_point == "final_install_oserror":
             raise OSError("simulated final install launch failure")
         if len(calls) == 2 and failure_point == "final_install_nonzero":
@@ -718,6 +720,7 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
                 process_runner=runner,
             )
         assert len(calls) == 2
+        assert not Path(calls[1][1]["env"]["UV_TOOL_BIN_DIR"]).exists()
         return
 
     result = run_update_transaction(
@@ -739,6 +742,7 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
     if failure_point == "final_install_oserror":
         assert "/plugin-generations/autoskillit-install/1.1.0/" in result.findings[0]
     assert len(calls) == 2
+    assert not Path(calls[1][1]["env"]["UV_TOOL_BIN_DIR"]).exists()
 
 
 def test_claudecode_with_existing_registration_defers_before_mutation(

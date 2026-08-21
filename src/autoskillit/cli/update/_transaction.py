@@ -551,16 +551,19 @@ def run_update_transaction(
             try:
                 generation_root.parent.mkdir(parents=True, exist_ok=True)
                 final_bin_dir = generation_root.parent / f".{generation_root.name}-bin"
-                final_result = runner(
-                    list(command.argv),
-                    check=False,
-                    env={
-                        **maintenance_env,
-                        "UV_TOOL_DIR": str(generation_root),
-                        "UV_TOOL_BIN_DIR": str(final_bin_dir),
-                    },
-                    cwd=working_dir,
-                )
+                try:
+                    final_result = runner(
+                        list(command.argv),
+                        check=False,
+                        env={
+                            **maintenance_env,
+                            "UV_TOOL_DIR": str(generation_root),
+                            "UV_TOOL_BIN_DIR": str(final_bin_dir),
+                        },
+                        cwd=working_dir,
+                    )
+                finally:
+                    shutil.rmtree(final_bin_dir, ignore_errors=True)
             except OSError as exc:
                 return _upgrade_failure(
                     progress,

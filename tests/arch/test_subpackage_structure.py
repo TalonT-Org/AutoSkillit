@@ -44,6 +44,7 @@ class TestCoreSubpackages:
             "_type_invariant_registry",
             "_type_launch",
             "_type_launch_projection",
+            "_type_managed_home",
             "_type_native_shell_capture",
             "_type_phoropter",
             "_type_persisted_formats",

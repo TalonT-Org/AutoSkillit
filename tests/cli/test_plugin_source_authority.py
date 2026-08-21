@@ -470,7 +470,7 @@ class TestInstalledPluginArtifactAuthority:
         from types import SimpleNamespace
 
         from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
-        from autoskillit.core import PluginLoadMode
+        from autoskillit.core import PluginLoadMode, managed_home
 
         backend = SimpleNamespace(
             capabilities=SimpleNamespace(skill_injection_capable=False),
@@ -499,6 +499,7 @@ class TestInstalledPluginArtifactAuthority:
 
         assert authority is authority_marker
         assert load_mode is PluginLoadMode.NONE
+        assert captured.pop("home") == managed_home()
         assert captured == {
             "base_branch": "main",
             "catalog": catalog_marker,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -18,6 +19,8 @@ from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
 from ._linux_proc import read_boot_id, read_starttime_ticks
+
+logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 runtime is stdlib-only
 
 __all__ = [
     "registry_path",
@@ -134,6 +137,7 @@ def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> boo
             )
             _atomic_write(path, _fast_dumps(registry))
     except Exception:
+        logger.warning("session owner binding failed", exc_info=True)
         return False
     return True
 

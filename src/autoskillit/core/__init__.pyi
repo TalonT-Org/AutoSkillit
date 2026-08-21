@@ -895,7 +895,6 @@ from .types import LaunchSurface as LaunchSurface
 from .types import LaunchValueSource as LaunchValueSource
 from .types import LaunchValueSourceKind as LaunchValueSourceKind
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
-from .types import ManagedHome as ManagedHome
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
@@ -913,6 +912,7 @@ from .types import (
 from .types import (
     ManagedHeadlessSessionTerminalState as ManagedHeadlessSessionTerminalState,
 )
+from .types import ManagedHome as ManagedHome
 from .types import ManagedSessionHome as ManagedSessionHome
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
@@ -1203,13 +1203,13 @@ from .types import is_valid_github_review_repository as is_valid_github_review_r
 from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )
+from .types import managed_home as managed_home
+from .types import managed_home_for as managed_home_for
 from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
 from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
 from .types import normalize_inherited_fds as normalize_inherited_fds
-from .types import managed_home as managed_home
-from .types import managed_home_for as managed_home_for
 from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
 from .types import parse_plan_paths as parse_plan_paths
 from .types import (

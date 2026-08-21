@@ -1344,5 +1344,10 @@ def any_kitchen_open(project_path: str | None = None, *, home: ManagedHome | Non
             return len(survivors) > 0
         finally:
             fh.close()
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "active_kitchen_open_check_failed",
+            error=str(exc),
+            exc_info=True,
+        )
         return True

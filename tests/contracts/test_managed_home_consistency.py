@@ -49,7 +49,7 @@ def _engine(home: ManagedHome, managed_root: Path) -> PluginArtifactRetirementEn
         managed_root=managed_root,
         artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
         manifest_path=lambda _path: identity.manifest_path,
-        lease_path=lambda path: path.parent / f".{path.name}.lease",
+        lease_path=lambda path: path.parent / f".{path.name}.lock",
         current_identity=lambda _record: identity,
         logger=Mock(),
         is_current=None,

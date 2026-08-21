@@ -81,6 +81,7 @@ async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_p
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     lifecycle_logger = MagicMock()
+    kitchen_id = ctx.kitchen_id
 
     with (
         patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
@@ -103,11 +104,11 @@ async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_p
     assert ctx.gate.enabled is False
     lifecycle_logger.warning.assert_any_call(
         "active_kitchen_registration_refused",
-        kitchen_id=ctx.kitchen_id,
+        kitchen_id=kitchen_id,
     )
     lifecycle_logger.warning.assert_any_call(
         "active_kitchen_unregistration_refused",
-        kitchen_id=ctx.kitchen_id,
+        kitchen_id=kitchen_id,
     )
     await asyncio.sleep(0)
 

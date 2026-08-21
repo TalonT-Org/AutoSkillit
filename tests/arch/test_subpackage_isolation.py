@@ -1021,7 +1021,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # subprocess boundary, and dimension-safe recipe delivery limits.
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
-        "core/types": 55,
+        "core/types": 56,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1136,7 +1136,7 @@ def test_data_directories_are_not_python_packages() -> None:
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     "core/_plugin_cache.py": (
-        1250,
+        1400,
         "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "
         "Both mutate the retiring cache under the install lock and must stay adjacent to "
         "the append/remove/read primitives they call, for the same reason "
@@ -1147,7 +1147,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "so the reclaim path's location is a checked invariant, not an accident. Issue "
         "#4710 adds per-record quarantine and total mutation results at the same lock-owned "
         "boundary; splitting those primitives would separate classification from mutation. "
-        "Phase 2 adds the lock-held salvage and durable-sidecar repair at this same authority.",
+        "Phase 2 adds the lock-held salvage and durable-sidecar repair at this same authority. "
+        "Phase 3 keeps explicit ManagedHome threading and the classified active-kitchen "
+        "reader/writers at that same lock and persistence boundary.",
     ),
     "execution/evidence_reader.py": (
         1500,

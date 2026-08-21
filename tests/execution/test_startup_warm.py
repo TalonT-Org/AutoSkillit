@@ -25,6 +25,7 @@ import time
 
 import pytest
 
+from autoskillit.fleet import WARM_MODULE_NAMES
 from tests.core.test_import_isolation import _clean_subprocess_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -65,6 +66,15 @@ def _run_warm_subprocess() -> subprocess.CompletedProcess[str]:
         time.sleep(1)
         result = subprocess.run(args, capture_output=True, text=True, env=env, timeout=30)
     return result
+
+
+def test_warm_modules_do_not_cross_above_the_fleet_import_layer() -> None:
+    invalid = [
+        module_name
+        for module_name in WARM_MODULE_NAMES
+        if module_name.partition(".")[2].partition(".")[0] not in {"core", "execution", "fleet"}
+    ]
+    assert not invalid, f"startup warming bypasses the import-layer contract: {invalid}"
 
 
 def test_failure_path_modules_are_preloaded_at_startup() -> None:

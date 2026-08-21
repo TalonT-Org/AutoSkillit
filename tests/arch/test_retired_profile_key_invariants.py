@@ -28,16 +28,13 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 @pytest.mark.parametrize("retired_key", sorted(RETIRED_PROFILE_KEYS))
 def test_retired_profile_key_invariants(retired_key: str) -> None:
-    # (a) Retired entries must be lowercase strings — fail-fast at module
+    # T1: Retired entries must be lowercase strings — fail-fast at module
     # load already enforces this; this test pins the test-side mirror.
     assert isinstance(retired_key, str)
     assert retired_key == retired_key.lower()
 
-    # (b) A retired profile key MUST NOT also be a live dataclass field —
-    # that would mean the field is both retired AND active, the state
-    # #4685 is escaping. NOTE: use the CLASS, not an instance, because
-    # ProviderProfileDef has a required positional `name: str` with no
-    # default — calling ProviderProfileDef() raises TypeError.
+    # T2: A retired profile key must not also be a live dataclass field.
+    # Use the class because ProviderProfileDef.name is required.
     live_fields = {f.name for f in dataclasses.fields(ProviderProfileDef)}
     assert retired_key not in live_fields, (
         f"RETIRED_PROFILE_KEYS[{retired_key!r}]: retired key is also a live "
@@ -50,12 +47,12 @@ def test_retired_profile_key_invariants(retired_key: str) -> None:
     [(k, v) for k in sorted(RETIRED_PROFILE_KEYS) for v in ["200000", "0", "-1", "abc", ""]],
 )
 def test_resolved_profiles_silently_drops_retired_keys(retired_key: str, raw_value: str) -> None:
-    """Every retired key is silently dropped regardless of value.
+    """T3/T4: drop retired string values while preserving unknown keys.
 
     Previously, ``context_window: 0`` raised ``ValueError`` from
-    ``__post_init__``. After retirement, all values (valid, invalid,
-    non-numeric, empty) are silently dropped without raising. The key
-    must NOT appear in ``raw_env`` — the retirement loop runs BEFORE
+    ``__post_init__``. After retirement, configured string values (positive,
+    zero, negative, non-numeric, and empty) are silently dropped without
+    raising. The key must NOT appear in ``raw_env`` — the retirement loop runs before
     ``raw_env=copy`` so it cannot leak into the catch-all sink.
     """
     cfg = ProvidersConfig(
@@ -81,7 +78,7 @@ def test_resolved_profiles_silently_drops_retired_keys(retired_key: str, raw_val
 
 
 def test_resolved_profiles_silently_drops_retired_keys_across_multiple_profiles() -> None:
-    """Retirement must apply to every profile, not just the first."""
+    """T5: retirement applies to every profile, not just the first."""
     cfg = ProvidersConfig(
         profiles={
             "anthropic": {"base_url": "https://a.invalid", "context_window": "200000"},

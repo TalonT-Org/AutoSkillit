@@ -34,16 +34,12 @@ if _HOOKS_DIR not in sys.path:
 
 # Register this module under both ``autoskillit.hooks._capture_lifecycle._admission``
 # and ``_capture_lifecycle._admission`` so callers from either spelling share
-# the same ``sys.modules`` entry. The dual-mode discriminator matches the
-# pattern in the original ``_capture_lifecycle.py:17-23``: under the bare
-# package identity, ``_capture._module_identity`` resolves directly.
+# the same ``sys.modules`` entry. Matches the 2-branch bootstrap in
+# ``_store.py`` and the pattern in ``_capture/_authority.py``.
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _module_identity
 else:
-    if __package__:
-        _module_identity = importlib.import_module("_capture._module_identity")
-    else:
-        _module_identity = importlib.import_module("_capture._module_identity")
+    _module_identity = importlib.import_module("_capture._module_identity")
 _module_identity.register_module_aliases(__name__)
 
 if TYPE_CHECKING:

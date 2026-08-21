@@ -77,18 +77,18 @@ def _protocol_declared_fake_names(fakes_path: Path, protocol_names: set[str]) ->
     return declared
 
 
-def _enrolled_in_a_contract_suite(fake_name: str, contracts_dir: Path) -> bool:
+def _contract_suite_references(contracts_dir: Path) -> set[str]:
+    references: set[str] = set()
     for py_file in contracts_dir.rglob("test_*.py"):
         if py_file.resolve() == Path(__file__).resolve():
             continue  # this file's own allowlist would otherwise self-enroll every entry
         tree = ast.parse(py_file.read_text())
-        if any(
-            (isinstance(node, ast.Name) and node.id == fake_name)
-            or (isinstance(node, ast.Attribute) and node.attr == fake_name)
-            for node in ast.walk(tree)
-        ):
-            return True
-    return False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                references.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                references.add(node.attr)
+    return references
 
 
 def test_protocol_scan_accepts_qualified_protocol_bases(tmp_path: Path) -> None:
@@ -115,11 +115,12 @@ def test_every_fake_is_enrolled_in_a_shared_contract_suite() -> None:
         f"removed?) — remove them: {sorted(stale_allowlist_entries)}"
     )
 
+    contract_references = _contract_suite_references(_CONTRACTS_DIR)
     failures: list[str] = []
     for fake_name in sorted(declared_fakes):
         if fake_name in allowlisted_names:
             continue
-        if not _enrolled_in_a_contract_suite(fake_name, _CONTRACTS_DIR):
+        if fake_name not in contract_references:
             failures.append(
                 f"{fake_name}: Protocol-declared but not referenced under tests/contracts/ "
                 f"and not in _UNENROLLED_ALLOWLIST — enroll it in a shared contract suite "

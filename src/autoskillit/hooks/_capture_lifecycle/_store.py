@@ -272,15 +272,7 @@ class CaptureLifecycleStore:
         return (now := self._wall_clock()), now + _RETENTION_SECONDS
 
     def _acquire_flock(self, fd: int, *, blocking: bool) -> None:
-        """Thin wrapper — delegates to ``_admission._acquire_flock``.
-
-        The lock-retry loop, budget check, and ``LockContended`` raise now
-        live in ``_admission.py`` so the lock-retry primitive is
-        physically separate from the transition/capacity accounting it
-        shares with the rest of the store. The wrapper preserves the
-        public ``self``-binding so monkeypatching this name on the class
-        continues to dispatch the same way.
-        """
+        """Thin wrapper — delegates to ``_admission._acquire_flock``."""
         return _admission._acquire_flock(self, fd, blocking=blocking)
 
     @contextmanager
@@ -1136,16 +1128,7 @@ class CaptureLifecycleStore:
         compaction_epoch: int,
         size: int,
     ) -> bool:
-        """Thin wrapper — delegates to ``_admission._admit_new_record``.
-
-        Preserves the ``#4440`` one-record-cannot-starve invariant: the
-        active-record cap, the ``_append_locked`` call, and the
-        ``_sweep_transitions`` budget increment all move with the body to
-        ``_admission._admit_new_record`` so the wrapper is a 1-line
-        delegation. ``tests/cli/test_capture_store.py:247`` relies on this
-        exact signature via ``real_admit = CaptureLifecycleStore._admit_new_record``
-        and ``monkeypatch.setattr``.
-        """
+        """Thin wrapper — delegates to ``_admission._admit_new_record``."""
         return _admission._admit_new_record(self, record, records, compaction_epoch, size)
 
     def _scan_and_adopt_orphans(self) -> _capture_sweep.OrphanAdoptionOutcome:

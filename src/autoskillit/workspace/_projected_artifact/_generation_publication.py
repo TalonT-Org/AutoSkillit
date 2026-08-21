@@ -399,34 +399,21 @@ class GenerationArtifactRetirementOwner:
         self._home = resolved_home.root
         self._plugin_ref = plugin_ref
         self._artifact_kind = artifact_kind
-        if artifact_kind is PluginArtifactKind.PLUGIN_GENERATION:
-            self._retirement = PluginArtifactRetirementEngine(
-                home=resolved_home,
-                managed_root=managed_root,
-                artifact_kind=PluginArtifactKind.PLUGIN_GENERATION,
-                manifest_path=self.manifest_path,
-                lease_path=self.lease_path,
-                current_identity=self._current_identity,
-                logger=logger,
-                is_current=lambda path: _is_selected_generation(
-                    self._home, self._plugin_ref, path
-                ),
-            )
-        elif artifact_kind is PluginArtifactKind.INSTALL_ROOT_GENERATION:
-            self._retirement = PluginArtifactRetirementEngine(
-                home=resolved_home,
-                managed_root=managed_root,
-                artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
-                manifest_path=self.manifest_path,
-                lease_path=self.lease_path,
-                current_identity=self._current_identity,
-                logger=logger,
-                is_current=lambda path: _is_selected_generation(
-                    self._home, self._plugin_ref, path
-                ),
-            )
-        else:
+        if artifact_kind not in {
+            PluginArtifactKind.PLUGIN_GENERATION,
+            PluginArtifactKind.INSTALL_ROOT_GENERATION,
+        }:
             raise ValueError(f"unsupported generation artifact kind: {artifact_kind}")
+        self._retirement = PluginArtifactRetirementEngine(
+            home=resolved_home,
+            managed_root=managed_root,
+            artifact_kind=artifact_kind,
+            manifest_path=self.manifest_path,
+            lease_path=self.lease_path,
+            current_identity=self._current_identity,
+            logger=logger,
+            is_current=lambda path: _is_selected_generation(self._home, self._plugin_ref, path),
+        )
 
     @property
     def managed_root(self) -> Path:

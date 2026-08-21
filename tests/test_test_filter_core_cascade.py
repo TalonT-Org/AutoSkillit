@@ -128,6 +128,7 @@ class TestModuleCascadeCore:
             "_type_backend",
             "_type_launch",
             "_type_launch_projection",
+            "_type_managed_home",
             "_type_recipe_delivery",
             "_type_recipe_sections",
             "_type_dimensions",

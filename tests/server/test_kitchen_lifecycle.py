@@ -81,7 +81,6 @@ async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_p
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     lifecycle_logger = MagicMock()
-    kitchen_id = ctx.kitchen_id
 
     with (
         patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
@@ -99,6 +98,7 @@ async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_p
         ),
     ):
         assert await _open_kitchen_handler() is None
+        kitchen_id = ctx.kitchen_id
         _close_kitchen_handler()
 
     assert ctx.gate.enabled is False

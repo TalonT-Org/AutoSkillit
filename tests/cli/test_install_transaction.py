@@ -26,6 +26,7 @@ from autoskillit.cli.install._install_contract import (
     InstallOutcome,
     InstallRequest,
 )
+from autoskillit.core import ManagedHome
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -110,13 +111,13 @@ def _configure_transaction(
 
     def publish_generation(
         *,
-        home: Path,
+        home: ManagedHome,
         plugin_ref: str,
         version: str,
         semantic_key: str,
         source_root: Path,
     ) -> SimpleNamespace:
-        assert home == tmp_path
+        assert home.root == tmp_path
         assert plugin_ref == _PLUGIN_REF
         assert semantic_key == f"{plugin_ref}:{version}"
         assert source_root == (

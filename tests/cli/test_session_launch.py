@@ -442,13 +442,12 @@ def test_run_interactive_session_binds_launch_owner_before_wait(
             events.append(("wait", timeout))
             return super().wait(timeout)
 
+    def bind_owner(project_dir: Path, launch_id: str, pid: int) -> bool:
+        events.append(("bind", (project_dir, launch_id, pid)))
+        return True
+
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: _Process(pid=777))
-    monkeypatch.setattr(
-        "autoskillit.core.bind_session_owner",
-        lambda project_dir, launch_id, pid: (
-            events.append(("bind", (project_dir, launch_id, pid))) or True
-        ),
-    )
+    monkeypatch.setattr("autoskillit.core.bind_session_owner", bind_owner)
     backend, _captured_kwargs = _make_capturing_backend()
 
     _run_interactive_session(

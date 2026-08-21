@@ -21,8 +21,7 @@ import dataclasses
 
 import pytest
 
-from autoskillit.config import ProviderProfileDef, ProvidersConfig
-from autoskillit.config.settings import RETIRED_PROFILE_KEYS
+from autoskillit.config import RETIRED_PROFILE_KEYS, ProviderProfileDef, ProvidersConfig
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -48,15 +47,9 @@ def test_retired_profile_key_invariants(retired_key: str) -> None:
 
 @pytest.mark.parametrize(
     "retired_key, raw_value",
-    [
-        (k, v)
-        for k in sorted(RETIRED_PROFILE_KEYS)
-        for v in ["200000", "0", "-1", "abc", ""]
-    ],
+    [(k, v) for k in sorted(RETIRED_PROFILE_KEYS) for v in ["200000", "0", "-1", "abc", ""]],
 )
-def test_resolved_profiles_silently_drops_retired_keys(
-    retired_key: str, raw_value: str
-) -> None:
+def test_resolved_profiles_silently_drops_retired_keys(retired_key: str, raw_value: str) -> None:
     """Every retired key is silently dropped regardless of value.
 
     Previously, ``context_window: 0`` raised ``ValueError`` from

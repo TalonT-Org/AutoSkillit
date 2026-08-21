@@ -38,7 +38,7 @@ def _replace_hook(script: str, **changes: object) -> list[HookDef]:
 
 
 def test_capture_shards_use_canonical_store_ports() -> None:
-    capture_dir = Path(capture_lifecycle.__file__).with_name("_capture")
+    capture_dir = Path(capture_lifecycle.__file__).resolve().parent.parent / "_capture"
     for filename in ("_delivery.py", "_resolver.py", "_sweep.py"):
         tree = ast.parse((capture_dir / filename).read_text())
         local_store_protocols = [
@@ -135,10 +135,15 @@ def test_snapshot_reference_and_reader_reuse_one_registered_resource_owner() -> 
 
 
 def test_every_shell_capture_persistent_path_constant_is_registered() -> None:
-    hooks_dir = Path(capture_lifecycle.__file__).resolve().parent
+    hooks_dir = Path(capture_lifecycle.__file__).resolve().parent.parent
     capture_dir = hooks_dir / "_capture"
     observed: set[tuple[str, str]] = set()
-    for path in (*capture_dir.glob("*.py"), hooks_dir / "_capture_lifecycle.py"):
+    candidate_paths = (
+        *capture_dir.glob("*.py"),
+        hooks_dir / "_capture_lifecycle" / "_store.py",
+        hooks_dir / "_capture_lifecycle" / "__init__.py",
+    )
+    for path in candidate_paths:
         for node in ast.parse(path.read_text()).body:
             if not isinstance(node, (ast.Assign, ast.AnnAssign)):
                 continue
@@ -159,8 +164,8 @@ def test_every_shell_capture_persistent_path_constant_is_registered() -> None:
         ("_syntax.py", "PUBLIC_NAME_RE"),
         ("_syntax.py", "QUARANTINE_NAME_RE"),
         ("_syntax.py", "STAGING_NAME_RE"),
-        ("_capture_lifecycle.py", "LEDGER_NAME"),
-        ("_capture_lifecycle.py", "LOCK_NAME"),
+        ("_store.py", "LEDGER_NAME"),
+        ("_store.py", "LOCK_NAME"),
         ("_migration.py", "MIGRATION_NAME"),
         ("_sweep_cursor.py", "CURSOR_NAME"),
         ("_orphan_scan.py", "CURSOR_NAME"),

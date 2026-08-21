@@ -35,6 +35,12 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.large]
 
 _INSTALL_REF = "faketool-immunity-test@fake-local"
 
+
+@pytest.fixture(autouse=True)
+def _isolate_install_lock(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+
 _PACKAGE_INIT = """
 import json
 import sys

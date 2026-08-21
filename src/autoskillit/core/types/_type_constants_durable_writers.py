@@ -2,9 +2,10 @@
 artifact with a lifetime exceeding the writing process under a relocatability
 or machine-local-detection obligation.
 
-Issue #4735: this shard was extracted from ``_type_constants.py``. The
-``repair_corrupt_retiring_cache`` entry (added in #4723) is preserved at the
-head of ``DURABLE_ARTIFACT_WRITERS`` — dropping it would re-introduce the
+Issue #4735: extracted from ``_type_constants.py`` to keep the facade under
+the enforced 750-line budget (``test_warning_zone_files_under_750_lines``).
+The ``repair_corrupt_retiring_cache`` entry (added in #4723) is preserved at
+the head of ``DURABLE_ARTIFACT_WRITERS`` — dropping it would re-introduce the
 brick-after-leak failure mode fixed by that PR.
 
 Import-time validation rejects duplicate writers and machine-local entries

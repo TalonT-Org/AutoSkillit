@@ -513,6 +513,7 @@ class TestGroupDApiContractPreservation:
             "pty_mode",
             "input_data",
             "completion_drain_timeout",
+            "natural_exit_grace_seconds",
             "linux_tracing_config",
             "env",
             "idle_output_timeout",

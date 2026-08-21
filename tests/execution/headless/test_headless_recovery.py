@@ -121,6 +121,7 @@ class TestNudgePtyMode:
             retry_reason=RetryReason.EARLY_STOP,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
         )
 
         # After fix: runner must have been called with pty_mode=True
@@ -196,6 +197,7 @@ class TestNudgePtyMode:
             pty_override=False,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
         )
 
         assert mock_runner.last_pty_mode is False, (
@@ -309,6 +311,7 @@ class TestNudgePtyMode:
             managed_lineage_observer=lineage_observer,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
         )
 
         assert result is not None and result.success is True
@@ -398,6 +401,7 @@ async def test_nudge_skips_for_block_delimiter_patterns(tmp_path: Path) -> None:
         result_parser=result_parser,
         launch_resolver=launch_resolver,
         launch_preparation=launch_preparation,
+        natural_exit_grace_seconds=3.0,
     )
 
     assert nudge_result is None

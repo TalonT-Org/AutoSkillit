@@ -31,6 +31,33 @@ class ConfigSchemaError(ValueError):
 _SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
 _METADATA_KEYS: frozenset[str] = frozenset({"version"})
 
+# Profile fields that have been retired from providers.profiles.<name>.
+# Values are YAML field names. Resolved by ProvidersConfig.resolved_profiles,
+# which silently drops them before constructing ProviderProfileDef. New
+# entries must include a trailing comment naming the retiring version and
+# the tracking issue. Append-only; never remove an entry. Fail-fast module-
+# load assertion below enforces lowercase — no exceptions.
+RETIRED_PROFILE_KEYS: frozenset[str] = frozenset(
+    {
+        # Removed in 0.10.1007. No consumer existed: _profile_to_env projects
+        # base_url / timeout_seconds / api_key_env / raw_env only. See #4685.
+        "context_window",
+    }
+)
+
+# Module-load fail-fast on shape violations (mirrors the lowercase / tuple
+# assertion enforced for RETIRED_CONFIG_KEYS above). Use raise AssertionError
+# (not bare assert) so the check survives `python -O`.
+_NON_LOWER_RETIRED_PROFILE_KEYS = sorted(
+    k for k in RETIRED_PROFILE_KEYS if not isinstance(k, str) or k != k.lower()
+)
+if _NON_LOWER_RETIRED_PROFILE_KEYS:
+    raise AssertionError(
+        f"RETIRED_PROFILE_KEYS entries must be lowercase str; offenders: "
+        f"{_NON_LOWER_RETIRED_PROFILE_KEYS!r}"
+    )
+del _NON_LOWER_RETIRED_PROFILE_KEYS
+
 
 _DEFAULT_COMMAND: tuple[str, ...] = ("task", "test-check")
 
@@ -687,11 +714,6 @@ class ProvidersConfig:
 
     @property
     def resolved_profiles(self) -> dict[str, ProviderProfileDef]:
-        # Function-local import: settings.py:31 imports _config_dataclasses at module
-        # load, so a top-level `from autoskillit.config.settings import
-        # RETIRED_PROFILE_KEYS` here would resolve before the registry is bound.
-        from autoskillit.config.settings import RETIRED_PROFILE_KEYS
-
         result: dict[str, ProviderProfileDef] = {}
         for name, raw_dict in self.profiles.items():
             copy = {k: v for k, v in raw_dict.items() if v is not None}

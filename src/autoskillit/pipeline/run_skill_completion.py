@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
+from autoskillit.core import FaultDomain
 from autoskillit.pipeline.tokens import canonical_step_name
 
 __all__ = ["DefaultRunSkillCompletionAuthority", "RunSkillCompletionReceipt"]
@@ -32,7 +33,7 @@ class RunSkillCompletionReceipt:
     success: bool
     result_digest: str
     started_at: float
-    fault_domain: str = "logic"
+    fault_domain: FaultDomain = FaultDomain.LOGIC
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,7 +147,7 @@ class DefaultRunSkillCompletionAuthority:
         success: bool,
         result_digest: str,
         child_session_id: str = "",
-        fault_domain: str = "logic",
+        fault_domain: FaultDomain = FaultDomain.LOGIC,
     ) -> RunSkillCompletionReceipt:
         """Atomically replace an in-flight invocation with a draft receipt."""
         with self._lock:

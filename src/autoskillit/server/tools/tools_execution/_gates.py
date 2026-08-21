@@ -8,7 +8,10 @@ import json
 import os
 from typing import TYPE_CHECKING, cast
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, compute_bytes_hash
+from autoskillit.core import DISPATCH_ID_ENV_VAR, FaultDomain, compute_bytes_hash
+from autoskillit.core import get_logger
+
+logger = get_logger(__name__)
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.server._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
@@ -239,7 +242,12 @@ def _finalize_run_skill_completion(
         }
     success = payload.get("success") is True
     classification = str(payload.get("subtype") or ("success" if success else "failed"))
-    fault_domain = str(payload.get("infra_fault_domain") or "logic")
+    raw_fault_domain = str(payload.get("infra_fault_domain") or FaultDomain.LOGIC.value)
+    try:
+        fault_domain = FaultDomain(raw_fault_domain)
+    except ValueError:
+        logger.warning("invalid_run_skill_fault_domain", fault_domain=raw_fault_domain)
+        fault_domain = FaultDomain.LOGIC
     receipt = authority.draft(
         invocation_id,
         classification=classification,

@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import CmdSpec
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
+from ._type_enums import FaultDomain
 from ._type_execution_identity import ExecutionIdentity
 from ._type_launch import (
     BackendAuthority,
@@ -78,7 +79,7 @@ class RunSkillCompletionAuthority(Protocol):
         success: bool,
         result_digest: str,
         child_session_id: str = "",
-        fault_domain: str = "logic",
+        fault_domain: FaultDomain = FaultDomain.LOGIC,
     ) -> Any: ...
 
     def abort(self, invocation_id: str) -> bool: ...

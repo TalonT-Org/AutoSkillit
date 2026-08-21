@@ -9,6 +9,7 @@ from threading import Barrier, Event
 
 import pytest
 
+from autoskillit.core import FaultDomain
 from autoskillit.pipeline import DefaultRunSkillCompletionAuthority, RunSkillCompletionReceipt
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
@@ -589,7 +590,7 @@ class TestMostRecentAcknowledged:
             classification="failed",
             success=False,
             result_digest="digest-1",
-            fault_domain="infrastructure",
+            fault_domain=FaultDomain.INFRASTRUCTURE,
         )
         authority.publish(first_receipt.receipt_id)
         authority.acknowledge(
@@ -600,14 +601,14 @@ class TestMostRecentAcknowledged:
         after_first = authority.most_recent_acknowledged()
         assert after_first is not None
         assert after_first.receipt_id == first_receipt.receipt_id
-        assert after_first.fault_domain == "infrastructure"
+        assert after_first.fault_domain is FaultDomain.INFRASTRUCTURE
 
         second_receipt = authority.draft(
             _begin(authority),
             classification="success",
             success=True,
             result_digest="digest-2",
-            fault_domain="logic",
+            fault_domain=FaultDomain.LOGIC,
         )
         authority.publish(second_receipt.receipt_id)
         authority.acknowledge(
@@ -618,7 +619,7 @@ class TestMostRecentAcknowledged:
         after_second = authority.most_recent_acknowledged()
         assert after_second is not None
         assert after_second.receipt_id == second_receipt.receipt_id
-        assert after_second.fault_domain == "logic"
+        assert after_second.fault_domain is FaultDomain.LOGIC
 
 
 class TestPendingInfo:

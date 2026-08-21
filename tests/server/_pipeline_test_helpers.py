@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from autoskillit.core import FaultDomain
+
 
 def _write_tracker(tmp_path, pipeline_id, steps, dependencies, kitchen_id="test-kitchen"):
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
@@ -108,7 +110,8 @@ def _seed_acknowledged_receipt(tool_ctx, *, fault_domain, step_name="seed-step")
         tracker_incarnation_id="",
         step_name=step_name,
     )
-    is_infrastructure = fault_domain == "infrastructure"
+    fault_domain = FaultDomain(fault_domain)
+    is_infrastructure = fault_domain is FaultDomain.INFRASTRUCTURE
     receipt = authority.draft(
         invocation_id,
         classification="failed" if is_infrastructure else "success",

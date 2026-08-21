@@ -174,14 +174,14 @@ def _require_no_infrastructure_fault(
     if authority is None:
         return None
     receipt = authority.most_recent_acknowledged()
-    if receipt is None or receipt.fault_domain != FaultDomain.INFRASTRUCTURE.value:
+    if receipt is None or receipt.fault_domain is not FaultDomain.INFRASTRUCTURE:
         return None
     if override_reason:
         logger.warning(
             "infrastructure_fault_gate_overridden",
             tool_name=tool_name,
             reason=override_reason,
-            fault_domain=receipt.fault_domain,
+            fault_domain=receipt.fault_domain.value,
         )
         return None
     return gate_error_result(

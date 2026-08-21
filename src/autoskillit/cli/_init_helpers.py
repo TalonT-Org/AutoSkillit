@@ -28,13 +28,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def warm_failure_path_imports() -> None:
-    """Load the fleet-owned startup warm only when a CLI command starts."""
-    from autoskillit.fleet import warm_failure_path_imports as warm
-
-    warm()
-
-
 def validate_public_plugin_projection(
     source_root: Path,
     public_root: Path,

@@ -5,12 +5,12 @@ types package. The ``disposition`` field on ``RetiredArtifactShape`` requires
 ``Literal`` at class-definition time (named-tuple field evaluation), so
 ``Literal`` is imported alongside ``NamedTuple``.
 
-Issue #4735: this shard was extracted from ``_type_constants.py`` to keep the
-facade under 750 lines. ``RETIRED_READINESS_TOKENS`` (originally at lines
-787-792 of the source) is structurally a retirement registry and is grouped
-here. Direct symbol imports (``from autoskillit.core.types._type_constants
-import RETIRED_SKILL_NAMES``) continue to resolve the same object identity
-through the facade's wildcard re-export.
+Issue #4735: this shard was extracted from ``_type_constants.py``.
+``RETIRED_READINESS_TOKENS`` is structurally a retirement registry and is
+grouped here. Direct symbol imports
+(``from autoskillit.core.types._type_constants import RETIRED_SKILL_NAMES``)
+continue to resolve the same object identity through the facade's wildcard
+re-export.
 """
 
 from __future__ import annotations

@@ -254,7 +254,6 @@ def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypa
 
 def test_projection_binding_excludes_refused_dependency_with_structured_detail(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.core import (
         SkillProjectionRefusal,
@@ -312,13 +311,19 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
     diagnostic = "dependency requires unavailable fixed-set fan-in"
 
     conventions = BackendConventions(skills_subdir=Path(".agents/skills"))
+
+    def adapt_semantics(plan):
+        if plan.join is None or not plan.join.required:
+            return SkillSemanticAdaptationResult()
+        return SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic=diagnostic,
+        )
+
     backend = SimpleNamespace(
         name="test-backend",
         conventions=conventions,
-        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult(
-            unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
-            diagnostic=diagnostic,
-        ),
+        adapt_skill_semantics=adapt_semantics,
     )
 
     binding = build_skill_projection_binding(

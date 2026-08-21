@@ -223,7 +223,7 @@ def test_fresh_contract_and_resume_retain_only_admitted_invocation_members(
     assert "dependency" not in contract.canonical_contents
 
     store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
-    correlation_key = store.create_provisional(contract, snapshot)
+    correlation_key = store.create_provisional(contract=contract, snapshot=snapshot)
     store.finalize(correlation_key, "admitted-only")
 
     loaded = store.load("admitted-only").contract

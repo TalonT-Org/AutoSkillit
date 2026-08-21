@@ -96,10 +96,11 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
             if (
                 b"trust" in accumulated
                 and (b"folder" in accumulated or b"directory" in accumulated)
+                and b"yes, continue" in accumulated
                 and "trust" not in responded
             ):
                 responded.add("trust")
-                os.write(master_fd, b"\r")
+                os.write(master_fd, b"1\r")
             if b"Hooks need review" in chunk and "hooks" not in responded:
                 responded.add("hooks")
                 os.write(master_fd, b"\x1b[B\x1b[B\r")

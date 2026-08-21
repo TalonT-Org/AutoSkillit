@@ -1014,6 +1014,7 @@ from .types import RepresentationBindingId as RepresentationBindingId
 from .types import RepresentationBindingWitness as RepresentationBindingWitness
 from .types import RepresentationRevision as RepresentationRevision
 from .types import RequestReconciliationEvent as RequestReconciliationEvent
+from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import ReservationDecision as ReservationDecision
 from .types import ReservationInvalidatedEffect as ReservationInvalidatedEffect
 from .types import ReservationRecordedEffect as ReservationRecordedEffect
@@ -1082,15 +1083,14 @@ from .types import SkillInvalidityKind as SkillInvalidityKind
 from .types import SkillLister as SkillLister
 from .types import SkillModelClassDef as SkillModelClassDef
 from .types import SkillProjectionBinding as SkillProjectionBinding
-from .types import SkillProjectionRefusal as SkillProjectionRefusal
 from .types import SkillProjectionContextAuthority as SkillProjectionContextAuthority
 from .types import SkillProjectionPreparation as SkillProjectionPreparation
+from .types import SkillProjectionRefusal as SkillProjectionRefusal
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSemanticAdaptationResult as SkillSemanticAdaptationResult
 from .types import SkillSemanticOperation as SkillSemanticOperation
 from .types import SkillSemanticPlan as SkillSemanticPlan
-from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSessionContract as SkillSessionContract
 from .types import SkillSessionContractStore as SkillSessionContractStore

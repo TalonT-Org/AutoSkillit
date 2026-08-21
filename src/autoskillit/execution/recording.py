@@ -535,6 +535,9 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
+        # natural_exit_grace_seconds is inert during replay: the runner returns
+        # pre-recorded subprocess results instead of managing a live process, so
+        # the drain window has no work to absorb.
         del (
             pass_fds,
             backend_resume_session_id,

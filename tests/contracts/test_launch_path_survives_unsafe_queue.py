@@ -192,7 +192,11 @@ def test_launch_binding_survives_an_unreadable_stale_projection_manifest(
     stale = _published_identity(_authority(tmp_path, projection_version=2))
     real_read = projection_cache.read_versioned_json
 
-    def fail_stale_manifest(path: Path, *args: object, **kwargs: object):
+    def fail_stale_manifest(
+        path: Path,
+        *args: object,
+        **kwargs: object,
+    ) -> dict[str, object] | None:
         if Path(path) == stale.manifest_path:
             raise OSError("injected stale sidecar failure")
         return real_read(path, *args, **kwargs)

@@ -273,51 +273,12 @@ def test_dismissal_window_twelve_hours(
 # ---------------------------------------------------------------------------
 
 
-def test_upgrade_command_stable() -> None:
+@pytest.mark.parametrize("requested_revision", ["stable", "main", "v0.7.75"])
+def test_upgrade_command_stable_tracks(requested_revision: str) -> None:
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="abc123",
-        requested_revision="stable",
-        url=None,
-        editable_source=None,
-    )
-    result = upgrade_command(info)
-    assert result is not None
-    assert list(result.argv) == [
-        "uv",
-        "tool",
-        "upgrade",
-        "autoskillit",
-        "--python",
-        _PYTHON_PIN,
-    ]
-
-
-def test_upgrade_command_main() -> None:
-    info = InstallInfo(
-        install_type=InstallType.GIT_VCS,
-        commit_id="abc123",
-        requested_revision="main",
-        url=None,
-        editable_source=None,
-    )
-    result = upgrade_command(info)
-    assert result is not None
-    assert list(result.argv) == [
-        "uv",
-        "tool",
-        "upgrade",
-        "autoskillit",
-        "--python",
-        _PYTHON_PIN,
-    ]
-
-
-def test_upgrade_command_release_tag() -> None:
-    info = InstallInfo(
-        install_type=InstallType.GIT_VCS,
-        commit_id="abc123",
-        requested_revision="v0.7.75",
+        requested_revision=requested_revision,
         url=None,
         editable_source=None,
     )

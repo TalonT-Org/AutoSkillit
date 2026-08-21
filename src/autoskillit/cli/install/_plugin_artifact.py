@@ -336,7 +336,6 @@ class InstalledPluginArtifactAuthority:
             if cancelled is None:
                 logger.warning(
                     "installed_plugin_launch_queue_unreadable",
-                    semantic_key=identity.semantic_key,
                     operation="cancel_obsolete_retirements",
                 )
             log_plugin_artifact_lifecycle(

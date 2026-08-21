@@ -236,6 +236,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_plugin_source": frozenset(
         {"core", "execution", "pipeline", "server", "cli", "workspace", "smoke_utils"}
     ),
+    "_type_retirement_backstops": frozenset({"core", "cli", "workspace"}),
     "kitchen_state": frozenset({"core", "server"}),
     "session_provenance": frozenset({"core", "execution"}),
     "readiness": frozenset({"core", "server"}),

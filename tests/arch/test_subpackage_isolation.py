@@ -1019,7 +1019,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
-        "core/types": 53,
+        # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
+        "core/types": 54,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1133,7 +1134,7 @@ def test_data_directories_are_not_python_packages() -> None:
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     "core/_plugin_cache.py": (
-        1100,
+        1150,
         "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "
         "Both mutate the retiring cache under the install lock and must stay adjacent to "
         "the append/remove/read primitives they call, for the same reason "
@@ -1141,7 +1142,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "them puts lock ordering across a module boundary, which is how destructive "
         "repair bypasses the lifecycle lock. tests/infra/test_plugin_source_ratchets.py "
         "also pins this module's raw-mutation call sites by (file, function, expression), "
-        "so the reclaim path's location is a checked invariant, not an accident.",
+        "so the reclaim path's location is a checked invariant, not an accident. Issue "
+        "#4710 adds per-record quarantine and total mutation results at the same lock-owned "
+        "boundary; splitting those primitives would separate classification from mutation.",
     ),
     "execution/evidence_reader.py": (
         1500,

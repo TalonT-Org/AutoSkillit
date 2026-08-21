@@ -60,6 +60,7 @@ class TestCoreSubpackages:
             "_type_recipe_binding",
             "_type_recipe_execution",
             "_type_recipe_sections",
+            "_type_retirement_backstops",
             "_type_resume",
             "_type_session_env",
             "_type_skill_contract",

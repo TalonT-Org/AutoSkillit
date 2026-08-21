@@ -49,9 +49,7 @@ _module_identity.register_module_aliases(__name__)
 # types, constants) and ``_admission`` (the ``MAX_ACTIVE_RECORDS`` cap that
 # participates in the admission contract).
 if TYPE_CHECKING:
-    from autoskillit.hooks._capture_lifecycle._admission import (
-        MAX_ACTIVE_RECORDS as _MAX_ACTIVE_RECORDS,
-    )  # noqa: F401
+    from autoskillit.hooks._capture_lifecycle._admission import MAX_ACTIVE_RECORDS  # noqa: F401
     from autoskillit.hooks._capture_lifecycle._store import (
         _REFERENCE_LIFETIME_SECONDS,
         _RETENTION_SECONDS,
@@ -92,7 +90,7 @@ if TYPE_CHECKING:
         _ObservedArtifact,
     )  # noqa: F401
 elif __package__ == "_capture_lifecycle":
-    from _capture_lifecycle._admission import MAX_ACTIVE_RECORDS as _MAX_ACTIVE_RECORDS
+    from _capture_lifecycle._admission import MAX_ACTIVE_RECORDS  # noqa: F401
     from _capture_lifecycle._store import (
         _REFERENCE_LIFETIME_SECONDS,
         _RETENTION_SECONDS,
@@ -133,7 +131,7 @@ elif __package__ == "_capture_lifecycle":
         _ObservedArtifact,
     )  # noqa: F401
 else:
-    from ._admission import MAX_ACTIVE_RECORDS as _MAX_ACTIVE_RECORDS
+    from ._admission import MAX_ACTIVE_RECORDS  # noqa: F401
     from ._store import (
         _REFERENCE_LIFETIME_SECONDS,
         _RETENTION_SECONDS,
@@ -173,11 +171,6 @@ else:
         _CarrierLeaseLive,
         _ObservedArtifact,
     )  # noqa: F401
-
-# Re-bind under the original public-API name. The discriminator imports this
-# as ``_MAX_ACTIVE_RECORDS`` to avoid colliding with the same constant in
-# ``_admission`` during the package import.
-MAX_ACTIVE_RECORDS = _MAX_ACTIVE_RECORDS
 
 # Private re-exports — preserve ``capture_lifecycle._capture_ledger`` /
 # ``capture_lifecycle._record_to_dict`` / ``capture_lifecycle.os`` access

@@ -2,14 +2,11 @@
 
 Owns the V3 failure envelope framing (``CaptureFailureV3``, the four V3
 render/parse functions, the V3 wire-format prefixes) and the cross-cutting
-``CaptureContractError`` exception.  V2 capture protocol primitives live
-in ``_capture._v2_protocol``; request/lineage codecs live in
-``_capture._request_lineage``.  This facade re-exports their public names
-so existing import sites continue to work unchanged.
-
-``CaptureContractError`` is defined before the cross-module discriminant so
-that ``_capture._v2_protocol``'s runtime import of it resolves during the
-first-load cycle.
+``CaptureContractError`` exception (sourced from ``_capture._errors``).
+V2 capture protocol primitives live in ``_capture._v2_protocol``;
+request/lineage codecs live in ``_capture._request_lineage``.  This facade
+re-exports their public names so existing import sites continue to work
+unchanged.
 """
 
 from __future__ import annotations
@@ -39,11 +36,12 @@ else:
 
 CaptureFailureReason = _failure_policy.CaptureFailureReason
 
-
-class CaptureContractError(ValueError):
-    """Raised when a V2 capture transport value is invalid or noncanonical."""
-
-    failure_reason = CaptureFailureReason.LEDGER_INTEGRITY
+if TYPE_CHECKING:
+    from autoskillit.hooks._capture._errors import CaptureContractError  # noqa: F401
+elif __package__:
+    from ._capture._errors import CaptureContractError  # noqa: F401
+else:
+    from _capture._errors import CaptureContractError  # noqa: F401
 
 
 if TYPE_CHECKING:

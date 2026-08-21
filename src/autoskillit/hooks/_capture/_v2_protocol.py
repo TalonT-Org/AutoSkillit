@@ -461,8 +461,6 @@ def parse_capture_failure_v2(value: bytes) -> CaptureFailureV2:
 
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._capture_contract import CaptureContractError
-elif __package__ == "_capture":
-    from _capture_contract import CaptureContractError
+    from autoskillit.hooks._capture._errors import CaptureContractError
 else:
-    from .._capture_contract import CaptureContractError
+    from ._errors import CaptureContractError

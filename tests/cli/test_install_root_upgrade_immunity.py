@@ -39,7 +39,7 @@ _INSTALL_REF = "faketool-immunity-test@fake-local"
 
 
 @pytest.fixture(autouse=True)
-def _isolate_install_lock(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _isolate_test_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
 

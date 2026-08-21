@@ -491,7 +491,11 @@ def test_install_detection_survives_versioned_roots(tmp_path: Path, fake_git_sou
         "'url': info.url}))\n"
     )
     site_packages = next(
-        (identity.managed_path / "faketool" / "lib").glob("python*/site-packages")
+        (identity.managed_path / "faketool" / "lib").glob("python*/site-packages"),
+        None,
+    )
+    assert site_packages is not None, (
+        f"installed generation has no site-packages directory: {identity.managed_path}"
     )
     result = subprocess.run(
         [sys.executable, "-c", probe],

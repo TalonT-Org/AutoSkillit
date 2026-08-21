@@ -1,14 +1,35 @@
-"""Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants."""
+"""Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants.
+
+Zero autoskillit imports; sibling imports remain within the IL-0 type package.
+
+Issue #4735: this module is a re-export facade. The retirement registries
+live in ``_type_constants_retirements.py``, the skill-contract remediation
+registry in ``_type_constants_skill_contract.py``, and the durable-artifact
+writer registry in ``_type_constants_durable_writers.py``. The 11 moved
+public names are bound into this module's namespace via wildcard re-export
+so direct symbol imports
+(``from autoskillit.core.types._type_constants import RETIRED_SKILL_NAMES``)
+and direct attribute access resolve the same object identity.
+
+The facade's own ``__all__`` excludes the 11 moved names so the package hub
+``__init__.py`` concatenated ``__all__`` has no duplicates. The hub's
+wildcard-import chain still surfaces every moved name to
+``autoskillit.core.types.*`` and ``autoskillit.core.*`` consumers.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from hashlib import sha256
-from types import MappingProxyType
-from typing import Literal, NamedTuple
+from typing import NamedTuple
 
-from ._type_enums import RemediationAction, SkillInvalidityKind
-from ._type_skill_semantics import SKILL_SEMANTIC_SCHEMA_VERSION
+from ._type_constants_durable_writers import *  # noqa: F401, F403
+
+# Private validator explicitly re-exported because
+# tests/contracts/test_durable_artifact_relocatability.py:19 imports it from
+# autoskillit.core.types._type_constants directly. (Issue #4735.)
+from ._type_constants_durable_writers import _validate_durable_artifact_writer_defs  # noqa: F401
+from ._type_constants_retirements import *  # noqa: F401, F403
+from ._type_constants_skill_contract import *  # noqa: F401, F403
 
 __all__ = [
     "OUTPUT_DISCIPLINE_POLICY_VERSION",
@@ -17,24 +38,12 @@ __all__ = [
     "OUTPUT_DISCIPLINE_COMBINED_SHA256",
     "OUTPUT_DISCIPLINE_DIGEST",
     "OUTPUT_DISCIPLINE_REQUIRED_SKILLS",
-    "RETIRED_SKILL_NAMES",
-    "KNOWN_UNAFFECTED_SKILL_IDS",
-    "RETIRED_AGENT_NAMES",
-    "RETIRED_INTAKE_RULE_IDS",
-    "RETIRED_INSTALL_ARTIFACT_SHAPES",
-    "RetiredArtifactShape",
-    "DurableArtifactWriterDef",
-    "DURABLE_ARTIFACT_WRITERS",
-    "SkillContractRemediationDef",
-    "SKILL_CONTRACT_REMEDIATIONS",
     "SKILL_COMMAND_PREFIX",
     "SKILL_COMMAND_DISPLAY_MAX",
     "AUTOSKILLIT_SKILL_PREFIX",
-    "RETIRED_READINESS_TOKENS",
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
-    "INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE",
     "ROUTING_AUTHORITY_CLAUSE",
     "ADMIRAL_DISPATCH_SECTIONS",
     "PR_TELEMETRY_SECTIONS",
@@ -64,6 +73,7 @@ __all__ = [
     "RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE",
     "RECIPE_EXECUTION_INACTIVE_MESSAGE",
 ]
+
 
 OUTPUT_DISCIPLINE_POLICY_VERSION = 1
 
@@ -170,652 +180,6 @@ OUTPUT_DISCIPLINE_REQUIRED_SKILLS: frozenset[str] = frozenset(
     {"investigate", "rectify", "audit-bugs", "audit-friction"}
 )
 
-RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
-    {
-        # Skill directory names that have been renamed or removed.
-        # Append retired names here atomically with the rename/deletion commit.
-        # DO NOT REMOVE entries — this registry is append-only.
-        "audit-feature-gates",  # Moved to .autoskillit/skills/; AutoSkillit-internal only
-        "enrich-issues",  # Retired; auto-generated requirements backfill removed (#4477)
-        "open-research-pr",  # Retired; replaced by decomposed skills
-        "sprint-planner",  # Retired; no replacement
-        "vis-lens-domain-norms",  # Retired; renamed to vis-lens-methodology-norms
-    }
-)
-
-if any(n != n.lower() for n in RETIRED_SKILL_NAMES):
-    raise AssertionError(
-        "RETIRED_SKILL_NAMES entries must be lowercase. "
-        f"Offending: {sorted(n for n in RETIRED_SKILL_NAMES if n != n.lower())}"
-    )
-
-# UNAFFECTED-skill registry for issue #4684 AC6 ("No new failure mode is
-# introduced for the unaffected skills"). A skill is UNAFFECTED iff its
-# SKILL.md carries no `<!-- autoskillit:exploration-vector id="..." -->`
-# marker — the same predicate tests/contracts/test_unaffected_skill_registry.py's
-# _discover_unaffected_skills() applies live against the current skills/ and
-# skills_extended/ trees. When a skill's UNAFFECTED status changes (gains a
-# marker, is retired, or a new skill is added), update this registry in the
-# same PR, citing the tracking issue.
-KNOWN_UNAFFECTED_SKILL_IDS: frozenset[str] = frozenset(
-    {
-        "analyze-pipeline-health",
-        "analyze-prs",
-        "apply-review-dimensions",
-        "audit-arch",
-        "audit-bugs",
-        "audit-claims",
-        "audit-cohesion",
-        "audit-defense-standards",
-        "audit-friction",
-        "audit-impl",
-        "audit-review-decisions",
-        "audit-tests",
-        "build-execution-map",
-        "bundle-local-report",
-        "classify-experiment-type",
-        "close-kitchen",
-        "collapse-issues",
-        "compose-pr",
-        "compose-research-pr",
-        "design-guards",
-        "diagnose-ci",
-        "download-data",
-        "dry-walkthrough",
-        "elaborate-phase",
-        "file-audit-issues",
-        "generate-report",
-        "implement-experiment",
-        "implement-worktree",
-        "implement-worktree-no-merge",
-        "issue-splitter",
-        "make-arch-diag",
-        "make-campaign",
-        "make-experiment-diag",
-        "make-groups",
-        "make-plan",
-        "make-req",
-        "merge-pr",
-        "mermaid",
-        "migrate-recipes",
-        "open-integration-pr",
-        "open-kitchen",
-        "phoropter-null-synthesis",
-        "phoropter-priority-synthesis",
-        "pipeline-summary",
-        "plan-experiment",
-        "plan-visualization",
-        "planner-assess-review-approach",
-        "planner-consolidate-wps",
-        "planner-elaborate-assignments",
-        "planner-elaborate-wps",
-        "planner-generate-phases",
-        "planner-reconcile-deps",
-        "planner-refine",
-        "planner-refine-assignments",
-        "planner-refine-phases",
-        "planner-refine-wps",
-        "planner-validate-task-alignment",
-        "prepare-issue",
-        "prepare-pr",
-        "prepare-research-pr",
-        "process-issues",
-        "promote-to-main",
-        "rectify",
-        "reload-session",
-        "report-bug",
-        "resolve-claims-review",
-        "resolve-design-review",
-        "resolve-failures",
-        "resolve-merge-conflicts",
-        "resolve-research-review",
-        "resolve-review",
-        "retry-worktree",
-        "review-approach",
-        "review-design",
-        "review-pr",
-        "review-research-pr",
-        "run-experiment",
-        "select-directions",
-        "select-vis-lenses",
-        "setup-environment",
-        "setup-project",
-        "smoke-task",
-        "sous-chef",
-        "stage-data",
-        "synthesize-vis-plan",
-        "triage-issues",
-        "troubleshoot-experiment",
-        "validate-audit",
-        "validate-review-decisions",
-        "validate-test-audit",
-        "verify-diag",
-        "write-recipe",
-    }
-)
-
-RETIRED_AGENT_NAMES: frozenset[str] = frozenset(
-    {
-        # Agent names that have been replaced with proven alternatives.
-        # Append retired names here atomically with the replacement commit.
-        # DO NOT REMOVE entries — this registry is append-only.
-        "pipeline-health-scanner",
-        "plan-assumption-challenger",
-        "plan-completeness-auditor",
-        "plan-contract-verifier",
-        "plan-registry-wire-tracer",
-    }
-)
-
-if any(n != n.lower() for n in RETIRED_AGENT_NAMES):
-    raise AssertionError(
-        "RETIRED_AGENT_NAMES entries must be lowercase. "
-        f"Offending: {sorted(n for n in RETIRED_AGENT_NAMES if n != n.lower())}"
-    )
-
-RETIRED_INTAKE_RULE_IDS: frozenset[str] = frozenset(
-    {
-        # Intake-rule ids that have been removed from CODEX_INTAKE_RULES.
-        # Append retired ids here atomically with the removal commit.
-        # DO NOT REMOVE entries — this registry is append-only.
-        # Removed #4487; harness injection made the re-read redundant.
-        "instruction-file-completeness",
-    }
-)
-
-if any(n != n.lower() for n in RETIRED_INTAKE_RULE_IDS):
-    raise AssertionError(
-        "RETIRED_INTAKE_RULE_IDS entries must be lowercase. "
-        f"Offending: {sorted(n for n in RETIRED_INTAKE_RULE_IDS if n != n.lower())}"
-    )
-
-
-class RetiredArtifactShape(NamedTuple):
-    """One on-disk install artifact whose *shape* was retired by a release.
-
-    ``~/.autoskillit/`` and ``~/.claude/plugins/`` persist across years of
-    versions, so changing the shape of an artifact we write there (symlink to
-    real directory, file to directory, …) strands every pre-existing install.
-    Declaring the retirement here is what gives the reconciler something to
-    repair and the guard test something to enforce.
-
-    ``disposition`` controls how the reconciler handles the retired shape:
-
-    - ``"delete"`` — unconditional removal (the original behavior).
-    - ``"retire_via_engine"`` — enqueue into the retirement engine with
-      the standard grace window and per-path lease gating, so a live
-      session's inherited shared-lease fd is never invalidated.
-    - ``"preserve"`` — retain a legacy artifact when no reliable liveness
-      signal exists; cleanup requires explicit operator action.
-    """
-
-    shape: str
-    retired_in: str
-    reason: str
-    disposition: Literal["delete", "retire_via_engine", "preserve"] = "delete"
-
-
-# Artifact key -> the shape that was retired. Keys are ``Path.home()``-relative
-# POSIX strings and are resolved against ``Path.home()`` at use time, so the
-# registry works unchanged under the ``monkeypatch.setattr(Path, "home", ...)``
-# pattern the test suite depends on. Absolute keys are rejected by a guard test.
-#
-# Append-only, exactly like RETIRED_SKILL_NAMES / RETIRED_AGENT_NAMES: adding an
-# entry here is the *forcing function* that makes an artifact-shape change
-# mergeable. The reconciler in workspace/_install_state.py consumes this at
-# runtime — it must handle every entry, and nothing outside it.
-RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingProxyType(
-    {
-        ".autoskillit/marketplace/plugins/autoskillit": RetiredArtifactShape(
-            shape="symlink",
-            retired_in="0.10.892",
-            reason=(
-                "The public marketplace plugin root was a symlink to pkg_root() before "
-                "0.10.892 and is a materialized directory after it. A leftover symlink "
-                "makes the projection's containment check resolve the destination onto "
-                "its own source root."
-            ),
-        ),
-        ".claude/plugins/cache/autoskillit-local/autoskillit": RetiredArtifactShape(
-            shape="directory",
-            retired_in="0.10.933",
-            reason=(
-                "The Claude-cache installed plugin artifact was replaced by generation-keyed "
-                "publication under ~/.autoskillit/plugin-generations/. Live sessions may "
-                "hold inherited shared-lease fds on version subdirectories, so the store "
-                "is routed through the retirement engine rather than deleted immediately."
-            ),
-            disposition="retire_via_engine",
-        ),
-        # ".autoskillit/plugin-projections" is deliberately NOT registered here yet.
-        # It is still the live store `ProjectedPluginArtifactAuthority`
-        # (workspace/_projected_artifact/authority.py) publishes to and binds cook
-        # and headless sessions from on every launch (PROJECTED_HOME/
-        # EXPLICIT_PLUGIN_DIR). Registering it as retired before that authority's
-        # dual-store logic collapses onto the generation store (tracked separately)
-        # would make verify_install_state() flag a healthy, actively-served store
-        # as broken on every machine that has ever run `autoskillit cook`.
-        ".local/share/uv/tools/autoskillit": RetiredArtifactShape(
-            shape="directory",
-            retired_in="0.10.1002",
-            reason=(
-                "Phase 3 replaced the single shared, force-replaced uv tool root "
-                "with immutable version+incarnation-keyed generations under "
-                "~/.autoskillit/plugin-generations/autoskillit-install/. The old "
-                "shared uv tool root is retired but may still be referenced by a "
-                "live process launched before the upgrade — it predates the "
-                "generation store's lease mechanism entirely, so no reliable signal "
-                "can prove that deletion is safe."
-            ),
-            disposition="preserve",
-        ),
-    }
-)
-
-_ABSOLUTE_ARTIFACT_KEYS = sorted(k for k in RETIRED_INSTALL_ARTIFACT_SHAPES if k.startswith("/"))
-if _ABSOLUTE_ARTIFACT_KEYS:
-    raise AssertionError(
-        "RETIRED_INSTALL_ARTIFACT_SHAPES keys must be Path.home()-relative. "
-        f"Offending: {_ABSOLUTE_ARTIFACT_KEYS}"
-    )
-
-
-class SkillContractRemediationDef(NamedTuple):
-    """One SkillInvalidityKind's forcing-function remediation declaration.
-
-    Modeled on ``RetiredArtifactShape``: a new validation cannot ship without
-    registering how pre-existing artifacts that now fail it are handled.
-    ``DETERMINISTIC`` kinds must be handled by ``SkillMigrationAdapter``;
-    ``ADVISORY`` kinds only ever surface ``hint`` to an operator.
-    """
-
-    kind: SkillInvalidityKind
-    introduced_in: str
-    action: RemediationAction
-    hint: str
-
-
-# Append-only, exactly like RETIRED_INSTALL_ARTIFACT_SHAPES: every member of
-# SkillInvalidityKind must have an entry here, enforced by a guard test in
-# tests/contracts/. The resolver (workspace/skills.py) renders `hint` into
-# SkillExclusion records, composition-root warnings, and doctor findings;
-# migration/engine.py's SkillMigrationAdapter renders every DETERMINISTIC
-# entry into an actual frontmatter rewrite.
-_SKILL_CONTRACT_REMEDIATION_DEFS = (
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.FRONTMATTER_PARSE,
-        introduced_in="0.10.929",
-        action=RemediationAction.ADVISORY,
-        hint="fix the YAML frontmatter parse error named in the detail message",
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.FIELD_SHAPE,
-        introduced_in="0.10.929",
-        action=RemediationAction.ADVISORY,
-        hint=("change the offending frontmatter field to a YAML list, e.g. 'categories: [tag]'"),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
-        introduced_in="0.10.931",
-        action=RemediationAction.ADVISORY,
-        hint=(
-            "move exploration vectors to a valid exploration.yaml sidecar and ensure "
-            "its declarations match the SKILL.md exploration-vector markers"
-        ),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.RESERVED_FIELD,
-        introduced_in="0.10.929",
-        action=RemediationAction.ADVISORY,
-        hint=(
-            "remove 'canonical_content'/'canonical_digest' from frontmatter — "
-            "these are source-derived and must not be supplied"
-        ),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.UNKNOWN_CAPABILITY,
-        introduced_in="0.10.929",
-        action=RemediationAction.ADVISORY,
-        hint=(
-            "remove the unrecognized capability name from 'uses_capabilities:', or "
-            "move the skill to an execution role permitted to declare it"
-        ),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.UNDECLARED_CAPABILITY,
-        introduced_in="0.10.929",
-        action=RemediationAction.DETERMINISTIC,
-        hint=("add the missing capability name(s) to 'uses_capabilities:' in the frontmatter"),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
-        introduced_in="0.10.929",
-        action=RemediationAction.DETERMINISTIC,
-        hint=(
-            "add a 'semantic_version'/'semantic_requirements' declaration covering "
-            "the detected portable-execution tokens"
-        ),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.SEMANTIC_MISSING_VERSION,
-        introduced_in="0.10.929",
-        action=RemediationAction.DETERMINISTIC,
-        hint=(
-            f"add 'semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}' alongside the "
-            "existing semantic_requirements"
-        ),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.SEMANTIC_VERSION_MISMATCH,
-        introduced_in="0.10.929",
-        action=RemediationAction.ADVISORY,
-        hint=(
-            "update semantic_requirements to the current schema and bump "
-            f"semantic_version to {SKILL_SEMANTIC_SCHEMA_VERSION}"
-        ),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID,
-        introduced_in="0.10.964",
-        action=RemediationAction.DETERMINISTIC,
-        hint=(
-            "give each semantic_requirements.child_spawns entry exactly one authority: "
-            "count: <positive integer> or for_each: <runtime collection>"
-        ),
-    ),
-    SkillContractRemediationDef(
-        kind=SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
-        introduced_in="0.10.929",
-        action=RemediationAction.ADVISORY,
-        hint="fix the malformed semantic_requirements mapping named in the detail message",
-    ),
-)
-SKILL_CONTRACT_REMEDIATIONS: Mapping[SkillInvalidityKind, SkillContractRemediationDef] = (
-    MappingProxyType(
-        {definition.kind: definition for definition in _SKILL_CONTRACT_REMEDIATION_DEFS}
-    )
-)
-
-if len(SKILL_CONTRACT_REMEDIATIONS) != len(_SKILL_CONTRACT_REMEDIATION_DEFS):
-    raise AssertionError("Skill contract remediation definitions must have unique kinds")
-
-_UNREGISTERED_INVALIDITY_KINDS = sorted(
-    set(SkillInvalidityKind) - set(SKILL_CONTRACT_REMEDIATIONS)
-)
-if _UNREGISTERED_INVALIDITY_KINDS:
-    raise AssertionError(
-        "Every SkillInvalidityKind must have a SKILL_CONTRACT_REMEDIATIONS entry. "
-        f"Missing: {_UNREGISTERED_INVALIDITY_KINDS}"
-    )
-
-# ---------------------------------------------------------------------------
-# Durable-artifact writer registry — forces every function that writes an
-# artifact with a lifetime exceeding the writing process under a relocatability
-# or machine-local-detection obligation.  See ``tests/contracts/
-# test_durable_artifact_relocatability.py`` for the per-writer contracts.
-# Import-time validation rejects duplicate writers and machine-local entries
-# that omit their required staleness detector.
-# ---------------------------------------------------------------------------
-
-
-class DurableArtifactWriterDef(NamedTuple):
-    """Static definition of a function that writes durable artifacts.
-
-    ``writer``: ``module:qualname`` of the writing function — specifically the
-        function whose body contains the actual persistence call (``atomic_write``,
-        ``write_versioned_json``, …), not an outer public wrapper that merely
-        delegates to it.  This is what lets the AST-based completeness guard
-        (``tests/arch/test_durable_artifact_writers_guard.py``) match registry
-        entries against real call sites without call-graph resolution.
-    ``artifact``: human-readable description of the destination, including the
-        public entry point a reader would recognize (e.g. "via sync_hooks_to_settings()").
-    ``machine_local``: True when the artifact legitimately bakes absolute host
-        paths (e.g. settings.json / config.toml — neither Claude Code's settings
-        file nor Codex's config.toml expands a relocatable ``${CLAUDE_PLUGIN_ROOT}``-
-        style token, unlike hooks.json).  Machine-local writers must declare a
-        ``detection`` callable that detects staleness at startup.
-    ``detection``: ``module:qualname`` of the staleness-detection callable;
-        required when ``machine_local=True``, enforced by the import-time assertion.
-
-    See ``tests/contracts/test_durable_artifact_relocatability.py`` for
-    per-writer resolvability/relocatability contracts.
-    """
-
-    writer: str
-    artifact: str
-    machine_local: bool
-    detection: str | None
-
-
-def _validate_durable_artifact_writer_defs(
-    writers: tuple[DurableArtifactWriterDef, ...],
-) -> None:
-    missing_detection = [
-        writer.writer for writer in writers if writer.machine_local and not writer.detection
-    ]
-    if missing_detection:
-        raise AssertionError(
-            "Every machine_local DurableArtifactWriterDef must have a detection callable. "
-            f"Missing: {missing_detection}"
-        )
-    writer_names = [writer.writer for writer in writers]
-    if len(writer_names) != len(set(writer_names)):
-        raise AssertionError("DURABLE_ARTIFACT_WRITERS contains duplicate writer strings")
-
-
-DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
-    DurableArtifactWriterDef(
-        writer="autoskillit.core._plugin_cache:repair_corrupt_retiring_cache",
-        artifact=(
-            "immutable retiring_cache.corrupt-<timestamp>.json forensic sidecar; "
-            "the original machine-local bytes are preserved for diagnosis and are "
-            "never consumed as relocated configuration"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.workspace._projected_artifact.materialization:write_generated_hooks_json",
-        artifact=(
-            "hooks/hooks.json in plugin/projection roots — relocatable "
-            "${CLAUDE_PLUGIN_ROOT}-form commands; written during projection staging, "
-            "marketplace publication, and self-heal republish"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.server._lifespan:run_startup_drift_check",
-        artifact=(
-            "dev-checkout pkg_root()/hooks/hooks.json — self-healed at MCP server "
-            "startup when on-disk bytes drift from render_hooks_json_text()"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer=(
-            "autoskillit.workspace._projected_artifact._hook_repair:"
-            "repair_broken_plugin_cache_hooks"
-        ),
-        artifact="repaired hooks/hooks.json in an installed plugin-cache incarnation",
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer=(
-            "autoskillit.workspace._projected_artifact._hook_repair:repair_broken_projection_hooks"
-        ),
-        artifact="repaired hooks/hooks.json + manifest digest in a plugin-projections incarnation",
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.workspace._projected_artifact._hook_repair:_rollback_repair",
-        artifact=(
-            "rollback restoration of original hooks.json/manifest.json bytes after a "
-            "failed hook-repair transaction"
-        ),
-        machine_local=True,
-        detection="autoskillit.hook_registry:find_broken_hook_scripts",
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.cli._hooks:_write_settings_data",
-        artifact=(
-            "~/.claude/settings.json hook entries (absolute host paths) — via "
-            "sync_hooks_to_settings() / _evict_stale_autoskillit_hooks()"
-        ),
-        machine_local=True,
-        detection="autoskillit.hook_registry:find_broken_hook_scripts",
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.execution.backends._codex_hooks:_upsert_hooks_text",
-        artifact=(
-            "~/.codex/config.toml [[hooks]] blocks (absolute host paths) — the "
-            "foreign-block-preserving text rewrite used by sync_hooks_to_codex_config()"
-        ),
-        machine_local=True,
-        detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.execution.backends._codex_config:_write_codex_config",
-        artifact=(
-            "~/.codex/config.toml — generic TOML writer; persists "
-            "sync_hooks_to_codex_config()'s merged hook entries (absolute host paths) "
-            "as well as MCP server registration"
-        ),
-        machine_local=True,
-        detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.execution.backends._codex_fs_atomic:_write_reconciliation_audit",
-        artifact=(
-            "immutable operator authorization records for explicit Codex attempt-view "
-            "reconciliation"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.execution.process._process_tether:write_tether",
-        artifact=(
-            "process-tethers/*.json under default_log_dir() — per-spawn spawner/child "
-            "identity and ceiling records; ephemeral host-and-boot-tied state, never "
-            "relocated, removed by settle() or the sweep — not a configuration artifact"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.workspace.session_skills:write_skill_unavailability_metadata",
-        artifact="add-dir/skill-unavailability.json",
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.pipeline.exploration_context:OwnerBoundExplorationContextStore.bind_launch",
-        artifact=(
-            ".autoskillit-exploration-authority.json (0600, HMAC-signed) for the "
-            "launch-environment explorer binding path — recoverable across a server "
-            "restart within the lease TTL"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.pipeline.exploration_context_durable:bind_session_scoped_durable",
-        artifact=(
-            ".autoskillit-exploration-authority.json (0600, HMAC-signed) for the "
-            "session-scoped Claude-native explorer binding path — symmetric to "
-            "bind_launch, so this path also survives a server restart within the "
-            "lease TTL"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer="autoskillit.core._entrypoint_shim:write_entrypoint_shim",
-        artifact=(
-            "~/.local/bin/autoskillit exec-time entrypoint shim, replacing uv's own "
-            "generated console-script wrapper — resolves the install-root generation "
-            "selector once per launch, then os.execv()s straight into the resolved "
-            "incarnation's own entrypoint"
-        ),
-        machine_local=False,
-        detection=None,
-    ),
-    DurableArtifactWriterDef(
-        writer=(
-            "autoskillit.workspace._projected_artifact._generation_publication:"
-            "publish_install_root_generation"
-        ),
-        artifact=(
-            "install-root generation tree under "
-            "~/.autoskillit/plugin-generations/autoskillit-install/ — the uv-tool-"
-            "installed Python package venv (site-packages, console-script shebangs, "
-            "pyvenv.cfg) for one incarnation, finalized from a caller-staged root"
-        ),
-        machine_local=True,
-        detection="autoskillit.core._install_binding:install_binding_matches_current_state",
-    ),
-)
-
-_validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)
-
-
-WORKTREE_SKILLS: frozenset[str] = frozenset(
-    {
-        "implement-worktree",
-        "implement-worktree-no-merge",
-        "implement-experiment",
-        "retry-worktree",
-    }
-)
-
-
-class SkillFamilyDef(NamedTuple):
-    """Skill family definition — groups sibling skills that must share API patterns."""
-
-    name: str
-    members: frozenset[str]
-    required_patterns: frozenset[str]
-
-
-GITHUB_API_SKILL_FAMILIES: tuple[SkillFamilyDef, ...] = (
-    SkillFamilyDef(
-        name="thread-resolvers",
-        members=frozenset(
-            {
-                "resolve-review",
-                "resolve-research-review",
-                "resolve-claims-review",
-            }
-        ),
-        required_patterns=frozenset(
-            {
-                "graphql-batch-aliases",
-                "mutating-call-delay",
-            }
-        ),
-    ),
-    SkillFamilyDef(
-        name="review-posters",
-        members=frozenset(
-            {
-                "review-pr",
-                "review-research-pr",
-                "audit-claims",
-            }
-        ),
-        required_patterns=frozenset(
-            {
-                "unpostable-prefilter",
-            }
-        ),
-    ),
-)
-
-
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.
 SKILL_COMMAND_PREFIX: str = "/"
@@ -824,18 +188,6 @@ SKILL_COMMAND_DISPLAY_MAX: int = 100
 
 # Canonical prefix for bundled autoskillit slash commands.
 AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
-
-# Log message tokens that were once used as subprocess readiness sync primitives
-# and have since been retired. Any logger call using these tokens as its first
-# positional argument is a structural anti-pattern — the lifespan's try: block
-# and the anyio signal receiver replaced them with a filesystem sentinel.
-# Consumed by test_lifespan_readiness_structural.py (AST Assertion C).
-RETIRED_READINESS_TOKENS: frozenset[str] = frozenset(
-    {
-        "lifespan_started",
-        "sigterm_handler_ready",
-    }
-)
 
 # Maps file-path regex patterns to the advisory skill name to suggest when that
 # path is written or edited. Patterns are tried in order; first match wins.
@@ -873,14 +225,6 @@ SOUS_CHEF_MANDATORY_SECTIONS: tuple[str, ...] = (
     "NARRATION SUPPRESSION",
     "FLEET DISPATCH RESUME DISCIPLINE",
 )
-
-INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE: str = """\
-INFRASTRUCTURE FAULT OVERRIDE — checked BEFORE on_failure, for run_skill only:
-when the result JSON contains "infra_fault_domain": "infrastructure", the
-step's on_failure route MUST NOT be followed. The environment faulted, not the
-work. Halt the pipeline and report the environment fault instead of routing to
-on_failure.
-"""
 
 ROUTING_AUTHORITY_CLAUSE: str = """
 ROUTING AUTHORITY — RECIPE YAML ONLY:
@@ -1008,4 +352,57 @@ RECIPE_EXECUTION_INACTIVE_MESSAGE: str = (
     "recipe attestation; a reloaded session has no execution — open the kitchen and "
     "complete_recipe_initialization to establish one, or drop the attestation arguments "
     "to run this skill without a recipe"
+)
+
+
+WORKTREE_SKILLS: frozenset[str] = frozenset(
+    {
+        "implement-worktree",
+        "implement-worktree-no-merge",
+        "implement-experiment",
+        "retry-worktree",
+    }
+)
+
+
+class SkillFamilyDef(NamedTuple):
+    """Skill family definition — groups sibling skills that must share API patterns."""
+
+    name: str
+    members: frozenset[str]
+    required_patterns: frozenset[str]
+
+
+GITHUB_API_SKILL_FAMILIES: tuple[SkillFamilyDef, ...] = (
+    SkillFamilyDef(
+        name="thread-resolvers",
+        members=frozenset(
+            {
+                "resolve-review",
+                "resolve-research-review",
+                "resolve-claims-review",
+            }
+        ),
+        required_patterns=frozenset(
+            {
+                "graphql-batch-aliases",
+                "mutating-call-delay",
+            }
+        ),
+    ),
+    SkillFamilyDef(
+        name="review-posters",
+        members=frozenset(
+            {
+                "review-pr",
+                "review-research-pr",
+                "audit-claims",
+            }
+        ),
+        required_patterns=frozenset(
+            {
+                "unpostable-prefilter",
+            }
+        ),
+    ),
 )

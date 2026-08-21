@@ -196,6 +196,21 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # write_entrypoint_shim() is called from cli/update/_transaction.py's
     # INSTALL_ROOT_GENERATION_PUBLICATION phase (issue #4597 Phase 3).
     "_entrypoint_shim": frozenset({"core", "cli"}),
+    # Issue #4735 — Wavefront 1 decomposition shards. Each is a topic-scoped
+    # sibling of an already-universal parent (_type_enums / _type_constants),
+    # so additive-only changes cascade to the same consumer test directories.
+    "_type_enums_context_admission": frozenset(
+        {"cli", "core", "execution", "recipe", "server", "smoke_utils"}
+    ),
+    "_type_constants_retirements": frozenset(
+        {"cli", "core", "execution", "fleet", "hooks", "recipe", "server", "skills", "workspace"}
+    ),
+    "_type_constants_skill_contract": frozenset(
+        {"cli", "core", "execution", "recipe", "server", "skills"}
+    ),
+    "_type_constants_durable_writers": frozenset(
+        {"cli", "core", "execution", "recipe", "server", "workspace"}
+    ),
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),

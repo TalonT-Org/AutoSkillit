@@ -128,7 +128,10 @@ def test_infrastructure_fault_override_key_in_load_recipe_docstring() -> None:
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     assert load_recipe.__doc__ is not None
-    assert INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE in inspect.cleandoc(load_recipe.__doc__)
+    normalized_doc = "\n".join(
+        line.strip() for line in inspect.cleandoc(load_recipe.__doc__).splitlines()
+    )
+    assert INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE.strip() in normalized_doc
     assert "infra_fault_domain" in load_recipe.__doc__, (
         "load_recipe docstring missing the infra_fault_domain wire key"
     )

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from autoskillit.cli.install._install_contract import (
+        MAINTENANCE_EXTRAS,
         InstallFailureKind,
         InstallMode,
         InstallOutcome,
@@ -62,6 +63,7 @@ __all__ = [
     "InstallProcessStatus",
     "InstallRequest",
     "InstallResult",
+    "MAINTENANCE_EXTRAS",
     "MaintenanceInstallArgv",
     "MaintenanceSubprocessInvocation",
     "process_status_for_result",
@@ -102,6 +104,10 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "InstallProcessStatus": ("autoskillit.cli.install._install_contract", "InstallProcessStatus"),
     "InstallRequest": ("autoskillit.cli.install._install_contract", "InstallRequest"),
     "InstallResult": ("autoskillit.cli.install._install_contract", "InstallResult"),
+    "MAINTENANCE_EXTRAS": (
+        "autoskillit.cli.install._install_contract",
+        "MAINTENANCE_EXTRAS",
+    ),
     "MaintenanceInstallArgv": (
         "autoskillit.cli.install._install_contract",
         "MaintenanceInstallArgv",

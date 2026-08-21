@@ -98,22 +98,22 @@ def _resume_reason_guidance(retry_reason: str) -> str:
     """Return reason-specific resume guidance for the L3 campaign dispatcher."""
     if retry_reason == RetryReason.IDLE_STALL:
         return (
-            "Kill reason: idle timeout (session was waiting for an external event). "
+            "Retry reason: idle timeout (session was waiting for an external event). "
             "Resume is safe — the session likely has partial progress on disk."
         )
     if retry_reason == RetryReason.RESUME:
         return (
-            "Kill reason: transient infrastructure failure (API error or process kill). "
+            "Retry reason: transient infrastructure failure (API error or process kill). "
             "Resume is safe — retry immediately."
         )
     if retry_reason == RetryReason.NONE:
         return (
-            "Kill reason: none — the session ended before any subprocess launched "
+            "Retry reason: none — the session ended before any subprocess launched "
             "(a crash or infrastructure fault at admission/launch time). Standard "
             "resume does not apply here: there is no partial subprocess run to "
             "continue. Start a fresh session instead."
         )
-    return "Kill reason: unknown. Resume with standard recovery."
+    return "Retry reason: unknown. Resume with standard recovery."
 
 
 def _build_fleet_campaign_prompt(

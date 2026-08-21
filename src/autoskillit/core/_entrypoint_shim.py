@@ -86,13 +86,8 @@ def entrypoint_shim_path(home: Path) -> Path:
     return Path(home) / ".local" / "bin" / "autoskillit"
 
 
-def write_entrypoint_shim(home: Path) -> bool:
+def write_entrypoint_shim(home: Path) -> None:
     """Idempotently (re)write the shim at its well-known location.
-
-    Returns ``True`` if the file's content changed (including first
-    creation), ``False`` if it already matched. Callers use this to skip
-    unnecessary durable-writer churn on every maintenance update, since the
-    shim's content is expected to be stable across versions.
 
     Writes via ``atomic_write()`` (temp-file + ``os.replace`` + fsync) so a
     concurrently exec'ing reader never observes a partially written shim.
@@ -104,7 +99,6 @@ def write_entrypoint_shim(home: Path) -> bool:
     except FileNotFoundError:
         existing = None
     if existing == source:
-        return False
+        return
     atomic_write(path, source, strict_durability=True)
     path.chmod(0o755)
-    return True

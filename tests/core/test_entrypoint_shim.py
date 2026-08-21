@@ -78,20 +78,25 @@ def test_entrypoint_shim_path_is_well_known_location(tmp_path: Path) -> None:
 def test_write_entrypoint_shim_creates_executable_file_on_first_call(tmp_path: Path) -> None:
     home = tmp_path / "home"
 
-    changed = write_entrypoint_shim(home)
+    write_entrypoint_shim(home)
 
     path = entrypoint_shim_path(home)
-    assert changed is True
     assert path.read_text() == ENTRYPOINT_SHIM_SOURCE
     assert os.access(path, os.X_OK)
     assert stat.S_IMODE(path.stat().st_mode) == 0o755
 
 
-def test_write_entrypoint_shim_second_call_is_a_noop(tmp_path: Path) -> None:
+def test_write_entrypoint_shim_second_call_is_a_noop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     home = tmp_path / "home"
     write_entrypoint_shim(home)
 
-    assert write_entrypoint_shim(home) is False
+    def fail_write(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("matching shim must not be rewritten")
+
+    monkeypatch.setattr("autoskillit.core._entrypoint_shim.atomic_write", fail_write)
+    write_entrypoint_shim(home)
 
 
 def test_write_entrypoint_shim_rewrites_stale_content(tmp_path: Path) -> None:
@@ -100,9 +105,8 @@ def test_write_entrypoint_shim_rewrites_stale_content(tmp_path: Path) -> None:
     path.parent.mkdir(parents=True)
     path.write_text("#!/usr/bin/env python3\nprint('stale shim')\n")
 
-    changed = write_entrypoint_shim(home)
+    write_entrypoint_shim(home)
 
-    assert changed is True
     assert path.read_text() == ENTRYPOINT_SHIM_SOURCE
 
 

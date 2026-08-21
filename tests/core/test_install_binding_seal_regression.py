@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.core.test_import_isolation import _run_import_subprocess
+from tests._subprocess_helpers import run_import_subprocess
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
@@ -32,7 +32,7 @@ def test_install_binding_seal_forced_by_early_import(module: str) -> None:
         "from autoskillit.core._install_binding import resolve_install_binding\n"
         "print(resolve_install_binding.cache_info().currsize)\n"
     )
-    result = _run_import_subprocess(code)
+    result = run_import_subprocess(code)
     assert result.returncode == 0, (
         f"Subprocess crashed (rc={result.returncode}):\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"

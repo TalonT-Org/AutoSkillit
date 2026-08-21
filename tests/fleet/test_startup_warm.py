@@ -25,7 +25,7 @@ import time
 
 import pytest
 
-from tests.core.test_import_isolation import _clean_subprocess_env
+from tests._subprocess_helpers import clean_subprocess_env
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
@@ -56,7 +56,7 @@ def _run_warm_subprocess() -> subprocess.CompletedProcess[str]:
     ``PackageNotFoundError`` in third-party ``__init__.py`` import-time
     metadata lookups. Retry once, matching ``test_import_isolation.py``.
     """
-    env = _clean_subprocess_env()
+    env = clean_subprocess_env()
     args = [sys.executable, "-c", _WARM_SUBPROCESS_SCRIPT]
     result = subprocess.run(args, capture_output=True, text=True, env=env, timeout=30)
     if result.returncode != 0 and (

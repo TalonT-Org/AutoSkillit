@@ -467,7 +467,8 @@ def run_update_transaction(
             except OSError as exc:
                 return _upgrade_failure(
                     progress,
-                    f"Could not create the install-root staging directory: {exc}",
+                    f"Could not create the install-root staging directory "
+                    f"{install_root_staging}: {exc}",
                 )
         try:
             upgrade_result = runner(

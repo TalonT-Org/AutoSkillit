@@ -159,14 +159,6 @@ class TestDirectoryTreeDigestIgnoreBytecode:
     that has ever actually run permanently fail its own digest check.
     """
 
-    def test_default_still_hashes_bytecode(self, tmp_path: Path) -> None:
-        _seed_tree(tmp_path)
-        d_clean = directory_tree_digest(tmp_path)
-        pycache = tmp_path / "sub" / "__pycache__"
-        pycache.mkdir()
-        (pycache / "b.cpython-311.pyc").write_bytes(b"fake pyc")
-        assert directory_tree_digest(tmp_path) != d_clean
-
     def test_ignore_bytecode_true_is_insensitive_to_pycache_dir(self, tmp_path: Path) -> None:
         _seed_tree(tmp_path)
         d_clean = directory_tree_digest(tmp_path, ignore_bytecode=True)

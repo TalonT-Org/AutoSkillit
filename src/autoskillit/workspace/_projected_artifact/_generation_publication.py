@@ -434,20 +434,25 @@ class GenerationArtifactRetirementOwner:
             raise PluginArtifactValidationError(
                 f"generation is outside managed root: {managed_path}"
             )
+        return self._read_identity(managed_path)
+
+    def _current_identity(self, record: RetiringArtifactRecord) -> PluginArtifactIdentity:
+        return self._read_identity(
+            record.managed_path,
+            expected_semantic_key=record.semantic_key,
+        )
+
+    def _read_identity(
+        self,
+        managed_path: Path,
+        *,
+        expected_semantic_key: str | None = None,
+    ) -> PluginArtifactIdentity:
         is_install_root = self._artifact_kind is PluginArtifactKind.INSTALL_ROOT_GENERATION
         return read_installed_plugin_artifact_identity(
             managed_path,
+            expected_semantic_key=expected_semantic_key,
             manifest_path=self.manifest_path(managed_path),
-            allow_symlinks=is_install_root,
-            ignore_bytecode=is_install_root,
-        )
-
-    def _current_identity(self, record: RetiringArtifactRecord) -> PluginArtifactIdentity:
-        is_install_root = self._artifact_kind is PluginArtifactKind.INSTALL_ROOT_GENERATION
-        return read_installed_plugin_artifact_identity(
-            record.managed_path,
-            expected_semantic_key=record.semantic_key,
-            manifest_path=self.manifest_path(record.managed_path),
             allow_symlinks=is_install_root,
             ignore_bytecode=is_install_root,
         )

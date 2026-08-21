@@ -601,19 +601,11 @@ class ProviderProfileDef:
     base_url: str | None = None
     timeout_seconds: int | None = None
     api_key_env: str | None = None
-    # Declared and __post_init__-validated (must be positive), but
-    # server/_guards.py's _profile_to_env(...) — the sole place ProviderProfileDef
-    # fields become effective behavior — reads base_url/timeout_seconds/
-    # api_key_env/raw_env only; context_window is never consumed.
-    # inert-tracked:#4693
-    context_window: int | None = None
     raw_env: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.timeout_seconds is not None and self.timeout_seconds < 0:
             raise ValueError(f"timeout_seconds must be non-negative, got {self.timeout_seconds}")
-        if self.context_window is not None and self.context_window <= 0:
-            raise ValueError(f"context_window must be positive, got {self.context_window}")
 
 
 @dataclass
@@ -695,13 +687,24 @@ class ProvidersConfig:
 
     @property
     def resolved_profiles(self) -> dict[str, ProviderProfileDef]:
+        # Function-local import: settings.py:31 imports _config_dataclasses at module
+        # load, so a top-level `from autoskillit.config.settings import
+        # RETIRED_PROFILE_KEYS` here would resolve before the registry is bound.
+        from autoskillit.config.settings import RETIRED_PROFILE_KEYS
+
         result: dict[str, ProviderProfileDef] = {}
         for name, raw_dict in self.profiles.items():
             copy = {k: v for k, v in raw_dict.items() if v is not None}
             base_url = copy.pop("base_url", None)
             timeout_str = copy.pop("timeout_seconds", None)
             api_key_env = copy.pop("api_key_env", None)
-            context_str = copy.pop("context_window", None)
+            # Silently drop retired profile keys per RETIRED_PROFILE_KEYS policy.
+            # Silent (no warning) because the registry is the canonical
+            # migration surface — users get the same behavior whether the key
+            # is removed in 0.10.1007 or in any later version. The loop runs
+            # BEFORE raw_env=copy so retired keys do not leak into the catch-all.
+            for retired_key in RETIRED_PROFILE_KEYS:
+                copy.pop(retired_key, None)
             result[name] = ProviderProfileDef(
                 name=name,
                 base_url=base_url,
@@ -709,9 +712,6 @@ class ProvidersConfig:
                 if timeout_str is not None and timeout_str != ""
                 else None,
                 api_key_env=api_key_env,
-                context_window=int(context_str)
-                if context_str is not None and context_str != ""
-                else None,
                 raw_env=copy,
             )
         return result

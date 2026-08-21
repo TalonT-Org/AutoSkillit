@@ -8,8 +8,8 @@ one launched binary — this only needs enough to detect *replacement* of the
 install root a long-lived process reads from: ``device``/``inode``, plus the
 version string captured at the same instant, so version and identity can
 never be read from two different points in time. That two-different-times
-shape is exactly what ARCH-012 forbids and what ``assert_generator_process_
-fresh()`` previously did by reading live state twice.
+shape is exactly what ARCH-012 forbids; ``assert_generator_process_fresh()``
+previously did it by reading live state twice.
 
 Purely in-process: the sealed binding lives only in ``lru_cache`` memory for
 the interpreter's lifetime and is never written to disk, so it carries no

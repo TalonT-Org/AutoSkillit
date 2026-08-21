@@ -34,6 +34,7 @@ __all__ = [
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
+    "INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE",
     "ROUTING_AUTHORITY_CLAUSE",
     "ADMIRAL_DISPATCH_SECTIONS",
     "PR_TELEMETRY_SECTIONS",
@@ -866,6 +867,14 @@ SOUS_CHEF_MANDATORY_SECTIONS: tuple[str, ...] = (
     "NARRATION SUPPRESSION",
     "FLEET DISPATCH RESUME DISCIPLINE",
 )
+
+INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE: str = """\
+INFRASTRUCTURE FAULT OVERRIDE — checked BEFORE on_failure, for run_skill only:
+when the result JSON contains "infra_fault_domain": "infrastructure", the
+step's on_failure route MUST NOT be followed. The environment faulted, not the
+work. Halt the pipeline and report the environment fault instead of routing to
+on_failure.
+"""
 
 ROUTING_AUTHORITY_CLAUSE: str = """
 ROUTING AUTHORITY — RECIPE YAML ONLY:

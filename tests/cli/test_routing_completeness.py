@@ -6,9 +6,12 @@ orchestrator prompt — the same class of oversight that produced the EMPTY_OUTP
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX
+from autoskillit.core import INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE
 from autoskillit.core.types import RetryReason
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -108,6 +111,7 @@ def test_infrastructure_fault_override_is_documented() -> None:
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
 
+    assert INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE in prompt_text
     assert "infra_fault_domain" in prompt_text, (
         "orchestrator prompt missing the infra_fault_domain wire key"
     )
@@ -124,6 +128,7 @@ def test_infrastructure_fault_override_key_in_load_recipe_docstring() -> None:
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     assert load_recipe.__doc__ is not None
+    assert INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE in inspect.cleandoc(load_recipe.__doc__)
     assert "infra_fault_domain" in load_recipe.__doc__, (
         "load_recipe docstring missing the infra_fault_domain wire key"
     )

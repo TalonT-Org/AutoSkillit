@@ -110,6 +110,27 @@ def test_repair_preserves_every_interpretable_record(tmp_path, monkeypatch) -> N
     )
 
 
+def test_repair_excludes_every_record_with_an_ambiguous_id(tmp_path, monkeypatch) -> None:
+    from autoskillit.core import (
+        RetiringCacheState,
+        read_retiring_cache,
+        repair_corrupt_retiring_cache,
+    )
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    duplicate = _record(1)
+    cache = _write_cache(tmp_path, [duplicate, dict(duplicate), _record(2)])
+    original = cache.read_bytes()
+
+    result = repair_corrupt_retiring_cache()
+    repaired = read_retiring_cache()
+
+    assert result.salvaged == 1
+    assert result.sidecar is not None and result.sidecar.read_bytes() == original
+    assert repaired.state is RetiringCacheState.EXACT_V2
+    assert tuple(record.record_id for record in repaired.records) == ("record-2",)
+
+
 def test_repair_is_a_no_op_on_a_healthy_cache(tmp_path, monkeypatch) -> None:
     from autoskillit.core import repair_corrupt_retiring_cache
 

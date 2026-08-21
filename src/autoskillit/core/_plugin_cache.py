@@ -323,19 +323,28 @@ def _salvage_retiring_records(
     if not isinstance(recovered, dict) or not isinstance(recovered.get("records"), list):
         return (), ()
 
+    raw_records = recovered["records"]
+    record_id_counts: dict[str, int] = {}
+    for raw_record in raw_records:
+        if isinstance(raw_record, dict) and isinstance(raw_record.get("record_id"), str):
+            record_id = raw_record["record_id"]
+            record_id_counts[record_id] = record_id_counts.get(record_id, 0) + 1
+
     salvaged: list[RetiringArtifactRecord] = []
     quarantined: list[QuarantinedRetiringRecord] = []
-    record_ids: set[str] = set()
-    for raw_record in recovered["records"]:
+    for raw_record in raw_records:
+        if (
+            isinstance(raw_record, dict)
+            and isinstance(raw_record.get("record_id"), str)
+            and record_id_counts[raw_record["record_id"]] > 1
+        ):
+            continue
         raw_json = json.dumps(raw_record, separators=(",", ":"), sort_keys=True)
         try:
             record = _record_from_json(raw_record)
-            if record.record_id in record_ids:
-                raise ValueError("duplicate retiring record_id")
         except (TypeError, ValueError) as exc:
             quarantined.append(QuarantinedRetiringRecord(raw_json=raw_json, reason=str(exc)))
             continue
-        record_ids.add(record.record_id)
         salvaged.append(record)
     return tuple(salvaged), tuple(quarantined)
 

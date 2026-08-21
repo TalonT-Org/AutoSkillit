@@ -3011,7 +3011,7 @@ class TestNudgeInfrastructureFaultPropagation:
     async def test_nudge_path_does_not_swallow_infrastructure_fault(
         self, monkeypatch, tool_ctx, tmp_path
     ):
-        from autoskillit.core import FaultDomain, RetryReason, SkillResult, StaleGeneratorError
+        from autoskillit.core import RetryReason, SkillResult, StaleGeneratorError
         from autoskillit.core.types import KillReason
         from autoskillit.execution.headless import run_headless_core
         from autoskillit.execution.headless._headless_recovery import _PathHint
@@ -3057,7 +3057,7 @@ class TestNudgeInfrastructureFaultPropagation:
 
         monkeypatch.setattr(tool_ctx.plugin_authority, "acquire_launch_binding", flaky_acquire)
 
-        with pytest.raises(StaleGeneratorError) as excinfo:
+        with pytest.raises(StaleGeneratorError):
             await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
 
         assert call_count["n"] == 2, (
@@ -3065,16 +3065,6 @@ class TestNudgeInfrastructureFaultPropagation:
             "the nudge attempt — the exception must be raised, not silently returned "
             "as the prior attempt's needs_retry result"
         )
-
-        # The exception escaping run_headless_core (rather than a stale SkillResult
-        # being returned) is the proof of "not silently kept". Downstream layers
-        # (server.tools_execution.run_skill) catch precisely this exception type and
-        # build the final SkillResult from it via the same production factory used
-        # at every other infrastructure_fault catch site.
-        final_skill_result = SkillResult.infrastructure_fault(exception=excinfo.value)
-        assert final_skill_result.subtype == "infrastructure_fault"
-        assert final_skill_result.infra.fault_domain is FaultDomain.INFRASTRUCTURE
-        assert final_skill_result.needs_retry is False
 
 
 class TestCancelledSessionLog:

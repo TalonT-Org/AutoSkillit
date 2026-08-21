@@ -1,40 +1,9 @@
-"""Meta-check: every Protocol-declared fake in tests/fakes.py is enrolled (T-B5b).
+"""Require every Protocol-declared test fake to have contract coverage.
 
-Mirrors the mechanism of ``tests/contracts/test_fetch_issue_mock_contracts.py``:
-AST-scan for a structural signal, accumulate failures as strings, one terminal
-``assert not all_failures``. Its stated rationale there — *"state-blind or
-body-blind mocks... caused the food-truck re-dispatch bug to go undetected
-across 7 test files"* — is the same failure shape this guard exists to catch
-one level up: a fake that silently skips a precondition the real
-implementation enforces.
-
-Asserting *enrolment* is the right job for a static guard — it can see that a
-fake class exists and is Protocol-declared, and whether its name is
-referenced anywhere under ``tests/contracts/``. Asserting *behaviour* is
-T-B5a's (``test_plugin_authority_contract.py``) job: a static scan can see
-that a method calls a precondition, not that calling it changes any outcome.
-Splitting the two is what makes this pair close the class of bug rather than
-the one instance.
-
-**Completeness claim, stated honestly.** "Protocol-declared" here means a
-``tests/fakes.py`` class whose name — with a leading ``Fake``/``InMemory``/
-``Mock`` prefix stripped — exactly matches a ``Protocol`` class name found
-anywhere under ``src/autoskillit/core/`` (19 files define at least one
-``Protocol`` subclass there; they are not confined to the ``_type_protocols_*``
-shard naming that ``tests/fakes.py``'s own module docstring suggests — e.g.
-``SubprocessRunner`` lives in ``_type_subprocess.py`` and
-``ManagedHeadlessSessionLineageStore`` lives in ``_type_native_shell_capture.py``).
-This catches every fake in the file at the time of writing, including both
-this guard exists because of (``FakePluginArtifactAuthority`` ->
-``PluginArtifactAuthority``, ``FakeManagedHeadlessSessionLineageStore`` ->
-``ManagedHeadlessSessionLineageStore``). It does **not** catch a fake of
-something that is a concrete class rather than a ``Protocol``, a fake using a
-naming convention other than those three prefixes, or one that doubles a
-Protocol under a completely unrelated name.
-
-The "enrolled" scan itself excludes this file — otherwise every allowlisted
-name would trivially self-enroll by appearing in ``_UNENROLLED_ALLOWLIST``
-below, which asserts the opposite of enrolment.
+The AST guard matches direct Protocol bases or exact names after stripping the
+``Fake``/``InMemory``/``Mock`` prefixes. It checks enrollment, not behavior, and
+deliberately excludes this file so the allowlist cannot self-enroll its entries.
+Concrete classes and unrelated fake names remain outside this static check.
 """
 
 from __future__ import annotations
@@ -53,28 +22,21 @@ _CONTRACTS_DIR = _REPO_ROOT / "tests" / "contracts"
 
 _FAKE_PREFIXES: tuple[str, ...] = ("Fake", "InMemory", "Mock")
 
-#: Protocol-declared fakes not enrolled in a shared contracts/ suite, each
-#: with a one-line rationale. Pre-existing doubles unrelated to issue #4597
-#: (mid-session upgrade immunity) — a full contract-suite migration for them
-#: is separate work, not a gap this plan addresses. Widening this set to
-#: cover a *new* Protocol-declared fake without either enrolling it or
-#: writing a real rationale defeats the guard.
-_UNENROLLED_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
+#: Pre-existing Protocol-declared fakes without shared contract coverage.
+_UNENROLLED_ALLOWLIST: frozenset[str] = frozenset(
     {
-        # isinstance-checked in test_fakes_conformance.py's T1 section, but
-        # that is protocol *conformance* (structural shape), not a shared
-        # behavioural contract suite (T-B5a's kind of coverage).
-        ("InMemoryHeadlessExecutor", "isinstance-only; see test_fakes_conformance.py T1"),
-        ("InMemoryTestRunner", "isinstance-only; see test_fakes_conformance.py T1"),
-        ("InMemoryRecipeRepository", "isinstance-only; see test_fakes_conformance.py T1"),
-        ("InMemoryCIWatcher", "isinstance-only; see test_fakes_conformance.py T1"),
-        ("InMemoryMergeQueueWatcher", "isinstance-only; see test_fakes_conformance.py T1"),
-        ("InMemoryDatabaseReader", "isinstance-only; see test_fakes_conformance.py T1"),
-        ("MockSubprocessRunner", "isinstance-only; see test_fakes_conformance.py T1"),
+        # These have structural conformance checks in test_fakes_conformance.py T1.
+        "InMemoryHeadlessExecutor",
+        "InMemoryTestRunner",
+        "InMemoryRecipeRepository",
+        "InMemoryCIWatcher",
+        "InMemoryMergeQueueWatcher",
+        "InMemoryDatabaseReader",
+        "MockSubprocessRunner",
         # No isinstance conformance check exists for these either.
-        ("FakeLaunchResolver", "no conformance or contract coverage; pre-existing"),
-        ("FakeSkillSessionContractStore", "no conformance or contract coverage; pre-existing"),
-        ("InMemoryGitHubApiLog", "no conformance or contract coverage; pre-existing"),
+        "FakeLaunchResolver",
+        "FakeSkillSessionContractStore",
+        "InMemoryGitHubApiLog",
     }
 )
 
@@ -146,7 +108,7 @@ def test_every_fake_is_enrolled_in_a_shared_contract_suite() -> None:
     declared_fakes = _protocol_declared_fake_names(_FAKES_PATH, protocol_names)
     assert declared_fakes, "No Protocol-declared fakes found in tests/fakes.py — check scan logic"
 
-    allowlisted_names = {name for name, _rationale in _UNENROLLED_ALLOWLIST}
+    allowlisted_names = _UNENROLLED_ALLOWLIST
     stale_allowlist_entries = allowlisted_names - declared_fakes
     assert not stale_allowlist_entries, (
         "Allowlist entries no longer match any Protocol-declared fake (class renamed or "

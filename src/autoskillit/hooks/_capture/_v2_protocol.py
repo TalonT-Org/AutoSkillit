@@ -25,6 +25,10 @@ _CAPTURE_PREFIX = b"[AutoSkillit shell capture v2:"
 _FAILURE_PREFIX = b"[AutoSkillit shell capture failure v2:"
 _FRAME_SUFFIX = b"]"
 _MAX_SIGNED_VALUE = (1 << 63) - 1
+MAX_CAPTURE_V2_MARKER_BYTES = 2048
+CAPTURE_V2_SCHEMA_VERSION = 2
+CAPTURE_V2_PRODUCER = "codex_shell_capture"
+MAX_CAPTURE_FAILURE_V2_BYTES = 1024
 _CAPTURE_ID_RE = _syntax.CAPTURE_ID_RE
 _REFERENCE_RE = _syntax.REFERENCE_RE
 _SHA256_RE = _syntax.SHA256_RE
@@ -78,11 +82,11 @@ class CaptureV2Fields:
 
     @property
     def schema_version(self) -> int:
-        return 2
+        return CAPTURE_V2_SCHEMA_VERSION
 
     @property
     def producer(self) -> str:
-        return "codex_shell_capture"
+        return CAPTURE_V2_PRODUCER
 
     @property
     def capture_status(self) -> str:
@@ -278,7 +282,7 @@ def _fields_from_renderable(value: CaptureV2Renderable) -> CaptureV2Fields:
 
 def _render_capture_fields(fields: CaptureV2Fields) -> bytes:
     encoded = _CAPTURE_PREFIX + _canonical_json(_capture_primitive(fields)) + _FRAME_SUFFIX
-    if len(encoded) > 2048:
+    if len(encoded) > MAX_CAPTURE_V2_MARKER_BYTES:
         raise CaptureContractError("capture marker exceeds bound")
     return encoded
 
@@ -292,7 +296,7 @@ def capture_v2_encoded_length(value: CaptureV2Renderable) -> int:
 
 
 def capture_v2_worst_case_bytes() -> int:
-    return 2048
+    return MAX_CAPTURE_V2_MARKER_BYTES
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -360,13 +364,13 @@ def parse_capture_v2(value: bytes) -> CaptureV2Fields:
     decoded = _decode_frame(
         value,
         prefix=_CAPTURE_PREFIX,
-        maximum=2048,
+        maximum=MAX_CAPTURE_V2_MARKER_BYTES,
     )
     if set(decoded) != _CAPTURE_KEYS:
         raise CaptureContractError("capture transport fields do not match schema")
     if (
-        decoded["schema_version"] != 2
-        or decoded["producer"] != "codex_shell_capture"
+        decoded["schema_version"] != CAPTURE_V2_SCHEMA_VERSION
+        or decoded["producer"] != CAPTURE_V2_PRODUCER
         or decoded["capture_status"] != "complete"
         or decoded["snapshot_status"] != "verified"
     ):
@@ -414,8 +418,8 @@ def _failure_primitive(value: CaptureFailureV2) -> dict[str, object]:
     _validate_failure(value)
     return {
         "detail": value.detail,
-        "producer": "codex_shell_capture",
-        "schema_version": 2,
+        "producer": CAPTURE_V2_PRODUCER,
+        "schema_version": CAPTURE_V2_SCHEMA_VERSION,
         "settlement_returncode": value.settlement_returncode,
         "shell_returncode": value.shell_returncode,
         "stage": value.stage,
@@ -425,7 +429,7 @@ def _failure_primitive(value: CaptureFailureV2) -> dict[str, object]:
 
 def render_capture_failure_v2(value: CaptureFailureV2) -> bytes:
     encoded = _FAILURE_PREFIX + _canonical_json(_failure_primitive(value)) + _FRAME_SUFFIX
-    if len(encoded) > 1024:
+    if len(encoded) > MAX_CAPTURE_FAILURE_V2_BYTES:
         raise CaptureContractError("capture failure marker exceeds bound")
     return encoded
 
@@ -434,13 +438,13 @@ def parse_capture_failure_v2(value: bytes) -> CaptureFailureV2:
     decoded = _decode_frame(
         value,
         prefix=_FAILURE_PREFIX,
-        maximum=1024,
+        maximum=MAX_CAPTURE_FAILURE_V2_BYTES,
     )
     if set(decoded) != _FAILURE_KEYS:
         raise CaptureContractError("capture failure fields do not match schema")
     if (
-        decoded["schema_version"] != 2
-        or decoded["producer"] != "codex_shell_capture"
+        decoded["schema_version"] != CAPTURE_V2_SCHEMA_VERSION
+        or decoded["producer"] != CAPTURE_V2_PRODUCER
         or decoded["status"] != "capture_failed"
     ):
         raise CaptureContractError("capture failure status does not match V2")

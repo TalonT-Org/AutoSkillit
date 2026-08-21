@@ -68,6 +68,10 @@ if TYPE_CHECKING:
     )
     from autoskillit.hooks._capture._v2_protocol import (  # noqa: F401
         _FRAME_SUFFIX,
+        CAPTURE_V2_PRODUCER,
+        CAPTURE_V2_SCHEMA_VERSION,
+        MAX_CAPTURE_FAILURE_V2_BYTES,
+        MAX_CAPTURE_V2_MARKER_BYTES,
         CaptureFailureV2,
         CaptureV2Fields,
         CaptureV2Renderable,
@@ -105,6 +109,10 @@ elif __package__:
     )
     from ._capture._v2_protocol import (  # noqa: F401
         _FRAME_SUFFIX,
+        CAPTURE_V2_PRODUCER,
+        CAPTURE_V2_SCHEMA_VERSION,
+        MAX_CAPTURE_FAILURE_V2_BYTES,
+        MAX_CAPTURE_V2_MARKER_BYTES,
         CaptureFailureV2,
         CaptureV2Fields,
         CaptureV2Renderable,
@@ -142,6 +150,10 @@ else:
     )
     from _capture._v2_protocol import (  # noqa: F401
         _FRAME_SUFFIX,
+        CAPTURE_V2_PRODUCER,
+        CAPTURE_V2_SCHEMA_VERSION,
+        MAX_CAPTURE_FAILURE_V2_BYTES,
+        MAX_CAPTURE_V2_MARKER_BYTES,
         CaptureFailureV2,
         CaptureV2Fields,
         CaptureV2Renderable,
@@ -200,10 +212,6 @@ __all__ = [
     "render_capture_v2",
 ]
 
-CAPTURE_V2_SCHEMA_VERSION = 2
-CAPTURE_V2_PRODUCER = "codex_shell_capture"
-MAX_CAPTURE_V2_MARKER_BYTES = 2048
-MAX_CAPTURE_FAILURE_V2_BYTES = 1024
 CAPTURE_FAILURE_V3_SCHEMA_VERSION = 3
 CAPTURE_FAILURE_V3_PRODUCER = CAPTURE_V2_PRODUCER
 MAX_CAPTURE_FAILURE_V3_BYTES = 1024

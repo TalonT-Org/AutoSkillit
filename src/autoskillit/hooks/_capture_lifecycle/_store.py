@@ -1,26 +1,51 @@
+"""CaptureLifecycleStore and the structural constants it depends on.
+
+The four class methods ``_acquire_flock``, ``_admission_reason``,
+``_admit_new_record``, and ``_scan_and_adopt_orphans`` are reduced to
+1-line wrappers that delegate to module-level functions in ``_admission``.
+The wrappers preserve the public class-method API (signatures, ``self``
+binding, ``monkeypatch.setattr`` contract) so test fixtures like
+``tests/cli/test_capture_store.py:247`` (``real_admit =
+CaptureLifecycleStore._admit_new_record``) continue to resolve without
+modification.
+
+All other class methods, exception classes, ledger helpers, and module
+constants move verbatim from the deleted ``_capture_lifecycle.py``. The
+file ends with ``register_module_aliases(__name__)`` so both
+``autoskillit.hooks._capture_lifecycle._store`` and
+``_capture_lifecycle._store`` resolve to the same ``sys.modules`` entry.
+"""
+
 from __future__ import annotations
 
 import errno
 import fcntl
 import importlib
 import os
-import random
 import re
 import secrets
 import stat
+import sys
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-if __package__:
-    from ._capture import _module_identity
-else:
-    from _capture import _module_identity as _standalone_module_identity
+# Bootstrap block — mirrors ``_capture/_authority.py`` so that bare-name
+# ``_capture`` siblings resolve under ``python -I -S -B`` with only ``hooks/``
+# on ``sys.path``.
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
 
-    _module_identity = _standalone_module_identity
+if TYPE_CHECKING:
+    from autoskillit.hooks._capture import _module_identity
+else:
+    _module_identity = importlib.import_module("_capture._module_identity")
 _module_identity.register_module_aliases(__name__)
+
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _capacity as _capture_capacity
     from autoskillit.hooks._capture import _delivery as _capture_delivery
@@ -35,24 +60,23 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _sweep as _capture_sweep
     from autoskillit.hooks._capture import _syntax as _capture_syntax
     from autoskillit.hooks._capture import _types as _capture_types
+    from autoskillit.hooks._capture_lifecycle import _admission
 else:
-    _capture_capacity = importlib.import_module(f"{_module_identity.__package__}._capacity")
-    _capture_delivery = importlib.import_module(f"{_module_identity.__package__}._delivery")
-    _capture_failure_policy = importlib.import_module(
-        f"{_module_identity.__package__}._failure_policy"
-    )
-    _capture_ledger = importlib.import_module(f"{_module_identity.__package__}._ledger")
-    _capture_ledger_view = importlib.import_module(f"{_module_identity.__package__}._ledger_view")
-    _capture_lifecycle_policy = importlib.import_module(
-        f"{_module_identity.__package__}._lifecycle_policy"
-    )
-    _capture_migration = importlib.import_module(f"{_module_identity.__package__}._migration")
-    _capture_reader = importlib.import_module(f"{_module_identity.__package__}._reader")
-    _capture_resolver = importlib.import_module(f"{_module_identity.__package__}._resolver")
-    _capture_snapshot = importlib.import_module(f"{_module_identity.__package__}._snapshot")
-    _capture_sweep = importlib.import_module(f"{_module_identity.__package__}._sweep")
-    _capture_syntax = importlib.import_module(f"{_module_identity.__package__}._syntax")
-    _capture_types = importlib.import_module(f"{_module_identity.__package__}._types")
+    _capture_capacity = importlib.import_module("_capture._capacity")
+    _capture_delivery = importlib.import_module("_capture._delivery")
+    _capture_failure_policy = importlib.import_module("_capture._failure_policy")
+    _capture_ledger = importlib.import_module("_capture._ledger")
+    _capture_ledger_view = importlib.import_module("_capture._ledger_view")
+    _capture_lifecycle_policy = importlib.import_module("_capture._lifecycle_policy")
+    _capture_migration = importlib.import_module("_capture._migration")
+    _capture_reader = importlib.import_module("_capture._reader")
+    _capture_resolver = importlib.import_module("_capture._resolver")
+    _capture_snapshot = importlib.import_module("_capture._snapshot")
+    _capture_sweep = importlib.import_module("_capture._sweep")
+    _capture_syntax = importlib.import_module("_capture._syntax")
+    _capture_types = importlib.import_module("_capture._types")
+    _admission = importlib.import_module("_capture_lifecycle._admission")
+
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 CaptureCapacityReason = _capture_types.CaptureCapacityReason
 CleanupBlocker = _capture_types.CleanupBlocker
@@ -72,29 +96,11 @@ LegacyCleanupOnly = _capture_types.LegacyCleanupOnly
 PublishedCaptureReference = _capture_snapshot.PublishedCaptureReference
 UnavailableCaptureReference = _capture_snapshot.UnavailableCaptureReference
 VerifiedCaptureSnapshot = _capture_snapshot.VerifiedCaptureSnapshot
-__all__ = [
-    "CaptureCapacityError",
-    "CaptureCapacityReason",
-    "CaptureCleanupOutcome",
-    "CaptureDeliveryStatus",
-    "CaptureLedgerError",
-    "CaptureLifecycleError",
-    "CaptureLifecycleRecord",
-    "CaptureLifecycleStore",
-    "CaptureReferenceStatus",
-    "CaptureRetentionPhase",
-    "CaptureSnapshotStatus",
-    "CaptureStatus",
-    "CaptureState",
-    "CaptureTransitionCommittedError",
-    *("CleanupBlocker", "CleanupProgress"),
-    "SweepBudgetSpec",
-]
+
 FRAME_MAGIC = _capture_ledger.FRAME_MAGIC
 LEDGER_NAME = ".capture-lifecycle.ledger"
 LOCK_NAME = ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
-MAX_ACTIVE_RECORDS = 4096
 # Single source of truth: the reclaimability declaration owns the sweep grace.
 _RETENTION_SECONDS = float(_capture_lifecycle_policy.SWEEP_GRACE_SECONDS)
 _REFERENCE_LIFETIME_SECONDS = 1800.0
@@ -116,14 +122,6 @@ _OBSERVE_FLAGS = os.O_RDWR | _CLOEXEC | _NOFOLLOW | _NONBLOCK
 _ARTIFACT_FLAGS = os.O_RDWR | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
 _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
 _STORE_FACTORY_TOKEN = object()
-# Jittered exponential backoff for non-blocking lock retry during an active
-# sweep: base delay uniformly chosen in [5ms, 20ms], doubling each retry, capped.
-# `random` (not `secrets`) is the deliberate choice — its per-process state is
-# already seeded from os.urandom at interpreter start, giving OS-entropy jitter
-# without the per-call cost of a CSPRNG, and never a wall-clock-derived source.
-_LOCK_RETRY_MIN_SECONDS = 0.005
-_LOCK_RETRY_MAX_SECONDS = 0.020
-_LOCK_RETRY_CAP_SECONDS = 0.25
 
 
 class CaptureLifecycleError(RuntimeError):
@@ -272,47 +270,16 @@ class CaptureLifecycleStore:
         return (now := self._wall_clock()), now + _RETENTION_SECONDS
 
     def _acquire_flock(self, fd: int, *, blocking: bool) -> None:
-        """Acquire ``fd``'s advisory lock, retrying non-blocking contention.
+        """Thin wrapper — delegates to ``_admission._acquire_flock``.
 
-        Blocking callers (the overwhelming majority — every non-sweep
-        transition) get a single kernel-blocking ``flock()`` call.
-        Non-blocking callers exist only inside an active sweep
-        (``self._sweep_budget`` is set for their whole duration): on
-        ``EAGAIN``/``EWOULDBLOCK`` they retry with jittered, doubling backoff
-        until the *sweep's own* ``max_duration_seconds`` budget — not a new
-        knob — is exhausted, then raise ``LockContended``. A non-blocking call
-        outside a sweep (should not happen given the current call graph) falls
-        back to single-attempt behavior rather than retrying forever.
+        The lock-retry loop, budget check, and ``LockContended`` raise now
+        live in ``_admission.py`` so the lock-retry primitive is
+        physically separate from the transition/capacity accounting it
+        shares with the rest of the store. The wrapper preserves the
+        public ``self``-binding so monkeypatching this name on the class
+        continues to dispatch the same way.
         """
-        operation = fcntl.LOCK_EX
-        if not blocking:
-            operation |= fcntl.LOCK_NB
-        try:
-            fcntl.flock(fd, operation)
-            return
-        except OSError as exc:
-            if blocking or exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
-                raise
-            contended = exc
-        budget = self._sweep_budget
-        started = self._sweep_started_monotonic
-        if budget is None or started is None:
-            raise _capture_types.LockContended from contended
-        deadline = started + budget.max_duration_seconds
-        delay = random.uniform(_LOCK_RETRY_MIN_SECONDS, _LOCK_RETRY_MAX_SECONDS)
-        while True:
-            remaining = deadline - self._monotonic()
-            if remaining <= 0:
-                raise _capture_types.LockContended from contended
-            time.sleep(min(delay, remaining))
-            try:
-                fcntl.flock(fd, operation)
-                return
-            except OSError as exc:
-                if exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
-                    raise
-                contended = exc
-            delay = min(delay * 2.0, _LOCK_RETRY_CAP_SECONDS)
+        return _admission._acquire_flock(self, fd, blocking=blocking)
 
     @contextmanager
     def _locked(self, *, blocking: bool = True) -> Iterator[None]:
@@ -640,7 +607,10 @@ class CaptureLifecycleStore:
                     record,
                     compaction_epoch=compaction_epoch,
                     spec=self._capacity,
-                    active_limit=min(MAX_ACTIVE_RECORDS, self._capacity.max_operational_records),
+                    active_limit=min(
+                        _admission.MAX_ACTIVE_RECORDS,
+                        self._capacity.max_operational_records,
+                    ),
                 )
                 if reason is not None:
                     raise CaptureCapacityError(reason)
@@ -1147,14 +1117,8 @@ class CaptureLifecycleStore:
         candidate: CaptureLifecycleRecord,
         compaction_epoch: int,
     ) -> CaptureCapacityReason | None:
-        return _capture_capacity.admission_reason(
-            records,
-            candidate,
-            compaction_epoch=compaction_epoch,
-            spec=self._capacity,
-            active_limit=min(MAX_ACTIVE_RECORDS, self._capacity.max_operational_records),
-            frame_size_cache=self._capacity_frame_sizes,
-        )
+        """Thin wrapper — delegates to ``_admission._admission_reason``."""
+        return _admission._admission_reason(self, records, candidate, compaction_epoch)
 
     def _admit_new_record(
         self,
@@ -1163,25 +1127,21 @@ class CaptureLifecycleStore:
         compaction_epoch: int,
         size: int,
     ) -> bool:
-        """Admit a brand-new (never-before-tracked) record if capacity allows.
+        """Thin wrapper — delegates to ``_admission._admit_new_record``.
 
-        Mirrors ``_transition_locked``'s self-accounting: a successful
-        admission during an active sweep counts against the same
-        ``max_transitions`` budget a state transition does, so
-        directory-reconciliation orphan adoption can only ever consume from
-        the same active-record capacity real reservations compete for, never
-        bypass it (#4440) — capacity-exhausted candidates are silently
-        skipped, deferred to a later invocation once cleanup frees room.
+        Preserves the ``#4440`` one-record-cannot-starve invariant: the
+        active-record cap, the ``_append_locked`` call, and the
+        ``_sweep_transitions`` budget increment all move with the body to
+        ``_admission._admit_new_record`` so the wrapper is a 1-line
+        delegation. ``tests/cli/test_capture_store.py:247`` relies on this
+        exact signature via ``real_admit = CaptureLifecycleStore._admit_new_record``
+        and ``monkeypatch.setattr``.
         """
-        if self._admission_reason(records, record, compaction_epoch) is not None:
-            return False
-        self._append_locked(record, records, compaction_epoch, size)
-        if self._sweep_budget is not None:
-            self._sweep_transitions += 1
-        return True
+        return _admission._admit_new_record(self, record, records, compaction_epoch, size)
 
     def _scan_and_adopt_orphans(self) -> _capture_sweep.OrphanAdoptionOutcome:
-        return _capture_sweep.scan_and_adopt_orphans(self, lifecycle_error=CaptureLifecycleError)
+        """Thin wrapper — delegates to ``_admission._scan_and_adopt_orphans``."""
+        return _admission._scan_and_adopt_orphans(self, lifecycle_error=CaptureLifecycleError)
 
     def sweep(
         self,

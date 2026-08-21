@@ -3802,7 +3802,7 @@ def test_active_record_bound_preserves_valid_ledger(
     anchor, root, store = _open_store(project, clock)
     ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
     try:
-        monkeypatch.setattr(capture_lifecycle, "MAX_ACTIVE_RECORDS", 1)
+        monkeypatch.setattr(capture_lifecycle._admission, "MAX_ACTIVE_RECORDS", 1)
         store.reserve_capture(_CAPTURE_ID)
         valid_ledger = ledger.read_bytes()
 
@@ -3951,7 +3951,7 @@ def test_recovery_transition_compacts_within_reserved_headroom(
                 reclamation_headroom_bytes=1,
             ),
         )
-        monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
+        monkeypatch.setattr(capture_lifecycle._store, "_COMPACTION_THRESHOLD_BYTES", 1)
 
         recovered = store._transition(
             store._authority_for(current),
@@ -3983,7 +3983,7 @@ def test_ledger_size_bound_rejects_without_mutating_valid_ledger(
         valid_ledger = ledger.read_bytes()
 
         with monkeypatch.context() as bound:
-            bound.setattr(capture_lifecycle, "MAX_LEDGER_BYTES", len(valid_ledger) - 1)
+            bound.setattr(capture_lifecycle._store, "MAX_LEDGER_BYTES", len(valid_ledger) - 1)
             with pytest.raises(CaptureLedgerError, match="ledger exceeds bound"):
                 store.get_record(_CAPTURE_ID)
 
@@ -4007,8 +4007,8 @@ def test_compaction_size_bound_preserves_valid_ledger(
         valid_ledger = ledger.read_bytes()
 
         with monkeypatch.context() as bound:
-            bound.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 0)
-            bound.setattr(capture_lifecycle, "_MAX_COMPACTION_BYTES", 1)
+            bound.setattr(capture_lifecycle._store, "_COMPACTION_THRESHOLD_BYTES", 0)
+            bound.setattr(capture_lifecycle._store, "_MAX_COMPACTION_BYTES", 1)
             with pytest.raises(CaptureLedgerError, match="compaction exceeds bound"):
                 store.reserve_capture("1" * 16)
 
@@ -4030,7 +4030,7 @@ def test_compaction_replace_failure_removes_temporary_control_file(
     anchor, root, store = _open_store(project, clock)
     try:
         store.reserve_capture(_CAPTURE_ID)
-        monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
+        monkeypatch.setattr(capture_lifecycle._store, "_COMPACTION_THRESHOLD_BYTES", 1)
 
         def fail_replace(
             _src: str,
@@ -4074,7 +4074,7 @@ def test_ledger_writes_retry_short_writes(
 
     try:
         if force_compaction:
-            monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
+            monkeypatch.setattr(capture_lifecycle._store, "_COMPACTION_THRESHOLD_BYTES", 1)
         monkeypatch.setattr(capture_lifecycle.os, "write", short_write)
         store.reserve_capture(_CAPTURE_ID)
 

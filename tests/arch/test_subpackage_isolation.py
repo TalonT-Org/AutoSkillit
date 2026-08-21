@@ -1191,6 +1191,19 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "Bumped for ADR-0009's rescue-sweep-and-retry pressure immunity at both the "
         "admission and transition gates (issue #4479).",
     ),
+    "hooks/_capture_lifecycle/_store.py": (
+        1250,
+        "REQ-CNST-010-E28: post-split capture-lifecycle store (#4727) — the "
+        "4 admission helpers (_acquire_flock, _admission_reason, _admit_new_record, "
+        "_scan_and_adopt_orphans) are now thin wrappers around module-level "
+        "implementations in the sibling _admission.py, but the rest of the class "
+        "body (state-machine transitions, ledger-compaction, capacity-rescue, "
+        "delivery wiring, sweep orchestration) shares the same self-accounting "
+        "invariants the original E21 entry called out. The class body alone is "
+        "~960 lines after the wrappers extract; the limit stays at 1250 to match "
+        "the pre-split E21 ceiling. Sub-ticket I retires E21 (and this entry) when "
+        "the class body is further decomposed (issue #4727).",
+    ),
     "hooks/_capture_contract.py": (
         1100,
         "REQ-CNST-010-E23: CaptureFailureV3 envelope framing — carries the full "
@@ -2326,3 +2339,20 @@ def test_cli_facade_all_resolves(facade_pkg: str) -> None:
                 f"{facade_pkg}.{name!r} resolves to a different object than "
                 f"{submodule_name}.{name!r}"
             )
+
+
+def test_capture_lifecycle_is_a_package_not_a_module() -> None:
+    """REQ-CNST-010-DECOMPOSE-3: Step 3 converts the .py file into a package directory."""
+    hooks = SRC_ROOT / "hooks"
+    assert not (hooks / "_capture_lifecycle.py").exists(), (
+        "_capture_lifecycle.py must be removed (replaced by package directory)"
+    )
+    assert (hooks / "_capture_lifecycle" / "__init__.py").exists(), (
+        "_capture_lifecycle/__init__.py must exist as a regular package marker"
+    )
+    assert (hooks / "_capture_lifecycle" / "_store.py").exists(), (
+        "_capture_lifecycle/_store.py must contain the lifecycle store class"
+    )
+    assert (hooks / "_capture_lifecycle" / "_admission.py").exists(), (
+        "_capture_lifecycle/_admission.py must contain the admission helpers"
+    )

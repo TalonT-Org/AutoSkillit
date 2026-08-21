@@ -397,7 +397,7 @@ def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:
 
         owner = GenerationArtifactRetirementOwner(
             home / ".autoskillit" / "plugin-generations" / "autoskillit-install",
-            home=home,
+            home=managed_home_for(home),
             plugin_ref=_INSTALL_ROOT_REF,
             artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
         )

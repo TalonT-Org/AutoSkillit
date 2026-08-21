@@ -1,11 +1,11 @@
-"""C-I3: Architectural guard — hook-artifact durable writes are registered.
+"""C-I3: Architectural guard — selected durable writes are registered.
 
 Scans the specific modules already known to own hook-artifact publication or
 repair logic (hooks.json, ``~/.claude/settings.json`` hook entries,
-``~/.codex/config.toml`` hook entries) for direct syntactic persistence call
-sites, and asserts each is either registered in ``DURABLE_ARTIFACT_WRITERS``
-or explicitly named in ``_NON_HOOK_ALLOWLIST`` as a non-hook write that
-happens to live in the same module.
+``~/.codex/config.toml`` hook entries), plus session admission metadata, for
+direct syntactic persistence call sites. Each must be registered in
+``DURABLE_ARTIFACT_WRITERS`` or explicitly named in ``_NON_HOOK_ALLOWLIST`` as
+a non-hook write that happens to live in the same module.
 
 Completeness claim (stated honestly): this guard is deliberately scoped to
 the modules already known to publish or repair hook artifacts — it is not a
@@ -44,6 +44,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 _SCOPED_MODULES: tuple[str, ...] = (
     "workspace/_projected_artifact/materialization.py",
     "workspace/_projected_artifact/_hook_repair.py",
+    "workspace/session_skills.py",
     "cli/_hooks.py",
     "execution/backends/_codex_hooks.py",
     "execution/backends/_codex_config.py",
@@ -247,3 +248,17 @@ def test_codex_reconciliation_audit_no_clobber_writer_is_registered() -> None:
     assert (
         "autoskillit.execution.backends._codex_fs_atomic:_write_reconciliation_audit"
     ) in _REGISTERED_WRITERS
+
+
+def test_skill_unavailability_metadata_writer_is_registered() -> None:
+    """Session admission omissions remain a relocatable registered artifact."""
+    writer = next(
+        entry
+        for entry in DURABLE_ARTIFACT_WRITERS
+        if entry.writer
+        == "autoskillit.workspace.session_skills:write_skill_unavailability_metadata"
+    )
+
+    assert writer.artifact == "add-dir/skill-unavailability.json"
+    assert writer.machine_local is False
+    assert writer.detection is None

@@ -105,6 +105,53 @@ class TestNonMachineLocalWritersAreRelocatable:
         write_generated_hooks_json(tmp_path)
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
 
+    def test_skill_unavailability_metadata_output_is_relocatable(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from autoskillit.core import SkillExecutionRole, SkillSemanticOperation
+        from autoskillit.workspace import (
+            CompiledSessionSkillCatalog,
+            EffectiveSkillCatalog,
+            SkillUnavailableMetadata,
+            write_skill_unavailability_metadata,
+        )
+
+        compilation = CompiledSessionSkillCatalog(
+            backend="codex",
+            catalog=EffectiveSkillCatalog(
+                skills=(),
+                execution_role=SkillExecutionRole.SESSION,
+            ),
+            unavailable=(
+                SkillUnavailableMetadata(
+                    skill="join-dependent",
+                    backend="codex",
+                    operation=SkillSemanticOperation.REQUIRED_JOIN,
+                    diagnostic="fixed join unavailable",
+                ),
+            ),
+        )
+        add_dir = tmp_path / "add-dir"
+        add_dir.mkdir()
+
+        write_skill_unavailability_metadata(add_dir, compilation=compilation)
+
+        content = (add_dir / "skill-unavailability.json").read_text(encoding="utf-8")
+        assert json.loads(content) == {
+            "backend": "codex",
+            "schema_version": 1,
+            "unavailable": [
+                {
+                    "backend": "codex",
+                    "diagnostic": "fixed join unavailable",
+                    "operation": "required_join",
+                    "skill": "join-dependent",
+                }
+            ],
+        }
+        _assert_relocatable(content)
+
     def test_codex_reconciliation_audit_output_is_relocatable(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex_session_storage import (
             _write_reconciliation_audit,

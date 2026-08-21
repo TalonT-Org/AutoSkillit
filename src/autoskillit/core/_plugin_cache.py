@@ -1302,7 +1302,7 @@ def register_active_kitchen(
         finally:
             fh.close()
     except Exception as exc:
-        logger.warning("active_kitchen_register_failed", error=str(exc))
+        logger.warning("active_kitchen_register_failed", error=str(exc), exc_info=True)
         return False
 
 

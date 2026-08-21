@@ -299,10 +299,9 @@ def publish_install_root_generation(
     ``generation_root`` directly — an installer (``uv tool install``) writes its
     own destination tree and offers no staging-directory handoff, so content
     creation happens before this function is ever called, at a location the
-    caller chose via ``core.generation_staging_root``. This performs
-    everything ``publish_generation`` does *after* staging: digest, atomic
-    move into the version-keyed generation path, lease, manifest, digest
-    verification, the atomic selector flip (the sole commit point), the
+    caller chose via ``core.generation_artifact_root``. This performs the
+    publication work that follows materialization: digest, lease, manifest,
+    digest verification, the atomic selector flip (the sole commit point), the
     version-independent selector update, and enqueueing every previously
     selected generation across all versions for retirement.
 

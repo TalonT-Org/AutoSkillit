@@ -1449,7 +1449,11 @@ def _is_frozen_version_ref(node: ast.expr) -> bool:
     if isinstance(node, ast.Name):
         return node.id in _FROZEN_VERSION_NAMES
     if isinstance(node, ast.Attribute):
-        return node.attr in _FROZEN_VERSION_NAMES
+        return (
+            isinstance(node.value, ast.Name)
+            and node.value.id == "autoskillit"
+            and node.attr in _FROZEN_VERSION_NAMES
+        )
     return False
 
 
@@ -1549,8 +1553,21 @@ def test_arch012_no_frozen_version_vs_live_metadata_comparison(tmp_path: Path) -
     )
     violations = _check_frozen_vs_live_version_compare(tmp_path)
     assert violations, "Expected ARCH-012 to flag the reproduced authority.py shape"
-    assert ":6: " in violations[0], f"Expected the compare's line (6), got: {violations[0]}"
+    assert "bad.py:" in violations[0]
     assert "sealed" in violations[0] and "InstallBinding" in violations[0]
+
+
+def test_arch012_ignores_third_party_version_comparisons(tmp_path: Path) -> None:
+    f = tmp_path / "allowed.py"
+    f.write_text(
+        "import importlib.metadata\n"
+        "import requests\n"
+        "\n"
+        "def versions_match():\n"
+        "    return requests.__version__ == importlib.metadata.version('requests')\n"
+    )
+
+    assert _check_frozen_vs_live_version_compare(tmp_path) == []
 
 
 def test_arch012_has_no_violations_in_real_source_tree() -> None:

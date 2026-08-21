@@ -66,7 +66,7 @@ class _ExceptionPathImportVisitor(ast.NodeVisitor):
         self.violations = violations
         self._depth = 0
 
-    def visit_Try(self, node: ast.Try) -> None:
+    def _visit_try(self, node: ast.Try | ast.TryStar) -> None:
         for stmt in node.body:
             self.visit(stmt)
         for handler in node.handlers:
@@ -80,6 +80,12 @@ class _ExceptionPathImportVisitor(ast.NodeVisitor):
         for stmt in node.finalbody:
             self.visit(stmt)
         self._depth -= 1
+
+    def visit_Try(self, node: ast.Try) -> None:
+        self._visit_try(node)
+
+    def visit_TryStar(self, node: ast.TryStar) -> None:
+        self._visit_try(node)
 
     def visit_Import(self, node: ast.Import) -> None:
         if self._depth > 0:
@@ -102,6 +108,21 @@ def _scan() -> list[tuple[str, int]]:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         _ExceptionPathImportVisitor(rel_path, violations).visit(tree)
     return violations
+
+
+def test_exception_path_visitor_covers_except_star() -> None:
+    tree = ast.parse(
+        "def handle_group():\n"
+        "    try:\n"
+        "        pass\n"
+        "    except* Exception:\n"
+        "        from autoskillit import core\n"
+    )
+    violations: list[tuple[str, int]] = []
+
+    _ExceptionPathImportVisitor("sample.py", violations).visit(tree)
+
+    assert violations == [("sample.py", 5)]
 
 
 def test_no_new_function_local_autoskillit_import_in_except_or_finally() -> None:

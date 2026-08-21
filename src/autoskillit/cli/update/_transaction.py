@@ -399,6 +399,7 @@ def run_update_transaction(
         generation_staging_root(resolved_home, _AUTOSKILLIT_INSTALL_ROOT_KEY)
         / install_root_incarnation_id
     )
+    install_root_probe_bin = install_root_staging.parent / f".{install_root_staging.name}-bin"
     command = upgrade_command(info, install_root_destination=install_root_staging)
     if command is None:
         return _upgrade_failure(
@@ -754,3 +755,4 @@ def run_update_transaction(
         shutil.rmtree(working_dir, ignore_errors=True)
         # A leftover here means the disposable probe failed before cleanup.
         shutil.rmtree(install_root_staging, ignore_errors=True)
+        shutil.rmtree(install_root_probe_bin, ignore_errors=True)

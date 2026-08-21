@@ -608,6 +608,7 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
             # publish_install_root_generation() call needs actual content at
             # whichever destination each call's own UV_TOOL_DIR names.
             destination = Path(kwargs["env"]["UV_TOOL_DIR"])
+            Path(kwargs["env"]["UV_TOOL_BIN_DIR"]).mkdir(parents=True)
             entrypoint = destination / "autoskillit" / "bin" / "autoskillit"
             entrypoint.parent.mkdir(parents=True, exist_ok=True)
             entrypoint.write_text("#!/bin/sh\necho fake\n")
@@ -638,6 +639,7 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
     assert probe_argv == expected_upgrade_argv
     staging_root_prefix = str(generation_staging_root(tmp_path, _AUTOSKILLIT_INSTALL_ROOT_KEY))
     assert str(probe_kwargs["env"]["UV_TOOL_DIR"]).startswith(staging_root_prefix)
+    assert not Path(probe_kwargs["env"]["UV_TOOL_BIN_DIR"]).exists()
 
     final_argv, final_kwargs = calls[1]
     assert final_argv == expected_upgrade_argv

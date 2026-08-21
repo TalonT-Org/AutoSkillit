@@ -47,7 +47,6 @@ def check_skill_semantic_feasibility(
         backend=backend.name,
     )
     if unsupported_operation is not None:
-        assert adaptation.diagnostic is not None
         return adaptation.diagnostic
     adaptation.validate_for(plan, backend=backend.name)
     return None

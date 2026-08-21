@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
     ArtifactLease,
     InfrastructureFaultError,
@@ -557,7 +558,6 @@ def default_plugin_retirement_coordinator(
     its ``managed_root`` and never removes it, so a misrouted record is
     re-rejected on every sweep for the life of the install.
     """
-    from autoskillit.core import _AUTOSKILLIT_INSTALL_ROOT_KEY
     from autoskillit.workspace import (
         GenerationArtifactRetirementOwner,
         ProjectedPluginRetirementOwner,

@@ -223,6 +223,72 @@ def test_command_classifying_guards_use_shared_primitive():
         )
 
 
+def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> None:
+    """Step 9 (#4733) regression: after decomposing the git-command
+    classification primitives into _git_command_classification, the
+    orchestrator (git_ops_guard.py) MUST continue to use the flag-spec
+    engine (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) and the segment
+    tokenizers (tokenize_command_segments, tokenize_shell_payload_segments,
+    command_verb_and_args, extract_interpreter_command_payloads,
+    extract_interpreter_write_paths, extract_redirect_targets) from
+    _command_classification - the same shared primitives that
+    test_command_classifying_guards_use_shared_primitive enforces for
+    write_guard.py, pr_create_guard.py, etc. The new sibling must NOT
+    re-export these symbols to consumers; it receives them as bare-name
+    imports internally and the orchestrator consumes them directly.
+    """
+    src = (SRC_ROOT / "hooks" / "guards" / "git_ops_guard.py").read_text()
+    tree = ast.parse(src)
+
+    imports_from_command_classification: list[str] = []
+    imports_from_git_command_classification: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "_command_classification":
+                imports_from_command_classification.extend(a.name for a in node.names)
+            elif node.module == "_git_command_classification":
+                imports_from_git_command_classification.extend(a.name for a in node.names)
+
+    # The orchestrator must keep using the flag-spec engine + segment tokenizers
+    # from _command_classification. The minimal set is the engine pair
+    # (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) plus the segment tokenizers.
+    required_command_classification = {
+        "_consume_str_flag",
+        "_GIT_GLOBAL_FLAG_SPEC",
+        "tokenize_command_segments",
+        "tokenize_shell_payload_segments",
+        "command_verb_and_args",
+    }
+    missing = required_command_classification - set(imports_from_command_classification)
+    assert not missing, (
+        f"git_ops_guard.py orchestrator must keep importing {sorted(missing)} "
+        f"from _command_classification (decomposition dropped a required "
+        f"orchestrator-side primitive)"
+    )
+    assert imports_from_git_command_classification, (
+        "git_ops_guard.py orchestrator must import the moved classification "
+        "primitives from _git_command_classification"
+    )
+    # The new sibling must not re-export _command_classification symbols that
+    # the orchestrator itself still consumes directly (orchestrator's import
+    # would be shadowed by the sibling's re-export).
+    forbidden = {
+        "_GIT_GLOBAL_FLAG_SPEC",
+        "_consume_str_flag",
+        "command_verb_and_args",
+        "extract_interpreter_command_payloads",
+        "extract_interpreter_write_paths",
+        "extract_redirect_targets",
+        "tokenize_command_segments",
+        "tokenize_shell_payload_segments",
+    }
+    leaked = forbidden & set(imports_from_git_command_classification)
+    assert not leaked, (
+        f"git_ops_guard.py must not re-export _command_classification symbols "
+        f"via _git_command_classification: {sorted(leaked)}"
+    )
+
+
 def test_shared_command_classification_module_exists():
     """The shared command classification module must exist for guards to import."""
     module_path = SRC_ROOT / "hooks" / "_command_classification.py"

@@ -14,15 +14,24 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import unittest.mock
 from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks.guards.git_ops_guard import (
+# Mirror the standalone hook process import mode: the new sibling module
+# uses bare-name imports (_github_mutation_analysis, _command_classification)
+# that resolve only when the hooks directory is on sys.path. The orchestrator
+# bootstraps this in production; the test must do it explicitly.
+_HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks")
+if _HOOKS_SRC not in sys.path:
+    sys.path.insert(0, _HOOKS_SRC)
+
+from autoskillit.hooks._command_classification import _FlagArity  # noqa: E402
+from autoskillit.hooks.guards._git_command_classification import (  # noqa: E402
     _GIT_FETCH_FLAG_SPEC,
     _classify_fetch,
-    _FlagArity,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -982,3 +991,59 @@ def test_every_git_fetch_spec_flag_is_recognized(flag: str) -> None:
         # means the flag was NOT recognized -- the precise failure mode the
         # spec table is supposed to prevent.
         assert not any(entry[1] == "<unresolved>" for entry in result)
+
+
+def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
+    """Step 9 (#4733) regression: _classify_fetch and _GIT_FETCH_FLAG_SPEC
+    moved to autoskillit.hooks.guards._git_command_classification.
+    """
+    from autoskillit.hooks.guards._git_command_classification import (  # noqa: PLC0415
+        _GIT_FETCH_FLAG_SPEC as spec,
+    )
+    from autoskillit.hooks.guards._git_command_classification import (
+        _classify_fetch as classify,
+    )
+
+    assert isinstance(spec, dict)
+    assert all(isinstance(k, str) for k in spec)
+    assert all(v == _FlagArity.BOOLEAN or v == _FlagArity.VALUE for v in spec.values())
+    assert callable(classify)
+    # And the parametrized test at line 963's import targets must remain
+    # accessible from this test's perspective.
+    assert spec is _GIT_FETCH_FLAG_SPEC
+    assert classify is _classify_fetch
+
+
+def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:
+    """Step 9 (#4733): the orchestrator's extended bootstrap must let
+    `_git_command_classification` resolve when only `hooks/` is on sys.path.
+    Mirrors tests/arch/test_shell_capture_trust_anchor.py:59
+    (test_capture_modules_import_with_hooks_directory_alone).
+    """
+    payload = json.dumps(
+        {
+            "session_id": "bootstrap-smoke",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status"},
+        }
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-B",
+            "src/autoskillit/hooks/guards/git_ops_guard.py",
+        ],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env={"PYTHONPATH": "src/autoskillit/hooks", "PATH": os.environ["PATH"]},
+        timeout=15,
+        cwd=str(Path(__file__).resolve().parents[2]),
+    )
+    assert result.returncode == 0, (
+        f"git_ops_guard.py subprocess failed (exit={result.returncode}): stderr={result.stderr!r}"
+    )
+    assert "ModuleNotFoundError" not in result.stderr
+    assert "ImportError" not in result.stderr

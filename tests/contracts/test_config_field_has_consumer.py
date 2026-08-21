@@ -34,9 +34,7 @@ pre-existing orphan surfaced by widening from the original
 AgentBackendConfig-only scope (RunSkillConfig.natural_exit_grace_seconds,
 unrelated to #4684's actual root cause) is annotated inert-tracked:#4693 in
 _config_dataclasses.py rather than wired here, to avoid unrelated scope
-creep in this rectify. ProviderProfileDef.context_window was retired in
-0.10.1007 via ``RETIRED_PROFILE_KEYS`` (refs #4685) and is no longer a
-field on ``ProviderProfileDef``.
+creep in this rectify.
 """
 
 from __future__ import annotations

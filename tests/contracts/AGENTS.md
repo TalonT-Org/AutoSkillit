@@ -50,9 +50,6 @@ pass — but widening also finds pre-existing, unrelated orphans (see
 `RunSkillConfig.natural_exit_grace_seconds` in `_config_dataclasses.py`,
 `inert-tracked:#4693`); resolve those separately rather than folding an
 unrelated fix into whatever change triggered the discovery.
-`ProviderProfileDef.context_window` was retired in 0.10.1007 via
-`RETIRED_PROFILE_KEYS` (refs #4685) and is no longer a field on
-`ProviderProfileDef`.
 
 Distinct from `test_config_field_coverage.py`, which checks a different thing
 (every dataclass field is populated by `_build_subconfig`) — a field can be

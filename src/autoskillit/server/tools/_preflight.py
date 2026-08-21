@@ -35,20 +35,21 @@ def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[s
 
 
 def check_skill_semantic_feasibility(
-    plans: tuple[SkillSemanticPlan, ...],
+    plan: SkillSemanticPlan | None,
     backend: CodingAgentBackend,
 ) -> str | None:
-    """Return the selected backend's exact first unsupported-operation diagnostic."""
-    for plan in plans:
-        adaptation = backend.adapt_skill_semantics(plan)
-        unsupported_operation = adaptation.validate_refusal_for(
-            plan,
-            backend=backend.name,
-        )
-        if unsupported_operation is not None:
-            assert adaptation.diagnostic is not None
-            return adaptation.diagnostic
-        adaptation.validate_for(plan, backend=backend.name)
+    """Return the selected backend's exact root-operation refusal diagnostic."""
+    if plan is None:
+        return None
+    adaptation = backend.adapt_skill_semantics(plan)
+    unsupported_operation = adaptation.validate_refusal_for(
+        plan,
+        backend=backend.name,
+    )
+    if unsupported_operation is not None:
+        assert adaptation.diagnostic is not None
+        return adaptation.diagnostic
+    adaptation.validate_for(plan, backend=backend.name)
     return None
 
 
@@ -207,7 +208,7 @@ def _check_dispatch_feasibility(
                             }
                         )
                     semantic_error = check_skill_semantic_feasibility(
-                        _skill_invocation.semantic_plans,
+                        _skill_invocation.root.semantic_plan,
                         _pinned_backend,
                     )
                     if semantic_error:

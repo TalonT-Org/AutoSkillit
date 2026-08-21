@@ -668,6 +668,36 @@ class SkillResult:
         )
 
     @classmethod
+    def infeasible(
+        cls,
+        *,
+        skill_name: str,
+        backend: str,
+        diagnostic: str,
+        skill_command: str = "",
+        session_id: str = "",
+        order_id: str = "",
+    ) -> SkillResult:
+        """Construct a terminal result for a designed backend admission refusal."""
+        result = f"Skill {skill_name!r} is not feasible on backend {backend!r}: {diagnostic}"
+        if skill_command:
+            result += f" | skill_command={skill_command!r}"
+        return cls(
+            success=False,
+            result=result,
+            session_id=session_id,
+            subtype="infeasible",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+            kill_reason=KillReason.NOT_APPLICABLE,
+            order_id=order_id,
+            evidence=WriteEvidence.none_observed(),
+        )
+
+    @classmethod
     def cancelled(
         cls,
         skill_command: str = "",

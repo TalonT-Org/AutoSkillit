@@ -1228,7 +1228,7 @@ def read_active_kitchens_registry(*, home: ManagedHome | None = None) -> ActiveK
         finally:
             fh.close()
     except Exception as exc:
-        logger.warning("active_kitchens_registry_read_failed", error=str(exc))
+        logger.warning("active_kitchens_registry_read_failed", error=str(exc), exc_info=True)
         return ActiveKitchensReadResult(
             state=ActiveKitchensState.CORRUPT,
             error=str(exc),

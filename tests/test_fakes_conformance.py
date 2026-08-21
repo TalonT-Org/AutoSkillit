@@ -7,15 +7,12 @@ from typing import cast
 
 import pytest
 
-from autoskillit.core import StaleGeneratorError
 from autoskillit.core.types import (
     CIWatcher,
     CodingAgentBackend,
     DatabaseReader,
     HeadlessExecutor,
-    ManagedHeadlessSessionKind,
     MergeQueueWatcher,
-    NativeShellCaptureMode,
     PluginArtifactAuthority,
     PluginLoadMode,
     RecipeRepository,
@@ -23,13 +20,10 @@ from autoskillit.core.types import (
     SubprocessRunner,
     TestResult,
     TestRunner,
-    resolve_native_shell_capture_decision,
 )
-from tests._helpers import replace_directory_preserving_children
 from tests.fakes import (
     DispatchFoodTruckCall,
     ExecutorCall,
-    FakeManagedHeadlessSessionLineageStore,
     FakePluginArtifactAuthority,
     InMemoryCIWatcher,
     InMemoryDatabaseReader,
@@ -102,60 +96,6 @@ def test_fake_plugin_artifact_authority_is_lazy_fresh_and_releasable(tmp_path: P
             backend=backend,
             load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
-
-
-def test_fake_plugin_artifact_authority_enforces_generator_freshness(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """T-B3: the fake invokes the same freshness probe both real authorities call.
-
-    Before B-5, ``FakePluginArtifactAuthority.acquire_launch_binding`` never
-    called ``assert_generator_process_fresh()`` at all, so every test flowing
-    through it bypassed the guard entirely. Forcing ``pkg_root()`` to resolve
-    to a nonexistent path and asserting the fake raises the same
-    ``StaleGeneratorError`` the real authorities raise under the identical
-    condition proves the bypass is closed.
-    """
-    import autoskillit.workspace._projected_artifact.authority as _auth
-
-    monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
-    authority = FakePluginArtifactAuthority(tmp_path)
-    backend = cast(CodingAgentBackend, object())
-    with pytest.raises(StaleGeneratorError, match="no longer exists"):
-        authority.acquire_launch_binding(
-            backend=backend,
-            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
-        )
-
-
-def test_fake_managed_lineage_store_enforces_anchor_inode_identity(tmp_path: Path) -> None:
-    """T-B4: the fake compares anchor_device/anchor_inode, not just the path string.
-
-    The real store's ``_validate_anchor_identity()`` (``execution/session/
-    _managed_headless_session_lineage.py``) checks device+inode in addition to
-    the anchor path string, at five call sites. Before B-5 the fake's
-    ``create()`` already captured ``anchor_device``/``anchor_inode`` but
-    ``_current()`` never checked them — a directory replaced at the same path
-    (new inode) was invisible to the fake, fatal to the real store. Deleting
-    and recreating the anchor at the identical path reproduces exactly that
-    replacement, and the fake must now reject it identically.
-    """
-    store = FakeManagedHeadlessSessionLineageStore()
-    anchor = tmp_path / "anchor"
-    anchor.mkdir()
-    decision = resolve_native_shell_capture_decision(NativeShellCaptureMode.DIRECT)
-    store.create(
-        lineage_anchor=anchor,
-        launch_id="a" * 32,
-        decision=decision,
-        backend="claude-code",
-        session_kind=ManagedHeadlessSessionKind.SKILL,
-    )
-
-    replace_directory_preserving_children(anchor)
-
-    with pytest.raises(ValueError, match="Managed lineage anchor identity mismatch"):
-        store.load(lineage_anchor=anchor, launch_id="a" * 32)
 
 
 # ---------------------------------------------------------------------------

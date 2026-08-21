@@ -116,14 +116,11 @@ upgrades never mutate or delete a root a live process is reading from.
 install lived at one shared, non-versioned path
 (`~/.local/share/uv/tools/autoskillit/`), which had no manifest or lease
 infrastructure at all. `reconcile_install_artifacts()`
-(`workspace/_install_state.py`) removes that legacy tree once it is
-content-stable — its digest observed unchanged across a 30-day window,
-recorded in a sidecar next to it — since there is no lease to gate on
-directly. This is a heuristic, not a liveness guarantee (a live-but-idle
-process can look identical to a dead one by digest alone), which is exactly
-why the window is 30 days rather than the 24-hour generation-retirement
-grace, and why this path is scoped to the one, one-time migration artifact
-rather than a general mechanism.
+(`workspace/_install_state.py`) preserves that legacy tree because it has no
+lease or exact-identity metadata from which AutoSkillit can prove that no live
+process still uses it. Retiring the shared root therefore requires explicit
+operator cleanup after its processes have stopped; automated reconciliation
+only reports the preserved legacy shape.
 
 **Reducing prompt frequency is a separate, operational concern from surviving
 an upgrade.** Everything above prevents a concurrent upgrade from destroying

@@ -3,9 +3,7 @@
 Provides the shared enum vocabulary for all higher layers.
 
 Issue #4735: this module is a re-export facade. The context-admission enums
-(``AdmissionState``, ``AdmissionDecisionKind``, ``ContextAdmission*Status``,
-``ChargeDomain``, ``GenerationState``, ``MeasurementKind``, ``CoverageState``,
-``CoverageEvidenceKind``, ``ReserveClass``, ``WitnessKind``, ``ProducerSurface``)
+(``AdmissionState`` and the other phoropter / context-accounting discriminators)
 live in the sibling shard ``_type_enums_context_admission.py`` and are bound
 into this module's namespace via wildcard re-export. Direct symbol imports
 (``from autoskillit.core.types._type_enums import AdmissionState``) and direct

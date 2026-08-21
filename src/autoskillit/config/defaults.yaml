@@ -335,7 +335,6 @@ providers:
       base_url: null
       timeout_seconds: null
       api_key_env: null
-      context_window: null
   step_overrides: {}
   recipe_overrides: {}
   model_overrides: {}

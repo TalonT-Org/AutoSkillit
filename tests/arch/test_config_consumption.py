@@ -42,14 +42,6 @@ class ForwardDeclaredField:
 _STALENESS_THRESHOLD_DAYS = 180
 
 _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
-    "context_window": ForwardDeclaredField(
-        issue=4685,
-        rationale=(
-            "ProviderProfileDef.context_window is parsed and range-validated but "
-            "_profile_to_env projects every other profile field and skips it"
-        ),
-        added_date=date(2026, 8, 17),
-    ),
     "natural_exit_grace_seconds": ForwardDeclaredField(
         issue=4686,
         rationale=(

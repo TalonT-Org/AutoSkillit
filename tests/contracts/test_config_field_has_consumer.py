@@ -29,12 +29,12 @@ _build_subconfig) — a field can be populated and still have zero readers.
 Scope: enforces every ``@dataclass``/``@dataclass(frozen=True, slots=True)``
 directly defined in config/_config_dataclasses.py (reflectively discovered,
 not hand-maintained — mirrors the reflective-discovery pattern in
-tests/execution/test_launch_force_inactive_call_path_reflective.py). Two
-pre-existing orphans surfaced by widening from the original
+tests/execution/test_launch_force_inactive_call_path_reflective.py). One
+pre-existing orphan surfaced by widening from the original
 AgentBackendConfig-only scope (RunSkillConfig.natural_exit_grace_seconds,
-ProviderProfileDef.context_window — both unrelated to #4684's actual root
-cause) are annotated inert-tracked:#4693 in _config_dataclasses.py rather
-than wired here, to avoid unrelated scope creep in this rectify.
+unrelated to #4684's actual root cause) is annotated inert-tracked:#4693 in
+_config_dataclasses.py rather than wired here, to avoid unrelated scope
+creep in this rectify.
 """
 
 from __future__ import annotations

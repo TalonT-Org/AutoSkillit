@@ -24,6 +24,7 @@ from autoskillit.config.settings import (
 )
 from autoskillit.config.settings import (
     RETIRED_CONFIG_KEYS,
+    RETIRED_PROFILE_KEYS,
     AgentBackendConfig,
     AutomationConfig,
     BranchingConfig,
@@ -94,6 +95,7 @@ __all__ = [
     "ReportBugConfig",
     "ResetWorkspaceConfig",
     "RETIRED_CONFIG_KEYS",
+    "RETIRED_PROFILE_KEYS",
     "RetiredConfigKeyDef",
     "ReviewConfig",
     "RunSkillConfig",

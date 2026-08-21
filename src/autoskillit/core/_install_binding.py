@@ -53,10 +53,10 @@ def _acquire_self_lease(root: Path, version: str) -> None:
     """Best-effort: hold a shared lease on this process's own install-root
     generation for the process's lifetime.
 
-    Finds the generation by matching ``root`` (this process's ``pkg_root()``)
-    against every incarnation directory under the install-root generation
-    store's version directory via ``is_relative_to`` — robust to uv's exact
-    internal venv layout, unlike assuming a fixed parent-directory depth.
+    Finds the generation by walking upward from ``root`` (this process's
+    ``pkg_root()``) to the matching install-root incarnation. This uses the
+    bound package location rather than the ambient home, which may have
+    changed since the generation was installed.
 
     Best-effort and silent on any failure: a pre-Phase-3 (legacy shared-root)
     install, a local editable/dev checkout, or any process whose root simply
@@ -66,26 +66,21 @@ def _acquire_self_lease(root: Path, version: str) -> None:
     """
     global _SELF_LEASE_HANDLE
     try:
-        from ._plugin_artifact_identity import (
-            generation_version_root,
-            installed_plugin_artifact_lease_path,
-        )
+        from ._plugin_artifact_identity import installed_plugin_artifact_lease_path
         from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY
         from .runtime.artifact_lease import ArtifactLease
 
         canonical_root = root.resolve()
-        version_root = generation_version_root(Path.home(), _AUTOSKILLIT_INSTALL_ROOT_KEY, version)
-        if not version_root.is_dir():
-            return
-        for incarnation_dir in version_root.iterdir():
-            if incarnation_dir.name.startswith(".") or incarnation_dir.is_symlink():
-                continue
-            if not incarnation_dir.is_dir():
-                continue
-            try:
-                if not canonical_root.is_relative_to(incarnation_dir.resolve()):
-                    continue
-            except OSError:
+        install_root_name = _AUTOSKILLIT_INSTALL_ROOT_KEY.partition("@")[0]
+        for incarnation_dir in canonical_root.parents:
+            version_root = incarnation_dir.parent
+            store_root = version_root.parent
+            if (
+                version_root.name != version
+                or store_root.name != install_root_name
+                or store_root.parent.name != "plugin-generations"
+                or store_root.parent.parent.name != ".autoskillit"
+            ):
                 continue
             _SELF_LEASE_HANDLE = ArtifactLease.acquire_existing_shared(
                 installed_plugin_artifact_lease_path(incarnation_dir)

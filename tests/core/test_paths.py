@@ -200,6 +200,37 @@ class TestInstallBindingSeal:
         )
         assert second.root == first.root
 
+    def test_self_lease_uses_bound_generation_when_home_changes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import autoskillit.core._install_binding as binding
+        from autoskillit.core import ArtifactLease, installed_plugin_artifact_lease_path
+
+        incarnation = (
+            tmp_path
+            / "install-home"
+            / ".autoskillit"
+            / "plugin-generations"
+            / "autoskillit-install"
+            / "1.2.3"
+            / "incarnation"
+        )
+        package_root = incarnation / "autoskillit" / "lib" / "site-packages" / "autoskillit"
+        package_root.mkdir(parents=True)
+        acquired: list[Path] = []
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "different-home")
+        monkeypatch.setattr(binding, "_SELF_LEASE_HANDLE", None)
+        monkeypatch.setattr(
+            ArtifactLease,
+            "acquire_existing_shared",
+            lambda path: acquired.append(path) or object(),
+        )
+
+        binding._acquire_self_lease(package_root, "1.2.3")
+
+        assert acquired == [installed_plugin_artifact_lease_path(incarnation)]
+
 
 class TestIsGitMainCheckout:
     def test_plain_directory_returns_false(self, tmp_path: Path) -> None:

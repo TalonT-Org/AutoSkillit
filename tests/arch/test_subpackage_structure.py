@@ -46,6 +46,7 @@ class TestCoreSubpackages:
             "_type_launch_projection",
             "_type_native_shell_capture",
             "_type_phoropter",
+            "_type_persisted_formats",
             "_type_plugin_source",
             "_type_protocols_backend",
             "_type_protocols_execution",

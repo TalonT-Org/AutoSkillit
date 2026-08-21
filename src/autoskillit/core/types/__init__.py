@@ -66,6 +66,8 @@ from ._type_launch import *  # noqa: F401, F403
 from ._type_launch import __all__ as _launch_all
 from ._type_native_shell_capture import *  # noqa: F401, F403
 from ._type_native_shell_capture import __all__ as _native_shell_capture_all
+from ._type_persisted_formats import *  # noqa: F401, F403
+from ._type_persisted_formats import __all__ as _persisted_formats_all
 from ._type_phoropter import *  # noqa: F401, F403
 from ._type_phoropter import __all__ as _phoropter_all
 from ._type_plugin_source import *  # noqa: F401, F403
@@ -144,6 +146,7 @@ __all__ = (
     + _launch_all
     + _native_shell_capture_all
     + _phoropter_all
+    + _persisted_formats_all
     + _plugin_source_all
     + _retirement_backstops_all
     + _protocols_logging_all

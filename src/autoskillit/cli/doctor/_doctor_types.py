@@ -20,7 +20,12 @@ class DoctorResult:
 _NON_PROBLEM: frozenset[Severity] = frozenset({Severity.OK, Severity.INFO})
 
 
-def _format_results(results: list[DoctorResult], *, output_json: bool) -> list[str]:
+def _format_results(
+    results: list[DoctorResult],
+    *,
+    output_json: bool,
+    include_info: bool = False,
+) -> list[str]:
     """Format doctor results without owning the CLI output stream."""
     if output_json:
         return [
@@ -38,6 +43,8 @@ def _format_results(results: list[DoctorResult], *, output_json: bool) -> list[s
     has_problems = any(r.severity not in _NON_PROBLEM for r in results)
     if has_problems:
         return [
-            f"{r.severity.upper()}: {r.message}" for r in results if r.severity not in _NON_PROBLEM
+            f"{r.severity.upper()}: {r.message}"
+            for r in results
+            if r.severity not in _NON_PROBLEM or (include_info and r.severity is Severity.INFO)
         ]
     return [f"{r.severity}: {r.message}" for r in results]

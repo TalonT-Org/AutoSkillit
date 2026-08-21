@@ -223,7 +223,8 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                 Severity.ERROR,
                 "retiring_cache_corrupt",
                 "retiring_cache.json is corrupt and cannot be interpreted safely: "
-                f"{detail}. Run `autoskillit install` to rebuild it.",
+                f"{detail}. Run `autoskillit doctor --repair` to rebuild it; the "
+                "unreadable content is preserved alongside the cache.",
             )
         )
     elif retirement.state is RetiringCacheState.UNSUPPORTED_FUTURE:
@@ -233,7 +234,9 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                 "retiring_cache_unsupported_future",
                 "retiring_cache.json uses unsupported schema "
                 f"{retirement.schema_version}; this version cannot determine deletion "
-                "authority safely. Run `autoskillit install` with a compatible version.",
+                f"authority safely. Upgrade AutoSkillit to a version that understands schema "
+                f"{retirement.schema_version}, or move the file aside; it is not safe for "
+                "this version to rewrite it.",
             )
         )
     elif retirement.state is RetiringCacheState.EXACT_V2:

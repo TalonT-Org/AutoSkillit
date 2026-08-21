@@ -4120,13 +4120,90 @@ def test_bad_ledger_checksum_fails_closed(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_unknown_lifecycle_enum_frames_survive_incremental_load_and_compaction(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        record = store.reserve_capture(_CAPTURE_ID)
+        future = capture_lifecycle._capture_ledger.record_to_dict(replace(record, revision=2))
+        future["state"] = "future-state"
+        opaque = capture_lifecycle._capture_ledger.encode_frame(
+            future,
+            compaction_epoch=record.compaction_epoch,
+        )
+        later = capture_lifecycle._capture_ledger.encode_frame(
+            capture_lifecycle._capture_ledger.record_to_dict(replace(record, revision=3)),
+            compaction_epoch=record.compaction_epoch,
+        )
+        ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+        with ledger.open("ab") as stream:
+            stream.write(opaque)
+            stream.write(later)
+
+        assert store.get_record(_CAPTURE_ID) is None
+        assert store._ledger_view.opaque_frames == (opaque, later)
+
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+            store._compact_locked(records, compaction_epoch + 1)
+
+        assert ledger.read_bytes() == opaque + later
+        reopened = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=_Clock().wall,
+        )
+        assert reopened.get_record(_CAPTURE_ID) is None
+        assert reopened._ledger_view.opaque_frames == (opaque, later)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_future_ledger_format_reports_observed_and_current_versions(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        record = store.reserve_capture(_CAPTURE_ID)
+        payload = capture_lifecycle._capture_ledger.canonical_json(
+            {
+                "compaction_epoch": record.compaction_epoch,
+                "format_version": capture_lifecycle._capture_ledger.CURRENT_FORMAT_VERSION + 1,
+                "record": capture_lifecycle._capture_ledger.record_to_dict(record),
+            }
+        )
+        ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+        ledger.write_bytes(_frame_from_payload(payload))
+        reader = CaptureLifecycleStore(
+            root.fd,
+            project_identity=(anchor.identity.device, anchor.identity.inode),
+            root_identity=(root.identity.device, root.identity.inode),
+            _factory_token=capture_lifecycle._STORE_FACTORY_TOKEN,
+        )
+
+        with pytest.raises(CaptureLedgerError) as raised:
+            reader.get_record(_CAPTURE_ID)
+
+        assert raised.value.reason == "unsupported_future"
+        assert raised.value.observed_version == (
+            capture_lifecycle._capture_ledger.CURRENT_FORMAT_VERSION + 1
+        )
+        assert (
+            raised.value.current_version
+            == capture_lifecycle._capture_ledger.CURRENT_FORMAT_VERSION
+        )
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_ledger_decoder_rejects_strict_json_and_version_violations() -> None:
     nested = b"[" * 20 + b"0" + b"]" * 20
     cases = (
-        (
-            b'{"compaction_epoch":1,"format_version":99,"record":{}}',
-            "metadata",
-        ),
         (
             b'{"compaction_epoch":1, "format_version":2,"record":{}}',
             "noncanonical",

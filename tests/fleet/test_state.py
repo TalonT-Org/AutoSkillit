@@ -303,6 +303,58 @@ class TestDispatchRecordFromDict:
         assert rec.reaper_dispatch_id == ""
 
 
+class TestUnknownPersistedDispatchStatus:
+    def test_unknown_dispatch_is_quarantined_round_tripped_and_blocks_completion(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.cli.fleet._fleet_display import _build_status_rows, _compute_exit_code
+        from autoskillit.fleet import has_blocking_dispatch
+
+        state_path = _state_path(tmp_path)
+        write_initial_state(
+            state_path,
+            "cid-unknown",
+            "future-status",
+            "/m.yaml",
+            [DispatchRecord(name="known")],
+        )
+        opaque_dispatch = {
+            "name": "future",
+            "status": "awaiting_operator",
+            "future_metadata": {"mode": "manual"},
+        }
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+        raw["dispatches"].append(opaque_dispatch)
+        state_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        loaded = read_state(state_path)
+
+        assert loaded is not None
+        assert [d.name for d in loaded.dispatches] == ["known"]
+        assert loaded.opaque_dispatches == [opaque_dispatch]
+        assert has_blocking_dispatch(state_path) is True
+        decision = resume_campaign_from_state(state_path, continue_on_failure=True)
+        assert decision is not None
+        assert decision.next_dispatch_name == ""
+        assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
+        assert _compute_exit_code(loaded) == 2
+        assert any(
+            row[:2] == ("future", "awaiting_operator") for row in _build_status_rows(loaded)
+        )
+
+        append_dispatch_record(
+            state_path,
+            DispatchRecord(name="known", status=DispatchStatus.SUCCESS),
+        )
+
+        rewritten = json.loads(state_path.read_text(encoding="utf-8"))
+        assert rewritten["dispatches"][1] == opaque_dispatch
+        round_tripped = read_state(state_path)
+        assert round_tripped is not None
+        assert round_tripped.opaque_dispatches == [opaque_dispatch]
+        assert round_tripped.ended_at == 0.0
+
+
 class TestStateDecompositionImports:
     def test_state_types_importable(self) -> None:
         from autoskillit.fleet.state_types import (

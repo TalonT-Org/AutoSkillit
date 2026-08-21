@@ -282,6 +282,9 @@ scripts/check_tool_annotations.py:
   - arch/
 scripts/check_launch_path_totality.py:
   - arch/
+scripts/check_persisted_enum_decoding.py:
+  - arch/
+  - contracts/
 scripts/compare-coverage-ast.py:
   - infra/
 scripts/validate_output_budget_evidence.py:

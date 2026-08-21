@@ -91,6 +91,16 @@ def _normalized_vector_body(value: str) -> str:
     return value.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
 
 
+def _freeze_json_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {str(key): _freeze_json_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, list | tuple):
+        return tuple(_freeze_json_value(item) for item in value)
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class ExplorationVectorDef:
     """Static reviewed definition bound to one replaceable SKILL.md prose vector."""
@@ -273,11 +283,16 @@ class SkillSessionContract:
     exploration_vectors: Mapping[str, tuple[ExplorationVectorDef, ...]] = field(
         default_factory=dict
     )
+    opaque_exploration_vectors: Mapping[str, tuple[tuple[int, Mapping[str, object]], ...]] = field(
+        default_factory=dict
+    )
     exploration_sidecar_digests: Mapping[str, str] = field(default_factory=dict)
     resolved_exploration_profile: RepositoryProfileId | None = None
+    opaque_resolved_exploration_profile: str | None = None
     active_exploration_applicabilities: frozenset[ExplorationVectorApplicabilityId] = field(
         default_factory=lambda: frozenset({ExplorationVectorApplicabilityId.ALWAYS})
     )
+    raw_active_exploration_applicabilities: tuple[str, ...] | None = None
     expected_output_patterns: tuple[str, ...] = ()
     write_behavior: WriteBehaviorSpec = WriteBehaviorSpec()
     read_only: bool = False
@@ -371,6 +386,50 @@ class SkillSessionContract:
                 {name: tuple(vectors) for name, vectors in exploration_vectors.items()}
             ),
         )
+        opaque_vectors = {
+            name: tuple(
+                (
+                    index,
+                    MappingProxyType(
+                        {key: _freeze_json_value(value) for key, value in raw.items()}
+                    ),
+                )
+                for index, raw in entries
+            )
+            for name, entries in self.opaque_exploration_vectors.items()
+        }
+        if not set(opaque_vectors).issubset(self.closure):
+            raise SkillContractError("opaque exploration vector keys must be in closure")
+        for name, entries in opaque_vectors.items():
+            positions = tuple(index for index, _raw in entries)
+            if (
+                any(type(index) is not int or index < 0 for index in positions)
+                or len(set(positions)) != len(positions)
+                or any(
+                    index >= len(self.exploration_vectors[name]) + len(entries)
+                    for index in positions
+                )
+            ):
+                raise SkillContractError("opaque exploration vector positions are invalid")
+        object.__setattr__(
+            self,
+            "opaque_exploration_vectors",
+            MappingProxyType(opaque_vectors),
+        )
+        if self.opaque_resolved_exploration_profile is not None and not isinstance(
+            self.opaque_resolved_exploration_profile, str
+        ):
+            raise SkillContractError("opaque resolved exploration profile must be text")
+        if self.raw_active_exploration_applicabilities is not None:
+            if any(
+                not isinstance(item, str) for item in self.raw_active_exploration_applicabilities
+            ):
+                raise SkillContractError("raw exploration applicabilities must be text")
+            object.__setattr__(
+                self,
+                "raw_active_exploration_applicabilities",
+                tuple(self.raw_active_exploration_applicabilities),
+            )
         sidecar_digests = self.exploration_sidecar_digests or {name: "" for name in self.closure}
         object.__setattr__(
             self,

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -437,3 +439,128 @@ def test_stale_projection_version_rejected_before_enum_construction(tmp_path: Pa
 
     with pytest.raises(ValueError, match="unsupported projection_version 5; expected 7"):
         store.finalize(correlation_key, "stale-projection")
+
+
+@pytest.mark.parametrize(
+    ("field", "future_value"),
+    [
+        ("profile", "future-profile"),
+        ("disposition", "future-disposition"),
+        ("applicability", "future-applicability"),
+        ("relationship_classes", ["future-relationship"]),
+    ],
+)
+def test_store_quarantines_unknown_exploration_vector_enums_and_preserves_raw_record(
+    tmp_path: Path,
+    field: str,
+    future_value: object,
+) -> None:
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+    from autoskillit.execution.session._skill_session_contract_codec import (
+        _contract_to_dict,
+        _digest_json,
+    )
+
+    text = "projected\n"
+    contract = _contract(tmp_path, text)
+    first = contract.exploration_vectors["root"][0]
+    sibling = replace(
+        first,
+        id="inspect-siblings",
+        task=replace(
+            first.task,
+            task_id="inspect-siblings-task",
+            frontier_item_id="inspect-siblings-frontier",
+        ),
+    )
+    contract = replace(contract, exploration_vectors={"root": (first, sibling)})
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=contract,
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    entry = store._provisional_path(correlation_key)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    raw_vector = manifest["contract"]["exploration_vectors"]["root"][0]
+    raw_vector[field] = future_value
+    expected_raw = deepcopy(raw_vector)
+    manifest["contract_digest"] = _digest_json(manifest["contract"])
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+    store.finalize(correlation_key, "future-vector")
+    stored = store.load("future-vector")
+
+    assert tuple(vector.id for vector in stored.contract.exploration_vectors["root"]) == (
+        "inspect-siblings",
+    )
+    opaque_index, opaque_vector = stored.contract.opaque_exploration_vectors["root"][0]
+    assert opaque_index == 0
+    assert opaque_vector["id"] == expected_raw["id"]
+    assert _contract_to_dict(stored.contract)["exploration_vectors"]["root"][0] == expected_raw
+
+
+def test_store_preserves_unknown_top_level_exploration_enums_without_routing_them(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import ExplorationVectorApplicabilityId
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+    from autoskillit.execution.session._skill_session_contract_codec import (
+        _contract_to_dict,
+        _digest_json,
+    )
+
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    entry = store._provisional_path(correlation_key)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    contract_data = manifest["contract"]
+    contract_data["resolved_exploration_profile"] = "future-profile"
+    contract_data["active_exploration_applicabilities"] = [
+        "always",
+        "future-applicability",
+    ]
+    manifest["contract_digest"] = _digest_json(contract_data)
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+    store.finalize(correlation_key, "future-top-level-enums")
+    contract = store.load("future-top-level-enums").contract
+
+    assert contract.resolved_exploration_profile is None
+    assert contract.opaque_resolved_exploration_profile == "future-profile"
+    assert contract.active_exploration_applicabilities == frozenset(
+        {ExplorationVectorApplicabilityId.ALWAYS}
+    )
+    assert _contract_to_dict(contract)["resolved_exploration_profile"] == "future-profile"
+    assert _contract_to_dict(contract)["active_exploration_applicabilities"] == [
+        "always",
+        "future-applicability",
+    ]
+
+
+def test_store_load_classifies_future_outer_schema(tmp_path: Path) -> None:
+    from autoskillit.core import SkillContractError
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    store.finalize(correlation_key, "future-schema")
+    entry = store._session_path("future-schema")  # noqa: SLF001
+    manifest_path = entry / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema_version"] = 3
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(SkillContractError) as exc_info:
+        store.load("future-schema")
+
+    assert exc_info.value.reason == "unsupported_future"  # type: ignore[attr-defined]
+    assert exc_info.value.observed_version == 3  # type: ignore[attr-defined]
+    assert exc_info.value.current_version == 2  # type: ignore[attr-defined]

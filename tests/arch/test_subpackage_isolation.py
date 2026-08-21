@@ -1020,7 +1020,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
-        "core/types": 54,
+        # +_type_persisted_formats: persisted enum/version tolerance ledger.
+        "core/types": 55,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,

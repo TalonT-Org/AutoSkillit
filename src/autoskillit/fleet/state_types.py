@@ -41,6 +41,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "launch_contract",
         "launch_contract_digest",
         "managed_lineage_ref",
+        "_persisted_status",
     }
 )
 
@@ -57,6 +58,18 @@ class DispatchStatus(StrEnum):
     SKIPPED = "skipped"
     REFUSED = "refused"
     RELEASED = "released"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_persisted(cls, raw: str) -> DispatchStatus:
+        """Convert a persisted status string to a DispatchStatus member.
+
+        Unknown strings map to UNKNOWN instead of raising ValueError.
+        """
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.UNKNOWN
 
 
 class ErrorCodeCategory(StrEnum):
@@ -374,6 +387,13 @@ class DispatchRecord:
 
     name: str
     status: DispatchStatus = DispatchStatus.PENDING
+    _persisted_status: str = field(
+        default="",
+        repr=False,
+        compare=False,
+        kw_only=True,
+        metadata={"persisted": False},
+    )
     dispatch_id: str = ""
     campaign_id: str = ""
     caller_session_id: str = ""
@@ -414,7 +434,11 @@ class DispatchRecord:
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
-            "status": self.status,
+            "status": (
+                self._persisted_status or self.status
+                if self.status == DispatchStatus.UNKNOWN
+                else self.status
+            ),
             "dispatch_id": self.dispatch_id,
             "campaign_id": self.campaign_id,
             "caller_session_id": self.caller_session_id,
@@ -467,6 +491,10 @@ class DispatchRecord:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> DispatchRecord:
+        status_raw = d.get("status", DispatchStatus.PENDING)
+        if not isinstance(status_raw, str):
+            raise TypeError(f"status must be str, got {type(status_raw).__name__!r}")
+        status = DispatchStatus.from_persisted(status_raw)
         pid_raw = d.get("dispatched_pid")
         ticks_raw = d.get("dispatched_starttime_ticks")
         caller_backend_name = d.get("caller_backend_name", "")
@@ -509,7 +537,8 @@ class DispatchRecord:
                 raise ValueError("persisted fleet backend authority drifted from launch contract")
         return cls(
             name=d["name"],
-            status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
+            status=status,
+            _persisted_status=status_raw if status == DispatchStatus.UNKNOWN else "",
             dispatch_id=d.get("dispatch_id", ""),
             campaign_id=d.get("campaign_id", ""),
             caller_session_id=d.get("caller_session_id", ""),
@@ -638,6 +667,7 @@ class CampaignState:
     started_at: float
     schema_version: int = FLEET_STATE_SCHEMA_VERSION
     dispatches: list[DispatchRecord] = field(default_factory=list)
+    opaque_dispatches: list[Any] = field(default_factory=list, kw_only=True)
     captured_values: dict[str, str] = field(default_factory=dict)
     orchestrator_session_id: str = ""
     ended_at: float = 0.0
@@ -690,6 +720,7 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DispatchStatus.SKIPPED: frozenset(),
     DispatchStatus.REFUSED: frozenset({DispatchStatus.PENDING}),
     DispatchStatus.RELEASED: frozenset(),
+    DispatchStatus.UNKNOWN: frozenset({DispatchStatus.UNKNOWN}),
 }
 
 for _ds in DispatchStatus:

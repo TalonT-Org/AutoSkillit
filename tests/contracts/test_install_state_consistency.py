@@ -9,6 +9,7 @@ MCP server startup, and post-install verification so it cannot rot.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from autoskillit.core import (
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _PLUGIN_KEY = "autoskillit@autoskillit-local"
+_REMEDIATION_COMMAND = re.compile(r"`autoskillit\s+([a-z0-9-]+)(?:\s+[^`]*)?`")
 
 
 def _write_registry(home: Path, install_path: Path) -> None:
@@ -475,7 +477,7 @@ class TestVerifyInstallState:
         )
         assert finding.severity is Severity.WARNING
 
-    def test_corrupt_retirement_cache_is_an_explicit_error(self, home: Path) -> None:
+    def test_corrupt_retirement_cache_names_a_real_remediation(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
 
         cache = home / ".autoskillit" / "retiring_cache.json"
@@ -488,9 +490,9 @@ class TestVerifyInstallState:
 
         assert finding.severity is Severity.ERROR
         assert "retiring_cache.json" in finding.message
-        assert "autoskillit install" in finding.message
+        assert "autoskillit doctor --repair" in finding.message
 
-    def test_future_retirement_cache_schema_is_an_explicit_error(self, home: Path) -> None:
+    def test_future_retirement_cache_names_safe_upgrade_guidance(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
 
         cache = home / ".autoskillit" / "retiring_cache.json"
@@ -505,7 +507,27 @@ class TestVerifyInstallState:
 
         assert finding.severity is Severity.ERROR
         assert "schema 99" in finding.message
-        assert "autoskillit install" in finding.message
+        assert "autoskillit doctor --repair" not in finding.message
+        assert "Upgrade AutoSkillit" in finding.message
+        assert "move the file aside" in finding.message
+
+    def test_every_install_state_finding_names_a_real_command(self, home: Path) -> None:
+        from autoskillit.cli.app import app
+        from autoskillit.workspace import verify_install_state
+
+        _write_registry(home, home / "missing")
+        cache = home / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("{not-json")
+
+        registered = {name for name in app if not name.startswith("-")}
+        commands = [
+            match.group(1)
+            for finding in verify_install_state()
+            for match in _REMEDIATION_COMMAND.finditer(finding.message)
+        ]
+        assert commands
+        assert set(commands) <= registered
 
     def test_version_drift_names_each_derived_file(self, home: Path) -> None:
         """Three files carry a version and all three are derived.

@@ -1,4 +1,9 @@
-"""Plugin cache lifecycle: retiring cache, install locking, kitchen registry."""
+"""Plugin cache lifecycle: retiring cache, install locking, kitchen registry.
+
+Corrupt durable formats are preserved as immutable ``.corrupt-<timestamp>``
+sidecars before a sanctioned repair replaces the active artifact. New repair
+paths should reuse that quarantine-to-sidecar convention.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +24,7 @@ import psutil
 
 from .io import (
     _AtomicWriteDurabilityError,
+    atomic_write,
     write_versioned_json,
 )
 from .logging import get_logger, log_plugin_artifact_lifecycle
@@ -35,6 +41,7 @@ from .types import (
     RetiringAppendResult,
     RetiringArtifactRecord,
     RetiringCacheReadResult,
+    RetiringCacheRepairResult,
     RetiringCacheState,
 )
 
@@ -285,6 +292,90 @@ def read_retiring_cache() -> RetiringCacheReadResult:
     fh = _open_lock(_retiring_cache_lock())
     try:
         return _read_retiring_cache_unlocked()
+    finally:
+        fh.close()
+
+
+def _next_corrupt_sidecar_path(cache: Path) -> Path:
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    base = f"{cache.stem}.corrupt-{timestamp}"
+    candidate = cache.with_name(f"{base}{cache.suffix}")
+    suffix = 1
+    while candidate.exists():
+        candidate = cache.with_name(f"{base}-{suffix}{cache.suffix}")
+        suffix += 1
+    return candidate
+
+
+def _salvage_retiring_records(
+    raw_bytes: bytes,
+) -> tuple[tuple[RetiringArtifactRecord, ...], tuple[QuarantinedRetiringRecord, ...]]:
+    """Recover independently valid records from a corrupt JSON root prefix."""
+    try:
+        text = raw_bytes.decode("utf-8")
+        recovered, _ = json.JSONDecoder().raw_decode(text.lstrip())
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return (), ()
+    if not isinstance(recovered, dict) or not isinstance(recovered.get("records"), list):
+        return (), ()
+
+    salvaged: list[RetiringArtifactRecord] = []
+    quarantined: list[QuarantinedRetiringRecord] = []
+    record_ids: set[str] = set()
+    for raw_record in recovered["records"]:
+        raw_json = json.dumps(raw_record, separators=(",", ":"), sort_keys=True)
+        try:
+            record = _record_from_json(raw_record)
+            if record.record_id in record_ids:
+                raise ValueError("duplicate retiring record_id")
+        except (TypeError, ValueError) as exc:
+            quarantined.append(QuarantinedRetiringRecord(raw_json=raw_json, reason=str(exc)))
+            continue
+        record_ids.add(record.record_id)
+        salvaged.append(record)
+    return tuple(salvaged), tuple(quarantined)
+
+
+def repair_corrupt_retiring_cache() -> RetiringCacheRepairResult:
+    """Rebuild a corrupt cache after durably preserving its original bytes.
+
+    Unsupported future schemas are never rewritten because this version cannot
+    determine which records carry authority.
+    """
+    fh = _open_lock(_retiring_cache_lock())
+    try:
+        state = _read_retiring_cache_unlocked()
+        if state.state is not RetiringCacheState.CORRUPT:
+            return RetiringCacheRepairResult(repaired=False, state=state.state)
+
+        original = _retiring_cache_path().read_bytes()
+        while True:
+            sidecar = _next_corrupt_sidecar_path(_retiring_cache_path())
+            try:
+                atomic_write(
+                    sidecar,
+                    original,
+                    strict_durability=True,
+                    exclusive=True,
+                )
+            except FileExistsError:
+                continue
+            break
+
+        salvaged, quarantined = _salvage_retiring_records(original)
+        _write_retiring_cache_unlocked(
+            salvaged,
+            (),
+            quarantined_records=quarantined,
+            quarantined_legacy_evidence=(),
+        )
+        return RetiringCacheRepairResult(
+            repaired=True,
+            state=RetiringCacheState.CORRUPT,
+            salvaged=len(salvaged),
+            quarantined=len(quarantined),
+            sidecar=sidecar,
+        )
     finally:
         fh.close()
 

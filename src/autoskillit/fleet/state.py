@@ -239,6 +239,16 @@ def read_fleet_state_payload(state_path: Path) -> dict[str, Any] | None:
         legacy = _json.loads(state_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, _json.JSONDecodeError, OSError):
         return None
+    if isinstance(legacy, dict):
+        observed_version = legacy.get("schema_version")
+        if isinstance(observed_version, int) and observed_version > FLEET_STATE_SCHEMA_VERSION:
+            logger.warning(
+                "fleet_state_unsupported_future",
+                path=str(state_path),
+                observed_version=observed_version,
+                current_version=FLEET_STATE_SCHEMA_VERSION,
+            )
+            return None
     if isinstance(legacy, dict) and legacy.get("schema_version") in _LEGACY_SCHEMA_VERSIONS:
         return legacy
     return None
@@ -249,19 +259,21 @@ def read_state(state_path: Path) -> CampaignState | None:
 
     Returns None on missing file, malformed JSON, or schema mismatch.
     Accepts the current schema version and legacy versions in _LEGACY_SCHEMA_VERSIONS.
+    Dispatch records with unsupported persisted values are quarantined and round-tripped.
     Never raises.
     """
     data = read_fleet_state_payload(state_path)
     if data is None:
         return None
     try:
-        dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
-        return CampaignState(
+        raw_dispatches = data["dispatches"]
+        if not isinstance(raw_dispatches, list):
+            raise TypeError("dispatches must be a list")
+        campaign = CampaignState(
             campaign_id=data["campaign_id"],
             campaign_name=data["campaign_name"],
             manifest_path=data["manifest_path"],
             started_at=data["started_at"],
-            dispatches=dispatches,
             captured_values=data.get("captured_values", {}),
             orchestrator_session_id=data.get("orchestrator_session_id") or "",
             ended_at=data.get("ended_at", 0.0),
@@ -270,6 +282,20 @@ def read_state(state_path: Path) -> CampaignState | None:
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("read_state_corrupt_payload", path=str(state_path), exc=str(exc))
         return None
+
+    for raw_dispatch in raw_dispatches:
+        try:
+            if not isinstance(raw_dispatch, dict):
+                raise TypeError("dispatch record must be an object")
+            dispatch = DispatchRecord.from_dict(raw_dispatch)
+        except (KeyError, ValueError, TypeError):
+            campaign.opaque_dispatches.append(raw_dispatch)
+            continue
+        if dispatch.status == DispatchStatus.UNKNOWN:
+            campaign.opaque_dispatches.append(raw_dispatch)
+            continue
+        campaign.dispatches.append(dispatch)
+    return campaign
 
 
 class CampaignStateMutator:
@@ -352,7 +378,7 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "campaign_name": state.campaign_name,
         "manifest_path": state.manifest_path,
         "started_at": state.started_at,
-        "dispatches": [d.to_dict() for d in state.dispatches],
+        "dispatches": [d.to_dict() for d in state.dispatches] + state.opaque_dispatches,
         "captured_values": state.captured_values,
         "orchestrator_session_id": state.orchestrator_session_id,
         "ended_at": state.ended_at,
@@ -552,6 +578,7 @@ def append_dispatch_record(
         if (
             m.state.ended_at == 0.0
             and m.state.dispatches
+            and not m.state.opaque_dispatches
             and all(d.status in TERMINAL_DISPATCH_STATUSES for d in m.state.dispatches)
         ):
             m.state.ended_at = time.time()

@@ -23,6 +23,7 @@ __all__ = [
     "QuarantinedRetiringRecord",
     "RetiringAppendResult",
     "RetiringArtifactRecord",
+    "RetiringCacheRepairResult",
     "RetiringCacheReadResult",
     "RetiringCacheState",
     "RetirementOutcome",
@@ -294,6 +295,17 @@ class RetiringCacheReadResult:
     quarantined_legacy_evidence: tuple[QuarantinedRetiringRecord, ...] = ()
     schema_version: int | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RetiringCacheRepairResult:
+    """Outcome of the opt-in corrupt retirement-cache repair action."""
+
+    repaired: bool
+    state: RetiringCacheState
+    salvaged: int = 0
+    quarantined: int = 0
+    sidecar: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -339,14 +339,20 @@ def test_register_active_kitchen_never_overwrites_an_unsupported_future_registry
 
 
 @pytest.mark.parametrize(
-    "content",
+    ("content", "expected_state"),
     [
-        b'{"schema_version":2,"kitchens":',
-        b'{"schema_version":99,"kitchens":[]}',
+        (b'{"schema_version":2,"kitchens":', ActiveKitchensState.CORRUPT),
+        (
+            b'{"schema_version":99,"kitchens":[]}',
+            ActiveKitchensState.UNSUPPORTED_FUTURE,
+        ),
     ],
 )
 def test_active_kitchen_readers_fail_closed_on_unsafe_registry(
-    monkeypatch, tmp_path: Path, content: bytes
+    monkeypatch,
+    tmp_path: Path,
+    content: bytes,
+    expected_state: ActiveKitchensState,
 ) -> None:
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
@@ -355,10 +361,7 @@ def test_active_kitchen_readers_fail_closed_on_unsafe_registry(
 
     read_result = read_active_kitchens_registry()
 
-    assert read_result.state in {
-        ActiveKitchensState.CORRUPT,
-        ActiveKitchensState.UNSUPPORTED_FUTURE,
-    }
+    assert read_result.state is expected_state
     assert any_kitchen_open() is True
     assert registry_path.read_bytes() == content
 

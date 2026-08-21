@@ -38,6 +38,7 @@ from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
+    InfrastructureFaultError,
     _installed_plugins_path,
     _InstallLock,
     build_maintenance_env,
@@ -577,6 +578,8 @@ def run_update_transaction(
                         incarnation_id=install_root_incarnation_id,
                         generation_root=generation_root,
                     )
+            except InfrastructureFaultError:
+                raise
             except Exception as exc:
                 _report_post_pivot_failure("update_install_root_generation_publish_failed")
                 return _upgrade_failure(

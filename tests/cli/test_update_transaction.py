@@ -32,7 +32,11 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionPhase,
     run_update_transaction,
 )
-from autoskillit.core import _AUTOSKILLIT_INSTALL_ROOT_KEY, generation_staging_root
+from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
+    InfrastructureFaultError,
+    generation_staging_root,
+)
 from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
 from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 from tests.conftest import production_interpreter_env
@@ -634,6 +638,7 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
         ("final_install_oserror", "Could not start the install-root generation install"),
         ("final_install_nonzero", "install-root generation install exited with status 7"),
         ("publication_error", "Could not publish the install-root generation"),
+        ("publication_infrastructure_fault", None),
         ("shim_error", "Could not write the entrypoint shim"),
     ],
 )
@@ -641,7 +646,7 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     failure_point: str,
-    expected_finding: str,
+    expected_finding: str | None,
 ) -> None:
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.detect_install",
@@ -655,6 +660,13 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
         monkeypatch.setattr(
             "autoskillit.cli.update._transaction.publish_install_root_generation",
             lambda **_kwargs: (_ for _ in ()).throw(OSError("simulated publication failure")),
+        )
+    if failure_point == "publication_infrastructure_fault":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.publish_install_root_generation",
+            lambda **_kwargs: (_ for _ in ()).throw(
+                InfrastructureFaultError("simulated infrastructure fault")
+            ),
         )
     if failure_point == "shim_error":
         monkeypatch.setattr(
@@ -677,6 +689,18 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
         entrypoint.chmod(0o755)
         return subprocess.CompletedProcess(cmd, 0)
 
+    if failure_point == "publication_infrastructure_fault":
+        with pytest.raises(InfrastructureFaultError, match="simulated infrastructure fault"):
+            run_update_transaction(
+                home=tmp_path,
+                base_env={"PATH": "/bin"},
+                version_reader=lambda _name: "1.0.0",
+                fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+                process_runner=runner,
+            )
+        assert len(calls) == 2
+        return
+
     result = run_update_transaction(
         home=tmp_path,
         base_env={"PATH": "/bin"},
@@ -691,7 +715,8 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
         UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION,
         UpdateTransactionPhase.RESULT_FINALIZATION,
     )
-    assert result.findings and expected_finding in result.findings[0]
+    assert result.findings and expected_finding is not None
+    assert expected_finding in result.findings[0]
     if failure_point == "final_install_oserror":
         assert "/plugin-generations/autoskillit-install/1.1.0/" in result.findings[0]
     assert len(calls) == 2

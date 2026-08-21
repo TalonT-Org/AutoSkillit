@@ -15,11 +15,21 @@ from autoskillit.cli.install._install_contract import (
     InstallRequest,
     InstallResult,
     MaintenanceInstallArgv,
+    MaintenanceSubprocessInvocation,
     process_status_for_result,
     result_from_process_status,
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def test_maintenance_subprocess_rejects_relative_cwd() -> None:
+    with pytest.raises(ValueError, match="cwd must be absolute"):
+        MaintenanceSubprocessInvocation.for_version_probe(
+            Path("autoskillit"),
+            environment={},
+            cwd=Path("relative-workdir"),
+        )
 
 
 def _request(

@@ -41,6 +41,8 @@ _MAINTENANCE_EXTRAS: Mapping[str, str] = {
 
 
 def _validated_maintenance_cwd(cwd: Path) -> Path:
+    if not cwd.is_absolute():
+        raise ValueError(f"Maintenance subprocess cwd must be absolute: {cwd}")
     if is_git_worktree(cwd) or is_git_main_checkout(cwd):
         raise ValueError(
             f"Refusing to build a maintenance subprocess invocation with cwd "

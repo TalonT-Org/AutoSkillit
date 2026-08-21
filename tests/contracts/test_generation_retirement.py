@@ -363,6 +363,7 @@ def test_install_root_selector_is_never_absent_during_flip(home: Path) -> None:
         stop.set()
         poller.join(timeout=5)
 
+    assert not poller.is_alive(), "selector poller did not stop"
     assert violations == [], f"selector was observed absent or broken: {violations[:5]}"
     assert len(observed_targets) >= 2, "poller never observed a selector transition"
 

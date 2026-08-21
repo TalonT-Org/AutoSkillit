@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 
 from autoskillit.core import Severity
@@ -62,4 +63,4 @@ def _print_doctor_results(
         output_json=output_json,
         include_info=include_info,
     ):
-        print(line)
+        sys.stdout.write(line + "\n")

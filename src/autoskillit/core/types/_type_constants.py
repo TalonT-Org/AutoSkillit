@@ -23,11 +23,6 @@ from hashlib import sha256
 from typing import NamedTuple
 
 from ._type_constants_durable_writers import *  # noqa: F401, F403
-
-# Private validator explicitly re-exported because
-# tests/contracts/test_durable_artifact_relocatability.py:19 imports it from
-# autoskillit.core.types._type_constants directly. (Issue #4735.)
-from ._type_constants_durable_writers import _validate_durable_artifact_writer_defs  # noqa: F401
 from ._type_constants_retirements import *  # noqa: F401, F403
 from ._type_constants_skill_contract import *  # noqa: F401, F403
 

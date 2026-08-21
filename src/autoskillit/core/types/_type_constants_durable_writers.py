@@ -14,8 +14,8 @@ contracts.
 
 ``Detection`` is ``str | None`` (``module:qualname``), not ``Callable`` — that
 is verified by the type annotations here and the import-side contract test
-that asserts ``autoskillit.core.types._type_constants._validate_durable_artifact_writer_defs``
-remains importable from the facade.
+``tests/contracts/test_durable_artifact_relocatability.py`` (which imports
+the validator directly from this module).
 """
 
 from __future__ import annotations

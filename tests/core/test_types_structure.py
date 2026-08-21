@@ -148,7 +148,6 @@ def test_decomposition_preserves_public_symbol_set() -> None:
 
     from autoskillit.core.types._type_constants_durable_writers import (
         DURABLE_ARTIFACT_WRITERS,
-        _validate_durable_artifact_writer_defs,
     )
     from autoskillit.core.types._type_constants_retirements import RETIRED_SKILL_NAMES
     from autoskillit.core.types._type_constants_skill_contract import (
@@ -165,10 +164,6 @@ def test_decomposition_preserves_public_symbol_set() -> None:
         is SkillContractRemediationDef
     )
     assert constants_mod.DURABLE_ARTIFACT_WRITERS is DURABLE_ARTIFACT_WRITERS
-    assert (
-        constants_mod._validate_durable_artifact_writer_defs
-        is _validate_durable_artifact_writer_defs
-    )
 
     # Every pre-split name resolves through its original facade path.
     for name in _PRE_SPLIT_ENUM_NAMES:

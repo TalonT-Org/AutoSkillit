@@ -6902,7 +6902,7 @@ def test_assert_overlapping_install_survives_happy_path(tmp_path: Path) -> None:
         smoke._assert_overlapping_install_survives(
             scratch_home=tmp_path,
             source_root=tmp_path / "source",
-            env=dict(os.environ),
+            env={**os.environ, "HOME": str(tmp_path)},
             minor_a="3.11",
             minor_b="3.13",
             version="9.9.9",
@@ -6932,7 +6932,7 @@ def test_assert_overlapping_install_survives_detects_same_path_collision(
             smoke._assert_overlapping_install_survives(
                 scratch_home=tmp_path,
                 source_root=tmp_path / "source",
-                env=dict(os.environ),
+                env={**os.environ, "HOME": str(tmp_path)},
                 minor_a="3.11",
                 minor_b="3.13",
                 version="9.9.9",

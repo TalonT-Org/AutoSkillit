@@ -216,6 +216,8 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
         codex_home = client_home / ".codex"
         config_path = codex_home / "config.toml"
         ensure_codex_mcp_registered(config_path=config_path)
+        with config_path.open("a", encoding="utf-8") as config:
+            config.write(f'\n[projects.{json.dumps(str(project))}]\ntrust_level = "trusted"\n')
         for name in ("auth.json", "installation_id"):
             source = source_home / ".codex" / name
             if source.exists():

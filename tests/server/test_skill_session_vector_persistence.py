@@ -167,7 +167,6 @@ def test_fresh_contract_and_resume_retain_only_admitted_invocation_members(
         "name: dependency\n"
         "description: Refused dependency.\n"
         "execution_role: session\n"
-        "uses_capabilities: [agent_subagent]\n"
         "---\n"
         "Run the dependency.\n",
         encoding="utf-8",
@@ -182,7 +181,7 @@ def test_fresh_contract_and_resume_retain_only_admitted_invocation_members(
     invocation = EffectiveSkillInvocation(
         root=root,
         closure=(root, dependency),
-        capability_union=frozenset({"agent_subagent"}),
+        capability_union=frozenset(),
         project_root=project_root,
         execution_role=SkillExecutionRole.SESSION,
     )

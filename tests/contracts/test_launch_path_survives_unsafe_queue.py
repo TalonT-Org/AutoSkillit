@@ -326,7 +326,7 @@ def test_cook_command_survives_a_corrupt_queue(
     backend = _RecordingBackend("claude-code")
     _install_cook_harness(monkeypatch, project_dir)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.bind_session_owner",
+        "autoskillit.core.bind_session_owner",
         lambda _project, _launch_id, _owner_pid: True,
     )
     cache = _cache_path(state.home)

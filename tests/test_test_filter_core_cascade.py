@@ -113,6 +113,7 @@ class TestModuleCascadeCore:
             "_linux_proc",
             "executable_binding",
             "_type_plugin_source",
+            "_type_retirement_backstops",
             "kitchen_state",
             "readiness",
             "session_provenance",

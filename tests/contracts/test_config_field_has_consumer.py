@@ -159,7 +159,6 @@ def test_inert_tracked_regex_matches_comment_block_shapes() -> None:
     Only validates the regex itself; the escape-hatch and consumer-detection
     functions (_field_has_consumer, _field_is_inert_tracked) are exercised
     against real fields by
-    test_natural_exit_grace_seconds_is_inert_tracked_against_a_real_field and
     test_allowed_labels_is_consumed_indirectly_via_a_dataclass_method below.
     """
     comment_block = "# Deliberately unread pending #99999.\n# inert-tracked:#99999"

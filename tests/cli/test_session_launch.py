@@ -445,7 +445,9 @@ def test_run_interactive_session_binds_launch_owner_before_wait(
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: _Process(pid=777))
     monkeypatch.setattr(
         "autoskillit.core.bind_session_owner",
-        lambda project_dir, launch_id, pid: events.append(("bind", (project_dir, launch_id, pid))),
+        lambda project_dir, launch_id, pid: (
+            events.append(("bind", (project_dir, launch_id, pid))) or True
+        ),
     )
     backend, _captured_kwargs = _make_capturing_backend()
 
@@ -459,30 +461,38 @@ def test_run_interactive_session_binds_launch_owner_before_wait(
     assert events == [("bind", (tmp_path, "launch-1", 777)), ("wait", None)]
 
 
-def test_run_interactive_session_reaps_child_when_owner_binding_fails(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_run_interactive_session_continues_when_real_owner_binding_refuses_corrupt_registry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     from autoskillit.core import LAUNCH_ID_ENV_VAR
+    from autoskillit.core.runtime.session_registry import registry_path
 
     process = InteractiveProcessStub(pid=888)
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
-
-    def fail_owner_binding(_project_dir: Path, _launch_id: str, _pid: int) -> None:
-        raise RuntimeError("bind failed")
-
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", fail_owner_binding)
+    logger = MagicMock()
+    monkeypatch.setattr("autoskillit.cli.session._session_launch.logger", logger)
+    path = registry_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_text("not valid json", encoding="utf-8")
     backend, _captured_kwargs = _make_capturing_backend()
 
-    with pytest.raises(RuntimeError, match="bind failed"):
-        _run_interactive_session(
-            system_prompt="test",
-            extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
-            project_dir=tmp_path,
-            backend=backend,
-        )
+    result = _run_interactive_session(
+        system_prompt="test",
+        extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
+        project_dir=tmp_path,
+        backend=backend,
+    )
 
-    assert process.terminated
-    assert process.returncode is not None
+    assert result is None
+    assert not process.terminated
+    assert process.returncode == 0
+    logger.warning.assert_called_once_with(
+        "session_owner_binding_refused",
+        launch_id="launch-1",
+        pid=888,
+    )
+    assert path.read_text(encoding="utf-8") == "not valid json"
 
 
 # ---------------------------------------------------------------------------

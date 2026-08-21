@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
+from tests.conftest import production_interpreter_env
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
 
 pty: ModuleType | None
@@ -109,7 +110,7 @@ def run_cli_launch(
             stdout=slave_fd,
             stderr=slave_fd,
             cwd=cwd,
-            env=env,
+            env={**production_interpreter_env(), **env},
             close_fds=True,
             preexec_fn=_acquire_controlling_terminal,
         )

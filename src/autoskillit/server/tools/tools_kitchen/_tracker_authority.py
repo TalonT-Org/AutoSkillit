@@ -78,7 +78,11 @@ def _release_kitchen_tracker_authority(
             tool_ctx.kitchen_process_identity = None
     try:
         if unregister and identity is not None:
-            _tk_pkg.unregister_active_kitchen(identity)
+            if not _tk_pkg.unregister_active_kitchen(identity):
+                logger.warning(
+                    "active_kitchen_unregistration_refused",
+                    kitchen_id=identity.kitchen_id,
+                )
     finally:
         if retire and key is not None:
             _tk_pkg.try_retire_tracker(key.target)
@@ -173,5 +177,9 @@ def _register_active_recipe_kitchen(ctx: ToolContext) -> None:
     from autoskillit.server._recipe_generation import activate_kitchen  # circular-break
 
     identity = cast(KitchenProcessIdentity, ctx.kitchen_process_identity)
-    register_active_kitchen(identity)
+    if not register_active_kitchen(identity):
+        logger.warning(
+            "active_kitchen_registration_refused",
+            kitchen_id=identity.kitchen_id,
+        )
     activate_kitchen(identity.kitchen_id)

@@ -19,6 +19,7 @@ from autoskillit.core import (
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactIdentity,
     Severity,
+    managed_home_for,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -56,9 +57,10 @@ def _publish_generation(
     source_root = home / ".test-generation-source"
     source_root.mkdir(exist_ok=True)
     (source_root / "marker.txt").write_text("content", encoding="utf-8")
-    with _InstallLock():
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
         return publish_generation(
-            home=home,
+            home=managed,
             plugin_ref=plugin_ref,
             version=version,
             semantic_key=f"{plugin_ref}:{version}",
@@ -108,9 +110,10 @@ def test_failed_generation_publication_discards_unpublished_artifacts(
 
         monkeypatch.setattr(publication, "_replace_symlink", fail_selector)
 
-    with _InstallLock(), pytest.raises((OSError, RuntimeError)):
+    managed = managed_home_for(home)
+    with _InstallLock(managed), pytest.raises((OSError, RuntimeError)):
         publication.publish_generation(
-            home=home,
+            home=managed,
             plugin_ref=_PLUGIN_KEY,
             version="1.2.3",
             semantic_key=f"{_PLUGIN_KEY}:1.2.3",
@@ -152,7 +155,10 @@ def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
         live,
         semantic_key=f"autoskillit@autoskillit-local:{__version__}",
     )
-    InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
+    InstalledPluginArtifactRetirementOwner(
+        live.parent,
+        home=managed_home_for(home),
+    ).enqueue_retirement(
         identity,
         datetime.now(UTC) + timedelta(hours=6),
     )
@@ -468,7 +474,10 @@ class TestVerifyInstallState:
             },
             schema_version=1,
         )
-        migrate_retiring_cache_v1({PluginArtifactKind.INSTALLED_PLUGIN: home / "cache"})
+        migrate_retiring_cache_v1(
+            {PluginArtifactKind.INSTALLED_PLUGIN: home / "cache"},
+            home=managed_home_for(home),
+        )
 
         finding = next(
             item
@@ -760,16 +769,19 @@ class TestRetiredArtifactShapeRegistry:
             action="publish",
         )
 
-        reconcile_install_artifacts()
+        managed = managed_home_for(home)
+        reconcile_install_artifacts(home=managed)
 
         assert legacy_version.is_dir()
         assert all(
-            record.managed_path != legacy_version for record in read_retiring_cache().records
+            record.managed_path != legacy_version
+            for record in read_retiring_cache(home=managed).records
         )
 
         _publish_generation(home, __version__)
-        reconcile_install_artifacts()
+        reconcile_install_artifacts(home=managed)
 
         assert any(
-            record.managed_path == legacy_version for record in read_retiring_cache().records
+            record.managed_path == legacy_version
+            for record in read_retiring_cache(home=managed).records
         )

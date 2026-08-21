@@ -285,6 +285,8 @@ scripts/check_launch_path_totality.py:
 scripts/check_persisted_enum_decoding.py:
   - arch/
   - contracts/
+scripts/check_ambient_home_boundary.py:
+  - arch/
 scripts/compare-coverage-ast.py:
   - infra/
 scripts/validate_output_budget_evidence.py:

@@ -29,6 +29,7 @@ from autoskillit.cli.update._transaction import (
 )
 from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
 from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -241,6 +242,7 @@ def _run_poisoned_subprocess(driver_body: str) -> subprocess.CompletedProcess[st
     script = _POISON_RICH_PREFIX + "\n" + driver_body
     return subprocess.run(
         [sys.executable, "-c", script],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
         timeout=20,

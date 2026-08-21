@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
@@ -25,11 +26,24 @@ def _clean_subprocess_env() -> dict[str, str]:
     rebuilds the venv mid-run), and ``PYTHONDONTWRITEBYTECODE`` to match
     the test-suite policy.
     """
-    env: dict[str, str] = {}
-    for key in ("PATH", "HOME", "USER", "LANG", "LC_ALL", "VIRTUAL_ENV"):
-        val = os.environ.get(key)
-        if val is not None:
-            env[key] = val
+    env = {
+        key: value
+        for key, value in production_interpreter_env().items()
+        if key
+        in {
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "PATH",
+            "USER",
+            "VIRTUAL_ENV",
+            "XDG_CACHE_HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_RUNTIME_DIR",
+            "XDG_STATE_HOME",
+        }
+    }
     if "VIRTUAL_ENV" not in env:
         venv_dir = str(Path(sys.executable).resolve().parent.parent)
         if (Path(venv_dir) / "pyvenv.cfg").exists():

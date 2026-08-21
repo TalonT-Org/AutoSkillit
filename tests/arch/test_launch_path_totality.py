@@ -13,6 +13,7 @@ import pytest
 
 from scripts.check_launch_path_totality import (
     LAUNCH_TOTAL_FUNCTIONS,
+    MUST_CONSUME_TOTAL_RESULTS,
     find_discarded_total_result_violations,
     find_missing_registered_functions,
     find_originated_exception_violations,
@@ -21,6 +22,15 @@ from scripts.check_launch_path_totality import (
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src"
+
+_LAUNCH_STATE_CALLBACKS = (
+    (
+        ("autoskillit/core/runtime/session_registry.py", "bind_session_owner"),
+        frozenset({"ValueError"}),
+    ),
+    (("autoskillit/core/_plugin_cache.py", "register_active_kitchen"), frozenset()),
+    (("autoskillit/core/_plugin_cache.py", "unregister_active_kitchen"), frozenset()),
+)
 
 
 def _write_module(src_root: Path, module: str, source: str) -> None:
@@ -31,6 +41,15 @@ def _write_module(src_root: Path, module: str, source: str) -> None:
 
 def test_registered_launch_functions_originate_no_disallowed_exception() -> None:
     assert not find_originated_exception_violations(_SRC_ROOT)
+
+
+@pytest.mark.parametrize(("target", "allowed_exceptions"), _LAUNCH_STATE_CALLBACKS)
+def test_launch_state_callbacks_are_total_and_must_be_consumed(
+    target: tuple[str, str],
+    allowed_exceptions: frozenset[str],
+) -> None:
+    assert LAUNCH_TOTAL_FUNCTIONS[target] == allowed_exceptions
+    assert target in MUST_CONSUME_TOTAL_RESULTS
 
 
 def test_guard_detects_an_injected_runtime_error(tmp_path: Path) -> None:

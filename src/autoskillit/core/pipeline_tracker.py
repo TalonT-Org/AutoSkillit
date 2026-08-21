@@ -18,7 +18,11 @@ from typing import Any, Literal
 
 import psutil
 
-from ._plugin_cache import kitchen_entry_alive, read_active_kitchens_registry
+from ._plugin_cache import (
+    ActiveKitchensState,
+    kitchen_entry_alive,
+    read_active_kitchens_registry,
+)
 from .io import atomic_write
 from .runtime.artifact_lease import ArtifactLease
 
@@ -333,14 +337,16 @@ def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
             if current.data is None:
                 return False
             try:
-                entries = read_active_kitchens_registry()
+                active_kitchens = read_active_kitchens_registry()
+                if active_kitchens.state is not ActiveKitchensState.EXACT:
+                    return False
                 kitchen_id = current.data.get("kitchen_id")
                 if not isinstance(kitchen_id, str) or not kitchen_id:
                     return False
                 project_path = str(target.project_dir.resolve())
                 matching = [
                     entry
-                    for entry in entries
+                    for entry in active_kitchens.entries
                     if entry.get("kitchen_id") == kitchen_id
                     and str(Path(str(entry.get("project_path"))).resolve()) == project_path
                 ]

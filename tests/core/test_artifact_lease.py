@@ -23,6 +23,7 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [
     pytest.mark.layer("core"),
@@ -171,6 +172,7 @@ def test_existing_shared_child_blocks_writer_without_mutating_sidecar(
             str(missing_lock),
             str(lock_path),
         ],
+        env=production_interpreter_env(),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -325,6 +327,7 @@ def test_inherited_descriptor_keeps_lease_after_parent_close(tmp_path: Path) -> 
             ),
             str(lease.fileno()),
         ],
+        env=production_interpreter_env(),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

@@ -78,6 +78,7 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureSnapshotStatus,
     CaptureState,
 )
+from tests.conftest import production_interpreter_env
 
 from .conftest import _FAILURE_GRADE_RE
 
@@ -105,6 +106,7 @@ def _start_lock_holder(lock_path: Path, *, hold_seconds: float) -> subprocess.Po
     )
     holder = subprocess.Popen(
         [sys.executable, "-c", holder_script, str(lock_path), str(hold_seconds)],
+        env=production_interpreter_env(),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -2331,6 +2333,7 @@ def test_writer_lease_is_visible_to_an_independent_process(tmp_path: Path) -> No
     try:
         completed = subprocess.run(
             [sys.executable, "-c", script, str(_capture_dir(project) / artifact.name)],
+            env=production_interpreter_env(),
             capture_output=True,
             text=True,
             timeout=5,
@@ -2364,6 +2367,7 @@ def test_terminated_producer_is_recovered_by_independent_store(tmp_path: Path) -
     )
     producer = subprocess.Popen(
         [sys.executable, "-c", producer_script, str(project), _CAPTURE_ID],
+        env=production_interpreter_env(),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

@@ -70,6 +70,8 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
 )
+from ._plugin_cache import ActiveKitchensReadResult as ActiveKitchensReadResult
+from ._plugin_cache import ActiveKitchensState as ActiveKitchensState
 from ._plugin_cache import KitchenProcessIdentity as KitchenProcessIdentity
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
@@ -893,6 +895,7 @@ from .types import LaunchSurface as LaunchSurface
 from .types import LaunchValueSource as LaunchValueSource
 from .types import LaunchValueSourceKind as LaunchValueSourceKind
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
+from .types import ManagedHome as ManagedHome
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
@@ -1205,6 +1208,8 @@ from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
 from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
 from .types import normalize_inherited_fds as normalize_inherited_fds
+from .types import managed_home as managed_home
+from .types import managed_home_for as managed_home_for
 from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
 from .types import parse_plan_paths as parse_plan_paths
 from .types import (

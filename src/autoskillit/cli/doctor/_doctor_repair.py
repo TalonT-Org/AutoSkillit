@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from autoskillit.core import Severity, repair_corrupt_retiring_cache
+from autoskillit.core import Severity, managed_home, repair_corrupt_retiring_cache
 
 from ._doctor_types import DoctorResult
 
 
 def collect_retiring_cache_repair_results() -> list[DoctorResult]:
     """Repair the retiring cache when safe and describe the action."""
-    repair = repair_corrupt_retiring_cache()
+    repair = repair_corrupt_retiring_cache(home=managed_home())
     if repair.repaired:
         message = (
             f"Retiring cache repaired; original bytes preserved at {repair.sidecar}; "

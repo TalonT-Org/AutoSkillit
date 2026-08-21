@@ -28,6 +28,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     pkg_root,
 )
+from autoskillit.core.runtime.session_registry import registry_path
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.workspace import (
     CompiledSessionSkillCatalog,
@@ -378,6 +379,13 @@ def _run_finalized_profile_cook(
         }
     }
 
+    def write_corrupt_registry(project_dir: Path, *_args: object) -> None:
+        path = registry_path(project_dir)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("not valid json", encoding="utf-8")
+
+    logger = MagicMock()
+    monkeypatch.setattr(cook_module, "logger", logger)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CODEX_HOME", "/ambient-home")
     monkeypatch.setenv("CODEX_SQLITE_HOME", "/ambient-sqlite-home")
@@ -391,8 +399,7 @@ def _run_finalized_profile_cook(
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=manager),
         patch("autoskillit.cli.session._session_onboarding.is_first_run", return_value=False),
         patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
-        patch("autoskillit.core.write_registry_entry"),
-        patch("autoskillit.core.bind_session_owner") as bind_session_owner,
+        patch("autoskillit.core.write_registry_entry", side_effect=write_corrupt_registry),
         patch(
             "autoskillit.cli.session._session_process.run_cook_attempt",
             side_effect=run_attempt,
@@ -404,13 +411,13 @@ def _run_finalized_profile_cook(
     ):
         cook_module.cook(profile="minimax", backend=_Backend())
 
-    return captured, generated_home, bind_session_owner
+    return captured, generated_home, logger
 
 
 def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    captured, generated_home, bind_session_owner = _run_finalized_profile_cook(
+    captured, generated_home, logger = _run_finalized_profile_cook(
         monkeypatch,
         tmp_path,
         skill_adapter=adapt_test_skill_semantics,
@@ -426,13 +433,18 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert "AUTOSKILLIT_CODEX_STARTUP_TRACE" not in spec.env
     assert any("sqlite_home=" in arg and str(generated_home) in arg for arg in spec.cmd)
     assert captured["pass_fds"] == (3, 5)
-    bind_session_owner.assert_called_once_with(tmp_path, captured["launch_id"], 1)
+    logger.warning.assert_called_once_with(
+        "session_owner_binding_refused",
+        launch_id=captured["launch_id"],
+        pid=1,
+    )
+    assert registry_path(tmp_path).read_text(encoding="utf-8") == "not valid json"
 
 
 def test_cook_compiles_catalog_with_real_codex_admission(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    captured, _generated_home, _bind_session_owner = _run_finalized_profile_cook(
+    captured, _generated_home, _logger = _run_finalized_profile_cook(
         monkeypatch,
         tmp_path,
         skill_adapter=CodexBackend().adapt_skill_semantics,

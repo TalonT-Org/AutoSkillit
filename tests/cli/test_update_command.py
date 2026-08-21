@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,7 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionResult,
     process_status_for_update_outcome,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -50,13 +53,11 @@ def _patch_result(
 
 
 def test_update_subcommand_registered_in_help() -> None:
-    import subprocess
-    import sys
-
     result = subprocess.run(
         [sys.executable, "-m", "autoskillit", "update", "--help"],
         capture_output=True,
         text=True,
+        env=production_interpreter_env(),
     )
     assert result.returncode == 0, f"update --help failed: {result.stderr}"
 

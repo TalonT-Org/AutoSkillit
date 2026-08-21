@@ -39,6 +39,7 @@ from pathlib import Path
 from autoskillit.core import (  # IL-005: core only — never cli.InstalledPluginsFile
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     ArtifactLease,
+    ManagedHome,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
     PluginArtifactUnavailableError,
@@ -50,6 +51,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
     installed_plugin_semantic_key,
+    managed_home,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
     registered_install_paths,
@@ -192,6 +194,7 @@ def _generation_store_findings() -> list[InstallStateFinding]:
 
 def verify_install_state() -> tuple[InstallStateFinding, ...]:
     """Return every violated install-state invariant, most actionable first."""
+    home = managed_home()
     findings: list[InstallStateFinding] = []
 
     # 1. Generation-store current-generation validation (primary authority).
@@ -199,7 +202,7 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
 
     # 2. Retired artifact shapes still present on disk.
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):
-        artifact = _home() / key
+        artifact = home.root / key
         if _has_retired_shape(artifact, retired.shape):
             findings.append(
                 InstallStateFinding(
@@ -214,8 +217,8 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
     # 3. Legacy evidence is visible but never deletion authority. Exact v2
     #    records are errors only when the registered path still validates as
     #    the same incarnation.
-    registered = frozenset(registered_install_paths(_home()))
-    retirement = read_retiring_cache()
+    registered = frozenset(registered_install_paths(home.root))
+    retirement = read_retiring_cache(home=home)
     if retirement.state is RetiringCacheState.CORRUPT:
         detail = retirement.error or "unknown parse failure"
         findings.append(
@@ -360,7 +363,10 @@ def _derived_version_findings(package_version: str) -> list[InstallStateFinding]
     return findings
 
 
-def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
+def _enqueue_legacy_installed_plugin_versions(
+    artifact: Path,
+    home: ManagedHome,
+) -> None:
     """Enqueue every version subdirectory of the legacy Claude-cache root.
 
     Best-effort per candidate: a version directory that fails to validate or
@@ -371,11 +377,12 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
 
     running_version = importlib.metadata.version("autoskillit")
     running_generation = resolve_current_generation(
-        _home(),
+        home.root,
         _AUTOSKILLIT_PLUGIN_KEY,
         running_version,
     )
     engine = PluginArtifactRetirementEngine(
+        home=home,
         managed_root=artifact,
         artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
         manifest_path=installed_plugin_artifact_manifest_path,
@@ -444,14 +451,14 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
         pass
 
 
-_RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path], None]] = {
+_RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path, ManagedHome], None]] = {
     ".claude/plugins/cache/autoskillit-local/autoskillit": (
         _enqueue_legacy_installed_plugin_versions
     ),
 }
 
 
-def reconcile_install_artifacts() -> tuple[str, ...]:
+def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str, ...]:
     """Remove install artifacts left in a retired shape; return what was repaired.
 
     Idempotent and safe to call on any machine state, including a clean one.
@@ -466,9 +473,10 @@ def reconcile_install_artifacts() -> tuple[str, ...]:
     key-addressed subdirectories) that cannot be enumerated generically, so
     every entry must register a handler in ``_RETIRE_VIA_ENGINE_HANDLERS``.
     """
+    resolved_home = home if home is not None else managed_home()
     repaired: list[str] = []
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):
-        artifact = _home() / key
+        artifact = resolved_home.root / key
         if not _has_retired_shape(artifact, retired.shape):
             continue
         disposition = retired.disposition
@@ -493,7 +501,7 @@ def reconcile_install_artifacts() -> tuple[str, ...]:
                     f"no retire_via_engine handler registered for {key!r} — "
                     "add one to _RETIRE_VIA_ENGINE_HANDLERS in this module"
                 )
-            handler(artifact)
+            handler(artifact, resolved_home)
             logger.info(
                 "reconcile_install_artifacts: %s enqueued for engine-gated retirement "
                 "(retired in %s, disposition=%s)",

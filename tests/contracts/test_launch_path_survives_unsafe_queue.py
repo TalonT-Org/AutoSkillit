@@ -14,6 +14,7 @@ from autoskillit.core import (
     PluginArtifactIdentity,
     PluginLoadMode,
     RetiringCacheState,
+    managed_home,
     new_plugin_artifact_incarnation_id,
     read_retiring_cache,
 )
@@ -248,7 +249,10 @@ def test_quarantined_records_round_trip_through_a_mutation(
         artifact_kind="install_root_generation",
     )
     _cache_path(tmp_path).write_text(json.dumps(_v2_payload(records=[unknown])))
-    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent)
+    owner = ProjectedPluginRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
 
     appended = owner.enqueue_retirement(
         _new_identity(identity.managed_path.parent, semantic_key="new-projection"),
@@ -283,7 +287,10 @@ def test_both_quarantine_buckets_survive_a_mutation_independently(
     _cache_path(tmp_path).write_text(
         json.dumps(_v2_payload(records=[unknown_record], legacy_evidence=[unknown_evidence]))
     )
-    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent)
+    owner = ProjectedPluginRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
 
     appended = owner.enqueue_retirement(
         _new_identity(identity.managed_path.parent, semantic_key="new-projection"),

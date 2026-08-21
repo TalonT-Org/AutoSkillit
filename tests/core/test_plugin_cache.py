@@ -16,12 +16,14 @@ import psutil
 import pytest
 
 from autoskillit.core import (
+    ActiveKitchensState,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
     RetiringArtifactRecord,
     RetiringCacheState,
     due_retiring_records,
+    managed_home_for,
 )
 from autoskillit.core._plugin_cache import (
     KitchenProcessIdentity,
@@ -189,8 +191,8 @@ def test_repeated_exact_registration_does_not_grow_registry(monkeypatch, tmp_pat
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     identity = KitchenProcessIdentity("kitchen", 42, 123.5, str(tmp_path))
 
-    register_active_kitchen(identity)
-    register_active_kitchen(identity)
+    assert register_active_kitchen(identity) is True
+    assert register_active_kitchen(identity) is True
 
     registry = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
     assert len(registry["kitchens"]) == 1
@@ -208,7 +210,10 @@ def test_registration_migrates_valid_v1_active_kitchens(monkeypatch, tmp_path: P
     }
     _make_kitchen_file(registry_path, schema_version=1, kitchens=[legacy_entry])
 
-    register_active_kitchen(KitchenProcessIdentity("current", 43, 124.5, str(tmp_path)))
+    assert (
+        register_active_kitchen(KitchenProcessIdentity("current", 43, 124.5, str(tmp_path)))
+        is True
+    )
 
     migrated = json.loads(registry_path.read_text(encoding="utf-8"))
     assert migrated["schema_version"] == 2
@@ -242,15 +247,17 @@ def test_registration_migrates_valid_v1_active_kitchens(monkeypatch, tmp_path: P
         },
     ],
 )
-def test_v2_active_kitchen_registry_rejects_malformed_entries(
+def test_v2_active_kitchen_registry_classifies_and_skips_malformed_entries(
     monkeypatch, tmp_path: Path, malformed_entry: dict[str, object]
 ) -> None:
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
     _make_kitchen_file(registry_path, schema_version=2, kitchens=[malformed_entry])
 
-    with pytest.raises(ValueError):
-        read_active_kitchens_registry()
+    result = read_active_kitchens_registry()
+
+    assert result.state is ActiveKitchensState.CORRUPT
+    assert result.entries == ()
 
 
 def test_v1_active_kitchen_registry_skips_malformed_entries(monkeypatch, tmp_path: Path) -> None:
@@ -262,7 +269,10 @@ def test_v1_active_kitchen_registry_skips_malformed_entries(monkeypatch, tmp_pat
         kitchens=[{"kitchen_id": "legacy", "pid": 42}],
     )
 
-    assert read_active_kitchens_registry() == []
+    result = read_active_kitchens_registry()
+
+    assert result.state is ActiveKitchensState.EXACT
+    assert result.entries == ()
 
 
 def test_scoped_kitchen_lookup_canonicalizes_project_path(monkeypatch, tmp_path: Path) -> None:
@@ -275,6 +285,82 @@ def test_scoped_kitchen_lookup_canonicalizes_project_path(monkeypatch, tmp_path:
     monkeypatch.setattr("autoskillit.core._plugin_cache.kitchen_entry_alive", lambda _entry: True)
 
     assert any_kitchen_open(str(project_link)) is True
+
+
+def test_register_active_kitchen_survives_a_corrupt_registry(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text('{"schema_version":2,"kitchens":')
+
+    result = register_active_kitchen(KitchenProcessIdentity("current", 43, 124.5, str(tmp_path)))
+
+    assert result is True
+    repaired = read_active_kitchens_registry()
+    assert repaired.state is ActiveKitchensState.EXACT
+    assert [entry["kitchen_id"] for entry in repaired.entries] == ["current"]
+
+
+def test_unregister_active_kitchen_survives_a_corrupt_registry(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text('{"schema_version":2,"kitchens":')
+
+    result = unregister_active_kitchen(KitchenProcessIdentity("stale", 43, 124.5, str(tmp_path)))
+
+    assert result is True
+    repaired = read_active_kitchens_registry()
+    assert repaired.state is ActiveKitchensState.EXACT
+    assert repaired.entries == ()
+
+
+def test_register_active_kitchen_never_overwrites_an_unsupported_future_registry(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
+    future_entry = {
+        "kitchen_id": "future",
+        "pid": 42,
+        "create_time": 123.5,
+        "project_path": str(tmp_path),
+        "opened_at": "2026-08-09T00:00:00+00:00",
+    }
+    _make_kitchen_file(registry_path, schema_version=99, kitchens=[future_entry])
+    before = registry_path.read_bytes()
+
+    result = register_active_kitchen(KitchenProcessIdentity("current", 43, 124.5, str(tmp_path)))
+
+    assert result is False
+    assert registry_path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b'{"schema_version":2,"kitchens":',
+        b'{"schema_version":99,"kitchens":[]}',
+    ],
+)
+def test_active_kitchen_readers_fail_closed_on_unsafe_registry(
+    monkeypatch, tmp_path: Path, content: bytes
+) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_bytes(content)
+
+    read_result = read_active_kitchens_registry()
+
+    assert read_result.state in {
+        ActiveKitchensState.CORRUPT,
+        ActiveKitchensState.UNSUPPORTED_FUTURE,
+    }
+    assert any_kitchen_open() is True
+    assert registry_path.read_bytes() == content
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +468,7 @@ def test_unsafe_retirement_state_reports_unverifiable_and_never_empties(
         artifact_digest=record.artifact_digest,
     )
     engine = PluginArtifactRetirementEngine(
+        home=managed_home_for(tmp_path),
         managed_root=tmp_path / "managed",
         artifact_kind=record.artifact_kind,
         manifest_path=lambda path: path.parent / f".{path.name}.manifest.json",
@@ -620,17 +707,21 @@ class TestRetiringCacheSchemaValidation:
         assert result.records == ()
         assert kitchens.read_bytes() == kitchens_before
 
-    def test_register_active_kitchen_preserves_unsafe_registry(self, monkeypatch, tmp_path):
+    def test_register_active_kitchen_refuses_and_preserves_an_unsupported_future_registry(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
         kitchens_path.parent.mkdir(parents=True)
         before = b'{"schema_version":99,"kitchens":[]}'
         kitchens_path.write_bytes(before)
 
-        with pytest.raises(ValueError, match="unsupported"):
+        assert (
             register_active_kitchen(
                 KitchenProcessIdentity("new-kitchen", 12345, 1.0, str(tmp_path))
             )
+            is False
+        )
 
         assert kitchens_path.read_bytes() == before
 
@@ -653,16 +744,20 @@ class TestActiveKitchensSchemaValidation:
 
         _reset_schema_drift_logged_for_tests()
 
-    def test_unregister_active_kitchen_preserves_unsafe_registry(self, monkeypatch, tmp_path):
+    def test_unregister_active_kitchen_refuses_and_preserves_an_unsupported_future_registry(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
         kitchens_path.parent.mkdir(parents=True)
         before = b'{"schema_version":99,"kitchens":[]}'
         kitchens_path.write_bytes(before)
 
-        with pytest.raises(ValueError, match="unsupported"):
+        assert (
             unregister_active_kitchen(
                 KitchenProcessIdentity("stale-kitchen", 12345, 1.0, str(tmp_path))
             )
+            is False
+        )
 
         assert kitchens_path.read_bytes() == before

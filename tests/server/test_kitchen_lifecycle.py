@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import psutil
 import pytest
@@ -67,6 +67,49 @@ async def test_kitchen_open_close_lifecycle(monkeypatch, tmp_path):
     # drain the cancelled task from the event loop
     await asyncio.sleep(0)
     assert task.cancelled() or task.done()
+
+
+async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_path):
+    """Open and close continue while explicitly consuming refused registry writes."""
+    monkeypatch.chdir(tmp_path)
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_authority=FakePluginArtifactAuthority(tmp_path),
+        project_dir=tmp_path,
+    )
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
+    lifecycle_logger = MagicMock()
+
+    with (
+        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._tracker_authority.register_active_kitchen",
+            return_value=False,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.unregister_active_kitchen",
+            return_value=False,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._tracker_authority.logger",
+            lifecycle_logger,
+        ),
+    ):
+        assert await _open_kitchen_handler() is None
+        _close_kitchen_handler()
+
+    assert ctx.gate.enabled is False
+    lifecycle_logger.warning.assert_any_call(
+        "active_kitchen_registration_refused",
+        kitchen_id=ctx.kitchen_id,
+    )
+    lifecycle_logger.warning.assert_any_call(
+        "active_kitchen_unregistration_refused",
+        kitchen_id=ctx.kitchen_id,
+    )
+    await asyncio.sleep(0)
 
 
 async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):

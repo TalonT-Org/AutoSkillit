@@ -33,6 +33,8 @@ REMOVED = (
 
 #: Symbols this change added. Each must be importable from the gateway.
 ADDED = (
+    "ActiveKitchensReadResult",
+    "ActiveKitchensState",
     "ArtifactLease",
     "ArtifactLeaseContention",
     "PluginArtifactAuthority",
@@ -45,6 +47,7 @@ ADDED = (
     "PluginArtifactValidationError",
     "PluginLaunchBinding",
     "PluginLoadMode",
+    "ManagedHome",
     "PluginRetirementCoordinator",
     "PERSISTED_FORMAT_LEDGER",
     "PersistedEnumDef",
@@ -68,6 +71,8 @@ ADDED = (
     "is_canonical_plugin_artifact_digest",
     "is_canonical_plugin_artifact_incarnation_id",
     "migrate_retiring_cache_v1",
+    "managed_home",
+    "managed_home_for",
     "new_plugin_artifact_incarnation_id",
     "normalize_inherited_fds",
     "read_installed_plugin_artifact_identity",

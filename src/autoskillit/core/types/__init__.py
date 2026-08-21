@@ -64,6 +64,8 @@ from ._type_invariant_registry import *  # noqa: F401, F403
 from ._type_invariant_registry import __all__ as _invariant_registry_all
 from ._type_launch import *  # noqa: F401, F403
 from ._type_launch import __all__ as _launch_all
+from ._type_managed_home import *  # noqa: F401, F403
+from ._type_managed_home import __all__ as _managed_home_all
 from ._type_native_shell_capture import *  # noqa: F401, F403
 from ._type_native_shell_capture import __all__ as _native_shell_capture_all
 from ._type_persisted_formats import *  # noqa: F401, F403
@@ -144,6 +146,7 @@ __all__ = (
     + _install_all
     + _invariant_registry_all
     + _launch_all
+    + _managed_home_all
     + _native_shell_capture_all
     + _phoropter_all
     + _persisted_formats_all

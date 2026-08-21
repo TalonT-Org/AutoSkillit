@@ -590,11 +590,14 @@ class TestStaleGeneratorRefusal:
 
         import autoskillit.workspace._projected_artifact.authority as _auth
         from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactAuthority
+        from autoskillit.core import managed_home_for
         from autoskillit.workspace._projected_artifact.authority import StaleGeneratorError
 
         monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
         authority = InstalledPluginArtifactAuthority(
-            tmp_path / "fake-root", semantic_key="fake-semantic-key"
+            tmp_path / "fake-root",
+            home=managed_home_for(tmp_path),
+            semantic_key="fake-semantic-key",
         )
         with pytest.raises(StaleGeneratorError, match="no longer exists"):
             authority.acquire_launch_binding(

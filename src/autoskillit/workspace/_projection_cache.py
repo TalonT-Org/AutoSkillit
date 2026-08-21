@@ -22,6 +22,7 @@ from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
     LegacyRetiringEvidence,
+    ManagedHome,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
@@ -375,8 +376,15 @@ PROJECTION_CACHE_KEY_EXCLUSIONS: Mapping[str, str] = MappingProxyType(
 class ProjectedPluginRetirementOwner:
     """Exact-identity retirement owner for projected plugin generations."""
 
-    def __init__(self, managed_root: Path, *, active_key: str | None = None) -> None:
+    def __init__(
+        self,
+        managed_root: Path,
+        *,
+        home: ManagedHome,
+        active_key: str | None = None,
+    ) -> None:
         self._retirement = PluginArtifactRetirementEngine(
+            home=home,
             managed_root=managed_root,
             artifact_kind=PluginArtifactKind.PROJECTION,
             manifest_path=self.manifest_path,
@@ -465,12 +473,13 @@ class ProjectedPluginRetirementOwner:
 def prune_stale_projections(
     projections_root: Path,
     *,
+    home: ManagedHome,
     active_key: str,
 ) -> int:
     """Queue exact stale incarnations without mutating reader-held artifacts."""
     root = Path(projections_root).expanduser().resolve(strict=False)
-    owner = ProjectedPluginRetirementOwner(root, active_key=active_key)
-    with _InstallLock():
+    owner = ProjectedPluginRetirementOwner(root, home=home, active_key=active_key)
+    with _InstallLock(home):
         if not root.is_dir():
             return 0
         candidates = tuple(
@@ -493,7 +502,7 @@ def prune_stale_projections(
         except ArtifactLeaseContention:
             continue
         try:
-            with _InstallLock():
+            with _InstallLock(home):
                 try:
                     identity = owner.identity_for_path(candidate)
                 except PluginArtifactValidationError as exc:

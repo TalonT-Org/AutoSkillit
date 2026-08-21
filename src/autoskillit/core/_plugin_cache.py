@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import IO, Any
 
@@ -32,6 +33,7 @@ from .paths import destination_location
 from .runtime.artifact_lease import ArtifactLease, ArtifactLeaseContention
 from .types import (
     LegacyRetiringEvidence,
+    ManagedHome,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactUnavailableError,
@@ -43,6 +45,7 @@ from .types import (
     RetiringCacheReadResult,
     RetiringCacheRepairResult,
     RetiringCacheState,
+    managed_home,
 )
 
 logger = get_logger(__name__)
@@ -86,28 +89,28 @@ _LEGACY_RETIRING_EVIDENCE_FIELDS = frozenset(
 )
 
 
-def _autoskillit_home() -> Path:
-    return Path.home() / ".autoskillit"
+def _autoskillit_home(home: ManagedHome) -> Path:
+    return home.autoskillit_dir
 
 
-def _retiring_cache_path() -> Path:
-    return _autoskillit_home() / "retiring_cache.json"
+def _retiring_cache_path(home: ManagedHome) -> Path:
+    return _autoskillit_home(home) / "retiring_cache.json"
 
 
-def _retiring_cache_lock() -> Path:
-    return _autoskillit_home() / "retiring_cache.lock"
+def _retiring_cache_lock(home: ManagedHome) -> Path:
+    return _autoskillit_home(home) / "retiring_cache.lock"
 
 
-def _active_kitchens_path() -> Path:
-    return _autoskillit_home() / "active_kitchens.json"
+def _active_kitchens_path(home: ManagedHome) -> Path:
+    return _autoskillit_home(home) / "active_kitchens.json"
 
 
-def _active_kitchens_lock() -> Path:
-    return _autoskillit_home() / "active_kitchens.lock"
+def _active_kitchens_lock(home: ManagedHome) -> Path:
+    return _autoskillit_home(home) / "active_kitchens.lock"
 
 
-def _install_lock_path() -> Path:
-    return _autoskillit_home() / "install.lock"
+def _install_lock_path(home: ManagedHome) -> Path:
+    return _autoskillit_home(home) / "install.lock"
 
 
 def _open_lock(lock_path: Path) -> IO[str]:
@@ -190,8 +193,8 @@ def _legacy_from_json(raw: object) -> LegacyRetiringEvidence:
     )
 
 
-def _read_retiring_cache_unlocked() -> RetiringCacheReadResult:
-    cache = _retiring_cache_path()
+def _read_retiring_cache_unlocked(home: ManagedHome) -> RetiringCacheReadResult:
+    cache = _retiring_cache_path(home)
     if not cache.exists():
         return RetiringCacheReadResult(state=RetiringCacheState.ABSENT)
     try:
@@ -287,11 +290,12 @@ def _read_retiring_cache_unlocked() -> RetiringCacheReadResult:
         )
 
 
-def read_retiring_cache() -> RetiringCacheReadResult:
+def read_retiring_cache(*, home: ManagedHome | None = None) -> RetiringCacheReadResult:
     """Read and classify the complete retirement cache under its lock."""
-    fh = _open_lock(_retiring_cache_lock())
+    resolved_home = home if home is not None else managed_home()
+    fh = _open_lock(_retiring_cache_lock(resolved_home))
     try:
-        return _read_retiring_cache_unlocked()
+        return _read_retiring_cache_unlocked(resolved_home)
     finally:
         fh.close()
 
@@ -336,21 +340,23 @@ def _salvage_retiring_records(
     return tuple(salvaged), tuple(quarantined)
 
 
-def repair_corrupt_retiring_cache() -> RetiringCacheRepairResult:
+def repair_corrupt_retiring_cache(*, home: ManagedHome | None = None) -> RetiringCacheRepairResult:
     """Rebuild a corrupt cache after durably preserving its original bytes.
 
     Unsupported future schemas are never rewritten because this version cannot
     determine which records carry authority.
     """
-    fh = _open_lock(_retiring_cache_lock())
+    resolved_home = home if home is not None else managed_home()
+    fh = _open_lock(_retiring_cache_lock(resolved_home))
     try:
-        state = _read_retiring_cache_unlocked()
+        state = _read_retiring_cache_unlocked(resolved_home)
         if state.state is not RetiringCacheState.CORRUPT:
             return RetiringCacheRepairResult(repaired=False, state=state.state)
 
-        original = _retiring_cache_path().read_bytes()
+        cache_path = _retiring_cache_path(resolved_home)
+        original = cache_path.read_bytes()
         while True:
-            sidecar = _next_corrupt_sidecar_path(_retiring_cache_path())
+            sidecar = _next_corrupt_sidecar_path(cache_path)
             try:
                 atomic_write(
                     sidecar,
@@ -364,6 +370,7 @@ def repair_corrupt_retiring_cache() -> RetiringCacheRepairResult:
 
         salvaged, quarantined = _salvage_retiring_records(original)
         _write_retiring_cache_unlocked(
+            resolved_home,
             salvaged,
             (),
             quarantined_records=quarantined,
@@ -410,13 +417,14 @@ def _legacy_to_json(evidence: LegacyRetiringEvidence) -> dict[str, object]:
 
 
 def _write_retiring_cache_unlocked(
+    home: ManagedHome,
     records: tuple[RetiringArtifactRecord, ...],
     legacy_evidence: tuple[LegacyRetiringEvidence, ...],
     quarantined_records: tuple[QuarantinedRetiringRecord, ...] = (),
     quarantined_legacy_evidence: tuple[QuarantinedRetiringRecord, ...] = (),
 ) -> None:
     write_versioned_json(
-        _retiring_cache_path(),
+        _retiring_cache_path(home),
         {
             "records": [_record_to_json(record) for record in records]
             + [json.loads(item.raw_json) for item in quarantined_records],
@@ -476,14 +484,17 @@ def _classify_legacy_path(
 
 def migrate_retiring_cache_v1(
     managed_roots: Mapping[PluginArtifactKind, Path],
+    *,
+    home: ManagedHome | None = None,
 ) -> RetiringCacheReadResult:
     """Persist v1 path-only records as non-destructive typed evidence."""
-    fh = _open_lock(_retiring_cache_lock())
+    resolved_home = home if home is not None else managed_home()
+    fh = _open_lock(_retiring_cache_lock(resolved_home))
     try:
-        state = _read_retiring_cache_unlocked()
+        state = _read_retiring_cache_unlocked(resolved_home)
         if state.state is not RetiringCacheState.LEGACY_V1:
             return state
-        raw = json.loads(_retiring_cache_path().read_text(encoding="utf-8"))
+        raw = json.loads(_retiring_cache_path(resolved_home).read_text(encoding="utf-8"))
         seen: set[tuple[str, str, str]] = set()
         evidence: list[LegacyRetiringEvidence] = []
         for entry in raw["retiring"]:
@@ -508,6 +519,7 @@ def migrate_retiring_cache_v1(
             schema_version=_RETIRING_CACHE_SCHEMA_VERSION,
         )
         _write_retiring_cache_unlocked(
+            resolved_home,
             result.records,
             result.legacy_evidence,
             quarantined_records=(),
@@ -540,12 +552,14 @@ def _retirement_staging_path(record: RetiringArtifactRecord) -> Path:
 def append_retiring_record(
     record: RetiringArtifactRecord,
     *,
+    home: ManagedHome | None = None,
     on_persisted: Callable[[str], None] | None = None,
 ) -> RetiringAppendResult | None:
     """Append one exact v2 record, preserving first-seen order and intent identity."""
-    fh = _open_lock(_retiring_cache_lock())
+    resolved_home = home if home is not None else managed_home()
+    fh = _open_lock(_retiring_cache_lock(resolved_home))
     try:
-        state = _read_retiring_cache_unlocked()
+        state = _read_retiring_cache_unlocked(resolved_home)
         if state.state is RetiringCacheState.ABSENT:
             records: tuple[RetiringArtifactRecord, ...] = ()
             evidence: tuple[LegacyRetiringEvidence, ...] = ()
@@ -574,6 +588,7 @@ def append_retiring_record(
             return None
         try:
             _write_retiring_cache_unlocked(
+                resolved_home,
                 (*records, record),
                 evidence,
                 quarantined_records=quarantined_records,
@@ -590,14 +605,17 @@ def append_retiring_record(
         fh.close()
 
 
-def remove_retiring_records(record_ids: Iterable[str]) -> int | None:
+def remove_retiring_records(
+    record_ids: Iterable[str], *, home: ManagedHome | None = None
+) -> int | None:
     """Remove exact records or migrated evidence by stable record ID."""
     ids = frozenset(record_ids)
     if not ids:
         return 0
-    fh = _open_lock(_retiring_cache_lock())
+    resolved_home = home if home is not None else managed_home()
+    fh = _open_lock(_retiring_cache_lock(resolved_home))
     try:
-        state = _read_retiring_cache_unlocked()
+        state = _read_retiring_cache_unlocked(resolved_home)
         if state.state is RetiringCacheState.ABSENT:
             return 0
         if state.state is not RetiringCacheState.EXACT_V2:
@@ -607,6 +625,7 @@ def remove_retiring_records(record_ids: Iterable[str]) -> int | None:
         removed = len(state.records) - len(records) + len(state.legacy_evidence) - len(evidence)
         if removed:
             _write_retiring_cache_unlocked(
+                resolved_home,
                 records,
                 evidence,
                 quarantined_records=state.quarantined_records,
@@ -617,11 +636,13 @@ def remove_retiring_records(record_ids: Iterable[str]) -> int | None:
         fh.close()
 
 
-def due_retiring_records(now: datetime) -> tuple[RetiringArtifactRecord, ...] | None:
+def due_retiring_records(
+    now: datetime, *, home: ManagedHome | None = None
+) -> tuple[RetiringArtifactRecord, ...] | None:
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("retirement sweep time must be timezone-aware")
     normalized_now = now.astimezone(UTC)
-    state = read_retiring_cache()
+    state = read_retiring_cache(home=home)
     if state.state is RetiringCacheState.ABSENT:
         return ()
     if state.state is not RetiringCacheState.EXACT_V2:
@@ -632,11 +653,12 @@ def due_retiring_records(now: datetime) -> tuple[RetiringArtifactRecord, ...] | 
 class _InstallLock:
     """Exclusive fcntl lock for the autoskillit install critical section."""
 
-    def __init__(self) -> None:
+    def __init__(self, home: ManagedHome) -> None:
+        self._home = home
         self._lock_file: IO[str] | None = None
 
     def __enter__(self) -> _InstallLock:
-        self._lock_file = _open_lock(_install_lock_path())
+        self._lock_file = _open_lock(_install_lock_path(self._home))
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -651,6 +673,7 @@ class PluginArtifactRetirementEngine:
     def __init__(
         self,
         *,
+        home: ManagedHome,
         managed_root: Path,
         artifact_kind: PluginArtifactKind,
         manifest_path: Callable[[Path], Path],
@@ -659,6 +682,7 @@ class PluginArtifactRetirementEngine:
         logger: Any,
         is_current: Callable[[Path], bool] | None,
     ) -> None:
+        self._home = home
         self.managed_root = Path(managed_root).expanduser().resolve(strict=False)
         self.artifact_kind = artifact_kind
         self._manifest_path = manifest_path
@@ -688,6 +712,12 @@ class PluginArtifactRetirementEngine:
                 f"{self.artifact_kind.value} artifact is outside managed root: "
                 f"{identity.managed_path}"
             )
+        if not self._home.contains(identity.managed_path):
+            raise PluginArtifactValidationError(
+                f"{self.artifact_kind.value} artifact at {identity.managed_path} is outside "
+                f"the managed home this queue writes to ({self._home.root}); the validating "
+                "root and the writing root disagree"
+            )
         if identity.manifest_path != self._manifest_path(identity.managed_path):
             raise PluginArtifactValidationError(
                 f"{self.artifact_kind.value} artifact manifest path is not canonical: "
@@ -709,6 +739,7 @@ class PluginArtifactRetirementEngine:
                 retired_at=retired_at,
                 not_before=not_before,
             ),
+            home=self._home,
             on_persisted=on_persisted,
         )
         if result is None:
@@ -728,7 +759,7 @@ class PluginArtifactRetirementEngine:
         self,
         identity: PluginArtifactIdentity,
     ) -> tuple[str, ...] | None:
-        state = read_retiring_cache()
+        state = read_retiring_cache(home=self._home)
         if state.state is RetiringCacheState.ABSENT:
             return ()
         if state.state is not RetiringCacheState.EXACT_V2:
@@ -755,7 +786,7 @@ class PluginArtifactRetirementEngine:
         )
         if not record_ids:
             return ()
-        if remove_retiring_records(record_ids) is None:
+        if remove_retiring_records(record_ids, home=self._home) is None:
             return None
         log_plugin_artifact_lifecycle(
             self._logger,
@@ -796,8 +827,8 @@ class PluginArtifactRetirementEngine:
                 detail=str(exc),
             )
         try:
-            with _InstallLock():
-                state = read_retiring_cache()
+            with _InstallLock(self._home):
+                state = read_retiring_cache(home=self._home)
                 if state.state is RetiringCacheState.ABSENT:
                     return RetirementOutcome.RECORD_REMOVED
                 if state.state is not RetiringCacheState.EXACT_V2:
@@ -836,7 +867,7 @@ class PluginArtifactRetirementEngine:
                 )
                 staging_exists = staging_path.exists() or staging_path.is_symlink()
                 if not managed_exists and not manifest_exists and not staging_exists:
-                    if remove_retiring_records((record.record_id,)) is None:
+                    if remove_retiring_records((record.record_id,), home=self._home) is None:
                         return self._log_reclaim(
                             record,
                             RetirementOutcome.DEFERRED_IO_ERROR,
@@ -860,7 +891,7 @@ class PluginArtifactRetirementEngine:
                             detail=str(exc),
                         )
                     except PluginArtifactValidationError:
-                        if remove_retiring_records((record.record_id,)) is None:
+                        if remove_retiring_records((record.record_id,), home=self._home) is None:
                             return self._log_reclaim(
                                 record,
                                 RetirementOutcome.DEFERRED_IO_ERROR,
@@ -872,7 +903,7 @@ class PluginArtifactRetirementEngine:
                             failed_validation=True,
                         )
                     if current != record.identity:
-                        if remove_retiring_records((record.record_id,)) is None:
+                        if remove_retiring_records((record.record_id,), home=self._home) is None:
                             return self._log_reclaim(
                                 record,
                                 RetirementOutcome.DEFERRED_IO_ERROR,
@@ -898,7 +929,7 @@ class PluginArtifactRetirementEngine:
                             f"retirement manifest is not removable: {record.manifest_path}"
                         )
                     shutil.rmtree(staging_path)
-                    if remove_retiring_records((record.record_id,)) is None:
+                    if remove_retiring_records((record.record_id,), home=self._home) is None:
                         return self._log_reclaim(
                             record,
                             RetirementOutcome.DEFERRED_IO_ERROR,
@@ -946,7 +977,7 @@ class PluginArtifactRetirementEngine:
         if not path.exists():
             # Nothing left to protect (also covers a broken symlink: exists()
             # follows the link and is False when the target is gone).
-            if remove_retiring_records((evidence.record_id,)) is None:
+            if remove_retiring_records((evidence.record_id,), home=self._home) is None:
                 return RetirementOutcome.DEFERRED_IO_ERROR
             return RetirementOutcome.RECORD_REMOVED
         try:
@@ -977,7 +1008,7 @@ class PluginArtifactRetirementEngine:
             if appended is None:
                 return RetirementOutcome.DEFERRED_IO_ERROR
             created = appended.created
-            if remove_retiring_records((evidence.record_id,)) is None:
+            if remove_retiring_records((evidence.record_id,), home=self._home) is None:
                 return RetirementOutcome.DEFERRED_IO_ERROR
         finally:
             writer.close_preserving()
@@ -1010,6 +1041,23 @@ class PluginArtifactRetirementEngine:
             contention_detail=detail,
         )
         return outcome
+
+
+class ActiveKitchensState(StrEnum):
+    """Safety classification for the active-kitchens registry."""
+
+    EXACT = "exact"
+    CORRUPT = "corrupt"
+    UNSUPPORTED_FUTURE = "unsupported_future"
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveKitchensReadResult:
+    """Classified active-kitchens read without unsafe empty-list collapse."""
+
+    state: ActiveKitchensState
+    entries: tuple[dict[str, object], ...] = ()
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1075,28 +1123,73 @@ def _identity_from_entry(entry: object) -> KitchenProcessIdentity:
     return KitchenProcessIdentity(kitchen_id, pid, float(create_time), project_path)
 
 
-def _read_active_kitchens_unlocked(path: Path) -> list[dict[str, object]]:
-    if not path.exists():
-        return []
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict) or frozenset(raw) != {"schema_version", "kitchens"}:
-        raise ValueError("active kitchen registry does not match the supported schema")
+def _active_kitchens_corrupt(
+    path: Path,
+    error: object,
+    *,
+    entries: tuple[dict[str, object], ...] = (),
+) -> ActiveKitchensReadResult:
+    logger.warning(
+        "active_kitchens_registry_corrupt",
+        path=str(path),
+        error=str(error),
+    )
+    return ActiveKitchensReadResult(
+        state=ActiveKitchensState.CORRUPT,
+        entries=entries,
+        error=str(error),
+    )
+
+
+def _read_active_kitchens_unlocked(path: Path) -> ActiveKitchensReadResult:
+    try:
+        if not path.exists():
+            return ActiveKitchensReadResult(state=ActiveKitchensState.EXACT)
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return _active_kitchens_corrupt(path, exc)
+    if not isinstance(raw, dict):
+        return _active_kitchens_corrupt(path, "active kitchen registry root must be an object")
     schema_version = raw.get("schema_version")
-    if schema_version not in {1, _ACTIVE_KITCHENS_SCHEMA_VERSION}:
-        raise ValueError("active kitchen registry schema is unsupported")
+    if type(schema_version) is int and schema_version > _ACTIVE_KITCHENS_SCHEMA_VERSION:
+        return ActiveKitchensReadResult(
+            state=ActiveKitchensState.UNSUPPORTED_FUTURE,
+            error=f"active kitchen registry schema {schema_version} is unsupported",
+        )
+    if frozenset(raw) != {"schema_version", "kitchens"}:
+        return _active_kitchens_corrupt(
+            path, "active kitchen registry does not match the supported schema"
+        )
+    if type(schema_version) is not int or schema_version not in {
+        1,
+        _ACTIVE_KITCHENS_SCHEMA_VERSION,
+    }:
+        return _active_kitchens_corrupt(path, "active kitchen registry schema is malformed")
     kitchens = raw.get("kitchens")
     if not isinstance(kitchens, list):
-        raise ValueError("active kitchen registry kitchens must be a list")
+        return _active_kitchens_corrupt(path, "active kitchen registry kitchens must be a list")
     entries: list[dict[str, object]] = []
+    malformed_v2 = False
     for entry in kitchens:
         try:
             _identity_from_entry(entry)
-        except ValueError:
+        except (TypeError, ValueError, OverflowError):
             if schema_version == 1:
                 continue
-            raise
+            malformed_v2 = True
+            continue
         entries.append(dict(entry))
-    return entries
+    frozen_entries = tuple(entries)
+    if malformed_v2:
+        return _active_kitchens_corrupt(
+            path,
+            "active kitchen registry contains malformed v2 entries",
+            entries=frozen_entries,
+        )
+    return ActiveKitchensReadResult(
+        state=ActiveKitchensState.EXACT,
+        entries=frozen_entries,
+    )
 
 
 def kitchen_entry_alive(entry: dict) -> bool:
@@ -1108,21 +1201,29 @@ def kitchen_entry_alive(entry: dict) -> bool:
     return _pid_alive(identity.pid, stored_create_time=identity.create_time)
 
 
-def read_active_kitchens_registry() -> list[dict]:
-    """Return the current active_kitchens.json entries (locked read).
+def read_active_kitchens_registry(*, home: ManagedHome | None = None) -> ActiveKitchensReadResult:
+    """Return a classified, locked read of the active-kitchens registry.
 
     Public counterpart to the private ``_active_kitchens_path``/``_active_kitchens_lock``
     pair — callers outside this module must not reach into private submodule internals
     (REQ-ARCH-001), so this is the sanctioned read surface for registry consumers such
     as ``prune_stale_kitchen_state``.
     """
-    akp = _active_kitchens_path()
-    lock = _active_kitchens_lock()
-    fh = _open_lock(lock)
     try:
-        return _read_active_kitchens_unlocked(akp)
-    finally:
-        fh.close()
+        resolved_home = home if home is not None else managed_home()
+        akp = _active_kitchens_path(resolved_home)
+        lock = _active_kitchens_lock(resolved_home)
+        fh = _open_lock(lock)
+        try:
+            return _read_active_kitchens_unlocked(akp)
+        finally:
+            fh.close()
+    except Exception as exc:
+        logger.warning("active_kitchens_registry_read_failed", error=str(exc))
+        return ActiveKitchensReadResult(
+            state=ActiveKitchensState.CORRUPT,
+            error=str(exc),
+        )
 
 
 def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
@@ -1159,65 +1260,89 @@ def _check_pid_with_psutil(pid: int, stored_create_time: float | None) -> bool:
         return True
 
 
-def register_active_kitchen(identity: KitchenProcessIdentity) -> None:
-    lock = _active_kitchens_lock()
-    akp = _active_kitchens_path()
-    fh = _open_lock(lock)
+def register_active_kitchen(
+    identity: KitchenProcessIdentity, *, home: ManagedHome | None = None
+) -> bool:
     try:
-        entries = [
-            entry
-            for entry in _read_active_kitchens_unlocked(akp)
-            if _identity_from_entry(entry) != identity
-        ]
-        entries.append(
-            {
-                "kitchen_id": identity.kitchen_id,
-                "pid": identity.pid,
-                "create_time": identity.create_time,
-                "project_path": identity.project_path,
-                "opened_at": datetime.now(UTC).isoformat(),
-            }
-        )
-        write_versioned_json(
-            akp,
-            {"kitchens": entries},
-            schema_version=_ACTIVE_KITCHENS_SCHEMA_VERSION,
-        )
-    finally:
-        fh.close()
-
-
-def unregister_active_kitchen(identity: KitchenProcessIdentity) -> None:
-    lock = _active_kitchens_lock()
-    akp = _active_kitchens_path()
-    fh = _open_lock(lock)
-    try:
-        entries = _read_active_kitchens_unlocked(akp)
-        survivors = [e for e in entries if _identity_from_entry(e) != identity]
-        write_versioned_json(
-            akp,
-            {"kitchens": survivors},
-            schema_version=_ACTIVE_KITCHENS_SCHEMA_VERSION,
-        )
-    finally:
-        fh.close()
-
-
-def any_kitchen_open(project_path: str | None = None) -> bool:
-    akp = _active_kitchens_path()
-    lock = _active_kitchens_lock()
-    if not akp.exists():
-        return False
-    fh = _open_lock(lock)
-    try:
+        resolved_home = home if home is not None else managed_home()
+        lock = _active_kitchens_lock(resolved_home)
+        akp = _active_kitchens_path(resolved_home)
+        fh = _open_lock(lock)
         try:
-            entries = _read_active_kitchens_unlocked(akp)
-        except (OSError, ValueError, json.JSONDecodeError):
+            read_result = _read_active_kitchens_unlocked(akp)
+            if read_result.state is ActiveKitchensState.UNSUPPORTED_FUTURE:
+                return False
+            entries = [
+                entry for entry in read_result.entries if _identity_from_entry(entry) != identity
+            ]
+            entries.append(
+                {
+                    "kitchen_id": identity.kitchen_id,
+                    "pid": identity.pid,
+                    "create_time": identity.create_time,
+                    "project_path": identity.project_path,
+                    "opened_at": datetime.now(UTC).isoformat(),
+                }
+            )
+            write_versioned_json(
+                akp,
+                {"kitchens": entries},
+                schema_version=_ACTIVE_KITCHENS_SCHEMA_VERSION,
+            )
             return True
-        survivors = [entry for entry in entries if kitchen_entry_alive(entry)]
-        if project_path is not None:
-            canonical_project = str(Path(project_path).resolve(strict=False))
-            return any(entry.get("project_path") == canonical_project for entry in survivors)
-        return len(survivors) > 0
-    finally:
-        fh.close()
+        finally:
+            fh.close()
+    except Exception as exc:
+        logger.warning("active_kitchen_register_failed", error=str(exc))
+        return False
+
+
+def unregister_active_kitchen(
+    identity: KitchenProcessIdentity, *, home: ManagedHome | None = None
+) -> bool:
+    try:
+        resolved_home = home if home is not None else managed_home()
+        lock = _active_kitchens_lock(resolved_home)
+        akp = _active_kitchens_path(resolved_home)
+        fh = _open_lock(lock)
+        try:
+            read_result = _read_active_kitchens_unlocked(akp)
+            if read_result.state is ActiveKitchensState.UNSUPPORTED_FUTURE:
+                return False
+            survivors = [
+                entry for entry in read_result.entries if _identity_from_entry(entry) != identity
+            ]
+            write_versioned_json(
+                akp,
+                {"kitchens": survivors},
+                schema_version=_ACTIVE_KITCHENS_SCHEMA_VERSION,
+            )
+            return True
+        finally:
+            fh.close()
+    except Exception as exc:
+        logger.warning("active_kitchen_unregister_failed", error=str(exc))
+        return False
+
+
+def any_kitchen_open(project_path: str | None = None, *, home: ManagedHome | None = None) -> bool:
+    try:
+        resolved_home = home if home is not None else managed_home()
+        akp = _active_kitchens_path(resolved_home)
+        lock = _active_kitchens_lock(resolved_home)
+        if not akp.exists():
+            return False
+        fh = _open_lock(lock)
+        try:
+            read_result = _read_active_kitchens_unlocked(akp)
+            if read_result.state is not ActiveKitchensState.EXACT:
+                return True
+            survivors = [entry for entry in read_result.entries if kitchen_entry_alive(entry)]
+            if project_path is not None:
+                canonical_project = str(Path(project_path).resolve(strict=False))
+                return any(entry.get("project_path") == canonical_project for entry in survivors)
+            return len(survivors) > 0
+        finally:
+            fh.close()
+    except Exception:
+        return True

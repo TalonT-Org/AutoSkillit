@@ -13,6 +13,8 @@ from types import ModuleType
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +32,7 @@ def _load_lifecycle_module() -> ModuleType:
 def _run(*args: object) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT), *(str(arg) for arg in args)],
+        env=production_interpreter_env(),
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -167,7 +170,11 @@ def test_marker_survives_basetemp_clearing(tmp_path: Path) -> None:
 
 def test_reap_skips_live_owner(tmp_path: Path) -> None:
     platform_root, generation, tmp_dir, cache_dir = _layout(tmp_path)
-    sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], text=True)
+    sleeper = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        text=True,
+        env=production_interpreter_env(),
+    )
     try:
         assert _setup(platform_root, tmp_dir, cache_dir, owner_pid=sleeper.pid).returncode == 0
         _backdate(generation / "owner.json")
@@ -234,7 +241,7 @@ def test_reap_vetoes_dirs_referenced_by_live_processes(tmp_path: Path) -> None:
     platform_root, generation, tmp_dir, _ = _layout(tmp_path)
     tmp_dir.mkdir(parents=True)
     _backdate(generation)
-    env = os.environ.copy()
+    env = production_interpreter_env()
     env["TMPDIR"] = str(tmp_dir)
     sleeper = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(60)"], env=env, text=True
@@ -254,7 +261,7 @@ def test_reap_vetoes_generation_used_as_live_cwd(tmp_path: Path) -> None:
     platform_root, generation, tmp_dir, _ = _layout(tmp_path)
     tmp_dir.mkdir(parents=True)
     _backdate(generation)
-    env = {key: value for key, value in os.environ.items() if key != "TMPDIR"}
+    env = {key: value for key, value in production_interpreter_env().items() if key != "TMPDIR"}
     sleeper = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(60)"],
         cwd=tmp_dir,
@@ -294,7 +301,7 @@ def test_sequential_generations_with_surviving_straggler(tmp_path: Path) -> None
     platform_root, generation_a, tmp_a, cache_a = _layout(tmp_path, "run-a")
     _, generation_b, tmp_b, cache_b = _layout(tmp_path, "run-b")
     assert _setup(platform_root, tmp_a, cache_a, owner_pid=os.getpid()).returncode == 0
-    env = os.environ.copy()
+    env = production_interpreter_env()
     env["TMPDIR"] = str(tmp_a)
     writer_code = """
 import os

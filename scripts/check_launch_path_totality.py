@@ -22,9 +22,15 @@ from pathlib import Path
 SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
 
 LAUNCH_TOTAL_FUNCTIONS: Mapping[tuple[str, str], frozenset[str]] = {
+    (
+        "autoskillit/core/runtime/session_registry.py",
+        "bind_session_owner",
+    ): frozenset({"ValueError"}),
     ("autoskillit/core/_plugin_cache.py", "append_retiring_record"): frozenset(),
     ("autoskillit/core/_plugin_cache.py", "remove_retiring_records"): frozenset(),
     ("autoskillit/core/_plugin_cache.py", "due_retiring_records"): frozenset({"ValueError"}),
+    ("autoskillit/core/_plugin_cache.py", "register_active_kitchen"): frozenset(),
+    ("autoskillit/core/_plugin_cache.py", "unregister_active_kitchen"): frozenset(),
     (
         "autoskillit/core/_plugin_cache.py",
         "PluginArtifactRetirementEngine.cancel_obsolete_retirements",
@@ -45,9 +51,12 @@ LAUNCH_TOTAL_FUNCTIONS: Mapping[tuple[str, str], frozenset[str]] = {
 
 MUST_CONSUME_TOTAL_RESULTS: frozenset[tuple[str, str]] = frozenset(
     {
+        ("autoskillit/core/runtime/session_registry.py", "bind_session_owner"),
         ("autoskillit/core/_plugin_cache.py", "append_retiring_record"),
         ("autoskillit/core/_plugin_cache.py", "remove_retiring_records"),
         ("autoskillit/core/_plugin_cache.py", "due_retiring_records"),
+        ("autoskillit/core/_plugin_cache.py", "register_active_kitchen"),
+        ("autoskillit/core/_plugin_cache.py", "unregister_active_kitchen"),
         (
             "autoskillit/core/_plugin_cache.py",
             "PluginArtifactRetirementEngine.enqueue_retirement",

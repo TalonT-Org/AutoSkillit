@@ -17,12 +17,13 @@ in stderr that escapes anyio's cancel scope.
 from __future__ import annotations
 
 import json
-import os
 import signal
 import subprocess
 import sys
 
 import pytest
+
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -34,7 +35,7 @@ def test_sigterm_during_startup_no_hang(tmp_path):
     output_dir.mkdir()
 
     env = {
-        **os.environ,
+        **production_interpreter_env(),
         "RECORD_SCENARIO": "1",
         "RECORD_SCENARIO_DIR": str(output_dir),
         "RECORD_SCENARIO_RECIPE": "test-recipe",

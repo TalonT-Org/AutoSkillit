@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import managed_home
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
@@ -278,6 +280,7 @@ class TestInstalledPluginArtifactAuthority:
         with pytest.raises(SystemExit, match="stop"):
             _plugin_artifact.InstalledPluginArtifactAuthority(
                 root,
+                home=managed_home(),
                 semantic_key="autoskillit@autoskillit-local:1.2.3",
             ).acquire_launch_binding(
                 backend=object(),
@@ -330,6 +333,7 @@ class TestInstalledPluginArtifactAuthority:
 
         binding = InstalledPluginArtifactAuthority(
             root,
+            home=managed_home(),
             semantic_key=semantic_key,
         ).acquire_launch_binding(
             backend=object(),
@@ -373,6 +377,7 @@ class TestInstalledPluginArtifactAuthority:
         with pytest.raises(PluginArtifactValidationError, match="digest mismatch"):
             InstalledPluginArtifactAuthority(
                 root,
+                home=managed_home(),
                 semantic_key=semantic_key,
             ).acquire_launch_binding(
                 backend=object(),
@@ -524,6 +529,7 @@ class TestInstalledPluginArtifactAuthority:
         with pytest.raises(PluginArtifactValidationError, match="semantic identity"):
             InstalledPluginArtifactAuthority(
                 root,
+                home=managed_home(),
                 semantic_key="autoskillit@autoskillit-local:1.2.3",
             ).acquire_launch_binding(
                 backend=object(),

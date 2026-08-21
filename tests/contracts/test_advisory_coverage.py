@@ -10,7 +10,6 @@ Guards:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 
@@ -20,13 +19,14 @@ from autoskillit.core.paths import pkg_root
 from autoskillit.core.types._type_constants import SKILL_FILE_ADVISORY_MAP
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
 def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
     hook_path = pkg_root() / "hooks" / "guards" / "recipe_write_advisor.py"
-    env = {**os.environ, **(extra_env or {})}
+    env = {**production_interpreter_env(), **(extra_env or {})}
     env.pop("AUTOSKILLIT_HEADLESS", None)
     result = subprocess.run(
         [sys.executable, str(hook_path)],

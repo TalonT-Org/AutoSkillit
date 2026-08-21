@@ -46,11 +46,15 @@ def github_review_ledger_path(
 
 
 def default_log_dir() -> Path:
-    """Platform-default session diagnostics log directory (XDG-aware).
+    """Default session diagnostics log directory (environment- and XDG-aware).
 
+    All platforms: $AUTOSKILLIT_LOG_DIR when nonempty
     Linux: $XDG_DATA_HOME/autoskillit/logs (fallback ~/.local/share/autoskillit/logs)
     macOS: ~/Library/Application Support/autoskillit/logs
     """
+    override = os.environ.get("AUTOSKILLIT_LOG_DIR")
+    if override:
+        return Path(override)
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
     xdg = os.environ.get("XDG_DATA_HOME")

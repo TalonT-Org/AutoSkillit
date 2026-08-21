@@ -21,6 +21,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     DirectInstall,
     EffectiveSkillCatalogAuthority,
+    ManagedHome,
     PluginArtifactContentionError,
     PluginArtifactIdentity,
     PluginArtifactKind,
@@ -38,6 +39,7 @@ from autoskillit.core import (
     _InstallLock,
     get_logger,
     log_plugin_artifact_lifecycle,
+    managed_home,
     new_plugin_artifact_incarnation_id,
     pkg_root,
     write_versioned_json,
@@ -320,6 +322,7 @@ class ProjectedPluginArtifactAuthority:
     """Lazy owner of projected plugin publication and per-launch reader leases."""
 
     direct_install: DirectInstall
+    home: ManagedHome
     projection_version: int = SKILL_PROJECTION_VERSION
     base_branch: str | None = None
     catalog: EffectiveSkillCatalogAuthority | None = None
@@ -460,7 +463,7 @@ class ProjectedPluginArtifactAuthority:
             asset_digest=public_plugin_asset_digest(source_root),
             rendered_hooks_digest=hashlib.sha256(rendered_hooks.encode()).hexdigest(),
         ).digest()
-        projections_root = Path.home() / ".autoskillit" / "plugin-projections"
+        projections_root = self.home.autoskillit_dir / "plugin-projections"
         destination = (projections_root / semantic_key).absolute()
         context = _direct_install_projection_context(
             cwd=self.cwd or Path.cwd(),
@@ -539,7 +542,7 @@ class ProjectedPluginArtifactAuthority:
                 f"projected plugin mutation is contended: {plan.semantic_key}"
             ) from exc
         try:
-            with _InstallLock():
+            with _InstallLock(self.home):
                 identity = _try_validate_published_plugin_artifact(plan)
                 if identity is None:
                     plan.destination.parent.mkdir(parents=True, exist_ok=True)
@@ -638,8 +641,8 @@ class ProjectedPluginArtifactAuthority:
             raise
         return self._binding(load_mode, plan, identity, reader)
 
-    @staticmethod
     def _binding(
+        self,
         load_mode: PluginLoadMode,
         plan: _ProjectedArtifactPlan,
         identity: PluginArtifactIdentity,
@@ -647,6 +650,7 @@ class ProjectedPluginArtifactAuthority:
     ) -> PluginLaunchBinding:
         owner = ProjectedPluginRetirementOwner(
             plan.destination.parent,
+            home=self.home,
             active_key=plan.semantic_key,
         )
         try:
@@ -657,6 +661,7 @@ class ProjectedPluginArtifactAuthority:
                 )
             prune_stale_projections(
                 plan.destination.parent,
+                home=self.home,
                 active_key=plan.semantic_key,
             )
         except BaseException as primary_error:
@@ -688,6 +693,7 @@ class ProjectedPluginArtifactAuthority:
 def project_direct_install_authority(
     direct_install: DirectInstall,
     *,
+    home: ManagedHome | None = None,
     projection_version: int = SKILL_PROJECTION_VERSION,
     base_branch: str | None = None,
     catalog: EffectiveSkillCatalogAuthority | None = None,
@@ -696,6 +702,7 @@ def project_direct_install_authority(
 ) -> ProjectedPluginArtifactAuthority:
     return ProjectedPluginArtifactAuthority(
         direct_install=direct_install,
+        home=home if home is not None else managed_home(),
         projection_version=projection_version,
         base_branch=base_branch,
         catalog=catalog,
@@ -706,6 +713,7 @@ def project_direct_install_authority(
 
 def project_default_plugin_authority(
     *,
+    home: ManagedHome | None = None,
     projection_version: int = SKILL_PROJECTION_VERSION,
     base_branch: str | None = None,
     catalog: EffectiveSkillCatalogAuthority | None = None,
@@ -714,6 +722,7 @@ def project_default_plugin_authority(
 ) -> ProjectedPluginArtifactAuthority:
     return project_direct_install_authority(
         DirectInstall(plugin_dir=pkg_root()),
+        home=home if home is not None else managed_home(),
         projection_version=projection_version,
         base_branch=base_branch,
         catalog=catalog,

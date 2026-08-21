@@ -273,6 +273,35 @@ class TestFleetAutoGateBootProjectDir:
         assert tool_ctx.gate.enabled is True  # gate stays open despite registry failure
 
     @pytest.mark.anyio
+    async def test_fleet_lifespan_auto_gate_logs_registry_refusal(self, tool_ctx):
+        """A classified write refusal is visible without aborting fleet boot."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+
+        with (
+            patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
+            patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
+            patch(
+                "autoskillit.server._lifespan.create_background_task",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "autoskillit.server._lifespan.register_active_kitchen",
+                return_value=False,
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            await _fleet_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True
+        assert any(entry.get("event") == "fleet_auto_gate_boot_registry_refused" for entry in logs)
+
+    @pytest.mark.anyio
     async def test_fleet_lifespan_auto_gate_logs_boot_event(self, tool_ctx):
         """fleet_auto_gate_boot emits structured log event."""
         from unittest.mock import AsyncMock, MagicMock, patch

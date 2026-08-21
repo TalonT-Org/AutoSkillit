@@ -476,7 +476,12 @@ def cook(
 
                     def _record_spawn(pid: int, pgid: int) -> None:
                         attempt_handle.record_spawn(pid, pgid)
-                        bind_session_owner(project_dir, launch_id, pid)
+                        if not bind_session_owner(project_dir, launch_id, pid):
+                            logger.warning(
+                                "session_owner_binding_refused",
+                                launch_id=launch_id,
+                                pid=pid,
+                            )
 
                     result = run_cook_attempt(
                         spec,

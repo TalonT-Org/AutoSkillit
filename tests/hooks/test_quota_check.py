@@ -581,41 +581,39 @@ def test_hook_respects_should_block_false_when_class_disabled(tmp_path):
     assert out.strip() == ""
 
 
-def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
-    """resolve_quota_log_dir() must produce the same path as resolve_log_dir('') for
-    identical env inputs. Guards against independent evolution of the two implementations.
+def test_log_dir_resolvers_stay_in_sync(monkeypatch):
+    """All log directory resolvers must produce the same default path.
 
     Constraint: this function MUST NOT be merged with execution/session_log.resolve_log_dir —
-    _hook_settings.py is stdlib-only and self-contained. This test is the canonical drift guard.
+    hook modules are stdlib-only and self-contained. This test is the canonical drift guard.
     """
+    from autoskillit.core.paths import default_log_dir
     from autoskillit.execution.session_log import resolve_log_dir
     from autoskillit.hooks._hook_settings import resolve_quota_log_dir as _resolve_quota_log_dir
+    from autoskillit.hooks.token_summary_hook import _log_root
+
+    def assert_defaults_match() -> None:
+        quota_path = _resolve_quota_log_dir()
+        session_path = resolve_log_dir("")
+
+        assert quota_path is not None, "resolve_quota_log_dir() must not return None"
+        assert quota_path == session_path == default_log_dir() == _log_root()
 
     # Case 1: platform default (no env overrides)
     monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-
-    quota_path = _resolve_quota_log_dir()
-    session_path = resolve_log_dir("")
-
-    assert quota_path is not None, "resolve_quota_log_dir() must not return None"
-    assert quota_path == session_path, (
-        f"Log dir mismatch (no env overrides):\n"
-        f"  _hook_settings.resolve_quota_log_dir(): {quota_path}\n"
-        f"  session_log.resolve_log_dir(''): {session_path}"
-    )
+    assert_defaults_match()
 
     # Case 2: XDG_DATA_HOME override
     monkeypatch.setenv("XDG_DATA_HOME", "/tmp/xdg-test")
-    quota_path_xdg = _resolve_quota_log_dir()
-    session_path_xdg = resolve_log_dir("")
+    assert_defaults_match()
 
-    assert quota_path_xdg is not None
-    assert quota_path_xdg == session_path_xdg, (
-        f"Log dir mismatch (XDG_DATA_HOME set):\n"
-        f"  quota_check: {quota_path_xdg}\n"
-        f"  session_log: {session_path_xdg}"
-    )
+    # Case 3: canonical AUTOSKILLIT_LOG_DIR override wins over XDG_DATA_HOME
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", "/tmp/autoskillit-logs")
+    assert_defaults_match()
+
+    # An explicit nonempty session log directory still has highest precedence.
+    assert resolve_log_dir("/tmp/explicit-logs") == Path("/tmp/explicit-logs")
 
 
 def test_hook_approves_when_disabled_flag_set_in_hook_config(tmp_path, monkeypatch):

@@ -14,6 +14,7 @@ from autoskillit.core import (
     PluginArtifactKind,
     PluginLoadMode,
     RetirementOutcome,
+    managed_home,
     read_retiring_cache,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
@@ -180,7 +181,10 @@ def test_a_held_launch_lease_blocks_reclaim_of_the_bound_artifact(
     try:
         assert binding.plugin_dir is not None
         deadline = datetime.now(UTC)
-        owner = ProjectedPluginRetirementOwner(binding.plugin_dir.parent)
+        owner = ProjectedPluginRetirementOwner(
+            binding.plugin_dir.parent,
+            home=managed_home(),
+        )
         append_result = owner.enqueue_retirement(binding.identity, deadline)
         assert append_result is not None
         record = next(
@@ -215,7 +219,10 @@ def test_reclaim_is_blocked_when_cancel_could_not_verify(
     initial.close()
 
     deadline = datetime.now(UTC)
-    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent)
+    owner = ProjectedPluginRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     append_result = owner.enqueue_retirement(identity, deadline)
     assert append_result is not None
     cache = tmp_path / ".autoskillit" / "retiring_cache.json"

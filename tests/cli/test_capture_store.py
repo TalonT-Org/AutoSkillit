@@ -31,6 +31,7 @@ from autoskillit.hooks._capture._orphan_scan import ADOPTION_AGE_SECONDS
 from autoskillit.hooks._capture._reconcile import CaptureStoreStats, capture_store_stats
 from autoskillit.hooks._capture._types import CleanupBlocker
 from autoskillit.hooks._capture_lifecycle import LOCK_NAME, CaptureLifecycleStore
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -289,6 +290,7 @@ def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) ->
     )
     holder = subprocess.Popen(
         [sys.executable, "-c", holder_script, str(lock_path)],
+        env=production_interpreter_env(),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,

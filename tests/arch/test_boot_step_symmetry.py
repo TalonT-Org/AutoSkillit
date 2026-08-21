@@ -82,6 +82,23 @@ def _first_symbol_line(func_node: ast.AsyncFunctionDef, symbol: str) -> int | No
     return None
 
 
+def _function_checks_false_result(tree: ast.Module, func_name: str, symbol: str) -> bool:
+    """Return whether *func_name* explicitly branches on a false call result."""
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.AsyncFunctionDef) or node.name != func_name:
+            continue
+        for child in ast.walk(node):
+            if not isinstance(child, ast.If):
+                continue
+            test = child.test
+            if not isinstance(test, ast.UnaryOp) or not isinstance(test.op, ast.Not):
+                continue
+            operand = test.operand
+            if isinstance(operand, ast.Call) and _references_symbol(operand.func, symbol):
+                return True
+    return False
+
+
 class TestBootStepSymmetry:
     @pytest.mark.parametrize("symbol,boot_functions", _REQUIRED_BOOT_STEPS)
     def test_boot_functions_contain_required_step(
@@ -102,6 +119,25 @@ class TestBootStepSymmetry:
             f"Boot function(s) missing '{symbol}' call: {missing}. "
             f"Both {' and '.join(boot_functions)} must call {symbol} "
             "to maintain boot step symmetry."
+        )
+
+    @pytest.mark.parametrize(
+        "boot_function",
+        (
+            "_fleet_auto_gate_boot",
+            "_pre_reveal_kitchen",
+            "_food_truck_auto_gate_boot",
+            "_skill_auto_gate_boot",
+        ),
+    )
+    def test_boot_functions_consume_registry_refusal(self, boot_function: str) -> None:
+        source = ""
+        for py in sorted(LIFESPAN_PKG.rglob("*.py")):
+            source += py.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        assert _function_checks_false_result(tree, boot_function, "register_active_kitchen"), (
+            f"{boot_function} must explicitly consume a refused active-kitchen write"
         )
 
     @pytest.mark.parametrize("before_symbol,after_symbol,boot_functions", _BOOT_STEP_ORDERING)

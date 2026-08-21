@@ -20,6 +20,7 @@ from autoskillit.execution.backends.codex_scenario_player import (
     _write_shim_script,
     make_codex_scenario_player,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -235,7 +236,10 @@ class TestShimScriptExecution:
     def test_cassette_echo(self, tmp_path: Path) -> None:
         binary = tmp_path / "codex"
         _write_shim_script(output_dir=tmp_path, binary_path=binary)
-        env = {**os.environ, "CODEX_REPLAY_CASSETTE": "replay_data_here"}
+        env = {
+            **production_interpreter_env(),
+            "CODEX_REPLAY_CASSETTE": "replay_data_here",
+        }
         result = subprocess.run(
             [sys.executable, str(binary)],
             capture_output=True,

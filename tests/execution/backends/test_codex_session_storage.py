@@ -32,6 +32,7 @@ from autoskillit.execution.backends._codex_session_storage import (
     CodexInteractiveSessionLease,
     CodexSessionStore,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -1098,7 +1099,9 @@ def test_record_spawn_captures_spawn_identity(tmp_path: Path) -> None:
     # child must have different starttime ticks for the assertion to mean
     # anything.
     child = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
     )
     try:
         before = time.time()
@@ -1136,7 +1139,9 @@ def test_recover_kills_live_child_before_marking_reaped(tmp_path: Path) -> None:
     relative = Path("2026/07/rollout-kills-live.jsonl")
     _rollout((home / "sessions").resolve() / relative, "thread-kills-live")
     child = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
     )
     try:
         handle.record_spawn(child.pid, child.pid)
@@ -1190,7 +1195,9 @@ def test_recover_identity_mismatch_marks_recycled(tmp_path: Path) -> None:
     relative = Path("2026/07/rollout-identity-mismatch.jsonl")
     _rollout((home / "sessions").resolve() / relative, "thread-identity-mismatch")
     child = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
     )
     try:
         handle.record_spawn(child.pid, child.pid)
@@ -1215,7 +1222,9 @@ def test_recover_legacy_manifest_live_pid_fails_closed(tmp_path: Path) -> None:
     lease = _prepared_lease(store, home, tmp_path)
     handle = lease.__enter__()
     child = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
     )
     try:
         handle.record_spawn(child.pid, child.pid)
@@ -1255,7 +1264,9 @@ def test_recover_kill_failure_leaves_view(tmp_path: Path, monkeypatch: pytest.Mo
     lease = _prepared_lease(store, home, tmp_path)
     handle = lease.__enter__()
     child = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
     )
     try:
         handle.record_spawn(child.pid, child.pid)
@@ -1296,7 +1307,9 @@ def test_cook_startup_survives_unresolvable_view(
     lease = _prepared_lease(store, home, tmp_path)
     handle = lease.__enter__()
     child = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
     )
     try:
         handle.record_spawn(child.pid, child.pid)

@@ -103,6 +103,35 @@ def _contract(tmp_path: Path, projected_text: str):
     )
 
 
+def test_contract_accepts_opaque_vectors_for_a_member_without_typed_vectors(
+    tmp_path: Path,
+) -> None:
+    contract = _contract(tmp_path, "projected\n")
+    root_ref = contract.source_refs["root"]
+    sibling_ref = replace(
+        root_ref,
+        logical_name="sibling",
+        skill_path=tmp_path / "project" / ".claude/skills/sibling/SKILL.md",
+    )
+
+    resumed = replace(
+        contract,
+        closure=("root", "sibling"),
+        source_refs={**contract.source_refs, "sibling": sibling_ref},
+        canonical_digests={**contract.canonical_digests, "sibling": "a" * 64},
+        projected_digests={**contract.projected_digests, "sibling": "b" * 64},
+        member_roles={**contract.member_roles, "sibling": SkillExecutionRole.SESSION},
+        member_capabilities={**contract.member_capabilities, "sibling": frozenset()},
+        member_activate_deps={**contract.member_activate_deps, "sibling": ()},
+        canonical_contents={**contract.canonical_contents, "sibling": "sibling\n"},
+        exploration_vectors={"root": contract.exploration_vectors["root"]},
+        opaque_exploration_vectors={"sibling": ((0, {"future": "vector"}),)},
+    )
+
+    assert resumed.exploration_vectors.get("sibling", ()) == ()
+    assert resumed.opaque_exploration_vectors["sibling"][0][0] == 0
+
+
 def _lineage_ref(tmp_path: Path):
     from autoskillit.core import ManagedHeadlessSessionLineageRef
 

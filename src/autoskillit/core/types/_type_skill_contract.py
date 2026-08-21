@@ -406,7 +406,7 @@ class SkillSessionContract:
                 any(type(index) is not int or index < 0 for index in positions)
                 or len(set(positions)) != len(positions)
                 or any(
-                    index >= len(self.exploration_vectors[name]) + len(entries)
+                    index >= len(self.exploration_vectors.get(name, ())) + len(entries)
                     for index in positions
                 )
             ):

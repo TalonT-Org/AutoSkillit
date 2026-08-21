@@ -1,22 +1,8 @@
-"""A-10 regrowth guard: no *new* function-local ``autoskillit`` import inside
-an ``except``/``finally`` block.
+"""Refuse new function-local imports inside ``except``/``finally`` (#4597).
 
-Issue #4597's finding #13: a deleted or replaced install tree turns one
-crash into an unrecoverable one when the error-handling path itself has to
-resolve a not-yet-imported ``autoskillit`` submodule. A-10 fixed today's
-known instances with a startup warm (``fleet._startup_warm``); this guard is
-the "stops the class from regrowing" half the plan calls for — new
-function-local imports of this shape are refused unless explicitly
-allowlisted with a one-line rationale, mirroring
-``tests/arch/test_durable_artifact_writers_guard.py``'s
-``_NON_HOOK_ALLOWLIST`` pattern.
-
-Completeness claim (stated honestly): this is a static AST scan, keyed by
-``(file, lineno)``. It cannot see imports assembled through indirection
-(``importlib.import_module``, a locally-defined wrapper that itself imports),
-and a later unrelated edit that shifts line numbers in an allowlisted file
-will make this guard fail closed rather than silently drift — that is the
-intended failure mode for an architectural guard, not a bug in it.
+Such imports can fail after an install tree is replaced, so exceptions require
+an allowlisted rationale. This static AST scan cannot see indirect imports; its
+line-keyed allowlist deliberately fails closed when surrounding code shifts.
 """
 
 from __future__ import annotations
@@ -33,8 +19,8 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 #: (relative file path, line number) pairs already carrying a function-local
 #: ``autoskillit`` import inside an ``except``/``finally`` block, each with a
 #: one-line rationale. A new entry requires the same rationale discipline;
-#: these are the same sites the fleet startup warm preloads
-#: preloads, so a deleted/replaced tree cannot turn the import itself into a
+#: these are the same sites the fleet startup warm preloads, so a replaced
+#: tree cannot turn the import itself into a
 #: second failure.
 _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
     {

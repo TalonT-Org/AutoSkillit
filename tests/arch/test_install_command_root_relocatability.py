@@ -44,6 +44,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 # against.
 _INSTALL_COMMAND_CONSTRUCTION_FILES: tuple[Path, ...] = (
     Path("src/autoskillit/cli/install/_install_info.py"),
+    Path("src/autoskillit/cli/update/_transaction.py"),
 )
 
 

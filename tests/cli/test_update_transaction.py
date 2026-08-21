@@ -689,6 +689,8 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
     assert result.irreversible_pivot_crossed is True
     assert result.phase_history[-1] is UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION
     assert result.findings and expected_finding in result.findings[0]
+    if failure_point == "final_install_oserror":
+        assert "/plugin-generations/autoskillit-install/1.1.0/" in result.findings[0]
     assert len(calls) == 2
 
 

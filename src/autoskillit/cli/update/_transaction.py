@@ -556,7 +556,8 @@ def run_update_transaction(
             except OSError as exc:
                 return _upgrade_failure(
                     progress,
-                    f"Could not start the install-root generation install: {exc}",
+                    f"Could not start the install-root generation install at "
+                    f"{generation_root}: {exc}",
                 )
             if final_result.returncode != 0:
                 return _upgrade_failure(

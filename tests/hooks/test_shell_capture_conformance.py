@@ -48,6 +48,7 @@ from autoskillit.hooks._capture_contract import (
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from autoskillit.hooks.shell_capture_hook import _build_harness
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -333,6 +334,7 @@ def _run_runner(
             str(Path(capture_artifacts.__file__).resolve()),
             encode_capture_request(request),
         ],
+        env=production_interpreter_env(),
         capture_output=True,
         cwd=execution_dir,
         timeout=_TIMEOUT,

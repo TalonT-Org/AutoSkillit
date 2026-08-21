@@ -436,7 +436,7 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
         tmp_path: Path,
         monkeypatch,
     ) -> None:
-        from autoskillit.core import PluginLoadMode, read_retiring_cache
+        from autoskillit.core import PluginLoadMode, managed_home, read_retiring_cache
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import (
             project_default_plugin_authority,
@@ -468,6 +468,7 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
             assert (
                 prune_stale_projections(
                     tmp_path / ".autoskillit" / "plugin-projections",
+                    home=managed_home(),
                     active_key=active.identity.semantic_key,
                 )
                 == 1
@@ -487,7 +488,7 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
         from unittest.mock import Mock
 
         import autoskillit.workspace._projection_cache as projection_cache
-        from autoskillit.core import PluginLoadMode
+        from autoskillit.core import PluginLoadMode, managed_home
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import (
             project_default_plugin_authority,
@@ -522,6 +523,7 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
             assert (
                 prune_stale_projections(
                     tmp_path / ".autoskillit" / "plugin-projections",
+                    home=managed_home(),
                     active_key=active.identity.semantic_key,
                 )
                 == 0

@@ -21,6 +21,8 @@ from autoskillit.core import (
     RetirementOutcome,
     RetiringArtifactRecord,
     append_retiring_record,
+    managed_home,
+    managed_home_for,
     read_retiring_cache,
     remove_retiring_records,
 )
@@ -89,11 +91,16 @@ def test_exact_append_is_ordered_idempotent_and_removed_by_record_id(
         not_before=deadline,
     )
 
-    assert append_retiring_record(first).created is True
-    assert append_retiring_record(second).created is True
+    first_result = append_retiring_record(first)
+    second_result = append_retiring_record(second)
+    assert first_result is not None
+    assert second_result is not None
+    assert first_result.created is True
+    assert second_result.created is True
     duplicate = replace(second, record_id="different-id")
     duplicate_result = append_retiring_record(duplicate)
 
+    assert duplicate_result is not None
     assert duplicate_result.record_id == second.record_id
     assert duplicate_result.created is False
     assert read_retiring_cache().records == (first, second)
@@ -112,7 +119,10 @@ def test_installed_reclaim_defers_until_final_reader_closes(
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
-    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    owner = InstalledPluginArtifactRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC) + timedelta(seconds=1)
     append_result = owner.enqueue_retirement(identity, deadline)
     record = next(
@@ -149,7 +159,10 @@ def test_installed_reclaim_io_failure_stays_queued_for_retry(
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
-    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    owner = InstalledPluginArtifactRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC)
     append_result = owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
@@ -187,7 +200,10 @@ def test_installed_reclaim_lease_failure_stays_queued_for_retry(
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
-    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    owner = InstalledPluginArtifactRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC)
     append_result = owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
@@ -212,7 +228,10 @@ def test_installed_reclaim_defers_when_cache_reread_is_unsafe(
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
-    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    owner = InstalledPluginArtifactRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC)
     owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
@@ -234,7 +253,10 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
-    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    owner = InstalledPluginArtifactRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC)
     owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
@@ -285,6 +307,7 @@ def test_installed_lifecycle_events_use_the_shared_schema(
             )
             binding = InstalledPluginArtifactAuthority(
                 identity.managed_path,
+                home=managed_home(),
                 semantic_key=identity.semantic_key,
             ).acquire_launch_binding(
                 backend=object(),  # type: ignore[arg-type]
@@ -292,7 +315,8 @@ def test_installed_lifecycle_events_use_the_shared_schema(
             )
             binding.close()
             InstalledPluginArtifactRetirementOwner(
-                identity.managed_path.parent
+                identity.managed_path.parent,
+                home=managed_home(),
             ).enqueue_retirement(
                 identity,
                 datetime.now(UTC) + timedelta(hours=6),
@@ -327,9 +351,10 @@ def test_launch_binding_validates_generation_selected_during_lease_retry(
     (source_root / "content.txt").write_text("first", encoding="utf-8")
 
     def publish() -> PluginArtifactIdentity:
-        with _InstallLock():
+        home = managed_home_for(tmp_path)
+        with _InstallLock(home):
             return publish_generation(
-                home=tmp_path,
+                home=home,
                 plugin_ref="autoskillit",
                 version="1.0.0",
                 semantic_key="autoskillit@autoskillit-local:1.0.0",
@@ -355,6 +380,7 @@ def test_launch_binding_validates_generation_selected_during_lease_retry(
 
     binding = InstalledPluginArtifactAuthority(
         tmp_path / "legacy" / "1.0.0",
+        home=managed_home(),
         semantic_key="autoskillit@autoskillit-local:1.0.0",
     ).acquire_launch_binding(
         backend=object(),  # type: ignore[arg-type]
@@ -375,7 +401,10 @@ def test_identity_mismatch_removes_record_without_deleting_current_path(
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     identity = _installed_identity(tmp_path)
-    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    owner = InstalledPluginArtifactRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC) + timedelta(seconds=1)
     append_result = owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
@@ -403,7 +432,7 @@ def test_install_lock_creates_lock_file(
     from autoskillit.core._plugin_cache import _InstallLock
 
     lock_path = tmp_path / ".autoskillit" / "install.lock"
-    with _InstallLock():
+    with _InstallLock(managed_home()):
         assert lock_path.exists()
     assert lock_path.exists()
 
@@ -415,7 +444,7 @@ def test_install_lock_blocks_concurrent_access(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import _install_lock_path
 
-    lock_file_path = _install_lock_path()
+    lock_file_path = _install_lock_path(managed_home())
     lock_file_path.parent.mkdir(parents=True, exist_ok=True)
     acquired = threading.Event()
     release = threading.Event()

@@ -254,7 +254,7 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr(
         "autoskillit.cli.install._marketplace._ensure_marketplace", lambda **_kw: None
     )
-    monkeypatch.setattr("autoskillit.workspace.reconcile_install_artifacts", lambda: ())
+    monkeypatch.setattr("autoskillit.workspace.reconcile_install_artifacts", lambda *, home: ())
     monkeypatch.setattr(
         "autoskillit.workspace.publish_generation",
         lambda **_kw: fake_identity,

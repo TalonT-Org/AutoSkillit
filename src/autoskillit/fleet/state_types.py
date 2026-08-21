@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 import uuid
@@ -41,6 +42,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "launch_contract",
         "launch_contract_digest",
         "managed_lineage_ref",
+        "_persisted_status",
     }
 )
 
@@ -57,6 +59,18 @@ class DispatchStatus(StrEnum):
     SKIPPED = "skipped"
     REFUSED = "refused"
     RELEASED = "released"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_persisted(cls, raw: str) -> DispatchStatus:
+        """Convert a persisted status string to a DispatchStatus member.
+
+        Unknown strings map to UNKNOWN instead of raising ValueError.
+        """
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.UNKNOWN
 
 
 class ErrorCodeCategory(StrEnum):
@@ -374,6 +388,13 @@ class DispatchRecord:
 
     name: str
     status: DispatchStatus = DispatchStatus.PENDING
+    _persisted_status: str = field(
+        default="",
+        repr=False,
+        compare=False,
+        kw_only=True,
+        metadata={"persisted": False},
+    )
     dispatch_id: str = ""
     campaign_id: str = ""
     caller_session_id: str = ""
@@ -414,7 +435,11 @@ class DispatchRecord:
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
-            "status": self.status,
+            "status": (
+                self._persisted_status or self.status
+                if self.status == DispatchStatus.UNKNOWN
+                else self.status
+            ),
             "dispatch_id": self.dispatch_id,
             "campaign_id": self.campaign_id,
             "caller_session_id": self.caller_session_id,
@@ -467,6 +492,10 @@ class DispatchRecord:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> DispatchRecord:
+        status_raw = d.get("status", DispatchStatus.PENDING)
+        if not isinstance(status_raw, str):
+            raise TypeError(f"status must be str, got {type(status_raw).__name__!r}")
+        status = DispatchStatus.from_persisted(status_raw)
         pid_raw = d.get("dispatched_pid")
         ticks_raw = d.get("dispatched_starttime_ticks")
         caller_backend_name = d.get("caller_backend_name", "")
@@ -509,7 +538,8 @@ class DispatchRecord:
                 raise ValueError("persisted fleet backend authority drifted from launch contract")
         return cls(
             name=d["name"],
-            status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
+            status=status,
+            _persisted_status=status_raw if status == DispatchStatus.UNKNOWN else "",
             dispatch_id=d.get("dispatch_id", ""),
             campaign_id=d.get("campaign_id", ""),
             caller_session_id=d.get("caller_session_id", ""),
@@ -638,6 +668,7 @@ class CampaignState:
     started_at: float
     schema_version: int = FLEET_STATE_SCHEMA_VERSION
     dispatches: list[DispatchRecord] = field(default_factory=list)
+    opaque_dispatches: list[Any] = field(default_factory=list, kw_only=True)
     captured_values: dict[str, str] = field(default_factory=dict)
     orchestrator_session_id: str = ""
     ended_at: float = 0.0
@@ -690,6 +721,7 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DispatchStatus.SKIPPED: frozenset(),
     DispatchStatus.REFUSED: frozenset({DispatchStatus.PENDING}),
     DispatchStatus.RELEASED: frozenset(),
+    DispatchStatus.UNKNOWN: frozenset({DispatchStatus.UNKNOWN}),
 }
 
 for _ds in DispatchStatus:
@@ -704,6 +736,37 @@ def _validate_transition(current: str, new: str, dispatch_name: str) -> None:
     if allowed is not None and new not in allowed:
         msg = f"Invalid transition for dispatch '{dispatch_name}': {current!r} -> {new!r}"
         raise ValueError(msg)
+
+
+def _clear_dispatch_for_retry(dispatch: DispatchRecord) -> None:
+    """Snapshot and reset the non-identity fields of a retryable dispatch."""
+    _validate_transition(dispatch.status, DispatchStatus.PENDING, dispatch.name)
+    snapshot: dict[str, Any] = {}
+    for field_def in dataclasses.fields(dispatch):
+        if field_def.name in _RETRY_IDENTITY_FIELDS:
+            continue
+        value = getattr(dispatch, field_def.name)
+        snapshot[field_def.name] = (
+            str(value)
+            if field_def.name == "status"
+            else dict(value)
+            if isinstance(value, dict)
+            else value
+        )
+    dispatch.attempt_history.append(snapshot)
+    for field_def in dataclasses.fields(dispatch):
+        if field_def.name in _RETRY_IDENTITY_FIELDS:
+            continue
+        default = (
+            field_def.default_factory()
+            if field_def.default_factory is not dataclasses.MISSING
+            else field_def.default
+        )
+        if default is dataclasses.MISSING:
+            raise RuntimeError(
+                f"Field {field_def.name!r} has no default; cannot reset it for retry"
+            )
+        setattr(dispatch, field_def.name, default)
 
 
 @dataclass(frozen=True, slots=True)

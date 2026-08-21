@@ -187,6 +187,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
     ),
     "_plugin_cache": frozenset({"core", "cli", "fleet", "pipeline", "server", "workspace"}),
+    "_type_persisted_formats": frozenset({"core", "execution", "fleet", "hooks"}),
+    "_type_managed_home": frozenset({"cli", "core", "server", "workspace"}),
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),
@@ -236,6 +238,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_plugin_source": frozenset(
         {"core", "execution", "pipeline", "server", "cli", "workspace", "smoke_utils"}
     ),
+    "_type_retirement_backstops": frozenset({"core", "cli", "workspace"}),
     "kitchen_state": frozenset({"core", "server"}),
     "session_provenance": frozenset({"core", "execution"}),
     "readiness": frozenset({"core", "server"}),

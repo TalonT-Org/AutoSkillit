@@ -339,11 +339,16 @@ def update() -> None:
 
 
 @app.command
-def doctor(*, output_json: bool = False):
-    """Check project setup for common issues."""
-    from autoskillit.cli.doctor import run_doctor
+def doctor(*, output_json: bool = False, repair: bool = False) -> None:
+    """Check project setup (``--repair`` opts into safe repairs)."""
+    if repair:
+        from autoskillit.cli.doctor import run_doctor_repairs
 
-    run_doctor(output_json=output_json)
+        run_doctor_repairs(output_json=output_json)
+    else:
+        from autoskillit.cli.doctor import run_doctor
+
+        run_doctor(output_json=output_json)
 
 
 @app.command

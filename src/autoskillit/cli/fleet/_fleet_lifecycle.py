@@ -31,7 +31,9 @@ def _pick_resume_campaign(project_dir: Path) -> tuple[str, str]:
             state = read_state(subdir / "state.json")
             if state is None:
                 continue
-            if any(d.status not in TERMINAL_DISPATCH_STATUSES for d in state.dispatches):
+            if state.opaque_dispatches or any(
+                d.status not in TERMINAL_DISPATCH_STATUSES for d in state.dispatches
+            ):
                 active.append(state)
 
     if not active:

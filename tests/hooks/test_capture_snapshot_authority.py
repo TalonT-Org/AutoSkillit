@@ -32,6 +32,7 @@ from autoskillit.hooks._capture._types import (
     CaptureFailureEvidence,
     LegacyCleanupOnly,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -510,6 +511,7 @@ def test_package_and_isolated_import_orders_share_authority_modules(
     code = f"import importlib,sys;sys.path.insert(0,{str(hooks_dir)!r});{checks}"
     completed = subprocess.run(
         [sys.executable, "-I", "-c", code],
+        env=production_interpreter_env(),
         check=False,
         capture_output=True,
         text=True,

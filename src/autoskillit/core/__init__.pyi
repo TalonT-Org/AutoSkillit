@@ -70,6 +70,8 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
 )
+from ._plugin_cache import ActiveKitchensReadResult as ActiveKitchensReadResult
+from ._plugin_cache import ActiveKitchensState as ActiveKitchensState
 from ._plugin_cache import KitchenProcessIdentity as KitchenProcessIdentity
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
@@ -83,6 +85,7 @@ from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens
 from ._plugin_cache import read_retiring_cache as read_retiring_cache
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import remove_retiring_records as remove_retiring_records
+from ._plugin_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from ._plugin_cache import sample_kitchen_process_identity as sample_kitchen_process_identity
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
@@ -512,6 +515,7 @@ from .types import OUTPUT_DISCIPLINE_POLICY_VERSION as OUTPUT_DISCIPLINE_POLICY_
 from .types import OUTPUT_DISCIPLINE_REQUIRED_SKILLS as OUTPUT_DISCIPLINE_REQUIRED_SKILLS
 from .types import PACK_REGISTRY as PACK_REGISTRY
 from .types import PARENT_SANDBOX_MODES as PARENT_SANDBOX_MODES
+from .types import PERSISTED_FORMAT_LEDGER as PERSISTED_FORMAT_LEDGER
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
 from .types import PRODUCER_SCHEMA_FIELDS as PRODUCER_SCHEMA_FIELDS
@@ -581,6 +585,7 @@ from .types import (
 from .types import RETIRED_INTAKE_RULE_IDS as RETIRED_INTAKE_RULE_IDS
 from .types import RETIRED_READINESS_TOKENS as RETIRED_READINESS_TOKENS
 from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
+from .types import RETIREMENT_BACKSTOP_LEDGER as RETIREMENT_BACKSTOP_LEDGER
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_PATH_LIKE_ARGS as RUN_PYTHON_PATH_LIKE_ARGS
@@ -907,6 +912,7 @@ from .types import (
 from .types import (
     ManagedHeadlessSessionTerminalState as ManagedHeadlessSessionTerminalState,
 )
+from .types import ManagedHome as ManagedHome
 from .types import ManagedSessionHome as ManagedSessionHome
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
@@ -936,6 +942,9 @@ from .types import OpenEpochEvent as OpenEpochEvent
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
+from .types import PersistedEnumDef as PersistedEnumDef
+from .types import PersistedEnumTolerance as PersistedEnumTolerance
+from .types import PersistedFormatDef as PersistedFormatDef
 from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PlanDispositionReport as PlanDispositionReport
@@ -968,6 +977,7 @@ from .types import ProtectedPoolSpec as ProtectedPoolSpec
 from .types import ProviderBinding as ProviderBinding
 from .types import ProviderOutcome as ProviderOutcome
 from .types import PRState as PRState
+from .types import QuarantinedRetiringRecord as QuarantinedRetiringRecord
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
@@ -1036,10 +1046,12 @@ from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
 from .types import RetiredArtifactShape as RetiredArtifactShape
+from .types import RetirementBackstopDef as RetirementBackstopDef
 from .types import RetirementOutcome as RetirementOutcome
 from .types import RetiringAppendResult as RetiringAppendResult
 from .types import RetiringArtifactRecord as RetiringArtifactRecord
 from .types import RetiringCacheReadResult as RetiringCacheReadResult
+from .types import RetiringCacheRepairResult as RetiringCacheRepairResult
 from .types import RetiringCacheState as RetiringCacheState
 from .types import RetryReason as RetryReason
 from .types import ReviewFindingDispositionKind as ReviewFindingDispositionKind
@@ -1191,6 +1203,8 @@ from .types import is_valid_github_review_repository as is_valid_github_review_r
 from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )
+from .types import managed_home as managed_home
+from .types import managed_home_for as managed_home_for
 from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id

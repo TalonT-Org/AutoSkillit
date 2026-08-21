@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import managed_home
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
@@ -278,6 +280,7 @@ class TestInstalledPluginArtifactAuthority:
         with pytest.raises(SystemExit, match="stop"):
             _plugin_artifact.InstalledPluginArtifactAuthority(
                 root,
+                home=managed_home(),
                 semantic_key="autoskillit@autoskillit-local:1.2.3",
             ).acquire_launch_binding(
                 backend=object(),
@@ -330,6 +333,7 @@ class TestInstalledPluginArtifactAuthority:
 
         binding = InstalledPluginArtifactAuthority(
             root,
+            home=managed_home(),
             semantic_key=semantic_key,
         ).acquire_launch_binding(
             backend=object(),
@@ -373,6 +377,7 @@ class TestInstalledPluginArtifactAuthority:
         with pytest.raises(PluginArtifactValidationError, match="digest mismatch"):
             InstalledPluginArtifactAuthority(
                 root,
+                home=managed_home(),
                 semantic_key=semantic_key,
             ).acquire_launch_binding(
                 backend=object(),
@@ -465,7 +470,7 @@ class TestInstalledPluginArtifactAuthority:
         from types import SimpleNamespace
 
         from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
-        from autoskillit.core import PluginLoadMode
+        from autoskillit.core import PluginLoadMode, managed_home
 
         backend = SimpleNamespace(
             capabilities=SimpleNamespace(skill_injection_capable=False),
@@ -494,6 +499,7 @@ class TestInstalledPluginArtifactAuthority:
 
         assert authority is authority_marker
         assert load_mode is PluginLoadMode.NONE
+        assert captured.pop("home") == managed_home()
         assert captured == {
             "base_branch": "main",
             "catalog": catalog_marker,
@@ -524,6 +530,7 @@ class TestInstalledPluginArtifactAuthority:
         with pytest.raises(PluginArtifactValidationError, match="semantic identity"):
             InstalledPluginArtifactAuthority(
                 root,
+                home=managed_home(),
                 semantic_key="autoskillit@autoskillit-local:1.2.3",
             ).acquire_launch_binding(
                 backend=object(),

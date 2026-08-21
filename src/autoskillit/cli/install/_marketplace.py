@@ -26,11 +26,13 @@ from autoskillit.cli.install._install_contract import (
 )
 from autoskillit.core import (
     MARKETPLACE_PREFIX,
+    ManagedHome,
     SkillExecutionRole,
     SkillSource,
     atomic_write,
     get_logger,
     is_git_worktree,
+    managed_home,
     pkg_root,
 )
 from autoskillit.workspace import (
@@ -81,6 +83,7 @@ def _ensure_marketplace(
     *,
     cwd: Path | None = None,
     version: str | None = None,
+    home: ManagedHome | None = None,
 ) -> Path:
     """Create or update the local marketplace directory."""
     if version is None:
@@ -90,7 +93,8 @@ def _ensure_marketplace(
     projection_cwd = Path.cwd().resolve() if cwd is None else Path(cwd)
 
     pkg_dir = pkg_root()
-    marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
+    resolved_home = managed_home() if home is None else home
+    marketplace_dir = resolved_home.autoskillit_dir / "marketplace"
     plugin_dir = marketplace_dir / ".claude-plugin"
     plugin_dir.mkdir(parents=True, exist_ok=True)
 
@@ -343,23 +347,25 @@ def install(
         effective_scope,
         cwd=operation_cwd,
     )
+    home = managed_home()
     try:
-        with _InstallLock():
+        with _InstallLock(home):
             try:
-                for repaired in reconcile_install_artifacts():
+                for repaired in reconcile_install_artifacts(home=home):
                     print(f"Repaired legacy install artifact: ~/{repaired}")
 
                 # Stage and publish the marketplace projection for metadata
                 _ensure_marketplace(
                     cwd=operation_cwd,
                     version=expected_version,
+                    home=home,
                 )
                 if install_request.mode is InstallMode.DIRECT:
                     _ensure_workspace_ready(cwd=operation_cwd)
 
                 # Build the source root for the generation
                 marketplace_plugin_root = (
-                    Path.home() / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
+                    home.autoskillit_dir / "marketplace" / "plugins" / "autoskillit"
                 )
 
                 semantic_key = installed_plugin_semantic_key(
@@ -369,7 +375,7 @@ def install(
 
                 try:
                     identity = publish_generation(
-                        home=Path.home(),
+                        home=home,
                         plugin_ref=plugin_ref,
                         version=expected_version,
                         semantic_key=semantic_key,
@@ -389,8 +395,8 @@ def install(
                 _hooks_mod._evict_stale_autoskillit_hooks(settings_path)
                 from autoskillit.cli.update._update_checks import invalidate_fetch_cache
 
-                invalidate_fetch_cache(Path.home())
-                _verify_cleanup(settings_path, _fetch_cache_path(Path.home()))
+                invalidate_fetch_cache(home.root)
+                _verify_cleanup(settings_path, _fetch_cache_path(home.root))
 
             except _InstallFailed as exc:
                 return _typed_result(

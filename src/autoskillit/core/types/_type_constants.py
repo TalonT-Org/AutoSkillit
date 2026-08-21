@@ -591,6 +591,16 @@ def _validate_durable_artifact_writer_defs(
 
 DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     DurableArtifactWriterDef(
+        writer="autoskillit.core._plugin_cache:repair_corrupt_retiring_cache",
+        artifact=(
+            "immutable retiring_cache.corrupt-<timestamp>.json forensic sidecar; "
+            "the original machine-local bytes are preserved for diagnosis and are "
+            "never consumed as relocated configuration"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer="autoskillit.workspace._projected_artifact.materialization:write_generated_hooks_json",
         artifact=(
             "hooks/hooks.json in plugin/projection roots — relocatable "

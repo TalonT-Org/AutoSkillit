@@ -62,6 +62,7 @@ from ._doctor_mcp import (
     _check_plugin_cache_integrity,
     _check_stale_mcp_servers,
 )
+from ._doctor_repair import collect_retiring_cache_repair_results
 from ._doctor_runtime import (
     _check_backend_version,
     _check_claude_binary,
@@ -83,15 +84,15 @@ from ._doctor_skills import (
     _check_skill_capability_authenticity,
 )
 from ._doctor_types import _NON_PROBLEM as _NON_PROBLEM
-from ._doctor_types import DoctorResult, _format_results
+from ._doctor_types import DoctorResult, _print_doctor_results
 
 logger = get_logger(__name__)
 
-__all__ = ["DoctorResult", "Severity", "run_doctor"]
+__all__ = ["DoctorResult", "Severity", "run_doctor", "run_doctor_repairs"]
 
 
-def run_doctor(*, output_json: bool = False) -> None:
-    """Check project setup for common issues."""
+def _collect_doctor_results() -> list[DoctorResult]:
+    """Collect diagnostic results without owning output or performing repairs."""
     cfg, results = _load_config_guarded(Path.cwd())
 
     if cfg.agent_backend.backend:
@@ -257,6 +258,20 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.extend(_check_orphaned_autoskillit_daemons())
     # Check 46: Process tethers whose spawner is dead or ceiling has passed
     results.extend(_check_orphaned_process_tethers())
-    # Output
-    for line in _format_results(results, output_json=output_json):
-        print(line)
+    return results
+
+
+def run_doctor(*, output_json: bool = False) -> None:
+    """Run the read-only diagnostic entry point."""
+    _print_doctor_results(_collect_doctor_results(), output_json=output_json)
+
+
+def run_doctor_repairs(*, output_json: bool = False) -> None:
+    """Run the opt-in safe repair action, then report post-repair diagnostics."""
+    results = _collect_doctor_results()
+    results.extend(collect_retiring_cache_repair_results())
+    _print_doctor_results(
+        results,
+        output_json=output_json,
+        include_info=True,
+    )

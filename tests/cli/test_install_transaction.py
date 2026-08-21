@@ -26,6 +26,7 @@ from autoskillit.cli.install._install_contract import (
     InstallOutcome,
     InstallRequest,
 )
+from autoskillit.core import ManagedHome
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -101,7 +102,7 @@ def _configure_transaction(
         "version",
         lambda _name: _VERSION,
     )
-    monkeypatch.setattr(workspace, "reconcile_install_artifacts", lambda: ())
+    monkeypatch.setattr(workspace, "reconcile_install_artifacts", lambda *, home: ())
     monkeypatch.setattr(
         _marketplace,
         "_ensure_marketplace",
@@ -110,13 +111,13 @@ def _configure_transaction(
 
     def publish_generation(
         *,
-        home: Path,
+        home: ManagedHome,
         plugin_ref: str,
         version: str,
         semantic_key: str,
         source_root: Path,
     ) -> SimpleNamespace:
-        assert home == tmp_path
+        assert home.root == tmp_path
         assert plugin_ref == _PLUGIN_REF
         assert semantic_key == f"{plugin_ref}:{version}"
         assert source_root == (
@@ -161,7 +162,7 @@ def test_control_flow_exceptions_propagate_with_lock_released(
     events: list[str] = []
     ownership = _instrument_transaction_ownership(monkeypatch, events)
 
-    def interrupt() -> tuple[()]:
+    def interrupt(*, home: object) -> tuple[()]:
         raise control_flow("stop")
 
     monkeypatch.setattr(workspace, "reconcile_install_artifacts", interrupt)
@@ -342,7 +343,7 @@ def test_success_path_holds_install_lock_through_completion(
         assert ownership == {"install_lock": True}, f"{event} ran outside the install lock"
         events.append(event)
 
-    def reconcile() -> tuple[()]:
+    def reconcile(*, home: object) -> tuple[()]:
         record_owned("reconciliation")
         return ()
 
@@ -414,7 +415,7 @@ def test_failure_path_releases_install_lock_without_rollback(
     events: list[str] = []
     ownership = _instrument_transaction_ownership(monkeypatch, events)
 
-    def fail_reconciliation() -> tuple[()]:
+    def fail_reconciliation(*, home: object) -> tuple[()]:
         assert ownership == {"install_lock": True}
         events.append("reconciliation")
         raise marketplace._InstallFailed(
@@ -558,7 +559,7 @@ def test_maintenance_ignores_ambient_cwd_and_backend_config(
     )
     calls: list[Path] = []
 
-    def ensure_marketplace(*, cwd: Path, version: str) -> Path:
+    def ensure_marketplace(*, cwd: Path, version: str, home: object) -> Path:
         calls.append(Path(cwd))
         return tmp_path / ".autoskillit" / "marketplace"
 
@@ -590,7 +591,7 @@ def test_direct_mode_defaults_to_ambient_cwd_when_unspecified(
     _configure_direct_backend(monkeypatch)
     calls: list[tuple[str, Path]] = []
 
-    def ensure_marketplace(*, cwd: Path, version: str) -> Path:
+    def ensure_marketplace(*, cwd: Path, version: str, home: object) -> Path:
         calls.append(("marketplace", Path(cwd)))
         return tmp_path / ".autoskillit" / "marketplace"
 

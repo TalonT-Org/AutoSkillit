@@ -33,6 +33,7 @@ from autoskillit.core import (
     _InstallLock,
     generation_plugin_selector_path,
     is_reclaimable_artifact_path,
+    managed_home_for,
     read_retiring_cache,
     resolve_current_generation_for_plugin,
 )
@@ -45,9 +46,10 @@ _PLUGIN_REF = "autoskillit"
 def _publish(home: Path, source_root: Path, version: str) -> PluginArtifactIdentity:
     from autoskillit.workspace import publish_generation
 
-    with _InstallLock():
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
         return publish_generation(
-            home=home,
+            home=managed,
             plugin_ref=_PLUGIN_REF,
             version=version,
             semantic_key=f"autoskillit@autoskillit-local:{version}",
@@ -121,7 +123,10 @@ def test_promotion_refuses_infrastructure_even_when_evidence_says_projection(
     leases.mkdir(parents=True)
     (leases / "somehash.lock").write_text("", encoding="utf-8")
 
-    owner = ProjectedPluginRetirementOwner(projections)
+    owner = ProjectedPluginRetirementOwner(
+        projections,
+        home=managed_home_for(tmp_path),
+    )
     evidence = LegacyRetiringEvidence(
         record_id="deadbeef",
         version="projection:.artifact-leases",
@@ -145,7 +150,10 @@ def test_promotion_drops_bookkeeping_for_already_gone_paths(tmp_path: Path) -> N
 
     projections = tmp_path / "plugin-projections"
     projections.mkdir(parents=True)
-    owner = ProjectedPluginRetirementOwner(projections)
+    owner = ProjectedPluginRetirementOwner(
+        projections,
+        home=managed_home_for(tmp_path),
+    )
     evidence = LegacyRetiringEvidence(
         record_id="cafebabe",
         version="projection:gone",

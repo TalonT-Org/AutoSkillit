@@ -75,12 +75,12 @@ class PluginArtifactRetirementOwner(Protocol):
         self,
         identity: PluginArtifactIdentity,
         not_before: datetime,
-    ) -> RetiringAppendResult: ...
+    ) -> RetiringAppendResult | None: ...
 
     def cancel_obsolete_retirements(
         self,
         identity: PluginArtifactIdentity,
-    ) -> tuple[str, ...]: ...
+    ) -> tuple[str, ...] | None: ...
 
     def try_reclaim(
         self,

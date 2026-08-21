@@ -518,11 +518,13 @@ classified `REJECT` with `category: "arch_violation"`.
 | Clone network timeouts | `test_clone_timeouts.py` | `subprocess.run()` with git network subcommands (clone/fetch/pull/push/ls-remote) in `clone.py` without `timeout=` |
 | Dispatch timeout resolver | `test_dispatch_timeout_guard.py` | `_run_dispatch` using hardcoded timeout instead of `resolve_dispatch_timeout()` |
 | Doctor read-only | `test_doctor_readonly.py` | `run_doctor()` performing filesystem writes (REQ-DOCTOR-READONLY) |
+| Persisted enum decoding | `test_persisted_enum_decoding.py` | Bare persisted-enum construction in registered decoders instead of tolerant construction or record quarantine |
 | No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup in `session_log.py` or `tool_sequence_analysis.py` — dedup is pre-applied |
 | GFM table rendering | `test_gfm_rendering_guard.py` | GFM table rendering bypassing `_render_gfm_table()` — all table output must route through it |
 | CLI prompts via timed_prompt | `test_input_tty_contracts.py` | `input()` calls in `src/autoskillit/cli/` not routed through `timed_prompt()` |
 | Interactive ordering gate | `test_interactive_ordering_gate.py` | Interactive launch sites that skip `assert_interactive_ordering()` before `_session_launch` |
 | Kitchen guard scoping | `test_kitchen_guard_scoping.py` | `any_kitchen_open()` call sites not passing `project_path` — must use scoped check |
+| Ambient home boundary | `test_ambient_home_boundary.py` | Raw `Path.home()` reads in registered managed-home modules outside their single approved resolution entry point |
 | Model identity contract | `test_model_identity_contract.py` | `detect_model_drift()` using raw string comparison instead of `normalize_model_id()` and `_models_match()`, missing `profile_name` suppression guard with `normalize_model_id` normalization, or `profile_name` guard calling `_is_non_anthropic` more than once or on `configured_model` instead of `observed_model` (over-restriction that kills the guard for the standard Anthropic-configured + non-Anthropic-observed production path) |
 | Recipe delivery provenance | `test_recipe_delivery_provenance.py` | Caller claims, host observations, selected outer limits, history retention, and measured byte ceilings must remain separately sourced |
 | No hardcoded model IDs in translation tests | `test_no_hardcoded_model_ids_in_translation_tests.py` | String literal alias-resolved model IDs in `assert` comparisons in `test_model_translation.py` — assertions must reference `CODEX_MODEL_ALIASES[key]` to prevent co-authoring of wrong values |

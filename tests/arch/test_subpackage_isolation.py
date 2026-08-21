@@ -1019,7 +1019,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
-        "core/types": 53,
+        # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
+        # +_type_persisted_formats: persisted enum/version tolerance ledger.
+        "core/types": 56,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1027,8 +1029,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # coherent subpackage home exists for any of them
         "cli/session": 11,  # +_session_onboarding.py folded in from cli/_onboarding.py,
         # first-run detection consumed only by _session_cook.py (#4670)
-        "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
+        "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
+        # +_doctor_repair isolated opt-in mutation spoke (#4710)
         "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
@@ -1133,7 +1136,7 @@ def test_data_directories_are_not_python_packages() -> None:
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     "core/_plugin_cache.py": (
-        1100,
+        1400,
         "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "
         "Both mutate the retiring cache under the install lock and must stay adjacent to "
         "the append/remove/read primitives they call, for the same reason "
@@ -1141,7 +1144,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "them puts lock ordering across a module boundary, which is how destructive "
         "repair bypasses the lifecycle lock. tests/infra/test_plugin_source_ratchets.py "
         "also pins this module's raw-mutation call sites by (file, function, expression), "
-        "so the reclaim path's location is a checked invariant, not an accident.",
+        "so the reclaim path's location is a checked invariant, not an accident. Issue "
+        "#4710 adds per-record quarantine and total mutation results at the same lock-owned "
+        "boundary; splitting those primitives would separate classification from mutation. "
+        "Phase 2 adds the lock-held salvage and durable-sidecar repair at this same authority. "
+        "Phase 3 keeps explicit ManagedHome threading and the classified active-kitchen "
+        "reader/writers at that same lock and persistence boundary.",
     ),
     "execution/evidence_reader.py": (
         1500,

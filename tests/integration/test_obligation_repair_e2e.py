@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.layer("integration"), pytest.mark.medium]
 
 
@@ -93,14 +95,11 @@ def test_obligation_repair_e2e_clears_obligation_with_typed_argv(
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(shutil, "which", lambda name, path=None: str(bin_dir / "autoskillit"))
 
-    env = dict(os.environ)
+    env = production_interpreter_env()
     env["HOME"] = str(home)
     # The fake entrypoint is a Python script — keep the original PATH so
     # `env python3` (via the shebang) can find a working interpreter.
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
-    # Drop harness bytecode suppression so child behavior matches production.
-    env.pop("PYTHONDONTWRITEBYTECODE", None)
-    env.pop("PYTHONPYCACHEPREFIX", None)
     # The harness sets CLAUDECODE=1 for child-spawning tests; the repair
     # helper defers in that case. Strip it so the e2e flow can run.
     env.pop("CLAUDECODE", None)

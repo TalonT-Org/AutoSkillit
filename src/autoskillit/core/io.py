@@ -201,7 +201,7 @@ def resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
 
 def atomic_write(
     path: Path,
-    content: str,
+    content: str | bytes,
     *,
     strict_durability: bool = False,
     exclusive: bool = False,
@@ -224,10 +224,16 @@ def atomic_write(
     tmp: str | None = None
     try:
         fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())  # durable data write
+        if isinstance(content, bytes):
+            with os.fdopen(fd, "wb") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())  # durable data write
+        else:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())  # durable data write
         os.replace(tmp, path)
     except Exception:
         if tmp is not None:

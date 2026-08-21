@@ -20,8 +20,10 @@ __all__ = [
     "PluginArtifactIdentity",
     "PluginLaunchBinding",
     "PluginLoadMode",
+    "QuarantinedRetiringRecord",
     "RetiringAppendResult",
     "RetiringArtifactRecord",
+    "RetiringCacheRepairResult",
     "RetiringCacheReadResult",
     "RetiringCacheState",
     "RetirementOutcome",
@@ -264,14 +266,46 @@ class LegacyRetiringEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class QuarantinedRetiringRecord:
+    """One on-disk queue entry this reader cannot interpret, preserved verbatim.
+
+    Written back unchanged on every mutation so an older AutoSkillit never
+    deletes a newer writer's queued records. Carries no deletion authority:
+    it is never routed to an owner and never reclaimed.
+    """
+
+    raw_json: str
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not self.raw_json:
+            raise ValueError("quarantined retiring record must carry its raw JSON")
+        if not self.reason:
+            raise ValueError("quarantined retiring record requires a reason")
+
+
+@dataclass(frozen=True, slots=True)
 class RetiringCacheReadResult:
     """Typed retirement-cache read that never collapses unsafe states to empty."""
 
     state: RetiringCacheState
     records: tuple[RetiringArtifactRecord, ...] = ()
     legacy_evidence: tuple[LegacyRetiringEvidence, ...] = ()
+    quarantined_records: tuple[QuarantinedRetiringRecord, ...] = ()
+    quarantined_legacy_evidence: tuple[QuarantinedRetiringRecord, ...] = ()
     schema_version: int | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RetiringCacheRepairResult:
+    """Outcome of the opt-in corrupt retirement-cache repair action."""
+
+    repaired: bool
+    state: RetiringCacheState
+    salvaged: int = 0
+    quarantined: int = 0
+    sidecar: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,13 +13,14 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
     hook_path = pkg_root() / "hooks" / "guards" / "recipe_write_advisor.py"
-    env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env = {k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"}
     env.update(extra_env or {})
     result = subprocess.run(
         [sys.executable, str(hook_path)],

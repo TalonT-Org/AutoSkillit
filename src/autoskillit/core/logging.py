@@ -49,6 +49,7 @@ _PLUGIN_ARTIFACT_OUTCOMES = frozenset(
         "succeeded",
         "deferred_contended",
         "deferred_io_error",
+        "deferred_unreadable_queue",
         "rejected_identity",
         "failed_validation",
     }

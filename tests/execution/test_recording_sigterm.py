@@ -8,7 +8,6 @@ File existence is atomic — no string-parse race, no wall-clock settle-sleep.
 from __future__ import annotations
 
 import json
-import os
 import signal
 import subprocess
 import sys
@@ -16,6 +15,7 @@ import sys
 import pytest
 
 from tests._subprocess_ready import wait_for_subprocess_ready
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -37,7 +37,7 @@ def test_sigterm_writes_scenario_json(tmp_path):
     home_dir.mkdir()
 
     env = {
-        **os.environ,
+        **production_interpreter_env(),
         "RECORD_SCENARIO": "1",
         "RECORD_SCENARIO_DIR": str(output_dir),
         "RECORD_SCENARIO_RECIPE": "test-recipe",

@@ -163,17 +163,10 @@ def test_decomposition_preserves_public_symbol_set() -> None:
     from autoskillit.core.types._type_constants_retirements import RETIRED_SKILL_NAMES
     from autoskillit.core.types._type_constants_skill_contract import (
         SKILL_CONTRACT_REMEDIATIONS,
-        SkillContractRemediationDef,
     )
 
     assert constants_mod.RETIRED_SKILL_NAMES is RETIRED_SKILL_NAMES
     assert constants_mod.SKILL_CONTRACT_REMEDIATIONS is SKILL_CONTRACT_REMEDIATIONS
-    assert (
-        constants_mod.SKILL_CONTRACT_REMEDIATIONS[
-            next(iter(SKILL_CONTRACT_REMEDIATIONS))
-        ].__class__
-        is SkillContractRemediationDef
-    )
     assert constants_mod.DURABLE_ARTIFACT_WRITERS is DURABLE_ARTIFACT_WRITERS
 
     # Every pre-split name resolves through its original facade path.

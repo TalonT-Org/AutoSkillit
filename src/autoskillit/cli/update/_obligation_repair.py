@@ -168,6 +168,7 @@ def attempt_obligation_repair(
                 text=True,
             )
         except OSError as exc:
+            logger.warning("obligation_repair_probe_failed", exc_info=True)
             return ObligationRepairResult(
                 outcome=ObligationRepairOutcome.FAILED,
                 findings=(f"obligation_repair_probe_failed: {exc}",),
@@ -224,6 +225,7 @@ def attempt_obligation_repair(
                 capture_output=install_invocation.capture_output,
             )
         except OSError as exc:
+            logger.warning("obligation_repair_install_launch_failed", exc_info=True)
             return ObligationRepairResult(
                 outcome=ObligationRepairOutcome.FAILED,
                 findings=(f"Could not launch obligation repair install: {exc}",),

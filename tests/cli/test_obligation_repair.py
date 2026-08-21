@@ -131,3 +131,39 @@ def test_repair_install_child_stdio_is_captured(tmp_path: Path) -> None:
     install_argv, install_kwargs = calls[1]
     assert install_argv[1:3] == ["install", "--maintenance-update"]
     assert install_kwargs.get("capture_output") is True
+
+
+@pytest.mark.parametrize(
+    ("failing_call", "expected_event"),
+    [
+        (1, "obligation_repair_probe_failed"),
+        (2, "obligation_repair_install_launch_failed"),
+    ],
+)
+def test_repair_launch_failures_preserve_traceback_context(
+    tmp_path: Path,
+    failing_call: int,
+    expected_event: str,
+) -> None:
+    import structlog.testing
+
+    _stage_pending_obligation(tmp_path)
+    calls = 0
+
+    def runner(argv: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        if calls == failing_call:
+            raise OSError("simulated launch failure")
+        return subprocess.CompletedProcess(argv, 0, stdout="0.2.0\n", stderr="")
+
+    with structlog.testing.capture_logs() as logs:
+        attempt_obligation_repair(
+            tmp_path,
+            environment={"HOME": str(tmp_path), "PATH": "/usr/bin"},
+            process_runner=runner,
+            entrypoint=Path("/usr/bin/autoskillit"),
+        )
+
+    assert logs[-1]["event"] == expected_event
+    assert logs[-1]["exc_info"] is True

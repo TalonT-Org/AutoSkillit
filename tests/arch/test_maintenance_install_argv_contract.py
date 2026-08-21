@@ -45,14 +45,16 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # The four production self-invocation spawn sites introduced by issue #4597
 # (A-6): a --version probe and an install --maintenance-update child in each
 # of the update transaction and obligation-repair modules. Every call site
 # building a MaintenanceSubprocessInvocation, and every runner() call that
 # consumes one, lives in one of these two files.
 _SPAWN_SITE_FILES: tuple[Path, ...] = (
-    Path("src/autoskillit/cli/update/_transaction.py"),
-    Path("src/autoskillit/cli/update/_obligation_repair.py"),
+    _REPO_ROOT / "src/autoskillit/cli/update/_transaction.py",
+    _REPO_ROOT / "src/autoskillit/cli/update/_obligation_repair.py",
 )
 
 _INVOCATION_FACTORY_METHODS = frozenset({"for_version_probe", "for_install"})
@@ -62,11 +64,11 @@ _REQUIRED_FACTORY_KWARGS = frozenset({"environment", "cwd"})
 # Files that legitimately contain the literal (the canonical builder).
 _ALLOWLIST: frozenset[Path] = frozenset(
     {
-        Path("src/autoskillit/core/types/_type_install.py"),
+        _REPO_ROOT / "src/autoskillit/core/types/_type_install.py",
     },
 )
 
-_SRC_ROOT = Path("src/autoskillit")
+_SRC_ROOT = _REPO_ROOT / "src/autoskillit"
 
 
 def _scan_for_maintenance_update_literals(tree: ast.AST) -> list[int]:
@@ -332,7 +334,6 @@ def test_every_maintenance_install_spawn_binds_env_and_stdio() -> None:
     """
     factory_violations: list[str] = []
     attr_violations: list[str] = []
-    files_scanned = 0
     for py_file in _SPAWN_SITE_FILES:
         assert py_file.is_file(), f"expected spawn-site file to exist: {py_file}"
         source = py_file.read_text(encoding="utf-8")
@@ -341,9 +342,6 @@ def test_every_maintenance_install_spawn_binds_env_and_stdio() -> None:
         attr_violations.extend(
             f"{py_file}:{v}" for v in _scan_runner_calls_for_invocation_attrs(tree)
         )
-        files_scanned += 1
-
-    assert files_scanned == len(_SPAWN_SITE_FILES)
     assert not factory_violations, (
         "MaintenanceSubprocessInvocation factory calls must pass environment= "
         "and cwd= by keyword:\n" + "\n".join(factory_violations)

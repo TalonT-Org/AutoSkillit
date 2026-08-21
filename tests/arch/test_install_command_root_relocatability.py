@@ -38,13 +38,15 @@ from tests.contracts._relocatability_helpers import environment_pinned_path_segm
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # Every known install-command-construction site: the function(s) that build
 # the argv/env values ultimately passed to a child `uv tool install`/`uv tool
 # upgrade` process. See the module docstring for what this guard protects
 # against.
 _INSTALL_COMMAND_CONSTRUCTION_FILES: tuple[Path, ...] = (
-    Path("src/autoskillit/cli/install/_install_info.py"),
-    Path("src/autoskillit/cli/update/_transaction.py"),
+    _REPO_ROOT / "src/autoskillit/cli/install/_install_info.py",
+    _REPO_ROOT / "src/autoskillit/cli/update/_transaction.py",
 )
 
 
@@ -91,7 +93,6 @@ def test_no_install_command_targets_a_shared_mutable_root() -> None:
     """
     forbidden_segments = environment_pinned_path_segments()
     violations: list[str] = []
-    files_scanned = 0
     for py_file in _INSTALL_COMMAND_CONSTRUCTION_FILES:
         assert py_file.is_file(), f"expected install-command-construction file to exist: {py_file}"
         source = py_file.read_text(encoding="utf-8")
@@ -99,9 +100,6 @@ def test_no_install_command_targets_a_shared_mutable_root() -> None:
         violations.extend(
             f"{py_file}:{v}" for v in _scan_for_forbidden_path_literals(tree, forbidden_segments)
         )
-        files_scanned += 1
-
-    assert files_scanned == len(_INSTALL_COMMAND_CONSTRUCTION_FILES)
     assert not violations, (
         "Install-command construction must derive every destination from the "
         "per-generation store (install_root_destination), never hardcode the "

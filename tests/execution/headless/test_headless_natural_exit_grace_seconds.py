@@ -1,17 +1,7 @@
-"""Tests that RunSkillConfig.natural_exit_grace_seconds reaches run_managed_async.
+"""Regression coverage for issue #4686.
 
-Closes the issue #4686 gap. The config field was previously inert: declared and
-validated, but dropped at every hop in the call chain. The wiring added by
-this issue threads the value from both the leaf ``run_skill`` call site and
-the food-truck ``dispatch_food_truck`` call site through
-``_execute_claude_headless`` → ``_run_headless_attempt`` →
-``DefaultSubprocessRunner.__call__`` → ``run_managed_async`` →
-``execute_termination_action(..., grace_seconds=...)``.
-
-Both paths are exercised here. A ``MockSubprocessRunner`` (from
-``tests.fakes``) records every kwarg it receives; these tests assert the
-configured value lands in the captured kwargs dict instead of the runner's
-hardcoded 3.0 s default.
+Threads cfg.run_skill.natural_exit_grace_seconds to the runner on both
+the leaf ``run_skill`` and fleet ``dispatch_food_truck`` paths.
 """
 
 from __future__ import annotations

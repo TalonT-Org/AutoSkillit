@@ -994,24 +994,43 @@ def test_every_git_fetch_spec_flag_is_recognized(flag: str) -> None:
 
 
 def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
-    """Step 9 (#4733) regression: _classify_fetch and _GIT_FETCH_FLAG_SPEC
-    moved to autoskillit.hooks.guards._git_command_classification.
+    """Step 9 (#4733) regression: every classification primitive the orchestrator
+    consumes from autoskillit.hooks.guards._git_command_classification must remain
+    reachable from the package import surface. Mirrors the orchestrator's import
+    block at src/autoskillit/hooks/guards/git_ops_guard.py:37.
     """
-    from autoskillit.hooks.guards._git_command_classification import (  # noqa: PLC0415
-        _GIT_FETCH_FLAG_SPEC as spec,
-    )
-    from autoskillit.hooks.guards._git_command_classification import (
-        _classify_fetch as classify,
+    from autoskillit.hooks.guards._git_command_classification import (  # noqa: PLC0415, E501
+        _GIT_FETCH_BOOLEAN_FLAGS,
+        _GIT_FETCH_FLAG_SPEC,
+        _GIT_FETCH_VALUE_FLAGS,
+        _classify_git_segment,
+        _contains_blocked_git_op,
+        _git_result,
+        _git_text,
+        _parse_worktree_owners,
+        _resolve_attempted_sha,
+        _resolve_git_common_dir,
     )
 
-    assert isinstance(spec, dict)
-    assert all(isinstance(k, str) for k in spec)
-    assert all(v == _FlagArity.BOOLEAN or v == _FlagArity.VALUE for v in spec.values())
-    assert callable(classify)
-    # And the parametrized test at line 963's import targets must remain
-    # accessible from this test's perspective.
-    assert spec is _GIT_FETCH_FLAG_SPEC
-    assert classify is _classify_fetch
+    expected_callables = (
+        _classify_git_segment,
+        _contains_blocked_git_op,
+        _git_result,
+        _git_text,
+        _parse_worktree_owners,
+        _resolve_attempted_sha,
+        _resolve_git_common_dir,
+    )
+    for symbol in expected_callables:
+        assert callable(symbol), f"_git_command_classification.{symbol.__name__} must be callable"
+
+    assert isinstance(_GIT_FETCH_FLAG_SPEC, dict)
+    assert all(isinstance(k, str) for k in _GIT_FETCH_FLAG_SPEC)
+    assert all(
+        v == _FlagArity.BOOLEAN or v == _FlagArity.VALUE for v in _GIT_FETCH_FLAG_SPEC.values()
+    )
+    assert isinstance(_GIT_FETCH_BOOLEAN_FLAGS, frozenset)
+    assert isinstance(_GIT_FETCH_VALUE_FLAGS, frozenset)
 
 
 def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:

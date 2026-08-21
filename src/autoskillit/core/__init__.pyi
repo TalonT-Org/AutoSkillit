@@ -1014,7 +1014,6 @@ from .types import RepresentationBindingId as RepresentationBindingId
 from .types import RepresentationBindingWitness as RepresentationBindingWitness
 from .types import RepresentationRevision as RepresentationRevision
 from .types import RequestReconciliationEvent as RequestReconciliationEvent
-from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import ReservationDecision as ReservationDecision
 from .types import ReservationInvalidatedEffect as ReservationInvalidatedEffect
 from .types import ReservationRecordedEffect as ReservationRecordedEffect
@@ -1208,6 +1207,7 @@ from .types import recipe_section_element_digest as recipe_section_element_diges
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
 from .types import render_intake_digest as render_intake_digest
 from .types import render_target_skill_command as render_target_skill_command
+from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import (
     resolve_native_shell_capture_decision as resolve_native_shell_capture_decision,
 )

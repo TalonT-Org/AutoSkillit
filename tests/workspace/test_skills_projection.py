@@ -286,7 +286,7 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
         "name: dependency\n"
         "description: Refused dependency.\n"
         "execution_role: session\n"
-        "uses_capabilities: [run_skill]\n"
+        "uses_capabilities: [agent_subagent]\n"
         "semantic_version: 1\n"
         "semantic_requirements:\n"
         "  join:\n"
@@ -304,7 +304,7 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
     invocation = EffectiveSkillInvocation(
         root=root,
         closure=(root, dependency),
-        capability_union=frozenset({"run_skill"}),
+        capability_union=frozenset({"agent_subagent"}),
         project_root=tmp_path,
         execution_role=SkillExecutionRole.SESSION,
     )

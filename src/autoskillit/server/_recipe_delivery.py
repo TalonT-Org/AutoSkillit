@@ -99,9 +99,7 @@ from autoskillit.server._recipe_segment_delivery import (
 from autoskillit.server._response_budget import enforce_response_budget
 
 if TYPE_CHECKING:
-    from autoskillit.core import (
-        RecipeDeliveryEvidenceDef,
-    )
+    from autoskillit.core import RecipeDeliveryEvidenceDef
     from autoskillit.pipeline import ToolContext
 
 

@@ -1,37 +1,9 @@
-"""T-C1/T-C2/T-C5 (issue #4597 Phase 3): the acceptance criteria.
+"""Concurrent install-root generation acceptance tests for issue #4597.
 
-A live process holding a reference into an install-root generation must
-survive a real, concurrent installation of a different version — the class
-of crash the whole plan exists to eliminate. These tests do not exercise
-``run_update_transaction()`` end to end (that would require a real
-`uv`-installable ``autoskillit`` distribution, network access, and minutes
-per run); instead they drive the same two production primitives the
-transaction's ``INSTALL_ROOT_GENERATION_PUBLICATION`` phase calls —
-``uv tool install`` targeted via ``UV_TOOL_DIR`` at
-``workspace.publish_install_root_generation`` — against a tiny local
-package, installed from a real (local, file:// — no network) git repository
-so the install genuinely goes through uv's git-clone-and-build pipeline,
-exactly like a real GitHub-sourced install would.
-
-**Why criterion (c) ("acquire a plugin launch binding") is exercised from
-this test process, not the child.** The plan's literal T-C1/T-C2 wording
-assumes the live process IS ``autoskillit`` itself, so it can call
-``ProjectedPluginArtifactAuthority.acquire_launch_binding()`` directly. The
-``faketool`` substitution above means the child's own venv has no
-``autoskillit`` import available (adding it as a dependency would reintroduce
-the network/minutes cost this substitution exists to avoid). Instead, this
-test process — which does have ``autoskillit`` imported — exercises the
-literal underlying primitive ``acquire_launch_binding()`` itself depends on:
-acquiring a reader ``ArtifactLease`` against the generation's own lease path
-(``authority.py``'s ``acquire_launch_binding()`` acquires exactly this lease,
-see its ``reader = ArtifactLease.acquire_shared(plan.lease_path)`` calls;
-here the lease is already published by ``publish_install_root_generation()``,
-so ``acquire_existing_shared()`` is the accurate call, matching production's
-own self-lease acquisition in ``core/_install_binding.py``), applied
-directly to the child's own (superseded but retained) generation.
-
-Every test here spawns real subprocesses and does real `uv tool install`
-work, hence `large`.
+A live reader must survive installation of a different version. The tests use
+a local git source and real ``uv tool install`` execution without network access,
+then acquire the same generation ``ArtifactLease`` that production launch binding
+uses. Every test spawns real subprocesses and is therefore marked ``large``.
 """
 
 from __future__ import annotations

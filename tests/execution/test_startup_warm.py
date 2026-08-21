@@ -19,13 +19,13 @@ or no-op implementation. Mirrors the subprocess-isolation idiom established by
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
+
+from tests.core.test_import_isolation import _clean_subprocess_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -46,32 +46,6 @@ print(json.dumps({
     "present_after": sorted(n for n in WARM_MODULE_NAMES if n in after),
 }))
 """
-
-
-def _clean_subprocess_env() -> dict[str, str]:
-    """Build a minimal env for a fresh-interpreter import-state subprocess.
-
-    Mirrors ``tests/core/test_import_isolation.py::_clean_subprocess_env``.
-    The parent process (MCP server or xdist worker) may carry env vars that
-    interfere with clean imports in a freshly-created venv (e.g. stale
-    ``PYTHONPATH``); pass only what the subprocess needs.
-    """
-    env: dict[str, str] = {}
-    for key in ("PATH", "HOME", "USER", "LANG", "LC_ALL", "VIRTUAL_ENV"):
-        val = os.environ.get(key)
-        if val is not None:
-            env[key] = val
-    if "VIRTUAL_ENV" not in env:
-        venv_dir = str(Path(sys.executable).resolve().parent.parent)
-        if (Path(venv_dir) / "pyvenv.cfg").exists():
-            env["VIRTUAL_ENV"] = venv_dir
-    # Sourced from the harness env override registry (tests/_test_env_parity.py)
-    # rather than hardcoded, so the parity contract pincer catches drift.
-    from tests._test_env_parity import TEST_HARNESS_ENV_OVERRIDES
-
-    for var, override in TEST_HARNESS_ENV_OVERRIDES.items():
-        env[var] = override.value
-    return env
 
 
 def _run_warm_subprocess() -> subprocess.CompletedProcess[str]:

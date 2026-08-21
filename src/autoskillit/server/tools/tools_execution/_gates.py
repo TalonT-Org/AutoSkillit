@@ -8,10 +8,7 @@ import json
 import os
 from typing import TYPE_CHECKING, cast
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, FaultDomain, compute_bytes_hash
-from autoskillit.core import get_logger
-
-logger = get_logger(__name__)
+from autoskillit.core import DISPATCH_ID_ENV_VAR, FaultDomain, compute_bytes_hash, get_logger
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.server._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
@@ -27,6 +24,8 @@ if TYPE_CHECKING:
 
     from autoskillit.core import TrackerAuthorityReadResult, TrackerAuthorityTarget
     from autoskillit.pipeline import ToolContext
+
+logger = get_logger(__name__)
 
 INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"

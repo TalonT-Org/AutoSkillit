@@ -45,7 +45,7 @@ logger = get_logger(__name__)
 
 _SELF_LEASE_HANDLE: object | None = None
 """Process-lifetime handle for the self-held lease. Intentionally never
-explicitly released — the descriptor closes naturally at process exit, which
+explicitly released — the file descriptor closes naturally at process exit, which
 is exactly when it should stop protecting this root."""
 
 

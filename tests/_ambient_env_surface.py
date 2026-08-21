@@ -575,7 +575,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
-    "cli/session/_session_launch.py:99": (
+    "cli/session/_session_launch.py:149": (
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),

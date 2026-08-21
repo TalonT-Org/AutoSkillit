@@ -200,20 +200,29 @@ class TestInstallBindingSeal:
         )
         assert second.root == first.root
 
-    def test_self_lease_uses_bound_generation_when_home_changes(
+    def test_self_lease_uses_bound_generation_layout_when_home_changes(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         import autoskillit.core._install_binding as binding
-        from autoskillit.core import ArtifactLease, installed_plugin_artifact_lease_path
+        import autoskillit.core._plugin_artifact_identity as identity
+        from autoskillit.core import (
+            _AUTOSKILLIT_INSTALL_ROOT_KEY,
+            ArtifactLease,
+            generation_artifact_root,
+            installed_plugin_artifact_lease_path,
+        )
 
-        incarnation = (
-            tmp_path
-            / "install-home"
-            / ".autoskillit"
-            / "plugin-generations"
-            / "autoskillit-install"
-            / "1.2.3"
-            / "incarnation"
+        def relocated_version_root(home: Path, plugin_ref: str, version: str) -> Path:
+            assert plugin_ref == _AUTOSKILLIT_INSTALL_ROOT_KEY
+            return home / ".relocated-generations" / version
+
+        monkeypatch.setattr(identity, "generation_version_root", relocated_version_root)
+
+        incarnation = generation_artifact_root(
+            tmp_path / "install-home",
+            _AUTOSKILLIT_INSTALL_ROOT_KEY,
+            "1.2.3",
+            "incarnation",
         )
         package_root = incarnation / "autoskillit" / "lib" / "site-packages" / "autoskillit"
         package_root.mkdir(parents=True)

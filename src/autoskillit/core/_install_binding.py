@@ -66,26 +66,26 @@ def _acquire_self_lease(root: Path, version: str) -> None:
     """
     global _SELF_LEASE_HANDLE
     try:
-        from ._plugin_artifact_identity import installed_plugin_artifact_lease_path
+        from ._plugin_artifact_identity import (
+            generation_version_root,
+            installed_plugin_artifact_lease_path,
+        )
         from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY
         from .runtime.artifact_lease import ArtifactLease
 
         canonical_root = root.resolve()
-        install_root_name = _AUTOSKILLIT_INSTALL_ROOT_KEY.partition("@")[0]
         for incarnation_dir in canonical_root.parents:
-            version_root = incarnation_dir.parent
-            store_root = version_root.parent
-            if (
-                version_root.name != version
-                or store_root.name != install_root_name
-                or store_root.parent.name != "plugin-generations"
-                or store_root.parent.parent.name != ".autoskillit"
-            ):
-                continue
-            _SELF_LEASE_HANDLE = ArtifactLease.acquire_existing_shared(
-                installed_plugin_artifact_lease_path(incarnation_dir)
-            )
-            return
+            for candidate_home in incarnation_dir.parents:
+                if incarnation_dir.parent != generation_version_root(
+                    candidate_home,
+                    _AUTOSKILLIT_INSTALL_ROOT_KEY,
+                    version,
+                ):
+                    continue
+                _SELF_LEASE_HANDLE = ArtifactLease.acquire_existing_shared(
+                    installed_plugin_artifact_lease_path(incarnation_dir)
+                )
+                return
     except Exception:
         logger.warning("self_lease_acquisition_failed", exc_info=True)
         return

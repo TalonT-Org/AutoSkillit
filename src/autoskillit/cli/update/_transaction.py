@@ -77,6 +77,12 @@ _VersionReader = Callable[[str], str]
 _VersionProber = Callable[[InstallInfo, Mapping[str, str], _ProcessRunner], str]
 
 
+def _install_root_entrypoint(root: Path) -> Path:
+    if sys.platform == "win32":
+        return root / "autoskillit" / "Scripts" / "autoskillit.exe"
+    return root / "autoskillit" / "bin" / "autoskillit"
+
+
 class UpdateTransactionPhase(StrEnum):
     """Ordered coordinator phases, independent of caller presentation policy."""
 
@@ -497,7 +503,7 @@ def run_update_transaction(
             probe_info = (
                 replace(
                     info,
-                    entrypoint=install_root_staging / "autoskillit" / "bin" / "autoskillit",
+                    entrypoint=_install_root_entrypoint(install_root_staging),
                 )
                 if command.env
                 else info

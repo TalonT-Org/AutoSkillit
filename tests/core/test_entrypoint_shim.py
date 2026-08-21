@@ -53,6 +53,12 @@ def test_shim_selector_literal_matches_generation_plugin_selector_path(tmp_path:
         cursor = found + len(needle)
 
 
+def test_shim_source_contains_both_platform_entrypoint_layouts() -> None:
+    assert 'sys.platform == "win32"' in ENTRYPOINT_SHIM_SOURCE
+    assert '"Scripts" / "autoskillit.exe"' in ENTRYPOINT_SHIM_SOURCE
+    assert '"bin" / "autoskillit"' in ENTRYPOINT_SHIM_SOURCE
+
+
 # ---------------------------------------------------------------------------
 # entrypoint_shim_path()
 # ---------------------------------------------------------------------------

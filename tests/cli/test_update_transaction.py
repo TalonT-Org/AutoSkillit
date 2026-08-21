@@ -44,6 +44,25 @@ from tests.conftest import production_interpreter_env
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
+@pytest.mark.parametrize(
+    ("platform", "relative_entrypoint"),
+    [
+        ("linux", Path("autoskillit/bin/autoskillit")),
+        ("win32", Path("autoskillit/Scripts/autoskillit.exe")),
+    ],
+)
+def test_install_root_entrypoint_uses_platform_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    relative_entrypoint: Path,
+) -> None:
+    from autoskillit.cli.update import _transaction as transaction_module
+
+    monkeypatch.setattr(transaction_module, "sys", SimpleNamespace(platform=platform))
+    root = Path("generation")
+    assert transaction_module._install_root_entrypoint(root) == root / relative_entrypoint
+
+
 def test_post_pivot_reporter_falls_back_when_logger_raises(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

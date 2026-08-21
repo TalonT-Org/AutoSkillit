@@ -67,7 +67,10 @@ def main() -> None:
         generation_dir = _SELECTOR.resolve(strict=True)
     except OSError as exc:
         _die(f"could not resolve install-root generation selector: {exc}")
-    inner = generation_dir / "autoskillit" / "bin" / "autoskillit"
+    if sys.platform == "win32":
+        inner = generation_dir / "autoskillit" / "Scripts" / "autoskillit.exe"
+    else:
+        inner = generation_dir / "autoskillit" / "bin" / "autoskillit"
     if not os.access(inner, os.X_OK):
         _die(f"resolved install-root generation has no executable entrypoint: {inner}")
     os.execv(str(inner), [str(inner), *sys.argv[1:]])

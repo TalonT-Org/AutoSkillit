@@ -206,28 +206,7 @@ def test_explicit_update_runs_the_transaction_exactly_once(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Regression guard for A-7: `autoskillit update` on a stale TTY install
-    must invoke run_update_transaction exactly once end-to-end through
-    ``main()``.
-
-    Before A-7, ``main()`` ran the automatic ``run_update_checks()``
-    pre-check for every non-install/--version argv, including "update"
-    itself. On a stale TTY install this raced the explicit command: the
-    automatic pre-check detected the stale signal, prompted "[Y/n]", and on
-    "y" ran ``run_update_transaction()`` to COMPLETED — which called
-    ``perform_restart()`` and re-exec'd the process. The re-exec'd process
-    then dispatched to the explicit `update` command, which called
-    ``run_update_transaction()`` AGAIN — finding the install already
-    current, returning FAILED_UPGRADE, and printing a failure line after the
-    update had already succeeded.
-
-    This test drives the real automatic-check machinery (TTY, signal,
-    prompt) under stale-TTY conditions rather than stubbing
-    ``run_update_checks`` away, so it would catch a regression where
-    "update" is removed from ``main()``'s exclusion set: with the A-7 fix in
-    place, ``run_update_checks()`` is never invoked for "update" argv, so
-    only the explicit command's call reaches ``run_update_transaction``.
-    """
+    """A stale-TTY explicit update runs one transaction end to end (#4597, A-7)."""
     import select as _select_mod
     from unittest.mock import MagicMock
 

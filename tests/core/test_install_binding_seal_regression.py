@@ -13,7 +13,7 @@ Must run in a subprocess: by the time an in-process pytest test executes,
 ``core.paths`` has already been imported by collection, so "is the seal
 populated" is unobservable from inside the worker. Mirrors the
 subprocess-isolation idiom established by ``tests/core/test_import_isolation.py``
-and ``tests/execution/test_startup_warm.py``.
+and ``tests/fleet/test_startup_warm.py``.
 """
 
 from __future__ import annotations

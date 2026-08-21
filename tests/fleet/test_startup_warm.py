@@ -27,7 +27,7 @@ import pytest
 
 from tests.core.test_import_isolation import _clean_subprocess_env
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium]
 
 _WARM_SUBPROCESS_SCRIPT = """
 import json

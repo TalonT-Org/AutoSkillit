@@ -77,18 +77,20 @@ def test_resolved_profiles_silently_drops_retired_keys(retired_key: str, raw_val
     assert profile.raw_env == {"model": "gpt-4"}
 
 
-def test_resolved_profiles_silently_drops_retired_keys_across_multiple_profiles() -> None:
+@pytest.mark.parametrize("retired_key", sorted(RETIRED_PROFILE_KEYS))
+def test_resolved_profiles_silently_drops_retired_keys_across_multiple_profiles(
+    retired_key: str,
+) -> None:
     """T5: retirement applies to every profile, not just the first."""
     cfg = ProvidersConfig(
         profiles={
-            "anthropic": {"base_url": "https://a.invalid", "context_window": "200000"},
-            "my_provider": {"base_url": "https://b.invalid", "context_window": "100000"},
+            "anthropic": {retired_key: "200000"},
+            "my_provider": {retired_key: "100000"},
         },
     )
     for name in ("anthropic", "my_provider"):
         profile = cfg.resolved_profiles[name]
-        assert profile.base_url is not None
-        assert profile.base_url.startswith("https://")
-        assert "context_window" not in profile.raw_env, (
-            f"profile {name!r}: context_window leaked into raw_env={profile.raw_env!r}"
+        assert profile.raw_env == {}, (
+            f"profile {name!r}: retired key {retired_key!r} leaked into "
+            f"raw_env={profile.raw_env!r}"
         )

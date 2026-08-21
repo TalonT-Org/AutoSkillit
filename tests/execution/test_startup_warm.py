@@ -29,15 +29,14 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
-# Importing the fleet gateway is itself part of the warm boundary: it loads
-# the fleet modules before the explicit warm call covers deferred execution
-# modules.
 _WARM_SUBPROCESS_SCRIPT = """
 import json
 import sys
 
-before = set(sys.modules)
 from autoskillit.fleet import WARM_MODULE_NAMES, warm_failure_path_imports
+for module_name in WARM_MODULE_NAMES:
+    sys.modules.pop(module_name, None)
+before = set(sys.modules)
 warm_failure_path_imports()
 after = set(sys.modules)
 

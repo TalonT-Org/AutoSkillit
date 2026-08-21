@@ -23,14 +23,18 @@ class TestCoreSubpackages:
             "_type_checkpoint",
             "_type_closure_report",
             "_type_constants",
+            "_type_constants_durable_writers",
             "_type_constants_env",
             "_type_constants_features",
             "_type_constants_registries",
+            "_type_constants_retirements",
+            "_type_constants_skill_contract",
             "_type_context_admission",
             "_type_context_admission_persistence",
             "_type_dimensions",
             "_type_dispatch_identity",
             "_type_enums",
+            "_type_enums_context_admission",
             "_type_execution_identity",
             "_type_exploration",
             "_type_exceptions",
@@ -77,18 +81,41 @@ class TestCoreSubpackages:
     def test_type_constants_split_completeness(self):
         """Verify __all__ union across all _type_constants*.py modules has no duplicates."""
         from autoskillit.core.types._type_constants import __all__ as remaining
+        from autoskillit.core.types._type_constants_durable_writers import (
+            __all__ as durable_writers,
+        )
         from autoskillit.core.types._type_constants_env import __all__ as env
         from autoskillit.core.types._type_constants_features import __all__ as features
         from autoskillit.core.types._type_constants_registries import __all__ as registries
-
-        combined = set(remaining) | set(env) | set(features) | set(registries)
-        assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
-            "Duplicate symbols across split modules"
+        from autoskillit.core.types._type_constants_retirements import __all__ as retirements
+        from autoskillit.core.types._type_constants_skill_contract import (
+            __all__ as skill_contract,
         )
-        assert len(combined) == 170, (
-            f"Expected 170 symbols total, got {len(combined)} "
-            f"(remaining={len(remaining)}, env={len(env)}, "
-            f"features={len(features)}, registries={len(registries)})"
+
+        combined = (
+            set(remaining)
+            | set(durable_writers)
+            | set(env)
+            | set(features)
+            | set(registries)
+            | set(retirements)
+            | set(skill_contract)
+        )
+        assert len(combined) == (
+            len(remaining)
+            + len(durable_writers)
+            + len(env)
+            + len(features)
+            + len(registries)
+            + len(retirements)
+            + len(skill_contract)
+        ), "Duplicate symbols across split modules"
+        assert len(combined) == 169, (
+            f"Expected 169 symbols total, got {len(combined)} "
+            f"(remaining={len(remaining)}, durable_writers={len(durable_writers)}, "
+            f"env={len(env)}, features={len(features)}, "
+            f"registries={len(registries)}, retirements={len(retirements)}, "
+            f"skill_contract={len(skill_contract)})"
         )
 
     def test_core_runtime_is_package(self):

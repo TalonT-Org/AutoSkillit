@@ -1063,9 +1063,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
         # +_recipe_section_handler.py (bounded recipe-section pull handler)
-        "hooks/guards": 40,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
+        "hooks/guards": 41,  # +github_mutation_guard (#4432); +4 join_*_guard (#4575)
         # +resource_exhaustion_guard (#4678 rectify: Bash busy-loop pattern denial)
         # +fabricated_completion_guard (#4457)
+        # +_git_command_classification.py (#4733 Step 9: extracted from
+        # git_ops_guard.py to slim the orchestrator under the 1,000-line cap)
         "execution/process": 11,  # +_termination (RE: #4664 decompose); +_process_tether
         # (#4678 rectify: process-tether spawner-death immunity mechanism)
         # +exploration_request_identity_guard request-correlated Claude authority (#4512)

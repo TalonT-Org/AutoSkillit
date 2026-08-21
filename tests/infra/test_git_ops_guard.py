@@ -1027,6 +1027,11 @@ def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:
             "tool_input": {"command": "git status"},
         }
     )
+    from tests.conftest import production_interpreter_env  # noqa: PLC0415
+
+    env = production_interpreter_env()
+    env["PYTHONPATH"] = "src/autoskillit/hooks"
+    env["PATH"] = os.environ["PATH"]
     result = subprocess.run(
         [
             sys.executable,
@@ -1038,7 +1043,7 @@ def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:
         input=payload,
         capture_output=True,
         text=True,
-        env={"PYTHONPATH": "src/autoskillit/hooks", "PATH": os.environ["PATH"]},
+        env=env,
         timeout=15,
         cwd=str(Path(__file__).resolve().parents[2]),
     )

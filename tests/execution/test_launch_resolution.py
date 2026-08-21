@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from hashlib import sha256
 
@@ -11,6 +12,7 @@ import pytest
 from autoskillit.core import (
     CANONICAL_LAUNCH_DIGEST_FIELDS,
     CODEX_VALID_MODEL_IDS,
+    LAUNCH_CONTRACT_SCHEMA_VERSION,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -27,6 +29,8 @@ from autoskillit.core import (
     ResolvedLaunchContract,
     SemanticLaunchPlan,
     SkillProjectionBinding,
+    SkillProjectionRefusal,
+    SkillSemanticOperation,
 )
 from autoskillit.execution import DefaultLaunchResolver
 from autoskillit.execution.backends import all_backends, get_backend
@@ -146,7 +150,10 @@ class _Adapter:
         return self.result_factory(preparation)
 
 
-def _projection_binding() -> SkillProjectionBinding:
+def _projection_binding(
+    *,
+    unavailable: tuple[SkillProjectionRefusal, ...] = (),
+) -> SkillProjectionBinding:
     digest = sha256(b"skill").hexdigest()
     semantic = sha256(b"semantic").hexdigest()
     adaptation = sha256(b"adaptation").hexdigest()
@@ -172,12 +179,25 @@ def _projection_binding() -> SkillProjectionBinding:
         cwd="/work/repo",
         backend="claude-code",
         artifact_paths=("/work/plugin",),
+        unavailable=unavailable,
+    )
+
+
+def _projection_refusal(
+    skill: str = "review-only",
+    *,
+    diagnostic: str = "backend 'claude-code' cannot realize join semantics exactly",
+) -> SkillProjectionRefusal:
+    return SkillProjectionRefusal(
+        skill=skill,
+        operation=SkillSemanticOperation.REQUIRED_JOIN,
+        diagnostic=diagnostic,
     )
 
 
 def test_resolved_launch_contract_solely_owns_projection_binding() -> None:
     resolver = DefaultLaunchResolver()
-    binding = _projection_binding()
+    binding = _projection_binding(unavailable=(_projection_refusal(),))
     request = _request(
         semantic_plan=SemanticLaunchPlan(
             surface=LaunchSurface.HEADLESS_SKILL,
@@ -204,6 +224,91 @@ def test_resolved_launch_contract_solely_owns_projection_binding() -> None:
         expected_digest=contract.digest,
     )
     assert restored.skill_projection_binding == contract.skill_projection_binding
+    assert restored.skill_projection_binding is not None
+    assert restored.skill_projection_binding.unavailable == (_projection_refusal(),)
+
+
+def test_skill_projection_binding_persists_refusals_in_both_digests() -> None:
+    refusal = _projection_refusal()
+    with_refusal = _projection_binding(unavailable=(refusal,))
+    without_refusal = _projection_binding()
+
+    assert with_refusal.unavailable == (refusal,)
+    assert with_refusal.canonical_payload["unavailable"] == (
+        {
+            "skill": "review-only",
+            "operation": "required_join",
+            "diagnostic": "backend 'claude-code' cannot realize join semantics exactly",
+        },
+    )
+    assert with_refusal.digest != without_refusal.digest
+    assert with_refusal.projection_digest != without_refusal.projection_digest
+
+
+def test_skill_projection_binding_refusal_order_is_canonical() -> None:
+    alpha = _projection_refusal("alpha", diagnostic="alpha diagnostic")
+    zeta = _projection_refusal("zeta", diagnostic="zeta diagnostic")
+
+    forward = _projection_binding(unavailable=(alpha, zeta))
+    reverse = _projection_binding(unavailable=(zeta, alpha))
+
+    assert reverse.unavailable == (alpha, zeta)
+    assert reverse.canonical_payload == forward.canonical_payload
+    assert reverse.digest == forward.digest
+    assert reverse.projection_digest == forward.projection_digest
+
+
+def test_skill_projection_binding_refusal_round_trip_preserves_exact_diagnostic() -> None:
+    diagnostic = "backend diagnostic: keep punctuation, 'quotes', and casing EXACT"
+    binding = _projection_binding(unavailable=(_projection_refusal(diagnostic=diagnostic),))
+
+    restored = SkillProjectionBinding.from_payload(binding.canonical_payload)
+
+    assert restored == binding
+    assert restored.unavailable[0].diagnostic == diagnostic
+
+
+@pytest.mark.parametrize(
+    "unavailable",
+    [
+        (_projection_refusal(), _projection_refusal()),
+        (_projection_refusal("rectify"),),
+    ],
+    ids=("duplicate-refusal", "admitted-refused-overlap"),
+)
+def test_skill_projection_binding_rejects_duplicate_or_overlapping_refusals(
+    unavailable: tuple[SkillProjectionRefusal, ...],
+) -> None:
+    with pytest.raises(LaunchContractError):
+        _projection_binding(unavailable=unavailable)
+
+
+def test_skill_projection_binding_requires_at_least_one_admitted_member() -> None:
+    digest = sha256(b"skill").hexdigest()
+
+    with pytest.raises(LaunchContractError):
+        SkillProjectionBinding(
+            root_name=None,
+            member_names=(),
+            execution_role="session",
+            capability_union=frozenset(),
+            source_identities={},
+            canonical_digests={},
+            projected_digests={},
+            semantic_digests={},
+            adaptation_digests={},
+            projection_version=4,
+            project_root="/work/repo",
+            cwd="/work/repo",
+            backend="claude-code",
+            unavailable=(
+                SkillProjectionRefusal(
+                    skill="only-skill",
+                    operation=SkillSemanticOperation.CHILD_SPAWN,
+                    diagnostic=f"unavailable {digest}",
+                ),
+            ),
+        )
 
 
 @pytest.mark.parametrize(
@@ -617,6 +722,71 @@ def test_resolved_contract_strict_payload_round_trip_and_digest_verification() -
             contract.canonical_payload,
             expected_digest="0" * 64,
         )
+
+
+def test_launch_contract_schema_is_exactly_version_four() -> None:
+    resolver = DefaultLaunchResolver()
+    contract = resolver.finalize(resolver.prepare(_request()), _Adapter())
+
+    assert LAUNCH_CONTRACT_SCHEMA_VERSION == 4
+    assert contract.schema_version == 4
+    assert contract.canonical_payload["schema_version"] == 4
+
+
+def test_launch_contract_rejects_version_three_payload() -> None:
+    resolver = DefaultLaunchResolver()
+    contract = resolver.finalize(resolver.prepare(_request()), _Adapter())
+    old_payload = dict(contract.canonical_payload)
+    old_payload["schema_version"] = 3
+
+    with pytest.raises(LaunchContractError, match="schema version"):
+        ResolvedLaunchContract.from_payload(old_payload)
+
+
+@pytest.mark.parametrize(
+    "malformed_unavailable",
+    [
+        "not-an-array",
+        ({"skill": "review-only", "operation": "required_join"},),
+        (
+            {
+                "skill": "review-only",
+                "operation": "not-a-semantic-operation",
+                "diagnostic": "exact refusal",
+            },
+        ),
+    ],
+    ids=("not-array", "missing-diagnostic", "invalid-operation"),
+)
+def test_launch_contract_rejects_malformed_projection_refusal_payload(
+    malformed_unavailable: object,
+) -> None:
+    resolver = DefaultLaunchResolver()
+    binding = _projection_binding(unavailable=(_projection_refusal(),))
+    request = _request(
+        semantic_plan=SemanticLaunchPlan(
+            surface=LaunchSurface.HEADLESS_SKILL,
+            semantic_digest=sha256(
+                json.dumps(
+                    dict(binding.semantic_digests),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest(),
+            projection_digest=binding.projection_digest,
+        ),
+        skill_projection_binding=binding,
+    )
+    contract = resolver.finalize(resolver.prepare(request), _Adapter())
+    payload = dict(contract.canonical_payload)
+    raw_binding_payload = payload["skill_projection_binding"]
+    assert isinstance(raw_binding_payload, Mapping)
+    binding_payload = dict(raw_binding_payload)
+    binding_payload["unavailable"] = malformed_unavailable
+    payload["skill_projection_binding"] = binding_payload
+
+    with pytest.raises(LaunchContractError, match="skill projection"):
+        ResolvedLaunchContract.from_payload(payload)
 
 
 def _forced_adapter_result(preparation) -> LaunchAdapterResult:

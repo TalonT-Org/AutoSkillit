@@ -112,6 +112,7 @@ Inspect consumers.
         session_root=ValidatedAddDir(path=str(session_root)),
         invocation=invocation,
         projection_context=context,
+        member_names=("root",),
         resolved_command="/root",
         expected_output_patterns=(),
         write_behavior=WriteBehaviorSpec(),
@@ -140,3 +141,134 @@ Inspect consumers.
 
     assert resumed.root.exploration_vectors == (vector,)
     assert loaded.execution_identity == identity
+
+
+def test_fresh_contract_and_resume_retain_only_admitted_invocation_members(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    root_path = tmp_path / "project" / ".claude" / "skills" / "root" / "SKILL.md"
+    dependency_path = tmp_path / "project" / ".claude" / "skills" / "dependency" / "SKILL.md"
+    root_path.parent.mkdir(parents=True)
+    dependency_path.parent.mkdir(parents=True)
+    root_path.write_text(
+        "---\n"
+        "name: root\n"
+        "description: Supported root.\n"
+        "execution_role: session\n"
+        "activate_deps: [dependency]\n"
+        "---\n"
+        "Run the root.\n",
+        encoding="utf-8",
+    )
+    dependency_path.write_text(
+        "---\n"
+        "name: dependency\n"
+        "description: Refused dependency.\n"
+        "execution_role: session\n"
+        "uses_capabilities: [run_skill]\n"
+        "---\n"
+        "Run the dependency.\n",
+        encoding="utf-8",
+    )
+    root = _skill_info_from_frontmatter("root", SkillSource.PROJECT_LOCAL, root_path)
+    dependency = _skill_info_from_frontmatter(
+        "dependency",
+        SkillSource.PROJECT_LOCAL,
+        dependency_path,
+    )
+    project_root = tmp_path / "project"
+    invocation = EffectiveSkillInvocation(
+        root=root,
+        closure=(root, dependency),
+        capability_union=frozenset({"run_skill"}),
+        project_root=project_root,
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    conventions = BackendConventions(skills_subdir=Path(".agents/skills"))
+    backend = SimpleNamespace(name="test-backend", conventions=conventions)
+    context = SkillProjectionContext(
+        cwd=project_root,
+        project_root=project_root,
+        invocation=invocation,
+        backend=backend,  # type: ignore[arg-type]
+        conventions=conventions,
+    )
+    session_root = tmp_path / "session"
+    projected_root = session_root / conventions.skills_subdir / "root" / "SKILL.md"
+    projected_root.parent.mkdir(parents=True)
+    projected_root.write_text(root.canonical_content, encoding="utf-8")
+
+    contract, snapshot = build_skill_session_contract(
+        session_root=ValidatedAddDir(path=str(session_root)),
+        invocation=invocation,
+        projection_context=context,
+        member_names=("root",),
+        resolved_command="/root",
+        expected_output_patterns=(),
+        write_behavior=WriteBehaviorSpec(),
+        read_only=False,
+        scope_discipline=False,
+        completion_required=False,
+        skill_contract_json="",
+        execution_identity=ExecutionIdentity(),
+    )
+
+    assert contract.closure == ("root",)
+    assert contract.capability_union == frozenset()
+    assert contract.member_capabilities == {"root": frozenset()}
+    assert contract.member_activate_deps == {"root": ()}
+    assert tuple(snapshot) == (".agents/skills/root/SKILL.md",)
+    assert "dependency" not in contract.canonical_contents
+
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(contract, snapshot)
+    store.finalize(correlation_key, "admitted-only")
+
+    loaded = store.load("admitted-only").contract
+    resumed, _resumed_context = rehydrate_skill_invocation(
+        loaded,
+        backend,  # type: ignore[arg-type]
+    )
+
+    assert loaded.closure == ("root",)
+    assert tuple(member.name for member in resumed.closure) == ("root",)
+    assert resumed.capability_union == frozenset()
+
+
+@pytest.mark.parametrize(
+    "member_names",
+    [("dependency",), ("root", "missing")],
+    ids=("refused-root", "unknown-member"),
+)
+def test_fresh_contract_rejects_member_sets_outside_admitted_rooted_closure(
+    tmp_path: Path,
+    member_names: tuple[str, ...],
+) -> None:
+    from autoskillit.core import SkillContractError
+
+    root = SimpleNamespace(name="root")
+    invocation = SimpleNamespace(
+        root=root,
+        closure=(root, SimpleNamespace(name="dependency")),
+    )
+
+    with pytest.raises(
+        SkillContractError,
+        match="Projected members do not match the effective invocation",
+    ):
+        build_skill_session_contract(
+            session_root=ValidatedAddDir(path=str(tmp_path / "session")),
+            invocation=invocation,
+            projection_context=SimpleNamespace(),  # type: ignore[arg-type]
+            member_names=member_names,
+            resolved_command="/root",
+            expected_output_patterns=(),
+            write_behavior=WriteBehaviorSpec(),
+            read_only=False,
+            scope_discipline=False,
+            completion_required=False,
+            skill_contract_json="",
+            execution_identity=ExecutionIdentity(),
+        )

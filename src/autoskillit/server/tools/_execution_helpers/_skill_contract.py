@@ -128,6 +128,7 @@ def build_skill_session_contract(
     session_root: ValidatedAddDir,
     invocation: object,
     projection_context: SkillProjectionContext,
+    member_names: tuple[str, ...],
     resolved_command: str,
     expected_output_patterns: tuple[str, ...],
     write_behavior: WriteBehaviorSpec,
@@ -138,8 +139,12 @@ def build_skill_session_contract(
     execution_identity: ExecutionIdentity,
 ) -> tuple[SkillSessionContract, dict[str, str]]:
     """Capture the exact projected invocation bytes before executor launch."""
-    closure = tuple(getattr(invocation, "closure"))
+    invocation_closure = tuple(getattr(invocation, "closure"))
     root = getattr(invocation, "root")
+    admitted_names = frozenset(member_names)
+    closure = tuple(member for member in invocation_closure if member.name in admitted_names)
+    if root.name not in admitted_names or len(closure) != len(admitted_names):
+        raise SkillContractError("Projected members do not match the effective invocation")
     backend = projection_context.backend
     conventions = projection_context.conventions
     if backend is None or conventions is None:
@@ -168,7 +173,9 @@ def build_skill_session_contract(
         source_refs[member.name] = member.source_ref
         member_roles[member.name] = member.execution_role
         member_capabilities[member.name] = member.uses_capabilities
-        member_activate_deps[member.name] = member.activate_deps
+        member_activate_deps[member.name] = tuple(
+            dependency for dependency in member.activate_deps if dependency in admitted_names
+        )
         canonical_contents[member.name] = member.canonical_content
         exploration_vectors[member.name] = member.exploration_vectors
         exploration_sidecar_digests[member.name] = member.exploration_sidecar_digest
@@ -180,7 +187,7 @@ def build_skill_session_contract(
         execution_role=getattr(invocation, "execution_role"),
         source_refs=source_refs,
         closure=tuple(member.name for member in closure),
-        capability_union=getattr(invocation, "capability_union"),
+        capability_union=frozenset().union(*(member.uses_capabilities for member in closure)),
         canonical_digests=canonical_digests,
         projected_digests=projected_digests,
         projection_version=projection_context.projection_version,

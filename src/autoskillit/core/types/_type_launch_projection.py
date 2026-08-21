@@ -9,12 +9,28 @@ from hashlib import sha256
 from types import MappingProxyType
 
 from ._type_backend import CmdSpec
+from ._type_skill_semantics import SkillSemanticOperation
 
-__all__ = ["LaunchContractError", "SkillProjectionBinding"]
+__all__ = ["LaunchContractError", "SkillProjectionBinding", "SkillProjectionRefusal"]
 
 
 class LaunchContractError(ValueError):
     """A launch could not be proven to match its declared authority."""
+
+
+@dataclass(frozen=True, slots=True)
+class SkillProjectionRefusal:
+    """One validated semantic refusal retained beside an executable projection."""
+
+    skill: str
+    operation: SkillSemanticOperation
+    diagnostic: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.operation, SkillSemanticOperation):
+            raise LaunchContractError("skill projection refusal operation is malformed")
+        if not self.skill.strip() or not self.diagnostic.strip():
+            raise LaunchContractError("skill projection refusal fields must be non-empty")
 
 
 def _freeze_str_mapping(value: Mapping[str, str], field_name: str) -> Mapping[str, str]:
@@ -84,11 +100,31 @@ class SkillProjectionBinding:
     worktree_identity: Mapping[str, str] = field(default_factory=dict)
     executable_identity: Mapping[str, str] = field(default_factory=dict)
     plugin_identity: Mapping[str, str] = field(default_factory=dict)
+    unavailable: tuple[SkillProjectionRefusal, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "member_names", tuple(self.member_names))
         object.__setattr__(self, "capability_union", frozenset(self.capability_union))
         object.__setattr__(self, "artifact_paths", tuple(self.artifact_paths))
+        raw_unavailable = tuple(self.unavailable)
+        if any(not isinstance(refusal, SkillProjectionRefusal) for refusal in raw_unavailable):
+            raise LaunchContractError("skill projection refusals are malformed")
+        unavailable = tuple(
+            sorted(
+                raw_unavailable,
+                key=lambda refusal: (
+                    refusal.skill,
+                    refusal.operation.value,
+                    refusal.diagnostic,
+                ),
+            )
+        )
+        refusal_names = tuple(refusal.skill for refusal in unavailable)
+        if len(refusal_names) != len(set(refusal_names)):
+            raise LaunchContractError("skill projection refusals require unique skill names")
+        if set(refusal_names) & set(self.member_names):
+            raise LaunchContractError("skill projection admitted and refused members overlap")
+        object.__setattr__(self, "unavailable", unavailable)
         for field_name in (
             "branch_identity",
             "worktree_identity",
@@ -168,6 +204,14 @@ class SkillProjectionBinding:
                 "projected_digests": self.projected_digests,
                 "semantic_digests": self.semantic_digests,
                 "adaptation_digests": self.adaptation_digests,
+                "unavailable": tuple(
+                    {
+                        "skill": refusal.skill,
+                        "operation": refusal.operation.value,
+                        "diagnostic": refusal.diagnostic,
+                    }
+                    for refusal in self.unavailable
+                ),
                 "projection_version": self.projection_version,
                 "project_root": self.project_root,
                 "cwd": self.cwd,
@@ -281,12 +325,15 @@ class SkillProjectionBinding:
             members_raw = payload["member_names"]
             capabilities_raw = payload["capability_union"]
             artifacts_raw = payload["artifact_paths"]
+            unavailable_raw = payload["unavailable"]
             if not isinstance(members_raw, (list, tuple)):
                 raise LaunchContractError("skill projection members must be an array")
             if not isinstance(capabilities_raw, (list, tuple)):
                 raise LaunchContractError("skill projection capabilities must be an array")
             if not isinstance(artifacts_raw, (list, tuple)):
                 raise LaunchContractError("skill projection artifact paths must be an array")
+            if not isinstance(unavailable_raw, (list, tuple)):
+                raise LaunchContractError("skill projection unavailable must be an array")
             sources = require_mapping(payload["source_identities"], "source identities")
             projection_version = payload["projection_version"]
             if not isinstance(projection_version, int) or isinstance(projection_version, bool):
@@ -330,6 +377,18 @@ class SkillProjectionBinding:
                     payload["executable_identity"], "executable identity"
                 ),
                 plugin_identity=require_str_mapping(payload["plugin_identity"], "plugin identity"),
+                unavailable=tuple(
+                    SkillProjectionRefusal(
+                        skill=str(require_mapping(item, "skill projection refusal")["skill"]),
+                        operation=SkillSemanticOperation(
+                            str(require_mapping(item, "skill projection refusal")["operation"])
+                        ),
+                        diagnostic=str(
+                            require_mapping(item, "skill projection refusal")["diagnostic"]
+                        ),
+                    )
+                    for item in unavailable_raw
+                ),
             )
         except (KeyError, TypeError, ValueError) as exc:
             if isinstance(exc, LaunchContractError):

@@ -251,6 +251,98 @@ def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypa
     assert not hasattr(_skills_mod, "_read_skill_frontmatter")
 
 
+def test_projection_binding_excludes_refused_dependency_with_structured_detail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import (
+        SkillProjectionRefusal,
+        SkillSemanticAdaptationResult,
+        SkillSemanticOperation,
+    )
+    from autoskillit.execution.backends import ClaudeCodeBackend
+    from autoskillit.workspace import (
+        EffectiveSkillInvocation,
+        SkillProjectionContext,
+        build_skill_projection_binding,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    root_path = tmp_path / "root" / "SKILL.md"
+    dependency_path = tmp_path / "dependency" / "SKILL.md"
+    root_path.parent.mkdir()
+    dependency_path.parent.mkdir()
+    root_path.write_text(
+        "---\n"
+        "name: root\n"
+        "description: Supported root.\n"
+        "execution_role: session\n"
+        "activate_deps: [dependency]\n"
+        "---\n"
+        "Run the root.\n",
+        encoding="utf-8",
+    )
+    dependency_path.write_text(
+        "---\n"
+        "name: dependency\n"
+        "description: Refused dependency.\n"
+        "execution_role: session\n"
+        "uses_capabilities: [run_skill]\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  join:\n"
+        "    required: true\n"
+        "---\n"
+        "Run the dependency.\n",
+        encoding="utf-8",
+    )
+    root = _skill_info_from_frontmatter("root", SkillSource.PROJECT_LOCAL, root_path)
+    dependency = _skill_info_from_frontmatter(
+        "dependency",
+        SkillSource.PROJECT_LOCAL,
+        dependency_path,
+    )
+    invocation = EffectiveSkillInvocation(
+        root=root,
+        closure=(root, dependency),
+        capability_union=frozenset({"run_skill"}),
+        project_root=tmp_path,
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    diagnostic = "dependency requires unavailable fixed-set fan-in"
+
+    monkeypatch.setattr(
+        ClaudeCodeBackend,
+        "adapt_skill_semantics",
+        lambda _backend, _plan: SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic=diagnostic,
+        ),
+    )
+    backend = ClaudeCodeBackend()
+
+    binding = build_skill_projection_binding(
+        SkillProjectionContext(
+            cwd=tmp_path,
+            project_root=tmp_path,
+            invocation=invocation,
+            backend=backend,
+            conventions=backend.conventions,
+        )
+    )
+
+    assert binding.root_name == "root"
+    assert binding.member_names == ("root",)
+    assert binding.capability_union == frozenset()
+    assert binding.unavailable == (
+        SkillProjectionRefusal(
+            skill="dependency",
+            operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic=diagnostic,
+        ),
+    )
+
+
 def test_projection_context_derives_and_validates_backend_conventions(
     tmp_path: Path,
 ) -> None:

@@ -32,6 +32,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillProjectionBinding,
+    SkillProjectionRefusal,
     SkillResolver,
     SkillVisibilitySpec,
     temp_dir_display_str,
@@ -54,6 +55,7 @@ from autoskillit.workspace._projected_artifact.materialization import _default_b
 __all__ = [
     "AgentSkillDocument",
     "SkillProjectionBinding",
+    "SkillProjectionRefusal",
     "SkillProjectionPreparation",
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
@@ -113,21 +115,33 @@ def build_skill_projection_binding(
     backend = projection_context.backend
     if backend is None:
         raise SkillContractError("skill projection binding requires an effective backend")
-    # The backend fails closed (raises SkillContractError) directly from
-    # adapt_skill_semantics() when it cannot honestly realize a declared
-    # operation (e.g. Codex + join.required=true) — project_agent_skill_document()
-    # surfaces that raise. Exclude such skills from this binding instead of
-    # failing the whole projection: catalogs reaching this point (e.g. the
-    # ORCHESTRATOR-role catalog used by food-truck/kitchen dispatch) are
-    # prepared before a backend is selected, so they have not necessarily
-    # already passed through compile_session_skill_catalog()'s exclusion.
     documents: dict[str, AgentSkillDocument] = {}
     skills: list[SkillAuthority] = []
+    unavailable: list[SkillProjectionRefusal] = []
     for skill in projection_context.skills:
-        try:
-            documents[skill.name] = project_agent_skill_document(skill, projection_context)
-        except SkillContractError:
-            continue
+        adaptation = None
+        if skill.semantic_plan is not None:
+            adaptation = backend.adapt_skill_semantics(skill.semantic_plan)
+            unsupported_operation = adaptation.validate_refusal_for(
+                skill.semantic_plan,
+                backend=backend.name,
+            )
+            if unsupported_operation is not None:
+                assert adaptation.diagnostic is not None
+                unavailable.append(
+                    SkillProjectionRefusal(
+                        skill=skill.name,
+                        operation=unsupported_operation,
+                        diagnostic=adaptation.diagnostic,
+                    )
+                )
+                continue
+            adaptation.validate_for(skill.semantic_plan, backend=backend.name)
+        documents[skill.name] = project_agent_skill_document(
+            skill,
+            projection_context,
+            adaptation,
+        )
         skills.append(skill)
     invocation = projection_context.invocation
     catalog = projection_context.catalog
@@ -170,6 +184,7 @@ def build_skill_projection_binding(
         cwd=str(projection_context.cwd),
         backend=backend.name,
         artifact_paths=tuple(artifact_paths),
+        unavailable=tuple(unavailable),
     )
 
 

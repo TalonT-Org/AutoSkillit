@@ -32,6 +32,7 @@ from autoskillit.core import (
     ResolvedSkillAuthority,
     SkillAuthority,
     SkillContractError,
+    SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceIdentity,
     atomic_write,
@@ -302,6 +303,7 @@ def _direct_install_projection_context(
 def project_agent_skill_document(
     skill_info: SkillContractRecord,
     context: SkillProjectionContext,
+    semantic_adaptation: SkillSemanticAdaptationResult | None = None,
 ) -> AgentSkillDocument:
     """Remove machine authority fields while preserving public YAML and body."""
     if skill_info.invalidities:
@@ -364,7 +366,9 @@ def project_agent_skill_document(
         semantic_payload = skill_info.semantic_plan.canonical_payload
         semantic_digest = skill_info.semantic_plan.digest
     if skill_info.semantic_plan is not None and context.backend is not None:
-        adaptation = context.backend.adapt_skill_semantics(skill_info.semantic_plan)
+        adaptation = semantic_adaptation or context.backend.adapt_skill_semantics(
+            skill_info.semantic_plan
+        )
         adaptation.validate_for(skill_info.semantic_plan, backend=context.backend.name)
         adaptation_payload = adaptation.canonical_payload
         adaptation_digest = adaptation.digest
@@ -500,6 +504,7 @@ def materialize_agent_skill_tree(
     destination: Path,
     skills_or_catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
     context: SkillProjectionContext,
+    semantic_adaptations: Mapping[str, SkillSemanticAdaptationResult] | None = None,
 ) -> dict[str, AgentSkillDocument]:
     """Replace *destination* with an exact tree of agent-safe skill projections."""
     destination = Path(destination)
@@ -535,7 +540,11 @@ def materialize_agent_skill_tree(
                 raise SkillContractError(f"invalid projected skill name: {skill.name!r}")
             if skill.name in documents:
                 raise SkillContractError(f"duplicate projected skill name: {skill.name!r}")
-            document = project_agent_skill_document(skill, context)
+            document = project_agent_skill_document(
+                skill,
+                context,
+                (semantic_adaptations or {}).get(skill.name),
+            )
             skill_dir = staging / skill.name
             skill_dir.mkdir()
             atomic_write(skill_dir / "SKILL.md", document.content)

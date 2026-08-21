@@ -1082,6 +1082,7 @@ from .types import SkillInvalidityKind as SkillInvalidityKind
 from .types import SkillLister as SkillLister
 from .types import SkillModelClassDef as SkillModelClassDef
 from .types import SkillProjectionBinding as SkillProjectionBinding
+from .types import SkillProjectionRefusal as SkillProjectionRefusal
 from .types import SkillProjectionContextAuthority as SkillProjectionContextAuthority
 from .types import SkillProjectionPreparation as SkillProjectionPreparation
 from .types import SkillResolver as SkillResolver

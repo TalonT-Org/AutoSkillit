@@ -32,6 +32,8 @@ from autoskillit.core import (
     PluginLoadMode,
     SkillAuthority,
     SkillExecutionRole,
+    SkillProjectionRefusal,
+    SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceRef,
     _InstallLock,
@@ -137,6 +139,8 @@ class _ProjectedArtifactPlan:
     validation_catalog: tuple[SkillAuthority, ...] | EffectiveSkillCatalogAuthority
     require_sources_within_root: bool
     context: SkillProjectionContext
+    unavailable: tuple[SkillProjectionRefusal, ...]
+    semantic_adaptations: Mapping[str, SkillSemanticAdaptationResult]
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +194,7 @@ def _stage_projected_plugin_artifact(
             staging_root / "skills",
             skill_infos,
             plan.context,
+            plan.semantic_adaptations,
         )
         artifact_digest = projected_plugin_artifact_digest(staging_root)
         identity = PluginArtifactIdentity(
@@ -397,6 +402,8 @@ class ProjectedPluginArtifactAuthority:
                 f"direct plugin has no bundled skills: {source_root}"
             )
         adaptation_digests: dict[str, str] = {}
+        semantic_adaptations: dict[str, SkillSemanticAdaptationResult] = {}
+        unavailable: list[SkillProjectionRefusal] = []
         excluded_skill_names: set[str] = set()
         for skill in catalog.skills:
             plan = skill.semantic_plan
@@ -408,10 +415,26 @@ class ProjectedPluginArtifactAuthority:
                 backend=backend.name,
             )
             if unsupported_operation is not None:
+                assert adaptation.diagnostic is not None
                 excluded_skill_names.add(skill.name)
+                unavailable.append(
+                    SkillProjectionRefusal(
+                        skill=skill.name,
+                        operation=unsupported_operation,
+                        diagnostic=adaptation.diagnostic,
+                    )
+                )
+                logger.warning(
+                    "projected_plugin_skill_unavailable",
+                    skill=skill.name,
+                    backend=backend.name,
+                    operation=unsupported_operation.value,
+                    diagnostic=adaptation.diagnostic,
+                )
                 continue
             adaptation.validate_for(plan, backend=backend.name)
             adaptation_digests[skill.name] = adaptation.digest
+            semantic_adaptations[skill.name] = adaptation
         if excluded_skill_names:
             catalog = EffectiveSkillCatalog(
                 skills=cast(
@@ -429,9 +452,13 @@ class ProjectedPluginArtifactAuthority:
                 exclusions=cast(tuple[SkillExclusion, ...], tuple(catalog.exclusions)),
             )
             if not catalog.skills:
+                details = "; ".join(
+                    f"{refusal.skill} ({refusal.operation.value}: {refusal.diagnostic})"
+                    for refusal in sorted(unavailable, key=lambda item: item.skill)
+                )
                 raise PluginArtifactPublicationError(
                     "direct plugin has no bundled skills supported by backend "
-                    f"{backend.name!r}: {source_root}"
+                    f"{backend.name!r}: {source_root}; refusals: {details}"
                 )
         skill_identity = "\n".join(
             f"{info.name}:{info.canonical_digest}:{info.exploration_sidecar_digest}"
@@ -477,6 +504,8 @@ class ProjectedPluginArtifactAuthority:
             validation_catalog=source_infos if source_infos else catalog,
             require_sources_within_root=bool(source_infos),
             context=context,
+            unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
+            semantic_adaptations=MappingProxyType(dict(semantic_adaptations)),
         )
 
     def acquire_launch_binding(

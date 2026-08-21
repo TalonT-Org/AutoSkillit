@@ -42,6 +42,43 @@ def _authority(tmp_path: Path) -> ProjectedPluginArtifactAuthority:
     )
 
 
+def _semantic_catalog(
+    tmp_path: Path,
+    declarations: dict[str, str],
+):
+    from autoskillit.core import SkillExecutionRole, SkillSource
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillCatalogEntry
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    entries = []
+    plans = {}
+    for name, semantic_requirements in declarations.items():
+        skill_path = tmp_path / "semantic-skills" / name / "SKILL.md"
+        skill_path.parent.mkdir(parents=True)
+        skill_path.write_text(
+            "---\n"
+            f"name: {name}\n"
+            f"description: {name} semantic test.\n"
+            "semantic_version: 1\n"
+            "semantic_requirements:\n"
+            f"{semantic_requirements}"
+            "---\n"
+            f"Perform {name}.\n",
+            encoding="utf-8",
+        )
+        info = _skill_info_from_frontmatter(name, SkillSource.PROJECT_LOCAL, skill_path)
+        assert info.semantic_plan is not None
+        entries.append(SkillCatalogEntry.from_skill_info(info))
+        plans[name] = info.semantic_plan
+    return (
+        EffectiveSkillCatalog(
+            skills=tuple(entries),
+            execution_role=SkillExecutionRole.SESSION,
+        ),
+        plans,
+    )
+
+
 def test_authority_creation_is_lazy(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -125,6 +162,181 @@ def test_projected_plugin_propagates_malformed_adapter_result(
     )
     with pytest.raises(SkillContractError, match=f"^{expected}$"):
         authority._plan(ClaudeCodeBackend())
+
+
+def test_projected_plugin_plan_retains_mixed_refusal_details(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import (
+        SkillProjectionRefusal,
+        SkillSemanticAdaptationResult,
+        SkillSemanticOperation,
+    )
+    from tests.fakes import adapt_test_skill_semantics
+
+    catalog, plans = _semantic_catalog(
+        tmp_path,
+        {
+            "portable": "  git_metadata_writes:\n  - purpose: create one commit\n",
+            "refused": "  join:\n    required: true\n",
+        },
+    )
+    diagnostic = "fixed-set join is unavailable in the projected backend"
+
+    def adapt(_backend, plan):
+        if plan is plans["refused"]:
+            return SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic=diagnostic,
+            )
+        return adapt_test_skill_semantics(plan)
+
+    monkeypatch.setattr(ClaudeCodeBackend, "adapt_skill_semantics", adapt)
+
+    plan = project_default_plugin_authority(
+        cwd=tmp_path,
+        base_branch="main",
+        catalog=catalog,
+    )._plan(ClaudeCodeBackend())
+
+    assert tuple(skill.name for skill in plan.catalog.skills) == ("portable",)
+    assert plan.unavailable == (
+        SkillProjectionRefusal(
+            skill="refused",
+            operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic=diagnostic,
+        ),
+    )
+
+
+def test_projected_plugin_reuses_supported_adaptation_during_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.workspace._projected_artifact.authority as projection
+    from autoskillit.core import (
+        SkillSemanticAdaptationResult,
+        SkillSemanticOperation,
+    )
+
+    catalog, _plans = _semantic_catalog(
+        tmp_path,
+        {
+            "stateful": "  git_metadata_writes:\n  - purpose: create one commit\n",
+        },
+    )
+    calls = 0
+    supported = SkillSemanticAdaptationResult(
+        instruction_fragments=("Use the first admitted adaptation.",),
+    )
+
+    def adapt(_backend, _plan):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return supported
+        return SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.GIT_METADATA_WRITE,
+            diagnostic="state changed after admission",
+        )
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(ClaudeCodeBackend, "adapt_skill_semantics", adapt)
+    authority = project_default_plugin_authority(
+        cwd=tmp_path,
+        base_branch="main",
+        catalog=catalog,
+    )
+
+    plan = authority._plan(ClaudeCodeBackend())
+    plan.destination.parent.mkdir(parents=True)
+    staged = projection._stage_projected_plugin_artifact(plan)
+
+    assert calls == 1
+    assert plan.semantic_adaptations == {"stateful": supported}
+    projected = staged.root / "skills" / "stateful" / "SKILL.md"
+    assert "Use the first admitted adaptation." in projected.read_text(encoding="utf-8")
+
+
+def test_all_refused_projection_preserves_previous_publication_and_names_details(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import (
+        PluginArtifactPublicationError,
+        SkillSemanticAdaptationResult,
+        SkillSemanticOperation,
+    )
+    from autoskillit.workspace._projection_cache import projected_plugin_artifact_digest
+    from tests.fakes import adapt_test_skill_semantics
+
+    catalog, plans = _semantic_catalog(
+        tmp_path,
+        {
+            "alpha": "  join:\n    required: true\n",
+            "beta": (
+                "  logical_roles:\n"
+                "  - name: worker\n"
+                "    purpose: perform one task\n"
+                "  child_spawns:\n"
+                "  - role: worker\n"
+                "    count: 1\n"
+            ),
+        },
+    )
+    refusing = False
+    diagnostics = {
+        "alpha": "alpha cannot use a fixed-set join",
+        "beta": "beta cannot spawn a child",
+    }
+    operations = {
+        "alpha": SkillSemanticOperation.REQUIRED_JOIN,
+        "beta": SkillSemanticOperation.CHILD_SPAWN,
+    }
+
+    def adapt(_backend, plan):
+        name = next(name for name, expected in plans.items() if plan is expected)
+        if not refusing:
+            return adapt_test_skill_semantics(plan)
+        return SkillSemanticAdaptationResult(
+            unsupported_operation=operations[name],
+            diagnostic=diagnostics[name],
+        )
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(ClaudeCodeBackend, "adapt_skill_semantics", adapt)
+    authority = project_default_plugin_authority(
+        cwd=tmp_path,
+        base_branch="main",
+        catalog=catalog,
+    )
+    binding = authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    previous_root = binding.identity.managed_path
+    previous_manifest = binding.identity.manifest_path.read_bytes()
+    previous_digest = projected_plugin_artifact_digest(previous_root)
+    binding.close()
+    previous_entries = tuple(sorted(path.name for path in previous_root.parent.iterdir()))
+    refusing = True
+
+    with pytest.raises(PluginArtifactPublicationError) as exc_info:
+        authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+
+    message = str(exc_info.value)
+    for name in ("alpha", "beta"):
+        assert name in message
+        assert operations[name].value in message
+        assert diagnostics[name] in message
+    assert previous_root.is_dir()
+    assert binding.identity.manifest_path.read_bytes() == previous_manifest
+    assert projected_plugin_artifact_digest(previous_root) == previous_digest
+    assert tuple(sorted(path.name for path in previous_root.parent.iterdir())) == previous_entries
 
 
 def test_projected_artifact_boundary_is_one_way_and_canonical() -> None:

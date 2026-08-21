@@ -983,12 +983,24 @@ class DefaultSessionSkillManager:
             effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
         elif backend is not None and projection_context.invocation is not None:
+            admitted_records: list[SkillAuthority] = []
             for record in records:
                 plan = record.semantic_plan
                 if plan is None:
+                    admitted_records.append(record)
                     continue
                 adaptation = backend.adapt_skill_semantics(plan)
+                unsupported_operation = adaptation.validate_refusal_for(
+                    plan,
+                    backend=backend.name,
+                )
+                if unsupported_operation is not None:
+                    if record.name == projection_context.invocation.root.name:
+                        adaptation.validate_for(plan, backend=backend.name)
+                    continue
                 adaptation.validate_for(plan, backend=backend.name)
+                admitted_records.append(record)
+            records = tuple(admitted_records)
 
         execution_role = (
             effective_catalog.execution_role

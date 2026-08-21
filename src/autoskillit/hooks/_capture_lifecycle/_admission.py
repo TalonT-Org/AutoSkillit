@@ -182,6 +182,12 @@ def _scan_and_adopt_orphans(
     without ``_admission`` needing to import from ``_store`` (which would
     create a circular import at module load time).
     """
+    if lifecycle_error is None:
+        raise TypeError(
+            "_scan_and_adopt_orphans requires a concrete lifecycle_error "
+            "exception class; the wrapper in _store.py always supplies "
+            "CaptureLifecycleError."
+        )
     return _sweep_scan_and_adopt_orphans(
         store,
         lifecycle_error=lifecycle_error,

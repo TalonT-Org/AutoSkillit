@@ -18,6 +18,7 @@ from autoskillit.core import (
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactIdentity,
     Severity,
+    managed_home_for,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -54,7 +55,7 @@ def _publish_generation(
     source_root = home / ".test-generation-source"
     source_root.mkdir(exist_ok=True)
     (source_root / "marker.txt").write_text("content", encoding="utf-8")
-    with _InstallLock():
+    with _InstallLock(managed_home_for(home)):
         return publish_generation(
             home=home,
             plugin_ref=plugin_ref,
@@ -106,7 +107,7 @@ def test_failed_generation_publication_discards_unpublished_artifacts(
 
         monkeypatch.setattr(publication, "_replace_symlink", fail_selector)
 
-    with _InstallLock(), pytest.raises((OSError, RuntimeError)):
+    with _InstallLock(managed_home_for(home)), pytest.raises((OSError, RuntimeError)):
         publication.publish_generation(
             home=home,
             plugin_ref=_PLUGIN_KEY,

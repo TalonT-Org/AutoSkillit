@@ -21,6 +21,7 @@ from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
     LegacyRetiringEvidence,
+    ManagedHome,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
@@ -38,6 +39,7 @@ from autoskillit.core import (
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
     log_plugin_artifact_lifecycle,
+    managed_home_for,
     new_plugin_artifact_incarnation_id,
     read_installed_plugin_artifact_identity,
     resolve_current_generation,
@@ -230,7 +232,7 @@ def _finalize_generation(
 
 def publish_generation(
     *,
-    home: Path,
+    home: Path | ManagedHome,
     plugin_ref: str,
     version: str,
     semantic_key: str,
@@ -243,9 +245,10 @@ def publish_generation(
 
     Returns the identity of the newly published generation.
     """
+    home_root = Path(home)
     incarnation_id = new_plugin_artifact_incarnation_id()
-    version_root = generation_version_root(home, plugin_ref, version)
-    generation_root = generation_artifact_root(home, plugin_ref, version, incarnation_id)
+    version_root = generation_version_root(home_root, plugin_ref, version)
+    generation_root = generation_artifact_root(home_root, plugin_ref, version, incarnation_id)
     version_root.mkdir(parents=True, exist_ok=True)
     _sweep_orphaned_staging(version_root)
 
@@ -270,7 +273,7 @@ def publish_generation(
         # Move staging content to the final generation path
         os.rename(staging / "content", generation_root)
         return _finalize_generation(
-            home=home,
+            home=home_root,
             artifact_ref=plugin_ref,
             version=version,
             semantic_key=semantic_key,
@@ -388,14 +391,16 @@ class GenerationArtifactRetirementOwner:
         self,
         managed_root: Path,
         *,
-        home: Path,
+        home: Path | ManagedHome,
         plugin_ref: str,
         artifact_kind: PluginArtifactKind = PluginArtifactKind.PLUGIN_GENERATION,
     ) -> None:
-        self._home = Path(home)
+        resolved_home = home if isinstance(home, ManagedHome) else managed_home_for(Path(home))
+        self._home = resolved_home.root
         self._plugin_ref = plugin_ref
         self._artifact_kind = artifact_kind
         self._retirement = PluginArtifactRetirementEngine(
+            home=resolved_home,
             managed_root=managed_root,
             artifact_kind=artifact_kind,
             manifest_path=self.manifest_path,
@@ -421,10 +426,12 @@ class GenerationArtifactRetirementOwner:
         self,
         identity: PluginArtifactIdentity,
         not_before: datetime,
-    ) -> RetiringAppendResult:
+    ) -> RetiringAppendResult | None:
         return self._retirement.enqueue_retirement(identity, not_before)
 
-    def cancel_obsolete_retirements(self, identity: PluginArtifactIdentity) -> tuple[str, ...]:
+    def cancel_obsolete_retirements(
+        self, identity: PluginArtifactIdentity
+    ) -> tuple[str, ...] | None:
         return self._retirement.cancel_obsolete_retirements(identity)
 
     def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
@@ -541,7 +548,9 @@ def prune_stale_generations(
                     exc,
                 )
                 continue
-            created += int(owner.enqueue_retirement(identity, not_before).created)
+            enqueued = owner.enqueue_retirement(identity, not_before)
+            if enqueued is not None:
+                created += int(enqueued.created)
         finally:
             writer.close_preserving()
     return created

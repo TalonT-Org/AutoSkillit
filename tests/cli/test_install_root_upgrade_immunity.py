@@ -27,6 +27,7 @@ from autoskillit.core import (
     generation_staging_root,
     installed_plugin_artifact_lease_path,
     installed_plugin_semantic_key,
+    managed_home_for,
     new_plugin_artifact_incarnation_id,
 )
 from autoskillit.workspace import publish_install_root_generation
@@ -228,7 +229,7 @@ def _install_root_generation(
 
     shutil.rmtree(staging, ignore_errors=True)
 
-    with _InstallLock():
+    with _InstallLock(managed_home_for(home)):
         return publish_install_root_generation(
             home=home,
             install_ref=_INSTALL_REF,

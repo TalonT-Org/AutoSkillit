@@ -255,7 +255,7 @@ def _publish_install_root(home: Path, version: str) -> PluginArtifactIdentity:
     generation_root = generation_artifact_root(home, _INSTALL_ROOT_REF, version, incarnation_id)
     generation_root.mkdir(parents=True)
     (generation_root / "marker").write_text(version, encoding="utf-8")
-    with _InstallLock():
+    with _InstallLock(managed_home_for(home)):
         return publish_install_root_generation(
             home=home,
             install_ref=_INSTALL_ROOT_REF,

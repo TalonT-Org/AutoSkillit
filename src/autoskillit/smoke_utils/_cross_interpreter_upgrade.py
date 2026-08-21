@@ -178,6 +178,7 @@ def _publish_real_package_generation(
         _InstallLock,
         generation_artifact_root,
         installed_plugin_semantic_key,
+        managed_home_for,
         new_plugin_artifact_incarnation_id,
     )
     from autoskillit.workspace import publish_install_root_generation
@@ -187,7 +188,7 @@ def _publish_real_package_generation(
     generation_root.parent.mkdir(parents=True, exist_ok=True)
     _run_uv_generation_install(source_root, generation_root, python_pin, env)
 
-    with _InstallLock():
+    with _InstallLock(managed_home_for(scratch_home)):
         return publish_install_root_generation(
             home=scratch_home,
             install_ref=install_ref,

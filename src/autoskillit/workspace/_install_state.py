@@ -363,7 +363,10 @@ def _derived_version_findings(package_version: str) -> list[InstallStateFinding]
     return findings
 
 
-def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
+def _enqueue_legacy_installed_plugin_versions(
+    artifact: Path,
+    home: ManagedHome,
+) -> None:
     """Enqueue every version subdirectory of the legacy Claude-cache root.
 
     Best-effort per candidate: a version directory that fails to validate or
@@ -374,11 +377,12 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
 
     running_version = importlib.metadata.version("autoskillit")
     running_generation = resolve_current_generation(
-        _home(),
+        home.root,
         _AUTOSKILLIT_PLUGIN_KEY,
         running_version,
     )
     engine = PluginArtifactRetirementEngine(
+        home=home,
         managed_root=artifact,
         artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
         manifest_path=installed_plugin_artifact_manifest_path,
@@ -447,7 +451,7 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
         pass
 
 
-_RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path], None]] = {
+_RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path, ManagedHome], None]] = {
     ".claude/plugins/cache/autoskillit-local/autoskillit": (
         _enqueue_legacy_installed_plugin_versions
     ),
@@ -498,7 +502,7 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
                     f"no retire_via_engine handler registered for {key!r} — "
                     "add one to _RETIRE_VIA_ENGINE_HANDLERS in this module"
                 )
-            handler(artifact)
+            handler(artifact, resolved_home)
             logger.info(
                 "reconcile_install_artifacts: %s enqueued for engine-gated retirement "
                 "(retired in %s, disposition=%s)",

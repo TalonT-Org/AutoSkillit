@@ -575,8 +575,8 @@ def default_plugin_retirement_coordinator(
         plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
     )
     install_root_generation_owner = GenerationArtifactRetirementOwner(
-        generation_store_root(home, _AUTOSKILLIT_INSTALL_ROOT_KEY),
-        home=home,
+        generation_store_root(resolved_home.root, _AUTOSKILLIT_INSTALL_ROOT_KEY),
+        home=resolved_home,
         plugin_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
         artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
     )

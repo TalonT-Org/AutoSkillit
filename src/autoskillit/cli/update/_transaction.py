@@ -48,6 +48,7 @@ from autoskillit.core import (
     installed_plugin_semantic_key,
     is_git_main_checkout,
     is_git_worktree,
+    managed_home_for,
     new_plugin_artifact_incarnation_id,
     write_entrypoint_shim,
 )
@@ -576,7 +577,7 @@ def run_update_transaction(
                     _process_finding("install-root generation install", final_result.returncode),
                 )
             try:
-                with _InstallLock():
+                with _InstallLock(managed_home_for(resolved_home)):
                     publish_install_root_generation(
                         home=resolved_home,
                         install_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,

@@ -188,7 +188,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_plugin_artifact_identity": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
     ),
-"_plugin_cache": frozenset(
+    "_plugin_cache": frozenset(
         {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
     ),
     "_type_persisted_formats": frozenset({"core", "execution", "fleet", "hooks"}),
@@ -196,7 +196,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # write_entrypoint_shim() is called from cli/update/_transaction.py's
     # INSTALL_ROOT_GENERATION_PUBLICATION phase (issue #4597 Phase 3).
     "_entrypoint_shim": frozenset({"core", "cli"}),
-
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),

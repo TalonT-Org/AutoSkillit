@@ -17,13 +17,18 @@ type `_FlagArity`) and one symbol from `_github_mutation_analysis`
 (`_DYNAMIC_SHELL_TOKEN_RE`). Both are bare-name flat-mode siblings resolved
 via `git_ops_guard.py`'s `sys.path` bootstrap (or the test-side bootstrap in
 `tests/infra/test_git_ops_guard.py`). It does NOT re-export any
-`_command_classification` symbol — the public-API surface is the seven
-classification primitives and their helpers above.
+`_command_classification` symbol.
 
-`extract_git_subcommand_and_flags` (from `_command_classification`) is the
-actual function used by `_classify_git_segment` — the parent plan's
-reference to a hypothetical `_extract_git_subcommand_and_remaining` was a
-documentation error that this module surfaces without acting on.
+Public API surface:
+    Classifiers (7):
+        _classify_git_segment, _classify_fetch, _classify_push,
+        _classify_update_ref, _classify_branch_position, _classify_reset,
+        _contains_blocked_git_op
+    Helpers (consumed transitively by the classifiers above):
+        _tokenize_text, _git_result, _git_text, _parse_worktree_owners,
+        _resolve_git_common_dir, _normal_branch_ref, _symbolic_head,
+        _resolve_attempted_sha, _consume_option_value, _refspec_targets,
+        _same_repository
 """
 
 from __future__ import annotations

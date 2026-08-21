@@ -50,6 +50,10 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture._request_lineage import (  # noqa: F401
         _CAPTURE_ID_RE,
         _IDENTITY_RE,
+        _MAX_DECODED_REQUEST_BYTES,
+        _MAX_ENCODED_REQUEST_BYTES,
+        _MAX_LINEAGE_REF_JSON_BYTES,
+        _MAX_PATH_BYTES,
         CAPTURE_REQUEST_PROTOCOL_VERSION,
         MANAGED_ATTEMPT_ID_ENV_VAR,
         MANAGED_LAUNCH_ID_ENV_VAR,
@@ -91,6 +95,10 @@ elif __package__:
     from ._capture._request_lineage import (  # noqa: F401
         _CAPTURE_ID_RE,
         _IDENTITY_RE,
+        _MAX_DECODED_REQUEST_BYTES,
+        _MAX_ENCODED_REQUEST_BYTES,
+        _MAX_LINEAGE_REF_JSON_BYTES,
+        _MAX_PATH_BYTES,
         CAPTURE_REQUEST_PROTOCOL_VERSION,
         MANAGED_ATTEMPT_ID_ENV_VAR,
         MANAGED_LAUNCH_ID_ENV_VAR,
@@ -132,6 +140,10 @@ else:
     from _capture._request_lineage import (  # noqa: F401
         _CAPTURE_ID_RE,
         _IDENTITY_RE,
+        _MAX_DECODED_REQUEST_BYTES,
+        _MAX_ENCODED_REQUEST_BYTES,
+        _MAX_LINEAGE_REF_JSON_BYTES,
+        _MAX_PATH_BYTES,
         CAPTURE_REQUEST_PROTOCOL_VERSION,
         MANAGED_ATTEMPT_ID_ENV_VAR,
         MANAGED_LAUNCH_ID_ENV_VAR,

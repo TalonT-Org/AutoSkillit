@@ -135,6 +135,18 @@ def test_decomposition_preserves_public_symbol_set() -> None:
         f"Names missing from core.types.__all__: {sorted(expected_all - set(types_hub.__all__))}"
     )
 
+    # Each facade's own __all__ must be a strict subset of the pre-split snapshot —
+    # any name that was moved to a shard shard must NOT reappear in the facade's
+    # __all__, otherwise the hub's concatenated __all__ would carry duplicates.
+    assert set(enums_mod.__all__) < _PRE_SPLIT_ENUM_NAMES, (
+        f"Names unexpectedly re-added to _type_enums.__all__: "
+        f"{sorted(set(enums_mod.__all__) - _PRE_SPLIT_ENUM_NAMES)}"
+    )
+    assert set(constants_mod.__all__) < _PRE_SPLIT_CONSTANT_NAMES, (
+        f"Names unexpectedly re-added to _type_constants.__all__: "
+        f"{sorted(set(constants_mod.__all__) - _PRE_SPLIT_CONSTANT_NAMES)}"
+    )
+
     # Identity preserved: name in facade and the same name imported directly from
     # the new shard resolve to the exact same object (no wrapping).
     from autoskillit.core.types._type_enums_context_admission import (

@@ -715,8 +715,8 @@ def main() -> None:
         from autoskillit.cli._init_helpers import (
             _user_claude_json_path,
             evict_direct_mcp_entry,
+            warm_failure_path_imports,
         )
-        from autoskillit.fleet import warm_failure_path_imports
 
         warm_failure_path_imports()
         evict_direct_mcp_entry(_user_claude_json_path())

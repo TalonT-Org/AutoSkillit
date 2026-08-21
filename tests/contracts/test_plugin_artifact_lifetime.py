@@ -51,6 +51,82 @@ def test_authority_creation_is_lazy(tmp_path: Path, monkeypatch) -> None:
     assert not (tmp_path / ".autoskillit").exists()
 
 
+@pytest.mark.parametrize(
+    ("malformation", "expected"),
+    [
+        (
+            "undeclared_refusal",
+            "backend 'claude-code' reported unsupported semantic operation "
+            "'child_spawn' not declared by the semantic plan",
+        ),
+        (
+            "incomplete_supported",
+            "semantic adaptation omitted observable instructions",
+        ),
+    ],
+)
+def test_projected_plugin_propagates_malformed_adapter_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    malformation: str,
+    expected: str,
+) -> None:
+    from autoskillit.core import (
+        SkillContractError,
+        SkillExecutionRole,
+        SkillSemanticAdaptationResult,
+        SkillSemanticOperation,
+        SkillSource,
+    )
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillCatalogEntry
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    skill_path = tmp_path / "projected-semantic-test" / "SKILL.md"
+    skill_path.parent.mkdir()
+    skill_path.write_text(
+        "---\n"
+        "name: projected-semantic-test\n"
+        "description: Projected semantic test.\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  git_metadata_writes:\n"
+        "  - purpose: create one commit\n"
+        "---\n"
+        "Perform the projected operation.\n",
+        encoding="utf-8",
+    )
+    info = _skill_info_from_frontmatter(
+        "projected-semantic-test",
+        SkillSource.PROJECT_LOCAL,
+        skill_path,
+    )
+    assert info.semantic_plan is not None
+    catalog = EffectiveSkillCatalog(
+        skills=(SkillCatalogEntry.from_skill_info(info),),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    if malformation == "undeclared_refusal":
+        result = SkillSemanticAdaptationResult.unsupported(
+            backend="claude-code",
+            operation=SkillSemanticOperation.CHILD_SPAWN,
+        )
+    else:
+        result = SkillSemanticAdaptationResult()
+    monkeypatch.setattr(
+        ClaudeCodeBackend,
+        "adapt_skill_semantics",
+        lambda self, plan: result,
+    )
+
+    authority = project_default_plugin_authority(
+        cwd=tmp_path,
+        base_branch="main",
+        catalog=catalog,
+    )
+    with pytest.raises(SkillContractError, match=f"^{expected}$"):
+        authority._plan(ClaudeCodeBackend())
+
+
 def test_projected_artifact_boundary_is_one_way_and_canonical() -> None:
     import autoskillit.workspace._projected_artifact as projected_artifact
     import autoskillit.workspace._projected_artifact.authority as authority

@@ -75,6 +75,7 @@ from autoskillit.core import (
     extract_skill_name,
     load_yaml,
     pkg_root,
+    required_join_is_unsupported,
     truncate_text,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
@@ -1058,11 +1059,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Claude Code instructions."""
-        if (
-            plan.join is not None
-            and plan.join.required
-            and not self.capabilities.fixed_set_join_capable
-        ):
+        if required_join_is_unsupported(plan, self.capabilities):
             return SkillSemanticAdaptationResult(
                 unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
                 diagnostic=(

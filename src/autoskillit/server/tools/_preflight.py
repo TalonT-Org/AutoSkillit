@@ -41,8 +41,14 @@ def check_skill_semantic_feasibility(
     """Return the selected backend's exact first unsupported-operation diagnostic."""
     for plan in plans:
         adaptation = backend.adapt_skill_semantics(plan)
-        if adaptation.diagnostic is not None:
+        unsupported_operation = adaptation.validate_refusal_for(
+            plan,
+            backend=backend.name,
+        )
+        if unsupported_operation is not None:
+            assert adaptation.diagnostic is not None
             return adaptation.diagnostic
+        adaptation.validate_for(plan, backend=backend.name)
     return None
 
 

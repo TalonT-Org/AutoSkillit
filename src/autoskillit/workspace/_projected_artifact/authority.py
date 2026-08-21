@@ -31,7 +31,6 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
     SkillAuthority,
-    SkillContractError,
     SkillExecutionRole,
     SkillSource,
     SkillSourceRef,
@@ -397,21 +396,18 @@ class ProjectedPluginArtifactAuthority:
             raise PluginArtifactPublicationError(
                 f"direct plugin has no bundled skills: {source_root}"
             )
-        # Backends fail closed (raise SkillContractError) directly from
-        # adapt_skill_semantics() when a plan declares an operation they
-        # cannot honestly realize (e.g. Codex + join.required=true), rather
-        # than returning a gradable unsupported_operation result. Treat that
-        # refusal the same way compile_session_skill_catalog() does: exclude
-        # the skill from this catalog instead of failing the whole plan.
         adaptation_digests: dict[str, str] = {}
         excluded_skill_names: set[str] = set()
         for skill in catalog.skills:
             plan = skill.semantic_plan
             if plan is None:
                 continue
-            try:
-                adaptation = backend.adapt_skill_semantics(plan)
-            except SkillContractError:
+            adaptation = backend.adapt_skill_semantics(plan)
+            unsupported_operation = adaptation.validate_refusal_for(
+                plan,
+                backend=backend.name,
+            )
+            if unsupported_operation is not None:
                 excluded_skill_names.add(skill.name)
                 continue
             adaptation.validate_for(plan, backend=backend.name)

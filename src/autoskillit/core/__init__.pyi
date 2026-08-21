@@ -1089,6 +1089,7 @@ from .types import SkillResult as SkillResult
 from .types import SkillSemanticAdaptationResult as SkillSemanticAdaptationResult
 from .types import SkillSemanticOperation as SkillSemanticOperation
 from .types import SkillSemanticPlan as SkillSemanticPlan
+from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSessionContract as SkillSessionContract
 from .types import SkillSessionContractStore as SkillSessionContractStore

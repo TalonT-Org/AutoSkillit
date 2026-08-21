@@ -364,7 +364,12 @@ def _check_standing_backend_pins_feasibility(
                 if skill_info.semantic_plan is None:
                     continue
                 adaptation = backend.adapt_skill_semantics(skill_info.semantic_plan)
-                if adaptation.diagnostic is not None:
+                unsupported_operation = adaptation.validate_refusal_for(
+                    skill_info.semantic_plan,
+                    backend=backend_name,
+                )
+                if unsupported_operation is not None:
+                    assert adaptation.diagnostic is not None
                     results.append(
                         DoctorResult(
                             Severity.ERROR,
@@ -376,6 +381,8 @@ def _check_standing_backend_pins_feasibility(
                             "supports the skill's semantic requirements.",
                         )
                     )
+                    continue
+                adaptation.validate_for(skill_info.semantic_plan, backend=backend_name)
 
     if not results:
         results.append(

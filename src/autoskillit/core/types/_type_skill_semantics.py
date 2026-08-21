@@ -8,8 +8,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from hashlib import sha256
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from ._type_exceptions import ChildSpawnCardinalityError, SkillContractError
+
+if TYPE_CHECKING:
+    from ._type_backend import BackendCapabilities
 
 __all__ = [
     "SKILL_MODEL_CLASS_REGISTRY",
@@ -27,6 +31,7 @@ __all__ = [
     "SkillModelClassDef",
     "SkillSemanticOperation",
     "SkillSemanticPlan",
+    "required_join_is_unsupported",
 ]
 
 
@@ -294,6 +299,14 @@ class SkillSemanticPlan:
                 separators=(",", ":"),
             ).encode()
         ).hexdigest()
+
+
+def required_join_is_unsupported(
+    plan: SkillSemanticPlan,
+    capabilities: BackendCapabilities,
+) -> bool:
+    """Return whether a required fixed-set join exceeds backend capabilities."""
+    return plan.join is not None and plan.join.required and not capabilities.fixed_set_join_capable
 
 
 @dataclass(frozen=True, slots=True)

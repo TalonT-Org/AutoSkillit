@@ -77,6 +77,7 @@ def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
         JoinSpec,
         LogicalRoleSpec,
         SiblingSkillSpec,
+        SkillSemanticOperation,
         SkillSemanticPlan,
     )
     from autoskillit.execution.backends import BACKEND_REGISTRY
@@ -99,17 +100,19 @@ def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
         git_metadata_writes=(GitMetadataWriteSpec(purpose="create a commit"),),
     )
 
-    from autoskillit.core.types._type_exceptions import SkillContractError
-
     for backend_name, backend_cls in BACKEND_REGISTRY.items():
-        # Codex cannot provide fixed-set fan-in, so it honestly refuses the
-        # join-required plan via SkillContractError at the adapter surface
-        # (fail-closed). Other backends must realize it.
+        result = backend_cls().adapt_skill_semantics(plan)
+        # Codex cannot provide fixed-set fan-in, so it honestly returns the
+        # join-required refusal at the adapter surface. Other backends realize it.
         if backend_name == "codex":
-            with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-                backend_cls().adapt_skill_semantics(plan)
+            assert result.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+            assert result.diagnostic == (
+                "Codex exposes wait-any/mailbox-activity semantics rather than "
+                "fixed-set fan-in. Skills declaring join.required=true cannot be "
+                "honestly realized on this backend and must be refused at admission."
+            )
+            assert result.instruction_fragments == ()
         else:
-            result = backend_cls().adapt_skill_semantics(plan)
             assert result.diagnostic is None, backend_name
             assert result.unsupported_operation is None, backend_name
             assert result.instruction_fragments, backend_name

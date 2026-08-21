@@ -441,3 +441,33 @@ def test_session_catalog_filters_unsupported_semantics_with_exact_metadata(
             },
         ),
     }
+
+
+def test_session_catalog_propagates_unexpected_adapter_contract_error(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import SkillContractError, SkillExecutionRole
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        compile_session_skill_catalog,
+    )
+
+    skill_path = tmp_path / "portable" / "SKILL.md"
+    _write_skill(skill_path)
+    info = _skill_info_from_frontmatter("portable", SkillSource.PROJECT_LOCAL, skill_path)
+    catalog = EffectiveSkillCatalog(
+        skills=(SkillCatalogEntry.from_skill_info(info),),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    def fail_adaptation(_plan):
+        raise SkillContractError("unexpected adapter contract failure")
+
+    backend = SimpleNamespace(
+        name="broken",
+        adapt_skill_semantics=fail_adaptation,
+    )
+
+    with pytest.raises(SkillContractError, match="^unexpected adapter contract failure$"):
+        compile_session_skill_catalog(catalog, backend)

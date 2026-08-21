@@ -343,10 +343,13 @@ def test_install_root_selector_is_never_absent_during_flip(home: Path) -> None:
                 started.set()
                 if target == final_target:
                     final_observed.set()
+                stop.wait(0.0005)
             except FileNotFoundError:
                 violations.append("selector missing")
+                break
             except OSError as exc:
                 violations.append(f"unexpected error reading selector: {exc}")
+                break
 
     poller = threading.Thread(target=_poll_selector, daemon=True)
     poller.start()

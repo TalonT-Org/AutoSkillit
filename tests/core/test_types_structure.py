@@ -123,9 +123,8 @@ _PRE_SPLIT_CONSTANT_NAMES: frozenset[str] = frozenset(
 
 
 def test_decomposition_preserves_public_symbol_set() -> None:
-    """Issue #4735: every original _type_enums / _type_constants __all__ entry
-    must remain reachable from the original facade path with object identity
-    preserved across the re-export."""
+    """Every pre-split _type_enums / _type_constants __all__ entry must remain
+    reachable through the original facade path with object identity preserved."""
     # Hub __all__ (union of all shards) preserves every original name.
     import autoskillit.core.types as types_hub
     import autoskillit.core.types._type_constants as constants_mod

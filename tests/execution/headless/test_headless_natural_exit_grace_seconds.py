@@ -97,5 +97,11 @@ async def test_food_truck_dispatch_threads_natural_exit_grace_seconds(
     )
 
     assert runner.call_args_list, "runner was never called"
-    _, _, _, kwargs = runner.call_args_list[0]
+    matching_calls = [
+        entry
+        for entry in runner.call_args_list
+        if entry[3].get("natural_exit_grace_seconds") == 8.0
+    ]
+    assert matching_calls, "no runner call threaded natural_exit_grace_seconds=8.0"
+    _, _, _, kwargs = matching_calls[0]
     assert kwargs["natural_exit_grace_seconds"] == 8.0

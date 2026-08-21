@@ -53,12 +53,12 @@ def generation_version_root(home: Path, plugin_ref: str, version: str) -> Path:
 def generation_staging_root(home: Path, plugin_ref: str) -> Path:
     """Return the un-versioned staging area for a plugin's generation store.
 
-    Used by callers that must materialize content before a version is known
-    (e.g. installing a floating VCS ref) and only discover the version
-    afterward, moving the staged tree into its final version-keyed path once
-    it does. Named with a leading dot so ``prune_stale_generations``'s
-    version-directory scan, which already skips dotfiles, never mistakes it
-    for a version.
+    Used for a disposable install that discovers the version of a floating VCS
+    ref. The caller then performs a second install directly into the final
+    version-and-incarnation-keyed destination because a virtual environment's
+    embedded absolute paths make the probe tree non-relocatable. Named with a
+    leading dot so ``prune_stale_generations``'s version-directory scan, which
+    already skips dotfiles, never mistakes it for a version.
     """
     return generation_store_root(home, plugin_ref) / ".staging"
 

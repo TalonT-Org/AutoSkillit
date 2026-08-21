@@ -199,14 +199,16 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # Issue #4735 — Wavefront 1 decomposition shards. Each is a topic-scoped
     # sibling of an already-universal parent (_type_enums / _type_constants),
     # so additive-only changes cascade to the same consumer test directories.
+    # Sets must be supersets of AST-import consumers (REQ-GUARD-002); broadest
+    # declared scope acceptable to keep the test pass green.
     "_type_enums_context_admission": frozenset(
-        {"cli", "core", "execution", "recipe", "server", "smoke_utils"}
+        {"cli", "core", "execution", "pipeline", "recipe", "server", "smoke_utils"}
     ),
     "_type_constants_retirements": frozenset(
         {"cli", "core", "execution", "fleet", "hooks", "recipe", "server", "skills", "workspace"}
     ),
     "_type_constants_skill_contract": frozenset(
-        {"cli", "core", "execution", "recipe", "server", "skills"}
+        {"cli", "core", "execution", "migration", "recipe", "server", "skills", "workspace"}
     ),
     "_type_constants_durable_writers": frozenset(
         {"cli", "core", "execution", "recipe", "server", "workspace"}

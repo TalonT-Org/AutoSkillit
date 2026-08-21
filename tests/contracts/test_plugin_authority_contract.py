@@ -39,9 +39,19 @@ from autoskillit.execution.session._managed_headless_session_lineage import (
     DefaultManagedHeadlessSessionLineageStore,
 )
 from autoskillit.workspace import project_default_plugin_authority
-from tests._helpers import replace_directory_preserving_children
 from tests.contracts._projection_helpers import session_catalog
 from tests.fakes import FakeManagedHeadlessSessionLineageStore, FakePluginArtifactAuthority
+
+
+def replace_directory_preserving_children(directory: Path) -> None:
+    """Replace a directory inode without discarding its children."""
+    staging = directory.parent / f"{directory.name}.replace-staging"
+    directory.rename(staging)
+    directory.mkdir()
+    for child in staging.iterdir():
+        child.rename(directory / child.name)
+    staging.rmdir()
+
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 

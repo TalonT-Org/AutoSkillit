@@ -259,6 +259,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             pty_mode=pty_mode,
             input_data=input_data,
             completion_drain_timeout=completion_drain_timeout,
+            natural_exit_grace_seconds=natural_exit_grace_seconds,
             linux_tracing_config=linux_tracing_config,
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,

@@ -77,15 +77,16 @@ def test_autoskillit_subprocess_writes_only_under_the_isolated_home(
         pytest.skip("home isolation is not in effect; refusing to run the subprocess")
     monkeypatch.setenv("HOME", str(simulated_developer_home))
 
-    subprocess.run(
+    result = subprocess.run(
         [sys.executable, "-m", "autoskillit", "doctor"],
-        check=False,
+        check=True,
         capture_output=True,
         text=True,
         timeout=30,
         env=production_interpreter_env(),
     )
 
+    assert result.returncode == 0
     assert not (simulated_developer_home / ".autoskillit").exists()
 
 

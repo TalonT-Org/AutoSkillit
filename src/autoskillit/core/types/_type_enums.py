@@ -1,4 +1,6 @@
-"""Core StrEnum discriminators. Zero autoskillit imports. Provides the shared enum vocabulary for all higher layers.
+"""Core StrEnum discriminators. Zero autoskillit imports.
+
+Provides the shared enum vocabulary for all higher layers.
 
 Issue #4735: this module is a re-export facade. The context-admission enums
 (``AdmissionState``, ``AdmissionDecisionKind``, ``ContextAdmission*Status``,

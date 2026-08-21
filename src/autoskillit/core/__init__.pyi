@@ -16,7 +16,15 @@ from ._delivery_bounds import (
 from ._delivery_bounds import (
     resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
 )
+from ._entrypoint_shim import ENTRYPOINT_SHIM_SOURCE as ENTRYPOINT_SHIM_SOURCE
+from ._entrypoint_shim import entrypoint_shim_path as entrypoint_shim_path
+from ._entrypoint_shim import write_entrypoint_shim as write_entrypoint_shim
 from ._execution_marker import execution_marker as execution_marker
+from ._install_binding import InstallBinding as InstallBinding
+from ._install_binding import (
+    install_binding_matches_current_state as install_binding_matches_current_state,
+)
+from ._install_binding import resolve_install_binding as resolve_install_binding
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag
 from ._install_detect import _is_stable_track as _is_stable_track
@@ -40,6 +48,9 @@ from ._plugin_artifact_identity import (
     generation_selector_path as generation_selector_path,
 )
 from ._plugin_artifact_identity import (
+    generation_staging_root as generation_staging_root,
+)
+from ._plugin_artifact_identity import (
     generation_store_root as generation_store_root,
 )
 from ._plugin_artifact_identity import (
@@ -60,7 +71,6 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     installed_plugin_cache_dir as installed_plugin_cache_dir,
 )
-from ._plugin_artifact_identity import is_python_bytecode_path as is_python_bytecode_path
 from ._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
 )
@@ -88,6 +98,7 @@ from ._plugin_cache import remove_retiring_records as remove_retiring_records
 from ._plugin_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from ._plugin_cache import sample_kitchen_process_identity as sample_kitchen_process_identity
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
+from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
@@ -205,6 +216,7 @@ from .io import decode_versioned_json_bytes as decode_versioned_json_bytes
 from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
+from .io import is_python_bytecode_path as is_python_bytecode_path
 from .io import is_yaml_mapping_node as is_yaml_mapping_node
 from .io import load_yaml as load_yaml
 from .io import mapping_entry_byte_ranges_from_yaml as mapping_entry_byte_ranges_from_yaml
@@ -479,6 +491,9 @@ from .types import GITHUB_API_SKILL_FAMILIES as GITHUB_API_SKILL_FAMILIES
 from .types import HEADLESS_AUTO_GATE_ENV_VAR as HEADLESS_AUTO_GATE_ENV_VAR
 from .types import HEADLESS_ENV_VAR as HEADLESS_ENV_VAR
 from .types import HEADLESS_TOOLS as HEADLESS_TOOLS
+from .types import (
+    INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE as INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE,
+)
 from .types import INVARIANT_REGISTRY as INVARIANT_REGISTRY
 from .types import INVESTIGATION_COMPLETE_MARKER as INVESTIGATION_COMPLETE_MARKER
 from .types import KITCHEN_GATED_TOOLS as KITCHEN_GATED_TOOLS
@@ -831,6 +846,7 @@ from .types import ExplorationVectorApplicabilityId as ExplorationVectorApplicab
 from .types import ExplorationVectorDef as ExplorationVectorDef
 from .types import ExplorationVectorDisposition as ExplorationVectorDisposition
 from .types import FailureRecord as FailureRecord
+from .types import FaultDomain as FaultDomain
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
@@ -865,6 +881,7 @@ from .types import IdempotencyNamespace as IdempotencyNamespace
 from .types import IdempotencyRecord as IdempotencyRecord
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
+from .types import InfrastructureFaultError as InfrastructureFaultError
 from .types import InputContractResolver as InputContractResolver
 from .types import InputPreflightResolver as InputPreflightResolver
 from .types import InputSpec as InputSpec
@@ -1111,6 +1128,7 @@ from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
+from .types import StaleGeneratorError as StaleGeneratorError
 from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope

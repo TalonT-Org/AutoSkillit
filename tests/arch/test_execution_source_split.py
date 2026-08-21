@@ -27,7 +27,11 @@ HEADLESS_SIZE_BUDGETS = {
     # authority the spec builders use, or adapter_digest and the spec field diverge.
     # #4678 rectify: threads ceiling_seconds and systemd_scope_enabled through to
     # run_managed_async for the process-tether spawner-death immunity mechanism.
-    "headless/_headless_execute.py": 651,
+    # #4597 rectify: InfrastructureFaultError classification handlers on the
+    # launch call graph (mid-session upgrade immunity) — one new handler on
+    # the first-attempt try plus two re-raise guards on the nudge/clone-guard
+    # cancellation handlers.
+    "headless/_headless_execute.py": 667,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

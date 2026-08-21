@@ -9,6 +9,7 @@ from threading import Barrier, Event
 
 import pytest
 
+from autoskillit.core import FaultDomain
 from autoskillit.pipeline import DefaultRunSkillCompletionAuthority, RunSkillCompletionReceipt
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
@@ -572,6 +573,53 @@ def test_started_at_survives_onto_receipt_via_draft() -> None:
         result_digest="digest",
     )
     assert receipt.started_at == recorded
+
+
+class TestMostRecentAcknowledged:
+    """most_recent_acknowledged() surfaces the fault_domain of the latest cycle."""
+
+    def test_returns_none_before_any_cycle(self) -> None:
+        authority = DefaultRunSkillCompletionAuthority()
+        assert authority.most_recent_acknowledged() is None
+
+    def test_reflects_the_second_of_two_cycles(self) -> None:
+        authority = DefaultRunSkillCompletionAuthority()
+
+        first_receipt = authority.draft(
+            _begin(authority),
+            classification="failed",
+            success=False,
+            result_digest="digest-1",
+            fault_domain=FaultDomain.INFRASTRUCTURE,
+        )
+        authority.publish(first_receipt.receipt_id)
+        authority.acknowledge(
+            first_receipt.receipt_id,
+            kitchen_id="kitchen",
+            request_session_id="session",
+        )
+        after_first = authority.most_recent_acknowledged()
+        assert after_first is not None
+        assert after_first.receipt_id == first_receipt.receipt_id
+        assert after_first.fault_domain is FaultDomain.INFRASTRUCTURE
+
+        second_receipt = authority.draft(
+            _begin(authority),
+            classification="success",
+            success=True,
+            result_digest="digest-2",
+            fault_domain=FaultDomain.LOGIC,
+        )
+        authority.publish(second_receipt.receipt_id)
+        authority.acknowledge(
+            second_receipt.receipt_id,
+            kitchen_id="kitchen",
+            request_session_id="session",
+        )
+        after_second = authority.most_recent_acknowledged()
+        assert after_second is not None
+        assert after_second.receipt_id == second_receipt.receipt_id
+        assert after_second.fault_domain is FaultDomain.LOGIC
 
 
 class TestPendingInfo:

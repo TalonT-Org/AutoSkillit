@@ -104,7 +104,7 @@ def _unsafe_cache_bytes(kind: str, identity: PluginArtifactIdentity) -> bytes:
     unknown = _record_payload(
         identity,
         record_id="unknown-record",
-        artifact_kind="install_root_generation",
+        artifact_kind="future_artifact_kind",
     )
     return json.dumps(_v2_payload(records=[unknown]), sort_keys=True).encode()
 
@@ -229,7 +229,7 @@ def test_unknown_artifact_kind_does_not_condemn_the_sibling_records(
         _record_payload(
             identity,
             record_id="unknown",
-            artifact_kind="install_root_generation",
+            artifact_kind="future_artifact_kind",
         )
     )
     _cache_path(tmp_path).write_text(json.dumps(_v2_payload(records=records)))

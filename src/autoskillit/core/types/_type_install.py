@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-__all__ = ["InstallMode", "MaintenanceInstallArgv"]
+__all__ = [
+    "InstallMode",
+    "MaintenanceInstallArgv",
+]
 
 
 class InstallMode(StrEnum):

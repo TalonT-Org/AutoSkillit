@@ -472,6 +472,7 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
     directory with dynamic, artifact-specific children (version- or
     key-addressed subdirectories) that cannot be enumerated generically, so
     every entry must register a handler in ``_RETIRE_VIA_ENGINE_HANDLERS``.
+    ``preserve`` entries remain untouched because liveness cannot be proven.
     """
     resolved_home = home if home is not None else managed_home()
     repaired: list[str] = []
@@ -509,6 +510,13 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
                 retired.retired_in,
                 disposition,
             )
+        elif disposition == "preserve":
+            logger.info(
+                "reconcile_install_artifacts: preserving %s because safe retirement "
+                "cannot be proven",
+                artifact,
+            )
+            continue
         else:
             raise ValueError(
                 f"unknown disposition {disposition!r} for retired artifact {key!r} — "

@@ -17,9 +17,11 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal
 
 from packaging.version import Version
@@ -36,6 +38,8 @@ from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.cli.update._restart import perform_restart
 from autoskillit.cli.update._transaction import (
     UpdateTransactionOutcome,
+    UpdateTransactionResult,
+    process_status_for_update_outcome,
     run_update_transaction,
 )
 from autoskillit.cli.update._update_checks_fetch import (
@@ -212,6 +216,47 @@ def _is_dismissed(
         return False
 
 
+# Every non-COMPLETED UpdateTransactionOutcome member must have an entry —
+# a KeyError on lookup means a new outcome was added to the transaction
+# without a corresponding user-visible disposition here. Mirrors the
+# totality _transaction.py's process_status_for_update_outcome() already
+# enforces for the process-status mapping.
+_NON_COMPLETED_OUTCOME_MESSAGES: Mapping[UpdateTransactionOutcome, str] = MappingProxyType(
+    {
+        UpdateTransactionOutcome.FAILED_UPGRADE: "Update failed during the upgrade step.",
+        UpdateTransactionOutcome.FAILED_INSTALL: "Update failed during the install step.",
+        UpdateTransactionOutcome.FAILED_POSTCONDITION: (
+            "Update's install succeeded but post-install verification failed."
+        ),
+        UpdateTransactionOutcome.DECLINED: "Update was declined.",
+        UpdateTransactionOutcome.DEFERRED: "Update deferred.",
+        UpdateTransactionOutcome.RECOVERY_REQUIRED: (
+            "Update requires manual recovery — run 'autoskillit doctor'."
+        ),
+        UpdateTransactionOutcome.INDETERMINATE: "Update outcome could not be determined.",
+    }
+)
+
+
+def _surface_non_completed_outcome(result: UpdateTransactionResult) -> None:
+    """Emit a user-visible line and a structured log record for a non-COMPLETED outcome.
+
+    Replaces the prior silent ``return`` — every outcome besides COMPLETED
+    was previously invisible on the automatic path (no restart, no
+    dismissal recorded, no log), so DEFERRED in particular re-contended on
+    every subsequent invocation with no operator-visible trace of why.
+    """
+    message = _NON_COMPLETED_OUTCOME_MESSAGES[result.outcome]
+    findings_suffix = f" ({'; '.join(result.findings)})" if result.findings else ""
+    logger.warning(
+        "update_sequence_non_completed",
+        outcome=result.outcome.value,
+        process_status=process_status_for_update_outcome(result.outcome).name,
+        findings=result.findings,
+    )
+    print(f"{message}{findings_suffix}", flush=True)
+
+
 def _run_update_sequence(
     home: Path,
     state: dict[str, object],
@@ -223,6 +268,7 @@ def _run_update_sequence(
             process_runner=subprocess.run,
         )
     if result.outcome is not UpdateTransactionOutcome.COMPLETED:
+        _surface_non_completed_outcome(result)
         return
     state.pop("update_prompt", None)
     state.pop("binary_snoozed", None)

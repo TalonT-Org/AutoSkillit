@@ -147,6 +147,29 @@ def test_baseline_refresh_after_successful_load(tmp_path, monkeypatch):
     assert cache_mod._check_process_staleness() is False
 
 
+def test_content_hash_staleness_fails_closed_on_unreadable_root(monkeypatch):
+    """T-B9: an unreadable package root reports stale, not 'not stale' (B-6).
+
+    Before B-6, an OSError/RuntimeError from _compute_content_hash() was
+    caught and reported as non-stale -- the wrong guess in exactly the case
+    (pkg_root mid-replacement) where the guess matters.
+    """
+    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
+    monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", "fakehash_baseline")
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
+
+    def _raise_oserror():
+        raise OSError("pkg_root unavailable")
+
+    monkeypatch.setattr(cache_mod, "_compute_content_hash", _raise_oserror)
+
+    assert api_mod._check_process_staleness() is True
+
+
 def test_registry_hash_content_based(tmp_path):
     """Registry hash must be identical for same-content files regardless of mtime."""
     from autoskillit.recipe._api_cache import _compute_registry_hash

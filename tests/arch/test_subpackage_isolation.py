@@ -82,6 +82,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "tools_evidence_reader",
         # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
         "_generation_publication",
+        # Legacy installed-plugin retirement uses a six-hour enqueue deadline.
+        "_install_state",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_install_info",  # cli/install/_install_info.py: window constants (see comment above)
         # KITCHEN_GUARDED_COMMANDS: frozenset[str]
@@ -999,7 +1001,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
             server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
             state_recovery.py to reduce the 757-line monolith and centralize deserialization
-            logic on DispatchRecord.from_dict. Exempt at 15 files.
+            logic on DispatchRecord.from_dict. Startup warming lives here so its
+            execution/fleet imports remain layer-correct. Exempt at 24 files.
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
@@ -1014,11 +1017,20 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 21,  # +session_index strict byte-bounded retained-index reads (#4514)
         # +evidence_reader sterile reader lifecycle (#4585)
         # +agent_definition native-role authority (#4443).
-        "core": 32,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
+        # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
         # subprocess boundary, and dimension-safe recipe delivery limits.
+        # +_install_binding.py (#4597 rectify phase 2: the sealed install
+        # identity B-1/B-2 route pkg_root() through — a single IL-0 module
+        # kept separate from paths.py so paths.py's own "zero autoskillit
+        # imports" character stays intact).
+        # +_entrypoint_shim.py (#4597 rectify phase 3: the exec-time
+        # entrypoint shim renderer/writer — stdlib-only and version-
+        # independent by design, kept separate from the generation-store
+        # publish machinery it is written alongside).
+        "core": 34,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         "core/types": 56,
@@ -1053,7 +1065,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +exploration_context_durable.py: durable (0600 HMAC-signed) session-scoped
         # exploration authority, split from exploration_context.py to stay under its
         # own REQ-CNST-010-E22 1100-line ceiling (#4684 Fix E)
-        "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
+        "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
@@ -1135,6 +1147,15 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    "core/types/_type_constants.py": (
+        1050,
+        "REQ-CNST-010-E29: #4597 Phase 3 added a RETIRED_INSTALL_ARTIFACT_SHAPES entry "
+        "for the pre-immutable-roots shared uv tool root and two DURABLE_ARTIFACT_WRITERS "
+        "entries (the entrypoint shim, the install-root generation writer). Both registries "
+        "are append-only forcing functions per the file's own model comment; splitting them "
+        "out of this module would separate them from the frozensets and validation "
+        "functions their own docstrings and tests reference by exact module path.",
+    ),
     "core/_plugin_cache.py": (
         1400,
         "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "
@@ -1281,7 +1302,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
     ),
     "fleet/_api.py": (
-        1590,
+        1595,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them. Bumped to 1200 by the "
@@ -1292,7 +1313,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
         "shell lineage decision and provenance snapshot remain on the same dispatch "
         "transaction boundary after conflict resolution. Bumped to 1590 for shared "
-        "tracker-authority retention and cleanup on every dispatch outcome boundary.",
+        "tracker-authority retention and cleanup on every dispatch outcome boundary. "
+        "Bumped to 1595 for #4597 rectify: warm_failure_path_imports() call at the "
+        "fleet-dispatch entry point, one of the three self-invocation entry points "
+        "this mid-session-upgrade-immunity fix warms.",
     ),
     "server/_recipe_delivery.py": (
         750,

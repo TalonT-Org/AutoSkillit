@@ -66,18 +66,23 @@ class PluginArtifactKind(StrEnum):
     ``PLUGIN_GENERATION`` routes the generation store
     (``~/.autoskillit/plugin-generations/``) to its own retirement owner.
     ``INSTALLED_PLUGIN`` remains bound to the legacy Claude-cache tree, which
-    ``reconcile_install_artifacts()`` still enqueues. The two roots are
-    disjoint, so one owner cannot serve both: a record routed to an owner whose
-    ``managed_root`` does not contain it is rejected on every sweep forever.
+    ``reconcile_install_artifacts()`` still enqueues. ``INSTALL_ROOT_GENERATION``
+    routes AutoSkillit's own Python-package install-root generation store — a
+    disjoint tree under the same generation-store mechanism, keyed by
+    ``_AUTOSKILLIT_INSTALL_ROOT_KEY`` instead of the plugin's ref. All roots
+    are disjoint, so one owner cannot serve two kinds: a record routed to an
+    owner whose ``managed_root`` does not contain it is rejected on every
+    sweep forever.
 
     This is a routing key for the retirement queue only. The on-disk manifest's
-    own ``artifact_kind`` stays ``INSTALLED_PLUGIN`` for both trees, since they
-    share one manifest format.
+    own ``artifact_kind`` stays ``INSTALLED_PLUGIN`` for all three trees, since
+    they share one manifest format.
     """
 
     PROJECTION = "projection"
     INSTALLED_PLUGIN = "installed_plugin"
     PLUGIN_GENERATION = "plugin_generation"
+    INSTALL_ROOT_GENERATION = "install_root_generation"
 
 
 class RetiringCacheState(StrEnum):

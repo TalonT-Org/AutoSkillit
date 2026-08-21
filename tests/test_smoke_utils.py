@@ -8,7 +8,9 @@ import math
 import os
 import re
 import subprocess
+import sys
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -45,6 +47,7 @@ from autoskillit.smoke_utils import (
     select_experimental_review_dispatch,
     validate_experimental_auditor_outputs,
 )
+from tests.conftest import production_interpreter_env
 from tests.infra._token_summary_helpers import _resolve_session_label
 
 pytestmark = [pytest.mark.medium]
@@ -6781,6 +6784,7 @@ def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
             raise RuntimeError("projected assertion failed")
 
     monkeypatch.setattr(smoke, "_assert_projected_artifact_relocatable", assert_projection)
+    monkeypatch.setattr(smoke, "_assert_overlapping_install_survives", lambda **_kwargs: None)
 
     if error_match is not None:
         with pytest.raises(RuntimeError, match=error_match):
@@ -6797,3 +6801,141 @@ def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
         "--expected-version",
         "1.1.0",
     ]
+
+
+def test_overlap_child_script_survives_release(tmp_path: Path) -> None:
+    """The overlap child's own block/release/fresh-import protocol works.
+
+    Runs ``_OVERLAP_CHILD_SCRIPT`` directly via the CURRENT interpreter (which
+    already has autoskillit importable in this test environment) rather than
+    through a real install-root generation venv — this isolates the script's
+    own correctness from ``uv``/dual-interpreter availability, mirroring how
+    ``tests/cli/test_install_root_upgrade_immunity.py`` block/release-tests a
+    throwaway package without needing a second interpreter for the script
+    logic itself.
+    """
+    from autoskillit.smoke_utils import _cross_interpreter_upgrade as smoke
+
+    marker = tmp_path / "marker"
+    release = tmp_path / "release"
+
+    child = subprocess.Popen(
+        [sys.executable, "-c", smoke._OVERLAP_CHILD_SCRIPT, str(marker), str(release)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=production_interpreter_env(),
+    )
+    try:
+        deadline = time.time() + 10
+        while not marker.exists():
+            if child.poll() is not None:
+                out, err = child.communicate()
+                pytest.fail(f"child exited early rc={child.returncode} out={out!r} err={err!r}")
+            if time.time() > deadline:
+                child.kill()
+                pytest.fail("child never became ready")
+            time.sleep(0.05)
+
+        release.write_text("go\n")
+        stdout, stderr = child.communicate(timeout=10)
+        assert child.returncode == 0, f"child exited {child.returncode}: {stderr}"
+        assert "SURVIVED:" in stdout, f"child did not report survival: {stdout!r}"
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
+
+
+def _fake_generation_identity(managed_path: Path) -> object:
+    """A minimal stand-in for ``PluginArtifactIdentity`` -- the orchestration
+    logic under test only ever reads ``.managed_path`` off the return value.
+    """
+    from types import SimpleNamespace
+
+    return SimpleNamespace(managed_path=managed_path)
+
+
+def _fake_generation_with_python3(tmp_path: Path, name: str) -> Path:
+    """Build a fake ``<managed_path>/autoskillit/bin/python3`` this process can
+    actually run and import ``autoskillit`` from.
+
+    Symlinks the ``autoskillit`` directory component itself (not just the
+    ``python3`` file) to the CURRENT venv root, so CPython's own venv/
+    ``pyvenv.cfg`` resolution -- which walks up from the executable's fully
+    resolved real path -- transparently resolves through the directory
+    symlink to the real venv. Symlinking only the executable file breaks
+    this: ``pyvenv.cfg`` would not be found relative to the fake path, and
+    the child would fall back to the system interpreter, which does not have
+    autoskillit importable.
+    """
+    generation_root = tmp_path / name
+    generation_root.mkdir(parents=True)
+    (generation_root / "autoskillit").symlink_to(Path(sys.executable).parent.parent)
+    return generation_root
+
+
+def test_assert_overlapping_install_survives_happy_path(tmp_path: Path) -> None:
+    """The overlap orchestration blocks a real child, overlaps a second real
+    publish while it is blocked, then releases it and requires survival.
+
+    ``_publish_real_package_generation`` (the real ``uv tool install`` work)
+    is mocked out; everything downstream of it -- the blocking child process,
+    the marker/release protocol, and the post-release survival checks -- is
+    real.
+    """
+    from autoskillit.smoke_utils import _cross_interpreter_upgrade as smoke
+
+    generation_a = _fake_generation_with_python3(tmp_path, "gen-a")
+
+    identities = iter(
+        [
+            _fake_generation_identity(generation_a),
+            _fake_generation_identity(tmp_path / "gen-b"),
+        ]
+    )
+    calls: list[dict[str, object]] = []
+
+    def fake_publish(**kwargs: object) -> object:
+        calls.append(kwargs)
+        return next(identities)
+
+    with patch.object(smoke, "_publish_real_package_generation", fake_publish):
+        smoke._assert_overlapping_install_survives(
+            scratch_home=tmp_path,
+            source_root=tmp_path / "source",
+            env={**os.environ, "HOME": str(tmp_path)},
+            minor_a="3.11",
+            minor_b="3.13",
+            version="9.9.9",
+        )
+
+    assert [call["python_pin"] for call in calls] == ["3.11", "3.13"]
+    assert all(call["version"] == "9.9.9" for call in calls)
+
+
+def test_assert_overlapping_install_survives_detects_same_path_collision(
+    tmp_path: Path,
+) -> None:
+    """A concurrent publish that lands at the SAME generation path as the
+    still-live one must fail loudly, not silently succeed.
+    """
+    from autoskillit.smoke_utils import _cross_interpreter_upgrade as smoke
+
+    generation_a = _fake_generation_with_python3(tmp_path, "gen-a")
+
+    same_identity = _fake_generation_identity(generation_a)
+
+    def fake_publish(**_kwargs: object) -> object:
+        return same_identity
+
+    with patch.object(smoke, "_publish_real_package_generation", fake_publish):
+        with pytest.raises(RuntimeError, match="SAME generation path"):
+            smoke._assert_overlapping_install_survives(
+                scratch_home=tmp_path,
+                source_root=tmp_path / "source",
+                env={**os.environ, "HOME": str(tmp_path)},
+                minor_a="3.11",
+                minor_b="3.13",
+                version="9.9.9",
+            )

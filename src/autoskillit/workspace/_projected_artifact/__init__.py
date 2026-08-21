@@ -1,5 +1,7 @@
 """Projected plugin artifact lifecycle facade."""
 
+from autoskillit.core import StaleGeneratorError
+
 from .._projection_cache import (
     PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     PROJECTION_CACHE_KEY_EXCLUSIONS,
@@ -24,7 +26,6 @@ from ._hook_repair import (
 )
 from .authority import (
     ProjectedPluginArtifactAuthority,
-    StaleGeneratorError,
     assert_generator_process_fresh,
     project_default_plugin_authority,
     project_direct_install_authority,

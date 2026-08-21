@@ -7,19 +7,23 @@ import shutil
 import subprocess
 import urllib.parse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.core import Severity, get_logger
 
 from ._doctor_types import DoctorResult
 
+if TYPE_CHECKING:
+    from autoskillit.cli.install._install_info import InstallInfo
+
 logger = get_logger(__name__)
 
 
-def _format_upgrade_cmd(info: object) -> str:
+def _format_upgrade_cmd(info: InstallInfo) -> str:
     from autoskillit.cli.install._install_info import upgrade_command
 
-    cmd = upgrade_command(info)  # type: ignore[arg-type]
-    return " ".join(cmd) if cmd else "autoskillit update"
+    cmd = upgrade_command(info)
+    return " ".join(cmd.argv) if cmd else "autoskillit update"
 
 
 def _check_autoskillit_on_path() -> DoctorResult:

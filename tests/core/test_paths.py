@@ -162,6 +162,85 @@ class TestPkgRoot:
         )
 
 
+class TestInstallBindingSeal:
+    """T-B6, T-B7: the sealed InstallBinding is captured once, never re-derived."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_seal(self):
+        from autoskillit.core._install_binding import resolve_install_binding
+
+        resolve_install_binding.cache_clear()
+        yield
+        resolve_install_binding.cache_clear()
+
+    def test_pkg_root_is_sealed_for_process_lifetime(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from autoskillit.core.paths import pkg_root
+
+        first = pkg_root()
+        monkeypatch.setattr(ir, "files", lambda name: tmp_path)
+        second = pkg_root()
+        assert second == first, "pkg_root() re-derived after being sealed"
+
+    def test_install_identity_is_sealed_and_self_consistent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.core._install_binding import resolve_install_binding
+
+        first = resolve_install_binding()
+        assert first.root.name == "autoskillit"
+        assert first.version
+
+        monkeypatch.setattr("importlib.metadata.version", lambda name: "0.0.0-mocked")
+        second = resolve_install_binding()
+        assert second is first, "lru_cache should return the identical sealed instance"
+        assert second.version != "0.0.0-mocked", (
+            "version changed after the seal — captured live instead of once"
+        )
+        assert second.root == first.root
+
+    def test_self_lease_uses_bound_generation_layout_when_home_changes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import autoskillit.core._install_binding as binding
+        import autoskillit.core._plugin_artifact_identity as identity
+        from autoskillit.core import (
+            _AUTOSKILLIT_INSTALL_ROOT_KEY,
+            ArtifactLease,
+            generation_artifact_root,
+            installed_plugin_artifact_lease_path,
+        )
+
+        def relocated_version_root(home: Path, plugin_ref: str, version: str) -> Path:
+            assert plugin_ref == _AUTOSKILLIT_INSTALL_ROOT_KEY
+            return home / ".relocated-generations" / version
+
+        monkeypatch.setattr(identity, "generation_version_root", relocated_version_root)
+
+        incarnation = generation_artifact_root(
+            tmp_path / "install-home",
+            _AUTOSKILLIT_INSTALL_ROOT_KEY,
+            "1.2.3",
+            "incarnation",
+        )
+        package_root = incarnation / "autoskillit" / "lib" / "site-packages" / "autoskillit"
+        package_root.mkdir(parents=True)
+        acquired: list[Path] = []
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "different-home")
+        monkeypatch.setattr(binding, "_SELF_LEASE_HANDLE", None)
+        monkeypatch.setattr(
+            ArtifactLease,
+            "acquire_existing_shared",
+            lambda path: acquired.append(path) or object(),
+        )
+
+        binding._acquire_self_lease(package_root, "1.2.3")
+
+        assert acquired == [installed_plugin_artifact_lease_path(incarnation)]
+
+
 class TestIsGitMainCheckout:
     def test_plain_directory_returns_false(self, tmp_path: Path) -> None:
         from autoskillit.core.paths import is_git_main_checkout

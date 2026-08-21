@@ -5,21 +5,24 @@ bundled skills, recipes, migrations, or plugin.json) must use pkg_root()
 from this module. Direct __file__-based path resolution is forbidden elsewhere.
 
 Design rationale:
-- Uses importlib.resources.files() for a named, depth-independent reference
+- Delegates to the sealed identity in ``core/_install_binding.py``, resolved
+  once via ``importlib.resources.files()`` and never re-derived
 - Single point of truth: change once, fixes all callers
-- Testable in isolation (mock importlib.resources.files in tests)
+- Testable in isolation (``resolve_install_binding.cache_clear()`` + monkeypatch
+  ``importlib.resources.files`` in tests)
 - Robust to module reorganization (no parent-count assumptions)
 """
 
 from __future__ import annotations
 
-import importlib.resources as ir
 import os
 import subprocess
 import sys
 from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
+
+from ._install_binding import resolve_install_binding
 
 
 def github_review_ledger_path(
@@ -65,14 +68,11 @@ def default_log_dir() -> Path:
 def pkg_root() -> Path:
     """Return the canonical autoskillit package root directory.
 
-    Uses importlib.resources.files('autoskillit') — a named reference
-    to the package root that does not depend on __file__ or parent-count
-    assumptions about any specific module's depth within the package.
-
-    Returns the same path as Path(__file__).parent when called from
-    __init__.py, but is stable regardless of which sub-module calls it.
+    The root is sealed by ``resolve_install_binding()`` on first access and
+    remains stable for the process lifetime even if the on-disk install is
+    later replaced at the same path.
     """
-    return Path(str(ir.files("autoskillit")))
+    return resolve_install_binding().root
 
 
 def destination_location(destination: Path) -> Path:

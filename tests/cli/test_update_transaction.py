@@ -19,7 +19,12 @@ from autoskillit.cli.install._install_contract import (
     InstallOutcome,
     InstallProcessStatus,
 )
-from autoskillit.cli.install._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import (
+    _INSTALL_FROM_DEVELOP,
+    InstallInfo,
+    InstallType,
+    UpgradeCommand,
+)
 from autoskillit.cli.update._transaction import (
     IRREVERSIBLE_PIVOT_PHASE,
     UPDATE_TRANSACTION_PHASES,
@@ -27,11 +32,35 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionPhase,
     run_update_transaction,
 )
+from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
+    InfrastructureFaultError,
+    generation_staging_root,
+)
 from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
 from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+@pytest.mark.parametrize(
+    ("platform", "relative_entrypoint"),
+    [
+        ("linux", Path("autoskillit/bin/autoskillit")),
+        ("win32", Path("autoskillit/Scripts/autoskillit.exe")),
+    ],
+)
+def test_install_root_entrypoint_uses_platform_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    relative_entrypoint: Path,
+) -> None:
+    from autoskillit.cli.update import _transaction as transaction_module
+
+    monkeypatch.setattr(transaction_module, "sys", SimpleNamespace(platform=platform))
+    root = Path("generation")
+    assert transaction_module._install_root_entrypoint(root) == root / relative_entrypoint
 
 
 def test_post_pivot_reporter_falls_back_when_logger_raises(
@@ -131,7 +160,7 @@ def _prepare(
     monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", _info)
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.upgrade_command",
-        lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
+        lambda _info, **_kw: UpgradeCommand(argv=["uv", "tool", "upgrade", "autoskillit"]),
     )
     if stub_git_checks:
         monkeypatch.setattr(
@@ -258,7 +287,7 @@ import tempfile
 from pathlib import Path
 
 import autoskillit.cli.update._transaction as t
-from autoskillit.cli.install._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType, UpgradeCommand
 
 
 def _info():
@@ -266,7 +295,9 @@ def _info():
 
 
 t.detect_install = _info
-t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.upgrade_command = lambda _info, **_kw: UpgradeCommand(
+    argv=["uv", "tool", "upgrade", "autoskillit"]
+)
 t.is_git_worktree = lambda _p: False
 t.is_git_main_checkout = lambda _p: False
 
@@ -385,7 +416,7 @@ import tempfile
 from pathlib import Path
 
 import autoskillit.cli.update._transaction as t
-from autoskillit.cli.install._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import InstallInfo, InstallType, UpgradeCommand
 
 
 def _info():
@@ -393,7 +424,9 @@ def _info():
 
 
 t.detect_install = _info
-t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.upgrade_command = lambda _info, **_kw: UpgradeCommand(
+    argv=["uv", "tool", "upgrade", "autoskillit"]
+)
 t.is_git_worktree = lambda _p: False
 t.is_git_main_checkout = lambda _p: False
 
@@ -491,7 +524,7 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
     )
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.upgrade_command",
-        lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
+        lambda _info, **_kw: UpgradeCommand(argv=["uv", "tool", "upgrade", "autoskillit"]),
     )
     monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
     monkeypatch.setattr(
@@ -519,7 +552,7 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
     assert probe_kwargs["env"]["PATH"] == "/bin"
 
 
-def test_update_transaction_declares_exact_twelve_phase_pivot_contract() -> None:
+def test_update_transaction_declares_exact_thirteen_phase_pivot_contract() -> None:
     assert UPDATE_TRANSACTION_PHASES == (
         UpdateTransactionPhase.CALLER_ENV_CAPTURE,
         UpdateTransactionPhase.PRE_UPDATE_EVIDENCE_CAPTURE,
@@ -529,13 +562,205 @@ def test_update_transaction_declares_exact_twelve_phase_pivot_contract() -> None
         UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE,
         UpdateTransactionPhase.IRREVERSIBLE_PIVOT,
         UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE,
+        UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION,
         UpdateTransactionPhase.INSTALL_CHILD_INVOCATION,
         UpdateTransactionPhase.INSTALL_STATUS_RECONSTRUCTION,
         UpdateTransactionPhase.POST_UPDATE_ARTIFACT_VERIFICATION,
         UpdateTransactionPhase.RESULT_FINALIZATION,
     )
-    assert len(UPDATE_TRANSACTION_PHASES) == 12
+    assert len(UPDATE_TRANSACTION_PHASES) == 13
     assert IRREVERSIBLE_PIVOT_PHASE is UPDATE_TRANSACTION_PHASES[6]
+
+
+def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The real, unmocked ``upgrade_command()`` determines the argv/env that
+    reach the subprocess boundary for a GIT_VCS dev-track install.
+
+    Every other test in this file mocks ``upgrade_command`` away and
+    therefore never exercises its real implementation against the real
+    transaction — this closes that gap.
+    """
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.detect_install",
+        lambda: InstallInfo(InstallType.GIT_VCS, "abc123", "develop", "https://x", None),
+    )
+    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
+    )
+
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
+        calls.append((list(cmd), kwargs))
+        if len(calls) in (1, 2):
+            # Stand in for `uv tool install`'s real effect on both installs of
+            # the real, unmocked upgrade_command()'s two-install design: a
+            # disposable probe install (call 1, into UV_TOOL_DIR's staging
+            # destination) purely to discover expected_version, then a second,
+            # near-free install (call 2) writing the real content directly at
+            # its permanent version+incarnation-keyed destination -- never
+            # renamed afterward, since a venv's console-script shebang bakes
+            # an absolute path at install time. The real post-pivot
+            # publish_install_root_generation() call needs actual content at
+            # whichever destination each call's own UV_TOOL_DIR names.
+            destination = Path(kwargs["env"]["UV_TOOL_DIR"])
+            Path(kwargs["env"]["UV_TOOL_BIN_DIR"]).mkdir(parents=True)
+            entrypoint = destination / "autoskillit" / "bin" / "autoskillit"
+            entrypoint.parent.mkdir(parents=True, exist_ok=True)
+            entrypoint.write_text("#!/bin/sh\necho fake\n")
+            entrypoint.chmod(0o755)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=runner,
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED, result.findings
+    assert len(calls) == 3
+    python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
+    expected_upgrade_argv = [
+        "uv",
+        "tool",
+        "install",
+        "--force",
+        _INSTALL_FROM_DEVELOP,
+        "--python",
+        python_pin,
+    ]
+    probe_argv, probe_kwargs = calls[0]
+    assert probe_argv == expected_upgrade_argv
+    staging_root_prefix = str(generation_staging_root(tmp_path, _AUTOSKILLIT_INSTALL_ROOT_KEY))
+    assert str(probe_kwargs["env"]["UV_TOOL_DIR"]).startswith(staging_root_prefix)
+    assert not Path(probe_kwargs["env"]["UV_TOOL_BIN_DIR"]).exists()
+
+    final_argv, final_kwargs = calls[1]
+    assert final_argv == expected_upgrade_argv
+    final_destination = str(final_kwargs["env"]["UV_TOOL_DIR"])
+    assert not final_destination.startswith(staging_root_prefix)
+    assert "/plugin-generations/autoskillit-install/1.1.0/" in final_destination
+
+    install_argv = calls[2][0]
+    assert install_argv[:2] == ["autoskillit", "install"]
+    assert "--require-registered-plugin" not in install_argv
+    assert result.phase_history == UPDATE_TRANSACTION_PHASES
+
+
+def _prepare_dev_track_publication(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.detect_install",
+        lambda: InstallInfo(InstallType.GIT_VCS, "abc123", "develop", "https://x", None),
+    )
+    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
+    )
+
+
+def _publication_runner(
+    calls: list[tuple[list[str], dict[str, Any]]],
+    failure_point: str | None = None,
+) -> Callable[..., subprocess.CompletedProcess[Any]]:
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        calls.append((list(cmd), kwargs))
+        if len(calls) == 2:
+            Path(kwargs["env"]["UV_TOOL_BIN_DIR"]).mkdir(parents=True)
+        if len(calls) == 2 and failure_point == "final_install_oserror":
+            raise OSError("simulated final install launch failure")
+        if len(calls) == 2 and failure_point == "final_install_nonzero":
+            return subprocess.CompletedProcess(cmd, 7)
+        destination = Path(kwargs["env"]["UV_TOOL_DIR"])
+        entrypoint = destination / "autoskillit" / "bin" / "autoskillit"
+        entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        entrypoint.write_text("#!/bin/sh\necho fake\n")
+        entrypoint.chmod(0o755)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    return runner
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "expected_finding"),
+    [
+        ("final_install_oserror", "Could not start the install-root generation install"),
+        ("final_install_nonzero", "install-root generation install exited with status 7"),
+        ("publication_error", "Could not publish the install-root generation"),
+        ("shim_error", "Could not write the entrypoint shim"),
+    ],
+)
+def test_dev_track_post_pivot_publication_failures_are_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure_point: str,
+    expected_finding: str,
+) -> None:
+    _prepare_dev_track_publication(monkeypatch)
+    if failure_point == "publication_error":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.publish_install_root_generation",
+            lambda **_kwargs: (_ for _ in ()).throw(OSError("simulated publication failure")),
+        )
+    if failure_point == "shim_error":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.write_entrypoint_shim",
+            lambda _home: (_ for _ in ()).throw(OSError("simulated shim failure")),
+        )
+
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=_publication_runner(calls, failure_point),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
+    assert result.irreversible_pivot_crossed is True
+    assert result.phase_history[-2:] == (
+        UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION,
+        UpdateTransactionPhase.RESULT_FINALIZATION,
+    )
+    assert result.findings
+    assert expected_finding in result.findings[0]
+    if failure_point == "final_install_oserror":
+        assert "/plugin-generations/autoskillit-install/1.1.0/" in result.findings[0]
+    assert len(calls) == 2
+    assert not Path(calls[1][1]["env"]["UV_TOOL_BIN_DIR"]).exists()
+
+
+def test_dev_track_publication_infrastructure_fault_propagates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _prepare_dev_track_publication(monkeypatch)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.publish_install_root_generation",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            InfrastructureFaultError("simulated infrastructure fault")
+        ),
+    )
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    with pytest.raises(InfrastructureFaultError, match="simulated infrastructure fault"):
+        run_update_transaction(
+            home=tmp_path,
+            base_env={"PATH": "/bin"},
+            version_reader=lambda _name: "1.0.0",
+            fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+            process_runner=_publication_runner(calls),
+        )
+
+    assert len(calls) == 2
+    assert not Path(calls[1][1]["env"]["UV_TOOL_BIN_DIR"]).exists()
 
 
 def test_claudecode_with_existing_registration_defers_before_mutation(
@@ -1216,7 +1441,13 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
         **kwargs: Any,
     ) -> subprocess.CompletedProcess[Any]:
         calls.append((list(cmd), kwargs))
-        assert set(kwargs) == {"check", "env", "cwd"}
+        # Call 1 is the upgrade-command spawn (unified env+cwd, stdio
+        # inherited by design). Call 2 is the install-child spawn via
+        # MaintenanceSubprocessInvocation, which also carries capture_output.
+        expected_kwargs = {"check", "env", "cwd"} | (
+            {"capture_output"} if len(calls) > 1 else set()
+        )
+        assert set(kwargs) == expected_kwargs
         assert kwargs["check"] is False
         if len(calls) == 1:
             return subprocess.CompletedProcess(cmd, 0)
@@ -1236,7 +1467,11 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
     assert len(calls) == 2
     upgrade_kwargs = calls[0][1]
     install_kwargs = calls[1][1]
-    assert upgrade_kwargs["env"] is install_kwargs["env"]
+    # MaintenanceSubprocessInvocation.for_install() re-derives env from the
+    # same sealed maintenance_env via build_maintenance_env() (idempotent,
+    # deterministic) rather than reusing the object — content equality is
+    # the load-bearing invariant here, not object identity.
+    assert upgrade_kwargs["env"] == install_kwargs["env"]
     assert upgrade_kwargs["cwd"] == install_kwargs["cwd"]
     maintenance_env = install_kwargs["env"]
     assert maintenance_env["HOME"] == str(home)
@@ -1411,7 +1646,7 @@ def test_no_obligation_for_failures_before_upgrade_subprocess(
     if failure_point == "unknown_install_type":
         monkeypatch.setattr(
             "autoskillit.cli.update._transaction.upgrade_command",
-            lambda _info: None,
+            lambda _info, **_kw: None,
         )
     elif failure_point == "claudecode_deferral":
         base_env["CLAUDECODE"] = "1"

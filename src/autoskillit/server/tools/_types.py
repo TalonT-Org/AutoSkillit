@@ -97,6 +97,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     order_id: str
     infra_exit_category: str
     infra_cleanup_incomplete: bool
+    infra_fault_domain: str
     has_progress_evidence: bool
     has_implementation_progress: bool
     completion_required: bool

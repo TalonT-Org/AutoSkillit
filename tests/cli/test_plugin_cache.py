@@ -261,7 +261,7 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
 
-    def fail_digest(_path: Path) -> str:
+    def fail_digest(_path: Path, **_kwargs: object) -> str:
         raise PermissionError("injected transient digest failure")
 
     monkeypatch.setattr(

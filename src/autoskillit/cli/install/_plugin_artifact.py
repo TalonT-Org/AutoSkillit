@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
     ArtifactLease,
+    InfrastructureFaultError,
     LegacyRetiringEvidence,
     ManagedHome,
     PluginArtifactIdentity,
@@ -195,12 +197,13 @@ class InstalledPluginArtifactAuthority:
     ) -> PluginLaunchBinding:
         """Resolve current generation, acquire a shared reader lease, validate.
 
-        If validation of the current generation fails, attempts a single
-        self-heal republish from source before propagating the error.
+        If validation of the current generation fails — including the
+        freshness probe finding the generator installation itself stale or
+        deleted — attempts a single self-heal republish from source before
+        propagating the error.
         """
         from autoskillit.workspace import assert_generator_process_fresh
 
-        assert_generator_process_fresh()
         del backend
         if not load_mode.consumes_artifact:
             raise PluginArtifactValidationError(
@@ -218,8 +221,9 @@ class InstalledPluginArtifactAuthority:
             return self._acquire_from_root(self._root, load_mode)
 
         try:
+            assert_generator_process_fresh()
             return self._acquire_from_root(generation_dir, load_mode)
-        except PluginArtifactValidationError:
+        except (PluginArtifactValidationError, InfrastructureFaultError):
             healed = self._self_heal_republish()
             if healed is None:
                 raise
@@ -486,12 +490,14 @@ class DefaultPluginRetirementCoordinator:
         projection_owner: PluginArtifactRetirementOwner,
         installed_owner: PluginArtifactRetirementOwner,
         generation_owner: PluginArtifactRetirementOwner,
+        install_root_generation_owner: PluginArtifactRetirementOwner,
     ) -> None:
         self._home = home
         self._owners: dict[PluginArtifactKind, PluginArtifactRetirementOwner] = {
             PluginArtifactKind.PROJECTION: projection_owner,
             PluginArtifactKind.INSTALLED_PLUGIN: installed_owner,
             PluginArtifactKind.PLUGIN_GENERATION: generation_owner,
+            PluginArtifactKind.INSTALL_ROOT_GENERATION: install_root_generation_owner,
         }
         self._managed_roots = {kind: owner.managed_root for kind, owner in self._owners.items()}
 
@@ -568,6 +574,12 @@ def default_plugin_retirement_coordinator(
         home=resolved_home,
         plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
     )
+    install_root_generation_owner = GenerationArtifactRetirementOwner(
+        generation_store_root(resolved_home.root, _AUTOSKILLIT_INSTALL_ROOT_KEY),
+        home=resolved_home,
+        plugin_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
+        artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+    )
     return DefaultPluginRetirementCoordinator(
         home=resolved_home,
         projection_owner=ProjectedPluginRetirementOwner(
@@ -576,6 +588,7 @@ def default_plugin_retirement_coordinator(
         ),
         installed_owner=installed_owner,
         generation_owner=generation_owner,
+        install_root_generation_owner=install_root_generation_owner,
     )
 
 

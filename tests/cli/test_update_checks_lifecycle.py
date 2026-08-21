@@ -15,6 +15,7 @@ from autoskillit.cli.install._install_contract import InstallMode, InstallReques
 from autoskillit.cli.update._transaction import (
     UpdateTransactionOutcome,
     UpdateTransactionResult,
+    process_status_for_update_outcome,
 )
 from autoskillit.cli.update._update_checks_fetch import (
     _fetch_with_cache,
@@ -620,6 +621,85 @@ def test_run_update_sequence_has_no_completed_only_effects_for_every_noncomplete
     }
     assert effects == []
     assert "updated successfully" not in capsys.readouterr().out
+
+
+# Independently-sourced (not imported from the SUT's own message table) substring
+# fixtures for each non-COMPLETED outcome's user-visible message. Reading these
+# straight out of _NON_COMPLETED_OUTCOME_MESSAGES would make the "genuinely
+# different text" assertion below tautological — this asserts the module under
+# test still says what we independently expect it to say.
+_NON_COMPLETED_OUTCOME_TEXT_FRAGMENTS: dict[UpdateTransactionOutcome, str] = {
+    UpdateTransactionOutcome.FAILED_UPGRADE: "failed during the upgrade step",
+    UpdateTransactionOutcome.FAILED_INSTALL: "failed during the install step",
+    UpdateTransactionOutcome.FAILED_POSTCONDITION: "post-install verification failed",
+    UpdateTransactionOutcome.DECLINED: "declined",
+    UpdateTransactionOutcome.DEFERRED: "deferred",
+    UpdateTransactionOutcome.RECOVERY_REQUIRED: "requires manual recovery",
+    UpdateTransactionOutcome.INDETERMINATE: "could not be determined",
+}
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        pytest.param(outcome, id=outcome.value)
+        for outcome in UpdateTransactionOutcome
+        if outcome is not UpdateTransactionOutcome.COMPLETED
+    ],
+)
+def test_non_completed_outcome_is_surfaced(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    outcome: UpdateTransactionOutcome,
+) -> None:
+    """Every non-COMPLETED outcome must produce a structured log record and a
+    distinguishable user-visible line.
+
+    Before this behavior existed, _run_update_sequence returned silently for
+    all seven non-COMPLETED outcomes (no print, no log) — DEFERRED in
+    particular re-contended on every subsequent invocation with no
+    operator-visible trace of why. This guards against that regression and
+    against a future generic-message shortcut that would make every outcome
+    print the same undifferentiated text.
+    """
+    import structlog.testing
+
+    from autoskillit.cli.update._update_checks import _run_update_sequence
+
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_transaction",
+        lambda **kwargs: UpdateTransactionResult(
+            outcome=outcome,
+            findings=("some finding",),
+        ),
+    )
+
+    with structlog.testing.capture_logs() as cap_logs:
+        _run_update_sequence(tmp_path, {})
+
+    warning_events = [e for e in cap_logs if e.get("log_level") == "warning"]
+    assert len(warning_events) == 1, f"Expected exactly one warning log, got {warning_events}"
+    record = warning_events[0]
+    assert record["event"] == "update_sequence_non_completed"
+    assert record["outcome"] == outcome.value
+    assert record["process_status"] == process_status_for_update_outcome(outcome).name
+    assert record["findings"] == ("some finding",)
+
+    out = capsys.readouterr().out
+    assert out.strip(), "Non-COMPLETED outcome must print a user-visible line"
+    assert "some finding" in out
+
+    own_fragment = _NON_COMPLETED_OUTCOME_TEXT_FRAGMENTS[outcome]
+    assert own_fragment in out
+    for other_outcome, other_fragment in _NON_COMPLETED_OUTCOME_TEXT_FRAGMENTS.items():
+        if other_outcome is outcome:
+            continue
+        assert other_fragment not in out, (
+            f"{outcome.value}'s printed line unexpectedly also contains "
+            f"{other_outcome.value}'s distinguishing text — messages must not "
+            f"collapse to a single generic string"
+        )
 
 
 def test_run_update_sequence_passes_home_and_fresh_process_runner(

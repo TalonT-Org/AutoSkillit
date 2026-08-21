@@ -536,3 +536,65 @@ class TestInstalledPluginArtifactAuthority:
                 backend=object(),
                 load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )
+
+    def test_stale_generator_reaches_self_heal(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A stale current generation is caught and routed through self-healing."""
+        from unittest.mock import Mock
+
+        import autoskillit.workspace as workspace_pkg
+        from autoskillit.cli.install._plugin_artifact import (
+            InstalledPluginArtifactAuthority,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import PluginLoadMode, StaleGeneratorError
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        version = "1.2.3"
+        root = _installed_root(tmp_path, version)
+        semantic_key = "autoskillit@autoskillit-local:1.2.3"
+
+        # A current generation must exist, or acquire_launch_binding takes the
+        # no-generation-store legacy fallback, which never runs the probe.
+        gen_version_root = (
+            tmp_path / ".autoskillit" / "plugin-generations" / "autoskillit" / version
+        )
+        stale_generation = gen_version_root / "stale-incarnation"
+        stale_generation.mkdir(parents=True)
+        (gen_version_root / "current").symlink_to(stale_generation)
+
+        # A genuinely published installed root standing in for what a real
+        # self-heal republish would produce.
+        healed_root = tmp_path / "healed-generation" / version
+        healed_root.mkdir(parents=True)
+        (healed_root / "plugin.json").write_text("healed content")
+        publish_installed_plugin_artifact(healed_root, semantic_key=semantic_key)
+
+        def raise_stale() -> None:
+            raise StaleGeneratorError("test")
+
+        # The production method resolves this deferred import from the package
+        # attribute on every call, so patch the package rather than its caller module.
+        monkeypatch.setattr(workspace_pkg, "assert_generator_process_fresh", raise_stale)
+
+        authority = InstalledPluginArtifactAuthority(
+            root,
+            home=managed_home(),
+            semantic_key=semantic_key,
+        )
+        heal_mock = Mock(return_value=healed_root)
+        monkeypatch.setattr(authority, "_self_heal_republish", heal_mock)
+
+        binding = authority.acquire_launch_binding(
+            backend=object(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        try:
+            heal_mock.assert_called_once_with()
+            assert binding.plugin_dir == healed_root
+            assert not binding.closed
+        finally:
+            binding.close()

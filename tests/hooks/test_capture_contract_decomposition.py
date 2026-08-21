@@ -1,12 +1,7 @@
 """Step-2 facade re-exports + canonical-import preservation for #4726.
 
 Each of these tests fails against the pre-Step-2 codebase because the moved
-names do not yet exist at their new module locations.  Once Step 2 lands,
-every test here passes without any change to the original importers
-(`tests/hooks/test_capture_contract.py`, `tests/hooks/test_shell_capture_hook.py`,
-`tests/execution/backends/test_shell_capture_marker_authority.py`, …) — they
-continue to import from `autoskillit.hooks._capture_contract` and the facade
-re-exports cover them all.
+names do not yet exist at their new module locations.
 """
 
 from __future__ import annotations
@@ -20,7 +15,6 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 def test_v2_protocol_primitives_live_in_dedicated_module() -> None:
-    """Step 2 moves V2 protocol primitives to _capture._v2_protocol."""
     from autoskillit.hooks._capture._v2_protocol import (
         parse_capture_v2,
         render_capture_v2,
@@ -31,7 +25,6 @@ def test_v2_protocol_primitives_live_in_dedicated_module() -> None:
 
 
 def test_request_lineage_primitives_live_in_dedicated_module() -> None:
-    """Step 2 moves request/lineage codecs to _capture._request_lineage."""
     from autoskillit.hooks._capture._request_lineage import (
         decode_capture_request,
         encode_capture_request,
@@ -42,7 +35,6 @@ def test_request_lineage_primitives_live_in_dedicated_module() -> None:
 
 
 def test_facade_keeps_v3_envelope_names() -> None:
-    """V3 envelope + module-level constants STAY in the facade per #4726 spec."""
     from autoskillit.hooks._capture_contract import (
         _MAX_COMMAND_BYTES,
         render_capture_failure_v3,
@@ -53,7 +45,6 @@ def test_facade_keeps_v3_envelope_names() -> None:
 
 
 def test_facade_re_exports_moved_v2_names() -> None:
-    """All names moved to _capture._v2_protocol remain importable from the facade."""
     from autoskillit.hooks._capture_contract import (
         render_capture_v2,
     )
@@ -62,7 +53,6 @@ def test_facade_re_exports_moved_v2_names() -> None:
 
 
 def test_facade_re_exports_moved_lineage_names() -> None:
-    """All names moved to _capture._request_lineage remain importable from the facade."""
     from autoskillit.hooks._capture_contract import (
         encode_capture_request,
     )

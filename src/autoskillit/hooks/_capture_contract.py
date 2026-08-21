@@ -1,21 +1,15 @@
-"""Canonical stdlib-only transport contracts for shell capture.
+"""Canonical facade for shell-capture transport contracts (stdlib-only).
 
-This module is the canonical facade for shell-capture transport contracts.
-It owns the V3 failure envelope framing (``CaptureFailureV3``, the four V3
+Owns the V3 failure envelope framing (``CaptureFailureV3``, the four V3
 render/parse functions, the V3 wire-format prefixes) and the cross-cutting
-``CaptureContractError`` exception.  The V2 capture protocol primitives
-live in ``_capture._v2_protocol``; the request/lineage codec surface
-lives in ``_capture._request_lineage``.  This facade re-exports every
-public name from those modules so existing import sites continue to
-work unchanged.
+``CaptureContractError`` exception.  V2 capture protocol primitives live
+in ``_capture._v2_protocol``; request/lineage codecs live in
+``_capture._request_lineage``.  This facade re-exports their public names
+so existing import sites continue to work unchanged.
 
-Stdlib-only at runtime: no ``autoskillit.*`` import outside ``TYPE_CHECKING``.
-The cross-module imports of moved names use the hooks-level three-way
-discriminator (``elif __package__:``) to keep the facade importable as
-both ``autoskillit.hooks._capture_contract`` and the standalone
-``_capture_contract`` spelling.  ``CaptureContractError`` is defined
-before the cross-module discriminant so that ``_capture._v2_protocol``'s
-runtime import of it resolves successfully during the first-load cycle.
+``CaptureContractError`` is defined before the cross-module discriminant so
+that ``_capture._v2_protocol``'s runtime import of it resolves during the
+first-load cycle.
 """
 
 from __future__ import annotations

@@ -1,16 +1,7 @@
 """Canonical capture-request and lineage-ref codecs (stdlib-only).
 
-This module owns the producer/consumer codecs that move a shell-capture
-request and its lineage reference between the host process and the
-isolated runner: ``encode_capture_request`` / ``decode_capture_request`` /
-``decode_lineage_ref_json`` plus the four producer-side / four
-consumer-side validators and the narrow canonical-JSON encoder.  The V2
-capture transport lives in ``_capture._v2_protocol`` and the V3 failure
-envelope lives in ``_capture_contract``; this module is the request-side
-sibling of both.
-
-Stdlib-only at runtime: no ``autoskillit.*`` import outside ``TYPE_CHECKING``.
-``register_module_aliases(__name__)`` registers both module-name spellings.
+Owns the producer/consumer codecs that move a shell-capture request and
+its lineage reference between the host process and the isolated runner.
 """
 
 from __future__ import annotations

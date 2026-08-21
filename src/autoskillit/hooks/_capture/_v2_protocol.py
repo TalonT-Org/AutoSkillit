@@ -1,18 +1,11 @@
 """Canonical V2 capture transport primitives (stdlib-only).
 
-This module is the single source of truth for the V2 capture wire-format:
-encode/decode of complete captures, capture failures, and the bounded-byte
-marker prefixes/suffixes.  The V3 failure envelope lives in the
-``_capture_contract`` facade (``src/autoskillit/hooks/_capture_contract.py``)
-because it shares ``_FRAME_SUFFIX`` and ``_canonical_json`` (defined here)
-while preserving its own distinct prefixes and degraded-delivery variant.
-
-Stdlib-only at runtime: no ``autoskillit.*`` import outside ``TYPE_CHECKING``.
-Cross-module imports of ``_capture_contract.CaptureContractError`` use the
-package-level three-way discriminator (``elif __package__ == "_capture":``).
-``register_module_aliases(__name__)`` registers both module-name spellings
-so ``_capture._v2_protocol`` and ``autoskillit.hooks._capture._v2_protocol``
-resolve to the same ``sys.modules`` entry.
+Single source of truth for the V2 capture wire-format: encode/decode of
+complete captures, capture failures, and the bounded-byte marker
+prefixes/suffixes.  The V3 failure envelope lives in the
+``_capture_contract`` facade because it shares ``_FRAME_SUFFIX`` and
+``_canonical_json`` while keeping its own distinct prefixes and
+degraded-delivery variant.
 """
 
 from __future__ import annotations

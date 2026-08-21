@@ -20,6 +20,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSource,
     pkg_root,
@@ -29,8 +30,7 @@ from autoskillit.execution.backends.codex import _generate_agent_tomls
 from autoskillit.workspace import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
-    SkillProjectionContext,
-    project_agent_skill_document,
+    compile_session_skill_catalog,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.execution.backends._conformance_assertions import (
@@ -561,35 +561,25 @@ def test_real_planner_workflows_project_their_runtime_collections(
         # shape that enrich-issues used to cover before its retirement.
     ],
 )
-def test_real_semantic_skill_materializes_through_codex_adapter(skill_name: str) -> None:
+def test_real_join_required_skill_is_unavailable_to_codex(skill_name: str) -> None:
     skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
     info = _skill_info_from_frontmatter(skill_name, SkillSource.BUNDLED, skill_md)
     assert not info.invalidities
     plan = info.semantic_plan
     assert plan is not None
-    # Codex refuses join-bearing skills per the rectify-join contract; the
-    # adapter test only applies to skills whose runtime path codex can serve.
-    if plan.join is not None and plan.join.required:
-        pytest.skip(f"codex cannot materialize {skill_name!r}: join.required=true is rejected")
+    assert plan.join is not None and plan.join.required is True
     entry = SkillCatalogEntry.from_skill_info(info)
     catalog = EffectiveSkillCatalog(
         skills=(entry,),
         execution_role=SkillExecutionRole.SESSION,
     )
-    backend = CodexBackend()
+    compilation = compile_session_skill_catalog(catalog, CodexBackend())
 
-    document = project_agent_skill_document(
-        entry,
-        SkillProjectionContext(
-            cwd=skill_md.parent,
-            catalog=catalog,
-            backend=backend,
-            conventions=backend.conventions,
-        ),
-    )
-
-    assert "spawn_agent" in document.content
-    assert "wait_agent" in document.content
-    assert "gpt-5.6-sol" in document.content
-    assert document.semantic_digest
-    assert document.adaptation_digest
+    assert compilation.backend == "codex"
+    assert compilation.catalog.skills == ()
+    assert len(compilation.unavailable) == 1
+    unavailable = compilation.unavailable[0]
+    assert unavailable.skill == skill_name
+    assert unavailable.backend == "codex"
+    assert unavailable.operation is SkillSemanticOperation.REQUIRED_JOIN
+    assert "wait-any/mailbox-activity" in unavailable.diagnostic

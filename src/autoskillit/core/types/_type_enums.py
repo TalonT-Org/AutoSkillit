@@ -114,9 +114,8 @@ class FaultDomain(StrEnum):
     post-launch text analysis of subprocess output, and answers a different
     question. An ``infrastructure_fault`` result has ``exit_category=""``;
     an existing rate-limited/API-error result has the default
-    ``fault_domain=LOGIC``. Uses the same two string values as
-    fleet error categorization imports this enum directly so both layers use
-    one authority.
+    ``fault_domain=LOGIC``. Fleet error categorization imports this enum
+    directly so both layers use one authority.
     """
 
     LOGIC = "logic"

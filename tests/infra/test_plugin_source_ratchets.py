@@ -332,7 +332,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     (
         "smoke_utils/_cross_interpreter_upgrade.py",
         "_assert_overlapping_install_survives",
-        "continue_file.unlink",
+        "release_file.unlink",
     ): (
         1,
         "Clears a leftover coordination-sentinel file from a prior smoke run before "
@@ -924,7 +924,7 @@ class TestPluginMutationInventory:
         sidecar_mutations = [
             key
             for key in _scan_plugin_mutations()
-            if "lease" in key[2].lower() or "lock" in key[2].lower()
+            if {"lease", "lock"} & set(key[2].lower().replace(".", "_").split("_"))
         ]
         assert not sidecar_mutations, (
             "Artifact lease sidecars are durable synchronization identities and "

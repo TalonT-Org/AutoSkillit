@@ -251,16 +251,12 @@ def _assert_overlapping_install_survives(
         )
 
     marker = scratch_home / "overlap-marker"
-    # Named to avoid the substring "lease" (see PLUGIN_MUTATION_ALLOWLIST's
-    # sidecar-deletion guard in tests/infra/test_plugin_source_ratchets.py):
-    # this is a plain coordination sentinel, not an ArtifactLease sidecar,
-    # but that guard's classifier matches on variable-name substrings.
-    continue_file = scratch_home / "overlap-continue"
+    release_file = scratch_home / "overlap-continue"
     marker.unlink(missing_ok=True)
-    continue_file.unlink(missing_ok=True)
+    release_file.unlink(missing_ok=True)
 
     child = subprocess.Popen(
-        [str(child_python), "-c", _OVERLAP_CHILD_SCRIPT, str(marker), str(continue_file)],
+        [str(child_python), "-c", _OVERLAP_CHILD_SCRIPT, str(marker), str(release_file)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -306,7 +302,7 @@ def _assert_overlapping_install_survives(
                 f"live one: {identity_a.managed_path}"
             )
 
-        atomic_write(continue_file, "go\n")
+        atomic_write(release_file, "go\n")
         try:
             stdout, stderr = child.communicate(timeout=30)
         except subprocess.TimeoutExpired:

@@ -1518,14 +1518,6 @@ def test_no_src_module_exceeds_line_limit() -> None:
     )
 
 
-def test_git_ops_guard_sibling_module_under_line_limit() -> None:
-    """Step 9 (#4733): both halves of the decomposition must stay under the cap."""
-    orchestrator = SRC_ROOT / "hooks" / "guards" / "git_ops_guard.py"
-    sibling = SRC_ROOT / "hooks" / "guards" / "_git_command_classification.py"
-    assert orchestrator.exists() and len(orchestrator.read_text().splitlines()) <= 1000
-    assert sibling.exists() and len(sibling.read_text().splitlines()) <= 1000
-
-
 def test_core_has_no_autoskillit_imports() -> None:
     """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package.
 

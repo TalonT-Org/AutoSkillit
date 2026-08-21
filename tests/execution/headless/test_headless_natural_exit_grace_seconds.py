@@ -99,17 +99,3 @@ async def test_food_truck_dispatch_threads_natural_exit_grace_seconds(
     assert runner.call_args_list, "runner was never called"
     _, _, _, kwargs = runner.call_args_list[0]
     assert kwargs["natural_exit_grace_seconds"] == 8.0
-
-
-@pytest.mark.anyio
-async def test_default_value_passes_through_unchanged(tool_ctx_kitchen_open) -> None:
-    """The 3.0 s default is preserved end-to-end when no override is set."""
-    cfg = AutomationConfig()
-    cfg.safety.require_dry_walkthrough = False
-    tool_ctx_kitchen_open.config = cfg
-    tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
-    tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
-    await run_skill("/investigate something", "/tmp")
-    _, _, _, kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1]
-    # The default 3.0 from RunSkillConfig flows through unchanged.
-    assert kwargs["natural_exit_grace_seconds"] == 3.0

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.conftest import production_interpreter_env
 from tests.infra._token_summary_helpers import _make_run_skill_event, _run_hook, _write_sessions
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -24,6 +25,7 @@ def test_tsa2_no_pr_url_exits_zero() -> None:
 
     proc = subprocess.run(
         [sys.executable, str(hook_path)],
+        env=production_interpreter_env(),
         input=json.dumps(event),
         capture_output=True,
         text=True,

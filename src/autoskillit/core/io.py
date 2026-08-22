@@ -201,7 +201,7 @@ def resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
 
 def atomic_write(
     path: Path,
-    content: str,
+    content: str | bytes,
     *,
     strict_durability: bool = False,
     exclusive: bool = False,
@@ -224,10 +224,16 @@ def atomic_write(
     tmp: str | None = None
     try:
         fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())  # durable data write
+        if isinstance(content, bytes):
+            with os.fdopen(fd, "wb") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())  # durable data write
+        else:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())  # durable data write
         os.replace(tmp, path)
     except Exception:
         if tmp is not None:
@@ -256,14 +262,53 @@ def atomic_write(
                 raise _AtomicWriteDurabilityError(path, exc) from exc
 
 
-def directory_tree_digest(root: Path) -> str:
-    """Hash every relative entry, kind, mode, and regular-file byte."""
+def is_python_bytecode_path(path: Path) -> bool:
+    """Return whether *path* names interpreter-generated Python bytecode."""
+    return (path.name == "__pycache__" and path.is_dir()) or (
+        path.name.endswith((".pyc", ".pyo")) and path.is_file()
+    )
+
+
+def directory_tree_digest(
+    root: Path,
+    *,
+    allow_symlinks: bool = False,
+    ignore_bytecode: bool = False,
+) -> str:
+    """Hash every relative entry, kind, mode, and regular-file byte.
+
+    ``allow_symlinks`` defaults to False: sanitized plugin/projection content
+    must never contain a symlink (a plausible escape vector out of the
+    sanitized tree), so its presence is treated as corruption. Real venvs
+    installed by ``uv`` (install-root generations, issue #4597 Phase 3) always
+    contain symlinks as normal structure (``lib64 -> lib``, interpreter
+    aliases) — pass ``allow_symlinks=True`` there. A symlink's "content" for
+    digest purposes is its target string (``os.readlink``), so retargeting it
+    still changes the digest — this stays tamper-evident, it just stops
+    rejecting the shape outright.
+
+    ``ignore_bytecode`` defaults to False: sanitized plugin/projection
+    content is never executed in place, so a ``__pycache__``/``.pyc``/``.pyo``
+    appearing there is genuine tampering evidence. An install-root
+    generation's own interpreter runs from inside its tree by design —
+    merely importing a module writes bytecode there — so treating that as
+    corruption would make every generation that has ever actually run
+    permanently fail its own digest check. Pass ``True`` there to exclude
+    ``is_python_bytecode_path`` entries from both hashing and traversal.
+    """
     root = Path(root)
     if not root.is_dir() or root.is_symlink():
         raise ValueError(f"artifact root is not a regular directory: {root}")
     digest = hashlib.sha256()
     for current_root, directory_names, file_names in os.walk(root, followlinks=False):
         current = Path(current_root)
+        if ignore_bytecode:
+            directory_names[:] = [
+                name for name in directory_names if not is_python_bytecode_path(current / name)
+            ]
+            file_names[:] = [
+                name for name in file_names if not is_python_bytecode_path(current / name)
+            ]
         directory_names.sort()
         file_names.sort()
         for name in (*directory_names, *file_names):
@@ -271,8 +316,10 @@ def directory_tree_digest(root: Path) -> str:
             relative = path.relative_to(root).as_posix()
             entry_stat = path.stat(follow_symlinks=False)
             if stat.S_ISLNK(entry_stat.st_mode):
-                raise ValueError(f"artifact contains a symlink: {path}")
-            if stat.S_ISDIR(entry_stat.st_mode):
+                if not allow_symlinks:
+                    raise ValueError(f"artifact contains a symlink: {path}")
+                kind = b"l"
+            elif stat.S_ISDIR(entry_stat.st_mode):
                 kind = b"d"
             elif stat.S_ISREG(entry_stat.st_mode):
                 kind = b"f"
@@ -285,6 +332,8 @@ def directory_tree_digest(root: Path) -> str:
             if kind == b"f":
                 with path.open("rb") as handle:
                     digest.update(hashlib.file_digest(handle, "sha256").digest())
+            elif kind == b"l":
+                digest.update(os.readlink(path).encode("utf-8"))
             digest.update(b"\0")
     return digest.hexdigest()
 

@@ -21,6 +21,7 @@ import pytest
 
 from autoskillit.cli._init_helpers import _register_mcp_server
 from autoskillit.execution.backends import ensure_codex_mcp_registered
+from tests.conftest import production_interpreter_env
 
 fcntl = importlib.import_module("fcntl") if sys.platform == "linux" else None
 pty = importlib.import_module("pty") if sys.platform == "linux" else None
@@ -187,7 +188,7 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
     if source_credentials.is_file():
         shutil.copy2(source_credentials, isolated_claude / ".credentials.json")
     env = {
-        **os.environ,
+        **production_interpreter_env(),
         "HOME": str(client_home),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
         "AUTOSKILLIT_LAUNCH_ID": launch_id,

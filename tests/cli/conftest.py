@@ -63,7 +63,7 @@ def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def _stub_owner_binding(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: None)
+    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: True)
 
 
 @pytest.fixture

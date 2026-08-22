@@ -131,9 +131,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/_overlay_state.py", 114),
     # pipeline_tracker.py — locked tracker init/merge/mutation writes centralize the existing
     # unversioned tracker file schema.
-    ("src/autoskillit/core/pipeline_tracker.py", 280),
-    ("src/autoskillit/core/pipeline_tracker.py", 302),
-    ("src/autoskillit/core/pipeline_tracker.py", 320),
+    ("src/autoskillit/core/pipeline_tracker.py", 284),
+    ("src/autoskillit/core/pipeline_tracker.py", 306),
+    ("src/autoskillit/core/pipeline_tracker.py", 324),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 580),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
@@ -143,7 +143,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/install/_installed_plugins.py", 81),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/update/_update_checks.py", 82),
+    ("src/autoskillit/cli/update/_update_checks.py", 86),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 55),
     # smoke_utils/_review_design.py — enriched handoff and manifest

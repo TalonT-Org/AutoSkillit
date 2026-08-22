@@ -539,11 +539,11 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "The `env_var` function parameter of _resolve_int() is supplied dynamically per caller;"
         "not a module-level literal or resolvable constant."
     ),
-    "server/_guards.py:361": (
+    "server/_guards.py:401": (
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/_lifespan/_session_boots.py:531": (
+    "server/_lifespan/_session_boots.py:535": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
@@ -566,7 +566,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
 }
 
 FORWARDING_SITES: dict[str, str] = {
-    "cli/install/_marketplace.py:260": (
+    "cli/install/_marketplace.py:264": (
         "Unfiltered dict(os.environ) snapshot (`ambient_env`) used as the base for an"
         "install/publish subprocess env; intentional wholesale forward for a maintenance-style"
         "operation."
@@ -579,7 +579,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
-    "cli/update/_transaction.py:350": (
+    "cli/update/_transaction.py:371": (
         "Unfiltered dict(os.environ if base_env is None else base_env) snapshot captured for"
         "update-transaction diagnostics/rollback comparison, not for a spawned child process."
     ),
@@ -644,7 +644,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for a same-host hook-script subprocess; only"
         "PYTHONDONTWRITEBYTECODE is added on top."
     ),
-    "smoke_utils/_cross_interpreter_upgrade.py:95": (
+    "smoke_utils/_cross_interpreter_upgrade.py:337": (
         "Unfiltered dict(os.environ) base for a smoke-test cross-interpreter upgrade subprocess"
         "sandboxed to a scratch HOME/XDG tree overridden immediately after."
     ),
@@ -2040,11 +2040,10 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
     "HOME": AmbientEnvDisposition(
         var="HOME",
         disposition="preserve",
-        owner="posix",
+        owner="harness",
         justification=(
-            "Generic POSIX/system environment configuration (process"
-            "locate/locale/proxy/certificate config) required for basic subprocess correctness;"
-            "not AutoSkillit-private state."
+            "AutoSkillit resolves private state beneath HOME, so the autouse isolation fixture"
+            " preserves a per-test value instead of deleting HOME and breaking subprocesses."
         ),
     ),
     "HTTPS_PROXY": AmbientEnvDisposition(
@@ -2967,51 +2966,46 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
     "XDG_CACHE_HOME": AmbientEnvDisposition(
         var="XDG_CACHE_HOME",
         disposition="preserve",
-        owner="posix",
+        owner="harness",
         justification=(
-            "Generic POSIX/system environment configuration (process"
-            "locate/locale/proxy/certificate config) required for basic subprocess correctness;"
-            "not AutoSkillit-private state."
+            "The autouse home-isolation fixture preserves a per-test cache root so child"
+            " processes cannot read or write the developer's XDG cache."
         ),
     ),
     "XDG_CONFIG_HOME": AmbientEnvDisposition(
         var="XDG_CONFIG_HOME",
         disposition="preserve",
-        owner="posix",
+        owner="harness",
         justification=(
-            "Generic POSIX/system environment configuration (process"
-            "locate/locale/proxy/certificate config) required for basic subprocess correctness;"
-            "not AutoSkillit-private state."
+            "The autouse home-isolation fixture preserves a per-test config root so child"
+            " processes cannot read the developer's XDG configuration."
         ),
     ),
     "XDG_DATA_HOME": AmbientEnvDisposition(
         var="XDG_DATA_HOME",
         disposition="preserve",
-        owner="posix",
+        owner="harness",
         justification=(
-            "Generic POSIX/system environment configuration (process"
-            "locate/locale/proxy/certificate config) required for basic subprocess correctness;"
-            "not AutoSkillit-private state."
+            "The autouse home-isolation fixture preserves a per-test data root so child"
+            " processes cannot read or write the developer's XDG data."
         ),
     ),
     "XDG_RUNTIME_DIR": AmbientEnvDisposition(
         var="XDG_RUNTIME_DIR",
         disposition="preserve",
-        owner="posix",
+        owner="harness",
         justification=(
-            "Generic POSIX/system environment configuration (process"
-            "locate/locale/proxy/certificate config) required for basic subprocess correctness;"
-            "not AutoSkillit-private state."
+            "The autouse home-isolation fixture preserves a per-test runtime root so child"
+            " processes cannot reach the developer's XDG runtime state."
         ),
     ),
     "XDG_STATE_HOME": AmbientEnvDisposition(
         var="XDG_STATE_HOME",
         disposition="preserve",
-        owner="posix",
+        owner="harness",
         justification=(
-            "Generic POSIX/system environment configuration (process"
-            "locate/locale/proxy/certificate config) required for basic subprocess correctness;"
-            "not AutoSkillit-private state."
+            "The autouse home-isolation fixture preserves a per-test state root so child"
+            " processes cannot read or write the developer's XDG state."
         ),
     ),
     "ZED_TERM": AmbientEnvDisposition(

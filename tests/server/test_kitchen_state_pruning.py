@@ -71,6 +71,44 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
     assert (tracker_dir / "K1.json").exists()
 
 
+@pytest.mark.parametrize(
+    "registry_text",
+    (
+        "{not valid json",
+        json.dumps({"schema_version": 3, "kitchens": []}),
+    ),
+    ids=("corrupt", "unsupported-future"),
+)
+def test_unsafe_active_registry_preserves_tracker(monkeypatch, tmp_path, registry_text):
+    """Unknown active-kitchen authority must fail closed during tracker retirement."""
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    tracker_dir.mkdir(parents=True)
+    tracker = tracker_dir / "K1.json"
+    tracker.write_text(
+        json.dumps(
+            {
+                "kitchen_id": "K1",
+                "steps": {},
+                "dependencies": {},
+            }
+        )
+    )
+    registry_path = tmp_path / "active_kitchens.json"
+    registry_path.write_text(registry_text)
+    monkeypatch.setattr(
+        "autoskillit.core._plugin_cache._active_kitchens_path",
+        lambda _home: registry_path,
+    )
+    monkeypatch.setattr(
+        "autoskillit.core._plugin_cache._active_kitchens_lock",
+        lambda _home: tmp_path / "active_kitchens.lock",
+    )
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert tracker.exists()
+
+
 def test_invalid_tracker_candidate_is_logged(monkeypatch, tmp_path):
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     tracker_dir.mkdir(parents=True)

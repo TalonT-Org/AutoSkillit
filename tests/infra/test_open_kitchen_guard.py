@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import fcntl
 import json
-import os
 import subprocess
 import sys
 import time
@@ -14,6 +13,7 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from tests._helpers import seed_registry_owner
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 def _run_guard(env_extra: dict, tool_input: dict) -> dict:
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     stdin_payload = json.dumps({"tool_input": tool_input})
-    env = {**os.environ, **env_extra}
+    env = {**production_interpreter_env(), **env_extra}
     result = subprocess.run(
         [sys.executable, str(hook_path)],
         input=stdin_payload,
@@ -53,7 +53,7 @@ def test_open_kitchen_guard_permits_headless_orchestrator(tmp_path: Path) -> Non
         "hook_event_name": "PreToolUse",
     }
     env = {
-        **os.environ,
+        **production_interpreter_env(),
         "AUTOSKILLIT_HEADLESS": "1",
         "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
         "AUTOSKILLIT_STATE_DIR": str(tmp_path),
@@ -75,7 +75,9 @@ def test_open_kitchen_guard_permits_headless_orchestrator(tmp_path: Path) -> Non
 
 
 def test_open_kitchen_guard_allows_human_session() -> None:
-    env_without_headless = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env_without_headless = {
+        k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"
+    }
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     stdin_payload = json.dumps({"tool_input": {}})
     result = subprocess.run(
@@ -103,7 +105,7 @@ def test_open_kitchen_guard_writes_marker_on_permit(tmp_path: Path, monkeypatch)
         "hook_event_name": "PreToolUse",
     }
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
-    env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env = {k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"}
     env["AUTOSKILLIT_STATE_DIR"] = str(tmp_path)
     result = subprocess.run(
         [sys.executable, str(hook_path)],
@@ -130,7 +132,7 @@ def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     env = {
-        **os.environ,
+        **production_interpreter_env(),
         "AUTOSKILLIT_HEADLESS": "1",
         "AUTOSKILLIT_SESSION_TYPE": "skill",
         "AUTOSKILLIT_STATE_DIR": str(tmp_path),
@@ -203,7 +205,9 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
         "session_id": "claude-xyz",
         "hook_event_name": "PreToolUse",
     }
-    env_without_headless = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env_without_headless = {
+        k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"
+    }
     env_without_headless["AUTOSKILLIT_LAUNCH_ID"] = "abc"
     result = subprocess.run(
         [sys.executable, str(hook_path)],
@@ -247,7 +251,7 @@ def test_guard_bridge_rereads_registry_under_lock(tmp_path: Path) -> None:
     }
     env = {
         key: value
-        for key, value in os.environ.items()
+        for key, value in production_interpreter_env().items()
         if key not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_STATE_DIR")
     }
     env.update(
@@ -314,7 +318,7 @@ def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:
     }
     env_without = {
         k: v
-        for k, v in os.environ.items()
+        for k, v in production_interpreter_env().items()
         if k not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_LAUNCH_ID")
     }
     result = subprocess.run(
@@ -356,7 +360,7 @@ def _run_guard_with_session(
     }
     env = {
         k: v
-        for k, v in os.environ.items()
+        for k, v in production_interpreter_env().items()
         if k not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_STATE_DIR")
     }
     env["AUTOSKILLIT_STATE_DIR"] = str(tmp_path)

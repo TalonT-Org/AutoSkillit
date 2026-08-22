@@ -37,6 +37,7 @@ _PLUGIN_ARTIFACT_ACTIONS = frozenset(
         "release",
         "publish",
         "publish_generation",
+        "publish_install_root_generation",
         "self_heal_republish",
         "repair",
         "retire",
@@ -49,6 +50,7 @@ _PLUGIN_ARTIFACT_OUTCOMES = frozenset(
         "succeeded",
         "deferred_contended",
         "deferred_io_error",
+        "deferred_unreadable_queue",
         "rejected_identity",
         "failed_validation",
     }

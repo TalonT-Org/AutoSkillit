@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,7 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionResult,
     process_status_for_update_outcome,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -50,13 +53,11 @@ def _patch_result(
 
 
 def test_update_subcommand_registered_in_help() -> None:
-    import subprocess
-    import sys
-
     result = subprocess.run(
         [sys.executable, "-m", "autoskillit", "update", "--help"],
         capture_output=True,
         text=True,
+        env=production_interpreter_env(),
     )
     assert result.returncode == 0, f"update --help failed: {result.stderr}"
 
@@ -199,6 +200,111 @@ def test_explicit_passes_home_and_fresh_process_runner(
 
     assert captured[0]["home"] == tmp_path
     assert captured[0]["process_runner"] is _update.subprocess.run
+
+
+def test_explicit_update_runs_the_transaction_exactly_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A stale-TTY explicit update runs one transaction end to end (#4597, A-7)."""
+    import select as _select_mod
+    from unittest.mock import MagicMock
+
+    from autoskillit.cli.app import main as app_main
+    from autoskillit.cli.update import _update, _update_checks
+
+    from ._update_checks_helpers import _make_stable_info
+
+    # Simulate a stale interactive TTY install: both stdio streams report a
+    # TTY, a "binary" staleness signal fires, and the operator answers "y".
+    fake_stdin = MagicMock()
+    fake_stdin.isatty.return_value = True
+    fake_stdout = MagicMock()
+    fake_stdout.isatty.return_value = True
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    monkeypatch.setattr(sys, "stdout", fake_stdout)
+    monkeypatch.setattr(
+        _select_mod, "select", lambda rlist, wlist, xlist, timeout=None: (rlist, [], [])
+    )
+    monkeypatch.delenv("CI", raising=False)
+    # CLAUDECODE / AUTOSKILLIT_SKIP_STALE_CHECK / AUTOSKILLIT_SKIP_UPDATE_CHECK
+    # are already scrubbed unconditionally by the autouse _scrub_ambient_env
+    # fixture in tests/conftest.py — no ad-hoc delenv needed for them here.
+
+    monkeypatch.setattr(_update_checks, "detect_install", lambda: _make_stable_info())
+    monkeypatch.setattr(
+        _update_checks,
+        "_binary_signal",
+        lambda info, home, current: _update_checks.Signal(
+            "binary", "New release: 9.9.9 (you have 0.0.0)"
+        ),
+    )
+    monkeypatch.setattr(_update_checks, "_hooks_signal", lambda settings_path: None)
+    monkeypatch.setattr(_update_checks, "_source_drift_signal", lambda info, home: None)
+    monkeypatch.setattr(
+        _update_checks,
+        "_claude_settings_path",
+        lambda scope, **_kwargs: tmp_path / "settings.json",
+    )
+    monkeypatch.setattr("builtins.input", lambda _="": "y")
+
+    printed: list[str] = []
+    monkeypatch.setattr(
+        "builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args))
+    )
+
+    # The first call mirrors a real successful upgrade; any further call
+    # mirrors what the real transaction returns when re-run against an
+    # install that is already current -- exactly the corrupted second call
+    # this test guards against.
+    call_count = 0
+
+    def counting_transaction(**kwargs: object) -> UpdateTransactionResult:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return UpdateTransactionResult(
+                outcome=UpdateTransactionOutcome.COMPLETED,
+                expected_version="1.1.0",
+            )
+        return UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.FAILED_UPGRADE,
+            findings=("install already at target version",),
+        )
+
+    # Both call sites resolve run_update_transaction independently; patch
+    # each module's bound name so a reintroduced double-call is counted
+    # regardless of which path it comes through.
+    monkeypatch.setattr(_update, "run_update_transaction", counting_transaction)
+    monkeypatch.setattr(_update_checks, "run_update_transaction", counting_transaction)
+    monkeypatch.setattr(_update, "terminal_guard", _TerminalGuard)
+    monkeypatch.setattr(_update_checks, "terminal_guard", _TerminalGuard)
+    monkeypatch.setattr(_update, "perform_restart", lambda: None)
+    monkeypatch.setattr(_update_checks, "perform_restart", lambda: None)
+
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["autoskillit", "update"])
+
+    # cyclopts always calls sys.exit(0) after a command completes normally;
+    # only a nonzero code signals the failure path (the "already at target
+    # version" FAILED_UPGRADE result a spurious second call would produce).
+    try:
+        app_main()
+    except SystemExit as exc:
+        if exc.code:
+            pytest.fail(
+                f"main() exited with SystemExit({exc.code}) instead of completing "
+                f"cleanly — indicates run_update_transaction was invoked more than "
+                f"once (call_count={call_count})"
+            )
+
+    assert call_count == 1, f"run_update_transaction invoked {call_count} time(s), expected 1"
+    combined = " ".join(printed)
+    assert "updated successfully" in combined
+    assert "did not complete" not in combined
 
 
 def test_missing_expected_version_prints_warning_at_update_command(

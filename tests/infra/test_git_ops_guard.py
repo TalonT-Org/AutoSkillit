@@ -14,15 +14,24 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import unittest.mock
 from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks.guards.git_ops_guard import (
+# Mirror the standalone hook process import mode: the new sibling module
+# uses bare-name imports (_github_mutation_analysis, _command_classification)
+# that resolve only when the hooks directory is on sys.path. The orchestrator
+# bootstraps this in production; the test must do it explicitly.
+_HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks")
+if _HOOKS_SRC not in sys.path:
+    sys.path.insert(0, _HOOKS_SRC)
+
+from autoskillit.hooks._command_classification import _FlagArity  # noqa: E402
+from autoskillit.hooks.guards._git_command_classification import (  # noqa: E402
     _GIT_FETCH_FLAG_SPEC,
     _classify_fetch,
-    _FlagArity,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -982,3 +991,83 @@ def test_every_git_fetch_spec_flag_is_recognized(flag: str) -> None:
         # means the flag was NOT recognized -- the precise failure mode the
         # spec table is supposed to prevent.
         assert not any(entry[1] == "<unresolved>" for entry in result)
+
+
+def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
+    """Step 9 (#4733) regression: every classification primitive the orchestrator
+    consumes from autoskillit.hooks.guards._git_command_classification must remain
+    reachable from the package import surface. Mirrors the orchestrator's import
+    block at src/autoskillit/hooks/guards/git_ops_guard.py:37.
+    """
+    from autoskillit.hooks.guards._git_command_classification import (  # noqa: PLC0415, E501
+        _GIT_FETCH_BOOLEAN_FLAGS,
+        _GIT_FETCH_FLAG_SPEC,
+        _GIT_FETCH_VALUE_FLAGS,
+        _classify_git_segment,
+        _contains_blocked_git_op,
+        _git_result,
+        _git_text,
+        _parse_worktree_owners,
+        _resolve_attempted_sha,
+        _resolve_git_common_dir,
+    )
+
+    expected_callables = (
+        _classify_git_segment,
+        _contains_blocked_git_op,
+        _git_result,
+        _git_text,
+        _parse_worktree_owners,
+        _resolve_attempted_sha,
+        _resolve_git_common_dir,
+    )
+    for symbol in expected_callables:
+        assert callable(symbol), f"_git_command_classification.{symbol.__name__} must be callable"
+
+    assert isinstance(_GIT_FETCH_FLAG_SPEC, dict)
+    assert all(isinstance(k, str) for k in _GIT_FETCH_FLAG_SPEC)
+    assert all(
+        v == _FlagArity.BOOLEAN or v == _FlagArity.VALUE for v in _GIT_FETCH_FLAG_SPEC.values()
+    )
+    assert isinstance(_GIT_FETCH_BOOLEAN_FLAGS, frozenset)
+    assert isinstance(_GIT_FETCH_VALUE_FLAGS, frozenset)
+
+
+def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:
+    """Step 9 (#4733): the orchestrator's extended bootstrap must let
+    `_git_command_classification` resolve when only `hooks/` is on sys.path.
+    Mirrors tests/arch/test_shell_capture_trust_anchor.py:59
+    (test_capture_modules_import_with_hooks_directory_alone).
+    """
+    payload = json.dumps(
+        {
+            "session_id": "bootstrap-smoke",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status"},
+        }
+    )
+    from tests.conftest import production_interpreter_env  # noqa: PLC0415
+
+    env = production_interpreter_env()
+    env["PYTHONPATH"] = "src/autoskillit/hooks"
+    env["PATH"] = os.environ["PATH"]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-B",
+            "src/autoskillit/hooks/guards/git_ops_guard.py",
+        ],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=15,
+        cwd=str(Path(__file__).resolve().parents[2]),
+    )
+    assert result.returncode == 0, (
+        f"git_ops_guard.py subprocess failed (exit={result.returncode}): stderr={result.stderr!r}"
+    )
+    assert "ModuleNotFoundError" not in result.stderr
+    assert "ImportError" not in result.stderr

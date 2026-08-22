@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -65,7 +66,7 @@ def _run_app_boundary(
         app_module.main()
         """
     )
-    env = os.environ.copy()
+    env = production_interpreter_env()
     env.update(
         AUTOSKILLIT_TEST_RENDER_MODE=mode,
         AUTOSKILLIT_TEST_ROOT=str(tmp_path),

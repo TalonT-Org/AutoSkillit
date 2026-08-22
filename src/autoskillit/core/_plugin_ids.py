@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 # The key written to installed_plugins.json by `autoskillit install`
 _AUTOSKILLIT_PLUGIN_KEY = "autoskillit@autoskillit-local"
 
+# Namespaces AutoSkillit's own Python-package install-root generation store,
+# disjoint from _AUTOSKILLIT_PLUGIN_KEY's projected-plugin generation tree.
+_AUTOSKILLIT_INSTALL_ROOT_KEY = "autoskillit-install@autoskillit-local"
+
 # Cache subdirectory name used by all plugin cache path constructions
 DIRECT_INSTALL_CACHE_SUBDIR = "autoskillit-local"
 

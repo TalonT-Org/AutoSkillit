@@ -27,6 +27,7 @@ from autoskillit.execution.process import (
     kill_process_tree,
     run_managed_async,
 )
+from tests.conftest import production_interpreter_env
 from tests.execution import _process_group_helpers
 from tests.execution._process_group_helpers import (
     _cleanup_owned_process_group,
@@ -208,6 +209,7 @@ class TestKillProcessTreeUnit:
         proc = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(60)"],
             start_new_session=True,
+            env=production_interpreter_env(),
         )
         pid = proc.pid
         proc.kill()
@@ -230,6 +232,7 @@ class TestKillProcessTreeUnit:
                 ),
             ],
             start_new_session=True,
+            env=production_interpreter_env(),
             stdout=subprocess.PIPE,
             text=True,
         )

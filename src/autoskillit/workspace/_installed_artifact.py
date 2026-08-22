@@ -55,6 +55,8 @@ def write_installed_plugin_artifact_manifest_locked(
     semantic_key: str,
     action: str,
     incarnation_id: str | None = None,
+    allow_symlinks: bool = False,
+    ignore_bytecode: bool = False,
 ) -> PluginArtifactIdentity:
     """Persist a fresh identity while the caller owns the publication lease.
 
@@ -62,6 +64,15 @@ def write_installed_plugin_artifact_manifest_locked(
     caller has already minted it at staging time and threaded it through the
     staging directory name, retirement records, and lifecycle logging).
     When ``None``, a fresh uuid4 hex is minted internally.
+
+    ``allow_symlinks`` defaults to False (sanitized plugin content must never
+    contain one); install-root generations (issue #4597 Phase 3) are real
+    venvs that always do (``lib64 -> lib``) and must pass ``True``.
+
+    ``ignore_bytecode`` defaults to False; install-root generations run their
+    own interpreter from inside their tree, which writes ``__pycache__``
+    merely by being imported — must pass ``True`` there or the generation
+    fails its own digest the moment it is actually used.
     """
     manifest_path = installed_plugin_artifact_manifest_path(managed_path)
     resolved_incarnation = (
@@ -71,7 +82,9 @@ def write_installed_plugin_artifact_manifest_locked(
         semantic_key=semantic_key,
         incarnation_id=resolved_incarnation,
         manifest_schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        artifact_digest=_complete_tree_digest(managed_path),
+        artifact_digest=_complete_tree_digest(
+            managed_path, allow_symlinks=allow_symlinks, ignore_bytecode=ignore_bytecode
+        ),
         managed_path=managed_path,
         manifest_path=manifest_path,
     )
@@ -92,10 +105,14 @@ def write_installed_plugin_artifact_manifest_locked(
     return identity
 
 
-def _complete_tree_digest(root: Path) -> str:
+def _complete_tree_digest(
+    root: Path, *, allow_symlinks: bool = False, ignore_bytecode: bool = False
+) -> str:
     """Hash every relative entry, kind, mode, and regular-file byte."""
     try:
-        return directory_tree_digest(root)
+        return directory_tree_digest(
+            root, allow_symlinks=allow_symlinks, ignore_bytecode=ignore_bytecode
+        )
     except (OSError, ValueError) as exc:
         raise PluginArtifactValidationError(
             f"installed plugin artifact cannot be digested: {root}"

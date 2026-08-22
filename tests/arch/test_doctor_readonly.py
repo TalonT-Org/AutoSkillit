@@ -1,8 +1,7 @@
-"""AST guard: run_doctor() must not perform filesystem mutations (REQ-DOCTOR-READONLY).
+"""AST guard: diagnostic doctor remains read-only (REQ-DOCTOR-READONLY).
 
-Doctor is a diagnostic command — it reads and reports but must never modify
-the filesystem. Any destructive call (shutil.rmtree, os.remove, …)
-in run_doctor() or its direct callees within _doctor.py is a structural violation.
+``run_doctor`` reads and reports without mutation. Safe repair is a distinct,
+opt-in entry point selected only by the CLI's ``repair=True`` branch.
 """
 
 from __future__ import annotations
@@ -62,4 +61,26 @@ def test_doctor_performs_no_writes() -> None:
     assert not violations, (
         "run_doctor() must be read-only — found forbidden write call(s):\n"
         + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_repair_entry_point_is_only_reachable_with_the_flag() -> None:
+    source = (SRC / "cli" / "app.py").read_text()
+    tree = ast.parse(source)
+    doctor = _find_function(tree, "doctor")
+    assert doctor is not None
+
+    repair_imports = [
+        node
+        for node in ast.walk(doctor)
+        if isinstance(node, ast.ImportFrom)
+        and any(alias.name == "run_doctor_repairs" for alias in node.names)
+    ]
+    assert len(repair_imports) == 1
+    assert any(
+        isinstance(parent, ast.If)
+        and isinstance(parent.test, ast.Name)
+        and parent.test.id == "repair"
+        and repair_imports[0] in ast.walk(parent)
+        for parent in ast.walk(doctor)
     )

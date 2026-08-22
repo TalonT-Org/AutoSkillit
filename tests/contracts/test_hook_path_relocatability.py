@@ -329,6 +329,7 @@ def test_retained_incarnation_hooks_resolve_independently_of_newer_version(
         InstalledPluginArtifactRetirementOwner,
         publish_installed_plugin_artifact,
     )
+    from autoskillit.core import managed_home
     from autoskillit.hook_registry import validate_plugin_cache_hooks
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -355,7 +356,10 @@ def test_retained_incarnation_hooks_resolve_independently_of_newer_version(
     old_identity = _publish_incarnation("1.0.0")
     _publish_incarnation("1.1.0")
 
-    InstalledPluginArtifactRetirementOwner(cache_dir).enqueue_retirement(
+    InstalledPluginArtifactRetirementOwner(
+        cache_dir,
+        home=managed_home(),
+    ).enqueue_retirement(
         old_identity,
         datetime.now(UTC) + timedelta(hours=6),
     )

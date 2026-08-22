@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -18,6 +19,8 @@ from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
 from ._linux_proc import read_boot_id, read_starttime_ticks
+
+logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 runtime is stdlib-only
 
 __all__ = [
     "registry_path",
@@ -102,32 +105,41 @@ def bridge_claude_session_id(
         _atomic_write(path, _fast_dumps(registry))
 
 
-def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> None:
-    """Bind an existing launch row to the exact spawned client process."""
+def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> bool:
+    """Bind an existing launch row to the exact spawned client process.
+
+    Return ``False`` when the registry or process identity cannot be read or
+    persisted.  A non-positive or non-integer PID remains a caller error.
+    """
     if isinstance(owner_pid, bool) or not isinstance(owner_pid, int) or owner_pid <= 0:
         raise ValueError("owner_pid must be a positive integer")
 
-    path = registry_path(project_dir)
-    with _registry_lock(path):
-        registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        path = registry_path(project_dir)
+        with _registry_lock(path):
+            registry: dict[str, dict] = json.loads(path.read_text(encoding="utf-8"))
 
-        if launch_id not in registry:
-            raise KeyError(f"unknown launch ID: {launch_id}")
+            if launch_id not in registry:
+                return False
 
-        if not sys.platform.startswith("linux"):
-            return
+            if not sys.platform.startswith("linux"):
+                return True
 
-        boot_id = read_boot_id()
-        starttime_ticks = read_starttime_ticks(owner_pid)
-        if not boot_id or not starttime_ticks:
-            raise RuntimeError(f"unable to capture Linux owner identity for PID {owner_pid}")
+            boot_id = read_boot_id()
+            starttime_ticks = read_starttime_ticks(owner_pid)
+            if not boot_id or not starttime_ticks:
+                return False
 
-        registry[launch_id].update(
-            owner_pid=owner_pid,
-            owner_boot_id=boot_id,
-            owner_starttime_ticks=starttime_ticks,
-        )
-        _atomic_write(path, _fast_dumps(registry))
+            registry[launch_id].update(
+                owner_pid=owner_pid,
+                owner_boot_id=boot_id,
+                owner_starttime_ticks=starttime_ticks,
+            )
+            _atomic_write(path, _fast_dumps(registry))
+    except Exception:
+        logger.warning("session owner binding failed", exc_info=True)
+        return False
+    return True
 
 
 def _atomic_write(path: Path, content: str) -> None:

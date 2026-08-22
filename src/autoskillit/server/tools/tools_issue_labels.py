@@ -15,7 +15,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server._guards import _require_enabled, _require_no_infrastructure_fault
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
@@ -198,6 +198,7 @@ async def release_issue(
     fail_label: str | None = None,
     close_issue: str | None = None,
     step_name: str = "",
+    infrastructure_fault_override_reason: str | None = None,
 ) -> str:
     """Remove the in-progress label from a GitHub issue to release it.
 
@@ -220,11 +221,20 @@ async def release_issue(
         staged_label: Label name for staged state. Defaults to github.staged_label from config.
         fail_label: Label name for failure state. When provided, swaps in-progress for this label.
         step_name: Exact YAML step key used for recovery segment delivery.
+        infrastructure_fault_override_reason: Required to proceed when the most
+            recently completed step ended in an infrastructure fault. Absent by
+            default so refusal is the default path, not an opt-in.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (
+        fault_gate := _require_no_infrastructure_fault(
+            "release_issue", override_reason=infrastructure_fault_override_reason
+        )
+    ) is not None:
+        return fault_gate
     try:
         prepared_segment: PreparedRecipeSegmentDelivery | None = None
 

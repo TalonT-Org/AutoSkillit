@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import HOOKS_DIR, generate_hooks_json
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -68,6 +69,7 @@ class TestDispatchResolution:
     def test_dispatch_resolves_current_script(self, hook_env: Path) -> None:
         result = subprocess.run(
             [sys.executable, str(hook_env / "_dispatch.py"), "guards/quota_guard"],
+            env=production_interpreter_env(),
             input=b'{"tool_name": "Read", "tool_input": {}}',
             capture_output=True,
             timeout=10,
@@ -98,6 +100,7 @@ class TestDispatchResolution:
                 str(hooks_dir / "_dispatch.py"),
                 "guards/leaf_orchestration_guard",
             ],
+            env=production_interpreter_env(),
             input=b'{"tool_name": "Read", "tool_input": {}}',
             capture_output=True,
             timeout=10,
@@ -108,6 +111,7 @@ class TestDispatchResolution:
     def test_dispatch_unknown_hook_exits_zero(self, hook_env: Path) -> None:
         result = subprocess.run(
             [sys.executable, str(hook_env / "_dispatch.py"), "guards/nonexistent_hook"],
+            env=production_interpreter_env(),
             input=b'{"tool_name": "Read", "tool_input": {}}',
             capture_output=True,
             timeout=10,
@@ -119,6 +123,7 @@ class TestDispatchResolution:
         payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}})
         result = subprocess.run(
             [sys.executable, str(stdin_echo_env / "_dispatch.py"), "guards/echo_hook"],
+            env=production_interpreter_env(),
             input=payload.encode(),
             capture_output=True,
             timeout=10,
@@ -224,6 +229,7 @@ class TestDispatchOverhead:
             start = time.perf_counter()
             subprocess.run(
                 [sys.executable, str(direct_script)],
+                env=production_interpreter_env(),
                 input=stdin_data,
                 capture_output=True,
             )
@@ -234,6 +240,7 @@ class TestDispatchOverhead:
             start = time.perf_counter()
             subprocess.run(
                 [sys.executable, str(dispatch_script), "guards/quota_guard"],
+                env=production_interpreter_env(),
                 input=stdin_data,
                 capture_output=True,
             )

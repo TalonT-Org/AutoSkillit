@@ -64,8 +64,12 @@ from ._type_invariant_registry import *  # noqa: F401, F403
 from ._type_invariant_registry import __all__ as _invariant_registry_all
 from ._type_launch import *  # noqa: F401, F403
 from ._type_launch import __all__ as _launch_all
+from ._type_managed_home import *  # noqa: F401, F403
+from ._type_managed_home import __all__ as _managed_home_all
 from ._type_native_shell_capture import *  # noqa: F401, F403
 from ._type_native_shell_capture import __all__ as _native_shell_capture_all
+from ._type_persisted_formats import *  # noqa: F401, F403
+from ._type_persisted_formats import __all__ as _persisted_formats_all
 from ._type_phoropter import *  # noqa: F401, F403
 from ._type_phoropter import __all__ as _phoropter_all
 from ._type_plugin_source import *  # noqa: F401, F403
@@ -98,6 +102,8 @@ from ._type_results_execution import *  # noqa: F401, F403
 from ._type_results_execution import __all__ as _results_execution_all
 from ._type_resume import *  # noqa: F401, F403
 from ._type_resume import __all__ as _resume_all
+from ._type_retirement_backstops import *  # noqa: F401, F403
+from ._type_retirement_backstops import __all__ as _retirement_backstops_all
 from ._type_session_env import *  # noqa: F401, F403
 from ._type_session_env import __all__ as _session_env_all
 from ._type_skill_contract import *  # noqa: F401, F403
@@ -140,9 +146,12 @@ __all__ = (
     + _install_all
     + _invariant_registry_all
     + _launch_all
+    + _managed_home_all
     + _native_shell_capture_all
     + _phoropter_all
+    + _persisted_formats_all
     + _plugin_source_all
+    + _retirement_backstops_all
     + _protocols_logging_all
     + _protocols_execution_all
     + _protocols_github_all

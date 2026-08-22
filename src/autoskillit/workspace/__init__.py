@@ -48,6 +48,7 @@ from autoskillit.workspace._projected_artifact._generation_publication import (
     GenerationArtifactRetirementOwner,
     prune_stale_generations,
     publish_generation,
+    publish_install_root_generation,
 )
 from autoskillit.workspace._update_obligation import (
     PublicationObligation,
@@ -254,6 +255,7 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
     "publish_generation",
+    "publish_install_root_generation",
     "read_skill_frontmatter",
     "repair_broken_plugin_cache_hooks",
     "repair_broken_projection_hooks",

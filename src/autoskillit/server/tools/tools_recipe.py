@@ -203,6 +203,7 @@ async def load_recipe(
       access that the orchestrator does not.
     - Your ONLY job is to route to the correct next step and pass the
       required arguments. The downstream skill does the actual work.
+    {INFRA_FAULT}
 
     FAILURE PREDICATES — when to follow on_failure:
     - test_check: {"passed": false}

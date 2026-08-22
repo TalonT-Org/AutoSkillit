@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 SCRIPT = (
@@ -22,7 +24,7 @@ def _run(stdin_data: str, env: dict | None = None, cwd: Path | None = None) -> t
         input=stdin_data,
         capture_output=True,
         text=True,
-        env=env,
+        env={**production_interpreter_env(), **(env or {})},
         cwd=cwd,
     )
     return result.returncode, result.stdout

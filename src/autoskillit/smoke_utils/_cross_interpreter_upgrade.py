@@ -12,14 +12,63 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from packaging.version import InvalidVersion, Version
 
+if TYPE_CHECKING:
+    from autoskillit.core import PluginArtifactIdentity
+
 # Declared precondition, not a default to silently fall back on: the runner
 # must offer both minors, or this step fails loudly (no silent caps).
 _REQUIRED_PYTHON_MINORS = ("3.11", "3.13")
+
+# Executed by the overlap child via `python3 -c` from inside a published
+# install-root generation's own venv. sys.argv[1:] are the marker/release
+# sentinel paths (matching tests/cli/test_install_root_upgrade_immunity.py's
+# block/release protocol, minus the pytest fixtures that file can't use from
+# a non-pytest smoke context). Proves the property this smoke's overlap phase
+# exists to check: a live process holding a reference into one install-root
+# generation survives a real, concurrent publish of another one, and can
+# still resolve *new* code from its own root afterward (not just already
+# loaded bytes).
+_OVERLAP_CHILD_SCRIPT = """
+import sys
+import time
+from pathlib import Path
+
+from autoskillit.core import pkg_root
+
+marker_file = Path(sys.argv[1])
+release_file = Path(sys.argv[2])
+
+root = pkg_root()
+initial_content = (root / "__init__.py").read_text()
+marker_file.write_text("ready\\n")
+
+deadline = time.time() + 60
+while not release_file.exists():
+    if time.time() > deadline:
+        sys.stderr.write("overlap child timed out waiting for release file\\n")
+        sys.exit(2)
+    time.sleep(0.05)
+
+post_content = (root / "__init__.py").read_text()
+if post_content != initial_content:
+    sys.stderr.write("post-release package content changed under a live process\\n")
+    sys.exit(3)
+
+import autoskillit.smoke_utils as _post_boundary_import
+
+if not hasattr(_post_boundary_import, "run_cross_interpreter_upgrade_smoke"):
+    sys.stderr.write("fresh post-boundary import missing expected symbol\\n")
+    sys.exit(4)
+
+print("SURVIVED:" + str(len(post_content)))
+"""
 
 
 def _find_source_root() -> Path:
@@ -32,8 +81,10 @@ def _find_source_root() -> Path:
     return candidate
 
 
-def _run(cmd: list[str], *, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+def _run(
+    cmd: list[str], *, env: dict[str, str], cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, env=env, cwd=cwd, capture_output=True, text=True, timeout=600)
 
 
 def _cache_incarnations(cache_root: Path) -> set[str]:
@@ -82,6 +133,197 @@ def _assert_incarnation_hooks_execute(incarnation_dir: Path) -> None:
                         f"after the cross-interpreter upgrade: {command} "
                         f"(exit {proc.returncode}): {proc.stderr}"
                     )
+
+
+def _run_uv_generation_install(
+    source_root: Path, destination: Path, python_pin: str, env: dict[str, str]
+) -> None:
+    """Install ``source_root`` directly at ``destination`` via ``UV_TOOL_DIR``.
+
+    Mirrors ``tests/cli/test_install_root_upgrade_immunity.py``'s
+    ``_run_uv_install`` exactly: a venv's console-script shebang bakes an
+    absolute path at creation time, so ``destination`` must already be the
+    real, final path — never a location this install expects to be moved
+    from afterward.
+    """
+    bin_dir = destination.parent / f".{destination.name}-bin"
+    install_env = {**env, "UV_TOOL_DIR": str(destination), "UV_TOOL_BIN_DIR": str(bin_dir)}
+    result = _run(
+        ["uv", "tool", "install", str(source_root), "--python", python_pin],
+        env=install_env,
+        cwd=destination.parent,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"install-root generation install failed (python {python_pin}, "
+            f"destination {destination}): {result.stderr}"
+        )
+
+
+def _publish_real_package_generation(
+    *,
+    scratch_home: Path,
+    source_root: Path,
+    install_ref: str,
+    version: str,
+    python_pin: str,
+    env: dict[str, str],
+) -> PluginArtifactIdentity:
+    """Publish one immutable install-root generation of the real autoskillit source.
+
+    Writes the permanent copy directly at its version-and-incarnation-keyed
+    destination, matching the post-version-probe publication path.
+    """
+    from autoskillit.core import (
+        _InstallLock,
+        generation_artifact_root,
+        installed_plugin_semantic_key,
+        managed_home_for,
+        new_plugin_artifact_incarnation_id,
+    )
+    from autoskillit.workspace import publish_install_root_generation
+
+    incarnation_id = new_plugin_artifact_incarnation_id()
+    generation_root = generation_artifact_root(scratch_home, install_ref, version, incarnation_id)
+    generation_root.parent.mkdir(parents=True, exist_ok=True)
+    _run_uv_generation_install(source_root, generation_root, python_pin, env)
+
+    with _InstallLock(managed_home_for(scratch_home)):
+        return publish_install_root_generation(
+            home=scratch_home,
+            install_ref=install_ref,
+            version=version,
+            semantic_key=installed_plugin_semantic_key(install_ref, version),
+            incarnation_id=incarnation_id,
+            generation_root=generation_root,
+        )
+
+
+def _assert_overlapping_install_survives(
+    *,
+    scratch_home: Path,
+    source_root: Path,
+    env: dict[str, str],
+    minor_a: str,
+    minor_b: str,
+    version: str,
+) -> None:
+    """Hold a live imported autoskillit process across a concurrent upgrade.
+
+    The rest of this file only ever sequences two non-overlapping installs
+    (3.11 fully replaces the shared ``uv tool install`` location, then 3.13
+    fully replaces it again). This exercises the real Phase 3 production
+    primitives instead — ``generation_staging_root`` /
+    ``generation_artifact_root`` / ``publish_install_root_generation``, the
+    same ones ``run_update_transaction()``'s ``INSTALL_ROOT_GENERATION_PUBLICATION``
+    phase calls — directly against the real autoskillit source, keyed on the
+    real ``_AUTOSKILLIT_INSTALL_ROOT_KEY`` the production transaction uses
+    for its own install root:
+
+    1. Publish one immutable install-root generation on python ``minor_a``.
+    2. Spawn a child that imports autoskillit from that generation's own
+       venv and blocks mid-step, holding a live reference into it.
+    3. While the child is still blocked, publish a SECOND, real, overlapping
+       generation on python ``minor_b`` — crossing the same 3.11 -> 3.13
+       boundary the rest of this file exercises sequentially, but this time
+       with a live process in flight across it.
+    4. Release the child and require it to complete successfully and report
+       survival, including a fresh post-boundary import of a sibling module
+       — proving the interpreter can still resolve *new* code from the old
+       root, not merely that already-loaded bytes remain valid in memory.
+
+    This is exactly the crash class issue #4597 Phase 3 exists to eliminate.
+    """
+    from autoskillit.core import _AUTOSKILLIT_INSTALL_ROOT_KEY, atomic_write
+
+    identity_a = _publish_real_package_generation(
+        scratch_home=scratch_home,
+        source_root=source_root,
+        install_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
+        version=version,
+        python_pin=minor_a,
+        env=env,
+    )
+    child_python = identity_a.managed_path / "autoskillit" / "bin" / "python3"
+    if not child_python.is_file():
+        raise RuntimeError(
+            f"install-root generation for python {minor_a} has no bin/python3: {child_python}"
+        )
+
+    marker = scratch_home / "overlap-marker"
+    release_file = scratch_home / "overlap-continue"
+    marker.unlink(missing_ok=True)
+    release_file.unlink(missing_ok=True)
+
+    child = subprocess.Popen(
+        [str(child_python), "-c", _OVERLAP_CHILD_SCRIPT, str(marker), str(release_file)],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 30
+        while not marker.exists():
+            if child.poll() is not None:
+                out, err = child.communicate()
+                raise RuntimeError(
+                    "overlapping-install smoke child exited before becoming ready "
+                    f"(exit {child.returncode}): stdout={out!r} stderr={err!r}"
+                )
+            if time.time() > deadline:
+                child.kill()
+                child.wait(timeout=5)
+                raise RuntimeError("overlapping-install smoke child never became ready within 30s")
+            time.sleep(0.05)
+
+        # The acceptance property: a real, second install-root generation,
+        # published while the child above is still blocked holding a live
+        # reference into the first one.
+        identity_b = _publish_real_package_generation(
+            scratch_home=scratch_home,
+            source_root=source_root,
+            install_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
+            version=version,
+            python_pin=minor_b,
+            env=env,
+        )
+        if not identity_a.managed_path.is_dir():
+            raise RuntimeError(
+                f"overlapping install removed the still-live generation: {identity_a.managed_path}"
+            )
+        if not child_python.is_file():
+            raise RuntimeError(
+                f"overlapping install removed the live child's own interpreter: {child_python}"
+            )
+        if identity_b.managed_path == identity_a.managed_path:
+            raise RuntimeError(
+                "overlapping install published to the SAME generation path as the "
+                f"live one: {identity_a.managed_path}"
+            )
+
+        atomic_write(release_file, "go\n")
+        try:
+            stdout, stderr = child.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(timeout=5)
+            raise RuntimeError(
+                "overlapping-install smoke child did not complete within 30s of release"
+            ) from None
+        if child.returncode != 0:
+            raise RuntimeError(
+                "overlapping-install smoke child failed after the concurrent upgrade "
+                f"(exit {child.returncode}): stdout={stdout!r} stderr={stderr!r}"
+            )
+        if "SURVIVED:" not in stdout:
+            raise RuntimeError(
+                f"overlapping-install smoke child did not report survival: {stdout!r}"
+            )
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
 
 
 def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
@@ -198,6 +440,15 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
         _assert_incarnation_hooks_execute(cache_root / name)
 
     _assert_projected_artifact_relocatable(scratch_home)
+
+    _assert_overlapping_install_survives(
+        scratch_home=scratch_home,
+        source_root=source_root,
+        env=env,
+        minor_a=minor_a,
+        minor_b=minor_b,
+        version=resolved_version,
+    )
 
     return True
 

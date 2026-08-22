@@ -13,6 +13,7 @@ import pytest
 
 from autoskillit.core import is_pid_zombie
 from autoskillit.core.paths import pkg_root
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -35,7 +36,7 @@ def _run_guard(
         (ak_dir / "active_kitchens.json").write_text(
             json.dumps({"kitchens": kitchens, "schema_version": 1})
         )
-    env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env = {k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"}
     env["HOME"] = str(home)
     if headless:
         env["AUTOSKILLIT_HEADLESS"] = "1"
@@ -196,7 +197,7 @@ def test_mcp_health_advisor_malformed_json_failopen(tmp_path: Path) -> None:
     (ak_dir / "active_kitchens.json").write_text("this is not valid JSON {{{{")
 
     hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_advisor.py"
-    env = {**os.environ, "HOME": str(home)}
+    env = {**production_interpreter_env(), "HOME": str(home)}
     result = subprocess.run(
         [sys.executable, str(hook_path)],
         input=json.dumps({"tool_name": "Read"}),

@@ -44,6 +44,7 @@ from autoskillit.server._recipe_section_pagination import (
     render_recipe_section_page,
     select_recipe_section,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -1314,6 +1315,7 @@ print(hashlib.sha256("\\0".join(rendered).encode("utf-8")).hexdigest())
 """
     completed = subprocess.run(
         [sys.executable, "-c", script],
+        env=production_interpreter_env(),
         check=True,
         capture_output=True,
         text=True,

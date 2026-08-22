@@ -244,6 +244,7 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "order_id",
         "infra_exit_category",
         "infra_cleanup_incomplete",
+        "infra_fault_domain",
         "api_retry_count",
         "api_retry_last_error",
         "api_retry_last_status",

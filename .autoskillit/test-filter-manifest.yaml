@@ -280,6 +280,13 @@ scripts/check_doc_counts.py:
   - infra/
 scripts/check_tool_annotations.py:
   - arch/
+scripts/check_launch_path_totality.py:
+  - arch/
+scripts/check_persisted_enum_decoding.py:
+  - arch/
+  - contracts/
+scripts/check_ambient_home_boundary.py:
+  - arch/
 scripts/compare-coverage-ast.py:
   - infra/
 scripts/validate_output_budget_evidence.py:

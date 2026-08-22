@@ -81,6 +81,27 @@ repos:
         files: ^src/autoskillit/.*\.py$
         pass_filenames: false
 
+      - id: check-launch-path-totality
+        name: Check launch-path retirement functions are total
+        language: system
+        entry: python scripts/check_launch_path_totality.py
+        files: ^src/autoskillit/.*\.py$
+        pass_filenames: false
+
+      - id: check-persisted-enum-decoding
+        name: Check persisted enum decoding
+        language: system
+        entry: python scripts/check_persisted_enum_decoding.py
+        files: ^src/autoskillit/.*\.py$
+        pass_filenames: false
+
+      - id: check-ambient-home-boundary
+        name: Check ambient home boundary
+        language: system
+        entry: python scripts/check_ambient_home_boundary.py
+        files: ^src/autoskillit/.*\.py$
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

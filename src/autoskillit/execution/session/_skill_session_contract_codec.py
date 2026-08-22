@@ -12,8 +12,10 @@ import hashlib
 import json
 import shutil
 from collections.abc import Mapping
+from copy import deepcopy
+from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, TypeVar
 
 from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
@@ -40,6 +42,42 @@ from autoskillit.execution.session._skill_session_contract_store import (
     _SHA256_RE,
     _STORE_MANIFEST_SCHEMA_VERSION,
 )
+
+
+class _UnsupportedFutureSkillContractError(SkillContractError):
+    """A newer persisted schema that this reader must leave untouched."""
+
+    reason = "unsupported_future"
+
+    def __init__(self, *, observed_version: int, current_version: int) -> None:
+        self.observed_version = observed_version
+        self.current_version = current_version
+        super().__init__(
+            f"unsupported_future: observed schema version {observed_version}; "
+            f"current {current_version}"
+        )
+
+
+class _UnsupportedPersistedExplorationEnum(ValueError):
+    """An exploration record uses an enum member unknown to this reader."""
+
+
+_EnumT = TypeVar("_EnumT", bound=StrEnum)
+
+
+def _persisted_enum(enum_type: type[_EnumT], value: str) -> _EnumT:
+    try:
+        return enum_type(value)
+    except ValueError as exc:
+        raise _UnsupportedPersistedExplorationEnum(value) from exc
+
+
+def _thaw_json_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _thaw_json_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_json_value(item) for item in value]
+    return value
 
 
 def _validate_raw_session_id(session_id: str) -> None:
@@ -284,17 +322,23 @@ def _exploration_vector_from_dict(value: object) -> ExplorationVectorDef:
             raise ValueError(f"serialized exploration vector {field_name} is invalid")
     if value["role"] is not None and not isinstance(value["role"], str):
         raise ValueError("serialized exploration vector role is invalid")
-    profile = RepositoryProfileId(value["profile"])
+    profile = _persisted_enum(RepositoryProfileId, value["profile"])
+    disposition = _persisted_enum(ExplorationVectorDisposition, value["disposition"])
+    applicability = _persisted_enum(
+        ExplorationVectorApplicabilityId,
+        value["applicability"],
+    )
+    relationship_classes = tuple(
+        _persisted_enum(RelationshipKind, item) for item in value["relationship_classes"]
+    )
     vector = ExplorationVectorDef(
         id=value["id"],
-        disposition=ExplorationVectorDisposition(value["disposition"]),
+        disposition=disposition,
         rationale=value["rationale"],
-        applicability=ExplorationVectorApplicabilityId(value["applicability"]),
+        applicability=applicability,
         role=value["role"],
         profile=profile,
-        relationship_classes=tuple(
-            RelationshipKind(item) for item in value["relationship_classes"]
-        ),
+        relationship_classes=relationship_classes,
         task=ExplorationTaskSpec(
             task_id=value["task_id"],
             frontier_item_id=value["frontier_item_id"],
@@ -331,6 +375,15 @@ def _execution_identity_from_dict(value: object) -> ExecutionIdentity:
 
 
 def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
+    exploration_vectors: dict[str, list[object]] = {}
+    for name, vectors in sorted(contract.exploration_vectors.items()):
+        serialized: list[object] = [_exploration_vector_to_dict(vector) for vector in vectors]
+        for index, raw in sorted(
+            contract.opaque_exploration_vectors.get(name, ()),
+            key=lambda item: item[0],
+        ):
+            serialized.insert(index, _thaw_json_value(raw))
+        exploration_vectors[name] = serialized
     return {
         "schema_version": contract.schema_version,
         "root_name": contract.root_name,
@@ -358,18 +411,21 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
             for name, dependencies in sorted(contract.member_activate_deps.items())
         },
         "canonical_contents": dict(sorted(contract.canonical_contents.items())),
-        "exploration_vectors": {
-            name: [_exploration_vector_to_dict(vector) for vector in vectors]
-            for name, vectors in sorted(contract.exploration_vectors.items())
-        },
+        "exploration_vectors": exploration_vectors,
         "exploration_sidecar_digests": dict(sorted(contract.exploration_sidecar_digests.items())),
         "resolved_exploration_profile": (
-            contract.resolved_exploration_profile.value
-            if contract.resolved_exploration_profile is not None
-            else None
+            contract.opaque_resolved_exploration_profile
+            if contract.opaque_resolved_exploration_profile is not None
+            else (
+                contract.resolved_exploration_profile.value
+                if contract.resolved_exploration_profile is not None
+                else None
+            )
         ),
-        "active_exploration_applicabilities": sorted(
-            item.value for item in contract.active_exploration_applicabilities
+        "active_exploration_applicabilities": (
+            list(contract.raw_active_exploration_applicabilities)
+            if contract.raw_active_exploration_applicabilities is not None
+            else sorted(item.value for item in contract.active_exploration_applicabilities)
         ),
         "expected_output_patterns": list(contract.expected_output_patterns),
         "write_behavior": {
@@ -395,6 +451,15 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
 
 
 def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
+    observed_schema_version = data.get("schema_version")
+    if (
+        type(observed_schema_version) is int
+        and observed_schema_version > SKILL_SESSION_CONTRACT_SCHEMA_VERSION
+    ):
+        raise _UnsupportedFutureSkillContractError(
+            observed_version=observed_schema_version,
+            current_version=SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
+        )
     try:
         source_refs_raw = data["source_refs"]
         if not isinstance(source_refs_raw, dict):
@@ -448,6 +513,49 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             not isinstance(item, str) for item in active_applicabilities_raw
         ):
             raise ValueError("active_exploration_applicabilities must be a list of text")
+        opaque_resolved_exploration_profile: str | None = None
+        if resolved_exploration_profile_raw is None:
+            resolved_exploration_profile = None
+        else:
+            try:
+                resolved_exploration_profile = _persisted_enum(
+                    RepositoryProfileId, resolved_exploration_profile_raw
+                )
+            except _UnsupportedPersistedExplorationEnum:
+                resolved_exploration_profile = None
+                opaque_resolved_exploration_profile = resolved_exploration_profile_raw
+        active_exploration_applicabilities: set[ExplorationVectorApplicabilityId] = set()
+        has_opaque_active_applicability = False
+        for item in active_applicabilities_raw:
+            try:
+                active_exploration_applicabilities.add(
+                    _persisted_enum(ExplorationVectorApplicabilityId, item)
+                )
+            except _UnsupportedPersistedExplorationEnum:
+                has_opaque_active_applicability = True
+        exploration_vectors: dict[str, tuple[ExplorationVectorDef, ...]] = {}
+        opaque_exploration_vectors: dict[str, tuple[tuple[int, Mapping[str, object]], ...]] = {}
+        for name, vectors in exploration_vectors_raw.items():
+            parsed_vectors: list[ExplorationVectorDef] = []
+            opaque_vectors: list[tuple[int, Mapping[str, object]]] = []
+            for index, vector_raw in enumerate(vectors):
+                if not isinstance(vector_raw, dict):
+                    raise ValueError("serialized exploration vector must be an object")
+                try:
+                    vector = _exploration_vector_from_dict(vector_raw)
+                except _UnsupportedPersistedExplorationEnum:
+                    opaque_vectors.append((index, deepcopy(vector_raw)))
+                    continue
+                if (
+                    opaque_resolved_exploration_profile is not None
+                    and vector.profile is RepositoryProfileId.AUTO
+                ):
+                    opaque_vectors.append((index, deepcopy(vector_raw)))
+                    continue
+                parsed_vectors.append(vector)
+            exploration_vectors[str(name)] = tuple(parsed_vectors)
+            if opaque_vectors:
+                opaque_exploration_vectors[str(name)] = tuple(opaque_vectors)
         return SkillSessionContract(
             root_name=str(data["root_name"]),
             execution_role=SkillExecutionRole(str(data["execution_role"])),
@@ -484,21 +592,17 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             canonical_contents={
                 str(name): str(content) for name, content in data["canonical_contents"].items()
             },
-            exploration_vectors={
-                str(name): tuple(_exploration_vector_from_dict(vector) for vector in vectors)
-                for name, vectors in exploration_vectors_raw.items()
-            },
+            exploration_vectors=exploration_vectors,
+            opaque_exploration_vectors=opaque_exploration_vectors,
             exploration_sidecar_digests={
                 str(name): str(digest)
                 for name, digest in data.get("exploration_sidecar_digests", {}).items()
             },
-            resolved_exploration_profile=(
-                RepositoryProfileId(resolved_exploration_profile_raw)
-                if resolved_exploration_profile_raw is not None
-                else None
-            ),
-            active_exploration_applicabilities=frozenset(
-                ExplorationVectorApplicabilityId(item) for item in active_applicabilities_raw
+            resolved_exploration_profile=resolved_exploration_profile,
+            opaque_resolved_exploration_profile=opaque_resolved_exploration_profile,
+            active_exploration_applicabilities=frozenset(active_exploration_applicabilities),
+            raw_active_exploration_applicabilities=(
+                tuple(active_applicabilities_raw) if has_opaque_active_applicability else None
             ),
             expected_output_patterns=tuple(
                 str(pattern) for pattern in data.get("expected_output_patterns", [])

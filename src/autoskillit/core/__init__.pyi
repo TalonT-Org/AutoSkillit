@@ -16,7 +16,15 @@ from ._delivery_bounds import (
 from ._delivery_bounds import (
     resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
 )
+from ._entrypoint_shim import ENTRYPOINT_SHIM_SOURCE as ENTRYPOINT_SHIM_SOURCE
+from ._entrypoint_shim import entrypoint_shim_path as entrypoint_shim_path
+from ._entrypoint_shim import write_entrypoint_shim as write_entrypoint_shim
 from ._execution_marker import execution_marker as execution_marker
+from ._install_binding import InstallBinding as InstallBinding
+from ._install_binding import (
+    install_binding_matches_current_state as install_binding_matches_current_state,
+)
+from ._install_binding import resolve_install_binding as resolve_install_binding
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag
 from ._install_detect import _is_stable_track as _is_stable_track
@@ -40,6 +48,9 @@ from ._plugin_artifact_identity import (
     generation_selector_path as generation_selector_path,
 )
 from ._plugin_artifact_identity import (
+    generation_staging_root as generation_staging_root,
+)
+from ._plugin_artifact_identity import (
     generation_store_root as generation_store_root,
 )
 from ._plugin_artifact_identity import (
@@ -60,7 +71,6 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     installed_plugin_cache_dir as installed_plugin_cache_dir,
 )
-from ._plugin_artifact_identity import is_python_bytecode_path as is_python_bytecode_path
 from ._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
 )
@@ -70,6 +80,8 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
 )
+from ._plugin_cache import ActiveKitchensReadResult as ActiveKitchensReadResult
+from ._plugin_cache import ActiveKitchensState as ActiveKitchensState
 from ._plugin_cache import KitchenProcessIdentity as KitchenProcessIdentity
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
@@ -83,8 +95,10 @@ from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens
 from ._plugin_cache import read_retiring_cache as read_retiring_cache
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import remove_retiring_records as remove_retiring_records
+from ._plugin_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from ._plugin_cache import sample_kitchen_process_identity as sample_kitchen_process_identity
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
+from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
@@ -202,6 +216,7 @@ from .io import decode_versioned_json_bytes as decode_versioned_json_bytes
 from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
+from .io import is_python_bytecode_path as is_python_bytecode_path
 from .io import is_yaml_mapping_node as is_yaml_mapping_node
 from .io import load_yaml as load_yaml
 from .io import mapping_entry_byte_ranges_from_yaml as mapping_entry_byte_ranges_from_yaml
@@ -476,6 +491,9 @@ from .types import GITHUB_API_SKILL_FAMILIES as GITHUB_API_SKILL_FAMILIES
 from .types import HEADLESS_AUTO_GATE_ENV_VAR as HEADLESS_AUTO_GATE_ENV_VAR
 from .types import HEADLESS_ENV_VAR as HEADLESS_ENV_VAR
 from .types import HEADLESS_TOOLS as HEADLESS_TOOLS
+from .types import (
+    INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE as INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE,
+)
 from .types import INVARIANT_REGISTRY as INVARIANT_REGISTRY
 from .types import INVESTIGATION_COMPLETE_MARKER as INVESTIGATION_COMPLETE_MARKER
 from .types import KITCHEN_GATED_TOOLS as KITCHEN_GATED_TOOLS
@@ -512,6 +530,7 @@ from .types import OUTPUT_DISCIPLINE_POLICY_VERSION as OUTPUT_DISCIPLINE_POLICY_
 from .types import OUTPUT_DISCIPLINE_REQUIRED_SKILLS as OUTPUT_DISCIPLINE_REQUIRED_SKILLS
 from .types import PACK_REGISTRY as PACK_REGISTRY
 from .types import PARENT_SANDBOX_MODES as PARENT_SANDBOX_MODES
+from .types import PERSISTED_FORMAT_LEDGER as PERSISTED_FORMAT_LEDGER
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
 from .types import PRODUCER_SCHEMA_FIELDS as PRODUCER_SCHEMA_FIELDS
@@ -581,6 +600,7 @@ from .types import (
 from .types import RETIRED_INTAKE_RULE_IDS as RETIRED_INTAKE_RULE_IDS
 from .types import RETIRED_READINESS_TOKENS as RETIRED_READINESS_TOKENS
 from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
+from .types import RETIREMENT_BACKSTOP_LEDGER as RETIREMENT_BACKSTOP_LEDGER
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_PATH_LIKE_ARGS as RUN_PYTHON_PATH_LIKE_ARGS
@@ -826,6 +846,7 @@ from .types import ExplorationVectorApplicabilityId as ExplorationVectorApplicab
 from .types import ExplorationVectorDef as ExplorationVectorDef
 from .types import ExplorationVectorDisposition as ExplorationVectorDisposition
 from .types import FailureRecord as FailureRecord
+from .types import FaultDomain as FaultDomain
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
@@ -860,6 +881,7 @@ from .types import IdempotencyNamespace as IdempotencyNamespace
 from .types import IdempotencyRecord as IdempotencyRecord
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
+from .types import InfrastructureFaultError as InfrastructureFaultError
 from .types import InputContractResolver as InputContractResolver
 from .types import InputPreflightResolver as InputPreflightResolver
 from .types import InputSpec as InputSpec
@@ -907,6 +929,7 @@ from .types import (
 from .types import (
     ManagedHeadlessSessionTerminalState as ManagedHeadlessSessionTerminalState,
 )
+from .types import ManagedHome as ManagedHome
 from .types import ManagedSessionHome as ManagedSessionHome
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
@@ -936,6 +959,9 @@ from .types import OpenEpochEvent as OpenEpochEvent
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
+from .types import PersistedEnumDef as PersistedEnumDef
+from .types import PersistedEnumTolerance as PersistedEnumTolerance
+from .types import PersistedFormatDef as PersistedFormatDef
 from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PlanDispositionReport as PlanDispositionReport
@@ -968,6 +994,7 @@ from .types import ProtectedPoolSpec as ProtectedPoolSpec
 from .types import ProviderBinding as ProviderBinding
 from .types import ProviderOutcome as ProviderOutcome
 from .types import PRState as PRState
+from .types import QuarantinedRetiringRecord as QuarantinedRetiringRecord
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
@@ -1036,10 +1063,12 @@ from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
 from .types import RetiredArtifactShape as RetiredArtifactShape
+from .types import RetirementBackstopDef as RetirementBackstopDef
 from .types import RetirementOutcome as RetirementOutcome
 from .types import RetiringAppendResult as RetiringAppendResult
 from .types import RetiringArtifactRecord as RetiringArtifactRecord
 from .types import RetiringCacheReadResult as RetiringCacheReadResult
+from .types import RetiringCacheRepairResult as RetiringCacheRepairResult
 from .types import RetiringCacheState as RetiringCacheState
 from .types import RetryReason as RetryReason
 from .types import ReviewFindingDispositionKind as ReviewFindingDispositionKind
@@ -1099,6 +1128,7 @@ from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
+from .types import StaleGeneratorError as StaleGeneratorError
 from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope
@@ -1191,6 +1221,8 @@ from .types import is_valid_github_review_repository as is_valid_github_review_r
 from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )
+from .types import managed_home as managed_home
+from .types import managed_home_for as managed_home_for
 from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id

@@ -705,11 +705,11 @@ def _write_registry(monkeypatch: Any, tmp_path: Any, entries: list[dict[str, Any
     registry_path = tmp_path / "active_kitchens.json"
     monkeypatch.setattr(
         "autoskillit.core._plugin_cache._active_kitchens_path",
-        lambda: registry_path,
+        lambda _home: registry_path,
     )
     monkeypatch.setattr(
         "autoskillit.core._plugin_cache._active_kitchens_lock",
-        lambda: tmp_path / "active_kitchens.lock",
+        lambda _home: tmp_path / "active_kitchens.lock",
     )
     write_versioned_json(registry_path, {"kitchens": entries}, schema_version=2)
     return registry_path

@@ -61,7 +61,7 @@ def test_registry_mutations_acquire_exclusive_lock(
     elif operation == "bridge":
         bridge_claude_session_id(tmp_path, "abc", "claude-session")
     else:
-        bind_session_owner(tmp_path, "abc", os.getpid())
+        assert bind_session_owner(tmp_path, "abc", os.getpid())
 
     assert lock_operations == [fcntl.LOCK_EX]
 
@@ -96,7 +96,7 @@ def test_bind_session_owner_preserves_launch_metadata(tmp_path: Path) -> None:
     write_registry_entry(tmp_path, "abc", "cook", "recipe")
     bridge_claude_session_id(tmp_path, "abc", "claude-session")
 
-    bind_session_owner(tmp_path, "abc", os.getpid())
+    assert bind_session_owner(tmp_path, "abc", os.getpid())
 
     entry = read_registry(tmp_path)["abc"]
     assert entry["session_type"] == "cook"
@@ -107,41 +107,40 @@ def test_bind_session_owner_preserves_launch_metadata(tmp_path: Path) -> None:
     assert entry["owner_starttime_ticks"] > 0
 
 
-def test_bind_session_owner_rejects_unknown_launch_id(tmp_path: Path) -> None:
+def test_bind_session_owner_returns_false_for_unknown_launch_id(tmp_path: Path) -> None:
     write_registry_entry(tmp_path, "abc", "cook", None)
 
-    with pytest.raises(KeyError, match="unknown launch ID"):
-        bind_session_owner(tmp_path, "missing", os.getpid())
+    assert not bind_session_owner(tmp_path, "missing", os.getpid())
 
     assert set(read_registry(tmp_path)) == {"abc"}
 
 
-@pytest.mark.parametrize("owner_pid", [0, -1])
-def test_bind_session_owner_rejects_non_positive_pid(tmp_path: Path, owner_pid: int) -> None:
+@pytest.mark.parametrize("owner_pid", [0, -1, True, "1"])
+def test_bind_session_owner_rejects_invalid_pid(tmp_path: Path, owner_pid: object) -> None:
     with pytest.raises(ValueError, match="owner_pid must be a positive integer"):
-        bind_session_owner(tmp_path, "abc", owner_pid)
+        bind_session_owner(tmp_path, "abc", owner_pid)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
-    ("contents", "expected_error"),
-    [(None, FileNotFoundError), ("not valid json", json.JSONDecodeError)],
+    "contents",
+    [None, "not valid json"],
 )
-def test_bind_session_owner_preserves_registry_read_errors(
+def test_bind_session_owner_returns_false_for_registry_read_errors(
     tmp_path: Path,
     contents: str | None,
-    expected_error: type[Exception],
 ) -> None:
     if contents is not None:
         path = registry_path(tmp_path)
         path.parent.mkdir(parents=True)
         path.write_text(contents, encoding="utf-8")
 
-    with pytest.raises(expected_error):
-        bind_session_owner(tmp_path, "abc", os.getpid())
+    assert not bind_session_owner(tmp_path, "abc", os.getpid())
+    if contents is not None:
+        assert registry_path(tmp_path).read_text(encoding="utf-8") == contents
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
-def test_bind_session_owner_fails_closed_without_linux_identity(
+def test_bind_session_owner_returns_false_without_linux_identity(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     write_registry_entry(tmp_path, "abc", "cook", None)
@@ -150,9 +149,26 @@ def test_bind_session_owner_fails_closed_without_linux_identity(
         lambda _pid: None,
     )
 
-    with pytest.raises(RuntimeError, match="unable to capture Linux owner identity"):
-        bind_session_owner(tmp_path, "abc", os.getpid())
+    assert not bind_session_owner(tmp_path, "abc", os.getpid())
 
+    assert "owner_pid" not in read_registry(tmp_path)["abc"]
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
+def test_bind_session_owner_returns_false_when_persistence_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    write_registry_entry(tmp_path, "abc", "cook", None)
+
+    def fail_write(_path: Path, _content: str) -> None:
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(
+        "autoskillit.core.runtime.session_registry._atomic_write",
+        fail_write,
+    )
+
+    assert not bind_session_owner(tmp_path, "abc", os.getpid())
     assert "owner_pid" not in read_registry(tmp_path)["abc"]
 
 

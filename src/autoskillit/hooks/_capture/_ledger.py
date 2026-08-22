@@ -72,6 +72,7 @@ __all__ = [
     "DecodedLedger",
     "LedgerCodecError",
     "LedgerFrame",
+    "UnsupportedLedgerVersionError",
     "adopted_orphan_record",
     "canonical_json",
     "decode_ledger",
@@ -104,6 +105,23 @@ class LedgerCodecError(RuntimeError):
     """Raised when framed lifecycle bytes are not strictly recoverable."""
 
     failure_reason = CaptureFailureReason.LEDGER_INTEGRITY
+    reason = "corrupt"
+    observed_version: int | None = None
+    current_version: int | None = None
+
+
+class UnsupportedLedgerVersionError(LedgerCodecError):
+    """Raised when an intact frame requires a newer ledger reader."""
+
+    reason = "unsupported_future"
+
+    def __init__(self, observed_version: int) -> None:
+        self.observed_version = observed_version
+        self.current_version = CURRENT_FORMAT_VERSION
+        super().__init__(
+            "unsupported future lifecycle frame format version "
+            f"{observed_version} (current {CURRENT_FORMAT_VERSION})"
+        )
 
 
 class CaptureTransitionCommittedError(RuntimeError):
@@ -748,6 +766,7 @@ class LedgerFrame:
     compaction_epoch: int
     record: dict[str, object]
     canonical_payload: bytes
+    exact_bytes: bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -888,6 +907,12 @@ def decode_ledger(data: bytes) -> DecodedLedger:
         else:
             raise LedgerCodecError("lifecycle frame fields do not match a schema")
         if (
+            isinstance(version, int)
+            and not isinstance(version, bool)
+            and version > CURRENT_FORMAT_VERSION
+        ):
+            raise UnsupportedLedgerVersionError(version)
+        if (
             version not in (1, CURRENT_FORMAT_VERSION)
             or not isinstance(epoch, int)
             or isinstance(epoch, bool)
@@ -905,6 +930,7 @@ def decode_ledger(data: bytes) -> DecodedLedger:
                 compaction_epoch=epoch,
                 record=decoded["record"],
                 canonical_payload=payload,
+                exact_bytes=data[cursor:frame_end],
             )
         )
         cursor = frame_end

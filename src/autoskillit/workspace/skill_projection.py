@@ -2,12 +2,18 @@
 
 Two module-wide policies, stated once so call sites cannot drift:
 
-**The projection source is always ``pkg_root()``.** It is the code currently
-executing, so it cannot be stale. Nothing here ever reads a plugin root out of
+**The projection source is always ``pkg_root()``, which returns this
+process's sealed ``InstallBinding`` root (``core/_install_binding.py``) —
+captured once, at first access, and immutable for this process's lifetime by
+construction.** That is a property of the seal, not of the path: a package
+root is a path into a tree ``uv`` owns and is free to version, relocate, or
+garbage-collect at any time — the executing code lives in memory, not on
+that path, so "it is the code currently executing" was never a reason the
+source could be trusted. Nothing here ever reads a plugin root out of
 third-party-owned mutable state (``installed_plugins.json``, the Claude Code
-plugin cache): such a path is a *derived copy* that its owner is free to
-version, relocate, or garbage-collect, and treating it as a source silently
-produces mixed-version sessions — old recipes/agents/hooks against new code.
+plugin cache) either: such a path is a *derived copy* subject to the same
+hazard, and treating it as a source silently produces mixed-version
+sessions — old recipes/agents/hooks against new code.
 
 **A projection destination's prior content is always replaced; only its
 location is contract-relevant.** Containment checks therefore use

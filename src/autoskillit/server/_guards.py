@@ -11,6 +11,7 @@ import regex as re
 from autoskillit.core import (
     BackendAuthorityKind,
     BackendPinResolution,
+    FaultDomain,
     InputContractResolver,
     SessionType,
     extract_bash_write_targets,
@@ -151,6 +152,45 @@ def _require_enabled() -> str | None:
     if not _get_ctx().gate.enabled:
         return gate_error_result()
     return None
+
+
+def _require_no_infrastructure_fault(
+    tool_name: str,
+    *,
+    override_reason: str | None,
+) -> str | None:
+    """Refuse a destructive tool call after an infrastructure fault, fail-closed.
+
+    There is no rollback: releasing a GitHub claim or removing a clone cannot
+    be undone by a process that is itself dying. That asymmetry — a
+    destructive step with no compensating action, taken on evidence the
+    environment produced rather than the work — is why refusal is the
+    default. An override requires a caller-supplied, non-empty reason; every
+    override is logged with the reason and the fault domain it overrides.
+
+    Returns gate_error_result JSON on refusal, None if the call may proceed.
+    """
+    authority = _get_ctx().run_skill_completion
+    if authority is None:
+        return None
+    receipt = authority.most_recent_acknowledged()
+    if receipt is None or receipt.fault_domain is not FaultDomain.INFRASTRUCTURE:
+        return None
+    if override_reason:
+        logger.warning(
+            "infrastructure_fault_gate_overridden",
+            tool_name=tool_name,
+            reason=override_reason,
+            fault_domain=receipt.fault_domain.value,
+        )
+        return None
+    return gate_error_result(
+        f"{tool_name} refused: the most recently completed step ended in an "
+        "infrastructure fault (a property of the environment — the package "
+        "was replaced, an artifact was contended — not of the work). There "
+        "is no rollback for this action once taken. Pass an explicit, "
+        "non-empty override reason if this refusal should not apply."
+    )
 
 
 def _check_recipe_read_prohibition(

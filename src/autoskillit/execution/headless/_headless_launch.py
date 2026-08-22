@@ -12,6 +12,7 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     ExecutionIdentity,
+    InfrastructureFaultError,
     LaunchPreparation,
     LaunchResolver,
     OutputFormat,
@@ -391,6 +392,8 @@ async def _attempt_contract_nudge(
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)
         return None
+    except InfrastructureFaultError:
+        raise
     except Exception:
         logger.warning("nudge_runner_failed_unexpected", exc_info=True)
         return None

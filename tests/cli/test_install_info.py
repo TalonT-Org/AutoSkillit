@@ -273,51 +273,18 @@ def test_dismissal_window_twelve_hours(
 # ---------------------------------------------------------------------------
 
 
-def test_upgrade_command_stable() -> None:
+@pytest.mark.parametrize("requested_revision", ["stable", "main", "v0.7.75"])
+def test_upgrade_command_stable_tracks(requested_revision: str) -> None:
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="abc123",
-        requested_revision="stable",
+        requested_revision=requested_revision,
         url=None,
         editable_source=None,
     )
-    assert upgrade_command(info) == [
-        "uv",
-        "tool",
-        "upgrade",
-        "autoskillit",
-        "--python",
-        _PYTHON_PIN,
-    ]
-
-
-def test_upgrade_command_main() -> None:
-    info = InstallInfo(
-        install_type=InstallType.GIT_VCS,
-        commit_id="abc123",
-        requested_revision="main",
-        url=None,
-        editable_source=None,
-    )
-    assert upgrade_command(info) == [
-        "uv",
-        "tool",
-        "upgrade",
-        "autoskillit",
-        "--python",
-        _PYTHON_PIN,
-    ]
-
-
-def test_upgrade_command_release_tag() -> None:
-    info = InstallInfo(
-        install_type=InstallType.GIT_VCS,
-        commit_id="abc123",
-        requested_revision="v0.7.75",
-        url=None,
-        editable_source=None,
-    )
-    assert upgrade_command(info) == [
+    result = upgrade_command(info)
+    assert result is not None
+    assert list(result.argv) == [
         "uv",
         "tool",
         "upgrade",
@@ -335,7 +302,9 @@ def test_upgrade_command_develop() -> None:
         url=None,
         editable_source=None,
     )
-    assert upgrade_command(info) == [
+    result = upgrade_command(info)
+    assert result is not None
+    assert list(result.argv) == [
         "uv",
         "tool",
         "install",
@@ -344,6 +313,36 @@ def test_upgrade_command_develop() -> None:
         "--python",
         _PYTHON_PIN,
     ]
+
+
+def test_upgrade_command_targets_a_fresh_versioned_root(tmp_path: Path) -> None:
+    """``install_root_destination`` redirects the dev-track install via env, never argv."""
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="abc123",
+        requested_revision="develop",
+        url=None,
+        editable_source=None,
+    )
+    destination = tmp_path / "install-roots" / "0.10.1002"
+
+    destination_result = upgrade_command(info, install_root_destination=destination)
+    plain_result = upgrade_command(info)
+
+    assert destination_result is not None
+    assert plain_result is not None
+    assert destination_result.env["UV_TOOL_DIR"] == str(destination)
+    assert list(destination_result.argv) == [
+        "uv",
+        "tool",
+        "install",
+        "--force",
+        _INSTALL_FROM_DEVELOP,
+        "--python",
+        _PYTHON_PIN,
+    ]
+    assert plain_result.env == {}
+    assert plain_result.argv == destination_result.argv
 
 
 def test_upgrade_command_local_editable() -> None:
@@ -355,7 +354,9 @@ def test_upgrade_command_local_editable() -> None:
         url="file:///home/user/autoskillit",
         editable_source=editable_source,
     )
-    assert upgrade_command(info) == ["uv", "pip", "install", "-e", str(editable_source)]
+    result = upgrade_command(info)
+    assert result is not None
+    assert list(result.argv) == ["uv", "pip", "install", "-e", str(editable_source)]
 
 
 @pytest.mark.parametrize(
@@ -501,9 +502,9 @@ def test_upgrade_command_arbitrary_dev_revision(revision: str) -> None:
     )
     result = upgrade_command(info)
     assert result is not None
-    assert result[:3] == ["uv", "tool", "install"]
-    assert "--force" in result
-    assert result[result.index("--python") + 1] == _PYTHON_PIN
+    assert list(result.argv[:3]) == ["uv", "tool", "install"]
+    assert "--force" in result.argv
+    assert result.argv[result.argv.index("--python") + 1] == _PYTHON_PIN
 
 
 # InstallInfo.entrypoint

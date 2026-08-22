@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -15,6 +16,7 @@ def _run_guard(event: dict) -> dict | None:
     script = pkg_root() / "hooks" / "guards" / "generated_file_write_guard.py"
     result = subprocess.run(
         [sys.executable, str(script)],
+        env=production_interpreter_env(),
         input=json.dumps(event),
         capture_output=True,
         text=True,
@@ -81,6 +83,7 @@ def test_write_guard_fail_open_on_invalid_json():
     script = pkg_root() / "hooks" / "guards" / "generated_file_write_guard.py"
     result = subprocess.run(
         [sys.executable, str(script)],
+        env=production_interpreter_env(),
         input="not json",
         capture_output=True,
         text=True,

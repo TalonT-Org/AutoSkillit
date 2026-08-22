@@ -21,6 +21,7 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     ExecutionIdentity,
+    InfrastructureFaultError,
     KillReason,
     LaunchPreparation,
     LaunchResolver,
@@ -342,6 +343,17 @@ async def _execute_claude_headless(
                 force_inactive_agent_teams=force_inactive_agent_teams,
                 **lineage_callbacks.attempt_kwargs,
             )
+        except InfrastructureFaultError as exc:
+            logger.error("headless_runner_infrastructure_fault", exc_info=True)
+            result = None
+            terminal_exception_text = traceback.format_exc()
+            terminal_reason_override = "CRASHED"
+            skill_result = SkillResult.infrastructure_fault(
+                exception=exc,
+                skill_command=skill_command,
+                order_id=order_id,
+            )
+            break
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
             result = None
@@ -437,6 +449,8 @@ async def _execute_claude_headless(
                     on_launch_resolved=observe_launch,
                     **lineage_callbacks.attempt_kwargs,
                 )
+            except InfrastructureFaultError:
+                raise
             except BaseException as exc:
                 logger.warning("headless_nudge_cancelled", exc_info=True)
                 skill_result = SkillResult.cancelled()
@@ -460,6 +474,8 @@ async def _execute_claude_headless(
                     policy=_clone_guard_policy,
                     exclude_prefix=_exclude_prefix,
                 )
+            except InfrastructureFaultError:
+                raise
             except BaseException as exc:
                 logger.warning("headless_clone_guard_cancelled", exc_info=True)
                 skill_result = SkillResult.cancelled()

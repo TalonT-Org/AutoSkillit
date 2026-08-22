@@ -55,6 +55,7 @@ from autoskillit.fleet._outcome import (
 from autoskillit.fleet._outcome import (
     build_success_short_circuit as _build_success_short_circuit,
 )
+from autoskillit.fleet._startup_warm import warm_failure_path_imports
 from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
 from autoskillit.fleet.state_recovery import prepare_resume
@@ -273,6 +274,7 @@ async def execute_dispatch(
     Orchestrates: lock → validate → quota → prompt → dispatch → parse → state → cleanup.
     Returns DispatchResult wrapping the outcome plus the per-dispatch state path.
     """
+    warm_failure_path_imports()
     effective_name = dispatch_name or recipe
     provenance = provenance or DispatchProvenanceTracker()
 

@@ -139,7 +139,9 @@ class CaptureLifecycleError(RuntimeError):
 
 
 class CaptureLedgerError(CaptureLifecycleError):
-    pass
+    reason = "corrupt"
+    observed_version: int | None = None
+    current_version: int | None = None
 
 
 class CaptureCapacityError(CaptureLedgerError):
@@ -333,7 +335,11 @@ class CaptureLifecycleStore:
             except _capture_ledger_view.LegacyCompacted:
                 return self._load_locked()
             except _capture_ledger.LedgerCodecError as exc:
-                raise CaptureLedgerError(str(exc)) from exc
+                error = CaptureLedgerError(str(exc))
+                error.reason = exc.reason
+                error.observed_version = exc.observed_version
+                error.current_version = exc.current_version
+                raise error from exc
         finally:
             os.close(fd)
 
@@ -344,6 +350,8 @@ class CaptureLifecycleStore:
         compaction_epoch: int,
         size: int,
     ) -> None:
+        if record.capture_id in self._ledger_view.opaque_capture_ids:
+            raise CaptureLedgerError("capture lifecycle state is opaque")
         previous = records.get(record.capture_id)
         if previous is None:
             if record.revision != 1:
@@ -397,7 +405,7 @@ class CaptureLifecycleStore:
     ) -> None:
         compacted = _capture_capacity.compacted_records(records, self._capacity)
         try:
-            frames = [
+            actionable_frames = [
                 _capture_ledger.encode_frame(
                     _record_to_dict(record),
                     compaction_epoch=compaction_epoch,
@@ -406,6 +414,7 @@ class CaptureLifecycleStore:
             ]
         except _capture_ledger.LedgerCodecError as exc:
             raise CaptureLedgerError(str(exc)) from exc
+        frames = [*self._ledger_view.opaque_frames, *actionable_frames]
         compacted_bound = min(
             _MAX_COMPACTION_BYTES,
             _capture_capacity.transition_compaction_bound(candidate, self._capacity),

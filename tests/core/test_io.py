@@ -288,16 +288,30 @@ def test_atomic_write_strict_parent_fsync_failure_is_observable(tmp_path, monkey
     assert target.read_text() == "{}"
 
 
-def test_atomic_write_exclusive_raises_file_exists_error_without_overwriting(tmp_path):
+@pytest.mark.parametrize("replacement", ["new content", b"new content"])
+def test_atomic_write_exclusive_raises_file_exists_error_without_overwriting(
+    tmp_path, replacement
+):
     from autoskillit.core.io import atomic_write
 
     target = tmp_path / "claimed.json"
     target.write_text("original content")
 
     with pytest.raises(FileExistsError):
-        atomic_write(target, "new content", exclusive=True)
+        atomic_write(target, replacement, exclusive=True)
 
     assert target.read_text() == "original content"
+
+
+def test_atomic_write_preserves_binary_content(tmp_path):
+    from autoskillit.core.io import atomic_write
+
+    target = tmp_path / "forensic-sidecar.bin"
+    payload = b"\x00\xffexact\r\nbytes"
+
+    atomic_write(target, payload, strict_durability=True)
+
+    assert target.read_bytes() == payload
 
 
 def test_atomic_write_default_exclusive_false_preserves_overwrite_behavior(tmp_path):

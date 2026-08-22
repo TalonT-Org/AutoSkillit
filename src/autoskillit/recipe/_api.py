@@ -232,7 +232,7 @@ def load_and_validate(
             _api_cache._clear_stale_caches()
         raise ProcessStaleError(
             "Process is running stale code — package directory was modified on disk "
-            "since server startup. Restart the MCP server via reload_session."
+            "since server startup."
         )
 
     _pdir = project_dir if project_dir is not None else Path.cwd()

@@ -13,6 +13,7 @@ from autoskillit.hooks._exploration_request_record import (
     SUPPORTED_EXPLORATION_REQUEST_TOOLS,
     consume_exploration_request_record,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = pytest.mark.medium
 
@@ -39,7 +40,7 @@ def _run_with_env(payload: object, env: dict[str, str]) -> subprocess.CompletedP
         text=True,
         capture_output=True,
         timeout=5,
-        env=env,
+        env={**production_interpreter_env(), **env},
         check=False,
     )
 

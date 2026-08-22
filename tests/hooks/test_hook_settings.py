@@ -318,6 +318,7 @@ def test_resolve_quota_log_dir_silent_when_no_caller(monkeypatch, capsys):
     def raise_():
         raise OSError("boom")
 
+    monkeypatch.setenv("XDG_DATA_HOME", "")
     monkeypatch.setattr(pathlib.Path, "home", staticmethod(raise_))
     result = resolve_quota_log_dir()
     assert result is None
@@ -333,6 +334,7 @@ def test_resolve_quota_log_dir_prints_stderr_with_caller(monkeypatch, capsys):
     def raise_():
         raise OSError("boom")
 
+    monkeypatch.setenv("XDG_DATA_HOME", "")
     monkeypatch.setattr(pathlib.Path, "home", staticmethod(raise_))
     result = resolve_quota_log_dir(caller="test_hook")
     assert result is None

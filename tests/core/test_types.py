@@ -881,3 +881,62 @@ def test_skill_result_file_changes_count_in_json() -> None:
     data = json.loads(sr.to_json())
     assert "file_changes_count" in data
     assert data["file_changes_count"] == 2
+
+
+def test_infrastructure_fault_exceptions_share_marker_base() -> None:
+    """InfrastructureFaultError is the shared marker base for environment faults.
+
+    Imported from the ``autoskillit.core`` package gateway, not the internal
+    ``_type_exceptions`` module, so this test also proves the gateway re-export
+    is wired up correctly.
+    """
+    from autoskillit.core import (
+        InfrastructureFaultError,
+        PluginArtifactContentionError,
+        PluginArtifactPublicationError,
+        PluginArtifactUnavailableError,
+        PluginArtifactValidationError,
+        ProcessStaleError,
+        StaleGeneratorError,
+    )
+
+    assert issubclass(StaleGeneratorError, InfrastructureFaultError)
+    assert issubclass(ProcessStaleError, InfrastructureFaultError)
+    assert issubclass(PluginArtifactContentionError, InfrastructureFaultError)
+    assert issubclass(PluginArtifactUnavailableError, InfrastructureFaultError)
+
+    # Marker base derives directly from Exception -- never RuntimeError/OSError --
+    # so joining it onto pre-existing hierarchies never widens existing
+    # except-RuntimeError/except-OSError handlers.
+    assert InfrastructureFaultError.__bases__ == (Exception,)
+
+    # Deliberately excluded: artifact-content-corrupt and publish-failure are
+    # not environment faults.
+    assert not issubclass(PluginArtifactValidationError, InfrastructureFaultError)
+    assert not issubclass(PluginArtifactPublicationError, InfrastructureFaultError)
+
+
+def test_skill_result_infrastructure_fault_factory() -> None:
+    """SkillResult.infrastructure_fault() produces a non-retriable fault result
+
+    distinguished on the wire (via the serialized "infra_fault_domain" key,
+    not merely the dataclass field) from a logic crash produced by crashed().
+    """
+    from autoskillit.core import FaultDomain
+
+    result = SkillResult.infrastructure_fault(
+        Exception("boom"),
+        skill_command="/some-skill",
+        session_id="sid",
+        order_id="oid",
+    )
+    assert result.success is False
+    assert result.subtype == "infrastructure_fault"
+    assert result.infra.fault_domain is FaultDomain.INFRASTRUCTURE
+    assert result.needs_retry is False
+
+    data = json.loads(result.to_json())
+    assert data["infra_fault_domain"] == "infrastructure"
+
+    crashed_data = json.loads(SkillResult.crashed(Exception("x")).to_json())
+    assert crashed_data["infra_fault_domain"] == "logic"

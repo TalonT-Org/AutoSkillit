@@ -43,6 +43,7 @@ from autoskillit.hooks._capture_artifacts import (
     open_project_anchor,
 )
 from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
+from tests.conftest import production_interpreter_env
 
 from .conftest import _FAILURE_GRADE_RE
 from .fixtures.session_replays import (
@@ -180,7 +181,7 @@ def run_event_through_matched_guards(
     """
     tool_name = event.payload.get("tool_name", "")
     results: list[GuardRunResult] = []
-    child_env = {**os.environ, **session_env}
+    child_env = {**production_interpreter_env(), **session_env}
     stdin_bytes = json.dumps(event.payload).encode("utf-8")
 
     for hook_def in matched_hook_defs(tool_name, session_env):
@@ -346,7 +347,7 @@ def dispatch_capture_lifecycle_hook(project_root: Path) -> GuardRunResult:
         input=stdin_bytes,
         capture_output=True,
         cwd=str(project_root),
-        env=os.environ,
+        env=production_interpreter_env(),
         timeout=_TIMEOUT_SECONDS,
     )
     assert proc.returncode == 0, (

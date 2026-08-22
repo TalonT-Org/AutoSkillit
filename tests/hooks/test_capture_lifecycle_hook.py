@@ -39,6 +39,7 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureLifecycleError,
     CaptureLifecycleStore,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -87,6 +88,7 @@ def test_standalone_authority_uses_standalone_lifecycle_identity() -> None:
                 "assert 'CaptureLifecycleError' in _authority.__all__\n"
             ),
         ],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
         cwd=SCRIPT.parent,
@@ -116,6 +118,7 @@ def test_package_cleanup_hook_preserves_direct_capture_package_imports(
                 "{'_capture._reader', 'autoskillit.hooks._capture._reader'}\n"
             ),
         ],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
         check=False,
@@ -132,7 +135,7 @@ def _run_hook(
     *,
     headless: bool,
 ) -> subprocess.CompletedProcess[str]:
-    env = dict(os.environ)
+    env = production_interpreter_env()
     if headless:
         env["AUTOSKILLIT_HEADLESS"] = "1"
     else:

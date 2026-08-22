@@ -180,7 +180,8 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
+        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+            logger.warning("fleet_auto_gate_boot_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
@@ -269,7 +270,8 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _mcp.disable(tags={tag})
     try:
         _retain_context_tracker_authority(ctx)
-        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
+        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+            logger.warning("pre_reveal_kitchen_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("pre_reveal_kitchen_registry_failed", exc_info=True)
@@ -364,7 +366,8 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
+        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+            logger.warning("food_truck_auto_gate_boot_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
@@ -480,7 +483,8 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx))
+        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+            logger.warning("skill_auto_gate_boot_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)

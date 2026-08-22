@@ -19,6 +19,7 @@ import pytest
 import zstandard
 
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.conftest import production_interpreter_env
 from tests.execution._process_group_helpers import (
     _capture_owned_group_identities,
     _cleanup_owned_process_group,
@@ -121,7 +122,7 @@ os.execvpe(command[0], command, os.environ)
     process = subprocess.Popen(
         (sys.executable, "-c", wrapper, json.dumps(list(spec.cmd))),
         cwd=project,
-        env=spec.env,
+        env={**production_interpreter_env(), **spec.env},
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         pass_fds=(lease_fd,),

@@ -89,7 +89,10 @@ class TestInitialState:
         raw = json.loads(state_path.read_text(encoding="utf-8"))
         raw["dispatches"][0]["launch_contract_digest"] = "0" * 64
         state_path.write_text(json.dumps(raw), encoding="utf-8")
-        assert read_state(state_path) is None
+        quarantined = read_state(state_path)
+        assert quarantined is not None
+        assert quarantined.dispatches == []
+        assert len(quarantined.opaque_dispatches) == 1
 
     def test_launch_contract_rebind_rejects_digest_drift(self, tmp_path: Path) -> None:
         state_path = _state_path(tmp_path)
@@ -301,6 +304,52 @@ class TestDispatchRecordFromDict:
         rec = DispatchRecord.from_dict({"name": "t"})
         assert rec.reaper_reason == ""
         assert rec.reaper_dispatch_id == ""
+
+
+class TestUnknownPersistedDispatchStatus:
+    def test_unknown_dispatch_is_quarantined_round_tripped_and_blocks_completion(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.fleet import has_blocking_dispatch
+
+        state_path = _state_path(tmp_path)
+        write_initial_state(
+            state_path,
+            "cid-unknown",
+            "future-status",
+            "/m.yaml",
+            [DispatchRecord(name="known")],
+        )
+        opaque_dispatch = {
+            "name": "future",
+            "status": "awaiting_operator",
+            "future_metadata": {"mode": "manual"},
+        }
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+        raw["dispatches"].append(opaque_dispatch)
+        state_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        loaded = read_state(state_path)
+
+        assert loaded is not None
+        assert [d.name for d in loaded.dispatches] == ["known"]
+        assert loaded.opaque_dispatches == [opaque_dispatch]
+        assert has_blocking_dispatch(state_path) is True
+        decision = resume_campaign_from_state(state_path, continue_on_failure=True)
+        assert decision is not None
+        assert decision.next_dispatch_name == ""
+        assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
+        append_dispatch_record(
+            state_path,
+            DispatchRecord(name="known", status=DispatchStatus.SUCCESS),
+        )
+
+        rewritten = json.loads(state_path.read_text(encoding="utf-8"))
+        assert rewritten["dispatches"][1] == opaque_dispatch
+        round_tripped = read_state(state_path)
+        assert round_tripped is not None
+        assert round_tripped.opaque_dispatches == [opaque_dispatch]
+        assert round_tripped.ended_at == 0.0
 
 
 class TestStateDecompositionImports:

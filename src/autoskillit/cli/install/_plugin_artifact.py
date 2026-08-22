@@ -9,9 +9,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
     ArtifactLease,
+    InfrastructureFaultError,
     LegacyRetiringEvidence,
+    ManagedHome,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactLifecycleLease,
@@ -34,6 +37,7 @@ from autoskillit.core import (
     installed_plugin_artifact_root,
     installed_plugin_semantic_key,
     log_plugin_artifact_lifecycle,
+    managed_home,
     migrate_retiring_cache_v1,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
@@ -47,11 +51,12 @@ if TYPE_CHECKING:
     from autoskillit.workspace import EffectiveSkillCatalog
 
 
-def current_installed_plugin_root() -> Path:
+def current_installed_plugin_root(home: ManagedHome | None = None) -> Path:
     """Return the lexical cache root created by the current install transaction."""
     from autoskillit import __version__
 
-    return installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
+    resolved_home = home if home is not None else managed_home()
+    return installed_plugin_artifact_root(resolved_home.root, "autoskillit", __version__)
 
 
 def current_installed_plugin_authority() -> InstalledPluginArtifactAuthority:
@@ -59,8 +64,10 @@ def current_installed_plugin_authority() -> InstalledPluginArtifactAuthority:
     from autoskillit import __version__
     from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
 
+    home = managed_home()
     return InstalledPluginArtifactAuthority(
-        current_installed_plugin_root(),
+        current_installed_plugin_root(home),
+        home=home,
         semantic_key=installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, __version__),
     )
 
@@ -75,6 +82,7 @@ def interactive_plugin_authority(
     retain_projection_source: bool = False,
 ) -> tuple[PluginArtifactAuthority | None, PluginLoadMode]:
     """Select authority only after the effective backend and load path are known."""
+    home = managed_home()
     capabilities = backend.capabilities
     if not capabilities.skill_injection_capable:
         if not retain_projection_source:
@@ -83,6 +91,7 @@ def interactive_plugin_authority(
 
         return (
             project_default_plugin_authority(
+                home=home,
                 base_branch=default_base_branch,
                 catalog=skill_catalog,
                 cwd=project_dir,
@@ -92,6 +101,7 @@ def interactive_plugin_authority(
     from autoskillit.workspace import project_default_plugin_authority
 
     authority = project_default_plugin_authority(
+        home=home,
         base_branch=default_base_branch,
         catalog=skill_catalog,
         cwd=project_dir,
@@ -168,7 +178,14 @@ def _publish_installed_plugin_artifact_locked(
 class InstalledPluginArtifactAuthority:
     """Fail-closed authority for one installed plugin transaction identity."""
 
-    def __init__(self, root: Path, *, semantic_key: str) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        home: ManagedHome,
+        semantic_key: str,
+    ) -> None:
+        self._home = home
         self._root = Path(root)
         self._semantic_key = semantic_key
 
@@ -180,12 +197,13 @@ class InstalledPluginArtifactAuthority:
     ) -> PluginLaunchBinding:
         """Resolve current generation, acquire a shared reader lease, validate.
 
-        If validation of the current generation fails, attempts a single
-        self-heal republish from source before propagating the error.
+        If validation of the current generation fails — including the
+        freshness probe finding the generator installation itself stale or
+        deleted — attempts a single self-heal republish from source before
+        propagating the error.
         """
         from autoskillit.workspace import assert_generator_process_fresh
 
-        assert_generator_process_fresh()
         del backend
         if not load_mode.consumes_artifact:
             raise PluginArtifactValidationError(
@@ -194,7 +212,7 @@ class InstalledPluginArtifactAuthority:
             )
 
         generation_dir = resolve_current_generation(
-            Path.home(),
+            self._home.root,
             "autoskillit",
             self._root.name,
         )
@@ -203,8 +221,9 @@ class InstalledPluginArtifactAuthority:
             return self._acquire_from_root(self._root, load_mode)
 
         try:
+            assert_generator_process_fresh()
             return self._acquire_from_root(generation_dir, load_mode)
-        except PluginArtifactValidationError:
+        except (PluginArtifactValidationError, InfrastructureFaultError):
             healed = self._self_heal_republish()
             if healed is None:
                 raise
@@ -261,9 +280,9 @@ class InstalledPluginArtifactAuthority:
                     mcp_tool_prefix=MARKETPLACE_PREFIX,
                 )
                 write_generated_hooks_json(staging_root)
-                with _InstallLock():
+                with _InstallLock(self._home):
                     identity = publish_generation(
-                        home=Path.home(),
+                        home=self._home,
                         plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
                         version=__version__,
                         semantic_key=self._semantic_key,
@@ -303,7 +322,7 @@ class InstalledPluginArtifactAuthority:
             except OSError as exc:
                 last_error = exc
                 refreshed = resolve_current_generation(
-                    Path.home(),
+                    self._home.root,
                     "autoskillit",
                     self._root.name,
                 )
@@ -330,9 +349,15 @@ class InstalledPluginArtifactAuthority:
                 expected_semantic_key=self._semantic_key,
                 manifest_path=installed_plugin_artifact_manifest_path(leased_root),
             )
-            InstalledPluginArtifactRetirementOwner(
-                identity.managed_path.parent
+            cancelled = InstalledPluginArtifactRetirementOwner(
+                identity.managed_path.parent,
+                home=self._home,
             ).cancel_obsolete_retirements(identity)
+            if cancelled is None:
+                logger.warning(
+                    "installed_plugin_launch_queue_unreadable",
+                    operation="cancel_obsolete_retirements",
+                )
             log_plugin_artifact_lifecycle(
                 logger,
                 action="acquire",
@@ -373,14 +398,17 @@ class InstalledPluginArtifactAuthority:
 class InstalledPluginArtifactRetirementOwner:
     """Exact-identity retirement owner for AutoSkillit's installed cache."""
 
-    def __init__(self, managed_root: Path) -> None:
+    def __init__(self, managed_root: Path, *, home: ManagedHome) -> None:
         self._retirement = PluginArtifactRetirementEngine(
+            home=home,
             managed_root=managed_root,
             artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
             manifest_path=installed_plugin_artifact_manifest_path,
             lease_path=installed_plugin_artifact_lease_path,
             current_identity=self._current_identity,
             logger=logger,
+            # The installed tree has no selector; the exclusive lease is the backstop.
+            is_current=None,
         )
 
     @property
@@ -396,7 +424,7 @@ class InstalledPluginArtifactRetirementOwner:
         not_before: datetime,
         *,
         on_persisted: Callable[[str], None] | None = None,
-    ) -> RetiringAppendResult:
+    ) -> RetiringAppendResult | None:
         return self._retirement.enqueue_retirement(
             identity,
             not_before,
@@ -406,7 +434,7 @@ class InstalledPluginArtifactRetirementOwner:
     def cancel_obsolete_retirements(
         self,
         identity: PluginArtifactIdentity,
-    ) -> tuple[str, ...]:
+    ) -> tuple[str, ...] | None:
         return self._retirement.cancel_obsolete_retirements(identity)
 
     @staticmethod
@@ -458,22 +486,26 @@ class DefaultPluginRetirementCoordinator:
     def __init__(
         self,
         *,
+        home: ManagedHome,
         projection_owner: PluginArtifactRetirementOwner,
         installed_owner: PluginArtifactRetirementOwner,
         generation_owner: PluginArtifactRetirementOwner,
+        install_root_generation_owner: PluginArtifactRetirementOwner,
     ) -> None:
+        self._home = home
         self._owners: dict[PluginArtifactKind, PluginArtifactRetirementOwner] = {
             PluginArtifactKind.PROJECTION: projection_owner,
             PluginArtifactKind.INSTALLED_PLUGIN: installed_owner,
             PluginArtifactKind.PLUGIN_GENERATION: generation_owner,
+            PluginArtifactKind.INSTALL_ROOT_GENERATION: install_root_generation_owner,
         }
         self._managed_roots = {kind: owner.managed_root for kind, owner in self._owners.items()}
 
     def migrate_legacy_cache(self) -> RetiringCacheReadResult:
         """Upgrade path-only retirement evidence before exact-v2 mutations."""
-        state = read_retiring_cache()
+        state = read_retiring_cache(home=self._home)
         if state.state is RetiringCacheState.LEGACY_V1:
-            return migrate_retiring_cache_v1(self._managed_roots)
+            return migrate_retiring_cache_v1(self._managed_roots, home=self._home)
         return state
 
     def sweep_due(self, now: datetime) -> tuple[RetirementOutcome, ...]:
@@ -504,7 +536,10 @@ class DefaultPluginRetirementCoordinator:
                 continue
             outcomes.append(owner.try_promote_legacy_evidence(evidence, now))
         # Re-read after promotion so newly minted records reclaim in this pass.
-        for record in due_retiring_records(now):
+        due = due_retiring_records(now, home=self._home)
+        if due is None:
+            return tuple(outcomes)
+        for record in due:
             record_owner = self._owners.get(record.artifact_kind)
             if record_owner is None:
                 outcomes.append(RetirementOutcome.REJECTED_IDENTITY)
@@ -513,7 +548,9 @@ class DefaultPluginRetirementCoordinator:
         return tuple(outcomes)
 
 
-def default_plugin_retirement_coordinator() -> DefaultPluginRetirementCoordinator:
+def default_plugin_retirement_coordinator(
+    *, home: ManagedHome | None = None
+) -> DefaultPluginRetirementCoordinator:
     """Compose every artifact-kind owner over its own disjoint managed root.
 
     The generation store and the legacy Claude plugin cache are separate trees.
@@ -526,20 +563,32 @@ def default_plugin_retirement_coordinator() -> DefaultPluginRetirementCoordinato
         ProjectedPluginRetirementOwner,
     )
 
-    home = Path.home()
-    projection_root = home / ".autoskillit" / "plugin-projections"
+    resolved_home = home if home is not None else managed_home()
+    projection_root = resolved_home.autoskillit_dir / "plugin-projections"
     installed_owner = InstalledPluginArtifactRetirementOwner(
-        current_installed_plugin_root().parent
+        current_installed_plugin_root(resolved_home).parent,
+        home=resolved_home,
     )
     generation_owner = GenerationArtifactRetirementOwner(
-        generation_store_root(home, _AUTOSKILLIT_PLUGIN_KEY),
-        home=home,
+        generation_store_root(resolved_home.root, _AUTOSKILLIT_PLUGIN_KEY),
+        home=resolved_home,
         plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
     )
+    install_root_generation_owner = GenerationArtifactRetirementOwner(
+        generation_store_root(resolved_home.root, _AUTOSKILLIT_INSTALL_ROOT_KEY),
+        home=resolved_home,
+        plugin_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
+        artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+    )
     return DefaultPluginRetirementCoordinator(
-        projection_owner=ProjectedPluginRetirementOwner(projection_root),
+        home=resolved_home,
+        projection_owner=ProjectedPluginRetirementOwner(
+            projection_root,
+            home=resolved_home,
+        ),
         installed_owner=installed_owner,
         generation_owner=generation_owner,
+        install_root_generation_owner=install_root_generation_owner,
     )
 
 

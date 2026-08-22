@@ -32,6 +32,7 @@ from autoskillit.config._config_dataclasses import (
     _COMMAND_UNSET,
     _METADATA_KEYS,
     _SECRETS_ONLY_KEYS,
+    RETIRED_PROFILE_KEYS,
     AgentBackendConfig,
     BranchingConfig,
     CIConfig,
@@ -273,6 +274,7 @@ __all__ = [
     "remap_retired_keys",
     "RemappedConfigKey",
     "RETIRED_CONFIG_KEYS",
+    "RETIRED_PROFILE_KEYS",
     "RetiredConfigKeyDef",
     "validate_layer_keys",
     "write_config_layer",
@@ -452,6 +454,17 @@ if _NON_LOWER_NEW_KEYS:
         f"RETIRED_CONFIG_KEYS new_key values must be lowercase. Offending: {_NON_LOWER_NEW_KEYS}"
     )
 del _NON_LOWER_NEW_KEYS
+
+# Fail fast at module load; an explicit raise keeps the check active under `python -O`.
+_NON_LOWER_RETIRED_PROFILE_KEYS = sorted(
+    k for k in RETIRED_PROFILE_KEYS if not isinstance(k, str) or k != k.lower()
+)
+if _NON_LOWER_RETIRED_PROFILE_KEYS:
+    raise AssertionError(
+        f"RETIRED_PROFILE_KEYS entries must be lowercase str; offenders: "
+        f"{_NON_LOWER_RETIRED_PROFILE_KEYS!r}"
+    )
+del _NON_LOWER_RETIRED_PROFILE_KEYS
 
 
 # Custom field builders that bypass _coerce_value.

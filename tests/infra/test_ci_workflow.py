@@ -5,7 +5,6 @@ from __future__ import annotations
 import dataclasses
 import importlib.util
 import json
-import os
 import subprocess
 import sys
 from collections.abc import Iterator, Mapping
@@ -15,6 +14,7 @@ from types import ModuleType
 import pytest
 
 from autoskillit.core.io import load_yaml
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -62,7 +62,7 @@ def _run_cli(
     payload: object | None = None,
     raw_payload: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    env = dict(os.environ)
+    env = production_interpreter_env()
     env.pop("GITHUB_EVENT_NAME", None)
     env.pop("GITHUB_EVENT_PATH", None)
     if event_name is not None:

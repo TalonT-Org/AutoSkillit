@@ -339,11 +339,16 @@ def update() -> None:
 
 
 @app.command
-def doctor(*, output_json: bool = False):
-    """Check project setup for common issues."""
-    from autoskillit.cli.doctor import run_doctor
+def doctor(*, output_json: bool = False, repair: bool = False) -> None:
+    """Check project setup (``--repair`` opts into safe repairs)."""
+    if repair:
+        from autoskillit.cli.doctor import run_doctor_repairs
 
-    run_doctor(output_json=output_json)
+        run_doctor_repairs(output_json=output_json)
+    else:
+        from autoskillit.cli.doctor import run_doctor
+
+        run_doctor(output_json=output_json)
 
 
 @app.command
@@ -707,8 +712,13 @@ def main() -> None:
     """Entry point for autoskillit."""
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
     if _first_arg != "serve":
-        from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
+        from autoskillit.cli._init_helpers import (
+            _user_claude_json_path,
+            evict_direct_mcp_entry,
+            warm_failure_path_imports,
+        )
 
+        warm_failure_path_imports()
         evict_direct_mcp_entry(_user_claude_json_path())
 
         # Repair on the next safe CLI process; exclude recursive child paths.
@@ -730,7 +740,10 @@ def main() -> None:
                         finding=finding,
                     )
 
-        from autoskillit.cli.update._update_checks import run_update_checks
+        # Self-invoked maintenance commands must never prompt. Explicit update
+        # also skips the automatic pre-check, which would race its own transaction.
+        if _first_arg not in {"install", "--version", "update"}:
+            from autoskillit.cli.update._update_checks import run_update_checks
 
-        run_update_checks()
+            run_update_checks()
     app()

@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/session_start_hook.py"
@@ -31,7 +33,7 @@ def _run(
         input=stdin_data,
         capture_output=True,
         text=True,
-        env=env,
+        env={**production_interpreter_env(), **(env or {})},
         cwd=cwd,
     )
     return result.returncode, result.stdout

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import resolve_temp_dir
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
@@ -60,6 +61,7 @@ def test_resolve_temp_dir_no_autoskillit_imports() -> None:
     )
     result = subprocess.run(
         [sys.executable, "-c", script],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
         check=False,

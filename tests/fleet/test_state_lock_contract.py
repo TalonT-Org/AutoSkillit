@@ -55,7 +55,8 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "server/_recipe_artifact.py",  # shared/exclusive immutable-generation lifecycle lock
         "hooks/resume_gate_post_hook.py",
         "hooks/_capture/_resolver.py",
-        "hooks/_capture_lifecycle.py",
+        "hooks/_capture_lifecycle/_store.py",
+        "hooks/_capture_lifecycle/_admission.py",
     }
 )
 
@@ -95,7 +96,7 @@ class TestFlockLockTarget:
         FCNTL_ALLOWED_MODULES = {src_root / p for p in _FCNTL_ALLOWED_RELATIVE_PATHS}
         FLOCK_DATA_FILE_EXCEPTIONS: dict[Path, frozenset[str] | None] = {
             src_root / "planner" / "merge.py": None,
-            src_root / "hooks" / "_capture_lifecycle.py": frozenset(
+            src_root / "hooks" / "_capture_lifecycle" / "_store.py": frozenset(
                 {"acquire_writer_lease", "_try_artifact_lease"}
             ),
             src_root / "hooks" / "_capture" / "_resolver.py": frozenset(

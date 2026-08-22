@@ -294,7 +294,7 @@ def test_capture_deletion_is_confined_to_lifecycle_transactions() -> None:
     trees = {
         relative: ast.parse(_source(relative))
         for relative in (
-            "hooks/_capture_lifecycle.py",
+            "hooks/_capture_lifecycle/_store.py",
             "hooks/_capture/_sweep.py",
         )
     }
@@ -311,7 +311,7 @@ def test_capture_deletion_is_confined_to_lifecycle_transactions() -> None:
         for relative, tree in trees.items()
     }
     assert functions_with_unlink == {
-        "hooks/_capture_lifecycle.py": {
+        "hooks/_capture_lifecycle/_store.py": {
             "_compact_locked",
             "create_artifact",
         },

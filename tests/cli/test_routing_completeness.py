@@ -6,9 +6,12 @@ orchestrator prompt — the same class of oversight that produced the EMPTY_OUTP
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX
+from autoskillit.core import INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE
 from autoskillit.core.types import RetryReason
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -94,3 +97,41 @@ def test_expected_routes_covers_all_orchestrator_visible_reasons() -> None:
         r.name for r in RetryReason if r not in _ROUTING_EXCLUDED and r not in _EXPECTED_ROUTES
     ]
     assert not missing, f"Add routing expectation for: {missing}"
+
+
+def test_infrastructure_fault_override_is_documented() -> None:
+    """Orchestrator prompt must document the infra_fault_domain override.
+
+    Asserts the literal wire key `infra_fault_domain` (not just the value
+    "infrastructure") appears — a prompt that named a differently-shaped key
+    `to_json()` never emits would still pass a value-only check, which is
+    exactly the failure mode this test exists to catch.
+    """
+    from autoskillit.cli.prompts._prompts_orchestrator import _build_orchestrator_prompt
+
+    prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
+
+    assert INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE in prompt_text
+    assert "infra_fault_domain" in prompt_text, (
+        "orchestrator prompt missing the infra_fault_domain wire key"
+    )
+    assert "infrastructure" in prompt_text, (
+        "orchestrator prompt missing the infrastructure fault value"
+    )
+    assert "MUST NOT be followed" in prompt_text, (
+        "orchestrator prompt must state on_failure MUST NOT be followed on infra fault"
+    )
+
+
+def test_infrastructure_fault_override_key_in_load_recipe_docstring() -> None:
+    """load_recipe docstring must name the infra_fault_domain wire key."""
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    assert load_recipe.__doc__ is not None
+    normalized_doc = "\n".join(
+        line.strip() for line in inspect.cleandoc(load_recipe.__doc__).splitlines()
+    )
+    assert INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE.strip() in normalized_doc
+    assert "infra_fault_domain" in load_recipe.__doc__, (
+        "load_recipe docstring missing the infra_fault_domain wire key"
+    )

@@ -13,7 +13,6 @@ command is covered the moment it is added.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli.app import app
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -39,7 +39,7 @@ def _top_level_commands() -> list[str]:
 def _hermetic_env(tmp_path: Path) -> dict[str, str]:
     home = tmp_path / "home"
     home.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
+    env = production_interpreter_env()
     env.update(
         {
             "HOME": str(home),

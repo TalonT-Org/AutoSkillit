@@ -8,7 +8,7 @@ import json
 import os
 from typing import TYPE_CHECKING, cast
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, compute_bytes_hash
+from autoskillit.core import DISPATCH_ID_ENV_VAR, FaultDomain, compute_bytes_hash, get_logger
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.server._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
     from autoskillit.core import TrackerAuthorityReadResult, TrackerAuthorityTarget
     from autoskillit.pipeline import ToolContext
+
+logger = get_logger(__name__)
 
 INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
@@ -239,12 +241,19 @@ def _finalize_run_skill_completion(
         }
     success = payload.get("success") is True
     classification = str(payload.get("subtype") or ("success" if success else "failed"))
+    raw_fault_domain = str(payload.get("infra_fault_domain") or FaultDomain.LOGIC.value)
+    try:
+        fault_domain = FaultDomain(raw_fault_domain)
+    except ValueError:
+        logger.warning("invalid_run_skill_fault_domain", fault_domain=raw_fault_domain)
+        fault_domain = FaultDomain.LOGIC
     receipt = authority.draft(
         invocation_id,
         classification=classification,
         success=success,
         result_digest=compute_bytes_hash(rendered.encode("utf-8")),
         child_session_id=child_session_id,
+        fault_domain=fault_domain,
     )
     payload["receipt_id"] = receipt.receipt_id
     finalized = FinalizedRunSkillCompletionResponse(

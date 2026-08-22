@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 import shutil
@@ -17,6 +18,7 @@ import regex as re
 
 from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
+    SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
     ManagedHeadlessSessionLineageRef,
     ResolvedLaunchContract,
     SkillSessionContract,
@@ -250,10 +252,28 @@ class DefaultSkillSessionContractStore:
         manifest_path = entry / _MANIFEST_FILENAME
         if not manifest_path.exists():
             raise FileNotFoundError(f"Skill session contract not found: {entry.name}") from None
-        loaded = read_versioned_json(manifest_path, _STORE_MANIFEST_SCHEMA_VERSION)
-        if loaded is None:
+        try:
+            loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError("Invalid skill session contract manifest") from exc
+        if not isinstance(loaded, dict):
+            raise ValueError("Invalid skill session contract manifest")
+        observed_version = loaded.get("schema_version")
+        if type(observed_version) is int and observed_version > _STORE_MANIFEST_SCHEMA_VERSION:
+            raise _UnsupportedFutureSkillContractError(
+                observed_version=observed_version,
+                current_version=_STORE_MANIFEST_SCHEMA_VERSION,
+            )
+        if observed_version != _STORE_MANIFEST_SCHEMA_VERSION:
             raise ValueError("Invalid or unsupported skill session contract manifest")
-        return loaded
+        validated = read_versioned_json(
+            manifest_path,
+            _STORE_MANIFEST_SCHEMA_VERSION,
+            raise_io_errors=True,
+        )
+        if validated is None:
+            raise ValueError("Invalid skill session contract manifest")
+        return validated
 
     def _write_manifest(self, entry: Path, manifest: Mapping[str, Any]) -> None:
         self._ensure_contained(entry)
@@ -283,12 +303,28 @@ class DefaultSkillSessionContractStore:
         expected_contract_digest = _digest_json(contract_data)
         if manifest.get("contract_digest") != expected_contract_digest:
             raise ValueError("Skill session contract manifest digest mismatch")
+        raw_schema_version = contract_data.get("schema_version")
+        if (
+            type(raw_schema_version) is int
+            and raw_schema_version > SKILL_SESSION_CONTRACT_SCHEMA_VERSION
+        ):
+            raise _UnsupportedFutureSkillContractError(
+                observed_version=raw_schema_version,
+                current_version=SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
+            )
         # Raw pre-gate: reject stale projection versions before _contract_from_dict
         # tries to construct enum values that may no longer exist.
         raw_projection_version = contract_data.get("projection_version")
         if (
-            type(raw_projection_version) is not int
-            or raw_projection_version != SKILL_PROJECTION_VERSION
+            type(raw_projection_version) is int
+            and raw_projection_version > SKILL_PROJECTION_VERSION
+        ):
+            raise _UnsupportedFutureSkillContractError(
+                observed_version=raw_projection_version,
+                current_version=SKILL_PROJECTION_VERSION,
+            )
+        if type(raw_projection_version) is not int or (
+            raw_projection_version != SKILL_PROJECTION_VERSION
         ):
             raise ValueError(
                 f"unsupported projection_version {raw_projection_version}; "
@@ -361,6 +397,7 @@ from autoskillit.execution.session._skill_session_contract_codec import (  # noq
     _digest_json,
     _finalized_contract_path,
     _managed_lineage_ref_from_manifest,
+    _UnsupportedFutureSkillContractError,
     _validate_contract,
     _validate_raw_session_id,
     _validate_relative_path,

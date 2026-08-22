@@ -55,6 +55,9 @@ def _canonical(name: str) -> str:
 
 def _log_root() -> pathlib.Path:
     """Return the autoskillit session log root (stdlib-only platform check)."""
+    override = os.environ.get("AUTOSKILLIT_LOG_DIR")
+    if override:
+        return pathlib.Path(override)
     if platform.system() == "Darwin":
         return pathlib.Path.home() / "Library/Application Support/autoskillit/logs"
     xdg = os.environ.get("XDG_DATA_HOME")

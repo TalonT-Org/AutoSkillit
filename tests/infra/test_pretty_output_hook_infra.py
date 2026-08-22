@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,7 +14,7 @@ from autoskillit.core.types import ChannelConfirmation, TerminationReason
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.hooks.formatters.pretty_output_hook import _format_response
-from tests.conftest import _make_result
+from tests.conftest import _make_result, production_interpreter_env
 from tests.infra._pretty_output_helpers import (
     _run_hook,
     _wrap_for_claude_code,
@@ -477,9 +479,6 @@ def test_typeddict_covers_json_producer_keys(tool_name: str, entry: FormatterCov
 
 def test_conftest_import_does_not_load_server():
     """Importing the infra conftest must not trigger the 57 MB server import chain."""
-    import subprocess
-    import sys
-
     result = subprocess.run(
         [
             sys.executable,
@@ -488,6 +487,7 @@ def test_conftest_import_does_not_load_server():
             "assert 'autoskillit.server' not in sys.modules, "
             "'server loaded at conftest import time'",
         ],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
         cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]),

@@ -38,6 +38,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import production_interpreter_env
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
 from tests.server.test_claude_explorer_live_gate import (
     _ROOT,
@@ -115,7 +116,7 @@ def _run_claude(project: Path, plugin: Path, home: Path) -> str:
         "After the child returns, do not retry or call any other tool: immediately reply "
         "LIVE_OK if its broker response was accepted, otherwise reply LIVE_FAILED."
     )
-    env = os.environ.copy()
+    env = production_interpreter_env()
     env["HOME"] = str(home)
     env["CLAUDE_CONFIG_DIR"] = str(home / ".claude")
     env["AUTOSKILLIT_STATE_ROOT"] = str(project)

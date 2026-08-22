@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from autoskillit.core import FaultDomain
+
 
 def _write_tracker(tmp_path, pipeline_id, steps, dependencies, kitchen_id="test-kitchen"):
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
@@ -84,6 +86,41 @@ def _grant_success_credit(tool_ctx, tmp_path, step_name, pipeline_id="test-kitch
     authority = tool_ctx.run_skill_completion
     assert authority is not None
     authority.acknowledge(
+        receipt.receipt_id,
+        kitchen_id=tool_ctx.kitchen_id,
+        request_session_id="request-session",
+    )
+
+
+def _seed_acknowledged_receipt(tool_ctx, *, fault_domain, step_name="seed-step"):
+    """Drive one begin/draft/publish/acknowledge cycle, untethered to any tracker.
+
+    Used by infrastructure-fault-gate tests that only need
+    ``most_recent_acknowledged()`` to reflect a receipt of a given
+    ``fault_domain`` — not a real tracker-bound success credit.
+    """
+    authority = tool_ctx.run_skill_completion
+    assert authority is not None
+    invocation_id = authority.begin(
+        kitchen_id=tool_ctx.kitchen_id,
+        request_session_id="request-session",
+        tracker_order_id="",
+        tracker_path="",
+        tracker_kitchen_id="",
+        tracker_incarnation_id="",
+        step_name=step_name,
+    )
+    fault_domain = FaultDomain(fault_domain)
+    is_infrastructure = fault_domain is FaultDomain.INFRASTRUCTURE
+    receipt = authority.draft(
+        invocation_id,
+        classification="failed" if is_infrastructure else "success",
+        success=not is_infrastructure,
+        result_digest="digest",
+        fault_domain=fault_domain,
+    )
+    authority.publish(receipt.receipt_id)
+    return authority.acknowledge(
         receipt.receipt_id,
         kitchen_id=tool_ctx.kitchen_id,
         request_session_id="request-session",

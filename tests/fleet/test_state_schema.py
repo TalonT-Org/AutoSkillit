@@ -100,6 +100,8 @@ class TestDispatchRecordSchemaV2:
 
     def test_read_state_returns_none_on_future_version(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is a future version."""
+        import structlog.testing
+
         future_payload = {
             "schema_version": 99,
             "campaign_id": "cmp",
@@ -110,8 +112,18 @@ class TestDispatchRecordSchemaV2:
         }
         state_path = tmp_path / "state.json"
         state_path.write_text(json.dumps(future_payload))
-        state = read_state(state_path)
+        with structlog.testing.capture_logs() as cap:
+            state = read_state(state_path)
         assert state is None
+        event = next(r for r in cap if r.get("event") == "fleet_state_unsupported_future")
+        assert event["observed_version"] == 99
+        assert event["current_version"] == FLEET_STATE_SCHEMA_VERSION
+
+    def test_unknown_persisted_dispatch_status_retains_original_token(self) -> None:
+        record = DispatchRecord.from_dict({"name": "future", "status": "awaiting_operator"})
+
+        assert record.status == DispatchStatus.UNKNOWN
+        assert record.to_dict()["status"] == "awaiting_operator"
 
     def test_read_state_logs_drift_warning_on_mismatch(self, tmp_path: Path) -> None:
         """read_state logs a drift warning when schema_version is stale."""
@@ -431,10 +443,12 @@ class TestDispatchRecordToDict:
         assert roundtripped["token_usage"] == {"x": 1}
 
     def test_to_dict_keys_match_dataclass_fields(self) -> None:
-        """to_dict() must emit exactly the dataclass field names."""
+        """to_dict() must emit exactly the persisted dataclass field names."""
         record = DispatchRecord(name="test")
         actual = set(record.to_dict().keys())
-        expected = {f.name for f in dataclasses.fields(DispatchRecord)}
+        expected = {
+            f.name for f in dataclasses.fields(DispatchRecord) if f.metadata.get("persisted", True)
+        }
         assert actual == expected
 
 

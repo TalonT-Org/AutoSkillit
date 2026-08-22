@@ -77,10 +77,12 @@ Launch an interactive pipeline session.
 
 Run health checks on your setup.
 
-    autoskillit doctor [--output-json]
+    autoskillit doctor [--output-json] [--repair]
 
 **Flags:**
 - `--output-json` — Output results as JSON
+- `--repair` — Opt into safe repairs. This is the only `doctor` invocation that writes;
+  unreadable retirement-cache bytes are preserved in a timestamped sidecar first.
 
 Runs 47 ungated checks (up to 53 with fleet enabled) enumerated by `run_doctor`
 in `cli/doctor/__init__.py`: 38 numbered checks (1–23, excluding 5, and 30–45)

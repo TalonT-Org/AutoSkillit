@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import re
 import shlex
 import subprocess
@@ -23,6 +22,7 @@ import pytest
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import HOOK_REGISTRY, HOOKS_DIR
 from autoskillit.hooks._capture_contract import decode_capture_request
+from tests.conftest import production_interpreter_env
 from tests.execution.backends.conftest import (
     _SKIP_CODEX,
     BACKENDS,
@@ -173,7 +173,9 @@ assert set(TOOL_CLASS_PAYLOADS.keys()) == set(TOOL_CLASSES.keys()), (
 
 def _clean_env() -> dict[str, str]:
     """Strip AUTOSKILLIT_* keys from the test runner's environment."""
-    return {k: v for k, v in os.environ.items() if not k.startswith("AUTOSKILLIT_")}
+    return {
+        k: v for k, v in production_interpreter_env().items() if not k.startswith("AUTOSKILLIT_")
+    }
 
 
 def _invoke_guard(

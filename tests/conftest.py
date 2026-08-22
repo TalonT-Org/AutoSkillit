@@ -281,7 +281,7 @@ def parse_stdout_json(capsys):
 
 @pytest.fixture(autouse=True)
 def _isolated_home(monkeypatch, tmp_path_factory):
-    """Redirect Path.home() to a per-test temp directory.
+    """Redirect home resolution to a per-test temp directory.
 
     Prevents the developer's real ~/.autoskillit/config.yaml from being
     loaded during tests. Without this, tests that call load_config() without
@@ -298,6 +298,12 @@ def _isolated_home(monkeypatch, tmp_path_factory):
     """
     isolated_home = tmp_path_factory.mktemp("isolated-home")
     monkeypatch.setattr("pathlib.Path.home", lambda: isolated_home)
+    monkeypatch.setenv("HOME", str(isolated_home))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(isolated_home / ".cache"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / ".config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_home / ".local" / "share"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(isolated_home / ".runtime"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(isolated_home / ".local" / "state"))
 
 
 @pytest.fixture(autouse=True)
@@ -1141,18 +1147,26 @@ def pytest_testnodedown(node, error):
 
 
 def production_interpreter_env() -> dict[str, str]:
-    """Build an env dict that strips test-harness bytecode suppression.
+    """Build an isolated env without test-harness bytecode suppression.
 
     The test harness sets ``PYTHONDONTWRITEBYTECODE=1`` on every pytest path
     (see ``TEST_HARNESS_ENV_OVERRIDES`` in ``tests/_test_env_parity.py``),
     which masks production behavior where hooks execute without suppression.
     This helper (a plain function, not a pytest fixture) lifts that mask so a
     child interpreter runs exactly as it does under a real Claude Code hook
-    invocation.
+    invocation. Home variables are derived from the currently patched
+    ``Path.home()`` so subprocess tests cannot escape the per-test home.
     """
+    home = _Path.home()
     env = dict(os.environ)
     env.pop("PYTHONDONTWRITEBYTECODE", None)
     env.pop("PYTHONPYCACHEPREFIX", None)
+    env["HOME"] = str(home)
+    env["XDG_CACHE_HOME"] = str(home / ".cache")
+    env["XDG_CONFIG_HOME"] = str(home / ".config")
+    env["XDG_DATA_HOME"] = str(home / ".local" / "share")
+    env["XDG_RUNTIME_DIR"] = str(home / ".runtime")
+    env["XDG_STATE_HOME"] = str(home / ".local" / "state")
     return env
 
 

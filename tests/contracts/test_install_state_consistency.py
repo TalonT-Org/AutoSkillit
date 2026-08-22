@@ -18,6 +18,7 @@ from autoskillit.core import (
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactIdentity,
     Severity,
+    managed_home_for,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -54,7 +55,7 @@ def _publish_generation(
     source_root = home / ".test-generation-source"
     source_root.mkdir(exist_ok=True)
     (source_root / "marker.txt").write_text("content", encoding="utf-8")
-    with _InstallLock():
+    with _InstallLock(managed_home_for(home)):
         return publish_generation(
             home=home,
             plugin_ref=plugin_ref,
@@ -106,7 +107,7 @@ def test_failed_generation_publication_discards_unpublished_artifacts(
 
         monkeypatch.setattr(publication, "_replace_symlink", fail_selector)
 
-    with _InstallLock(), pytest.raises((OSError, RuntimeError)):
+    with _InstallLock(managed_home_for(home)), pytest.raises((OSError, RuntimeError)):
         publication.publish_generation(
             home=home,
             plugin_ref=_PLUGIN_KEY,
@@ -150,7 +151,10 @@ def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
         live,
         semantic_key=f"autoskillit@autoskillit-local:{__version__}",
     )
-    InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
+    InstalledPluginArtifactRetirementOwner(
+        live.parent,
+        home=managed_home_for(home),
+    ).enqueue_retirement(
         identity,
         datetime.now(UTC) + timedelta(hours=6),
     )
@@ -273,7 +277,7 @@ class TestVerifyInstallState:
 
         _publish_generation(home, __version__)
 
-        def fail_digest(_path: Path) -> str:
+        def fail_digest(_path: Path, **_kwargs: object) -> str:
             raise PermissionError("injected diagnostic read failure")
 
         monkeypatch.setattr(plugin_artifact_identity, "directory_tree_digest", fail_digest)
@@ -422,7 +426,7 @@ class TestVerifyInstallState:
 
         identity = _queue_registered_retirement(home)
 
-        def fail_digest(_path: Path) -> str:
+        def fail_digest(_path: Path, **_kwargs: object) -> str:
             raise PermissionError("injected diagnostic read failure")
 
         monkeypatch.setattr(
@@ -475,7 +479,7 @@ class TestVerifyInstallState:
         )
         assert finding.severity is Severity.WARNING
 
-    def test_corrupt_retirement_cache_is_an_explicit_error(self, home: Path) -> None:
+    def test_corrupt_retirement_cache_names_a_real_remediation(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
 
         cache = home / ".autoskillit" / "retiring_cache.json"
@@ -488,9 +492,9 @@ class TestVerifyInstallState:
 
         assert finding.severity is Severity.ERROR
         assert "retiring_cache.json" in finding.message
-        assert "autoskillit install" in finding.message
+        assert "autoskillit doctor --repair" in finding.message
 
-    def test_future_retirement_cache_schema_is_an_explicit_error(self, home: Path) -> None:
+    def test_future_retirement_cache_names_safe_upgrade_guidance(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
 
         cache = home / ".autoskillit" / "retiring_cache.json"
@@ -505,7 +509,8 @@ class TestVerifyInstallState:
 
         assert finding.severity is Severity.ERROR
         assert "schema 99" in finding.message
-        assert "autoskillit install" in finding.message
+        assert "autoskillit doctor --repair" not in finding.message
+        assert "Upgrade AutoSkillit" in finding.message
 
     def test_version_drift_names_each_derived_file(self, home: Path) -> None:
         """Three files carry a version and all three are derived.
@@ -683,6 +688,16 @@ class TestRetiredArtifactShapeRegistry:
 
         assert reconcile_install_artifacts() == ()
         assert reconcile_install_artifacts() == ()
+
+    def test_legacy_uv_tool_root_is_preserved_without_liveness_proof(self, home: Path) -> None:
+        from autoskillit.workspace import reconcile_install_artifacts
+
+        legacy_root = home / ".local/share/uv/tools/autoskillit"
+        legacy_root.mkdir(parents=True)
+        (legacy_root / "marker").write_text("live", encoding="utf-8")
+
+        assert reconcile_install_artifacts() == ()
+        assert (legacy_root / "marker").read_text(encoding="utf-8") == "live"
 
     def test_legacy_retirement_enqueue_failure_does_not_abort_reconciliation(
         self,

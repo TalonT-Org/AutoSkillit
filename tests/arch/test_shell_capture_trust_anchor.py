@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +122,7 @@ else:
                 str(hooks_dir.resolve()),
                 stem,
             ],
+            env=production_interpreter_env(),
             cwd=tmp_path,
             capture_output=True,
             text=True,

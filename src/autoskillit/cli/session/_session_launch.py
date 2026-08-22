@@ -405,8 +405,12 @@ def _run_interactive_session(
             def _record_spawn(pid: int, pgid: int) -> None:
                 attempt_handle.record_spawn(pid, pgid)
                 launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
-                if launch_id:
-                    bind_session_owner(_project_dir, launch_id, pid)
+                if launch_id and not bind_session_owner(_project_dir, launch_id, pid):
+                    logger.warning(
+                        "session_owner_binding_refused",
+                        launch_id=launch_id,
+                        pid=pid,
+                    )
 
             managed_result = run_cook_attempt(
                 spec,
@@ -481,8 +485,12 @@ def _run_interactive_session(
                 )
                 try:
                     launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
-                    if launch_id:
-                        bind_session_owner(_project_dir, launch_id, process.pid)
+                    if launch_id and not bind_session_owner(_project_dir, launch_id, process.pid):
+                        logger.warning(
+                            "session_owner_binding_refused",
+                            launch_id=launch_id,
+                            pid=process.pid,
+                        )
                     returncode = process.wait()
                 except BaseException:
                     try:

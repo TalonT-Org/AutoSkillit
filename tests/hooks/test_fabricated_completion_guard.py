@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY, NEW_SUBDIR_BASENAMES
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -139,7 +140,7 @@ def _run_guard(
     if payload:
         hook_payload.update(payload)
     env = {
-        **os.environ,
+        **production_interpreter_env(),
         "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
         **(env_overrides or {}),
     }
@@ -436,7 +437,7 @@ def test_fails_open_without_reading_non_regular_transcript(tmp_path: Path) -> No
         "tool_input": {},
     }
     env = {
-        **os.environ,
+        **production_interpreter_env(),
         "AUTOSKILLIT_HEADLESS": "1",
         "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
     }

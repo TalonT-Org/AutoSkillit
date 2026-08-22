@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/session_start_hook.py"
@@ -22,7 +24,7 @@ def _run(stdin_data: str, env: dict | None = None) -> tuple[int, str]:
         input=stdin_data,
         capture_output=True,
         text=True,
-        env=env,
+        env={**production_interpreter_env(), **(env or {})},
     )
     return result.returncode, result.stdout
 
@@ -127,7 +129,7 @@ def test_session_start_sweeps_stale_markers(tmp_path: Path) -> None:
         input=payload,
         capture_output=True,
         text=True,
-        env={**__import__("os").environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path)},
+        env={**production_interpreter_env(), "AUTOSKILLIT_STATE_DIR": str(tmp_path)},
     )
     assert result.returncode == 0
     assert not stale.exists(), "Stale marker should have been swept"

@@ -51,7 +51,6 @@ class TestProvidersConfig:
             "base_url": None,
             "timeout_seconds": None,
             "api_key_env": None,
-            "context_window": None,
         }
         assert cfg.providers.step_overrides == {}
         assert cfg.providers.recipe_overrides == {}
@@ -227,7 +226,6 @@ class TestProvidersConfigYaml:
             "base_url",
             "timeout_seconds",
             "api_key_env",
-            "context_window",
         }
         assert all(v is None for v in profile.values())
 
@@ -305,7 +303,6 @@ class TestResolvedProfiles:
         assert profile.base_url == "https://api.openai.com"
         assert profile.api_key_env == "OPENAI_API_KEY"
         assert profile.timeout_seconds is None
-        assert profile.context_window is None
         assert profile.raw_env == {}
 
     def test_resolved_profiles_int_coercion_timeout(self) -> None:
@@ -313,12 +310,6 @@ class TestResolvedProfiles:
 
         cfg = ProvidersConfig(profiles={"fast": {"timeout_seconds": "30"}})
         assert cfg.resolved_profiles["fast"].timeout_seconds == 30
-
-    def test_resolved_profiles_int_coercion_context_window(self) -> None:
-        from autoskillit.config.settings import ProvidersConfig
-
-        cfg = ProvidersConfig(profiles={"large": {"context_window": "128000"}})
-        assert cfg.resolved_profiles["large"].context_window == 128000
 
     def test_resolved_profiles_empty_string_numeric_is_none(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
@@ -354,14 +345,13 @@ class TestResolvedProfiles:
         cfg = ProvidersConfig(
             profiles={
                 "fast": {"timeout_seconds": "10", "model": "gpt-4o-mini"},
-                "large": {"context_window": "200000", "model": "gpt-4o"},
+                "large": {"model": "gpt-4o"},
             }
         )
         result = cfg.resolved_profiles
         assert len(result) == 2
         assert result["fast"].timeout_seconds == 10
         assert result["fast"].raw_env == {"model": "gpt-4o-mini"}
-        assert result["large"].context_window == 200000
         assert result["large"].raw_env == {"model": "gpt-4o"}
 
     def test_resolved_profiles_null_sentinel(self) -> None:
@@ -374,7 +364,6 @@ class TestResolvedProfiles:
                     "base_url": None,
                     "timeout_seconds": None,
                     "api_key_env": None,
-                    "context_window": None,
                 }
             }  # type: ignore[arg-type]
         )
@@ -385,7 +374,6 @@ class TestResolvedProfiles:
         assert profile.base_url is None
         assert profile.timeout_seconds is None
         assert profile.api_key_env is None
-        assert profile.context_window is None
         assert profile.raw_env == {}
 
 
@@ -399,14 +387,12 @@ class TestProviderProfileDef:
             base_url="https://api.openai.com",
             timeout_seconds=30,
             api_key_env="OPENAI_API_KEY",
-            context_window=128000,
             raw_env=env,
         )
         assert p.name == "openai"
         assert p.base_url == "https://api.openai.com"
         assert p.timeout_seconds == 30
         assert p.api_key_env == "OPENAI_API_KEY"
-        assert p.context_window == 128000
         assert p.raw_env == {"custom": "val"}
 
     def test_frozen_enforcement(self) -> None:
@@ -423,13 +409,6 @@ class TestProviderProfileDef:
 
         with pytest.raises(ValueError, match="timeout_seconds must be non-negative"):
             ProviderProfileDef(name="x", timeout_seconds=-1)
-
-    @pytest.mark.parametrize("val", [0, -1])
-    def test_context_window_zero_or_negative_raises(self, val: int) -> None:
-        from autoskillit.config._config_dataclasses import ProviderProfileDef
-
-        with pytest.raises(ValueError, match="context_window must be positive"):
-            ProviderProfileDef(name="x", context_window=val)
 
     def test_raw_env_passthrough(self) -> None:
         from autoskillit.config._config_dataclasses import ProviderProfileDef
@@ -483,7 +462,6 @@ class TestProvidersConfigCoercion:
             profiles={
                 "fast": {"timeout_seconds": "10"},
                 "large": {
-                    "context_window": "200000",
                     "base_url": "https://api.example.com",
                 },
             }
@@ -493,7 +471,6 @@ class TestProvidersConfigCoercion:
         assert isinstance(result["fast"], ProviderProfileDef)
         assert isinstance(result["large"], ProviderProfileDef)
         assert result["fast"].timeout_seconds == 10
-        assert result["large"].context_window == 200000
         assert result["large"].base_url == "https://api.example.com"
 
 

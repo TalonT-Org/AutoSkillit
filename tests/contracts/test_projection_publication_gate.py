@@ -541,6 +541,18 @@ class TestStaleGeneratorRefusal:
     def test_deleted_pkg_root_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Backstop coverage, not the primary defense (issue #4597 Phase 3).
+
+        Phase 3's immutable, version-addressed install-root generations plus
+        the self-held lease acquired in ``resolve_install_binding()`` (see
+        ``test_generator_root_cannot_be_deleted_while_referenced`` below) make
+        this branch unreachable via AutoSkillit's own upgrade lifecycle: an
+        AutoSkillit-initiated update never mutates or deletes a root a live
+        process is reading from. This probe — and this test — remain as a
+        backstop for installs outside that lifecycle (a dev/editable checkout
+        has no generation store to lease at all) and for external tampering,
+        which no lease can prevent.
+        """
         import autoskillit.workspace._projected_artifact.authority as _auth
         from autoskillit.workspace._projected_artifact.authority import (
             StaleGeneratorError,
@@ -552,28 +564,37 @@ class TestStaleGeneratorRefusal:
         with pytest.raises(StaleGeneratorError, match="no longer exists"):
             assert_generator_process_fresh()
 
-    def test_version_mismatch_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_version_skew_cannot_be_constructed_under_a_sealed_binding(
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """T-B10: mutating on-disk metadata mid-process cannot desync the seal.
+
+        Before B-3, ``assert_generator_process_fresh()`` re-read
+        ``importlib.metadata.version()`` live on every call and compared it
+        against the frozen in-process ``autoskillit.__version__`` -- exactly
+        the two-different-times read ARCH-012 forbids, and the shape this
+        test used to codify as "raise". After B-3, the freshness probe reads
+        the sealed ``InstallBinding``'s device/inode identity instead of a
+        version string, so a live metadata mutation mid-process has nothing
+        left to disagree with -- the mismatch this test used to construct is
+        now unconstructible.
+        """
         from autoskillit.workspace._projected_artifact.authority import (
-            StaleGeneratorError,
             assert_generator_process_fresh,
         )
 
-        # Use real pkg_root so the directory and dispatcher exist
         monkeypatch.setattr(
             "importlib.metadata.version",
             lambda name: "0.0.0-changed" if name == "autoskillit" else name,
         )
-        # Non-vacuity: the in-process version is NOT the mocked value,
-        # proving the probe reads the filesystem, not an import-time cache.
+        # Non-vacuity: the in-process version is NOT the mocked value, so a
+        # frozen-vs-live comparison (if one still existed) would disagree.
         import autoskillit
 
         assert autoskillit.__version__ != "0.0.0-changed", (
-            "in-process version equals the mock — probe cannot distinguish disk from cache"
+            "in-process version equals the mock — this test proves nothing"
         )
-        with pytest.raises(StaleGeneratorError, match="upgraded under this process"):
-            assert_generator_process_fresh()
+        assert_generator_process_fresh()  # must NOT raise
 
     def test_fresh_generator_passes(self) -> None:
         from autoskillit.workspace._projected_artifact.authority import (
@@ -585,22 +606,76 @@ class TestStaleGeneratorRefusal:
     def test_installed_authority_also_refuses_stale_generator(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """T-B4 case 4: InstalledPluginArtifactAuthority refuses identically."""
+        """T-B4 case 4: InstalledPluginArtifactAuthority refuses identically.
+
+        Phase 1 (issue #4597), A-9 moved the freshness probe inside the
+        generation-dir branch's ``try`` and widened its ``except`` clause to
+        ``InfrastructureFaultError``, so a probe failure no longer propagates
+        directly out of ``acquire_launch_binding`` — it is first routed into
+        ``_self_heal_republish()``. This test now proves the whole new
+        contract instead of the pre-Phase-1 shortcut: self-heal is attempted
+        (not skipped), and when it *also* fails, the original
+        ``StaleGeneratorError`` still propagates.
+
+        Two setup changes from the pre-Phase-1 version were required to even
+        reach that code, not just to accommodate the new outcome:
+
+        - ``generation_dir`` must be non-``None``, or ``acquire_launch_binding``
+          takes the no-generation-store legacy fallback added in this phase,
+          which skips the probe entirely. A real ``current`` selector is
+          planted in the generation store for that reason.
+        - ``load_mode`` must be a real ``PluginLoadMode``, not ``None``: the
+          ``consumes_artifact`` check now runs before generation-dir
+          resolution (it used to run after the unconditional probe), so a
+          ``None`` load_mode would raise ``AttributeError`` before the probe
+          is ever reached.
+
+        ``_self_heal_republish`` is monkeypatched directly to return ``None``
+        (through a call-tracking wrapper) rather than exercising its real,
+        filesystem-driven body against a second patched ``pkg_root`` binding.
+        That body's exact failure mode when ``pkg_root()`` is fake — which
+        internal step first raises — is an implementation detail this test
+        should not couple to. What the contract actually promises, that
+        self-heal is invoked and a failed self-heal does not swallow the
+        original error, is exercised either way.
+        """
         from typing import Any, cast
+        from unittest.mock import Mock
 
         import autoskillit.workspace._projected_artifact.authority as _auth
         from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactAuthority
+        from autoskillit.core import PluginLoadMode, managed_home_for
         from autoskillit.workspace._projected_artifact.authority import StaleGeneratorError
 
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
-        authority = InstalledPluginArtifactAuthority(
-            tmp_path / "fake-root", semantic_key="fake-semantic-key"
+
+        version = "1.2.3"
+        root = tmp_path / "fake-root-parent" / version
+
+        # A current generation must exist, or acquire_launch_binding takes the
+        # no-generation-store legacy fallback, which never runs the probe.
+        gen_version_root = (
+            tmp_path / ".autoskillit" / "plugin-generations" / "autoskillit" / version
         )
+        current_generation = gen_version_root / "current-incarnation"
+        current_generation.mkdir(parents=True)
+        (gen_version_root / "current").symlink_to(current_generation)
+
+        authority = InstalledPluginArtifactAuthority(
+            root,
+            home=managed_home_for(tmp_path),
+            semantic_key="fake-semantic-key",
+        )
+        heal_mock = Mock(return_value=None)
+        monkeypatch.setattr(authority, "_self_heal_republish", heal_mock)
+
         with pytest.raises(StaleGeneratorError, match="no longer exists"):
             authority.acquire_launch_binding(
                 backend=cast(Any, None),
-                load_mode=cast(Any, None),  # will fail before reaching load_mode use
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )
+        heal_mock.assert_called_once_with()
 
 
 class TestClaudeCodeDoesNotDisableRepair:

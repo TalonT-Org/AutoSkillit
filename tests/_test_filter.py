@@ -181,18 +181,48 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     # +workspace: _install_state reads the plugin registry through
     # registered_install_paths() (IL-005 forbids reaching for cli.InstalledPluginsFile).
-    "_plugin_ids": frozenset({"core", "cli", "execution", "hook_registry", "server", "workspace"}),
+    "_plugin_ids": frozenset(
+        {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
+    ),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "_plugin_artifact_identity": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
     ),
-    "_plugin_cache": frozenset({"core", "cli", "fleet", "pipeline", "server", "workspace"}),
+    "_plugin_cache": frozenset(
+        {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
+    ),
+    "_type_persisted_formats": frozenset({"core", "execution", "fleet", "hooks"}),
+    "_type_managed_home": frozenset({"cli", "core", "server", "smoke_utils", "workspace"}),
+    # write_entrypoint_shim() is called from cli/update/_transaction.py's
+    # INSTALL_ROOT_GENERATION_PUBLICATION phase (issue #4597 Phase 3).
+    "_entrypoint_shim": frozenset({"core", "cli"}),
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),
     # +smoke_utils: _cross_interpreter_upgrade resolves the repo root above the
     # installed package via pkg_root() for the live uv upgrade smoke step.
     "paths": frozenset(
+        {
+            "core",
+            "cli",
+            "config",
+            "execution",
+            "fleet",
+            "hook_registry",
+            "migration",
+            "recipe",
+            "report",
+            "server",
+            "smoke_utils",
+            "workspace",
+            "infra/test_generated_file_write_guard.py",
+            "infra/test_generated_files.py",
+        }
+    ),
+    # _install_binding underlies paths.pkg_root() (B-2) and is used directly by
+    # workspace (authority.py's freshness probe) and recipe (_api.py/_api_cache.py's
+    # shared staleness remedy) — same reach as paths itself (#4597 rectify phase 2).
+    "_install_binding": frozenset(
         {
             "core",
             "cli",
@@ -236,6 +266,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_plugin_source": frozenset(
         {"core", "execution", "pipeline", "server", "cli", "workspace", "smoke_utils"}
     ),
+    "_type_retirement_backstops": frozenset({"core", "cli", "workspace"}),
     "kitchen_state": frozenset({"core", "server"}),
     "session_provenance": frozenset({"core", "execution"}),
     "readiness": frozenset({"core", "server"}),

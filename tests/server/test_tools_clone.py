@@ -18,6 +18,7 @@ from autoskillit.server.tools.tools_clone import (
     remove_clone,
 )
 from autoskillit.workspace import clone_registry
+from tests.server._pipeline_test_helpers import _seed_acknowledged_receipt
 from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -144,6 +145,31 @@ class TestRemoveCloneTool:
         tool_ctx.clone_mgr = mock_mgr
         result = json.loads(await remove_clone(clone_path="/bad", keep="false"))
         assert "error" not in result
+
+    @pytest.mark.anyio
+    async def test_remove_clone_refuses_after_infrastructure_fault(self, tool_ctx_kitchen_open):
+        """remove_clone refuses without an override once an infrastructure fault
+        has been acknowledged, and proceeds when an override reason is given."""
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx_kitchen_open.clone_mgr = mock_mgr
+        _seed_acknowledged_receipt(tool_ctx_kitchen_open, fault_domain="infrastructure")
+
+        refused = json.loads(await remove_clone(clone_path="/clone/path", keep="false"))
+        assert refused["success"] is False
+        assert refused["subtype"] == "gate_error"
+        assert "infrastructure" in refused["result"]
+        mock_mgr.remove_clone.assert_not_called()
+
+        proceeded = json.loads(
+            await remove_clone(
+                clone_path="/clone/path",
+                keep="false",
+                infrastructure_fault_override_reason="operator confirmed",
+            )
+        )
+        assert proceeded == {"removed": "true"}
+        mock_mgr.remove_clone.assert_called_once_with("/clone/path", "false")
 
 
 class TestPushToRemoteTool:

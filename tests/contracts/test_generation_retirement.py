@@ -20,6 +20,8 @@ Every test here fails against the pre-fix code.
 
 from __future__ import annotations
 
+import os
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -32,7 +34,9 @@ from autoskillit.core import (
     RetirementOutcome,
     _InstallLock,
     generation_plugin_selector_path,
+    generation_selector_path,
     is_reclaimable_artifact_path,
+    managed_home_for,
     read_retiring_cache,
     resolve_current_generation_for_plugin,
 )
@@ -45,9 +49,10 @@ _PLUGIN_REF = "autoskillit"
 def _publish(home: Path, source_root: Path, version: str) -> PluginArtifactIdentity:
     from autoskillit.workspace import publish_generation
 
-    with _InstallLock():
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
         return publish_generation(
-            home=home,
+            home=managed,
             plugin_ref=_PLUGIN_REF,
             version=version,
             semantic_key=f"autoskillit@autoskillit-local:{version}",
@@ -121,7 +126,10 @@ def test_promotion_refuses_infrastructure_even_when_evidence_says_projection(
     leases.mkdir(parents=True)
     (leases / "somehash.lock").write_text("", encoding="utf-8")
 
-    owner = ProjectedPluginRetirementOwner(projections)
+    owner = ProjectedPluginRetirementOwner(
+        projections,
+        home=managed_home_for(tmp_path),
+    )
     evidence = LegacyRetiringEvidence(
         record_id="deadbeef",
         version="projection:.artifact-leases",
@@ -145,7 +153,10 @@ def test_promotion_drops_bookkeeping_for_already_gone_paths(tmp_path: Path) -> N
 
     projections = tmp_path / "plugin-projections"
     projections.mkdir(parents=True)
-    owner = ProjectedPluginRetirementOwner(projections)
+    owner = ProjectedPluginRetirementOwner(
+        projections,
+        home=managed_home_for(tmp_path),
+    )
     evidence = LegacyRetiringEvidence(
         record_id="cafebabe",
         version="projection:gone",
@@ -222,6 +233,192 @@ def test_every_artifact_kind_has_a_registered_owner(home: Path) -> None:
     coordinator = default_plugin_retirement_coordinator()
 
     assert frozenset(coordinator._owners) == frozenset(PluginArtifactKind)
+
+
+# ---------------------------------------------------------------------------
+# Install-root generations (issue #4597 Phase 3): atomic publish, reclaim safety
+# ---------------------------------------------------------------------------
+
+_INSTALL_ROOT_REF = "autoskillit-install@autoskillit-local"
+
+
+def _publish_install_root(home: Path, version: str) -> PluginArtifactIdentity:
+    from autoskillit.core import (
+        _InstallLock,
+        generation_artifact_root,
+        installed_plugin_semantic_key,
+        new_plugin_artifact_incarnation_id,
+    )
+    from autoskillit.workspace import publish_install_root_generation
+
+    incarnation_id = new_plugin_artifact_incarnation_id()
+    generation_root = generation_artifact_root(home, _INSTALL_ROOT_REF, version, incarnation_id)
+    generation_root.mkdir(parents=True)
+    (generation_root / "marker").write_text(version, encoding="utf-8")
+    with _InstallLock(managed_home_for(home)):
+        return publish_install_root_generation(
+            home=home,
+            install_ref=_INSTALL_ROOT_REF,
+            version=version,
+            semantic_key=installed_plugin_semantic_key(_INSTALL_ROOT_REF, version),
+            incarnation_id=incarnation_id,
+            generation_root=generation_root,
+        )
+
+
+def test_install_root_generation_publish_is_atomic_and_rolls_back(
+    home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-C7: a failed flip leaves the prior selector intact and discards the partial root.
+
+    Mirrors ``publish_generation()``'s own rollback contract
+    (``_generation_publication.py``): the selector flip is the sole commit
+    point, so a failure during or after it must never leave the tree in a
+    state where a partially published generation looks selected, or where
+    the previously selected one stops resolving.
+    """
+    import autoskillit.workspace._projected_artifact._generation_publication as gen_pub
+    from autoskillit.core import resolve_current_generation
+
+    first = _publish_install_root(home, "1.0.0")
+
+    real_replace_symlink = gen_pub._replace_symlink
+    call_count = 0
+
+    def _flaky_replace_symlink(path: Path, target: Path) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise OSError("simulated flip failure")
+        real_replace_symlink(path, target)
+
+    monkeypatch.setattr(gen_pub, "_replace_symlink", _flaky_replace_symlink)
+
+    with pytest.raises(OSError, match="simulated flip failure"):
+        _publish_install_root(home, "1.0.1")
+
+    assert resolve_current_generation(home, _INSTALL_ROOT_REF, "1.0.0") == first.managed_path, (
+        "the prior selector must still resolve after a failed flip"
+    )
+    version_root = home / ".autoskillit" / "plugin-generations" / "autoskillit-install" / "1.0.1"
+    remaining = (
+        [p for p in version_root.iterdir() if not p.is_symlink()] if version_root.is_dir() else []
+    )
+    assert remaining == [], (
+        f"the partially published 1.0.1 generation must be discarded, found: {remaining}"
+    )
+
+
+def test_install_root_selector_is_never_absent_during_flip(home: Path) -> None:
+    """C-1: the selector must never be observably absent at any instant across a flip.
+
+    ``_replace_symlink()`` (``_generation_publication.py``) is temp-link ->
+    ``os.replace`` -> fsync — atomic on POSIX by construction, unlike an
+    ``unlink`` + ``symlink`` pair, which has a real window where the path
+    resolves to nothing. ``tests/infra/test_plugin_source_ratchets.py``
+    already pins that ``_replace_symlink`` calls ``os.replace`` exactly once
+    and never ``unlink`` on the live path — a static guard against the wrong
+    shape being reintroduced. This is the dynamic complement the plan calls
+    for: a reader polling the real selector throughout a live flip must never
+    observe it missing, proving the atomicity empirically rather than only
+    by call-shape inspection.
+    """
+    version = "1.0.0"
+    _publish_install_root(home, version)
+    selector = generation_selector_path(home, _INSTALL_ROOT_REF, version)
+
+    stop = threading.Event()
+    started = threading.Event()
+    final_observed = threading.Event()
+    final_target: str | None = None
+    violations: list[str] = []
+    observed_targets: set[str] = set()
+
+    def _poll_selector() -> None:
+        while not stop.is_set():
+            try:
+                target = os.readlink(selector)
+                observed_targets.add(target)
+                started.set()
+                if target == final_target:
+                    final_observed.set()
+                stop.wait(0.0005)
+            except FileNotFoundError:
+                violations.append("selector missing")
+                break
+            except OSError as exc:
+                violations.append(f"unexpected error reading selector: {exc}")
+                break
+
+    poller = threading.Thread(target=_poll_selector, daemon=True)
+    poller.start()
+    try:
+        assert started.wait(timeout=5), "poller never observed the initial selector"
+        # Republishing the same version repeatedly flips this exact
+        # selector between successive incarnations -- the live mechanism
+        # under test, not a synthetic stand-in for it.
+        for _ in range(30):
+            _publish_install_root(home, version)
+        final_target = os.readlink(selector)
+        assert final_observed.wait(timeout=5), "poller never observed the final selector"
+    finally:
+        stop.set()
+        poller.join(timeout=5)
+
+    assert not poller.is_alive(), "selector poller did not stop"
+    assert violations == [], f"selector was observed absent or broken: {violations[:5]}"
+    assert len(observed_targets) >= 2, "poller never observed a selector transition"
+
+
+def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:
+    """T-C8: a held shared lease defers reclaim regardless of grace or supersession.
+
+    The same gate as ``core/_plugin_cache.py``'s ``try_reclaim`` — exercised
+    here specifically for the ``INSTALL_ROOT_GENERATION`` routing kind, which
+    ``prune_stale_generations``/``GenerationArtifactRetirementOwner`` must
+    honor identically to the plugin-generation kind they were built for.
+    """
+    from autoskillit.core import (
+        due_retiring_records,
+    )
+    from autoskillit.core._plugin_artifact_identity import (
+        installed_plugin_artifact_lease_path,
+    )
+    from autoskillit.core.runtime.artifact_lease import ArtifactLease
+    from autoskillit.workspace import GenerationArtifactRetirementOwner
+
+    old = _publish_install_root(home, "1.0.0")
+    held_lease = ArtifactLease.acquire_existing_shared(
+        installed_plugin_artifact_lease_path(old.managed_path)
+    )
+    try:
+        _publish_install_root(home, "1.0.1")
+
+        owner = GenerationArtifactRetirementOwner(
+            home / ".autoskillit" / "plugin-generations" / "autoskillit-install",
+            home=managed_home_for(home),
+            plugin_ref=_INSTALL_ROOT_REF,
+            artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+        )
+        far_future = datetime.now(UTC) + timedelta(hours=1)
+        enqueued = owner.enqueue_retirement(old, not_before=far_future)
+        assert enqueued.created
+
+        past_due = datetime.now(UTC) + timedelta(hours=2)
+        (record,) = [
+            r for r in due_retiring_records(past_due) if r.record_id == enqueued.record_id
+        ]
+
+        assert owner.try_reclaim(record, past_due) is RetirementOutcome.DEFERRED_CONTENDED
+        assert old.managed_path.is_dir()
+
+        held_lease.close()
+        assert owner.try_reclaim(record, past_due) is RetirementOutcome.RECLAIMED
+        assert not old.managed_path.exists()
+    finally:
+        if not held_lease.closed:
+            held_lease.close()
 
 
 # ---------------------------------------------------------------------------

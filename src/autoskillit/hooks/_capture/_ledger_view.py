@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import stat
 from collections.abc import Callable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from . import _ledger
 from ._module_identity import register_module_aliases
@@ -63,10 +63,22 @@ def _current_record(frame: _ledger.LedgerFrame) -> Record:
     )
 
 
-def _decode_full(data: bytes) -> tuple[Records, int, bool, int | None]:
+@dataclass(frozen=True, slots=True)
+class _DecodedView:
+    records: Records
+    compaction_epoch: int
+    saw_legacy: bool
+    truncate_at: int | None
+    opaque_frames: tuple[bytes, ...]
+    opaque_capture_ids: frozenset[str]
+
+
+def _decode_full(data: bytes) -> _DecodedView:
     decoded = _ledger.decode_ledger(data)
     records: Records = {}
     source_versions: dict[str, int] = {}
+    opaque_frames: list[bytes] = []
+    opaque_capture_ids: set[str] = set()
     compaction_epoch = 1
     saw_legacy = False
     for frame in decoded.frames:
@@ -74,23 +86,45 @@ def _decode_full(data: bytes) -> tuple[Records, int, bool, int | None]:
             raise _ledger.LedgerCodecError("lifecycle compaction epoch regressed")
         compaction_epoch = frame.compaction_epoch
         raw_capture_id = frame.record.get("capture_id")
+        if isinstance(raw_capture_id, str) and raw_capture_id in opaque_capture_ids:
+            opaque_frames.append(frame.exact_bytes)
+            continue
         previous = records.get(raw_capture_id) if isinstance(raw_capture_id, str) else None
-        if frame.format_version == 1:
-            if previous is not None and source_versions[previous.capture_id] != 1:
-                raise _ledger.LedgerCodecError("legacy frame follows current lifecycle state")
-            saw_legacy = True
-            record = _ledger.legacy_record_from_dict(
-                frame.record,
-                revision=1 if previous is None else previous.revision + 1,
-                compaction_epoch=frame.compaction_epoch,
-            )
-        else:
-            record = _current_record(frame)
+        if (
+            frame.format_version == 1
+            and previous is not None
+            and source_versions[previous.capture_id] != 1
+        ):
+            raise _ledger.LedgerCodecError("legacy frame follows current lifecycle state")
+        try:
+            if frame.format_version == 1:
+                record = _ledger.legacy_record_from_dict(
+                    frame.record,
+                    revision=1 if previous is None else previous.revision + 1,
+                    compaction_epoch=frame.compaction_epoch,
+                )
+                saw_legacy = True
+            else:
+                record = _current_record(frame)
+        except _ledger.LedgerCodecError:
+            opaque_frames.append(frame.exact_bytes)
+            if isinstance(raw_capture_id, str):
+                opaque_capture_ids.add(raw_capture_id)
+                records.pop(raw_capture_id, None)
+                source_versions.pop(raw_capture_id, None)
+            continue
         if previous is not None and frame.format_version != 1:
             _ledger.validate_successor(previous, record)
         records[record.capture_id] = record
         source_versions[record.capture_id] = frame.format_version
-    return records, compaction_epoch, saw_legacy, decoded.truncate_at
+    return _DecodedView(
+        records=records,
+        compaction_epoch=compaction_epoch,
+        saw_legacy=saw_legacy,
+        truncate_at=decoded.truncate_at,
+        opaque_frames=tuple(opaque_frames),
+        opaque_capture_ids=frozenset(opaque_capture_ids),
+    )
 
 
 class LedgerView:
@@ -100,6 +134,8 @@ class LedgerView:
         self.records: Records | None = None
         self.incarnation: LedgerIncarnation | None = None
         self.snapshot: LedgerSnapshot | None = None
+        self.opaque_frames: tuple[bytes, ...] = ()
+        self.opaque_capture_ids: frozenset[str] = frozenset()
 
     def install(
         self,
@@ -108,8 +144,12 @@ class LedgerView:
         compaction_epoch: int,
         value: os.stat_result,
         decoded_offset: int,
+        opaque_frames: tuple[bytes, ...],
+        opaque_capture_ids: frozenset[str],
     ) -> tuple[Records, int, int]:
         self.records = records
+        self.opaque_frames = opaque_frames
+        self.opaque_capture_ids = opaque_capture_ids
         self.incarnation = LedgerIncarnation(
             value.st_dev,
             value.st_ino,
@@ -136,6 +176,8 @@ class LedgerView:
             compaction_epoch=compaction_epoch,
             value=value,
             decoded_offset=value.st_size,
+            opaque_frames=self.opaque_frames,
+            opaque_capture_ids=self.opaque_capture_ids,
         )
 
     def note_compaction(
@@ -153,6 +195,8 @@ class LedgerView:
             compaction_epoch=compaction_epoch,
             value=value,
             decoded_offset=value.st_size,
+            opaque_frames=self.opaque_frames,
+            opaque_capture_ids=self.opaque_capture_ids,
         )
 
     def _load_full(
@@ -165,22 +209,31 @@ class LedgerView:
     ) -> tuple[Records, int, int]:
         account_replay(value.st_size)
         source_bytes = _read_range(fd, 0, value.st_size)
-        records, compaction_epoch, saw_legacy, truncate_at = _decode_full(source_bytes)
+        decoded = _decode_full(source_bytes)
         decoded_offset = value.st_size
-        if truncate_at is not None:
-            os.ftruncate(fd, truncate_at)
+        if decoded.truncate_at is not None:
+            os.ftruncate(fd, decoded.truncate_at)
             os.fsync(fd)
-            decoded_offset = truncate_at
+            decoded_offset = decoded.truncate_at
             value = os.fstat(fd)
-            source_bytes = source_bytes[:truncate_at]
-        if saw_legacy:
-            compact_legacy(records, compaction_epoch + 1, source_bytes, value)
+            source_bytes = source_bytes[: decoded.truncate_at]
+        if decoded.saw_legacy:
+            self.opaque_frames = decoded.opaque_frames
+            self.opaque_capture_ids = decoded.opaque_capture_ids
+            compact_legacy(
+                decoded.records,
+                decoded.compaction_epoch + 1,
+                source_bytes,
+                value,
+            )
             raise LegacyCompacted
         return self.install(
-            records=records,
-            compaction_epoch=compaction_epoch,
+            records=decoded.records,
+            compaction_epoch=decoded.compaction_epoch,
             value=value,
             decoded_offset=decoded_offset,
+            opaque_frames=decoded.opaque_frames,
+            opaque_capture_ids=decoded.opaque_capture_ids,
         )
 
     def load(
@@ -241,8 +294,21 @@ class LedgerView:
                 compact_legacy=compact_legacy,
             )
         latest = dict(records)
+        opaque_frames = list(self.opaque_frames)
+        opaque_capture_ids = set(self.opaque_capture_ids)
         for frame in decoded.frames:
-            record = _current_record(frame)
+            raw_capture_id = frame.record.get("capture_id")
+            if isinstance(raw_capture_id, str) and raw_capture_id in opaque_capture_ids:
+                opaque_frames.append(frame.exact_bytes)
+                continue
+            try:
+                record = _current_record(frame)
+            except _ledger.LedgerCodecError:
+                opaque_frames.append(frame.exact_bytes)
+                if isinstance(raw_capture_id, str):
+                    opaque_capture_ids.add(raw_capture_id)
+                    latest.pop(raw_capture_id, None)
+                continue
             previous = latest.get(record.capture_id)
             if previous is not None:
                 _ledger.validate_successor(previous, record)
@@ -258,4 +324,6 @@ class LedgerView:
             compaction_epoch=incarnation.compaction_epoch,
             value=value,
             decoded_offset=decoded_offset,
+            opaque_frames=tuple(opaque_frames),
+            opaque_capture_ids=frozenset(opaque_capture_ids),
         )

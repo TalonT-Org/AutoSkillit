@@ -522,7 +522,19 @@ class TestGroupFDoctor:
             called_with["output_json"] = output_json
 
         monkeypatch.setattr(_doctor_mod, "run_doctor", mock_run_doctor)
-        cli.doctor_cmd(output_json=True)
+        cli.doctor_cmd(output_json=True, repair=False)
+        assert called_with == {"output_json": True}
+
+    def test_doctor_repair_delegates_to_repair_entry_point(self, monkeypatch):
+        import autoskillit.cli.doctor as _doctor_mod
+
+        called_with: dict[str, bool] = {}
+
+        def mock_run_doctor_repairs(*, output_json: bool = False) -> None:
+            called_with["output_json"] = output_json
+
+        monkeypatch.setattr(_doctor_mod, "run_doctor_repairs", mock_run_doctor_repairs)
+        cli.doctor_cmd(output_json=True, repair=True)
         assert called_with == {"output_json": True}
 
     def test_severity_and_doctorresult_in_doctor_module(self):

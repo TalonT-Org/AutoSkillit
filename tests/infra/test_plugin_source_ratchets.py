@@ -298,7 +298,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
     (
         "workspace/_projected_artifact/_generation_publication.py",
-        "publish_generation",
+        "_finalize_generation",
         "selector.unlink",
     ): (
         1,
@@ -319,6 +319,24 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ): (
         1,
         "Removes the manifest and lease sidecars for the exact unpublished generation.",
+    ),
+    (
+        "smoke_utils/_cross_interpreter_upgrade.py",
+        "_assert_overlapping_install_survives",
+        "marker.unlink",
+    ): (
+        1,
+        "Clears a leftover coordination-sentinel file from a prior smoke run before "
+        "reusing the same scratch path; not an artifact of the plugin/generation store.",
+    ),
+    (
+        "smoke_utils/_cross_interpreter_upgrade.py",
+        "_assert_overlapping_install_survives",
+        "release_file.unlink",
+    ): (
+        1,
+        "Clears a leftover coordination-sentinel file from a prior smoke run before "
+        "reusing the same scratch path; not an artifact of the plugin/generation store.",
     ),
     (
         "execution/backends/_codex_explorer_projection.py",
@@ -906,7 +924,7 @@ class TestPluginMutationInventory:
         sidecar_mutations = [
             key
             for key in _scan_plugin_mutations()
-            if "lease" in key[2].lower() or "lock" in key[2].lower()
+            if {"lease", "lock"} & set(key[2].lower().replace(".", "_").split("_"))
         ]
         assert not sidecar_mutations, (
             "Artifact lease sidecars are durable synchronization identities and "

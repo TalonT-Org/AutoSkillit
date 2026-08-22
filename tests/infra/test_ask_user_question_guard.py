@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -11,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -35,7 +36,7 @@ def run_guard(
     else:
         extra.pop("AUTOSKILLIT_HEADLESS", None)
     # Start from a clean env without AUTOSKILLIT_HEADLESS to avoid test-env leakage
-    env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env = {k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"}
     env.update(extra)
     result = subprocess.run(
         [sys.executable, str(hook_path)],

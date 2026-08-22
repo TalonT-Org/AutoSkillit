@@ -10,6 +10,8 @@ from datetime import datetime
 import anyio
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [
     pytest.mark.layer("execution"),
     pytest.mark.medium,
@@ -345,6 +347,7 @@ async def test_proc_monitor_persists_psutil_process_for_cpu_percent():
 
     proc = subprocess.Popen(
         [sys.executable, "-c", "while True: pass"],
+        env=production_interpreter_env(),
     )
     try:
         snaps = []

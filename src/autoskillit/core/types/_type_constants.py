@@ -1,7 +1,4 @@
-"""Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants.
-
-Zero autoskillit imports; sibling imports remain within the IL-0 type package.
-"""
+"""Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants."""
 
 from __future__ import annotations
 
@@ -37,6 +34,7 @@ __all__ = [
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
+    "INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE",
     "ROUTING_AUTHORITY_CLAUSE",
     "ADMIRAL_DISPATCH_SECTIONS",
     "PR_TELEMETRY_SECTIONS",
@@ -347,12 +345,14 @@ class RetiredArtifactShape(NamedTuple):
     - ``"retire_via_engine"`` — enqueue into the retirement engine with
       the standard grace window and per-path lease gating, so a live
       session's inherited shared-lease fd is never invalidated.
+    - ``"preserve"`` — retain a legacy artifact when no reliable liveness
+      signal exists; cleanup requires explicit operator action.
     """
 
     shape: str
     retired_in: str
     reason: str
-    disposition: Literal["delete", "retire_via_engine"] = "delete"
+    disposition: Literal["delete", "retire_via_engine", "preserve"] = "delete"
 
 
 # Artifact key -> the shape that was retired. Keys are ``Path.home()``-relative
@@ -395,6 +395,20 @@ RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingPro
         # dual-store logic collapses onto the generation store (tracked separately)
         # would make verify_install_state() flag a healthy, actively-served store
         # as broken on every machine that has ever run `autoskillit cook`.
+        ".local/share/uv/tools/autoskillit": RetiredArtifactShape(
+            shape="directory",
+            retired_in="0.10.1002",
+            reason=(
+                "Phase 3 replaced the single shared, force-replaced uv tool root "
+                "with immutable version+incarnation-keyed generations under "
+                "~/.autoskillit/plugin-generations/autoskillit-install/. The old "
+                "shared uv tool root is retired but may still be referenced by a "
+                "live process launched before the upgrade — it predates the "
+                "generation store's lease mechanism entirely, so no reliable signal "
+                "can prove that deletion is safe."
+            ),
+            disposition="preserve",
+        ),
     }
 )
 
@@ -563,7 +577,7 @@ class DurableArtifactWriterDef(NamedTuple):
     ``detection``: ``module:qualname`` of the staleness-detection callable;
         required when ``machine_local=True``, enforced by the import-time assertion.
 
-    See ``tests/contracts/test_durable_artifact_relocatability.py`` (T-C2) for
+    See ``tests/contracts/test_durable_artifact_relocatability.py`` for
     per-writer resolvability/relocatability contracts.
     """
 
@@ -590,6 +604,16 @@ def _validate_durable_artifact_writer_defs(
 
 
 DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
+    DurableArtifactWriterDef(
+        writer="autoskillit.core._plugin_cache:repair_corrupt_retiring_cache",
+        artifact=(
+            "immutable retiring_cache.corrupt-<timestamp>.json forensic sidecar; "
+            "the original machine-local bytes are preserved for diagnosis and are "
+            "never consumed as relocated configuration"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
     DurableArtifactWriterDef(
         writer="autoskillit.workspace._projected_artifact.materialization:write_generated_hooks_json",
         artifact=(
@@ -709,9 +733,35 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         machine_local=False,
         detection=None,
     ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.core._entrypoint_shim:write_entrypoint_shim",
+        artifact=(
+            "~/.local/bin/autoskillit exec-time entrypoint shim, replacing uv's own "
+            "generated console-script wrapper — resolves the install-root generation "
+            "selector once per launch, then os.execv()s straight into the resolved "
+            "incarnation's own entrypoint"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer=(
+            "autoskillit.workspace._projected_artifact._generation_publication:"
+            "publish_install_root_generation"
+        ),
+        artifact=(
+            "install-root generation tree under "
+            "~/.autoskillit/plugin-generations/autoskillit-install/ — the uv-tool-"
+            "installed Python package venv (site-packages, console-script shebangs, "
+            "pyvenv.cfg) for one incarnation, finalized from a caller-staged root"
+        ),
+        machine_local=True,
+        detection="autoskillit.core._install_binding:install_binding_matches_current_state",
+    ),
 )
 
 _validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)
+
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(
     {
@@ -823,6 +873,14 @@ SOUS_CHEF_MANDATORY_SECTIONS: tuple[str, ...] = (
     "NARRATION SUPPRESSION",
     "FLEET DISPATCH RESUME DISCIPLINE",
 )
+
+INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE: str = """\
+INFRASTRUCTURE FAULT OVERRIDE — checked BEFORE on_failure, for run_skill only:
+when the result JSON contains "infra_fault_domain": "infrastructure", the
+step's on_failure route MUST NOT be followed. The environment faulted, not the
+work. Halt the pipeline and report the environment fault instead of routing to
+on_failure.
+"""
 
 ROUTING_AUTHORITY_CLAUSE: str = """
 ROUTING AUTHORITY — RECIPE YAML ONLY:

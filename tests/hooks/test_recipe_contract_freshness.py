@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe.contracts import generate_recipe_card
+from tests.conftest import production_interpreter_env
 
 _SCRIPT = (
     Path(__file__).resolve().parent.parent.parent / "scripts" / "recipe_contract_freshness.py"
@@ -53,6 +54,7 @@ steps:
 
     result = subprocess.run(
         [sys.executable, str(_SCRIPT), str(recipe_file)],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
     )
@@ -95,6 +97,7 @@ steps:
 
     result = subprocess.run(
         [sys.executable, str(_SCRIPT), str(recipe_file)],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
     )
@@ -108,6 +111,7 @@ def test_hook_passes_when_no_recipe_args() -> None:
     """Hook should pass when no recipe files are passed (no recipe changes to check)."""
     result = subprocess.run(
         [sys.executable, str(_SCRIPT)],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
     )
@@ -140,6 +144,7 @@ steps:
 
     result = subprocess.run(
         [sys.executable, str(_SCRIPT), str(recipe_file)],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
     )

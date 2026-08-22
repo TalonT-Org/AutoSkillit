@@ -21,6 +21,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     DirectInstall,
     EffectiveSkillCatalogAuthority,
+    ManagedHome,
     PluginArtifactContentionError,
     PluginArtifactIdentity,
     PluginArtifactKind,
@@ -36,11 +37,15 @@ from autoskillit.core import (
     SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceRef,
+    StaleGeneratorError,
     _InstallLock,
     get_logger,
+    install_binding_matches_current_state,
     log_plugin_artifact_lifecycle,
+    managed_home,
     new_plugin_artifact_incarnation_id,
     pkg_root,
+    resolve_install_binding,
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
@@ -88,43 +93,49 @@ __all__ = [
 ]
 
 
-class StaleGeneratorError(Exception):
-    """The generating process's installation is stale or deleted."""
-
-
 def assert_generator_process_fresh() -> None:
     """Verify that the running process's on-disk installation still exists.
 
     Called at the top of :func:`acquire_launch_binding`, this probe refuses a
     deleted or replaced installation with a typed, actionable error.
 
+    Under Phase 3's immutable, version-addressed install roots (issue #4597),
+    an AutoSkillit-initiated upgrade never mutates or deletes a root any live
+    process is reading from — it always publishes a fresh generation instead,
+    and the retirement engine refuses to reclaim a superseded root until both
+    a grace window has elapsed and its lease is uncontended. This probe is
+    therefore not "restart after every upgrade" — that hazard is gone — it is
+    a backstop against a scenario the transaction guarantees not to cause on
+    its own: external tampering (something other than AutoSkillit removed or
+    replaced the tree), disk corruption, or an install shaped by a version
+    older than #4597's immutable-root scheme.
+
     Checks:
     1. ``pkg_root()`` must still be a directory and contain ``hooks/_dispatch.py``.
-    2. The on-disk package version must match the in-process ``autoskillit.__version__``.
+    2. The sealed install root (``InstallBinding``, captured once at this
+       process's first access) must still own its path — verified by
+       ``device``/``inode`` via ``install_binding_matches_current_state()``,
+       never by comparing a live-re-read version string against the frozen
+       in-process one. A version-string comparison reads the same fact at two
+       different times and is exactly the shape ARCH-012 forbids.
     """
-    import importlib.metadata
-
     source = pkg_root()
     dispatcher = source / "hooks" / "_dispatch.py"
     if not source.is_dir() or not dispatcher.is_file():
         raise StaleGeneratorError(
             f"Generator installation deleted: {source} no longer exists or is "
-            f"missing hooks/_dispatch.py.  Restart the orchestrator process."
+            "missing hooks/_dispatch.py. This should not happen under "
+            "AutoSkillit's own immutable install-root lifecycle; if it does, "
+            "the tree was altered outside that lifecycle."
         )
-    try:
-        disk_version = importlib.metadata.version("autoskillit")
-    except importlib.metadata.PackageNotFoundError:
+    binding = resolve_install_binding()
+    if not install_binding_matches_current_state(binding):
         raise StaleGeneratorError(
-            "Generator package metadata missing: 'autoskillit' is no longer "
-            "installed.  Restart the orchestrator process."
-        )
-    import autoskillit
-
-    if disk_version != autoskillit.__version__:
-        raise StaleGeneratorError(
-            f"Generator installation upgraded under this process: "
-            f"on-disk version {disk_version!r} != in-process version "
-            f"{autoskillit.__version__!r}.  Restart the orchestrator process."
+            f"Generator installation replaced under this process: {binding.root} "
+            f"no longer matches the identity sealed at this process's first access "
+            f"(device={binding.device}, inode={binding.inode}). This should not "
+            "happen under AutoSkillit's own immutable install-root lifecycle; if "
+            "it does, the tree was altered outside that lifecycle."
         )
 
 
@@ -324,6 +335,7 @@ class ProjectedPluginArtifactAuthority:
     """Lazy owner of projected plugin publication and per-launch reader leases."""
 
     direct_install: DirectInstall
+    home: ManagedHome
     projection_version: int = SKILL_PROJECTION_VERSION
     base_branch: str | None = None
     catalog: EffectiveSkillCatalogAuthority | None = None
@@ -483,7 +495,7 @@ class ProjectedPluginArtifactAuthority:
             asset_digest=public_plugin_asset_digest(source_root),
             rendered_hooks_digest=hashlib.sha256(rendered_hooks.encode()).hexdigest(),
         ).digest()
-        projections_root = Path.home() / ".autoskillit" / "plugin-projections"
+        projections_root = self.home.autoskillit_dir / "plugin-projections"
         destination = (projections_root / semantic_key).absolute()
         context = _direct_install_projection_context(
             cwd=self.cwd or Path.cwd(),
@@ -564,7 +576,7 @@ class ProjectedPluginArtifactAuthority:
                 f"projected plugin mutation is contended: {plan.semantic_key}"
             ) from exc
         try:
-            with _InstallLock():
+            with _InstallLock(self.home):
                 identity = _try_validate_published_plugin_artifact(plan)
                 if identity is None:
                     plan.destination.parent.mkdir(parents=True, exist_ok=True)
@@ -663,18 +675,27 @@ class ProjectedPluginArtifactAuthority:
             raise
         return self._binding(load_mode, plan, identity, reader)
 
-    @staticmethod
     def _binding(
+        self,
         load_mode: PluginLoadMode,
         plan: _ProjectedArtifactPlan,
         identity: PluginArtifactIdentity,
         reader: ArtifactLease,
     ) -> PluginLaunchBinding:
-        owner = ProjectedPluginRetirementOwner(plan.destination.parent)
+        owner = ProjectedPluginRetirementOwner(
+            plan.destination.parent,
+            home=self.home,
+            active_key=plan.semantic_key,
+        )
         try:
-            owner.cancel_obsolete_retirements(identity)
+            if owner.cancel_obsolete_retirements(identity) is None:
+                logger.warning(
+                    "projected_plugin_launch_queue_unreadable",
+                    operation="cancel_obsolete_retirements",
+                )
             prune_stale_projections(
                 plan.destination.parent,
+                home=self.home,
                 active_key=plan.semantic_key,
             )
         except BaseException as primary_error:
@@ -706,6 +727,7 @@ class ProjectedPluginArtifactAuthority:
 def project_direct_install_authority(
     direct_install: DirectInstall,
     *,
+    home: ManagedHome | None = None,
     projection_version: int = SKILL_PROJECTION_VERSION,
     base_branch: str | None = None,
     catalog: EffectiveSkillCatalogAuthority | None = None,
@@ -714,6 +736,7 @@ def project_direct_install_authority(
 ) -> ProjectedPluginArtifactAuthority:
     return ProjectedPluginArtifactAuthority(
         direct_install=direct_install,
+        home=home if home is not None else managed_home(),
         projection_version=projection_version,
         base_branch=base_branch,
         catalog=catalog,
@@ -724,6 +747,7 @@ def project_direct_install_authority(
 
 def project_default_plugin_authority(
     *,
+    home: ManagedHome | None = None,
     projection_version: int = SKILL_PROJECTION_VERSION,
     base_branch: str | None = None,
     catalog: EffectiveSkillCatalogAuthority | None = None,
@@ -732,6 +756,7 @@ def project_default_plugin_authority(
 ) -> ProjectedPluginArtifactAuthority:
     return project_direct_install_authority(
         DirectInstall(plugin_dir=pkg_root()),
+        home=home if home is not None else managed_home(),
         projection_version=projection_version,
         base_branch=base_branch,
         catalog=catalog,

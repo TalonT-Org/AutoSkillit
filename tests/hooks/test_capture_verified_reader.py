@@ -45,6 +45,7 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureLifecycleStore,
     CaptureReferenceStatus,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -466,6 +467,7 @@ def test_fifo_substitution_is_rejected_without_blocking(tmp_path: Path) -> None:
     try:
         completed = subprocess.run(
             [sys.executable, "-I", "-c", code, str(project), published.token],
+            env=production_interpreter_env(),
             check=False,
             capture_output=True,
             text=True,

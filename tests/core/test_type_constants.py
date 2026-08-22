@@ -5,8 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import operator
+import subprocess
+import sys
 
 import pytest
+
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -397,15 +401,13 @@ def test_fleet_menu_tools_in_type_constants() -> None:
 
 def test_fleet_menu_tools_not_in_fleet_init() -> None:
     """FLEET_MENU_TOOLS must no longer be exported from fleet.__init__."""
-    import subprocess
-    import sys
-
     result = subprocess.run(
         [
             sys.executable,
             "-c",
             "import autoskillit.fleet as f; print(hasattr(f, 'FLEET_MENU_TOOLS'))",
         ],
+        env=production_interpreter_env(),
         capture_output=True,
         text=True,
     )

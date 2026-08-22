@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -32,7 +33,7 @@ _STATUS_COLUMNS = (
 def _compute_exit_code(state: CampaignState) -> int:
     """Compute CLI exit code from dispatch statuses.
 
-    0 = all success/skipped, 1 = any failure, 2 = any in-progress.
+    0 = all success/skipped, 1 = any failure, 2 = unresolved or in-progress.
     """
     from autoskillit.fleet import DispatchStatus  # noqa: PLC0415
 
@@ -48,7 +49,9 @@ def _compute_exit_code(state: CampaignState) -> int:
         {DispatchStatus.RUNNING, DispatchStatus.PENDING, DispatchStatus.RESUMABLE}
     )
     has_failure = any(d.status in _failure for d in state.dispatches)
-    has_in_progress = any(d.status in _in_progress for d in state.dispatches)
+    has_in_progress = bool(state.opaque_dispatches) or any(
+        d.status in _in_progress or d.status == DispatchStatus.UNKNOWN for d in state.dispatches
+    )
     if has_failure:
         return 1
     if has_in_progress:
@@ -114,6 +117,14 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
                 d.dispatched_session_log_dir or "-",
             )
         )
+    for raw in state.opaque_dispatches:
+        name = (
+            str(raw.get("name", "(opaque dispatch)"))
+            if isinstance(raw, Mapping)
+            else "(opaque dispatch)"
+        )
+        status = str(raw.get("status", "unknown")) if isinstance(raw, Mapping) else "unknown"
+        rows.append((name, status, "-", "-", "-", "-", "-", "-"))
     totals = _aggregate_totals(state)
     rows.append(("─" * 6, "", "", "", "", "", "", ""))
     rows.append(
@@ -201,6 +212,10 @@ def _watch_loop(state_path: Path) -> int:
     if state is None:
         sys.stderr.write("ERROR: state file disappeared or corrupted\n")
         return 3
+    if state.opaque_dispatches:
+        _render_status_display(state)
+        print("\nCampaign contains unsupported dispatch state.")
+        return 2
 
     # If campaign already terminal, render once and exit without needing a TTY
     if all(d.status not in _in_progress for d in state.dispatches):
@@ -226,6 +241,10 @@ def _watch_loop(state_path: Path) -> int:
                 sys.stdout.flush()
                 sys.stderr.write("ERROR: state file disappeared or corrupted\n")
                 return 3
+            if state.opaque_dispatches:
+                prev_lines = _render_status_display(state)
+                print("\nCampaign contains unsupported dispatch state.")
+                return 2
 
             if prev_lines > 0:
                 sys.stdout.write(f"\033[{prev_lines}A")

@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import IntEnum, StrEnum
 from pathlib import Path
 from types import MappingProxyType
@@ -18,13 +18,14 @@ from typing import Any, assert_never
 from packaging.version import Version
 
 from autoskillit.cli.install._install_contract import (
+    MAINTENANCE_EXTRAS,
     InstallFailureKind,
     InstallMode,
     InstallOutcome,
     InstallProcessStatus,
     InstallRequest,
     InstallResult,
-    MaintenanceInstallArgv,
+    MaintenanceSubprocessInvocation,
     result_from_process_status,
 )
 from autoskillit.cli.install._install_info import (
@@ -35,16 +36,26 @@ from autoskillit.cli.install._install_info import (
 )
 from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
+    InfrastructureFaultError,
     _installed_plugins_path,
+    _InstallLock,
     build_maintenance_env,
+    generation_artifact_root,
+    generation_staging_root,
     get_logger,
+    installed_plugin_semantic_key,
     is_git_main_checkout,
     is_git_worktree,
+    managed_home_for,
+    new_plugin_artifact_incarnation_id,
+    write_entrypoint_shim,
 )
 from autoskillit.workspace import (
     PublicationObligation,
     clear_obligation,
+    publish_install_root_generation,
     update_obligation_expected_version,
     write_obligation,
 )
@@ -60,15 +71,17 @@ __all__ = [
     "run_update_transaction",
 ]
 
-_MAINTENANCE_EXTRAS = {
-    "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
-    "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-}
 logger = get_logger(__name__)
 
 _ProcessRunner = Callable[..., subprocess.CompletedProcess[Any]]
 _VersionReader = Callable[[str], str]
 _VersionProber = Callable[[InstallInfo, Mapping[str, str], _ProcessRunner], str]
+
+
+def _install_root_entrypoint(root: Path) -> Path:
+    if sys.platform == "win32":
+        return root / "autoskillit" / "Scripts" / "autoskillit.exe"
+    return root / "autoskillit" / "bin" / "autoskillit"
 
 
 class UpdateTransactionPhase(StrEnum):
@@ -82,6 +95,7 @@ class UpdateTransactionPhase(StrEnum):
     UPGRADE_SUBPROCESS_GATE = "upgrade-subprocess-gate"
     IRREVERSIBLE_PIVOT = "irreversible-pivot"
     FRESH_VERSION_METADATA_GATE = "fresh-version-metadata-gate"
+    INSTALL_ROOT_GENERATION_PUBLICATION = "install-root-generation-publication"
     INSTALL_CHILD_INVOCATION = "install-child-invocation"
     INSTALL_STATUS_RECONSTRUCTION = "install-status-reconstruction"
     POST_UPDATE_ARTIFACT_VERIFICATION = "post-update-artifact-verification"
@@ -238,6 +252,8 @@ def _default_fresh_version_prober(
     info: InstallInfo,
     maintenance_env: Mapping[str, str],
     runner: _ProcessRunner,
+    *,
+    cwd: Path,
 ) -> str:
     """Read the post-pivot version from a newly launched CLI process."""
     entrypoint = resolve_autoskillit_entrypoint(
@@ -250,11 +266,15 @@ def _default_fresh_version_prober(
             "post-upgrade version (neither the pre-pivot ambient PATH nor "
             "the maintenance environment's PATH could locate one)."
         )
+    invocation = MaintenanceSubprocessInvocation.for_version_probe(
+        entrypoint, environment=maintenance_env, cwd=cwd
+    )
     result = runner(
-        [str(entrypoint), "--version"],
+        list(invocation.argv),
         check=False,
-        env=maintenance_env,
-        capture_output=True,
+        env=invocation.env,
+        cwd=invocation.cwd,
+        capture_output=invocation.capture_output,
         text=True,
     )
     if result.returncode != 0:
@@ -274,11 +294,12 @@ def _resolve_fresh_version(
     maintenance_env: Mapping[str, str],
     runner: _ProcessRunner,
     fresh_version_prober: _VersionProber | None,
+    cwd: Path,
 ) -> str:
     """Resolve post-pivot version truth through the configured subprocess probe."""
     if fresh_version_prober is not None:
         return fresh_version_prober(info, maintenance_env, runner)
-    return _default_fresh_version_prober(info, maintenance_env, runner)
+    return _default_fresh_version_prober(info, maintenance_env, runner, cwd=cwd)
 
 
 def _map_install_result(
@@ -373,7 +394,13 @@ def run_update_transaction(
 
     progress.enter(UpdateTransactionPhase.SAFETY_CAPABILITY_PREFLIGHT)
     info = detect_install()
-    command = upgrade_command(info)
+    install_root_incarnation_id = new_plugin_artifact_incarnation_id()
+    install_root_staging = (
+        generation_staging_root(resolved_home, _AUTOSKILLIT_INSTALL_ROOT_KEY)
+        / install_root_incarnation_id
+    )
+    install_root_probe_bin = install_root_staging.parent / f".{install_root_staging.name}-bin"
+    command = upgrade_command(info, install_root_destination=install_root_staging)
     if command is None:
         return _upgrade_failure(
             progress,
@@ -393,7 +420,7 @@ def run_update_transaction(
 
     progress.enter(UpdateTransactionPhase.MAINTENANCE_CONTEXT_CONSTRUCTION)
     try:
-        maintenance_env = build_maintenance_env(environment, _MAINTENANCE_EXTRAS)
+        maintenance_env = build_maintenance_env(environment, MAINTENANCE_EXTRAS)
     except (TypeError, ValueError) as exc:
         return _upgrade_failure(
             progress,
@@ -442,11 +469,20 @@ def run_update_transaction(
                     progress,
                     f"Could not record the publication obligation: {exc}",
                 )
+        if command.env:
+            try:
+                install_root_staging.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                return _upgrade_failure(
+                    progress,
+                    f"Could not create the install-root staging directory "
+                    f"{install_root_staging}: {exc}",
+                )
         try:
             upgrade_result = runner(
-                command,
+                list(command.argv),
                 check=False,
-                env=maintenance_env,
+                env={**maintenance_env, **command.env},
                 cwd=working_dir,
             )
         except OSError as exc:
@@ -462,11 +498,24 @@ def run_update_transaction(
         progress.enter(UpdateTransactionPhase.IRREVERSIBLE_PIVOT)
         progress.enter(UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE)
         try:
+            # A retargeted install landed at install_root_staging, not at any
+            # path the ambient PATH or the pre-pivot entrypoint resolves to —
+            # probe that binary directly rather than the default ambient
+            # resolution _default_fresh_version_prober would otherwise use.
+            probe_info = (
+                replace(
+                    info,
+                    entrypoint=_install_root_entrypoint(install_root_staging),
+                )
+                if command.env
+                else info
+            )
             expected_version = _resolve_fresh_version(
-                info=info,
+                info=probe_info,
                 maintenance_env=maintenance_env,
                 runner=runner,
                 fresh_version_prober=fresh_version_prober,
+                cwd=working_dir,
             )
             if Version(expected_version) <= Version(current_version):
                 return _upgrade_failure(
@@ -480,6 +529,83 @@ def run_update_transaction(
                 progress,
                 f"Could not verify post-upgrade autoskillit metadata: {exc}",
             )
+
+        progress.enter(UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION)
+        if command.env:
+            # Only the retargeted GIT_VCS dev track staged content via
+            # UV_TOOL_DIR — the STABLE/LOCAL_EDITABLE branches upgraded the
+            # shared uv-managed root in place and have nothing to finalize.
+            #
+            # install_root_staging is a disposable probe copy, not the
+            # published artifact: uv/venv console scripts bake an absolute
+            # shebang path at creation time, so a tree once written cannot be
+            # relocated afterward. The install above ran only to learn
+            # expected_version. A second, near-free install (uv's local
+            # cache makes a repeat install of the same resolved commit a
+            # cache hit — verified by spike) writes the real, permanent copy
+            # directly at its final version+incarnation-keyed path.
+            generation_root = generation_artifact_root(
+                resolved_home,
+                _AUTOSKILLIT_INSTALL_ROOT_KEY,
+                expected_version,
+                install_root_incarnation_id,
+            )
+            try:
+                generation_root.parent.mkdir(parents=True, exist_ok=True)
+                final_bin_dir = generation_root.parent / f".{generation_root.name}-bin"
+                try:
+                    final_result = runner(
+                        list(command.argv),
+                        check=False,
+                        env={
+                            **maintenance_env,
+                            "UV_TOOL_DIR": str(generation_root),
+                            "UV_TOOL_BIN_DIR": str(final_bin_dir),
+                        },
+                        cwd=working_dir,
+                    )
+                finally:
+                    shutil.rmtree(final_bin_dir, ignore_errors=True)
+            except OSError as exc:
+                return _upgrade_failure(
+                    progress,
+                    f"Could not start the install-root generation install at "
+                    f"{generation_root}: {exc}",
+                )
+            if final_result.returncode != 0:
+                return _upgrade_failure(
+                    progress,
+                    _process_finding("install-root generation install", final_result.returncode),
+                )
+            try:
+                with _InstallLock(managed_home_for(resolved_home)):
+                    publish_install_root_generation(
+                        home=resolved_home,
+                        install_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
+                        version=expected_version,
+                        semantic_key=installed_plugin_semantic_key(
+                            _AUTOSKILLIT_INSTALL_ROOT_KEY,
+                            expected_version,
+                        ),
+                        incarnation_id=install_root_incarnation_id,
+                        generation_root=generation_root,
+                    )
+            except InfrastructureFaultError:
+                raise
+            except Exception as exc:
+                _report_post_pivot_failure("update_install_root_generation_publish_failed")
+                return _upgrade_failure(
+                    progress,
+                    f"Could not publish the install-root generation: {exc}",
+                )
+            try:
+                write_entrypoint_shim(resolved_home)
+            except Exception as exc:
+                _report_post_pivot_failure("update_entrypoint_shim_write_failed")
+                return _upgrade_failure(
+                    progress,
+                    f"Could not write the entrypoint shim: {exc}",
+                )
 
         if require_registered_plugin:
             # Post-pivot journal touch; update_obligation_expected_version()
@@ -500,17 +626,21 @@ def run_update_transaction(
             require_registered_plugin=request.require_registered_plugin,
             expected_version=expected_version,
         )
-        install_command = MaintenanceInstallArgv(
-            entrypoint=Path("autoskillit"),
-            expected_version=expected_version,
-        ).to_argv(require_registered_plugin=require_registered_plugin)
+        install_invocation = MaintenanceSubprocessInvocation.for_install(
+            Path("autoskillit"),
+            expected_version,
+            environment=maintenance_env,
+            cwd=working_dir,
+            require_registered_plugin=require_registered_plugin,
+        )
         progress.enter(UpdateTransactionPhase.INSTALL_CHILD_INVOCATION)
         try:
             install_process = runner(
-                install_command,
+                list(install_invocation.argv),
                 check=False,
-                env=maintenance_env,
-                cwd=working_dir,
+                env=install_invocation.env,
+                cwd=install_invocation.cwd,
+                capture_output=install_invocation.capture_output,
             )
         except OSError as exc:
             _report_post_pivot_failure("update_install_child_launch_failed")
@@ -556,7 +686,6 @@ def run_update_transaction(
         try:
             from autoskillit.core import (
                 installed_plugin_artifact_manifest_path,
-                installed_plugin_semantic_key,
                 read_installed_plugin_artifact_identity,
                 resolve_current_generation,
             )
@@ -624,3 +753,6 @@ def run_update_transaction(
         )
     finally:
         shutil.rmtree(working_dir, ignore_errors=True)
+        # A leftover here means the disposable probe failed before cleanup.
+        shutil.rmtree(install_root_staging, ignore_errors=True)
+        shutil.rmtree(install_root_probe_bin, ignore_errors=True)

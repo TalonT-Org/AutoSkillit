@@ -79,10 +79,13 @@ _ALWAYS_BLOCKING_STATUSES = frozenset(
     {
         DispatchStatus.INTERRUPTED,
         DispatchStatus.REFUSED,
+        DispatchStatus.UNKNOWN,
     }
 )
 
-_RETRIABLE_NON_SUCCESS = _ALWAYS_BLOCKING_STATUSES | frozenset({DispatchStatus.FAILURE})
+_RETRIABLE_NON_SUCCESS = frozenset(
+    {DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED, DispatchStatus.REFUSED}
+)
 
 
 _RESUMABLE_RETRY_REASONS: frozenset[str] = frozenset(
@@ -149,6 +152,15 @@ def prepare_resume(
     state = read_state(state_path)
     if state is None:
         return None
+    if state.opaque_dispatches:
+        return ResumePreflight(
+            prior_session_chain=[],
+            prior_dispatched_session_id="",
+            short_circuit=None,
+            reset_performed=False,
+            halt=True,
+            halted_reason="Campaign halted: persisted dispatch status is unsupported",
+        )
 
     target: DispatchRecord | None = None
     for d in state.dispatches:
@@ -168,6 +180,18 @@ def prepare_resume(
 
     prior_session_chain = list(target.session_chain)
     prior_dispatched_session_id = target.dispatched_session_id
+
+    if target.status == DispatchStatus.UNKNOWN:
+        return ResumePreflight(
+            prior_session_chain=prior_session_chain,
+            prior_dispatched_session_id=prior_dispatched_session_id,
+            short_circuit=None,
+            reset_performed=False,
+            halt=True,
+            halted_reason=(
+                f"Campaign halted: prior dispatch {dispatch_name!r} has an unsupported status"
+            ),
+        )
 
     # Case 1: SUCCESS — short-circuit the resume (caller can reuse prior result).
     if target.status == DispatchStatus.SUCCESS:
@@ -245,8 +269,8 @@ def has_failed_dispatch(state_path: Path) -> bool:
 def has_blocking_dispatch(state_path: Path) -> bool:
     """Check whether any dispatch should block further campaign dispatches.
 
-    INTERRUPTED and REFUSED dispatches always block (they are retriable but not
-    terminal). FAILURE blocks only when it is a logic failure (not infrastructure).
+    INTERRUPTED, REFUSED, and unsupported dispatches always block. FAILURE blocks
+    only when it is a logic failure (not infrastructure).
 
     Returns False when the file is missing or corrupted (fail-open).
     """
@@ -257,6 +281,8 @@ def has_blocking_dispatch(state_path: Path) -> bool:
     state = read_state(state_path)
     if state is None:
         return False
+    if state.opaque_dispatches:
+        return True
     for d in state.dispatches:
         if d.status in _ALWAYS_BLOCKING_STATUSES:
             return True
@@ -412,9 +438,9 @@ def resume_campaign_from_state(
     """
     from autoskillit.fleet.state import (  # noqa: PLC0415
         CampaignStateMutator,
-        _clear_dispatch_for_retry,
         read_state,
     )
+    from autoskillit.fleet.state_types import _clear_dispatch_for_retry  # noqa: PLC0415
 
     # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
     # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the
@@ -426,6 +452,13 @@ def resume_campaign_from_state(
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             return None
+        if m.state.opaque_dispatches or any(
+            d.status == DispatchStatus.UNKNOWN for d in m.state.dispatches
+        ):
+            return ResumeDecision(
+                next_dispatch_name="",
+                completed_dispatches_block=FLEET_HALTED_SENTINEL,
+            )
         for d in m.state.dispatches:
             if d.status == DispatchStatus.RUNNING:
                 resolve_stale_running(d, m, reason="stale_running_on_resume")

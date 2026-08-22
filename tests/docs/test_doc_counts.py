@@ -217,15 +217,15 @@ def _quota_thresholds_default() -> tuple[float, float]:
 
 
 def _count_doctor_checks() -> int:
-    """Count doctor checks inside ``run_doctor``: numbered + lettered sub-checks (4b, 7b).
+    """Count doctor checks inside ``_collect_doctor_results``.
 
     Helper functions earlier in the module use the same ``# Check N:`` comment
     style for their internal sub-steps; we restrict the count to the body of
-    ``run_doctor`` so those comments do not double-count.
+    the diagnostic collector so those comments do not double-count.
     """
     text = _read(SRC_DIR / "cli" / "doctor" / "__init__.py")
-    body = re.search(r"def run_doctor\(.*?\n((?:    .*\n|\n)+)", text, re.DOTALL)
-    assert body, "run_doctor not found in cli/doctor/__init__.py"
+    body = re.search(r"def _collect_doctor_results\(.*?\n((?:    .*\n|\n)+)", text, re.DOTALL)
+    assert body, "_collect_doctor_results not found in cli/doctor/__init__.py"
     body_text = body.group(1)
     numbered = len(re.findall(r"# Check \d+:", body_text))
     lettered = len(re.findall(r"# Check \d+[a-z]:", body_text))

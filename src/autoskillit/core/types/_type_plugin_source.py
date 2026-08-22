@@ -20,8 +20,10 @@ __all__ = [
     "PluginArtifactIdentity",
     "PluginLaunchBinding",
     "PluginLoadMode",
+    "QuarantinedRetiringRecord",
     "RetiringAppendResult",
     "RetiringArtifactRecord",
+    "RetiringCacheRepairResult",
     "RetiringCacheReadResult",
     "RetiringCacheState",
     "RetirementOutcome",
@@ -64,18 +66,23 @@ class PluginArtifactKind(StrEnum):
     ``PLUGIN_GENERATION`` routes the generation store
     (``~/.autoskillit/plugin-generations/``) to its own retirement owner.
     ``INSTALLED_PLUGIN`` remains bound to the legacy Claude-cache tree, which
-    ``reconcile_install_artifacts()`` still enqueues. The two roots are
-    disjoint, so one owner cannot serve both: a record routed to an owner whose
-    ``managed_root`` does not contain it is rejected on every sweep forever.
+    ``reconcile_install_artifacts()`` still enqueues. ``INSTALL_ROOT_GENERATION``
+    routes AutoSkillit's own Python-package install-root generation store — a
+    disjoint tree under the same generation-store mechanism, keyed by
+    ``_AUTOSKILLIT_INSTALL_ROOT_KEY`` instead of the plugin's ref. All roots
+    are disjoint, so one owner cannot serve two kinds: a record routed to an
+    owner whose ``managed_root`` does not contain it is rejected on every
+    sweep forever.
 
     This is a routing key for the retirement queue only. The on-disk manifest's
-    own ``artifact_kind`` stays ``INSTALLED_PLUGIN`` for both trees, since they
-    share one manifest format.
+    own ``artifact_kind`` stays ``INSTALLED_PLUGIN`` for all three trees, since
+    they share one manifest format.
     """
 
     PROJECTION = "projection"
     INSTALLED_PLUGIN = "installed_plugin"
     PLUGIN_GENERATION = "plugin_generation"
+    INSTALL_ROOT_GENERATION = "install_root_generation"
 
 
 class RetiringCacheState(StrEnum):
@@ -264,14 +271,46 @@ class LegacyRetiringEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class QuarantinedRetiringRecord:
+    """One on-disk queue entry this reader cannot interpret, preserved verbatim.
+
+    Written back unchanged on every mutation so an older AutoSkillit never
+    deletes a newer writer's queued records. Carries no deletion authority:
+    it is never routed to an owner and never reclaimed.
+    """
+
+    raw_json: str
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not self.raw_json:
+            raise ValueError("quarantined retiring record must carry its raw JSON")
+        if not self.reason:
+            raise ValueError("quarantined retiring record requires a reason")
+
+
+@dataclass(frozen=True, slots=True)
 class RetiringCacheReadResult:
     """Typed retirement-cache read that never collapses unsafe states to empty."""
 
     state: RetiringCacheState
     records: tuple[RetiringArtifactRecord, ...] = ()
     legacy_evidence: tuple[LegacyRetiringEvidence, ...] = ()
+    quarantined_records: tuple[QuarantinedRetiringRecord, ...] = ()
+    quarantined_legacy_evidence: tuple[QuarantinedRetiringRecord, ...] = ()
     schema_version: int | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RetiringCacheRepairResult:
+    """Outcome of the opt-in corrupt retirement-cache repair action."""
+
+    repaired: bool
+    state: RetiringCacheState
+    salvaged: int = 0
+    quarantined: int = 0
+    sidecar: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,6 +12,7 @@ from autoskillit.cli.prompts._prompts import (
     _read_full_sous_chef,
 )
 from autoskillit.core import (
+    INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE,
     QUOTA_GUARD_DENY_TRIGGER,
     QUOTA_POST_WARNING_TRIGGER,
     ROUTING_AUTHORITY_CLAUSE,
@@ -156,6 +157,12 @@ ROUTING RULES — MANDATORY:
   access that the orchestrator does not.
 - Your ONLY job is to route to the correct next step and pass the
   required arguments. The downstream skill does the actual work.
+{INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE}
+This includes a replaced package install, a contended plugin artifact, or a
+transiently unavailable filesystem read. The client should not retry until the
+system state has been explicitly fixed. Do not release claims or remove clones
+on this result without explicit operator confirmation — those tools refuse by
+default after an infrastructure fault.
 
 FAILURE PREDICATES — when to follow on_failure:
 - test_check: "passed: False" in output

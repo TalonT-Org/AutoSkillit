@@ -67,6 +67,11 @@ projects need.
 
     autoskillit doctor
 
+`doctor` is read-only by default. `autoskillit doctor --repair` is the only doctor
+invocation that writes; it can rebuild a corrupt retirement cache after preserving
+the original bytes in a timestamped sidecar. It never rewrites a newer unsupported
+cache schema.
+
 Doctor runs 46 ungated checks: 37 numbered checks (1–23, excluding 5,
 and 30–44) plus 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`,
 `7b`, `7c`, `17b`, `31b`). Enabling the fleet feature adds checks 24–29,
@@ -154,7 +159,15 @@ Then re-run `autoskillit install`.
 
 The shared `install_state_consistency` diagnostic names the exact artifact or
 invariant whose installed state disagrees with the registry, a retired shape, or
-the running package version. Rebuild and reconcile the install, then verify it:
+the running package version. Follow the command in the finding. For a corrupt
+retirement cache, preserve and rebuild it with:
+
+    autoskillit doctor --repair
+    autoskillit doctor
+
+For a future retirement-cache schema, upgrade AutoSkillit or move the cache aside;
+this version will not rewrite data it cannot understand. Other install-artifact
+findings can be reconciled with:
 
     autoskillit install
     autoskillit doctor

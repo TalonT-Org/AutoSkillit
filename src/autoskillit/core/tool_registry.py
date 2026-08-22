@@ -406,7 +406,11 @@ _TOOL_DEFS = (
         ("source_dir", "run_name", "branch", "strategy", "remote_url", "step_name"),
         required=("source_dir", "run_name"),
     ),
-    _tool("remove_clone", ("clone_path", "keep", "step_name"), required=("clone_path",)),
+    _tool(
+        "remove_clone",
+        ("clone_path", "keep", "step_name", "infrastructure_fault_override_reason"),
+        required=("clone_path",),
+    ),
     _tool(
         "push_to_remote",
         ("clone_path", "branch", "source_dir", "remote_url", "force", "step_name"),
@@ -658,6 +662,7 @@ _TOOL_DEFS = (
             "fail_label",
             "close_issue",
             "step_name",
+            "infrastructure_fault_override_reason",
         ),
         required=("issue_url",),
         recovery_recipe_delivery=True,

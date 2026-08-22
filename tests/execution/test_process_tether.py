@@ -36,6 +36,7 @@ from autoskillit.execution.process._process_tether import (
     TetherRecord,
     write_tether,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [
     pytest.mark.layer("execution"),
@@ -194,6 +195,7 @@ class TestSweepReapsChildOfDeadSpawner:
         )
         intermediate = subprocess.Popen(
             [sys.executable, "-c", script],
+            env=production_interpreter_env(),
             stdout=subprocess.PIPE,
             text=True,
         )

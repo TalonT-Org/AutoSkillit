@@ -197,7 +197,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 11 entries ──────────────────────────────────────────────────
+# ── RULES tuple — 12 entries ──────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -398,6 +398,32 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-011",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-012",
+        name="no-frozen-vs-live-version-compare",
+        lens="error-resilience",
+        description=(
+            "A frozen version reference (autoskillit.__version__, "
+            "AUTOSKILLIT_INSTALLED_VERSION) must not be compared against a live "
+            "importlib.metadata.version() read."
+        ),
+        rationale=(
+            "Reading the same fact (the installed package version) at two different "
+            "times and asserting the readings agree is a TOCTOU-prone identity check: "
+            "an upgrade landing between the two reads reports 'stale' even when nothing "
+            "the process actually depends on has moved, and reports 'fresh' when it has "
+            "if the reads race the other way. Issue #4597's stale-generator crash was "
+            "exactly this shape (frozen autoskillit.__version__ vs. a live "
+            "importlib.metadata.version('autoskillit') call). The sealed InstallBinding "
+            "(core.InstallBinding.matches_current_state()) replaces it with a single "
+            "device/inode identity check against the path sealed at process start — "
+            "the error-resilience lens forbids reintroducing the two-reads shape it "
+            "closed."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-014",
     ),
 )
 

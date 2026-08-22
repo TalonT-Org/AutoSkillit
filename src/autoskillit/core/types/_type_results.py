@@ -19,7 +19,7 @@ from typing import Any, Generic, Literal, TypedDict, TypeVar
 from ..closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle import AuditVerdict
-from ._type_enums import KillReason, RetryReason, SessionOutcome
+from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
 from ._type_execution_identity import ChildExecutionIdentityDict, ExecutionIdentity
 
 T = TypeVar("T")
@@ -455,6 +455,11 @@ class InfraOutcome:
     """Surfaces ``SubprocessResult.cleanup_evidence`` for retry orchestration.
     See ``_should_flag_cleanup_incomplete`` in execution.headless._headless_result
     for the canonical contract."""
+    fault_domain: FaultDomain = FaultDomain.LOGIC
+    """Populated from exception type at the classifying catch site, never from
+    ``exit_category`` (post-launch text analysis) — the two are not cross-populated.
+    An ``infrastructure_fault`` result has ``exit_category=""``; an existing
+    rate-limited/API-error result keeps the default ``fault_domain=LOGIC``."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -611,6 +616,7 @@ class SkillResult:
             "provider_used": self.provider.provider_used,
             "infra_exit_category": self.infra.exit_category,
             "infra_cleanup_incomplete": self.infra.cleanup_incomplete,
+            "infra_fault_domain": self.infra.fault_domain.value,
             "api_retry_count": self.api_retry.count,
             "api_retry_last_error": self.api_retry.last_error,
             "api_retry_last_status": self.api_retry.last_status,
@@ -723,6 +729,41 @@ class SkillResult:
             kill_reason=KillReason.EXCEPTION,
             order_id=order_id,
             evidence=WriteEvidence.none_observed(),
+        )
+
+    @classmethod
+    def infrastructure_fault(
+        cls,
+        exception: Exception,
+        skill_command: str = "",
+        session_id: str = "",
+        order_id: str = "",
+    ) -> SkillResult:
+        """Construct a SkillResult for a fault that is a property of the environment.
+
+        Sibling to ``crashed()``/``cancelled()``, for exceptions deriving from
+        ``InfrastructureFaultError``. ``needs_retry=False`` deliberately: the
+        environment is still broken, so retrying in-process cannot help. The
+        result is distinguished from a logic crash by ``fault_domain``, not by
+        retry semantics.
+        """
+        _result = f"{type(exception).__name__}: {exception}"
+        if skill_command:
+            _result += f" | skill_command={skill_command!r}"
+        return cls(
+            success=False,
+            result=_result,
+            session_id=session_id,
+            subtype="infrastructure_fault",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+            kill_reason=KillReason.EXCEPTION,
+            order_id=order_id,
+            evidence=WriteEvidence.none_observed(),
+            infra=InfraOutcome(fault_domain=FaultDomain.INFRASTRUCTURE),
         )
 
     @property

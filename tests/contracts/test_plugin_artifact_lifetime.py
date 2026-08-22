@@ -19,6 +19,7 @@ from autoskillit.core import (
     PluginLoadMode,
     RetirementOutcome,
     is_canonical_plugin_artifact_incarnation_id,
+    managed_home,
     new_plugin_artifact_incarnation_id,
     read_retiring_cache,
 )
@@ -513,7 +514,10 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     )
     identity = binding.identity
     binding.close()
-    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent)
+    owner = ProjectedPluginRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC)
     append_result = owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
@@ -552,7 +556,10 @@ def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
 
     from autoskillit.workspace import ProjectedPluginRetirementOwner
 
-    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent)
+    owner = ProjectedPluginRetirementOwner(
+        identity.managed_path.parent,
+        home=managed_home(),
+    )
     deadline = datetime.now(UTC)
     owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
@@ -597,7 +604,14 @@ def test_projection_prune_preserves_validation_skip_when_writer_close_fails(
 
     monkeypatch.setattr(ArtifactLease, "close", fail_after_close)
 
-    assert prune_stale_projections(projections_root, active_key="active") == 0
+    assert (
+        prune_stale_projections(
+            projections_root,
+            home=managed_home(),
+            active_key="active",
+        )
+        == 0
+    )
     assert close_calls == 1
     monkeypatch.setattr(ArtifactLease, "close", real_close)
     with ArtifactLease.acquire_exclusive(

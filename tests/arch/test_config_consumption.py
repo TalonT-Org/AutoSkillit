@@ -41,8 +41,7 @@ class ForwardDeclaredField:
 
 _STALENESS_THRESHOLD_DAYS = 180
 
-_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
-}
+_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {}
 
 
 def _config_dataclasses() -> list[type]:

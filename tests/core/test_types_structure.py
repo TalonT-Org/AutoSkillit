@@ -45,6 +45,7 @@ _PRE_SPLIT_ENUM_NAMES: frozenset[str] = frozenset(
         "IssueLabelState",
         "DispatchGateType",
         "ClaudeContentBlockType",
+        "FaultDomain",
         "InfraExitCategory",
         "BackendEventKind",
         "CodexEventType",
@@ -118,6 +119,7 @@ _PRE_SPLIT_CONSTANT_NAMES: frozenset[str] = frozenset(
         "SESSION_ADD_DIR_SUBDIR",
         "RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE",
         "RECIPE_EXECUTION_INACTIVE_MESSAGE",
+        "INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE",
     }
 )
 

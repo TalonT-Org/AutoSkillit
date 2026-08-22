@@ -84,6 +84,7 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
                 return
             diagnostics.extend(chunk)
             del diagnostics[:-8192]
+            accumulated = bytes(diagnostics).lower()
             if b"\x1b[6n" in chunk:
                 os.write(master_fd, b"\x1b[1;1R")
             if b"\x1b]10;?\x1b\\" in chunk:
@@ -94,12 +95,16 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
                 responded.add("theme")
                 os.write(master_fd, b"\r")
             if (
-                b"trust" in chunk
-                and (b"folder" in chunk or b"directory" in chunk)
+                b"trust" in accumulated
+                and (b"folder" in accumulated or b"directory" in accumulated)
+                and (
+                    b"press enter" in accumulated
+                    or (b"enter" in accumulated and b"confirm" in accumulated)
+                )
                 and "trust" not in responded
             ):
                 responded.add("trust")
-                os.write(master_fd, b"\r")
+                os.write(master_fd, b"\r\r")
             if b"Hooks need review" in chunk and "hooks" not in responded:
                 responded.add("hooks")
                 os.write(master_fd, b"\x1b[B\x1b[B\r")
@@ -212,6 +217,8 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
         codex_home = client_home / ".codex"
         config_path = codex_home / "config.toml"
         ensure_codex_mcp_registered(config_path=config_path)
+        with config_path.open("a", encoding="utf-8") as config:
+            config.write(f'\n[projects.{json.dumps(str(project))}]\ntrust_level = "trusted"\n')
         for name in ("auth.json", "installation_id"):
             source = source_home / ".codex" / name
             if source.exists():

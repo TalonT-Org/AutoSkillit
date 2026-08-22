@@ -23,6 +23,7 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillProjectionContextAuthority,
     SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSource,
     ValidatedAddDir,
@@ -34,6 +35,7 @@ from autoskillit.workspace import (
     CompiledSessionSkillCatalog,
     EffectiveSkillCatalog,
     SkillCatalogEntry,
+    SkillUnavailableMetadata,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.contracts._skill_admission_ledger import (
@@ -45,7 +47,11 @@ from tests.fakes import adapt_test_skill_semantics
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
-def _make_mock_backend_class():
+def _make_mock_backend_class(
+    *,
+    supports_tool_list_changed: bool = True,
+    system_prompts: list[str | None] | None = None,
+):
     captured = []
 
     class _MockBackend:
@@ -57,7 +63,7 @@ def _make_mock_backend_class():
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
-            supports_tool_list_changed=True,
+            supports_tool_list_changed=supports_tool_list_changed,
             cook_exact_binding_probe_required=False,
             skill_injection_capable=False,
             plugin_install_capable=True,
@@ -72,6 +78,8 @@ def _make_mock_backend_class():
 
         def build_interactive_cmd(self, **kwargs):
             captured.append(kwargs.get("env_extras", {}))
+            if system_prompts is not None:
+                system_prompts.append(kwargs.get("system_prompt"))
             return CmdSpec(cmd=("claude",), env={})
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
@@ -94,8 +102,20 @@ def _mock_mgr():
     return MagicMock()
 
 
-def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
-    mock_backend_cls, captured = _make_mock_backend_class()
+def _run_cook(
+    profile,
+    cfg,
+    mock_mgr,
+    generated_home: Path,
+    *,
+    supports_tool_list_changed: bool = True,
+    system_prompts: list[str | None] | None = None,
+    reload_sentinels: tuple[str | None, ...] | None = None,
+):
+    mock_backend_cls, captured = _make_mock_backend_class(
+        supports_tool_list_changed=supports_tool_list_changed,
+        system_prompts=system_prompts,
+    )
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
 
@@ -127,6 +147,7 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
         patch(
             "autoskillit.cli.session._session_reload.consume_reload_sentinel",
             return_value=None,
+            side_effect=reload_sentinels,
         ),
         patch("autoskillit.cli.session._session_onboarding.is_first_run", return_value=False),
         patch("autoskillit.core.write_registry_entry"),
@@ -139,6 +160,17 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
     ):
         cook_module.cook(profile=profile, backend=mock_backend_cls())
     return captured
+
+
+def _refusal_compilation(
+    catalog: EffectiveSkillCatalog,
+    *unavailable: SkillUnavailableMetadata,
+) -> CompiledSessionSkillCatalog:
+    return CompiledSessionSkillCatalog(
+        backend="limited",
+        catalog=catalog,
+        unavailable=unavailable,
+    )
 
 
 def test_cook_skips_repository_profile_resolution_for_ordinary_catalog(
@@ -225,6 +257,90 @@ def test_profile_none_does_not_inject_provider_env(_mock_mgr, tmp_path: Path):
     assert len(captured) >= 1, "build_interactive_cmd was not called"
     env = captured[0]
     assert "AUTOSKILLIT_PROVIDER_PROFILE" not in env
+
+
+def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
+    _mock_mgr: MagicMock,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cfg = MagicMock()
+    cfg.experimental_enabled = True
+    cfg.providers.profiles = {}
+    system_prompts: list[str | None] = []
+    refusals = (
+        SkillUnavailableMetadata(
+            skill="zeta",
+            backend="limited",
+            operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic="fixed join unavailable",
+        ),
+        SkillUnavailableMetadata(
+            skill="alpha",
+            backend="limited",
+            operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic="fixed join unavailable",
+        ),
+    )
+
+    with patch(
+        "autoskillit.workspace.compile_session_skill_catalog",
+        side_effect=lambda catalog, _backend: _refusal_compilation(catalog, *refusals),
+    ):
+        _run_cook(
+            None,
+            cfg,
+            _mock_mgr,
+            tmp_path / "generated-home",
+            system_prompts=system_prompts,
+        )
+
+    assert system_prompts == [None]
+    assert (
+        "2 skills unavailable on this backend "
+        "(required_join: fixed join unavailable): alpha, zeta"
+        in capsys.readouterr().out.splitlines()
+    )
+
+
+def test_cook_reload_attempts_each_receive_one_unavailability_block(
+    _mock_mgr: MagicMock,
+    tmp_path: Path,
+) -> None:
+    cfg = MagicMock()
+    cfg.experimental_enabled = True
+    cfg.providers.profiles = {}
+    system_prompts: list[str | None] = []
+    refusal = SkillUnavailableMetadata(
+        skill="investigate",
+        backend="limited",
+        operation=SkillSemanticOperation.REQUIRED_JOIN,
+        diagnostic="fixed join unavailable",
+    )
+
+    with patch(
+        "autoskillit.workspace.compile_session_skill_catalog",
+        side_effect=lambda catalog, _backend: _refusal_compilation(catalog, refusal),
+    ):
+        _run_cook(
+            None,
+            cfg,
+            _mock_mgr,
+            tmp_path / "generated-home",
+            supports_tool_list_changed=False,
+            system_prompts=system_prompts,
+            reload_sentinels=("reload-id", None),
+        )
+
+    assert len(system_prompts) == 2
+    assert all(prompt is not None for prompt in system_prompts)
+    assert all(
+        prompt.count("<autoskillit_skill_unavailability>") == 1
+        and prompt.count("</autoskillit_skill_unavailability>") == 1
+        for prompt in system_prompts
+        if prompt is not None
+    )
+    assert system_prompts[0] == system_prompts[1]
 
 
 def test_profile_feature_disabled_exits(capsys, _mock_mgr):

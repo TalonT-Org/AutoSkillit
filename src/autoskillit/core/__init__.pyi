@@ -1113,6 +1113,7 @@ from .types import SkillModelClassDef as SkillModelClassDef
 from .types import SkillProjectionBinding as SkillProjectionBinding
 from .types import SkillProjectionContextAuthority as SkillProjectionContextAuthority
 from .types import SkillProjectionPreparation as SkillProjectionPreparation
+from .types import SkillProjectionRefusal as SkillProjectionRefusal
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSemanticAdaptationResult as SkillSemanticAdaptationResult
@@ -1238,6 +1239,7 @@ from .types import recipe_section_element_digest as recipe_section_element_diges
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
 from .types import render_intake_digest as render_intake_digest
 from .types import render_target_skill_command as render_target_skill_command
+from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import (
     resolve_native_shell_capture_decision as resolve_native_shell_capture_decision,
 )

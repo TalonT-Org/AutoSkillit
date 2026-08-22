@@ -441,3 +441,181 @@ def test_session_catalog_filters_unsupported_semantics_with_exact_metadata(
             },
         ),
     }
+
+
+def test_session_catalog_propagates_unexpected_adapter_contract_error(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import SkillContractError, SkillExecutionRole
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        compile_session_skill_catalog,
+    )
+
+    skill_path = tmp_path / "portable" / "SKILL.md"
+    _write_skill(skill_path)
+    info = _skill_info_from_frontmatter("portable", SkillSource.PROJECT_LOCAL, skill_path)
+    catalog = EffectiveSkillCatalog(
+        skills=(SkillCatalogEntry.from_skill_info(info),),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    def fail_adaptation(_plan):
+        raise SkillContractError("unexpected adapter contract failure")
+
+    backend = SimpleNamespace(
+        name="broken",
+        adapt_skill_semantics=fail_adaptation,
+    )
+
+    with pytest.raises(SkillContractError, match="^unexpected adapter contract failure$"):
+        compile_session_skill_catalog(catalog, backend)
+
+
+def test_projection_binding_records_mixed_admission_and_reuses_exact_adaptation(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import (
+        BackendConventions,
+        SkillExecutionRole,
+        SkillProjectionRefusal,
+        SkillSemanticAdaptationResult,
+    )
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        build_skill_projection_binding,
+        project_agent_skill_document,
+    )
+
+    admitted_path = tmp_path / "admitted" / "SKILL.md"
+    refused_path = tmp_path / "refused" / "SKILL.md"
+    _write_skill(admitted_path)
+    _write_skill(refused_path)
+    admitted = SkillCatalogEntry.from_skill_info(
+        _skill_info_from_frontmatter(
+            "admitted",
+            SkillSource.PROJECT_LOCAL,
+            admitted_path,
+        )
+    )
+    refused = SkillCatalogEntry.from_skill_info(
+        _skill_info_from_frontmatter(
+            "refused",
+            SkillSource.PROJECT_LOCAL,
+            refused_path,
+        )
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=(refused, admitted),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    admitted_adaptation = SkillSemanticAdaptationResult(
+        instruction_fragments=("Use the exact admitted adaptation.",),
+        logical_role_mapping={"reviewer": "reviewer"},
+        sibling_skill_targets={"investigate": "native:investigate"},
+        model_effort_policy={"reviewer": ("native-model", "high")},
+    )
+    refusal_adaptation = SkillSemanticAdaptationResult.unsupported(
+        backend="stateful",
+        operation=SkillSemanticOperation.REQUIRED_JOIN,
+    )
+
+    class StatefulBackend:
+        name = "stateful"
+        conventions = BackendConventions(skills_subdir=Path("skills"))
+
+        def __init__(self) -> None:
+            self.calls: list[object] = []
+
+        def adapt_skill_semantics(self, plan):
+            self.calls.append(plan)
+            if plan is refused.semantic_plan:
+                return refusal_adaptation
+            if plan is admitted.semantic_plan:
+                return admitted_adaptation
+            pytest.fail("projection adapted an unbound semantic plan")
+
+    backend = StatefulBackend()
+    context = SkillProjectionContext(cwd=tmp_path, catalog=catalog, backend=backend)
+
+    binding = build_skill_projection_binding(context)
+    expected_document = project_agent_skill_document(
+        admitted,
+        context,
+        semantic_adaptation=admitted_adaptation,
+    )
+
+    exact_diagnostic = (
+        "backend 'stateful' does not support skill semantic operation 'required_join'"
+    )
+    assert backend.calls == [refused.semantic_plan, admitted.semantic_plan]
+    assert binding.member_names == ("admitted",)
+    assert binding.unavailable == (
+        SkillProjectionRefusal(
+            skill="refused",
+            operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic=exact_diagnostic,
+        ),
+    )
+    assert binding.canonical_payload["unavailable"] == (
+        {
+            "skill": "refused",
+            "operation": "required_join",
+            "diagnostic": exact_diagnostic,
+        },
+    )
+    assert binding.adaptation_digests["admitted"] == admitted_adaptation.digest
+    assert binding.projected_digests["admitted"] == expected_document.projected_digest
+    assert "Use the exact admitted adaptation." in expected_document.content
+
+
+def test_projection_binding_propagates_unexpected_adapter_contract_error(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import BackendConventions, SkillContractError, SkillExecutionRole
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        build_skill_projection_binding,
+    )
+
+    skill_path = tmp_path / "portable" / "SKILL.md"
+    _write_skill(skill_path)
+    entry = SkillCatalogEntry.from_skill_info(
+        _skill_info_from_frontmatter(
+            "portable",
+            SkillSource.PROJECT_LOCAL,
+            skill_path,
+        )
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    def fail_adaptation(_plan):
+        raise SkillContractError("unexpected projection adapter contract failure")
+
+    conventions = BackendConventions(skills_subdir=Path(".agents/skills"))
+    backend = SimpleNamespace(
+        name="broken",
+        conventions=conventions,
+        adapt_skill_semantics=fail_adaptation,
+    )
+
+    with pytest.raises(
+        SkillContractError,
+        match="^unexpected projection adapter contract failure$",
+    ):
+        build_skill_projection_binding(
+            SkillProjectionContext(
+                cwd=tmp_path,
+                catalog=catalog,
+                backend=backend,
+                conventions=conventions,
+            )
+        )

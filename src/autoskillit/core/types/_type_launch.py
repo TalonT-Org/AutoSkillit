@@ -17,6 +17,7 @@ from ._type_execution_identity import BackendAuthorityKind
 from ._type_launch_projection import (
     LaunchContractError,
     SkillProjectionBinding,
+    SkillProjectionRefusal,
     _freeze_metadata,
     _freeze_str_mapping,
     _json_value,
@@ -42,10 +43,11 @@ __all__ = [
     "SecretEnvironmentBinding",
     "SemanticLaunchPlan",
     "SkillProjectionBinding",
+    "SkillProjectionRefusal",
 ]
 
 
-LAUNCH_CONTRACT_SCHEMA_VERSION = 3
+LAUNCH_CONTRACT_SCHEMA_VERSION = 4
 
 # Top-level field order is part of the persisted stable-digest schema. Runtime
 # observations, attempt counters, retry state, and resume state do not belong here.

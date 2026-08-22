@@ -46,6 +46,11 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 _DISCIPLINE_DIGEST = "sha256:portable-output-discipline"
+_CODEX_JOIN_REFUSAL_DIAGNOSTIC = (
+    "Codex exposes wait-any/mailbox-activity semantics rather than fixed-set fan-in. "
+    "Skills declaring join.required=true cannot be honestly realized on this backend "
+    "and must be refused at admission."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -465,11 +470,14 @@ def test_codex_reusable_trace_reproves_unrelated_mailbox_wakeup() -> None:
     join. We assert that a 4-child join plan is refused at admission
     and that a stand-alone unrelated mailbox wakeup does not close the
     declared set."""
-    from autoskillit.core.types._type_exceptions import SkillContractError
+    from autoskillit.core import SkillSemanticOperation
 
     plan = _four_child_plan()
-    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-        CodexBackend().adapt_skill_semantics(plan)
+    adaptation = CodexBackend().adapt_skill_semantics(plan)
+
+    assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+    assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
+    assert adaptation.instruction_fragments == ()
 
 
 # ---------------------------------------------------------------------------
@@ -480,20 +488,26 @@ def test_codex_reusable_trace_reproves_unrelated_mailbox_wakeup() -> None:
 def test_codex_required_join_refused_at_admission() -> None:
     """Codex cannot provide fixed-set fan-in.
 
-    The Codex adapt_skill_semantics path now short-circuits with
-    ``SkillContractError`` carrying the ``wait-any/mailbox-activity``
-    diagnostic (the contract test relies on the fail-closed raise). The
-    ``unsupported_operation=REQUIRED_JOIN`` marker is still produced
-    before the raise so the catalog/doctor/preflight admission paths can
-    surface the same diagnostic during skill publication. This is the
-    source of truth — a future Codex fixed-set primitive must pass the
-    same conformance fixture before the trait flips.
+    The Codex adapter returns the structured ``REQUIRED_JOIN`` refusal with
+    the exact admission diagnostic. This is the source of truth — a future
+    Codex fixed-set primitive must pass the same conformance fixture before
+    the trait flips.
     """
-    from autoskillit.core import SkillContractError
+    from autoskillit.core import SkillSemanticOperation
 
     plan = _four_child_plan()
-    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-        CodexBackend().adapt_skill_semantics(plan)
+    adaptation = CodexBackend().adapt_skill_semantics(plan)
+
+    assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+    assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
+    assert adaptation.canonical_payload == {
+        "instruction_fragments": (),
+        "logical_role_mapping": {},
+        "sibling_skill_targets": {},
+        "model_effort_policy": {},
+        "unsupported_operation": "required_join",
+        "diagnostic": _CODEX_JOIN_REFUSAL_DIAGNOSTIC,
+    }
 
 
 def test_codex_join_bearing_skill_removed_from_catalog() -> None:
@@ -517,15 +531,12 @@ def test_codex_join_bearing_skill_removed_from_catalog() -> None:
     if info.semantic_plan is None or not info.semantic_plan.join.required:
         pytest.skip("review-pr is not a join-bearing skill in this checkout")
     backend = CodexBackend()
-    # The adaptation for Codex must mark it as REQUIRED_JOIN. The new
-    # rectify-join contract short-circuits via SkillContractError at the
-    # adapter surface; the unsupported_operation marker is still produced
-    # before the raise so the catalog/doctor/preflight admission paths can
-    # surface the same diagnostic during skill publication.
-    from autoskillit.core.types._type_exceptions import SkillContractError
+    # The adapter boundary reports an honest, structured refusal.
+    from autoskillit.core import SkillContractError, SkillSemanticOperation
 
-    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-        backend.adapt_skill_semantics(info.semantic_plan)
+    adaptation = backend.adapt_skill_semantics(info.semantic_plan)
+    assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+    assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
     # And the projection must fail closed (no projected document for
     # a join-bearing skill on Codex).
     entry = SkillCatalogEntry.from_skill_info(info)

@@ -17,6 +17,7 @@ from autoskillit.cli.session._session_launch import (
     _write_order_entry,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
+    render_skill_unavailability,
 )
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
@@ -173,6 +174,7 @@ def order(
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(skill_catalog.exclusions)
     skill_compilation = compile_session_skill_catalog(skill_catalog, backend)
+    render_skill_unavailability(skill_compilation)
     skill_catalog = skill_compilation.catalog
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)

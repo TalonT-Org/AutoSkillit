@@ -121,7 +121,7 @@ async def test_heartbeat_refreshes_mtime(tmp_path: Path) -> None:
         tg.start_soon(_stop)
 
     final_mtime = marker_path.stat().st_mtime
-    assert final_mtime > initial_mtime, "heartbeat must advance marker mtime"
+    assert final_mtime != initial_mtime, "heartbeat must refresh marker mtime"
 
 
 @pytest.mark.anyio

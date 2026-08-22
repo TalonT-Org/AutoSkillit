@@ -17,7 +17,6 @@ from autoskillit.core import (
     JoinSpec,
     LogicalRoleSpec,
     SiblingSkillSpec,
-    SkillContractError,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
@@ -38,6 +37,12 @@ from tests.execution.backends._conformance_assertions import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_CODEX_JOIN_REFUSAL_DIAGNOSTIC = (
+    "Codex exposes wait-any/mailbox-activity semantics rather than fixed-set fan-in. "
+    "Skills declaring join.required=true cannot be honestly realized on this backend "
+    "and must be refused at admission."
+)
 
 _DISCIPLINE_DIGEST = "sha256:portable-output-discipline"
 _REVIEW_ROLE = "autoskillit:pr-review-auditor-baseline"
@@ -412,19 +417,13 @@ def test_compose_pr_real_codex_trace_spawns_then_joins_registered_roles() -> Non
     assert not info.invalidities
     assert info.semantic_plan is not None
     plan = info.semantic_plan
-    # compose-pr declares join.required: true; per the rectify-join contract,
-    # codex refuses join-bearing skills with a precise diagnostic instead of
-    # rendering an impossible exact-ID wait instruction. The legacy Codex
-    # trace (this test) is preserved for the wait-any/mailbox symptoms, but
-    # the backend must short-circuit before any spawn/wait fragments emit.
+    # compose-pr declares join.required: true; Codex returns a precise refusal
+    # instead of rendering an impossible exact-ID wait instruction.
     assert plan.join is not None and plan.join.required is True
-    with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-        CodexBackend().adapt_skill_semantics(plan)
-    # The legacy test body that drove spawn_agent/wait_agent fragments is
-    # intentionally removed: codex refuses join-bearing skills at admission,
-    # so the prior trace is no longer reachable. The negative assertion above
-    # (SkillContractError raised with the refuse-join diagnostic) is the
-    # surviving contract.
+    adaptation = CodexBackend().adapt_skill_semantics(plan)
+    assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+    assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
+    assert adaptation.instruction_fragments == ()
 
 
 def test_dynamic_child_spawn_adapters_preserve_runtime_cardinality() -> None:
@@ -464,8 +463,9 @@ def test_review_approach_projects_the_real_named_web_role() -> None:
 
     claude_text = "\n".join(ClaudeCodeBackend().adapt_skill_semantics(plan).instruction_fragments)
     if plan.join is not None and plan.join.required:
-        with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-            CodexBackend().adapt_skill_semantics(plan)
+        adaptation = CodexBackend().adapt_skill_semantics(plan)
+        assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+        assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
         return
     codex_text = "\n".join(CodexBackend().adapt_skill_semantics(plan).instruction_fragments)
     assert "subagent_type='autoskillit:web-evidence-researcher'" in claude_text
@@ -496,8 +496,9 @@ def test_analyze_pipeline_health_projects_the_real_terminal_reader() -> None:
 
     claude_text = "\n".join(ClaudeCodeBackend().adapt_skill_semantics(plan).instruction_fragments)
     if plan.join is not None and plan.join.required:
-        with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-            CodexBackend().adapt_skill_semantics(plan)
+        adaptation = CodexBackend().adapt_skill_semantics(plan)
+        assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+        assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
         return
     codex_text = "\n".join(CodexBackend().adapt_skill_semantics(plan).instruction_fragments)
     assert "subagent_type='autoskillit:session-log-reader'" in claude_text
@@ -543,8 +544,9 @@ def test_real_planner_workflows_project_their_runtime_collections(
     assert collection in claude_text
     assert " 1 " not in claude_text
     if info.semantic_plan.join is not None and info.semantic_plan.join.required:
-        with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
-            CodexBackend().adapt_skill_semantics(info.semantic_plan)
+        adaptation = CodexBackend().adapt_skill_semantics(info.semantic_plan)
+        assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
+        assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
         return
     codex_text = "\n".join(
         CodexBackend().adapt_skill_semantics(info.semantic_plan).instruction_fragments
@@ -582,4 +584,4 @@ def test_real_join_required_skill_is_unavailable_to_codex(skill_name: str) -> No
     assert unavailable.skill == skill_name
     assert unavailable.backend == "codex"
     assert unavailable.operation is SkillSemanticOperation.REQUIRED_JOIN
-    assert "wait-any/mailbox-activity" in unavailable.diagnostic
+    assert unavailable.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC

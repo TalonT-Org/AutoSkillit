@@ -271,24 +271,7 @@ def compile_session_skill_catalog(
         if plan is None:
             supported.append(cast(SkillCatalogEntry, skill))
             continue
-        try:
-            adaptation = backend.adapt_skill_semantics(plan)
-        except SkillContractError as exc:
-            # The backend fails closed (raises) directly from
-            # adapt_skill_semantics() when it cannot honestly realize a
-            # declared operation (e.g. Codex + join.required=true), rather
-            # than returning a gradable unsupported_operation result. Route
-            # that refusal through the same graceful-exclusion path as a
-            # normal unsupported-operation result.
-            unavailable.append(
-                SkillUnavailableMetadata(
-                    skill=skill.name,
-                    backend=backend.name,
-                    operation=SkillSemanticOperation.REQUIRED_JOIN,
-                    diagnostic=str(exc),
-                )
-            )
-            continue
+        adaptation = backend.adapt_skill_semantics(plan)
         unsupported_operation = adaptation.validate_refusal_for(
             plan,
             backend=backend.name,
@@ -411,7 +394,16 @@ def _materialize_codex_profile_skill_infos(
         skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
         execution_role=SkillExecutionRole.SESSION,
     )
-    catalog = compile_session_skill_catalog(catalog, backend).catalog
+    compilation = compile_session_skill_catalog(catalog, backend)
+    for unavailable in compilation.unavailable:
+        logger.warning(
+            "codex_profile_skill_unavailable",
+            skill=unavailable.skill,
+            backend=unavailable.backend,
+            operation=unavailable.operation.value,
+            diagnostic=unavailable.diagnostic,
+        )
+    catalog = compilation.catalog
     materialize_agent_skill_tree(
         session_dir / backend.conventions.skills_subdir,
         catalog,
@@ -1000,12 +992,24 @@ class DefaultSessionSkillManager:
             effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
         elif backend is not None and projection_context.invocation is not None:
+            admitted_records: list[SkillAuthority] = []
             for record in records:
                 plan = record.semantic_plan
                 if plan is None:
+                    admitted_records.append(record)
                     continue
                 adaptation = backend.adapt_skill_semantics(plan)
+                unsupported_operation = adaptation.validate_refusal_for(
+                    plan,
+                    backend=backend.name,
+                )
+                if unsupported_operation is not None:
+                    if record.name == projection_context.invocation.root.name:
+                        adaptation.validate_for(plan, backend=backend.name)
+                    continue
                 adaptation.validate_for(plan, backend=backend.name)
+                admitted_records.append(record)
+            records = tuple(admitted_records)
 
         execution_role = (
             effective_catalog.execution_role

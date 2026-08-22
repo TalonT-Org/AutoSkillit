@@ -253,6 +253,7 @@ def _prepare_dispatch_session(state: _RunSkillDispatchState) -> str | None:
             session_root=state.skill_add_dirs[0],
             invocation=state.invocation,
             projection_context=state.projection_context,
+            member_names=state._capability_contract.member_names,
             resolved_command=state.resolved_command,
             expected_output_patterns=tuple(state.expected_output_patterns),
             write_behavior=state.write_spec or WriteBehaviorSpec(),

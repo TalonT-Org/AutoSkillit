@@ -707,6 +707,12 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
+        writer="autoskillit.workspace.session_skills:write_skill_unavailability_metadata",
+        artifact="add-dir/skill-unavailability.json",
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer="autoskillit.pipeline.exploration_context:OwnerBoundExplorationContextStore.bind_launch",
         artifact=(
             ".autoskillit-exploration-authority.json (0600, HMAC-signed) for the "

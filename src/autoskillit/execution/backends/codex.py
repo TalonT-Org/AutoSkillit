@@ -69,6 +69,7 @@ from autoskillit.core import (
     default_log_dir,
     extract_skill_name,
     get_logger,
+    required_join_is_unsupported,
 )
 from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._backend_cmd_builder_base import (
@@ -1096,8 +1097,8 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Codex collaboration instructions."""
-        if plan.join is not None and plan.join.required:
-            result = SkillSemanticAdaptationResult(
+        if required_join_is_unsupported(plan, self.capabilities):
+            return SkillSemanticAdaptationResult(
                 unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
                 diagnostic=(
                     "Codex exposes wait-any/mailbox-activity semantics rather than "
@@ -1105,8 +1106,6 @@ class CodexBackend(BackendCmdBuilderBase):
                     "honestly realized on this backend and must be refused at admission."
                 ),
             )
-            result.validate_for(plan, backend=self.name)
-            raise AssertionError("unreachable")  # validate_for raises unconditionally
         role_mapping: dict[str, str] = {}
         for role in plan.logical_roles:
             if role.name.startswith("autoskillit:"):
@@ -1153,8 +1152,6 @@ class CodexBackend(BackendCmdBuilderBase):
                 )
         if plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Spawn all independent children before awaiting any result.")
-        # NOTE: plan.join.required is refused at admission above via the
-        # unsupported_operation path; this fragment is unreachable by design.
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""
             fragments.append(f"Require {boundary}evidence from each child result.")

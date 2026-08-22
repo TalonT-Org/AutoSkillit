@@ -66,7 +66,7 @@ def _check_backend_compat(
     ``skill_info`` retains its compatibility-facing parameter name because
     ``tools_execution`` still calls this helper by keyword. The value is an
     ``EffectiveSkillInvocation``; policy reads its closure-wide capability union
-    and derived backend requirements.
+    while semantic target admission is intentionally root-only.
     """
     if target_name is None:
         return None
@@ -90,14 +90,14 @@ def _check_backend_compat(
     if skill_info is None:
         return None
     effective_backend = effective_backend_obj.name
-    semantic_plans = getattr(skill_info, "semantic_plans", ())
-    semantic_error = check_skill_semantic_feasibility(semantic_plans, effective_backend_obj)
+    root = getattr(skill_info, "root", None)
+    root_plan = getattr(root, "semantic_plan", None)
+    semantic_error = check_skill_semantic_feasibility(root_plan, effective_backend_obj)
     if semantic_error:
-        return SkillResult.crashed(
-            exception=RuntimeError(
-                f"Skill {target_name!r} is not feasible on backend "
-                f"{effective_backend!r}: {semantic_error}"
-            ),
+        return SkillResult.infeasible(
+            skill_name=target_name,
+            backend=effective_backend,
+            diagnostic=semantic_error,
             skill_command=resolved_command,
             order_id=effective_order_id,
         ).to_json()

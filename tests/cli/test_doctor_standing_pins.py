@@ -59,6 +59,64 @@ class TestStandingBackendPinsFeasibility:
         msg = errors[0].message
         assert "assess" in msg and "codex" in msg
 
+    @pytest.mark.parametrize(
+        ("malformation", "expected"),
+        [
+            (
+                "undeclared_refusal",
+                "backend 'codex' reported unsupported semantic operation "
+                "'child_spawn' not declared by the semantic plan",
+            ),
+            (
+                "incomplete_supported",
+                "semantic adaptation omitted observable instructions",
+            ),
+        ],
+    )
+    def test_malformed_adapter_result_propagates_contract_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        malformation: str,
+        expected: str,
+    ) -> None:
+        from autoskillit.cli.doctor._doctor_config import (
+            _check_standing_backend_pins_feasibility,
+        )
+        from autoskillit.core import (
+            BackendCapabilities,
+            SkillContractError,
+            SkillSemanticAdaptationResult,
+            SkillSemanticOperation,
+        )
+
+        if malformation == "undeclared_refusal":
+            result = SkillSemanticAdaptationResult.unsupported(
+                backend="codex",
+                operation=SkillSemanticOperation.CHILD_SPAWN,
+            )
+        else:
+            result = SkillSemanticAdaptationResult()
+        backend = type(
+            "MalformedBackend",
+            (),
+            {
+                "adapt_skill_semantics": lambda self, plan: result,
+                "capabilities": BackendCapabilities(),
+            },
+        )()
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        _write_config(
+            tmp_path / "home" / ".autoskillit" / "config.yaml",
+            "agent_backend:\n  recipe_overrides:\n    remediation:\n      assess: codex\n",
+        )
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        with pytest.raises(SkillContractError, match=f"^{expected}$"):
+            _check_standing_backend_pins_feasibility(project_dir=project_dir)
+
     def test_feasible_pin_reports_ok(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -22,12 +22,17 @@ from autoskillit.execution.headless._headless_path_tokens import (
     _extract_worktree_path,
     _normalize_messages,
 )
+from autoskillit.execution.headless._headless_result import _EVIDENCE_RECOVERABLE_SUBTYPES
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from tests.conftest import _make_result
 from tests.execution.conftest import _make_tool_use_line, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def test_infeasible_subtype_is_not_evidence_recoverable() -> None:
+    assert "infeasible" not in _EVIDENCE_RECOVERABLE_SUBTYPES
 
 
 class TestBuildSkillResultChannelAPatternRecovery:

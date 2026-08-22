@@ -616,6 +616,37 @@ class TestSkillResultCrashedFactory:
         assert result.provider.fallback_activated is False
 
 
+class TestSkillResultInfeasibleFactory:
+    def test_infeasible_returns_terminal_result_with_correct_fields(self) -> None:
+        from autoskillit.core.types import KillReason
+
+        result = SkillResult.infeasible(
+            skill_name="audit-tests",
+            backend="codex",
+            diagnostic="fixed-set fan-in is unavailable",
+            skill_command="$audit-tests",
+            session_id="session-123",
+            order_id="order-456",
+        )
+
+        assert result.success is False
+        assert result.is_error is True
+        assert result.subtype == "infeasible"
+        assert result.needs_retry is False
+        assert result.retry_reason is RetryReason.NONE
+        assert result.kill_reason is KillReason.NOT_APPLICABLE
+        assert result.exit_code == -1
+        assert result.stderr == ""
+        assert result.evidence == WriteEvidence.none_observed()
+        assert result.outcome is SessionOutcome.FAILED
+        assert result.session_id == "session-123"
+        assert result.order_id == "order-456"
+        assert result.result == (
+            "Skill 'audit-tests' is not feasible on backend 'codex': "
+            "fixed-set fan-in is unavailable | skill_command='$audit-tests'"
+        )
+
+
 class TestSkillResultProviderFields:
     _BASE_KWARGS: ClassVar[dict[str, Any]] = {
         "success": True,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import structlog.testing
 
 import autoskillit.workspace.session_skills as session_skills
 from autoskillit.core import (
@@ -14,6 +15,9 @@ from autoskillit.core import (
     RepositoryProfileId,
     SkillContractError,
     SkillExecutionRole,
+    SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
+    SkillSemanticPlan,
     ValidatedAddDir,
     pkg_root,
 )
@@ -419,6 +423,68 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
     assert "# MY SKILL\n" in content
     assert "## Backend-adapted semantic execution contract" in content
     assert count == 1
+
+
+def test_refused_codex_profile_skill_is_excluded_with_structured_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import materialize_codex_profile_skills
+
+    class _RefusingCodexBackend(CodexBackend):
+        def adapt_skill_semantics(
+            self,
+            plan: SkillSemanticPlan,
+        ) -> SkillSemanticAdaptationResult:
+            assert SkillSemanticOperation.CHILD_SPAWN in plan.operations
+            return SkillSemanticAdaptationResult.unsupported(
+                backend=self.name,
+                operation=SkillSemanticOperation.CHILD_SPAWN,
+            )
+
+    fake_home = tmp_path / "fake-home"
+    profile_skill = fake_home / ".codex" / "skills" / "profile-helper"
+    profile_skill.mkdir(parents=True)
+    (profile_skill / "SKILL.md").write_text(
+        "---\n"
+        "name: profile-helper\n"
+        "description: Delegate profile work.\n"
+        "execution_role: session\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  logical_roles:\n"
+        "  - name: helper\n"
+        "    purpose: perform delegated work\n"
+        "  child_spawns:\n"
+        "  - role: helper\n"
+        "    count: 1\n"
+        "---\n"
+        "Delegate the work.\n",
+        encoding="utf-8",
+    )
+    session_dir = tmp_path / "session"
+    (session_dir / "skills").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+    with structlog.testing.capture_logs() as logs:
+        count = materialize_codex_profile_skills(session_dir, _RefusingCodexBackend())
+
+    assert count == 0
+    assert not (session_dir / "skills" / "profile-helper").exists()
+    assert logs == [
+        {
+            "event": "codex_profile_skill_unavailable",
+            "log_level": "warning",
+            "logger": "autoskillit.workspace.session_skills",
+            "skill": "profile-helper",
+            "backend": "codex",
+            "operation": "child_spawn",
+            "diagnostic": (
+                "backend 'codex' does not support skill semantic operation 'child_spawn'"
+            ),
+        }
+    ]
 
 
 @pytest.mark.parametrize(

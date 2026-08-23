@@ -466,6 +466,7 @@ class GenerationReservationRecord(_ContractValue):
             _raise_invalid("duplicate_witness_id")
 
 
+@dataclass(frozen=True, slots=True)
 class ClosedEpochAudit(_ContractValue):
     snapshot: ContextWindowSnapshot
     terminal_occurrence_records: tuple[AdmissionOccurrenceRecord, ...]

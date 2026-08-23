@@ -320,6 +320,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_launch": frozenset(
         {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
     ),
+    "_type_launch_authority": frozenset(
+        {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
+    ),
     "_type_launch_projection": frozenset(
         {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
     ),

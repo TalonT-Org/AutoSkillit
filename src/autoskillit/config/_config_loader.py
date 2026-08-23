@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.config._config_dataclasses import PacksConfig, SubsetsConfig
 from autoskillit.core import (
+    AGENT_BACKEND_ENV_VAR,
     CATEGORY_TAGS,
     dump_yaml_str,
     get_logger,
@@ -166,6 +167,18 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
                     f"got {type(data).__name__!r}."
                 )
 
+    envvar_prefix = "AUTOSKILLIT"
+    runtime_backend_key = AGENT_BACKEND_ENV_VAR.removeprefix(f"{envvar_prefix}_")
+    if isinstance(merged.get("agent_backend"), str):
+        merged["agent_backend"] = {"backend": merged["agent_backend"]}
+
+    def filter_runtime_backend(data: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in data.items()
+            if key != runtime_backend_key or isinstance(value, Mapping)
+        }
+
     # Write to a temp file so Dynaconf can load it and apply env var overrides.
     # Dynaconf reads files lazily; we trigger eager loading before the file is
     # deleted so the in-memory cache remains valid.
@@ -173,26 +186,22 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
         tmp.write(dump_yaml_str(merged))
         tmp_path = Path(tmp.name)
 
-    # AUTOSKILLIT_AGENT_BACKEND flat env var (used by hook subprocesses to detect
-    # the active backend) clashes with Dynaconf: a flat section override replaces
-    # the agent_backend dict, suppressing nested env vars and file config. Pop it
-    # before Dynaconf loads and restore it after so that AUTOSKILLIT_AGENT_BACKEND__BACKEND
-    # (nested) and YAML file config are not silently overridden.
-    _flat_backend = os.environ.pop("AUTOSKILLIT_AGENT_BACKEND", None)
+    # AGENT_BACKEND_ENV_VAR is a scalar runtime selector. Filtering it after
+    # prefix normalization preserves mapping-valued file config and the nested
+    # AUTOSKILLIT_AGENT_BACKEND__BACKEND setting.
     try:
         d = Dynaconf(
-            envvar_prefix="AUTOSKILLIT",
+            envvar_prefix=envvar_prefix,
             preload=[str(tmp_path)],
             settings_files=[],
             merge_enabled=False,
             load_dotenv=False,
             environments=False,
+            filter_strategy=filter_runtime_backend,
         )
         d.as_dict()  # trigger eager load so the temp file can be safely deleted
     finally:
         tmp_path.unlink(missing_ok=True)
-        if _flat_backend is not None:
-            os.environ["AUTOSKILLIT_AGENT_BACKEND"] = _flat_backend
 
     return d
 

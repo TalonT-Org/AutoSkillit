@@ -1,1 +1,0 @@
-A plan that identifies the downstream consumer `_extract_captures`, enumerates its format expectations, and includes a round-trip test verifying the output matches caller expectations.

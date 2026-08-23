@@ -157,6 +157,7 @@ class TestModuleCascadeCore:
             "_type_constants_durable_writers",
             "_type_constants_retirements",
             "_type_constants_skill_contract",
+            "_type_enums_context_admission",
             "_type_exceptions",
             "_type_skill_contract",
             "_step_context",

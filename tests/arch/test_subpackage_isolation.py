@@ -1044,7 +1044,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_enums_context_admission: context-admission enums shard (#4735).
         # +_type_constants_retirements, +_type_constants_skill_contract,
         # +_type_constants_durable_writers: cohesive constants shards (#4735).
-        "core/types": 60,
+        # +_type_results_records: leaf result and persisted-index record contracts.
+        "core/types": 61,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,

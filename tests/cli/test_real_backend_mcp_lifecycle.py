@@ -9,6 +9,7 @@ import os
 import secrets
 import select
 import shutil
+import socket
 import struct
 import subprocess
 import sys
@@ -72,7 +73,12 @@ def _wait_dead(process: psutil.Process, timeout: float) -> bool:
     return False
 
 
-def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) -> None:
+def _drain_pty(
+    master_fd: int,
+    stop: threading.Event,
+    diagnostics: bytearray,
+    unexpected_trust_prompt: threading.Event,
+) -> None:
     responded: set[str] = set()
     while not stop.is_set():
         try:
@@ -103,13 +109,52 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
                 )
                 and "trust" not in responded
             ):
-                responded.add("trust")
-                os.write(master_fd, b"\r\r")
+                unexpected_trust_prompt.set()
             if b"Hooks need review" in chunk and "hooks" not in responded:
                 responded.add("hooks")
                 os.write(master_fd, b"\x1b[B\x1b[B\r")
         except OSError:
             return
+
+
+def test_drain_pty_observes_split_trust_prompt_without_responding() -> None:
+    drain_socket, peer = socket.socketpair()
+    diagnostics = bytearray()
+    stop = threading.Event()
+    unexpected_trust_prompt = threading.Event()
+    drain = threading.Thread(
+        target=_drain_pty,
+        args=(drain_socket.fileno(), stop, diagnostics, unexpected_trust_prompt),
+        daemon=True,
+    )
+    started = False
+    try:
+        drain.start()
+        started = True
+        peer.sendall(b"Do you trust this fol")
+        deadline = time.monotonic() + 1
+        while b"Do you trust this fol" not in diagnostics and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert b"Do you trust this fol" in diagnostics
+        peer.sendall(b"der? Press Enter to confirm")
+
+        assert unexpected_trust_prompt.wait(timeout=1), diagnostics.decode(errors="replace")
+        assert b"Do you trust this folder? Press Enter to confirm" in diagnostics
+        readable, _, _ = select.select([peer], [], [], 0.3)
+        if readable:
+            response = peer.recv(4096)
+            assert response == b"", f"trust prompt received unexpected response: {response!r}"
+    finally:
+        stop.set()
+        with contextlib.suppress(OSError):
+            drain_socket.shutdown(socket.SHUT_RDWR)
+        drain_socket.close()
+        try:
+            if started:
+                drain.join(timeout=1)
+                assert not drain.is_alive()
+        finally:
+            peer.close()
 
 
 def _terminate(process: psutil.Process | None) -> None:
@@ -200,6 +245,7 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
 
     project = tmp_path / "project"
     project.mkdir()
+    project = project.resolve()
     state_root = project
     launch_id = secrets.token_hex(8)
     bin_dir = tmp_path / "bin"
@@ -276,9 +322,10 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
     fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
     diagnostics = bytearray()
     stop_drain = threading.Event()
+    unexpected_trust_prompt = threading.Event()
     drain = threading.Thread(
         target=_drain_pty,
-        args=(master_fd, stop_drain, diagnostics),
+        args=(master_fd, stop_drain, diagnostics, unexpected_trust_prompt),
         daemon=True,
     )
     client: subprocess.Popen[bytes] | None = None
@@ -298,6 +345,11 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
         slave_fd = -1
         drain.start()
         daemon = _wait_for_registered_daemon(launch_id, timeout=20)
+        if backend_name == "codex":
+            assert not unexpected_trust_prompt.is_set(), (
+                "Codex displayed a project-trust prompt despite pretrusting its canonical cwd:\n"
+                + diagnostics.decode(errors="replace")
+            )
         assert daemon is not None, diagnostics.decode(errors="replace")
         assert os.getpgid(daemon.pid) != os.getpgid(client.pid)
         with contextlib.suppress(psutil.NoSuchProcess):

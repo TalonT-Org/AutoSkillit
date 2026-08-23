@@ -115,6 +115,14 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # module-load self-check block (#4351).
         "_type_intake_policy",
         "_type_constants_registries",  # measured response-exemption registry digest
+        # Issue #4735 — Wavefront 1 decomposition. The retirement shard builds
+        # _ABSOLUTE_ARTIFACT_KEYS = sorted(...) at import time so the absolute-path
+        # guard can run at module load.
+        "_type_constants_retirements",
+        # Issue #4735 — Wavefront 1 decomposition. The skill-contract shard runs
+        # _UNREGISTERED_INVALIDITY_KINDS = sorted(set(SkillInvalidityKind) - set(...))
+        # at import time as the completeness-vs-enum assertion.
+        "_type_constants_skill_contract",
         "_type_dimensions",  # named conversion policies (BytesToTokensPolicy instances)
         "tool_registry",  # immutable canonical MCP tool definition registry
         # Frozen static ownership and identity-profile definitions are derived once.
@@ -1033,7 +1041,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 34,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
-        "core/types": 56,
+        # +_type_enums_context_admission: context-admission enums shard (#4735).
+        # +_type_constants_retirements, +_type_constants_skill_contract,
+        # +_type_constants_durable_writers: cohesive constants shards (#4735).
+        "core/types": 60,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,

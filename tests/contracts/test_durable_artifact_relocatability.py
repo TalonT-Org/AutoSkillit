@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_constants import (
+from autoskillit.core.types._type_constants_durable_writers import (
     DURABLE_ARTIFACT_WRITERS,
     DurableArtifactWriterDef,
     _validate_durable_artifact_writer_defs,

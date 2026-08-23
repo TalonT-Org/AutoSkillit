@@ -48,6 +48,11 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "recipe/io.py": 750,
     "server/tools/tools_git.py": 750,
     "server/tools/tools_github.py": 750,
+    # Issue #4735 — Wavefront 1 decomposition. Both files stay ≤750 because
+    # _type_enums_context_admission.py / _type_constants_{retirements,
+    # skill_contract, durable_writers}.py carry the cohesive extractions.
+    "core/types/_type_enums.py": 750,
+    "core/types/_type_constants.py": 750,
 }
 
 

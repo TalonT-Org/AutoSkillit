@@ -53,6 +53,7 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     # skill_contract, durable_writers}.py carry the cohesive extractions.
     "core/types/_type_enums.py": 750,
     "core/types/_type_constants.py": 750,
+    # Issue #4760 — Wavefront 1 decomposition of result contract records.
     "core/types/_type_results.py": 750,
     "core/types/_type_results_records.py": 750,
     # Issue #4739 — recipe-section and tool-registry authorities are split
@@ -63,6 +64,15 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "core/_tool_registry_builders.py": 750,
     "core/types/_type_launch.py": 750,
     "core/types/_type_launch_authority.py": 750,
+    # Issue #4736 — Wavefront 1 decomposition of audit-cycle and audit-admission
+    # facade modules into five cohesive ownership shards.
+    "core/types/_type_audit_cycle.py": 750,
+    "core/types/_type_audit_cycle_authority.py": 750,
+    "core/types/_type_audit_cycle_disposition.py": 750,
+    "core/types/_type_audit_admission.py": 750,
+    "core/types/_type_audit_admission_validation.py": 750,
+    "core/types/_type_audit_artifact_ownership.py": 750,
+    "core/types/_type_audit_reference_identity.py": 750,
 }
 
 

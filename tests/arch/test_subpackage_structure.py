@@ -17,8 +17,13 @@ class TestCoreSubpackages:
         expected = {
             "_type_audit_admission",
             "_type_audit_admission_ledger",
+            "_type_audit_admission_validation",
+            "_type_audit_artifact_ownership",
             "_type_audit_cycle",
+            "_type_audit_cycle_authority",
+            "_type_audit_cycle_disposition",
             "_type_audit_protocols",
+            "_type_audit_reference_identity",
             "_type_backend",
             "_type_checkpoint",
             "_type_closure_report",

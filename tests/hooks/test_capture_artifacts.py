@@ -17,8 +17,10 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.hooks._capture._authority as capture_authority
+import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture._runner as capture_runner
+import autoskillit.hooks._capture._types as capture_types
 import autoskillit.hooks._capture_process as capture_process
 from autoskillit.hooks._capture._snapshot import (
     CaptureMeasurement,
@@ -1122,12 +1124,12 @@ def test_valid_reject_runs_one_runner_tail_sweep(
 
     def reconcile(requested_cwd, budget):
         assert requested_cwd == "/abs/project"
-        assert budget is capture_runner._capture_reconcile.RUNNER_TAIL_BUDGET
+        assert budget is capture_reconcile.RUNNER_TAIL_BUDGET
         events.append("reconcile")
         return CaptureCleanupOutcome()
 
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
@@ -1148,7 +1150,7 @@ def test_runner_tail_consumes_byte_pressure_budget(
 
     monkeypatch.setattr(capture_runner, "_BYTE_PRESSURE_OBSERVED", True)
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
@@ -1157,8 +1159,8 @@ def test_runner_tail_consumes_byte_pressure_budget(
     capture_runner._sweep_after_runner("/abs/project")
 
     assert budgets == [
-        capture_runner._capture_types.TRANSITION_RESCUE_BUDGET,
-        capture_runner._capture_reconcile.RUNNER_TAIL_BUDGET,
+        capture_types.TRANSITION_RESCUE_BUDGET,
+        capture_reconcile.RUNNER_TAIL_BUDGET,
     ]
 
 
@@ -1177,7 +1179,7 @@ def test_runner_tail_preserves_dispatch_result_and_order(
 
     monkeypatch.setattr(capture_runner, "_dispatch_runner", dispatch)
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
@@ -1196,7 +1198,7 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
         raise RuntimeError("🔥" * 512)
 
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         fail_reconcile,
     )
@@ -1215,7 +1217,7 @@ def test_runner_tail_reports_sweep_outcome_errors(
 ) -> None:
     monkeypatch.setattr(capture_runner, "_dispatch_runner", lambda *_args: 23)
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         lambda requested_cwd, budget: CaptureCleanupOutcome(
             errors=2,
@@ -1239,7 +1241,7 @@ def test_runner_tail_deferred_outcome_emits_nothing_per_command(
     per-command runner-tail message."""
     monkeypatch.setattr(capture_runner, "_dispatch_runner", lambda *_args: 23)
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         lambda requested_cwd, budget: CaptureCleanupOutcome(
             examined=2,
@@ -1272,7 +1274,7 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
 
     monkeypatch.setattr(capture_runner, "_dispatch_runner", fail_dispatch)
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
@@ -1292,7 +1294,7 @@ def test_malformed_runner_invocation_reconciles_only_with_absolute_cwd(
         return CaptureCleanupOutcome()
 
     monkeypatch.setattr(
-        capture_runner._capture_reconcile,
+        capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )

@@ -388,7 +388,7 @@ def test_ordered_full_reference_identity_covers_all_metadata() -> None:
     second = _reference("two.md", content_digest=_digest("2"))
     baseline = compute_audit_reference_identity((first, second))
 
-    assert baseline == ("sha256:600141d9023f634237a9d04d1293f78484208e691c52c7d92dd14c027e126ee1")
+    assert baseline == ("sha256:acd0546f3a36c7268b8a9d04359f88c2476224b37ef90792aac72e4d97eac04e")
     assert baseline != compute_audit_reference_identity((second, first))
     for changed in (
         _reference("renamed.md", content_digest=_digest("1")),

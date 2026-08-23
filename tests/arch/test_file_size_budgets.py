@@ -53,6 +53,8 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     # skill_contract, durable_writers}.py carry the cohesive extractions.
     "core/types/_type_enums.py": 750,
     "core/types/_type_constants.py": 750,
+    "core/types/_type_results.py": 750,
+    "core/types/_type_results_records.py": 750,
 }
 
 

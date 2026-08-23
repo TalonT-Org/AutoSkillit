@@ -168,6 +168,25 @@ _CORE_UNIVERSAL_EXCLUSIONS: dict[str, frozenset[str]] = {
     "_type_enums": frozenset({"hooks", "skills"}),
 }
 
+_TYPE_RESULTS_CASCADE = frozenset(
+    {
+        "core",
+        "execution",
+        "exploration",
+        "pipeline",
+        "workspace",
+        "recipe",
+        "migration",
+        "fleet",
+        "server",
+        "cli",
+        "_llm_triage",
+        "_test_filter",
+        "hook_registry",
+        "smoke_utils",
+    }
+)
+
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
@@ -290,24 +309,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "session_registry": frozenset({"core"}),
     "tool_sequence_analysis": frozenset({"core", "execution", "server", "cli"}),
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
-    "_type_results": frozenset(
-        {
-            "core",
-            "execution",
-            "exploration",
-            "pipeline",
-            "workspace",
-            "recipe",
-            "migration",
-            "fleet",
-            "server",
-            "cli",
-            "_llm_triage",
-            "_test_filter",
-            "hook_registry",
-            "smoke_utils",
-        }
-    ),
+    "_type_results": _TYPE_RESULTS_CASCADE,
+    "_type_results_records": _TYPE_RESULTS_CASCADE,
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_execution_identity": frozenset({"core", "execution", "server", "cli", "fleet"}),
     "_type_exploration": frozenset({"core", "exploration", "pipeline", "server"}),

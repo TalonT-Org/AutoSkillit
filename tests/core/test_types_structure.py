@@ -222,7 +222,7 @@ def test_types_hub_backward_compat():
     assert isinstance(FREE_RANGE_TOOLS, frozenset)  # _type_constants
     assert dataclasses.is_dataclass(LoadResult)  # _type_results
     assert dataclasses.is_dataclass(SkillResult)  # _type_results
-    assert dataclasses.is_dataclass(FailureRecord)  # _type_results
+    assert dataclasses.is_dataclass(FailureRecord)  # _type_results_records
     assert callable(GateState)  # _type_protocols_infra — Protocol
     assert callable(HeadlessExecutor)  # _type_protocols_execution — Protocol
     assert callable(extract_skill_name)  # _type_helpers — function

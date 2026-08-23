@@ -1056,8 +1056,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # _type_audit_admission_validation, _type_audit_admission_artifact_ownership,
         # _type_audit_admission_reference_identity alongside the unchanged facades
         # and ledger module.
-        # +_type_orchestrator_instruction_surfaces: cohesive instruction registry (#4707).
-        "core/types": 68,
+        # +seven context-admission contract shards (#4738).
+        "core/types": 67,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1500,14 +1500,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "semantics, released-version dispatch, and configuration-aware coverage resolution "
         "reviewable as one state machine; splitting dispatch branches would fragment "
         "exhaustiveness.",
-    ),
-    "core/types/_type_context_admission.py": (
-        2350,
-        "REQ-CNST-010-E14: #4333 freezes the complete content-free protocol-v1 schema in "
-        "one IL-0 shard. Co-locating identities, records, closed event/effect unions, "
-        "states, canonical serialization, and the static coverage registry with its pinned "
-        "configuration variants prevents downstream layers from defining incompatible "
-        "wire contracts.",
     ),
     "pipeline/context_admission_ledger.py": (
         2300,

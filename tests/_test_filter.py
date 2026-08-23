@@ -333,6 +333,15 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_dimensions": frozenset({"config", "core", "server"}),
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
+    # Issue #4738 — each internal context-admission shard shares the stable
+    # facade's core/reducer/persistence consumer scope.
+    "_type_context_admission_base": frozenset({"core", "pipeline", "server"}),
+    "_type_context_admission_identities": frozenset({"core", "pipeline", "server"}),
+    "_type_context_admission_records": frozenset({"core", "pipeline", "server"}),
+    "_type_context_admission_events": frozenset({"core", "pipeline", "server"}),
+    "_type_context_admission_effects": frozenset({"core", "pipeline", "server"}),
+    "_type_context_admission_states": frozenset({"core", "pipeline", "server"}),
+    "_type_context_admission_coverage": frozenset({"core", "pipeline", "server"}),
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_audit_admission_validation": frozenset({"core", "execution", "pipeline", "server"}),

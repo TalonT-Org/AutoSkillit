@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import errno
-import importlib
 import json
 import os
 import shlex
@@ -17,8 +16,10 @@ from types import SimpleNamespace
 
 import pytest
 
+import autoskillit.hooks._capture._authority as capture_authority
 import autoskillit.hooks._capture._replay as capture_replay
-import autoskillit.hooks._capture_artifacts as capture_artifacts
+import autoskillit.hooks._capture._runner as capture_runner
+import autoskillit.hooks._capture_process as capture_process
 from autoskillit.hooks._capture._snapshot import (
     CaptureMeasurement,
     CommandOutcome,
@@ -67,9 +68,6 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureState,
     CaptureTransitionCommittedError,
 )
-
-capture_authority = importlib.import_module(capture_artifacts.open_project_anchor.__module__)
-capture_process = importlib.import_module(capture_artifacts._spawn_bash.__module__)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -185,16 +183,16 @@ def _issue_artifact(anchor, root, artifact, data: bytes = b"captured"):
 
 
 def test_capture_authorities_are_factory_only_and_externally_immutable(tmp_path: Path) -> None:
-    identity = capture_artifacts.FileIdentity(device=1, inode=2)
+    identity = capture_authority.FileIdentity(device=1, inode=2)
     with pytest.raises(CaptureSetupError, match="open_project_anchor"):
-        capture_artifacts.ProjectAnchor(
+        capture_authority.ProjectAnchor(
             fd=-1,
             identity=identity,
             supplied_path=str(tmp_path),
             physical_path=tmp_path,
         )
     with pytest.raises(CaptureSetupError, match="open_capture_root"):
-        capture_artifacts.CaptureRoot(
+        capture_authority.CaptureRoot(
             autoskillit_fd=-1,
             temp_fd=-1,
             fd=-1,
@@ -203,7 +201,7 @@ def test_capture_authorities_are_factory_only_and_externally_immutable(tmp_path:
             identity=identity,
         )
     with pytest.raises(CaptureSetupError, match="create_capture_artifact"):
-        capture_artifacts.CaptureArtifact(
+        capture_runner.CaptureArtifact(
             fd=-1,
             name="shell.log",
             identity=identity,
@@ -272,14 +270,14 @@ class _FakeCaptureProcess:
 
 def _record_artifact_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     observed_fds: list[int] = []
-    real_create = capture_artifacts.create_capture_artifact
+    real_create = capture_runner.create_capture_artifact
 
     def record_artifact(root, capture_id, lifecycle):
         artifact = real_create(root, capture_id, lifecycle)
         observed_fds.append(artifact.fd)
         return artifact
 
-    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
+    monkeypatch.setattr(capture_runner, "create_capture_artifact", record_artifact)
     return observed_fds
 
 
@@ -310,22 +308,22 @@ def test_settle_failed_capture_preserves_raw_kill_result_after_timeout() -> None
 
 def _record_runtime_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     observed_fds = _record_owned_capture_fds(monkeypatch)
-    real_duplicate = capture_artifacts._duplicate_artifact_writer
+    real_duplicate = capture_runner._duplicate_artifact_writer
 
     def record_duplicate(artifact):
         writer_fd = real_duplicate(artifact)
         observed_fds.append(writer_fd)
         return writer_fd
 
-    monkeypatch.setattr(capture_artifacts, "_duplicate_artifact_writer", record_duplicate)
+    monkeypatch.setattr(capture_runner, "_duplicate_artifact_writer", record_duplicate)
     return observed_fds
 
 
 def _record_owned_capture_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     observed_fds: list[int] = []
-    real_open_anchor = capture_artifacts.open_project_anchor
-    real_open_root = capture_artifacts.open_capture_root
-    real_create = capture_artifacts.create_capture_artifact
+    real_open_anchor = capture_runner.open_project_anchor
+    real_open_root = capture_runner.open_capture_root
+    real_create = capture_runner.create_capture_artifact
 
     def record_anchor(cwd):
         anchor = real_open_anchor(cwd)
@@ -342,11 +340,11 @@ def _record_owned_capture_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
         observed_fds.append(artifact.fd)
         return artifact
 
-    monkeypatch.setattr(capture_artifacts, "open_project_anchor", record_anchor)
-    monkeypatch.setattr(capture_artifacts, "open_capture_root", record_root)
+    monkeypatch.setattr(capture_runner, "open_project_anchor", record_anchor)
+    monkeypatch.setattr(capture_runner, "open_capture_root", record_root)
     monkeypatch.setattr(capture_authority, "open_project_anchor", record_anchor)
     monkeypatch.setattr(capture_authority, "open_capture_root", record_root)
-    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
+    monkeypatch.setattr(capture_runner, "create_capture_artifact", record_artifact)
     return observed_fds
 
 
@@ -384,8 +382,8 @@ def test_symlinked_cwd_is_opened_before_path_derivation_and_descendants(
     supplied_cwd = tmp_path / "project-link"
     supplied_cwd.symlink_to(project, target_is_directory=True)
     events: list[tuple[str, int | None]] = []
-    real_open = capture_artifacts.os.open
-    real_realpath = capture_artifacts.os.path.realpath
+    real_open = capture_runner.os.open
+    real_realpath = capture_runner.os.path.realpath
 
     def track_open(path, flags, mode=0o777, *, dir_fd=None):
         fd = real_open(path, flags, mode, dir_fd=dir_fd)
@@ -657,7 +655,7 @@ def test_runner_policy_precedence_cross_product(
     )
     observations: list[dict[str, object]] = []
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "validate_lineage_reference",
         lambda supplied_ref, supplied_attempt: (
             supplied_ref == reference and supplied_attempt == "c" * 32
@@ -675,7 +673,7 @@ def test_runner_policy_precedence_cross_product(
         return True
 
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "record_runner_observation",
         record_observation,
     )
@@ -729,17 +727,17 @@ def test_runner_observation_failure_prevents_command_execution(
         anchor_inode=project_stat.st_ino,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "validate_lineage_reference",
         lambda *_args: True,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "record_runner_observation",
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_spawn_bash",
         lambda *_args, **_kwargs: pytest.fail("command must not execute"),
     )
@@ -764,7 +762,7 @@ def test_policy_partial_open_failure_closes_autoskillit_fd(
     autoskillit_dir.mkdir(parents=True)
     anchor = open_project_anchor(str(project))
     opened_fds: list[int] = []
-    real_open_component = capture_artifacts._open_directory_component
+    real_open_component = capture_runner._open_directory_component
 
     def record_open_component(parent_fd, name, *, create):
         fd = real_open_component(parent_fd, name, create=create)
@@ -773,7 +771,7 @@ def test_policy_partial_open_failure_closes_autoskillit_fd(
         return fd
 
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_open_directory_component",
         record_open_component,
     )
@@ -877,7 +875,7 @@ def test_marker_directory_identity_failure_closes_partial_open_fd(
     autoskillit_dir.mkdir(parents=True)
     anchor = open_project_anchor(str(project))
     opened_fds: list[int] = []
-    real_open_component = capture_artifacts._open_directory_component
+    real_open_component = capture_runner._open_directory_component
 
     def record_open_component(parent_fd, name, *, create):
         fd = real_open_component(parent_fd, name, create=create)
@@ -888,15 +886,15 @@ def test_marker_directory_identity_failure_closes_partial_open_fd(
         raise OSError("fault injection")
 
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_open_directory_component",
         record_open_component,
     )
-    monkeypatch.setattr(capture_artifacts, "_same_identity", fail_identity)
+    monkeypatch.setattr(capture_runner, "_same_identity", fail_identity)
 
     try:
         with pytest.raises(OSError, match="fault injection"):
-            capture_artifacts._open_and_match_directory(
+            capture_runner._open_and_match_directory(
                 anchor.fd,
                 CAPTURE_PATH_COMPONENTS[0],
                 anchor.identity,
@@ -917,7 +915,7 @@ def test_setup_failure_prevents_user_command_and_emits_failure_marker(
     temp_dir.mkdir(parents=True)
     (temp_dir / CAPTURE_PATH_COMPONENTS[2]).write_text("blocking file")
     assert (
-        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        capture_runner._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
         == 1
     )
     captured = capfd.readouterr()
@@ -953,14 +951,14 @@ def test_validated_direct_bypasses_unusable_capture_root_without_artifact_or_lea
         anchor_inode=project_stat.st_ino,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "validate_lineage_reference",
         lambda supplied_ref, supplied_attempt: (
             supplied_ref == reference and supplied_attempt == "c" * 32
         ),
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "record_runner_observation",
         lambda *_args, **_kwargs: True,
     )
@@ -1011,22 +1009,22 @@ def test_direct_control_flow_exception_settles_and_reraises(
     process = InterruptingProcess(b"")
     settled: list[object] = []
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "validate_lineage_reference",
         lambda *_args: True,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "record_runner_observation",
         lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_spawn_bash",
         lambda *_args, **_kwargs: process,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_settle_failed_capture",
         lambda supplied: settled.append(supplied),
     )
@@ -1061,9 +1059,9 @@ def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail
     def fail_create(*_args, **_kwargs):
         raise CaptureSetupError(reason, "capture setup failed") from RuntimeError(sensitive)
 
-    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", fail_create)
+    monkeypatch.setattr(capture_runner, "create_capture_artifact", fail_create)
 
-    assert capture_artifacts._main(_runner_args(command=command, cwd=str(project))) == 1
+    assert capture_runner._main(_runner_args(command=command, cwd=str(project))) == 1
 
     captured = capfd.readouterr()
     failure = _single_failure_marker(captured.err)
@@ -1087,10 +1085,10 @@ def test_recovery_contention_is_classified_at_the_runner_boundary(
     def contend(*_args, **_kwargs):
         raise LockContended
 
-    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", contend)
+    monkeypatch.setattr(capture_runner, "create_capture_artifact", contend)
 
     assert (
-        capture_artifacts._main(_runner_args(command=f"printf ran > {sentinel}", cwd=str(project)))
+        capture_runner._main(_runner_args(command=f"printf ran > {sentinel}", cwd=str(project)))
         == 1
     )
 
@@ -1110,7 +1108,7 @@ def test_reject_mode_validates_capture_id(
     encoded = base64.b64encode(
         json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()
     ).decode()
-    assert capture_artifacts._main([encoded]) == 1
+    assert capture_runner._main([encoded]) == 1
     captured = capfd.readouterr()
     assert "invalid capture runner invocation" in captured.err
     assert "capture request rejected before command execution" not in captured.err
@@ -1124,17 +1122,17 @@ def test_valid_reject_runs_one_runner_tail_sweep(
 
     def reconcile(requested_cwd, budget):
         assert requested_cwd == "/abs/project"
-        assert budget is capture_artifacts._capture_reconcile.RUNNER_TAIL_BUDGET
+        assert budget is capture_runner._capture_reconcile.RUNNER_TAIL_BUDGET
         events.append("reconcile")
         return CaptureCleanupOutcome()
 
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
 
-    assert capture_artifacts._main(_runner_args(action="reject", command=None)) == 1
+    assert capture_runner._main(_runner_args(action="reject", command=None)) == 1
     assert events == ["reconcile"]
     assert "capture request rejected before command execution" in capfd.readouterr().err
 
@@ -1148,19 +1146,19 @@ def test_runner_tail_consumes_byte_pressure_budget(
         budgets.append(budget)
         return CaptureCleanupOutcome()
 
-    monkeypatch.setattr(capture_artifacts, "_BYTE_PRESSURE_OBSERVED", True)
+    monkeypatch.setattr(capture_runner, "_BYTE_PRESSURE_OBSERVED", True)
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
 
-    capture_artifacts._sweep_after_runner("/abs/project")
-    capture_artifacts._sweep_after_runner("/abs/project")
+    capture_runner._sweep_after_runner("/abs/project")
+    capture_runner._sweep_after_runner("/abs/project")
 
     assert budgets == [
-        capture_artifacts._capture_types.TRANSITION_RESCUE_BUDGET,
-        capture_artifacts._capture_reconcile.RUNNER_TAIL_BUDGET,
+        capture_runner._capture_types.TRANSITION_RESCUE_BUDGET,
+        capture_runner._capture_reconcile.RUNNER_TAIL_BUDGET,
     ]
 
 
@@ -1177,14 +1175,14 @@ def test_runner_tail_preserves_dispatch_result_and_order(
         events.append("reconcile")
         return CaptureCleanupOutcome()
 
-    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", dispatch)
+    monkeypatch.setattr(capture_runner, "_dispatch_runner", dispatch)
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
 
-    assert capture_artifacts._main(_runner_args()) == 37
+    assert capture_runner._main(_runner_args()) == 37
     assert events == ["dispatch", "reconcile"]
 
 
@@ -1192,18 +1190,18 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
+    monkeypatch.setattr(capture_runner, "_dispatch_runner", lambda *_args: 23)
 
     def fail_reconcile(_requested_cwd, _budget):
         raise RuntimeError("🔥" * 512)
 
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         fail_reconcile,
     )
 
-    assert capture_artifacts._main(_runner_args()) == 23
+    assert capture_runner._main(_runner_args()) == 23
     captured = capfd.readouterr()
     assert captured.out == ""
     assert "failed" in captured.err
@@ -1215,9 +1213,9 @@ def test_runner_tail_reports_sweep_outcome_errors(
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
+    monkeypatch.setattr(capture_runner, "_dispatch_runner", lambda *_args: 23)
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         lambda requested_cwd, budget: CaptureCleanupOutcome(
             errors=2,
@@ -1226,7 +1224,7 @@ def test_runner_tail_reports_sweep_outcome_errors(
         ),
     )
 
-    assert capture_artifacts._main(_runner_args()) == 23
+    assert capture_runner._main(_runner_args()) == 23
     captured = capfd.readouterr()
     assert captured.out == ""
     assert "blocker=ledger_integrity errors=2" in captured.err
@@ -1239,9 +1237,9 @@ def test_runner_tail_deferred_outcome_emits_nothing_per_command(
     """The incident: bounded budget progress with no errors must stay silent
     on every command, not just occasionally — DEFERRED never produces a
     per-command runner-tail message."""
-    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
+    monkeypatch.setattr(capture_runner, "_dispatch_runner", lambda *_args: 23)
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         lambda requested_cwd, budget: CaptureCleanupOutcome(
             examined=2,
@@ -1253,7 +1251,7 @@ def test_runner_tail_deferred_outcome_emits_nothing_per_command(
         ),
     )
 
-    assert capture_artifacts._main(_runner_args()) == 23
+    assert capture_runner._main(_runner_args()) == 23
     captured = capfd.readouterr()
     assert captured.out == ""
     assert captured.err == ""
@@ -1272,14 +1270,14 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
         swept.append(True)
         return CaptureCleanupOutcome()
 
-    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", fail_dispatch)
+    monkeypatch.setattr(capture_runner, "_dispatch_runner", fail_dispatch)
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
 
-    assert capture_artifacts._main(_runner_args()) == 1
+    assert capture_runner._main(_runner_args()) == 1
     assert swept == [True]
     assert "capture runner failed" in capfd.readouterr().err
 
@@ -1294,13 +1292,13 @@ def test_malformed_runner_invocation_reconciles_only_with_absolute_cwd(
         return CaptureCleanupOutcome()
 
     monkeypatch.setattr(
-        capture_artifacts._capture_reconcile,
+        capture_runner._capture_reconcile,
         "reconcile_capture_store",
         reconcile,
     )
 
-    assert capture_artifacts._main(["not-base64"]) == 1
-    assert capture_artifacts._main([]) == 1
+    assert capture_runner._main(["not-base64"]) == 1
+    assert capture_runner._main([]) == 1
     assert reconciled == []
 
 
@@ -1342,7 +1340,7 @@ def test_dispatch_uses_only_request_mode_and_keeps_lineage_anchor_distinct_from_
         return 17
 
     monkeypatch.setenv(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR, ambient_mode)
-    monkeypatch.setattr(capture_artifacts, "run_capture", record_run)
+    monkeypatch.setattr(capture_runner, "run_capture", record_run)
     request = _runner_request(
         mode=request_mode,
         cwd="/command/cwd",
@@ -1350,7 +1348,7 @@ def test_dispatch_uses_only_request_mode_and_keeps_lineage_anchor_distinct_from_
         lineage_ref=lineage_ref,
     )
 
-    assert capture_artifacts._dispatch_runner(request) == 17
+    assert capture_runner._dispatch_runner(request) == 17
     assert observed["requested_mode"] == request_mode
     assert observed["attempt_id"] == attempt_id
     assert observed["lineage_ref"] == lineage_ref
@@ -1372,14 +1370,14 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
     for name in PROTECTED_CAPTURE_ENV_VARS:
         monkeypatch.setenv(name, f"hostile-{name}")
     monkeypatch.setenv("PHASE4_UNRELATED_ENV", "preserved")
-    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
         capture_process,
         "_finish_owned_spawn",
         lambda process, **_kwargs: process,
     )
-    capture_artifacts._spawn_bash(
-        capture_artifacts._resolve_bash(),
+    capture_runner._spawn_bash(
+        capture_runner._resolve_bash(),
         "printf safe",
         capture_output=False,
     )
@@ -1405,9 +1403,9 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
     closed_fds: list[int] = []
     fchdir_fds: list[int] = []
     popen_kwargs: list[dict[str, object]] = []
-    real_open = capture_artifacts.os.open
-    real_close = capture_artifacts.os.close
-    real_fchdir = capture_artifacts.os.fchdir
+    real_open = capture_runner.os.open
+    real_close = capture_runner.os.close
+    real_fchdir = capture_runner.os.fchdir
 
     def record_open(path, flags, mode=0o777, *, dir_fd=None):
         fd = real_open(path, flags, mode, dir_fd=dir_fd)
@@ -1432,10 +1430,10 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
             raise OSError(spawn_errno, "fault injection")
         return process
 
-    monkeypatch.setattr(capture_artifacts.os, "open", record_open)
-    monkeypatch.setattr(capture_artifacts.os, "close", record_close)
-    monkeypatch.setattr(capture_artifacts.os, "fchdir", record_fchdir)
-    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(capture_runner.os, "open", record_open)
+    monkeypatch.setattr(capture_runner.os, "close", record_close)
+    monkeypatch.setattr(capture_runner.os, "fchdir", record_fchdir)
+    monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
         capture_process,
         "_finish_owned_spawn",
@@ -1444,7 +1442,7 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
 
     if spawn_errno is None:
         assert (
-            capture_artifacts._spawn_bash(
+            capture_runner._spawn_bash(
                 "/bin/bash",
                 "printf safe",
                 capture_output=False,
@@ -1458,7 +1456,7 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
             else "cannot spawn capture shell"
         )
         with pytest.raises(CaptureSetupError, match=message):
-            capture_artifacts._spawn_bash(
+            capture_runner._spawn_bash(
                 "/bin/bash",
                 "printf safe",
                 capture_output=False,
@@ -1507,7 +1505,7 @@ def test_spawn_bash_does_not_leak_inherited_cwd_fd_to_child(
             ),
         ]
     )
-    process = capture_artifacts._spawn_bash(
+    process = capture_runner._spawn_bash(
         "/bin/bash",
         shlex.join([sys.executable, "-c", script]),
         capture_output=capture_output,
@@ -1531,7 +1529,7 @@ def test_e2big_spawn_failure_is_explicit_bounded_and_fail_closed(
     def fail_spawn(*_args, **_kwargs):
         raise OSError(errno.E2BIG, "argument list too long")
 
-    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", fail_spawn)
+    monkeypatch.setattr(capture_runner.subprocess, "Popen", fail_spawn)
 
     assert run_capture("printf must-not-run", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
@@ -1565,7 +1563,7 @@ def test_capture_preserves_native_bash_command_name(
     assert run_capture('printf "%s" "$0"', str(project), _CAPTURE_ID) == 0
 
     captured = capfd.readouterr()
-    assert captured.out == capture_artifacts._resolve_bash()
+    assert captured.out == capture_runner._resolve_bash()
 
 
 def test_spawn_failure_closes_created_artifact_fd(
@@ -1582,7 +1580,7 @@ def test_spawn_failure_closes_created_artifact_fd(
 
     monkeypatch.setattr(subprocess, "Popen", fail_spawn)
     assert (
-        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        capture_runner._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
         == 1
     )
 
@@ -1609,18 +1607,18 @@ def test_spawn_failure_reports_failed_state_recovery_error(
         raise OSError("primary spawn failure")
 
     def fail_recovery(*_args, **_kwargs):
-        raise capture_artifacts.CaptureLifecycleError("secondary recovery failure")
+        raise capture_runner.CaptureLifecycleError("secondary recovery failure")
 
     def record_error(message: str, *, exc_info: bool = False) -> None:
         logged_events.append((message, exc_info))
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", fail_spawn)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", fail_spawn)
     monkeypatch.setattr(
-        capture_artifacts.CaptureLifecycleStore,
+        capture_runner.CaptureLifecycleStore,
         "commit_capture_failure",
         fail_recovery,
     )
-    monkeypatch.setattr(capture_artifacts.logger, "error", record_error)
+    monkeypatch.setattr(capture_runner.logger, "error", record_error)
 
     assert run_capture("printf never", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
@@ -1640,7 +1638,7 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
     project.mkdir()
     observed_fds = _record_owned_capture_fds(monkeypatch)
     duplicated_fds: list[int] = []
-    real_dup = capture_artifacts.os.dup
+    real_dup = capture_runner.os.dup
 
     def record_dup(fd):
         duplicated_fd = real_dup(fd)
@@ -1653,11 +1651,11 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
     def unexpected_spawn(*_args, **_kwargs):
         raise AssertionError("command must not spawn after fd duplication failure")
 
-    monkeypatch.setattr(capture_artifacts.os, "dup", record_dup)
-    monkeypatch.setattr(capture_artifacts, "_same_identity", fail_duplicated_identity)
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", unexpected_spawn)
+    monkeypatch.setattr(capture_runner.os, "dup", record_dup)
+    monkeypatch.setattr(capture_runner, "_same_identity", fail_duplicated_identity)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", unexpected_spawn)
     assert (
-        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        capture_runner._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
         == 1
     )
 
@@ -1684,9 +1682,9 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
     inherited_cwd_fds: list[int] = []
     closed_fds: list[int] = []
     popen_kwargs: list[dict[str, object]] = []
-    real_open = capture_artifacts.os.open
-    real_close = capture_artifacts.os.close
-    real_fchdir = capture_artifacts.os.fchdir
+    real_open = capture_runner.os.open
+    real_close = capture_runner.os.close
+    real_fchdir = capture_runner.os.fchdir
     fchdir_calls = 0
 
     def record_open(path, flags, mode=0o777, *, dir_fd=None):
@@ -1711,10 +1709,10 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
         popen_kwargs.append(kwargs)
         return process
 
-    monkeypatch.setattr(capture_artifacts.os, "open", record_open)
-    monkeypatch.setattr(capture_artifacts.os, "close", record_close)
-    monkeypatch.setattr(capture_artifacts.os, "fchdir", fail_restore)
-    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(capture_runner.os, "open", record_open)
+    monkeypatch.setattr(capture_runner.os, "close", record_close)
+    monkeypatch.setattr(capture_runner.os, "fchdir", fail_restore)
+    monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
         capture_process,
         "_finish_owned_spawn",
@@ -1723,7 +1721,7 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
 
     try:
         with pytest.raises(CaptureSetupError, match="cannot restore runner cwd"):
-            capture_artifacts._spawn_bash(
+            capture_runner._spawn_bash(
                 "/bin/bash",
                 "printf never",
                 capture_output=capture_output,
@@ -1758,9 +1756,9 @@ def test_post_creation_identity_failure_closes_artifact_and_emits_failure(
             raise OSError("fault injection")
         return value
 
-    monkeypatch.setattr(capture_artifacts.os, "fstat", fail_artifact_identity)
+    monkeypatch.setattr(capture_runner.os, "fstat", fail_artifact_identity)
     assert (
-        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        capture_runner._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
         == 1
     )
     captured = capfd.readouterr()
@@ -1780,14 +1778,14 @@ def test_capture_pipe_closes_on_success(
     project = tmp_path / "project"
     project.mkdir()
     processes: list[subprocess.Popen[bytes]] = []
-    real_spawn = capture_artifacts._spawn_bash
+    real_spawn = capture_runner._spawn_bash
 
     def record_spawn(*args, **kwargs):
         process = real_spawn(*args, **kwargs)
         processes.append(process)
         return process
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", record_spawn)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", record_spawn)
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
     assert processes
@@ -1823,7 +1821,7 @@ def test_oversized_delivery_publishes_parseable_resolvable_v2(
     project = tmp_path / "project"
     project.mkdir()
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=8),
     )
@@ -1865,7 +1863,7 @@ def test_oversized_v2_preserves_distinct_raw_wait_outcome(
     project = tmp_path / "project"
     project.mkdir()
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=8),
     )
@@ -1926,13 +1924,13 @@ def test_bash_resolution_rejects_untrusted_explicit_candidate(
         target.chmod(0o777)
 
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_TRUSTED_BASH_CANDIDATES",
         (str(candidate),),
     )
 
     with pytest.raises(CaptureSetupError, match="trusted bash executable unavailable"):
-        capture_artifacts._resolve_bash()
+        capture_runner._resolve_bash()
 
 
 def test_capture_stream_failure_closes_pipe_and_artifact(
@@ -1943,7 +1941,7 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
     project = tmp_path / "project"
     project.mkdir()
     observed_fds: list[int] = []
-    real_create = capture_artifacts.create_capture_artifact
+    real_create = capture_runner.create_capture_artifact
 
     class FailingStream:
         closed = False
@@ -1976,8 +1974,8 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
         observed_fds.append(artifact.fd)
         return artifact
 
-    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "create_capture_artifact", record_artifact)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
@@ -2006,17 +2004,17 @@ def test_capture_control_flow_exception_settles_and_reraises(
     settled: list[object] = []
 
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_spawn_bash",
         lambda *_args, **_kwargs: process,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_drain_capture",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "_settle_failed_capture",
         lambda supplied: settled.append(supplied),
     )
@@ -2054,7 +2052,7 @@ def test_capture_readback_failure_after_partial_output_closes_runtime_fds(
 
     process = _FakeCaptureProcess(b"")
     process.stdout = PartialReadbackStream()
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
 
@@ -2092,8 +2090,8 @@ def test_digest_failure_emits_failure_and_closes_runtime_resources(
         def hexdigest(self) -> str:
             raise AssertionError("digest failure must stop before finalization")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(capture_artifacts, "hashlib", SimpleNamespace(sha256=BrokenDigest))
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "hashlib", SimpleNamespace(sha256=BrokenDigest))
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
@@ -2128,10 +2126,10 @@ def test_completed_carrier_fsync_failure_prevents_finalization(
             raise OSError("carrier fsync failed")
         real_fsync(fd)
 
-    monkeypatch.setattr(capture_artifacts.os, "fsync", fail_carrier_fsync)
+    monkeypatch.setattr(capture_runner.os, "fsync", fail_carrier_fsync)
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
-    monkeypatch.setattr(capture_artifacts.os, "fsync", real_fsync)
+    monkeypatch.setattr(capture_runner.os, "fsync", real_fsync)
 
     captured = capfd.readouterr()
     record = _capture_record(project)
@@ -2152,17 +2150,17 @@ def test_artifact_content_tampering_prevents_capture_publication(
     project = tmp_path / "project"
     project.mkdir()
     process = _FakeCaptureProcess(b"captured-output")
-    real_drain = capture_artifacts._drain_capture
+    real_drain = capture_runner._drain_capture
 
     def tamper_after_drain(process, artifact_writer_fd, inline_bytes):
         result = real_drain(process, artifact_writer_fd, inline_bytes)
         os.ftruncate(artifact_writer_fd, 0)
         os.lseek(artifact_writer_fd, 0, os.SEEK_SET)
-        capture_artifacts._write_all(artifact_writer_fd, b"tampered")
+        capture_runner._write_all(artifact_writer_fd, b"tampered")
         return result
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(capture_artifacts, "_drain_capture", tamper_after_drain)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_drain_capture", tamper_after_drain)
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
@@ -2185,7 +2183,7 @@ def test_stdout_delivery_failure_closes_resources_without_success(
     def fail_stdout_delivery(*_args, **_kwargs) -> None:
         raise RuntimeError("fault injection")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         capture_replay,
         "write_and_flush_hook_stdout",
@@ -2224,7 +2222,7 @@ def test_degraded_finalization_delivers_verified_output_and_child_status(
     def fail_finalization(*_args, **_kwargs):
         raise CaptureCapacityError(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         CaptureLifecycleStore,
         "commit_verified_snapshot",
@@ -2265,7 +2263,7 @@ def test_degraded_stdout_failure_preserves_delivery_error_as_cause(
             assert logged is not None
             logged_exceptions.append(logged)
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         CaptureLifecycleStore,
         "commit_verified_snapshot",
@@ -2276,7 +2274,7 @@ def test_degraded_stdout_failure_preserves_delivery_error_as_cause(
         "write_and_flush_hook_stdout",
         fail_stdout_delivery,
     )
-    monkeypatch.setattr(capture_artifacts.logger, "error", record_error)
+    monkeypatch.setattr(capture_runner.logger, "error", record_error)
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
@@ -2315,9 +2313,9 @@ def test_partial_write_and_flush_failures_record_delivery_authoritatively(
     project.mkdir()
     process = _FakeCaptureProcess(b"inline")
     stream = _ShortWriteStream(results, fail_flush=fail_flush)
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts.sys,
+        capture_runner.sys,
         "stdout",
         SimpleNamespace(buffer=stream),
     )
@@ -2343,9 +2341,9 @@ def test_progressive_short_writes_complete_delivery(
     project.mkdir()
     process = _FakeCaptureProcess(b"inline")
     stream = _ShortWriteStream([1, 2, 3])
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts.sys,
+        capture_runner.sys,
         "stdout",
         SimpleNamespace(buffer=stream),
     )
@@ -2370,7 +2368,7 @@ def test_successful_finalization_uses_lifecycle_time_policy(
     project = tmp_path / "project"
     project.mkdir()
     process = _FakeCaptureProcess(b"inline")
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         CaptureLifecycleStore,
         "capture_finalization_window",
@@ -2401,7 +2399,7 @@ def test_begin_delivery_failure_emits_no_capture_bytes(
             raise OSError("begin delivery failed")
         return real_transition(self, value, expected=expected, target=target)
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(CaptureLifecycleStore, "transition_delivery", fail_begin)
 
     assert run_capture("printf inline", str(project), _CAPTURE_ID) == 1
@@ -2430,9 +2428,9 @@ def test_oversized_begin_failure_invalidates_unemitted_reference(
             raise OSError("begin delivery failed")
         return real_transition(self, value, expected=expected, target=target)
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=1),
     )
@@ -2461,13 +2459,13 @@ def test_transfer_failure_invalidates_issued_reference(
     def fail_transfer(_self, _lifecycle, _finalized):
         raise OSError("transfer failed")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=1),
     )
-    monkeypatch.setattr(capture_artifacts.CaptureArtifact, "transfer_to_reader", fail_transfer)
+    monkeypatch.setattr(capture_runner.CaptureArtifact, "transfer_to_reader", fail_transfer)
 
     assert run_capture("printf oversized", str(project), _CAPTURE_ID) == 1
 
@@ -2492,7 +2490,7 @@ def test_render_failure_after_begin_records_failed_delivery(
     def fail_render(_finalized) -> bytes:
         raise RuntimeError("render failed")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(capture_replay, "render_inline_capture", fail_render)
 
     assert run_capture("printf inline", str(project), _CAPTURE_ID) == 1
@@ -2521,7 +2519,7 @@ def test_finish_delivery_failure_preserves_attempting_after_flushed_bytes(
             raise OSError("finish delivery failed")
         return real_transition(self, value, expected=expected, target=target)
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(CaptureLifecycleStore, "transition_delivery", fail_finish)
 
     assert run_capture("printf inline", str(project), _CAPTURE_ID) == 1
@@ -2550,9 +2548,9 @@ def test_oversized_finish_failure_leaves_flushed_marker_and_resolvable_token(
             raise OSError("finish delivery failed")
         return real_transition(self, value, expected=expected, target=target)
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=1),
     )
@@ -2598,7 +2596,7 @@ def test_delivery_transition_accepts_durable_successor_after_exception(
             raise CaptureTransitionCommittedError("post-append fault")
         return result
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         CaptureLifecycleStore,
         "transition_delivery",
@@ -2641,7 +2639,7 @@ def test_delivery_transition_does_not_accept_unclassified_successor_after_except
             raise OSError("unclassified post-append fault")
         return result
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         CaptureLifecycleStore,
         "transition_delivery",
@@ -2782,9 +2780,9 @@ def test_publication_failure_invalidates_issued_token_without_delivery(
     def fail_publication(_self, _finalized):
         raise OSError("publication failed")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=1),
     )
@@ -2815,9 +2813,9 @@ def test_publication_accepts_durable_successor_after_exception(
         real_publish(self, finalized)
         raise CaptureTransitionCommittedError("post-publication fault")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=1),
     )
@@ -2848,9 +2846,9 @@ def test_publication_does_not_accept_unclassified_successor_after_exception(
         real_publish(self, finalized)
         raise OSError("unclassified post-publication fault")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=1),
     )
@@ -2876,7 +2874,7 @@ def test_failure_marker_emission_failure_returns_capture_failure_code(
     def fail_marker(*_args, **_kwargs) -> None:
         raise RuntimeError("fault injection")
 
-    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
         capture_replay,
         "write_and_flush_hook_stdout",
@@ -2900,7 +2898,7 @@ def test_artifact_write_failure_emits_failure_marker(
     def fail_write(fd, data):
         raise OSError("fault injection")
 
-    monkeypatch.setattr(capture_artifacts, "_write_all", fail_write)
+    monkeypatch.setattr(capture_runner, "_write_all", fail_write)
 
     command = f"printf ran > {shlex.quote(str(sentinel))}; printf output"
     assert run_capture(command, str(project), _CAPTURE_ID) == 1
@@ -2997,12 +2995,12 @@ def test_publication_binding_failure_emits_typed_failure(
         raise OSError("fault injection")
 
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "verify_reference_publication_binding",
         fail_verification,
     )
     monkeypatch.setattr(
-        capture_artifacts,
+        capture_runner,
         "read_capture_policy",
         lambda _anchor: CapturePolicy(inline_bytes=1),
     )

@@ -28,10 +28,16 @@ def _find_env_set_constants(constants_file: Path) -> list[str]:
     return names
 
 
-def _has_production_import(src_root: Path, constant_name: str, definition_file: Path) -> bool:
+def _has_production_import(
+    src_root: Path,
+    constant_name: str,
+    definition_file: Path,
+    *,
+    excluded_files: frozenset[Path] = frozenset(),
+) -> bool:
     """Check if any production file (excluding the definition) imports the constant."""
     for py_file in src_root.rglob("*.py"):
-        if py_file == definition_file:
+        if py_file == definition_file or py_file in excluded_files:
             continue
         if py_file.name.startswith("test_"):
             continue
@@ -126,6 +132,7 @@ def test_registry_constants_have_production_consumer() -> None:
     src_root = paths.pkg_root()
     constants_files = [
         src_root / "core" / "types" / "_type_constants_registries.py",
+        src_root / "core" / "types" / "_type_recipe_sections.py",
         src_root / "core" / "types" / "_type_constants.py",
     ]
 
@@ -140,7 +147,17 @@ def test_registry_constants_have_production_consumer() -> None:
     for name, def_file in all_constants:
         if name in _REGISTRY_EXEMPTIONS:
             continue
-        if not _has_production_import(src_root, name, def_file):
+        excluded_files = (
+            frozenset({src_root / "core" / "types" / "_type_constants_registries.py"})
+            if def_file.name == "_type_recipe_sections.py"
+            else frozenset()
+        )
+        if not _has_production_import(
+            src_root,
+            name,
+            def_file,
+            excluded_files=excluded_files,
+        ):
             unconsumed.append(name)
 
     assert not unconsumed, (
@@ -164,6 +181,7 @@ def test_exemptions_reference_real_constants() -> None:
     src_root = paths.pkg_root()
     constants_files = [
         src_root / "core" / "types" / "_type_constants_registries.py",
+        src_root / "core" / "types" / "_type_recipe_sections.py",
         src_root / "core" / "types" / "_type_constants.py",
     ]
     all_names: set[str] = set()

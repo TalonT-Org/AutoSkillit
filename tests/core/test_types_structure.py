@@ -123,6 +123,19 @@ _PRE_SPLIT_CONSTANT_NAMES: frozenset[str] = frozenset(
     }
 )
 
+_RECIPE_SECTION_FACADE_NAMES: tuple[str, ...] = (
+    "RecipeSectionDef",
+    "RECIPE_SECTION_REGISTRY",
+    "DYNAMIC_RECIPE_SECTION_DEF",
+    "RECIPE_SECTION_PAGINATION_VERSION",
+    "RECIPE_SECTION_REGISTRY_DIGEST",
+    "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
+    "RecipeSectionContentFormatDef",
+    "RECIPE_SECTION_CONTENT_FORMAT_REGISTRY",
+    "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
+    "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
+)
+
 
 def test_decomposition_preserves_public_symbol_set() -> None:
     """Every pre-split _type_enums / _type_constants __all__ entry must remain
@@ -176,6 +189,23 @@ def test_decomposition_preserves_public_symbol_set() -> None:
         assert hasattr(enums_mod, name), f"_type_enums.{name} missing after decomposition"
     for name in _PRE_SPLIT_CONSTANT_NAMES:
         assert hasattr(constants_mod, name), f"_type_constants.{name} missing after decomposition"
+
+
+@pytest.mark.parametrize("name", _RECIPE_SECTION_FACADE_NAMES)
+def test_recipe_section_facade_preserves_identity_and_export_ownership(name: str) -> None:
+    import autoskillit.core as core_mod
+    import autoskillit.core.types as types_hub
+    import autoskillit.core.types._type_constants_registries as legacy_mod
+    import autoskillit.core.types._type_recipe_sections as canonical_mod
+
+    canonical = getattr(canonical_mod, name)
+    assert getattr(legacy_mod, name) is canonical
+    assert getattr(types_hub, name) is canonical
+    assert getattr(core_mod, name) is canonical
+    assert types_hub.__all__.count(name) == 1
+    assert name in core_mod.__all__
+    assert name in canonical_mod.__all__
+    assert name not in legacy_mod.__all__
 
 
 def test_enums_importable_from_sub_module():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dis
 from dataclasses import replace
 from typing import NamedTuple
 
@@ -14,10 +15,12 @@ from autoskillit.core import (
     ProducerSurface,
     resolve_context_admission_coverage,
 )
+from autoskillit.hooks._capture._runner import run_capture
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 CHECKED_AT = "2026-07-23"
+DIRECT_CHECKED_AT = "2026-08-23"
 FRESHNESS_POLICY = "verify_on_version_or_configuration_change"
 CODEX_REVISION = "25af12f7e61572b0bc18ddb1008be543b91519b0"
 REASON_CODE = "authoritative-watermark-unavailable"
@@ -67,10 +70,10 @@ def _autoskillit_direct_evidence() -> ExpectedEvidence:
         "autoskillit",
         "direct",
         "source_inspection",
-        "src/autoskillit/hooks/_capture_artifacts.py",
-        "0.10.890",
-        "ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
-        CHECKED_AT,
+        "src/autoskillit/hooks/_capture/_runner.py",
+        "0.10.1013",
+        "548883ae5547d8a2cebc561d940c7a80ae7de47a",
+        DIRECT_CHECKED_AT,
         FRESHNESS_POLICY,
     )
 
@@ -490,6 +493,20 @@ def test_native_shell_default_and_direct_resolve_independently() -> None:
     assert degraded_direct.evidence[0].claim_id == "COV-NATIVE-SHELL-DIRECT"
     assert degraded_direct.observation_state is CoverageState.UPSTREAM_GATED
     assert degraded_direct.reason_code == "coverage-runtime-mismatch"
+
+
+def test_native_shell_direct_decision_is_owned_by_capture_runner() -> None:
+    instructions = tuple(dis.get_instructions(run_capture))
+    loaded_names = {item.argval for item in instructions if item.opname == "LOAD_GLOBAL"}
+    string_constants = {
+        item.argval
+        for item in instructions
+        if item.opname == "LOAD_CONST" and isinstance(item.argval, str)
+    }
+
+    assert run_capture.__module__ == "autoskillit.hooks._capture._runner"
+    assert {"capture", "direct"} <= string_constants
+    assert {"_spawn_bash", "open_capture_root"} <= loaded_names
 
 
 def test_compaction_observation_does_not_imply_authority() -> None:

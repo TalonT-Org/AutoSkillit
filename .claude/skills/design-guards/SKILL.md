@@ -8,6 +8,10 @@ hooks:
         - type: command
           command: "echo '[SKILL: design-guards] Designing architectural guards for bug patterns...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Design Guards Skill

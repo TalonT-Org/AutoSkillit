@@ -546,45 +546,6 @@ def _render_cli_auth_store(config_text: str, execution_role: SkillExecutionRole)
     return updated
 
 
-def _materialize_profile_skills(
-    session_dir: Path,
-    *,
-    source_codex_home: Path | None = None,
-) -> int:
-    """Symlink source-home profile skills into a generated Codex home.
-
-    Scans the selected Codex home's ``skills`` for subdirectories containing
-    SKILL.md. Each is symlinked into session_dir/skills/<name>. Falls back
-    to shutil.copytree if symlink creation fails. Subdirectories without
-    SKILL.md are skipped. Returns the number of skills materialized.
-    """
-    source_home = Path.home() / ".codex" if source_codex_home is None else Path(source_codex_home)
-    profile_skills_root = source_home / "skills"
-    if not profile_skills_root.is_dir():
-        return 0
-    count = 0
-    skills_base = session_dir / "skills"
-    skills_base.mkdir(parents=True, exist_ok=True)
-    entries = list(profile_skills_root.iterdir())
-    for entry in entries:
-        if not entry.is_dir() or not (entry / "SKILL.md").is_file():
-            continue
-        target = skills_base / entry.name
-        if target.exists() or target.is_symlink():
-            continue
-        try:
-            target.symlink_to(entry.resolve())
-        except OSError:
-            logger.debug(
-                "codex_profile_skill_symlink_failed_using_copytree",
-                skill=entry.name,
-                exc_info=True,
-            )
-            shutil.copytree(entry, target)
-        count += 1
-    return count
-
-
 __all__ = [
     "clear_explorer_binding_env",
     "refresh_explorer_binding_env",

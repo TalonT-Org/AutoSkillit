@@ -10,6 +10,7 @@ import asyncio
 import json
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -151,6 +152,109 @@ class TestFleetRunCliAdmission:
             "without this kwarg the engine's internal load_and_validate runs without "
             "per-step routing context, causing backend-incompatible-skill false positives."
         )
+
+    def test_fleet_run_compiles_and_consumes_orchestrator_guidance_refusals(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Fleet derives food-truck guidance only from its admitted Codex catalog."""
+        from autoskillit.cli.fleet import _fleet_run
+
+        backend = _make_codex_backend()
+        raw_catalog = SimpleNamespace(
+            skills=(
+                SimpleNamespace(name="sous-chef"),
+                SimpleNamespace(name="process-issues"),
+            ),
+        )
+        payload = {
+            "backend": "codex",
+            "unavailable": (
+                {
+                    "skill": "process-issues",
+                    "backend": "codex",
+                    "operation": "required_join",
+                    "diagnostic": "required join is unavailable",
+                },
+            ),
+        }
+        compilation = SimpleNamespace(
+            catalog=SimpleNamespace(skills=(raw_catalog.skills[0],)),
+            unavailability_payload=payload,
+        )
+        compile_calls: list[tuple[object, object]] = []
+        projected: list[str] = []
+        rendered: list[object] = []
+
+        class Resolver:
+            def list_effective(self, *_args: object, **_kwargs: object) -> object:
+                return raw_catalog
+
+        def compile_catalog(catalog: object, selected_backend: object) -> object:
+            compile_calls.append((catalog, selected_backend))
+            return compilation
+
+        def project(skill: object, _context: object) -> SimpleNamespace:
+            projected.append(getattr(skill, "name"))
+            return SimpleNamespace(content="admitted sous-chef guidance")
+
+        def render(unavailability_payload: object) -> None:
+            rendered.append(unavailability_payload)
+
+        mock_ctx = _make_mock_ctx(tmp_path, backend)
+        mock_ctx.skill_resolver = Resolver()
+        monkeypatch.setattr(
+            "autoskillit.server.make_context",
+            lambda _cfg, project_dir=None, plugin_retirement_coordinator=None: mock_ctx,
+        )
+        monkeypatch.setattr(
+            "autoskillit.workspace.compile_session_skill_catalog",
+            compile_catalog,
+        )
+        monkeypatch.setattr(
+            _fleet_run,
+            "compile_session_skill_catalog",
+            compile_catalog,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "autoskillit.workspace.project_agent_skill_document",
+            project,
+        )
+        monkeypatch.setattr(
+            _fleet_run,
+            "project_agent_skill_document",
+            project,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch.render_skill_unavailability",
+            render,
+        )
+        monkeypatch.setattr(_fleet_run, "render_skill_unavailability", render, raising=False)
+
+        async def fake_dispatch(**_kwargs: object) -> DispatchResult:
+            return _make_success_result()
+
+        monkeypatch.setattr("autoskillit.fleet.execute_dispatch", fake_dispatch)
+        asyncio.run(
+            _fleet_run._execute_fleet_run(
+                cfg=MagicMock(),
+                recipe="test-recipe",
+                task="",
+                ingredients=None,
+                timeout_sec=None,
+                dispatch_backend=backend,
+                resume_session_id=None,
+                prior_dispatch_id=None,
+                disable_quota_guard=True,
+            )
+        )
+
+        assert compile_calls == [(raw_catalog, backend)]
+        assert projected == ["sous-chef"]
+        assert rendered == [payload]
 
     def test_fleet_run_cli_codex_fails_closed_on_invalid_recipe(
         self,

@@ -12,6 +12,7 @@ import pytest
 import autoskillit.workspace.session_skills as session_skills
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
+    BackendConventions,
     ClaudeDirectoryConventions,
     PreLaunchReadiness,
     SessionSkillManager,
@@ -84,7 +85,10 @@ def _codex_backend() -> MagicMock:
     backend = MagicMock()
     backend.name = "codex"
     backend.capabilities = _CODEX_CAPABILITIES
-    backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    backend.conventions = BackendConventions(
+        skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
+        profile_skills_source=None,
+    )
     backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     backend.setup_session_dir.return_value = None
     backend.validate_session_layout.return_value = []

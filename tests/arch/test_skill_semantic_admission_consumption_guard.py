@@ -22,12 +22,15 @@ _EXPECTED_CALLERS = Counter(
     {
         (_COMPILE, "cli/session/_session_cook.py", "cook"): 1,
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
+        (_COMPILE, "workspace/session_skills.py", "materialize_profile_skills"): 1,
+        (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 2,
+        (_COMPILE, "server/tools/_serve_helpers.py", "project_orchestrator_guidance"): 1,
         (
             _COMPILE,
-            "workspace/session_skills.py",
-            "_materialize_codex_profile_skill_infos",
+            "server/tools/tools_fleet_dispatch/_campaign_state.py",
+            "_project_food_truck_sous_chef",
         ): 1,
-        (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 2,
+        (_COMPILE, "cli/fleet/_fleet_run.py", "_execute_fleet_run"): 1,
         (_ADAPT, "cli/doctor/_doctor_config.py", "_check_standing_backend_pins_feasibility"): 1,
         (_ADAPT, "server/tools/_preflight.py", "check_skill_semantic_feasibility"): 1,
         (_ADAPT, "workspace/_projected_artifact/authority.py", "_plan"): 1,
@@ -166,12 +169,34 @@ def _consumes_compilation(function: ast.AST, call: ast.Call) -> bool:
         )
     if any(
         isinstance(node, ast.Attribute)
-        and node.attr in {"unavailable", "unavailability_payload"}
+        and node.attr == "unavailability_payload"
         and isinstance(node.value, ast.Name)
         and node.value.id == variable
+        and any(
+            isinstance(parent, ast.Call) and _contains(parent, node)
+            for parent in _walk_function_scope(function)
+        )
         for node in _walk_function_scope(function)
     ):
         return True
+    for node in _walk_function_scope(function):
+        if not (
+            isinstance(node, ast.For)
+            and isinstance(node.iter, ast.Attribute)
+            and node.iter.attr == "unavailable"
+            and isinstance(node.iter.value, ast.Name)
+            and node.iter.value.id == variable
+            and isinstance(node.target, ast.Name)
+        ):
+            continue
+        if any(
+            isinstance(candidate, ast.Call)
+            and isinstance(candidate.func, ast.Attribute)
+            and candidate.func.attr in {"debug", "info", "warning", "error", "exception"}
+            and _name_reaches_call(node.target.id, candidate)
+            for candidate in ast.walk(node)
+        ):
+            return True
     return any(
         isinstance(node, ast.Call)
         and _call_name(node) in _COMPILATION_CONSUMERS

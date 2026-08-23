@@ -10,6 +10,11 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestClaudeCodeLayoutValidation:
+    def test_claude_conventions_have_no_profile_skills_source(self):
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+        assert ClaudeCodeBackend().conventions.profile_skills_source is None
+
     def test_claude_code_valid_layout_returns_empty(self, tmp_path):
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
@@ -65,6 +70,16 @@ class TestClaudeCodeLayoutValidation:
 
 
 class TestCodexLayoutValidation:
+    def test_codex_conventions_expose_the_injected_profile_skills_source(self, tmp_path):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        source_home = tmp_path / "source-codex-home"
+
+        assert (
+            CodexBackend(source_codex_home=source_home).conventions.profile_skills_source
+            == source_home / "skills"
+        )
+
     def test_codex_valid_layout_returns_empty(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
@@ -227,45 +242,16 @@ class TestCodexLayoutValidation:
 
         assert any(public_name in error and "empty" in error for error in errors)
 
-    def test_codex_profile_skills_appear_in_session_dir(self, tmp_path, monkeypatch):
+    def test_codex_profile_only_discovery_root_is_a_valid_session_layout(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
-        from autoskillit.workspace import materialize_codex_profile_skills
 
-        fake_home = tmp_path / "fake_home"
-        profile_skill = fake_home / ".codex" / "skills" / "my-profile-skill"
+        staging_skills = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
+        staging_skills.mkdir(parents=True)
+        profile_skill = tmp_path / "skills" / "my-profile-skill"
         profile_skill.mkdir(parents=True)
         (profile_skill / "SKILL.md").write_text(
-            "---\n"
-            "name: my-profile-skill\n"
-            "description: Profile skill.\n"
-            "uses_capabilities: []\n"
-            "execution_role: session\n"
-            "---\n"
-            "# MY PROFILE SKILL\n"
+            "---\nname: my-profile-skill\ndescription: Profile skill.\n---\n# MY PROFILE SKILL\n"
         )
-        # Subdir without SKILL.md should be skipped
-        (fake_home / ".codex" / "skills" / "no-skill-dir").mkdir()
+        (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
 
-        session_dir = tmp_path / "session"
-        (session_dir / "skills").mkdir(parents=True)
-
-        monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
-        count = materialize_codex_profile_skills(session_dir, CodexBackend())
-
-        assert count == 1
-        assert (session_dir / "skills" / "my-profile-skill" / "SKILL.md").exists()
-        assert not (session_dir / "skills" / "no-skill-dir").exists()
-
-    def test_codex_profile_skills_missing_codex_skills_dir_no_raise(self, tmp_path, monkeypatch):
-        from autoskillit.execution.backends.codex import CodexBackend
-        from autoskillit.workspace import materialize_codex_profile_skills
-
-        fake_home = tmp_path / "fake_home"
-        fake_home.mkdir()
-        session_dir = tmp_path / "session"
-        (session_dir / "skills").mkdir(parents=True)
-
-        monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
-        count = materialize_codex_profile_skills(session_dir, CodexBackend())
-
-        assert count == 0
+        assert CodexBackend().validate_session_layout(tmp_path, project_dir=tmp_path) == []

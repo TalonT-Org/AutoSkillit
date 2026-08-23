@@ -9,6 +9,10 @@ hooks:
         - type: command
           command: "echo '[SKILL: audit-tests] Auditing test suite...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Test Suite Audit Skill

@@ -82,6 +82,8 @@ class BackendConventions:
     skills_subdir: Path = Path("skills")
     #: Project-relative directories to scan for project-local skills.
     project_local_skill_search_dirs: tuple[str, ...] = ()
+    #: Backend-owned profile skill source admitted into generated session homes.
+    profile_skills_source: Path | None = None
     #: Persistent generated-home root below the configured project temp directory.
     persistent_session_root_subdir: Path | None = None
     #: Native model-facing skill invocation sigil.

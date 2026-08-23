@@ -159,15 +159,17 @@ def test_codex_recipe_delivery_contract_is_generated_from_static_budget() -> Non
 
 
 def test_codex_recipe_delivery_contract_reaches_all_prompt_families() -> None:
-    from autoskillit.cli.prompts import (
-        _build_open_kitchen_prompt,
-        _build_orchestrator_prompt,
-    )
     from autoskillit.execution import (
         CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
         codex_recipe_delivery_calling_contract,
     )
     from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     assert CODEX_RECIPE_DELIVERY_CALLING_CONTRACT in codex_discipline_suffix()
     prefix = "mcp__autoskillit__"

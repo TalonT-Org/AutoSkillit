@@ -23,7 +23,9 @@ def test_build_orchestrator_prompt_importable_from_prompts():
 
 # PR3
 def test_build_orchestrator_prompt_contains_recipe_name():
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     result = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "my-recipe" in result
@@ -44,7 +46,9 @@ def test_build_orchestrator_prompt_not_in_app_module():
 
 def test_orchestrator_prompt_delegates_ingredient_collection_to_open_kitchen():
     """Orchestrator prompt must instruct Claude to call open_kitchen with recipe name."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "open_kitchen" in prompt, "Prompt must instruct Claude to call open_kitchen"
@@ -55,7 +59,9 @@ def test_orchestrator_prompt_delegates_ingredient_collection_to_open_kitchen():
 
 def test_build_open_kitchen_prompt_includes_dispatch_routing():
     """_build_open_kitchen_prompt must include dispatch routing instructions."""
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(DIRECT_PREFIX)
     assert "ingredients_only" in prompt
@@ -63,7 +69,9 @@ def test_build_open_kitchen_prompt_includes_dispatch_routing():
 
 
 def test_open_kitchen_prompt_fails_closed_on_unknown_recipe_pagination() -> None:
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(DIRECT_PREFIX)
     for required in (
@@ -88,7 +96,9 @@ def test_open_kitchen_prompt_fails_closed_on_unknown_recipe_pagination() -> None
 
 def test_orchestrator_prompt_documents_confirm_action():
     """The orchestrator system prompt must explain how to handle action:confirm steps."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "action: confirm" in prompt or 'action: "confirm"' in prompt
@@ -97,7 +107,9 @@ def test_orchestrator_prompt_documents_confirm_action():
 
 def test_build_orchestrator_prompt_accepts_name_not_yaml():
     """_build_orchestrator_prompt takes a recipe name string, not raw YAML."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "my-recipe" in prompt
@@ -109,7 +121,9 @@ def test_build_orchestrator_prompt_accepts_name_not_yaml():
 
 def test_orchestrator_prompt_instructs_open_kitchen_with_recipe_first():
     """Prompt must instruct Claude to call open_kitchen(name) as its first action."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "open_kitchen" in prompt
@@ -120,7 +134,9 @@ def test_orchestrator_prompt_instructs_open_kitchen_with_recipe_first():
 
 def test_orchestrator_prompt_open_kitchen_uses_keyword_form():
     """open_kitchen must use keyword argument form in the orchestrator prompt."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     assert "open_kitchen(name=" in prompt, (
@@ -130,7 +146,9 @@ def test_orchestrator_prompt_open_kitchen_uses_keyword_form():
 
 def test_orchestrator_prompt_does_not_contain_greeting_pool():
     """Greetings are delivered via positional arg, not embedded in system prompt."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "Good Burger" not in prompt
@@ -140,7 +158,9 @@ def test_orchestrator_prompt_does_not_contain_greeting_pool():
 
 def test_orchestrator_prompt_no_diagram():
     """Orchestrator prompt must not contain diagram content."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "### Graph" not in prompt
@@ -150,7 +170,9 @@ def test_orchestrator_prompt_no_diagram():
 # T2-C (updated for single-parameter signature)
 def test_build_orchestrator_prompt_single_param():
     """Calling with a single recipe name returns a valid prompt."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     result = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     assert isinstance(result, str)
@@ -178,7 +200,9 @@ def test_open_kitchen_greetings_have_no_placeholders():
 
 def test_open_kitchen_prompt_does_not_embed_greetings():
     """Open-kitchen greetings are delivered via positional arg, not embedded."""
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     assert "Display ONE of these greetings" not in prompt
@@ -275,7 +299,9 @@ def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch,
 
 def test_orchestrator_prompt_contains_multi_issue_guidance():
     """System prompt must document the sequential vs parallel decision for multiple issues."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     assert prompt, "_build_orchestrator_prompt returned empty"
@@ -290,7 +316,9 @@ def test_orchestrator_prompt_contains_multi_issue_guidance():
 
 def test_orchestrator_prompt_multi_issue_ask_only_two_options():
     """When mode unspecified, prompt must prescribe asking sequential-or-parallel only."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     # Must tell the orchestrator to ask the user — no other alternatives offered
@@ -305,7 +333,9 @@ def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
     This prevents empty_output, early_stop, and zero_writes retry reasons from
     being incorrectly routed to on_context_limit.
     """
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     # Must require retry_reason=resume to route to on_context_limit
@@ -319,7 +349,9 @@ def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
 
 def test_orchestrator_prompt_empty_output_falls_to_on_failure():
     """The orchestrator prompt must explicitly route empty_output to on_failure."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     assert "empty_output" in prompt, "Prompt must mention empty_output retry_reason"
@@ -333,7 +365,9 @@ def test_orchestrator_prompt_empty_output_falls_to_on_failure():
 
 def test_orchestrator_prompt_drain_race_routes_to_on_context_limit():
     """drain_race must be listed alongside resume as an on_context_limit trigger."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     assert "drain_race" in prompt, "Prompt must mention drain_race retry_reason"
@@ -347,7 +381,9 @@ def test_orchestrator_prompt_drain_race_routes_to_on_context_limit():
 
 def test_orchestrator_prompt_path_contamination_falls_to_on_failure():
     """path_contamination must fall through to on_failure, not on_context_limit."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     assert "path_contamination" in prompt, "Prompt must mention path_contamination retry_reason"
@@ -382,7 +418,9 @@ def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_pat
 
 def test_orchestrator_prompt_stale_retries_not_routed_to_context_limit():
     """Stale path (subtype=stale) must be retried, not routed to on_context_limit."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     # subtype=stale must appear as an explicit routing discriminant
@@ -403,7 +441,9 @@ def test_orchestrator_prompt_stale_retries_not_routed_to_context_limit():
 
 def test_orchestrator_prompt_context_exhaustion_still_routes_to_context_limit():
     """Genuine context exhaustion must still route to on_context_limit."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     # context_exhaustion subtype must be explicitly referenced — hard assertion, no fallback
@@ -419,7 +459,9 @@ def test_orchestrator_prompt_context_exhaustion_still_routes_to_context_limit():
 # MCP prefix parametrisation tests
 @pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
 def test_orchestrator_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> None:
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=mcp_prefix)
     assert f"{mcp_prefix}open_kitchen" in prompt
@@ -427,7 +469,9 @@ def test_orchestrator_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> 
 
 @pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
 def test_open_kitchen_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> None:
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=mcp_prefix)
     assert f"{mcp_prefix}open_kitchen" in prompt
@@ -435,7 +479,9 @@ def test_open_kitchen_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> 
 
 def test_orchestrator_prompt_contains_quota_routing():
     """_build_orchestrator_prompt output includes QUOTA DENIAL ROUTING section."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "QUOTA DENIAL ROUTING" in prompt
@@ -445,7 +491,12 @@ def test_orchestrator_prompt_has_no_server_startup_recovery_block():
     """SERVER-STARTUP RECOVERY block must be removed — it misdiagnoses schema deferral
     as server startup latency."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt, _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     for fn, name in [
         (_build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX), "orchestrator"),
@@ -460,7 +511,9 @@ def test_orchestrator_prompt_has_no_server_startup_recovery_block():
 def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
     """The conditional DEFERRED-TOOL RECOVERY block must not be present."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert "schemas NOT loaded — calling directly will fail" not in prompt
@@ -469,7 +522,9 @@ def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
 def test_first_action_no_toolsearch_or_bash():
     """FIRST ACTION must not reference ToolSearch or Bash."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
     start = prompt.index("FIRST ACTION")
@@ -483,7 +538,9 @@ def test_first_action_no_toolsearch_or_bash():
 def test_first_action_opens_with_open_kitchen():
     """FIRST ACTION step 1 must call open_kitchen directly — no preamble step."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
     start = prompt.index("FIRST ACTION")
@@ -497,7 +554,9 @@ def test_first_action_opens_with_open_kitchen():
 def test_open_kitchen_prompt_no_toolsearch_or_bash():
     """open_kitchen call instruction must not reference ToolSearch or Bash."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     # Scope to the call instruction before the discipline block
@@ -511,14 +570,18 @@ def test_open_kitchen_prompt_no_toolsearch_or_bash():
 def test_open_kitchen_prompt_calls_open_kitchen_directly():
     """_build_open_kitchen_prompt must instruct a direct open_kitchen call."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     assert "open_kitchen" in prompt
 
 
 def test_orchestrator_prompt_contains_anti_skip_rule():
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert "STEP EXECUTION IS NOT DISCRETIONARY" in prompt
@@ -526,7 +589,9 @@ def test_orchestrator_prompt_contains_anti_skip_rule():
 
 
 def test_open_kitchen_prompt_contains_anti_skip_rule():
-    from autoskillit.cli.prompts import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     assert "STEP EXECUTION IS NOT DISCRETIONARY" in prompt
@@ -536,7 +601,9 @@ def test_open_kitchen_prompt_contains_anti_skip_rule():
 def test_orchestrator_prompt_closes_optional_semantics():
     """OPTIONAL STEP SEMANTICS must instruct the LLM to never evaluate inputs.*
     references itself — skip_when_false is resolved server-side."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     idx = prompt.index("OPTIONAL STEP SEMANTICS")
@@ -547,7 +614,9 @@ def test_orchestrator_prompt_closes_optional_semantics():
 # ING-1
 def test_build_orchestrator_prompt_injects_ingredients_table_when_provided():
     """When ingredients_table is supplied, it appears verbatim in the prompt."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     table = "| Name | Description | Default |\n|------|-------------|---------|"
     prompt = _build_orchestrator_prompt(
@@ -559,7 +628,9 @@ def test_build_orchestrator_prompt_injects_ingredients_table_when_provided():
 # ING-2
 def test_build_orchestrator_prompt_omits_ingredients_section_when_none():
     """When ingredients_table is None (default), no RECIPE INGREDIENTS section is injected."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "RECIPE INGREDIENTS" not in prompt, (
@@ -570,7 +641,9 @@ def test_build_orchestrator_prompt_omits_ingredients_section_when_none():
 # ING-3
 def test_build_orchestrator_prompt_first_action_mentions_tool_activation():
     """FIRST ACTION section must clarify open_kitchen is required for tool activation."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     first_action_start = prompt.index("FIRST ACTION")
@@ -584,7 +657,9 @@ def test_build_orchestrator_prompt_first_action_mentions_tool_activation():
 # ING-4
 def test_build_orchestrator_prompt_ingredients_section_before_first_action():
     """RECIPE INGREDIENTS section must appear before FIRST ACTION so LLM sees names first."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     table = "| task * | What to do | (required) |"
     prompt = _build_orchestrator_prompt("impl", mcp_prefix=DIRECT_PREFIX, ingredients_table=table)
@@ -598,7 +673,9 @@ def test_build_orchestrator_prompt_ingredients_section_before_first_action():
 def test_orchestrator_prompt_contains_skill_command_format_guidance():
     """Orchestrator prompt must instruct the LLM that skill_command is a literal template."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "SKILL_COMMAND FORMATTING" in prompt, (
@@ -610,7 +687,9 @@ def test_orchestrator_prompt_contains_skill_command_format_guidance():
 def test_orchestrator_prompt_includes_null_context_handling():
     """System prompt must instruct the model on null/None context variable behavior."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "NULL/NONE CONTEXT VARIABLES" in prompt, (
@@ -655,7 +734,9 @@ def test_campaign_prompt_tool_claim_has_after_startup_qualifier():
 
 def test_orchestrator_prompt_documents_stop_action():
     """The orchestrator system prompt must explain how to handle action:stop steps."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert 'action: "stop"' in prompt or "action: stop" in prompt
@@ -665,7 +746,9 @@ def test_orchestrator_prompt_documents_stop_action():
 
 def test_orchestrator_prompt_documents_route_action():
     """The orchestrator system prompt must explain how to handle action:route steps."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert 'action: "route"' in prompt or "action: route" in prompt
@@ -675,7 +758,9 @@ def test_orchestrator_prompt_documents_route_action():
 
 def test_orchestrator_prompt_contains_hook_denial_compliance():
     """The orchestrator prompt must teach the model that ALL hook denials are mandatory."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "HOOK DENIAL" in prompt.upper()
@@ -686,7 +771,9 @@ def test_orchestrator_prompt_contains_hook_denial_compliance():
 @pytest.mark.parametrize("action_type", ["stop", "confirm", "route"])
 def test_orchestrator_prompt_documents_all_action_types(action_type):
     """Every recognized action type must have explicit behavioral semantics."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert f'action: "{action_type}"' in prompt or f"action: {action_type}" in prompt
@@ -694,7 +781,9 @@ def test_orchestrator_prompt_documents_all_action_types(action_type):
 
 def test_orchestrator_prompt_contains_missing_on_failure_instruction():
     """The L1 orchestrator prompt must instruct the model to stop on missing on_failure."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "recipe authoring error. Stop the pipeline and report the missing route." in prompt
@@ -758,7 +847,9 @@ def test_campaign_prompt_has_stale_artifact_recovery_section():
 
 def test_fleet_dispatch_prompt_includes_reset_dispatch():
     """Ad-hoc fleet dispatch prompt tool surface must include reset_dispatch."""
-    from autoskillit.cli.prompts._prompts_kitchen import _build_fleet_dispatch_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
+    )
 
     prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
     assert "reset_dispatch" in prompt
@@ -766,7 +857,9 @@ def test_fleet_dispatch_prompt_includes_reset_dispatch():
 
 def test_fleet_dispatch_prompt_includes_infrastructure_failure_section():
     """T1: Ad-hoc fleet prompt has an INFRASTRUCTURE FAILURE section."""
-    from autoskillit.cli.prompts._prompts_kitchen import _build_fleet_dispatch_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
+    )
 
     prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
     assert "INFRASTRUCTURE FAILURE" in prompt
@@ -774,7 +867,9 @@ def test_fleet_dispatch_prompt_includes_infrastructure_failure_section():
 
 def test_fleet_dispatch_prompt_lists_infrastructure_codes():
     """T2: Ad-hoc fleet prompt lists representative infrastructure error codes."""
-    from autoskillit.cli.prompts._prompts_kitchen import _build_fleet_dispatch_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
+    )
 
     prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
     assert "fleet_l3_no_result_block" in prompt
@@ -784,7 +879,9 @@ def test_fleet_dispatch_prompt_lists_infrastructure_codes():
 
 def test_fleet_dispatch_infrastructure_section_uses_provenance_disposition():
     """T3: Infrastructure recovery branches on effect provenance."""
-    from autoskillit.cli.prompts._prompts_kitchen import _build_fleet_dispatch_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
+    )
 
     prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
     start = prompt.index("INFRASTRUCTURE FAILURE")
@@ -923,7 +1020,9 @@ def test_orchestrator_prompt_no_resume_session_id_in_context_limit_routing():
     Context-exhausted sessions should never be resumed — the retry must start
     a fresh session to get a full context window.
     """
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
     ctx_section_start = prompt.find("CONTEXT LIMIT ROUTING")
@@ -971,7 +1070,9 @@ class TestPromptsReExporter:
 
 def test_orchestrator_prompt_addresses_skip_guard_resolution():
     """The cook prompt must instruct the LLM to resolve skip guards after collecting ingredients."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("remediation", mcp_prefix="mcp__autoskillit__")
     assert "overrides=" in prompt or "resolve" in prompt.lower() or "deferred" in prompt.lower(), (
@@ -981,7 +1082,9 @@ def test_orchestrator_prompt_addresses_skip_guard_resolution():
 
 
 def test_build_open_kitchen_prompt_includes_post_dispatch_diagnostics():
-    from autoskillit.cli.prompts._prompts_kitchen import _build_open_kitchen_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
 
     prompt = _build_open_kitchen_prompt(DIRECT_PREFIX)
     assert "health_report" in prompt

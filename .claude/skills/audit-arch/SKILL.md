@@ -9,6 +9,10 @@ hooks:
         - type: command
           command: "echo 'Auditing codebase architecture...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Architectural Audit Skill

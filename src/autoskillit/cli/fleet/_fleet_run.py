@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from cyclopts import Parameter
 
+from autoskillit.cli.session._session_launch import render_skill_unavailability
 from autoskillit.core import get_logger, is_feature_enabled
 
 if TYPE_CHECKING:
@@ -61,13 +62,21 @@ async def _execute_fleet_run(
     from autoskillit.core import SkillExecutionRole, detect_autoskillit_mcp_prefix
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
     from autoskillit.server import make_context
-    from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
+    from autoskillit.workspace import (
+        SkillProjectionContext,
+        compile_session_skill_catalog,
+        project_agent_skill_document,
+    )
 
     ctx = make_context(
         cfg,
         project_dir=Path.cwd(),
         plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
     )
+
+    effective_backend = dispatch_backend or ctx.backend
+    if effective_backend is None:
+        raise RuntimeError("Fleet dispatch requires a configured backend.")
 
     from autoskillit.server import _compute_effective_backend_map  # noqa: PLC0415
 
@@ -84,16 +93,19 @@ async def _execute_fleet_run(
         config_backend=ctx.config.agent_backend,
     )
 
-    effective_backend = dispatch_backend or ctx.backend
-    if effective_backend is None:
-        raise RuntimeError("Fleet dispatch requires a configured backend.")
     has_ufa = effective_backend.capabilities.has_unguarded_filesystem_access
     sous_chef = None
     if ctx.skill_resolver is not None:
-        orchestrator_catalog = ctx.skill_resolver.list_effective(
+        raw_orchestrator_catalog = ctx.skill_resolver.list_effective(
             ctx.project_dir,
             SkillExecutionRole.ORCHESTRATOR,
         )
+        skill_compilation = compile_session_skill_catalog(
+            raw_orchestrator_catalog,
+            effective_backend,
+        )
+        render_skill_unavailability(skill_compilation.unavailability_payload)
+        orchestrator_catalog = skill_compilation.catalog
         sous_chef = next(
             (skill for skill in orchestrator_catalog.skills if skill.name == "sous-chef"),
             None,

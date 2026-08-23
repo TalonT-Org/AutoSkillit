@@ -23,6 +23,23 @@ Example: to override `review-pr`, copy the bundled `SKILL.md` from
 `src/autoskillit/skills_extended/review-pr/SKILL.md` as a starting point, then modify it
 to add your team's review guidelines.
 
+## Semantic Requirements
+
+An override that shadows a bundled skill must preserve the bundled skill's semantic
+requirements. In particular, if the bundled skill declares a semantic schema version,
+the override must declare that version or a later one. If the bundled skill requires a
+fixed-set join, the override must retain:
+
+```yaml
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
+```
+
+This prevents a local customization from making a skill admissible on a backend that
+cannot honestly support the bundled skill's required coordination.
+
 ## Name-Matching Behavior
 
 When a project-local skill matches a bundled skill by name:

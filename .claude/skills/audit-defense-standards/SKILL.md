@@ -8,6 +8,10 @@ hooks:
         - type: command
           command: "echo '[SKILL: audit-defense-standards] Auditing defense standards compliance...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Defense Standards Audit Skill

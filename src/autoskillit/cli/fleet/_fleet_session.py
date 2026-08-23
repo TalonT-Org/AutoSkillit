@@ -11,6 +11,7 @@ from autoskillit.core import (
     FleetSessionEnv,
     NamedResume,
     NoResume,
+    SkillExecutionRole,
     dump_yaml_str,
     get_logger,
 )
@@ -59,10 +60,18 @@ def _launch_fleet_session(
     cfg = load_config(project_dir)
 
     from autoskillit.execution import get_backend  # noqa: PLC0415
+    from autoskillit.workspace import (  # noqa: PLC0415
+        DefaultSkillResolver,
+        compile_session_skill_catalog,
+    )
 
     _backend = get_backend(cfg.agent_backend.backend)
     _backend_caps = _backend.capabilities
     mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
+    skill_compilation = compile_session_skill_catalog(
+        DefaultSkillResolver().list_effective(project_dir, SkillExecutionRole.ORCHESTRATOR),
+        _backend,
+    )
 
     if campaign_recipe is None:
         # Ad-hoc mode: no campaign, no state, bare kitchen open
@@ -74,6 +83,9 @@ def _launch_fleet_session(
             max_total_issues=cfg.fleet.max_total_issues,
             max_concurrent_dispatches=cfg.fleet.max_concurrent_dispatches,
             has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
+            skill_compilation=skill_compilation,
+            project_root=project_dir,
+            backend=_backend,
         )
         env_spec = FleetSessionEnv(
             session_type="fleet",

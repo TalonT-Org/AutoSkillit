@@ -102,7 +102,10 @@ def _make_codex_backend() -> MagicMock:
     b = MagicMock()
     b.name = "codex"
     b.capabilities = _CODEX_CAPABILITIES
-    b.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    b.conventions = BackendConventions(
+        skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
+        profile_skills_source=None,
+    )
     b.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     b.setup_session_dir.return_value = None
     b.validate_session_layout.return_value = []
@@ -122,7 +125,8 @@ def _stub_backend(
     backend.name = name
     backend.capabilities = BackendCapabilities(session_dir_persistent=session_dir_persistent)
     backend.conventions = BackendConventions(
-        persistent_session_root_subdir=persistent_session_root_subdir
+        persistent_session_root_subdir=persistent_session_root_subdir,
+        profile_skills_source=None,
     )
     return backend
 

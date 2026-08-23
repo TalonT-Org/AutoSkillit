@@ -223,6 +223,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             return BackendConventions(
                 skills_subdir=Path("test/skills"),
                 project_local_skill_search_dirs=(),
+                profile_skills_source=None,
             )
 
         @property
@@ -365,7 +366,9 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None: ...
 
-    assert isinstance(_Backend(), CodingAgentBackend)
+    backend = _Backend()
+    assert backend.conventions.profile_skills_source is None
+    assert isinstance(backend, CodingAgentBackend)
 
 
 def test_skill_session_config_importable_from_protocols_backend() -> None:

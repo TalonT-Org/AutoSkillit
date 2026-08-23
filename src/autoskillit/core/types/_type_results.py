@@ -52,6 +52,8 @@ __all__ = [
     "SpillSpec",
     "TestResult",
     "ManagedSessionHome",
+    "SkillUnavailabilityPayload",
+    "SkillUnavailabilityRecord",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "VALID_INPUT_SPEC_TYPES",
@@ -119,6 +121,22 @@ class PreLaunchReadiness:
     attested_env: Mapping[str, str] = field(default_factory=dict)
 
 
+class SkillUnavailabilityRecord(TypedDict):
+    """One deterministic backend-admission refusal exposed to the session."""
+
+    skill: str
+    backend: str
+    operation: str
+    diagnostic: str
+
+
+class SkillUnavailabilityPayload(TypedDict):
+    """Canonical machine-readable backend-admission refusals for one session."""
+
+    backend: str | None
+    unavailable: tuple[SkillUnavailabilityRecord, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class ValidatedAddDir:
     """An --add-dir path validated for Claude Code convention compliance.
@@ -161,6 +179,7 @@ class ManagedSessionHome:
     generated_home: Path
     skills_dir: ValidatedAddDir
     pass_fds: tuple[int, ...]
+    unavailability_payload: SkillUnavailabilityPayload
 
 
 @dataclass(frozen=True, slots=True)

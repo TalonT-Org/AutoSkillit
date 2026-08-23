@@ -11,7 +11,9 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 def _get_prompt() -> str:
     """Return the orchestrator prompt for a demo recipe."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     return _build_orchestrator_prompt("demo", "mcp__autoskillit__")
 
@@ -146,7 +148,9 @@ class TestOpenKitchenStartupPolicyEmbedding:
     def test_open_kitchen_prompt_embeds_canonical_policy(self):
         from autoskillit.cli.prompts import (
             _MCP_RETRY_INSTRUCTION,
-            _build_open_kitchen_prompt,
+        )
+        from tests.cli._orchestrator_prompt_helpers import (
+            build_open_kitchen_prompt as _build_open_kitchen_prompt,
         )
 
         ok_prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
@@ -189,7 +193,9 @@ class TestFirstActionDirectOpenKitchen:
 
 
 def test_orchestrator_prompt_prohibits_raw_file_reading():
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt(
         "implementation",
@@ -201,14 +207,18 @@ def test_orchestrator_prompt_prohibits_raw_file_reading():
 
 
 def test_orchestrator_prompt_has_universal_raw_file_prohibition():
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("implementation", mcp_prefix="mcp__autoskillit_")
     assert "NEVER read recipe YAML files from the filesystem" in prompt
 
 
 def test_unguarded_filesystem_backend_supplement_injected():
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt(
         "implementation",
@@ -220,7 +230,9 @@ def test_unguarded_filesystem_backend_supplement_injected():
 
 
 def test_guarded_backend_no_filesystem_supplement():
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt(
         "implementation",
@@ -254,7 +266,9 @@ def test_prompt_builders_accept_filesystem_access_param(func_name: str, module: 
 def test_cook_prompt_skip_guard_parity_with_fleet():
     """The cook prompt must handle skip_when_false resolution at least as correctly as the
     fleet prompt — which passes overrides to open_kitchen."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     cook_prompt = _build_orchestrator_prompt("remediation", mcp_prefix="mcp__autoskillit__")
     cook_has_resolution = (

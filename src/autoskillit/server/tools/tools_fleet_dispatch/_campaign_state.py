@@ -26,6 +26,7 @@ from autoskillit.fleet import (
     upsert_dispatch_record_by_name,
 )
 from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
+from autoskillit.workspace import compile_session_skill_catalog
 
 if TYPE_CHECKING:
     from autoskillit.fleet import DispatchOutcome
@@ -169,15 +170,28 @@ def _project_food_truck_sous_chef(
     backend: CodingAgentBackend | None,
 ) -> str:
     """Project L2 orchestration guidance before crossing into the fleet layer."""
+    effective_backend = backend or tool_ctx.backend
+    if effective_backend is None:
+        return ""
     if tool_ctx.skill_resolver is None:
         return ""
-    catalog = tool_ctx.skill_resolver.list_effective(
+    raw_catalog = tool_ctx.skill_resolver.list_effective(
         tool_ctx.project_dir,
         SkillExecutionRole.ORCHESTRATOR,
         visibility=tool_ctx.config.skill_visibility_spec(),
         recipe_packs=tool_ctx.active_recipe_packs,
         recipe_features=tool_ctx.active_recipe_features,
     )
+    skill_compilation = compile_session_skill_catalog(raw_catalog, effective_backend)
+    for refusal in skill_compilation.unavailable:
+        logger.info(
+            "food_truck_guidance_skill_unavailable",
+            skill=refusal.skill,
+            backend=refusal.backend,
+            operation=refusal.operation.value,
+            diagnostic=refusal.diagnostic,
+        )
+    catalog = skill_compilation.catalog
     sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
     if sous_chef is None:
         return ""
@@ -186,8 +200,8 @@ def _project_food_truck_sous_chef(
         SkillProjectionContext(
             cwd=tool_ctx.project_dir.resolve(),
             catalog=catalog,
-            backend=backend,
-            conventions=backend.conventions if backend is not None else None,
+            backend=effective_backend,
+            conventions=effective_backend.conventions,
             gating=False,
         ),
     ).content

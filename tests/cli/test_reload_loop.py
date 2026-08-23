@@ -8,6 +8,7 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -96,6 +97,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         NamedResume,
         NoResume,
         SkillProjectionContextAuthority,
+        SkillUnavailabilityPayload,
         ValidatedAddDir,
     )
 
@@ -104,6 +106,17 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
     manager = MagicMock()
+    profile_payload: SkillUnavailabilityPayload = {
+        "backend": "claude-code",
+        "unavailable": (
+            {
+                "skill": "profile-required-join",
+                "backend": "claude-code",
+                "operation": "required_join",
+                "diagnostic": "fixed join unavailable",
+            },
+        ),
+    }
 
     @contextmanager
     def managed_session(
@@ -119,6 +132,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
                 generated_home=generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
                 pass_fds=(7,),
+                unavailability_payload=profile_payload,
             )
         finally:
             events.append(("managed-exit", launch_id))
@@ -133,7 +147,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
-            supports_tool_list_changed=True,
+            supports_tool_list_changed=False,
             cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
         )
@@ -148,7 +162,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         def build_interactive_cmd(self, **kwargs):
             resume_spec = kwargs["resume_spec"]
             plugin_binding = kwargs["plugin_binding"]
-            events.append(("build", resume_spec))
+            events.append(("build", resume_spec, kwargs["system_prompt"]))
             return CmdSpec(
                 cmd=("claude",),
                 env={"ATTEMPT": str(len(events))},
@@ -238,6 +252,16 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
     )
+    rendered_payloads: list[SkillUnavailabilityPayload] = []
+
+    def record_render(payload: SkillUnavailabilityPayload) -> None:
+        rendered_payloads.append(payload)
+        events.append(("render", payload))
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_cook.render_skill_unavailability",
+        record_render,
+    )
     monkeypatch.setattr(
         "autoskillit.cli.session._session_process.run_cook_attempt", fake_run_cook_attempt
     )
@@ -272,6 +296,12 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     managed_enters = [event for event in events if event[0] == "managed-enter"]
     managed_exits = [event for event in events if event[0] == "managed-exit"]
     assert len(managed_enters) == len(managed_exits) == 1
+    assert rendered_payloads == [profile_payload]
+    assert (
+        events.index(managed_enters[0])
+        < events.index(("render", profile_payload))
+        < events.index(next(event for event in events if event[0] == "build"))
+    )
 
     attempt_enters = [event for event in events if event[0] == "attempt-enter"]
     assert [event[1] for event in attempt_enters] == [1, 2]
@@ -294,6 +324,10 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
     run_events = [event for event in events if event[0] == "run"]
     assert [event[3] for event in run_events] == [(5, 7, 11), (5, 7, 11)]
+    build_prompts = [cast(str, event[2]) for event in events if event[0] == "build"]
+    assert len(build_prompts) == 2
+    assert all(prompt.count("<autoskillit_skill_unavailability>") == 1 for prompt in build_prompts)
+    assert all("profile-required-join" in prompt for prompt in build_prompts)
     assert len(bindings) == 1
     assert bindings[0].closed
     assert events.index(managed_exits[0]) > events.index(
@@ -348,6 +382,7 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
                 generated_home=generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
                 pass_fds=(),
+                unavailability_payload={"backend": "claude-code", "unavailable": ()},
             )
         finally:
             managed_exits.append(launch_id)

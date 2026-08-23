@@ -601,31 +601,57 @@ def _run_codex_selection_case(
     ):
         env.pop(inherited_headless_flag, None)
 
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace import (
+        DefaultSessionSkillManager,
+        EffectiveSkillCatalog,
+        SkillsDirectoryProvider,
+        compile_session_skill_catalog,
+    )
+
     backend = CodexBackend(source_codex_home=source_codex_home)
-    readiness = backend.ensure_pre_launch(session_dir=case_codex_home)
-    assert not readiness.errors, f"Codex pre-launch failed: {readiness.errors}"
-    backend.setup_session_dir(case_codex_home)
+    provider = SkillsDirectoryProvider()
+    catalog = EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION)
+    context = provider.catalog_projection_context(
+        catalog,
+        workspace,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
+    manager = DefaultSessionSkillManager(
+        provider,
+        ephemeral_root=case_root / "ephemeral",
+        persistent_roots={"codex": case_codex_home},
+    )
 
     venv_bin = Path(__file__).resolve().parents[3] / ".venv" / "bin"
     env["PATH"] = f"{venv_bin}{os.pathsep}{env.get('PATH', '')}"
     timeout = int(os.environ.get("CODEX_SELECTION_SMOKE_TIMEOUT", "900"))
-    result = subprocess.run(  # noqa: S603
-        [
-            "codex",
-            "exec",
-            "--json",
-            "--sandbox",
-            "workspace-write",
-            "--model",
-            model,
-            prompt,
-        ],
-        cwd=workspace,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    with manager.managed_session(
+        "selection-probe",
+        compile_session_skill_catalog(catalog, backend),
+        context,
+    ) as managed:
+        assert (managed.generated_home / "skills" / "investigate" / "SKILL.md").is_file()
+        env["CODEX_HOME"] = str(managed.generated_home)
+        env["CODEX_SQLITE_HOME"] = str(managed.generated_home)
+        result = subprocess.run(  # noqa: S603
+            [
+                "codex",
+                "exec",
+                "--json",
+                "--sandbox",
+                "workspace-write",
+                "--model",
+                model,
+                prompt,
+            ],
+            cwd=workspace,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
     if result.returncode != 0:
         raise OSError(
             f"Codex selection probe failed with rc={result.returncode}: "

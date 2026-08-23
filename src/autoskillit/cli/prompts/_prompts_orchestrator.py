@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.recipe.loader import RecipeInfo
-    from autoskillit.workspace import EffectiveSkillCatalog
+    from autoskillit.workspace import CompiledSessionSkillCatalog
 
 __all__ = [
     "_build_orchestrator_prompt",
@@ -84,9 +84,10 @@ def _build_orchestrator_prompt(
     mcp_prefix: str,
     ingredients_table: str | None = None,
     has_unguarded_filesystem_access: bool = False,
-    skill_catalog: EffectiveSkillCatalog | None = None,
-    project_dir: Path | None = None,
-    backend: object | None = None,
+    *,
+    skill_compilation: CompiledSessionSkillCatalog,
+    project_root: Path,
+    backend: object,
 ) -> str:
     """Build the --append-system-prompt content for a cook session.
 
@@ -95,8 +96,8 @@ def _build_orchestrator_prompt(
     is discovered by the session via ``load_recipe``.
     """
     raw = _read_full_sous_chef(
-        skill_catalog,
-        project_dir=project_dir,
+        skill_compilation,
+        project_root=project_root,
         backend=backend,
     )
     sous_chef_content = "\n\n" + raw if raw else ""

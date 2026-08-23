@@ -9,6 +9,10 @@ hooks:
         - type: command
           command: "echo '[SKILL: audit-bugs] Mining investigation logs for bug patterns...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Bug Pattern Audit Skill

@@ -261,8 +261,14 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
     client_home.mkdir()
     source_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
     source_claude_state = source_home / ".claude.json"
+    claude_state: dict[str, object] = {}
     if source_claude_state.is_file():
         shutil.copy2(source_claude_state, client_home / ".claude.json")
+        claude_state = json.loads((client_home / ".claude.json").read_text())
+    projects = claude_state.setdefault("projects", {})
+    assert isinstance(projects, dict)
+    projects[str(project)] = {"hasTrustDialogAccepted": True}
+    (client_home / ".claude.json").write_text(json.dumps(claude_state), encoding="utf-8")
     isolated_claude = client_home / ".claude"
     isolated_claude.mkdir()
     (isolated_claude / "settings.json").write_text(

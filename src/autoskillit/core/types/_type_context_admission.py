@@ -115,7 +115,6 @@ from ._type_context_admission_coverage import (
     CoverageEvidence,
     ProducerCoverageDef,
 )
-)
 from ._type_enums import ProducerSurface  # noqa: F401
 
 __all__ = [

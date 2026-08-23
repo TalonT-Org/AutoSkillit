@@ -366,6 +366,7 @@ class TestEnumNudgeIntegration:
             skill_contract=contract,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
         )
         assert patched is not None
         assert patched.success is True
@@ -387,6 +388,7 @@ class TestEnumNudgeIntegration:
             skill_contract=contract,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
         )
         assert rejected is None
 

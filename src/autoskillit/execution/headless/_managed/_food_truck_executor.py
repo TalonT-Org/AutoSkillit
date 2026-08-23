@@ -288,6 +288,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             if fleet_idle > 0
             else None
         )
+        effective_natural_exit_grace_seconds: float = cfg.run_skill.natural_exit_grace_seconds
         effective_marker_dir: Path | None = marker_dir or (
             headless_facade._resolve_session_log_dir(
                 cwd, cast(CodingAgentBackend, dispatch_backend)
@@ -311,6 +312,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 timeout=float(effective_timeout),
                 stale_threshold=float(effective_stale),
                 idle_output_timeout=effective_idle_out,
+                natural_exit_grace_seconds=effective_natural_exit_grace_seconds,
                 completion_marker=completion_marker,
                 prior_completion_markers=prior_completion_markers,
                 on_spawn=on_spawn,

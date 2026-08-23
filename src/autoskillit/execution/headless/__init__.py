@@ -431,6 +431,7 @@ async def run_headless_core(
                 timeout=float(effective_timeout),
                 stale_threshold=float(effective_stale),
                 idle_output_timeout=idle_output_timeout,
+                natural_exit_grace_seconds=cfg.natural_exit_grace_seconds,
                 expected_output_patterns=expected_output_patterns,
                 write_behavior=write_behavior,
                 completion_marker=effective_marker,

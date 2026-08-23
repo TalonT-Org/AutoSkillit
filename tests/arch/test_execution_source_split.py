@@ -31,7 +31,9 @@ HEADLESS_SIZE_BUDGETS = {
     # launch call graph (mid-session upgrade immunity) — one new handler on
     # the first-attempt try plus two re-raise guards on the nudge/clone-guard
     # cancellation handlers.
-    "headless/_headless_execute.py": 667,
+    # #4686: threads natural_exit_grace_seconds through to run_managed_async so the
+    # configured drain window reaches execute_termination_action's grace_seconds.
+    "headless/_headless_execute.py": 670,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

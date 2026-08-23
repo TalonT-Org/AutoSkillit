@@ -107,21 +107,24 @@ async def test_marker_deleted_after_exception(tool_ctx, monkeypatch, tmp_path: P
 
 @pytest.mark.anyio
 async def test_heartbeat_refreshes_mtime(tmp_path: Path) -> None:
+    import os
+
     marker_path = tmp_path / "dispatch-in-progress-test.marker"
     marker_path.write_text("{}")
-    initial_mtime = marker_path.stat().st_mtime
+    # Pin baseline mtime to the epoch so filesystem timestamp granularity
+    # (1s on some mounts, jiffies on others) cannot cause the heartbeat's
+    # refresh to compare against an mtime that is fractionally newer than
+    # the post-write stat().
+    os.utime(marker_path, (0, 0))
+    initial_mtime_ns = marker_path.stat().st_mtime_ns
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(_touch_marker, marker_path, 0.05)
+        await anyio.sleep(1.0)
+        tg.cancel_scope.cancel()
 
-        async def _stop():
-            await anyio.sleep(2.1)
-            tg.cancel_scope.cancel()
-
-        tg.start_soon(_stop)
-
-    final_mtime = marker_path.stat().st_mtime
-    assert final_mtime != initial_mtime, "heartbeat must refresh marker mtime"
+    final_mtime_ns = marker_path.stat().st_mtime_ns
+    assert final_mtime_ns > initial_mtime_ns, "heartbeat must advance marker mtime"
 
 
 @pytest.mark.anyio

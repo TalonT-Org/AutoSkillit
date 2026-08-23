@@ -41,17 +41,7 @@ class ForwardDeclaredField:
 
 _STALENESS_THRESHOLD_DAYS = 180
 
-_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
-    "natural_exit_grace_seconds": ForwardDeclaredField(
-        issue=4686,
-        rationale=(
-            "RunSkillConfig.natural_exit_grace_seconds is validated against "
-            "exit_after_stop_delay_ms but never threaded to run_managed_async's "
-            "identically-named parameter, so the drain window always uses 3.0"
-        ),
-        added_date=date(2026, 8, 17),
-    ),
-}
+_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {}
 
 
 def _config_dataclasses() -> list[type]:
@@ -171,6 +161,17 @@ def test_force_inactive_agent_teams_is_consumed() -> None:
 
     assert "force_inactive_agent_teams" not in _FORWARD_DECLARED
     assert sites, "the agent-teams opt-in must be read by production code"
+
+
+def test_natural_exit_grace_seconds_is_consumed() -> None:
+    """Locks in the fix for issue #4686: the field must never go inert again."""
+    from autoskillit.core import paths
+
+    reads = _collect_attribute_reads(paths.pkg_root(), frozenset({"natural_exit_grace_seconds"}))
+    sites = reads["natural_exit_grace_seconds"]
+
+    assert "natural_exit_grace_seconds" not in _FORWARD_DECLARED
+    assert sites, "natural_exit_grace_seconds must be read by production code"
 
 
 def test_forward_declared_has_linked_issues() -> None:

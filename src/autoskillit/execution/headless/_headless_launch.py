@@ -121,6 +121,7 @@ async def _run_headless_attempt(
     completion_marker: str,
     stale_threshold: float,
     completion_drain_timeout: float,
+    natural_exit_grace_seconds: float,
     linux_tracing_config: Any,
     idle_output_timeout: float | None,
     max_suppression_seconds: float,
@@ -192,6 +193,7 @@ async def _run_headless_attempt(
             completion_marker=completion_marker,
             stale_threshold=stale_threshold,
             completion_drain_timeout=completion_drain_timeout,
+            natural_exit_grace_seconds=natural_exit_grace_seconds,
             linux_tracing_config=linux_tracing_config,
             idle_output_timeout=effective_idle,
             max_suppression_seconds=max_suppression_seconds,
@@ -239,6 +241,7 @@ async def _attempt_contract_nudge(
     expected_launch_contract: ResolvedLaunchContract | None = None,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     force_inactive_agent_teams: bool = False,
+    natural_exit_grace_seconds: float,
 ) -> SkillResult | None:
     """Resume once to recover omitted structured tokens or the completion marker."""
     if backend is None or not backend.capabilities.session_resume_capable:
@@ -388,6 +391,7 @@ async def _attempt_contract_nudge(
                     pty_override if pty_override is not None else _resolve_pty_mode(backend)
                 ),
                 pass_fds=spec.inherited_fds,
+                natural_exit_grace_seconds=natural_exit_grace_seconds,
             )
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)

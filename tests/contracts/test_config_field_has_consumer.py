@@ -159,27 +159,11 @@ def test_inert_tracked_regex_matches_comment_block_shapes() -> None:
     Only validates the regex itself; the escape-hatch and consumer-detection
     functions (_field_has_consumer, _field_is_inert_tracked) are exercised
     against real fields by
-    test_natural_exit_grace_seconds_is_inert_tracked_against_a_real_field and
     test_allowed_labels_is_consumed_indirectly_via_a_dataclass_method below.
     """
     comment_block = "# Deliberately unread pending #99999.\n# inert-tracked:#99999"
     assert _INERT_TRACKED_RE.search(comment_block) is not None
     assert _INERT_TRACKED_RE.search("# no marker here") is None
-
-
-def test_natural_exit_grace_seconds_is_inert_tracked_against_a_real_field() -> None:
-    """Exercise the escape hatch against a real (not synthetic) orphaned field.
-
-    RunSkillConfig.natural_exit_grace_seconds is read only inside its own
-    __post_init__ self-consistency check — never threaded into
-    execution/process/__init__.py's same-named parameter at either real call
-    site — so it must rely on the inert-tracked:#NNNN annotation, not a
-    detected consumer, to pass the contract below.
-    """
-    from autoskillit.config._config_dataclasses import RunSkillConfig
-
-    assert not _field_has_consumer("natural_exit_grace_seconds", RunSkillConfig)
-    assert _field_is_inert_tracked("natural_exit_grace_seconds", RunSkillConfig)
 
 
 def test_allowed_labels_is_consumed_indirectly_via_a_dataclass_method() -> None:

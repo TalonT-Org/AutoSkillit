@@ -107,6 +107,7 @@ async def _execute_claude_headless(
     timeout: float,
     stale_threshold: float,
     idle_output_timeout: float | None = None,
+    natural_exit_grace_seconds: float = 3.0,
     expected_output_patterns: Sequence[str] = (),
     write_behavior: WriteBehaviorSpec | None = None,
     completion_marker: str = "",
@@ -323,6 +324,7 @@ async def _execute_claude_headless(
                 completion_marker=completion_marker,
                 stale_threshold=stale_threshold,
                 completion_drain_timeout=cfg.completion_drain_timeout,
+                natural_exit_grace_seconds=natural_exit_grace_seconds,
                 linux_tracing_config=linux_tracing_cfg,
                 idle_output_timeout=base_effective_idle,
                 max_suppression_seconds=cfg.max_suppression_seconds,
@@ -447,6 +449,7 @@ async def _execute_claude_headless(
                     launch_preparation=launch_preparation,
                     expected_launch_contract=resume_launch_contract,
                     on_launch_resolved=observe_launch,
+                    natural_exit_grace_seconds=natural_exit_grace_seconds,
                     **lineage_callbacks.attempt_kwargs,
                 )
             except InfrastructureFaultError:

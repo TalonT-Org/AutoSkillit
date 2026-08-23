@@ -132,6 +132,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         pty_mode: bool = False,
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
+        natural_exit_grace_seconds: float = 3.0,
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
@@ -179,6 +180,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     pty_mode=pty_mode,
                     input_data=input_data,
                     completion_drain_timeout=completion_drain_timeout,
+                    natural_exit_grace_seconds=natural_exit_grace_seconds,
                     linux_tracing_config=linux_tracing_config,
                     idle_output_timeout=idle_output_timeout,
                     max_suppression_seconds=max_suppression_seconds,
@@ -213,6 +215,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 pty_mode=pty_mode,
                 input_data=input_data,
                 completion_drain_timeout=completion_drain_timeout,
+                natural_exit_grace_seconds=natural_exit_grace_seconds,
                 linux_tracing_config=linux_tracing_config,
                 idle_output_timeout=idle_output_timeout,
                 max_suppression_seconds=max_suppression_seconds,
@@ -256,6 +259,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             pty_mode=pty_mode,
             input_data=input_data,
             completion_drain_timeout=completion_drain_timeout,
+            natural_exit_grace_seconds=natural_exit_grace_seconds,
             linux_tracing_config=linux_tracing_config,
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,
@@ -361,6 +365,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         pty_mode: bool,
         input_data: str | None,
         completion_drain_timeout: float,
+        natural_exit_grace_seconds: float,
         linux_tracing_config: Any | None,
         idle_output_timeout: float | None,
         max_suppression_seconds: float | None,
@@ -394,6 +399,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             pty_mode=pty_mode,
             input_data=input_data,
             completion_drain_timeout=completion_drain_timeout,
+            natural_exit_grace_seconds=natural_exit_grace_seconds,
             linux_tracing_config=linux_tracing_config,
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,
@@ -507,6 +513,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         pty_mode: bool = False,
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
+        natural_exit_grace_seconds: float = 3.0,
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
@@ -528,7 +535,16 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
-        del pass_fds, backend_resume_session_id, ceiling_seconds, systemd_scope_enabled
+        # natural_exit_grace_seconds is inert during replay: the runner returns
+        # pre-recorded subprocess results instead of managing a live process, so
+        # the drain window has no work to absorb.
+        del (
+            pass_fds,
+            backend_resume_session_id,
+            ceiling_seconds,
+            systemd_scope_enabled,
+            natural_exit_grace_seconds,
+        )
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if not step_name:

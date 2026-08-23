@@ -18,12 +18,14 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _authority, _delivery, _failure_policy  # noqa: I001
     from autoskillit.hooks._capture import _observation, _reader, _reconcile, _replay
     from autoskillit.hooks._capture import _snapshot, _types
+    from autoskillit.hooks._capture._authority import CAPTURE_PATH_COMPONENTS
     from autoskillit.hooks import _capture_contract, _capture_lifecycle, _capture_process
     from autoskillit.hooks import _hook_settings, _policy_event
     from autoskillit.hooks._capture._module_identity import register_module_aliases
 elif __package__ == "_capture":
     from _capture import _authority, _delivery, _failure_policy, _observation  # noqa: I001
     from _capture import _reader, _reconcile, _replay, _snapshot, _types
+    from _capture._authority import CAPTURE_PATH_COMPONENTS
     import _capture_contract
     import _capture_lifecycle
     import _capture_process
@@ -33,6 +35,7 @@ elif __package__ == "_capture":
 else:
     from . import _authority, _delivery, _failure_policy, _observation, _reader  # noqa: I001
     from . import _reconcile, _replay, _snapshot, _types
+    from ._authority import CAPTURE_PATH_COMPONENTS
     from .. import _capture_contract, _capture_lifecycle, _capture_process
     from .. import _hook_settings, _policy_event
     from ._module_identity import register_module_aliases
@@ -63,7 +66,6 @@ _capture_replay = _replay
 _capture_types = _types
 _DIRECTORY_FLAGS = _authority._DIRECTORY_FLAGS
 _READ_FLAGS = _authority._READ_FLAGS
-CAPTURE_PATH_COMPONENTS = _authority.CAPTURE_PATH_COMPONENTS
 CaptureRoot = _authority.CaptureRoot
 CaptureSetupError = _authority.CaptureSetupError
 FileIdentity = _authority.FileIdentity

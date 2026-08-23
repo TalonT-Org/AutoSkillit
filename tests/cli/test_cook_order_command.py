@@ -179,7 +179,7 @@ class TestCLIOrderCommand:
             _backend: object,
         ) -> CompiledSessionSkillCatalog:
             return CompiledSessionSkillCatalog(
-                backend="limited",
+                backend=getattr(_backend, "name"),
                 catalog=catalog,
                 unavailable=(
                     SkillUnavailableMetadata(

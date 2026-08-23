@@ -1121,7 +1121,10 @@ class DefaultSessionSkillManager:
             records = tuple(effective_catalog.skills)
 
         ordinary_payload = (
-            compilation.unavailability_payload
+            _merge_skill_unavailability_payloads(
+                backend.name if backend is not None else None,
+                compilation.unavailability_payload,
+            )
             if compilation is not None
             else _canonical_skill_unavailability_payload(
                 backend.name if backend is not None else None,

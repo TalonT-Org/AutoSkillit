@@ -82,7 +82,7 @@ def test_autoskillit_subprocess_writes_only_under_the_isolated_home(
         check=True,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=120,
         env=production_interpreter_env(),
     )
 

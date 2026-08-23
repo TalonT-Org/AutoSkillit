@@ -114,6 +114,16 @@ class TestGetLogger:
 
 
 class TestNullHandlerContract:
+    @pytest.fixture(autouse=True)
+    def _reset_package_logger_to_preconfigure_state(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        package_logger = logging.getLogger("autoskillit")  # noqa: TID251
+        monkeypatch.setattr(package_logger, "handlers", [logging.NullHandler()])
+        monkeypatch.setattr(package_logger, "level", logging.NOTSET)
+        monkeypatch.setattr(package_logger, "propagate", True)
+
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
         """NullHandler in autoskillit/__init__.py prevents stdlib lastResort output.
 

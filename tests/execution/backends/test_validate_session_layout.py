@@ -253,5 +253,9 @@ class TestCodexLayoutValidation:
             "---\nname: my-profile-skill\ndescription: Profile skill.\n---\n# MY PROFILE SKILL\n"
         )
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+        for name in ("sessions", "archived_sessions"):
+            target = tmp_path / f".inert-{name}"
+            target.mkdir()
+            (tmp_path / name).symlink_to(target.name)
 
         assert CodexBackend().validate_session_layout(tmp_path, project_dir=tmp_path) == []

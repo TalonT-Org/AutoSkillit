@@ -106,6 +106,7 @@ def _managed_home(tmp_path: Path) -> ManagedSessionHome:
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
         pass_fds=(),
+        unavailability_payload={"backend": None, "unavailable": ()},
     )
 
 

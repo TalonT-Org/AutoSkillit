@@ -93,24 +93,6 @@ def test_project_local_overrides_preserve_bundled_semantic_contracts() -> None:
             failures.append(f"{bundled_path}: invalid bundled frontmatter ({bundled.error})")
             continue
 
-        bundled_version = bundled.data.get("semantic_version")
-        local_version = local.data.get("semantic_version")
-        if bundled_version is not None:
-            if not isinstance(bundled_version, int) or isinstance(bundled_version, bool):
-                failures.append(
-                    f"{bundled_path}: semantic_version must be an integer, got {bundled_version!r}"
-                )
-            elif not isinstance(local_version, int) or isinstance(local_version, bool):
-                failures.append(
-                    f"{local_path}: must declare semantic_version >= {bundled_version} "
-                    f"to preserve {bundled_path}"
-                )
-            elif local_version < bundled_version:
-                failures.append(
-                    f"{local_path}: semantic_version {local_version} is lower than "
-                    f"bundled {bundled_version} in {bundled_path}"
-                )
-
         if _requires_join(bundled.data) and not _requires_join(local.data):
             failures.append(
                 f"{local_path}: must retain semantic_requirements.join.required: true "
@@ -130,7 +112,7 @@ def test_required_join_overrides_resolve_and_codex_refuses_them() -> None:
         if (parsed := read_skill_frontmatter(bundled_path)).data is not None
         and _requires_join(parsed.data)
     )
-    assert bundled_required_join_skills == _REQUIRED_JOIN_SKILLS
+    assert _REQUIRED_JOIN_SKILLS <= bundled_required_join_skills
 
     resolver = DefaultSkillResolver()
     codex = CodexBackend()

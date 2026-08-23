@@ -158,6 +158,7 @@ def _capture_cook_spec(
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(path=str(skills_dir)),
         pass_fds=(),
+        unavailability_payload={"backend": None, "unavailable": ()},
     )
     mock_mgr = MagicMock()
     mock_mgr.managed_session.return_value = nullcontext(managed_home)

@@ -125,7 +125,9 @@ class TestFirstActionAskUserQuestionProhibition:
         """FIRST ACTION embeds the exact canonical startup-recovery contract."""
         from autoskillit.cli.prompts import (
             _MCP_RETRY_INSTRUCTION,
-            _build_orchestrator_prompt,
+        )
+        from tests.cli._orchestrator_prompt_helpers import (
+            build_orchestrator_prompt as _build_orchestrator_prompt,
         )
 
         prompt = _build_orchestrator_prompt("demo", "mcp__autoskillit__")

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import structlog
 
 from autoskillit.config import AutomationConfig
 from autoskillit.execution.backends import get_backend
@@ -83,7 +83,6 @@ def _install_projection_spies(
 @pytest.mark.parametrize("backend_source", ["explicit", "context"])
 def test_orchestrator_guidance_projects_only_admitted_sous_chef_and_logs_refusal(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
     project_guidance: Callable[[object, object | None], str],
     guidance_name: str,
     backend_source: str,
@@ -93,23 +92,21 @@ def test_orchestrator_guidance_projects_only_admitted_sous_chef_and_logs_refusal
     context = _guidance_context(backend=backend if backend_source == "context" else None)
     selected = _install_projection_spies(monkeypatch)
 
-    caplog.set_level(logging.INFO)
-    guidance = project_guidance(
-        context,
-        backend if backend_source == "explicit" else None,
-    )
+    with structlog.testing.capture_logs() as logs:
+        guidance = project_guidance(
+            context,
+            backend if backend_source == "explicit" else None,
+        )
 
     assert guidance.endswith("projected:sous-chef")
     assert selected == ["sous-chef"], f"{guidance_name} guidance selected a raw catalog entry"
 
-    refusals = [
-        record for record in caplog.records if getattr(record, "skill", None) == "process-issues"
-    ]
+    refusals = [record for record in logs if record.get("skill") == "process-issues"]
     assert len(refusals) == 1
     refusal = refusals[0]
-    assert refusal.backend == "codex"
-    assert refusal.operation == "required_join"
-    assert isinstance(refusal.diagnostic, str) and refusal.diagnostic
+    assert refusal["backend"] == "codex"
+    assert refusal["operation"] == "required_join"
+    assert isinstance(refusal["diagnostic"], str) and refusal["diagnostic"]
 
 
 @pytest.mark.parametrize("project_guidance", [_server_guidance, _fleet_guidance])

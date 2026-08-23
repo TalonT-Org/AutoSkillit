@@ -22,7 +22,7 @@ _EXPECTED_CALLERS = Counter(
     {
         (_COMPILE, "cli/session/_session_cook.py", "cook"): 1,
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
-        (_COMPILE, "workspace/session_skills.py", "materialize_profile_skills"): 1,
+        (_COMPILE, "workspace/session_skills.py", "_materialize_profile_skill_infos"): 1,
         (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 2,
         (_COMPILE, "server/tools/_serve_helpers.py", "project_orchestrator_guidance"): 1,
         (
@@ -31,6 +31,7 @@ _EXPECTED_CALLERS = Counter(
             "_project_food_truck_sous_chef",
         ): 1,
         (_COMPILE, "cli/fleet/_fleet_run.py", "_execute_fleet_run"): 1,
+        (_COMPILE, "cli/fleet/_fleet_session.py", "_launch_fleet_session"): 1,
         (_ADAPT, "cli/doctor/_doctor_config.py", "_check_standing_backend_pins_feasibility"): 1,
         (_ADAPT, "server/tools/_preflight.py", "check_skill_semantic_feasibility"): 1,
         (_ADAPT, "workspace/_projected_artifact/authority.py", "_plan"): 1,

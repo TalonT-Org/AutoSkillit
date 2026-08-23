@@ -94,7 +94,7 @@ def project_orchestrator_guidance(
     backend: CodingAgentBackend | None = None,
 ) -> str:
     """Project the sous-chef document for an anonymous kitchen open."""
-    effective_backend = backend or tool_ctx.backend
+    effective_backend = backend or getattr(tool_ctx, "backend", None)
     if effective_backend is None:
         return ""
     if tool_ctx.skill_resolver is None:

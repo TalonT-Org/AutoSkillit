@@ -25,8 +25,11 @@ from autoskillit.fleet import (
     read_state,
     upsert_dispatch_record_by_name,
 )
-from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
-from autoskillit.workspace import compile_session_skill_catalog
+from autoskillit.server._misc import (
+    SkillProjectionContext,
+    compile_session_skill_catalog,
+    project_agent_skill_document,
+)
 
 if TYPE_CHECKING:
     from autoskillit.fleet import DispatchOutcome
@@ -170,7 +173,7 @@ def _project_food_truck_sous_chef(
     backend: CodingAgentBackend | None,
 ) -> str:
     """Project L2 orchestration guidance before crossing into the fleet layer."""
-    effective_backend = backend or tool_ctx.backend
+    effective_backend = backend or getattr(tool_ctx, "backend", None)
     if effective_backend is None:
         return ""
     if tool_ctx.skill_resolver is None:

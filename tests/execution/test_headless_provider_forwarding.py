@@ -3,6 +3,8 @@ forwarding through the headless call chain."""
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
@@ -22,6 +24,33 @@ _STUB_RESULT = SkillResult(
     retry_reason=RetryReason.NONE,
     stderr="",
 )
+
+
+def _sink_env() -> dict[str, str]:
+    base = "http://127.0.0.1:43199"
+    env = {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": base,
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    }
+    for signal in ("TRACES", "METRICS", "LOGS"):
+        prefix = f"OTEL_EXPORTER_OTLP_{signal}"
+        env[f"{prefix}_ENDPOINT"] = f"{base}/v1/{signal.lower()}"
+        env[f"{prefix}_PROTOCOL"] = "http/json"
+    for prefix in (
+        "OTEL_EXPORTER_OTLP",
+        "OTEL_EXPORTER_OTLP_TRACES",
+        "OTEL_EXPORTER_OTLP_METRICS",
+        "OTEL_EXPORTER_OTLP_LOGS",
+    ):
+        env.update(
+            {
+                f"{prefix}_HEADERS": "",
+                f"{prefix}_CERTIFICATE": "",
+                f"{prefix}_COMPRESSION": "none",
+                f"{prefix}_TIMEOUT": "",
+            }
+        )
+    return env
 
 
 @pytest.mark.anyio
@@ -1088,3 +1117,84 @@ def test_headless_executor_protocol_includes_marker_dir_params() -> None:
     )
     assert sig.parameters["marker_dir"].default is None
     assert sig.parameters["caller_session_id"].default is None
+
+
+@pytest.mark.anyio
+async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_values(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    import autoskillit.execution.headless._headless_execute as _execute_module
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    sink_env = _sink_env()
+    caller_env = {key: f"caller-{key}" for key in sink_env}
+    caller_env["CALLER_EXTRA"] = "preserved"
+    built_envs: list[dict[str, str]] = []
+    nudge_kwargs: dict[str, object] = {}
+    parent_environment = dict(os.environ)
+
+    class FakeSink:
+        env = sink_env
+
+        @classmethod
+        def start(cls, _log_dir: str) -> FakeSink:
+            return cls()
+
+        def close(self) -> None:
+            return None
+
+    async def fake_runner(_cmd, **_kwargs):
+        return _sr()
+
+    async def fake_nudge(*_args, **kwargs):
+        nudge_kwargs.update(kwargs)
+        return None
+
+    recovery_result = SkillResult(
+        success=False,
+        result="",
+        session_id="recovery-session",
+        subtype="contract_recovery",
+        is_error=False,
+        exit_code=1,
+        needs_retry=True,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+        stderr="",
+    )
+
+    def build_spec(_binding, provider_extras):
+        env = dict(provider_extras or {})
+        built_envs.append(env)
+        return ClaudeHeadlessCmd(cmd=("claude", "-p", "test"), env=env)
+
+    minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    monkeypatch.setattr(_execute_module, "LocalOtlpSink", FakeSink, raising=False)
+    monkeypatch.setattr(_execute_module, "_attempt_contract_nudge", fake_nudge)
+    monkeypatch.setattr(
+        _execute_module, "_build_skill_result", lambda *_args, **_kwargs: recovery_result
+    )
+    monkeypatch.setattr(
+        _execute_module,
+        "_compute_post_session_metrics",
+        lambda *_args, **_kwargs: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr(_execute_module, "_capture_git_head_sha", lambda *_args: "")
+
+    await _execute_claude_headless(
+        build_spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        provider_extras=caller_env,
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+    )
+
+    expected_env = {**caller_env, **sink_env}
+    assert built_envs == [expected_env]
+    assert nudge_kwargs["provider_extras"] == expected_env
+    assert os.environ == parent_environment

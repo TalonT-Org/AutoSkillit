@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,6 +32,75 @@ def _success_result() -> SubprocessResult:
         termination=TerminationReason.NATURAL_EXIT,
         pid=12345,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("close_raises", (False, True))
+async def test_execute_overlays_sink_endpoint_and_always_closes_it(
+    minimal_ctx, tmp_path: Path, monkeypatch, close_raises: bool
+) -> None:
+    import autoskillit.execution.headless._headless_execute as _execute_module
+    import autoskillit.execution.session_log as _session_log
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import _execute_claude_headless
+    from tests.execution.conftest import _launch_preparation, _mock_backend
+    from tests.fakes import MockSubprocessRunner
+
+    events: list[str] = []
+    runner = MockSubprocessRunner()
+    runner.set_default(_success_result())
+    minimal_ctx.runner = runner
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    parent_environment = dict(os.environ)
+
+    class FakeSink:
+        env = {
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:43199",
+            "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+        }
+
+        @classmethod
+        def start(cls, log_dir: str) -> FakeSink:
+            assert log_dir == minimal_ctx.config.linux_tracing.log_dir
+            events.append("start")
+            return cls()
+
+        def close(self) -> None:
+            events.append("close")
+            if close_raises:
+                raise OSError("best-effort sink shutdown")
+
+    monkeypatch.setattr(_execute_module, "LocalOtlpSink", FakeSink, raising=False)
+    monkeypatch.setattr(
+        _session_log,
+        "flush_session_log",
+        lambda **_kwargs: events.append("flush"),
+    )
+
+    def build_spec(_binding, provider_extras):
+        return ClaudeHeadlessCmd(
+            cmd=("claude", "-p", "test"),
+            env=dict(provider_extras or {}),
+        )
+
+    result = await _execute_claude_headless(
+        build_spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        provider_extras={"OTEL_EXPORTER_OTLP_ENDPOINT": "https://ambient.invalid"},
+        step_name="sink-test",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+    )
+
+    assert result.success
+    assert events == ["start", "flush", "close"]
+    assert runner.call_args_list[0][3]["env"]["OTEL_EXPORTER_OTLP_ENDPOINT"] == (
+        "http://127.0.0.1:43199"
+    )
+    assert os.environ == parent_environment
 
 
 class TestProcessIdleTimeoutOverride:

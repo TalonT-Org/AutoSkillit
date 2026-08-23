@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dis
 import importlib
 import sys
 
@@ -73,3 +74,17 @@ def test_runner_module_identity_uses_both_supported_import_spellings() -> None:
     assert dotted is short
     assert sys.modules.get("autoskillit.hooks._capture._runner") is dotted
     assert sys.modules.get("_capture._runner") is dotted
+
+
+def test_direct_versus_capture_decision_is_owned_by_capture_runner() -> None:
+    instructions = tuple(dis.get_instructions(capture_runner.run_capture))
+    loaded_names = {item.argval for item in instructions if item.opname == "LOAD_GLOBAL"}
+    string_constants = {
+        item.argval
+        for item in instructions
+        if item.opname == "LOAD_CONST" and isinstance(item.argval, str)
+    }
+
+    assert capture_runner.run_capture.__module__ == "autoskillit.hooks._capture._runner"
+    assert {"capture", "direct"} <= string_constants
+    assert {"_spawn_bash", "open_capture_root"} <= loaded_names

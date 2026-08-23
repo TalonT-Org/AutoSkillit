@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dis
 from dataclasses import replace
 from typing import NamedTuple
 
@@ -15,7 +14,6 @@ from autoskillit.core import (
     ProducerSurface,
     resolve_context_admission_coverage,
 )
-from autoskillit.hooks._capture._runner import run_capture
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -399,7 +397,7 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
             evidence.backend,
             evidence.configuration_mode,
             evidence.tested_version,
-            CHECKED_AT,
+            evidence.checked_at,
         )
         assert resolved == row
 
@@ -408,19 +406,19 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
                 f"{evidence.backend}-mismatch",
                 evidence.configuration_mode,
                 evidence.tested_version,
-                CHECKED_AT,
+                evidence.checked_at,
             ),
             (
                 evidence.backend,
                 evidence.configuration_mode,
                 f"{evidence.tested_version}-mismatch",
-                CHECKED_AT,
+                evidence.checked_at,
             ),
             (
                 evidence.backend,
                 evidence.configuration_mode,
                 evidence.tested_version,
-                "2026-07-24",
+                "2000-01-01",
             ),
         )
         for backend, configuration_mode, source_version, as_of in mismatch_inputs:
@@ -493,20 +491,6 @@ def test_native_shell_default_and_direct_resolve_independently() -> None:
     assert degraded_direct.evidence[0].claim_id == "COV-NATIVE-SHELL-DIRECT"
     assert degraded_direct.observation_state is CoverageState.UPSTREAM_GATED
     assert degraded_direct.reason_code == "coverage-runtime-mismatch"
-
-
-def test_native_shell_direct_decision_is_owned_by_capture_runner() -> None:
-    instructions = tuple(dis.get_instructions(run_capture))
-    loaded_names = {item.argval for item in instructions if item.opname == "LOAD_GLOBAL"}
-    string_constants = {
-        item.argval
-        for item in instructions
-        if item.opname == "LOAD_CONST" and isinstance(item.argval, str)
-    }
-
-    assert run_capture.__module__ == "autoskillit.hooks._capture._runner"
-    assert {"capture", "direct"} <= string_constants
-    assert {"_spawn_bash", "open_capture_root"} <= loaded_names
 
 
 def test_compaction_observation_does_not_imply_authority() -> None:

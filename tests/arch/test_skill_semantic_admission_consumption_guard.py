@@ -50,6 +50,7 @@ _EXPECTED_CALLERS = Counter(
 # where write_skill_unavailability_metadata() publishes its refusal metadata.
 _COMPILATION_CONSUMERS = frozenset(
     {
+        "CompiledSessionSkillCatalog",
         "_launch_cook_session",
         "append_skill_unavailability",
         "managed_session",

@@ -272,6 +272,26 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "infra/test_generated_files.py",
         }
     ),
+    # fs_observation underlies paths.safe_mtime and is also consumed directly by
+    # CLI and server enumeration paths, so it inherits the paths cascade.
+    "fs_observation": frozenset(
+        {
+            "core",
+            "cli",
+            "config",
+            "execution",
+            "fleet",
+            "hook_registry",
+            "migration",
+            "recipe",
+            "report",
+            "server",
+            "smoke_utils",
+            "workspace",
+            "infra/test_generated_file_write_guard.py",
+            "infra/test_generated_files.py",
+        }
+    ),
     # _install_binding underlies paths.pkg_root() (B-2) and is used directly by
     # workspace (authority.py's freshness probe) and recipe (_api.py/_api_cache.py's
     # shared staleness remedy) — same reach as paths itself (#4597 rectify phase 2).

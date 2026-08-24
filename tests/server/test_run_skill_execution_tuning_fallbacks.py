@@ -144,7 +144,7 @@ async def test_unresolved_model_template_is_not_forwarded(
 
 
 def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None:
-    """_EXECUTION_TUNING_STEP_FIELDS documents which RecipeStep fields the
+    """EXECUTION_TUNING_STEP_FIELDS documents which RecipeStep fields the
     post-gate fallback reads — it is NOT itself iterated at runtime (each
     field needs a distinct vacancy-sentinel check and writes a distinct
     local variable, which Python cannot dispatch generically by name
@@ -171,11 +171,11 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
     }
     missing = [
         field_name
-        for field_name in tools_execution._EXECUTION_TUNING_STEP_FIELDS.values()
+        for field_name in tools_execution.EXECUTION_TUNING_STEP_FIELDS.values()
         if field_name not in read_fields
     ]
     assert not missing, (
-        f"EXECUTION_TUNING RecipeStep field(s) in _EXECUTION_TUNING_STEP_FIELDS have "
+        f"EXECUTION_TUNING RecipeStep field(s) in EXECUTION_TUNING_STEP_FIELDS have "
         f"no matching '_recipe_step.<field>' read site inside "
         f"_prepare_dispatch_backend(): {missing}. "
         "A table entry with no runtime consumer silently does nothing — add the "

@@ -129,7 +129,7 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
 
     # step_provider's execution-tuning fallback lives here (pre-gate,
     # profile-interplay semantics) rather than in the post-gate
-    # fallback loop — see _EXECUTION_TUNING_EXTERNALLY_RESOLVED.
+    # fallback loop — see core.EXECUTION_TUNING_EXTERNALLY_RESOLVED.
     if (
         not state.step_provider
         and state.step_name

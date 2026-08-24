@@ -18,6 +18,8 @@ from dataclasses import replace
 import pytest
 
 from autoskillit.core import (
+    EXECUTION_TUNING_EXTERNALLY_RESOLVED,
+    EXECUTION_TUNING_STEP_FIELDS,
     RUN_SKILL_ATTESTATION_PARAMS,
     RUNTIME_ADMISSION_BY_ROLE,
     RuntimeAdmission,
@@ -27,11 +29,7 @@ from autoskillit.core import (
     runtime_exempt_param_names,
 )
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.server.tools.tools_execution import (
-    _EXECUTION_TUNING_EXTERNALLY_RESOLVED,
-    _EXECUTION_TUNING_STEP_FIELDS,
-    _build_actual_mcp_kwargs,
-)
+from autoskillit.server.tools.tools_execution import _build_actual_mcp_kwargs
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -88,8 +86,8 @@ def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
     execution_tuning_names = frozenset(
         param.name for param in tool_def.params if param.role is ToolParamRole.EXECUTION_TUNING
     )
-    loop_keys = frozenset(_EXECUTION_TUNING_STEP_FIELDS)
-    external_keys = frozenset(_EXECUTION_TUNING_EXTERNALLY_RESOLVED)
+    loop_keys = frozenset(EXECUTION_TUNING_STEP_FIELDS)
+    external_keys = frozenset(EXECUTION_TUNING_EXTERNALLY_RESOLVED)
 
     overlap = loop_keys & external_keys
     assert not overlap, (
@@ -104,8 +102,8 @@ def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
     )
 
     recipe_step_field_names = frozenset(field.name for field in dataclass_fields(RecipeStep))
-    mapped_fields = frozenset(_EXECUTION_TUNING_STEP_FIELDS.values()) | frozenset(
-        _EXECUTION_TUNING_EXTERNALLY_RESOLVED.values()
+    mapped_fields = frozenset(EXECUTION_TUNING_STEP_FIELDS.values()) | frozenset(
+        EXECUTION_TUNING_EXTERNALLY_RESOLVED.values()
     )
     unmapped = mapped_fields - recipe_step_field_names
     assert not unmapped, (

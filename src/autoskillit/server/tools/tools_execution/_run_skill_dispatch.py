@@ -9,7 +9,6 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import anyio
 import structlog
@@ -57,25 +56,7 @@ from autoskillit.server.tools.tools_pipeline_tracker import (
     _select_tracker_authority,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
 logger = get_logger(__name__)
-
-
-# RecipeStep fallbacks for execution-tuning parameters left at their vacancy sentinel.
-# `_run_skill_prepare.py` keeps explicit branches because the sentinels differ by type.
-_EXECUTION_TUNING_STEP_FIELDS: Mapping[str, str] = {
-    "model": "model",
-    "stale_threshold": "stale_threshold",
-    "idle_output_timeout": "idle_output_timeout",
-}
-# Execution-tuning parameters resolved outside the prepare-phase fallback block.
-_EXECUTION_TUNING_EXTERNALLY_RESOLVED: Mapping[str, str] = {
-    # Pre-gate profile resolution — see the step_provider_resolved_from_recipe
-    # block earlier in run_skill().
-    "step_provider": "provider",
-}
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})

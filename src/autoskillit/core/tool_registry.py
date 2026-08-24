@@ -23,6 +23,8 @@ from .types._type_recipe_binding import (
 
 __all__ = [
     "TOOL_REGISTRY",
+    "EXECUTION_TUNING_EXTERNALLY_RESOLVED",
+    "EXECUTION_TUNING_STEP_FIELDS",
     "all_tool_names",
     "compute_tool_contract_identity",
     "get_tool_def",
@@ -31,6 +33,25 @@ __all__ = [
 ]
 
 _TOOL_CONTRACT_IDENTITY_DOMAIN = "autoskillit:tool-contract:v1:sha256"
+
+# RecipeStep fallbacks for execution-tuning parameters left at their vacancy sentinel.
+# `_run_skill_prepare.py` keeps explicit branches because the sentinels differ by type.
+EXECUTION_TUNING_STEP_FIELDS: Mapping[str, str] = MappingProxyType(
+    {
+        "model": "model",
+        "stale_threshold": "stale_threshold",
+        "idle_output_timeout": "idle_output_timeout",
+    }
+)
+
+# Execution-tuning parameters resolved outside the prepare-phase fallback block.
+EXECUTION_TUNING_EXTERNALLY_RESOLVED: Mapping[str, str] = MappingProxyType(
+    {
+        # Pre-gate profile resolution — see the step_provider_resolved_from_recipe
+        # block earlier in run_skill().
+        "step_provider": "provider",
+    }
+)
 
 
 _TOOL_DEFS = (

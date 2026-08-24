@@ -318,6 +318,8 @@ from .runtime.session_registry import bridge_claude_session_id as bridge_claude_
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path
 from .runtime.session_registry import write_registry_entry as write_registry_entry
+from .tool_registry import EXECUTION_TUNING_EXTERNALLY_RESOLVED as EXECUTION_TUNING_EXTERNALLY_RESOLVED
+from .tool_registry import EXECUTION_TUNING_STEP_FIELDS as EXECUTION_TUNING_STEP_FIELDS
 from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
 from .tool_registry import all_tool_names as all_tool_names
 from .tool_registry import compute_tool_contract_identity as compute_tool_contract_identity

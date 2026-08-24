@@ -151,105 +151,9 @@ def _recipe_section_facade_names() -> tuple[str, ...]:
     )
 
 
-# Frozen protocol-v1 facade surface. Ordered tuple guards against simultaneous
-# export regressions in either direction (additions or removals).
-_CONTEXT_ADMISSION_PUBLIC_SURFACE: tuple[str, ...] = (
-    "CONTEXT_ADMISSION_PROTOCOL_VERSION",
-    "CONTEXT_ADMISSION_COVERAGE",
-    "ContextAdmissionValidationError",
-    "UnsupportedContextAdmissionProtocolError",
-    "ContextSessionId",
-    "AgentInstanceId",
-    "ContextThreadId",
-    "ForkOccurrenceId",
-    "TurnId",
-    "ProducerInstanceId",
-    "ToolCallId",
-    "ModelItemId",
-    "AdmissionRequestId",
-    "AdmissionBatchId",
-    "WindowEpochId",
-    "TokenizerIdentity",
-    "CanonicalSpanId",
-    "AdmissionOccurrenceId",
-    "AdmissionAttemptId",
-    "DeliveryOccurrenceId",
-    "AdmissionEventId",
-    "AdmissionReservationId",
-    "AdmissionWitnessId",
-    "AuthoritySourceId",
-    "GenerationReservationId",
-    "ProtectedPoolOwnerId",
-    "RepresentationRevision",
-    "RepresentationBindingId",
-    "AggregateRevision",
-    "AdmissionSequence",
-    "IdempotencyNamespace",
-    "ContextLineage",
-    "ContextWindowSnapshot",
-    "CanonicalSpanOwner",
-    "CanonicalRepresentationManifest",
-    "AdmissionOccurrence",
-    "AdmissionBatch",
-    "AdmissionReservationKey",
-    "AdmissionReservation",
-    "AdmissionWitness",
-    "RepresentationBindingWitness",
-    "EpochFenceProof",
-    "ProtectedPoolSpec",
-    "AdmissionDecision",
-    "AdmissionOccurrenceRecord",
-    "AdmissionBatchRecord",
-    "GenerationReservationRecord",
-    "ProcessedEventRecord",
-    "IdempotencyRecord",
-    "ExpiredIdempotencyTombstone",
-    "ClosedEpochAudit",
-    "CoverageEvidence",
-    "ProducerCoverageDef",
-    "OpenEpochEvent",
-    "AuthorityUnavailableEvent",
-    "ProposeOccurrenceEvent",
-    "ReserveRequestEvent",
-    "PrepareBatchEvent",
-    "StageHistoryEvent",
-    "DispatchRequestEvent",
-    "AcceptInputEvent",
-    "ReleaseNonAdmissionEvent",
-    "RollbackAdmissionEvent",
-    "MarkIndeterminateEvent",
-    "ResolveIndeterminateAcceptedEvent",
-    "ResolveIndeterminateNonAdmissionEvent",
-    "ResolveIndeterminateRollbackEvent",
-    "StartGenerationEvent",
-    "ReconcileGenerationEvent",
-    "MarkGenerationIndeterminateEvent",
-    "RequestReconciliationEvent",
-    "ExpireIdempotencyKeyEvent",
-    "RolloverEpochEvent",
-    "ContextAdmissionEvent",
-    "ReservationRecordedEffect",
-    "ReservationReleasedEffect",
-    "OccurrenceStateChangedEffect",
-    "ChargeCommittedEffect",
-    "GenerationReservationRecordedEffect",
-    "GenerationReconciledEffect",
-    "ReconciliationQueryRequestedEffect",
-    "ReconciliationEscalationEffect",
-    "ConflictRejectedEffect",
-    "IdempotencyExpiredEffect",
-    "ReservationInvalidatedEffect",
-    "EpochClosedEffect",
-    "QuarantineRecordedEffect",
-    "AuthorityUnavailableEffect",
-    "AdmissionEffect",
-    "UninitializedContextAdmissionState",
-    "ActiveContextAdmissionState",
-    "ContextAdmissionState",
-    "AdmissionTransition",
-    "AdmissionReplay",
-)
-
+# Per-shard ownership of protocol-v1 facade names. The single source of truth:
+# the public surface is derived from this map, so additions or removals must
+# change exactly one place (the owning shard's tuple).
 _CONTEXT_ADMISSION_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "_type_context_admission_base",
@@ -380,6 +284,12 @@ _CONTEXT_ADMISSION_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "ProducerCoverageDef",
         ),
     ),
+)
+
+# Derived from _CONTEXT_ADMISSION_SHARD_OWNERS so the two stay in lock-step
+# without a hand-maintained duplicate.
+_CONTEXT_ADMISSION_PUBLIC_SURFACE: tuple[str, ...] = tuple(
+    name for _, names in _CONTEXT_ADMISSION_SHARD_OWNERS for name in names
 )
 
 

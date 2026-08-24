@@ -1056,6 +1056,12 @@ _FS_OBSERVATION_FUNNEL = {"observe_path_mode", "safe_mtime"}
 # for every LATENT site this part's sweep found but did not fix.
 _ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
     (
+        SRC_ROOT / "cli" / "_install_snapshot" / "_snapshot.py",
+        "_matches_staged_state lstat()s two rglob()-enumerated entries with no "
+        "try/except in the function; caller chain already absorbs it via "
+        "rollback()'s except BaseException, so not a live crash today — #4784",
+    ),
+    (
         SRC_ROOT / "cli" / "doctor" / "_doctor_fleet.py",
         "unguarded stat on an iterdir()-enumerated campaign state file — #4768",
     ),
@@ -1063,6 +1069,12 @@ _ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
         SRC_ROOT / "core" / "io.py",
         "directory_tree_digest stats every os.walk()-enumerated entry with no guard; "
         "3 of 5 callers guard against this at the call site, this function does not — #4770",
+    ),
+    (
+        SRC_ROOT / "execution" / "_recording_skills.py",
+        "build_skills_manifest reads an iterdir()-enumerated skill_md with no "
+        "try/except; safe today only because its one caller passes a private "
+        "post-copytree directory, not a live shared one — #4785",
     ),
     (
         SRC_ROOT / "execution" / "session_log.py",
@@ -1075,6 +1087,12 @@ _ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
         "here — #4772",
     ),
     (
+        SRC_ROOT / "recipe" / "_cmd_rpc_issues.py",
+        "batch_create_issues reads a glob()-enumerated ticket_body_*.md with no "
+        "try/except at all; no concurrent writer identified, but a hit would hard-fail "
+        "the whole ticket batch, not just the racing file — #4786",
+    ),
+    (
         SRC_ROOT / "server" / "_editable_guard.py",
         "unguarded read on a glob()-enumerated direct_url.json inside a broad "
         "except Exception — #4773",
@@ -1083,6 +1101,12 @@ _ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
         SRC_ROOT / "workspace" / "session_skills.py",
         "unguarded stat on an iterdir()-enumerated lease-sweep candidate, no try/except "
         "nearby at all — #4774",
+    ),
+    (
+        SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py",
+        "_render_agent_definitions reads a glob()-enumerated agent .md file with no "
+        "try/except; agents_dir is a private, synchronously-populated tempdir with no "
+        "identified concurrent writer at all — #4787",
     ),
 ]
 

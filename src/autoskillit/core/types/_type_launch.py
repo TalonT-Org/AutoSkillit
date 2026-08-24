@@ -20,7 +20,6 @@ from ._type_launch_authority import (
     LaunchSurface,
     LaunchValueSource,
     LaunchValueSourceKind,
-    ModelPinResolution,
     ProviderBinding,
 )
 from ._type_launch_projection import (
@@ -36,18 +35,10 @@ from ._type_launch_projection import (
 __all__ = [
     "CANONICAL_LAUNCH_DIGEST_FIELDS",
     "LAUNCH_CONTRACT_SCHEMA_VERSION",
-    "BackendAuthority",
-    "BackendAuthorityTier",
     "LaunchAdapterResult",
     "LaunchContractError",
-    "LaunchFallbackRoute",
     "LaunchPreparation",
     "LaunchResolutionRequest",
-    "LaunchSurface",
-    "LaunchValueSource",
-    "LaunchValueSourceKind",
-    "ModelPinResolution",
-    "ProviderBinding",
     "ResolvedLaunchContract",
     "SecretEnvironmentBinding",
     "SemanticLaunchPlan",

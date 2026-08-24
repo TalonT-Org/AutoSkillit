@@ -305,22 +305,28 @@ def test_dispatch_state_fields_cover_every_handler_param() -> None:
     they land before that sentinel — the same discipline the section
     comment already documents.
     """
-    import itertools
     from dataclasses import fields as dataclass_fields
 
     from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
 
-    all_fields = dataclass_fields(_RunSkillDispatchState)
-    tool_input_names = frozenset(
-        field.name for field in itertools.takewhile(lambda f: f.name != "tool_ctx", all_fields)
-    )
-    assert "tool_ctx" not in tool_input_names, (
-        "tool_ctx sentinel boundary field not found in _RunSkillDispatchState — "
+    all_field_names = tuple(field.name for field in dataclass_fields(_RunSkillDispatchState))
+    assert all_field_names.count("tool_ctx") == 1, (
+        "tool_ctx sentinel boundary field must appear exactly once in "
+        "_RunSkillDispatchState — "
         "has the tool-input section been renamed or reordered?"
     )
+    tool_ctx_index = all_field_names.index("tool_ctx")
+    tool_input_names = frozenset(all_field_names[:tool_ctx_index])
 
     handler_param_names = frozenset(
         param.name for param in TOOL_REGISTRY["run_skill"].params if param.handler_parameter
+    )
+    handler_fields_after_boundary = sorted(
+        handler_param_names.intersection(all_field_names[tool_ctx_index + 1 :])
+    )
+    assert not handler_fields_after_boundary, (
+        "tool_ctx precedes registered handler fields in _RunSkillDispatchState: "
+        f"{handler_fields_after_boundary}"
     )
 
     missing_from_state = sorted(handler_param_names - tool_input_names)

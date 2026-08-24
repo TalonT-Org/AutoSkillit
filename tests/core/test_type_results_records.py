@@ -8,7 +8,7 @@ import pytest
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
-MOVED_NAMES = (
+ROOT_PUBLIC_NAMES = (
     "CapturedStream",
     "SpilledOutput",
     "FailureRecord",
@@ -18,13 +18,14 @@ MOVED_NAMES = (
     "CloneGateUnpublished",
     "CloneResult",
     "ModelTotalEntry",
+)
+INTERNAL_INDEX_NAMES = (
     "TokenUsageFileEntry",
     "SessionIndexEntry",
 )
+MOVED_NAMES = ROOT_PUBLIC_NAMES + INTERNAL_INDEX_NAMES
 
 RUNTIME_TYPE_NAMES = tuple(name for name in MOVED_NAMES if name != "CloneResult")
-ROOT_PUBLIC_NAMES = MOVED_NAMES[:9]
-INTERNAL_INDEX_NAMES = MOVED_NAMES[9:]
 
 
 def test_record_shard_owns_exact_public_surface() -> None:
@@ -62,6 +63,14 @@ def test_clone_result_is_composed_from_shard_owned_types() -> None:
         records.CloneGateUncommitted,
         records.CloneGateUnpublished,
     )
+
+
+def test_root_public_and_internal_index_names_partition_moved_names() -> None:
+    """ROOT_PUBLIC_NAMES and INTERNAL_INDEX_NAMES are explicit, non-overlapping, exhaustive."""
+    partition = set(ROOT_PUBLIC_NAMES) | set(INTERNAL_INDEX_NAMES)
+    assert partition == set(MOVED_NAMES)
+    assert set(ROOT_PUBLIC_NAMES).isdisjoint(set(INTERNAL_INDEX_NAMES))
+    assert len(MOVED_NAMES) == len(set(MOVED_NAMES))
 
 
 @pytest.mark.parametrize("name", ROOT_PUBLIC_NAMES)

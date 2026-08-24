@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 from types import MappingProxyType
+from typing import cast
 
 from ._type_execution_identity import BackendAuthorityKind
 from ._type_launch_projection import LaunchContractError, _freeze_str_mapping
@@ -98,7 +99,7 @@ class BackendAuthority:
     def from_payload(cls, payload: Mapping[str, object]) -> BackendAuthority:
         """Strictly decode one canonical authority payload."""
         expected_fields = {"backend", "kind", "tier", "key_path"}
-        if set(payload) != expected_fields or len(payload) != len(expected_fields):
+        if set(payload) != expected_fields:
             raise LaunchContractError("backend authority payload is not canonical")
         backend = payload["backend"]
         kind_value = payload["kind"]
@@ -108,15 +109,22 @@ class BackendAuthority:
             isinstance(value, str) for value in (backend, kind_value, tier_value, key_path)
         ):
             raise LaunchContractError("backend authority payload fields must be strings")
-        assert isinstance(backend, str)
-        assert isinstance(kind_value, str)
-        assert isinstance(tier_value, str)
-        assert isinstance(key_path, str)
+        backend = cast(str, backend)
+        kind_value = cast(str, kind_value)
+        tier_value = cast(str, tier_value)
+        key_path = cast(str, key_path)
         try:
             kind = BackendAuthorityKind(kind_value)
+        except ValueError as exc:
+            raise LaunchContractError(
+                f"backend authority payload field 'kind' value {kind_value!r} is invalid"
+            ) from exc
+        try:
             tier = BackendAuthorityTier[tier_value.upper()]
-        except (KeyError, ValueError) as exc:
-            raise LaunchContractError("backend authority payload is invalid") from exc
+        except KeyError as exc:
+            raise LaunchContractError(
+                f"backend authority payload field 'tier' value {tier_value!r} is invalid"
+            ) from exc
         return cls(
             backend=backend,
             kind=kind,
@@ -165,7 +173,7 @@ class ProviderBinding:
 
     def __post_init__(self) -> None:
         for field_name in ("provider", "profile", "required_backend", "key_path"):
-            if not str(getattr(self, field_name)).strip():
+            if not getattr(self, field_name).strip():
                 raise LaunchContractError(f"provider binding requires {field_name}")
         object.__setattr__(
             self, "environment", _freeze_str_mapping(self.environment, "provider environment")
@@ -173,6 +181,8 @@ class ProviderBinding:
         keys = tuple(sorted(set(self.secret_environment_keys)))
         if any(not key for key in keys):
             raise LaunchContractError("secret environment keys must be non-empty")
+        # `environment` is already frozen above; overlap check uses the canonical key set
+        # to reject any key whose value is exposed as both secret and non-secret.
         if set(keys) & set(self.environment):
             raise LaunchContractError("secret environment keys cannot be nonsecret environment")
         object.__setattr__(self, "secret_environment_keys", keys)
@@ -187,6 +197,11 @@ class LaunchFallbackRoute:
     profile: str
     model: str
     source: LaunchValueSource
+
+    def __post_init__(self) -> None:
+        for field_name in ("backend", "provider", "profile", "model"):
+            if not getattr(self, field_name).strip():
+                raise LaunchContractError(f"launch fallback route requires {field_name}")
 
     def to_payload(self) -> Mapping[str, object]:
         return MappingProxyType(

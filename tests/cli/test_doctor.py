@@ -590,21 +590,29 @@ class TestRunCheck:
 def test_collect_doctor_results_isolates_a_crashing_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One check raising must not take the other 54 checks down with it (see #4768)."""
+    """One check raising must not prevent a subsequent check from running (see #4768)."""
     from autoskillit.cli import doctor as doctor_mod
     from autoskillit.core import Severity
 
     def _check_script_version_health() -> doctor_mod.DoctorResult:
         raise RuntimeError("simulated check crash")
 
+    def _check_gitignore_completeness(_project_dir: Path) -> doctor_mod.DoctorResult:
+        return doctor_mod.DoctorResult(Severity.OK, "continuation_probe", "ran")
+
     monkeypatch.setattr(doctor_mod, "_check_script_version_health", _check_script_version_health)
+    monkeypatch.setattr(
+        doctor_mod,
+        "_check_gitignore_completeness",
+        _check_gitignore_completeness,
+    )
 
     results = doctor_mod._collect_doctor_results()
 
     crashed = [r for r in results if r.check == "script_version_health"]
     assert len(crashed) == 1
     assert crashed[0].severity == Severity.ERROR
-    assert len(results) > 5  # every other check still ran and reported
+    assert any(result.check == "continuation_probe" for result in results)
 
 
 def test_doctor_fix_parameter_does_not_exist():

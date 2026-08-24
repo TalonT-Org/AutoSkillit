@@ -68,10 +68,13 @@ _DENIAL_TEST_VALUES: dict[str, object] = {
 }
 
 
-def _write_tracker_for(ready, with_args) -> None:
+def _write_tracker_for(ready) -> None:
     from tests.server._pipeline_test_helpers import _write_tracker
 
-    step_name = with_args["step_name"]
+    # Read the step identity from the fixture, not from with_args: a step need
+    # not declare step_name in its with: block (planner's fan-out steps do not),
+    # and ready.step_name is the attested identity in every case.
+    step_name = ready.step_name
     assert isinstance(step_name, str)
     _write_tracker(
         ready.tool_ctx.project_dir,
@@ -97,13 +100,13 @@ async def test_forwarding_execution_tuning_param_is_denied_with_actionable_messa
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_tracker_for(ready, with_args)
+    _write_tracker_for(ready)
 
     result = json.loads(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
@@ -141,13 +144,13 @@ async def test_stale_threshold_and_idle_output_timeout_delivered_from_recipe_ste
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_tracker_for(ready, with_args)
+    _write_tracker_for(ready)
 
     result = json.loads(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
@@ -185,13 +188,13 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_tracker_for(ready, with_args)
+    _write_tracker_for(ready)
 
     result = json.loads(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
@@ -249,7 +252,7 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_tracker_for(ready, with_args)
+    _write_tracker_for(ready)
 
     # elaborate_phases declares no skill_inputs: sub-key — its child inputs come
     # from parsing skill_command's placeholders. Omitting the parameter lets the
@@ -265,7 +268,7 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,

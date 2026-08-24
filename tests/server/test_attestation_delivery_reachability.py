@@ -10,7 +10,6 @@ No test here reads ``payload.json`` or any file under ``recipe-delivery/``.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -69,8 +68,11 @@ _OVERRIDES = {
 }
 
 
-def _write_attested_tracker(ready, with_args: Mapping[str, object]) -> None:
-    step_name = with_args["step_name"]
+def _write_attested_tracker(ready) -> None:
+    # Read the step identity from the fixture, not from with_args: a step need
+    # not declare step_name in its with: block (planner's fan-out steps do not),
+    # and ready.step_name is the attested identity in every case.
+    step_name = ready.step_name
     assert isinstance(step_name, str)
     _write_tracker(
         ready.tool_ctx.project_dir,
@@ -129,7 +131,7 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_attested_tracker(ready, with_args)
+    _write_attested_tracker(ready)
     ready.tool_ctx.runner.push(_make_result(returncode=1))
     ready.tool_ctx.runner.push(
         _make_result(
@@ -196,7 +198,7 @@ async def test_attested_run_skill_admits_explicit_order_id(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_attested_tracker(ready, with_args)
+    _write_attested_tracker(ready)
 
     result = json.loads(
         await run_skill(
@@ -338,7 +340,7 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_attested_tracker(ready, with_args)
+    _write_attested_tracker(ready)
     ready.tool_ctx.runner.push(_make_result(returncode=1))
     ready.tool_ctx.runner.push(
         _make_result(
@@ -370,7 +372,7 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
@@ -383,7 +385,7 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest="sha256:" + "0" * 64,

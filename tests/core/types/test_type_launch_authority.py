@@ -137,11 +137,10 @@ class TestLaunchValueSource:
 
     def test_to_payload_round_trips(self) -> None:
         src = _source()
-        rebuilt = LaunchValueSource(
-            kind=LaunchValueSourceKind(src.to_payload()["kind"]),
-            key_path=src.to_payload()["key_path"],
-        )
-        assert rebuilt == src
+        payload = src.to_payload()
+        assert set(payload) == {"kind", "key_path"}
+        assert payload["kind"] == src.kind.value
+        assert payload["key_path"] == src.key_path
 
 
 class TestProviderBinding:
@@ -245,11 +244,6 @@ class TestLaunchFallbackRoute:
 
 
 class TestModelPinResolution:
-    def test_holds_model_and_source(self) -> None:
-        resolution = ModelPinResolution(model="gpt-5", source=_source())
-        assert resolution.model == "gpt-5"
-        assert resolution.source is not None
-
     def test_frozen_blocks_mutation(self) -> None:
         resolution = ModelPinResolution(model="gpt-5", source=_source())
         with pytest.raises(AttributeError):

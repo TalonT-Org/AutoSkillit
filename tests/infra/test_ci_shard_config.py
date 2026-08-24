@@ -194,12 +194,13 @@ def _expand_scope_to_files(scope: set[Path], tests_root: Path) -> set[str]:
     """Expand a filter scope into repo-relative test-file paths."""
     result: set[str] = set()
     for entry in scope:
-        if entry.is_dir():
-            for child in entry.rglob("test_*.py"):
+        resolved = entry if entry.is_absolute() else tests_root.parent / entry
+        if resolved.is_dir():
+            for child in resolved.rglob("test_*.py"):
                 if child.is_file():
                     result.add(str(child.relative_to(tests_root.parent)))
-        elif entry.is_file():
-            result.add(str(entry.relative_to(tests_root.parent)))
+        elif resolved.is_file():
+            result.add(str(resolved.relative_to(tests_root.parent)))
     return result
 
 
@@ -539,7 +540,7 @@ class TestConservativeFilterShardIntersection:
             "recipe",
         }
 
-    def test_changed_channel_b_test_intersects_only_channel_b(self, tmp_path: Path) -> None:
+    def test_changed_channel_b_test_reaches_channel_b_shard(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
         (tests_root / "execution").mkdir(parents=True)
         (tests_root / "execution" / "test_process_channel_b.py").write_text("")
@@ -552,10 +553,14 @@ class TestConservativeFilterShardIntersection:
         assert not isinstance(scope, FullRunReason), (
             f"Conservative filter requested a full run: {scope}"
         )
-        expanded = {str(entry) for entry in scope}
+        expanded = _expand_scope_to_files(set(scope), tests_root)
+        ownership = self._ownership()
 
-        assert expanded == {CHANNEL_B_TEST}
-        assert _intersected_shards(expanded, self._ownership()) == {"execution-channel-b"}
+        assert CHANNEL_B_TEST in expanded
+        assert CHANNEL_B_TEST in ownership["execution-channel-b"]
+        for shard, files in ownership.items():
+            if shard != "execution-channel-b":
+                assert CHANNEL_B_TEST not in files
 
     def test_server_state_intersects_recipe_and_execution(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"

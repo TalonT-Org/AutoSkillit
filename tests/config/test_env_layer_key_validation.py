@@ -36,8 +36,24 @@ def test_unknown_nested_env_key_raises_with_hint(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(ConfigSchemaError) as excinfo:
         validate_env_layer_keys()
     message = str(excinfo.value)
+    assert "AUTOSKILLIT_MODEL__MODEL_OVERRIDE" in message
     assert "model.model_override" in message
     assert "override" in message
+
+
+def test_case_distinct_env_names_cannot_collapse(monkeypatch: pytest.MonkeyPatch) -> None:
+    uppercase_name = "AUTOSKILLIT_MODEL__OVERRIDE"
+    mixed_case_name = "AUTOSKILLIT_MODEL__override"
+    monkeypatch.setenv(uppercase_name, "first")
+    monkeypatch.setenv(mixed_case_name, "second")
+
+    with pytest.raises(ConfigSchemaError) as excinfo:
+        validate_env_layer_keys()
+
+    message = str(excinfo.value)
+    assert uppercase_name in message
+    assert mixed_case_name in message
+    assert "model.override" in message
 
 
 def test_unknown_env_section_raises(monkeypatch: pytest.MonkeyPatch) -> None:

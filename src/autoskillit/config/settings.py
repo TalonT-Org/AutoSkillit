@@ -912,7 +912,7 @@ def validate_env_layer_keys() -> None:
     secret (``AUTOSKILLIT_GITHUB__TOKEN``) — rejecting ``_SECRETS_ONLY_KEYS``
     here would reject a legitimate deployment pattern, not catch a mistake.
     """
-    synthesized: dict[str, dict[str, str]] = {}
+    source_by_key: dict[tuple[str, str], str] = {}
     for name, value in os.environ.items():
         if name in AUTOSKILLIT_PRIVATE_ENV_VARS:
             continue
@@ -923,12 +923,17 @@ def validate_env_layer_keys() -> None:
             continue  # flat plumbing var, not a nested section.key override
         section, remainder = rest.split("__", 1)
         key = remainder.split("__", 1)[0]
-        synthesized.setdefault(section.lower(), {})[key.lower()] = value
+        normalized_key = (section.lower(), key.lower())
+        if previous_name := source_by_key.get(normalized_key):
+            raise ConfigSchemaError(
+                f"Conflicting environment variables {previous_name!r} and {name!r}: "
+                f"both normalize to {normalized_key[0]}.{normalized_key[1]}"
+            )
+        source_by_key[normalized_key] = name
 
-    if not synthesized:
-        return
-    remapped, _records = remap_retired_keys(synthesized, is_secrets_layer=False)
-    validate_layer_keys(remapped, Path("environment variables"), is_secrets_layer=True)
+        candidate = {normalized_key[0]: {normalized_key[1]: value}}
+        remapped, _records = remap_retired_keys(candidate, is_secrets_layer=False)
+        validate_layer_keys(remapped, Path(name), is_secrets_layer=True)
 
 
 def write_config_layer(path: Path, data: dict[str, Any]) -> None:

@@ -143,6 +143,16 @@ ORCHESTRATOR_FACING_INSTRUCTION_SURFACES: Mapping[str, OrchestratorSurfaceDef] =
             producer_module="autoskillit.recipe._api",
             producer_symbol="_build_orchestration_rules",
         ),
+        "parameter_forwarding_rules": OrchestratorSurfaceDef(
+            name="parameter_forwarding_rules",
+            extraction_mode=InstructionExtractionMode.GENERATED_OUTPUT,
+            delivery_channel=(
+                "recipe delivery (embedded in orchestration_rules; also independently "
+                "registered here so removing that wiring cannot silently drop coverage)"
+            ),
+            producer_module="autoskillit.core.tool_registry",
+            producer_symbol="build_parameter_forwarding_rules",
+        ),
         **_kitchen_tool_module_surfaces(),
     }
 )

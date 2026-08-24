@@ -322,6 +322,7 @@ from .tool_registry import EXECUTION_TUNING_EXTERNALLY_RESOLVED as EXECUTION_TUN
 from .tool_registry import EXECUTION_TUNING_STEP_FIELDS as EXECUTION_TUNING_STEP_FIELDS
 from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
 from .tool_registry import all_tool_names as all_tool_names
+from .tool_registry import build_parameter_forwarding_rules as build_parameter_forwarding_rules
 from .tool_registry import compute_tool_contract_identity as compute_tool_contract_identity
 from .tool_registry import get_tool_def as get_tool_def
 from .tool_registry import runtime_exempt_param_names as runtime_exempt_param_names

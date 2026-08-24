@@ -26,6 +26,7 @@ __all__ = [
     "EXECUTION_TUNING_EXTERNALLY_RESOLVED",
     "EXECUTION_TUNING_STEP_FIELDS",
     "all_tool_names",
+    "build_parameter_forwarding_rules",
     "compute_tool_contract_identity",
     "get_tool_def",
     "runtime_exempt_param_names",
@@ -643,6 +644,49 @@ def runtime_exempt_param_names(tool_def: ToolDef) -> frozenset[str]:
         for param in tool_def.params
         if RUNTIME_ADMISSION_BY_ROLE[param.role] is RuntimeAdmission.ALWAYS
     )
+
+
+def build_parameter_forwarding_rules(tool_name: str = "run_skill") -> str:
+    """Orchestration prose for which params may be forwarded, derived from
+    RUNTIME_ADMISSION_BY_ROLE and the UNION of both param -> RecipeStep field
+    mappings (EXECUTION_TUNING_STEP_FIELDS | EXECUTION_TUNING_EXTERNALLY_RESOLVED).
+
+    Generated, not hand-copied, so the two cannot diverge the way
+    tools_recipe.py's docstring and sous-chef/SKILL.md once did (#4707).
+    """
+    tool_def = get_tool_def(tool_name)
+    if tool_def is None:
+        raise ValueError(f"{tool_name!r} is not a registered tool")
+
+    # The two tables are guaranteed disjoint and jointly total over the
+    # EXECUTION_TUNING role (test_execution_tuning_fallback_tables_cover_role_exactly),
+    # so their union is exactly the role's parameter set.
+    field_by_param: dict[str, str] = {
+        **EXECUTION_TUNING_STEP_FIELDS,
+        **EXECUTION_TUNING_EXTERNALLY_RESOLVED,
+    }
+    tuning_param_names = sorted(
+        param.name for param in tool_def.params if param.role is ToolParamRole.EXECUTION_TUNING
+    )
+    if not tuning_param_names:
+        return ""
+
+    rules: list[str] = [f"EXECUTION-TUNING FIELDS ({tool_name}) — server-resolved, not restated:"]
+    for param_name in tuning_param_names:
+        if param_name not in field_by_param:
+            raise ValueError(
+                f"{tool_name!r} param {param_name!r} is EXECUTION_TUNING-roled but has no "
+                "EXECUTION_TUNING_STEP_FIELDS/EXECUTION_TUNING_EXTERNALLY_RESOLVED entry"
+            )
+        field_name = field_by_param[param_name]
+        rules.append(
+            f"- A step's `{field_name}:` field is resolved server-side; never include "
+            f"`{param_name}` in a `{tool_name}` call for that step. A per-step call-time "
+            f"override is expressed only by declaring `{param_name}` under that step's "
+            "`with:` block — a static with: value there admits only that exact value; "
+            "only a dynamically-bound value varies per call."
+        )
+    return "\n".join(rules)
 
 
 def compute_tool_contract_identity(tool_def: ToolDef) -> str:

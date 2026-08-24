@@ -165,11 +165,9 @@ async def load_recipe(
       ${{ context.var_name }} in `with:` arguments.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
-    - Steps with a `model:` field: do not include `model` in the `run_skill` call — it is
-      resolved server-side from the step's declared field. The same applies to `stale_threshold:`,
-      `idle_output_timeout:`, and `provider:`. A per-step call-time override requires declaring the
-      run_skill parameter name in that step's `with:` block — for `provider:` that key is
-      `step_provider`, not `provider`.
+    - Which run_skill parameters may be forwarded from a step's `with:` block is
+      stated in the delivered `orchestration_rules` — see that section, not this
+      docstring, for the current EXECUTION_TUNING field list.
 
     TOKEN USAGE TRACKING:
     - BEFORE executing the pipeline, call kitchen_status() and read

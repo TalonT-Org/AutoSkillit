@@ -22,6 +22,7 @@ from autoskillit.core import (
     RecipeSource,
     SkillLister,
     YAMLError,
+    build_parameter_forwarding_rules,
     get_logger,
     pkg_root,
     resolve_temp_dir,
@@ -176,6 +177,9 @@ def _build_orchestration_rules(
         "Consequence: skipping PR review steps results in unreviewed code, missing "
         "diff annotations, and no architectural lens analysis."
     ]
+    forwarding_rules = build_parameter_forwarding_rules()
+    if forwarding_rules:
+        parts.append(forwarding_rules)
     if recipe is not None:
         sem = stop_semantics if stop_semantics is not None else _build_stop_step_semantics(recipe)
         if sem:

@@ -375,17 +375,17 @@ class LocalOtlpSink:
                 if self._server_thread is not None and self._server_thread.is_alive():
                     server.shutdown()
             except BaseException:
-                pass
+                logger.debug("local_otlp_sink_partial_shutdown_failed", exc_info=True)
             try:
                 server.server_close()
             except BaseException:
-                pass
+                logger.debug("local_otlp_sink_partial_server_close_failed", exc_info=True)
         for thread in (self._server_thread, self._writer_thread):
             if thread is not None and thread.is_alive():
                 try:
                     thread.join(_THREAD_JOIN_SECONDS)
                 except BaseException:
-                    pass
+                    logger.debug("local_otlp_sink_partial_thread_join_failed", exc_info=True)
 
     def _handler_enter(self) -> None:
         with self._condition:

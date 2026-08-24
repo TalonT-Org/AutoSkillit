@@ -34,6 +34,65 @@ def _success_result() -> SubprocessResult:
     )
 
 
+def _sink_env() -> dict[str, str]:
+    base = "http://127.0.0.1:43199"
+    env = {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": base,
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    }
+    for signal in ("TRACES", "METRICS", "LOGS"):
+        prefix = f"OTEL_EXPORTER_OTLP_{signal}"
+        env[f"{prefix}_ENDPOINT"] = f"{base}/v1/{signal.lower()}"
+        env[f"{prefix}_PROTOCOL"] = "http/json"
+    for prefix in (
+        "OTEL_EXPORTER_OTLP",
+        "OTEL_EXPORTER_OTLP_TRACES",
+        "OTEL_EXPORTER_OTLP_METRICS",
+        "OTEL_EXPORTER_OTLP_LOGS",
+    ):
+        env.update(
+            {
+                f"{prefix}_HEADERS": "",
+                f"{prefix}_CERTIFICATE": "",
+                f"{prefix}_COMPRESSION": "none",
+                f"{prefix}_TIMEOUT": "",
+            }
+        )
+    return env
+
+
+def _install_fake_sink(
+    monkeypatch,
+    execute_module,
+    events: list[str],
+    expected_log_dir: str,
+    *,
+    close_raises: bool,
+) -> dict[str, str]:
+    sink_env = _sink_env()
+
+    class FakeSink:
+        env = sink_env
+
+        @classmethod
+        def start(cls, log_dir: str) -> FakeSink:
+            assert log_dir == expected_log_dir
+            events.append("start")
+            return cls()
+
+        def close(self) -> None:
+            events.append("close")
+            if close_raises:
+                raise OSError("best-effort sink shutdown")
+
+    monkeypatch.setattr(execute_module, "LocalOtlpSink", FakeSink)
+    return sink_env
+
+
+def _conflicting_sink_env(sink_env: dict[str, str]) -> dict[str, str]:
+    return {key: f"conflicting-{key.lower()}" for key in sink_env}
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("close_raises", (False, True))
 async def test_execute_overlays_sink_endpoint_and_always_closes_it(
@@ -52,25 +111,13 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
     minimal_ctx.runner = runner
     minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
     parent_environment = dict(os.environ)
-
-    class FakeSink:
-        env = {
-            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:43199",
-            "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-        }
-
-        @classmethod
-        def start(cls, log_dir: str) -> FakeSink:
-            assert log_dir == minimal_ctx.config.linux_tracing.log_dir
-            events.append("start")
-            return cls()
-
-        def close(self) -> None:
-            events.append("close")
-            if close_raises:
-                raise OSError("best-effort sink shutdown")
-
-    monkeypatch.setattr(_execute_module, "LocalOtlpSink", FakeSink, raising=False)
+    sink_env = _install_fake_sink(
+        monkeypatch,
+        _execute_module,
+        events,
+        minimal_ctx.config.linux_tracing.log_dir,
+        close_raises=close_raises,
+    )
     monkeypatch.setattr(
         _session_log,
         "flush_session_log",
@@ -89,7 +136,7 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
         minimal_ctx,
         timeout=30.0,
         stale_threshold=5.0,
-        provider_extras={"OTEL_EXPORTER_OTLP_ENDPOINT": "https://ambient.invalid"},
+        provider_extras=_conflicting_sink_env(sink_env),
         step_name="sink-test",
         launch_resolver=minimal_ctx.launch_resolver,
         launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
@@ -97,9 +144,184 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
 
     assert result.success
     assert events == ["start", "flush", "close"]
-    assert runner.call_args_list[0][3]["env"]["OTEL_EXPORTER_OTLP_ENDPOINT"] == (
-        "http://127.0.0.1:43199"
+    runner_env = runner.call_args_list[0][3]["env"]
+    assert {key: runner_env[key] for key in sink_env} == sink_env
+    assert os.environ == parent_environment
+
+
+@pytest.mark.anyio
+async def test_sink_close_failure_does_not_replace_runner_crash(
+    minimal_ctx, tmp_path: Path, monkeypatch
+) -> None:
+    import autoskillit.execution as _execution
+    import autoskillit.execution.headless._headless_execute as _execute_module
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import _execute_claude_headless
+    from tests.execution.conftest import _launch_preparation, _mock_backend
+
+    events: list[str] = []
+    runner_envs: list[dict[str, str]] = []
+    parent_environment = dict(os.environ)
+    sink_env = _install_fake_sink(
+        monkeypatch,
+        _execute_module,
+        events,
+        minimal_ctx.config.linux_tracing.log_dir,
+        close_raises=True,
     )
+
+    async def crashing_runner(_cmd, **kwargs):
+        runner_envs.append(dict(kwargs["env"]))
+        raise RuntimeError("runner crashed")
+
+    minimal_ctx.runner = crashing_runner  # type: ignore[assignment]
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    monkeypatch.setattr(
+        _execution,
+        "flush_session_log",
+        lambda **_kwargs: events.append("flush"),
+    )
+
+    result = await _execute_claude_headless(
+        lambda _binding, extras: ClaudeHeadlessCmd(
+            cmd=("claude", "-p", "test"), env=dict(extras or {})
+        ),
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        provider_extras=_conflicting_sink_env(sink_env),
+        step_name="sink-crash-test",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+    )
+
+    assert result.subtype == "crashed"
+    assert events == ["start", "flush", "close"]
+    assert {key: runner_envs[0][key] for key in sink_env} == sink_env
+    assert os.environ == parent_environment
+
+
+@pytest.mark.anyio
+async def test_sink_close_failure_does_not_replace_propagated_infrastructure_fault(
+    minimal_ctx, tmp_path: Path, monkeypatch
+) -> None:
+    import autoskillit.execution.headless._headless_execute as _execute_module
+    from autoskillit.core import InfrastructureFaultError, RetryReason, SkillResult
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import _execute_claude_headless
+    from tests.execution.conftest import _launch_preparation, _mock_backend
+    from tests.fakes import MockSubprocessRunner
+
+    events: list[str] = []
+    runner = MockSubprocessRunner()
+    runner.set_default(_success_result())
+    minimal_ctx.runner = runner
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    parent_environment = dict(os.environ)
+    sink_env = _install_fake_sink(
+        monkeypatch,
+        _execute_module,
+        events,
+        minimal_ctx.config.linux_tracing.log_dir,
+        close_raises=True,
+    )
+    retry_result = SkillResult(
+        success=False,
+        result="missing output contract",
+        session_id="nudge-session",
+        subtype="contract_recovery",
+        is_error=False,
+        exit_code=1,
+        needs_retry=True,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+        stderr="",
+    )
+    fault = InfrastructureFaultError("nudge infrastructure failed")
+
+    async def raising_nudge(*_args, **_kwargs):
+        raise fault
+
+    monkeypatch.setattr(
+        _execute_module,
+        "_build_skill_result",
+        lambda *_args, **_kwargs: retry_result,
+    )
+    monkeypatch.setattr(_execute_module, "_attempt_contract_nudge", raising_nudge)
+
+    with pytest.raises(InfrastructureFaultError) as exc_info:
+        await _execute_claude_headless(
+            lambda _binding, extras: ClaudeHeadlessCmd(
+                cmd=("claude", "-p", "test"), env=dict(extras or {})
+            ),
+            str(tmp_path),
+            minimal_ctx,
+            timeout=30.0,
+            stale_threshold=5.0,
+            provider_extras=_conflicting_sink_env(sink_env),
+            launch_resolver=minimal_ctx.launch_resolver,
+            launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+        )
+
+    assert exc_info.value is fault
+    assert events == ["start", "close"]
+    runner_env = runner.call_args_list[0][3]["env"]
+    assert {key: runner_env[key] for key in sink_env} == sink_env
+    assert os.environ == parent_environment
+
+
+@pytest.mark.anyio
+async def test_sink_close_failure_does_not_replace_deferred_cancellation(
+    minimal_ctx, tmp_path: Path, monkeypatch
+) -> None:
+    import anyio
+
+    import autoskillit.execution as _execution
+    import autoskillit.execution.headless._headless_execute as _execute_module
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import _execute_claude_headless
+    from tests.execution.conftest import _launch_preparation, _mock_backend
+
+    events: list[str] = []
+    runner_envs: list[dict[str, str]] = []
+    parent_environment = dict(os.environ)
+    sink_env = _install_fake_sink(
+        monkeypatch,
+        _execute_module,
+        events,
+        minimal_ctx.config.linux_tracing.log_dir,
+        close_raises=True,
+    )
+
+    async def cancelling_runner(_cmd, **kwargs):
+        runner_envs.append(dict(kwargs["env"]))
+        raise anyio.get_cancelled_exc_class()()
+
+    minimal_ctx.runner = cancelling_runner  # type: ignore[assignment]
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    monkeypatch.setattr(
+        _execution,
+        "flush_session_log",
+        lambda **_kwargs: events.append("flush"),
+    )
+
+    with pytest.raises(anyio.get_cancelled_exc_class()):
+        await _execute_claude_headless(
+            lambda _binding, extras: ClaudeHeadlessCmd(
+                cmd=("claude", "-p", "test"), env=dict(extras or {})
+            ),
+            str(tmp_path),
+            minimal_ctx,
+            timeout=30.0,
+            stale_threshold=5.0,
+            provider_extras=_conflicting_sink_env(sink_env),
+            step_name="sink-cancellation-test",
+            launch_resolver=minimal_ctx.launch_resolver,
+            launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+        )
+
+    assert events == ["start", "flush", "close"]
+    assert {key: runner_envs[0][key] for key in sink_env} == sink_env
     assert os.environ == parent_environment
 
 

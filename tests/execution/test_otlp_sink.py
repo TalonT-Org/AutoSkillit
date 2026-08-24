@@ -205,7 +205,7 @@ def test_accepts_bounded_gzip_json_and_sanitizes_it(local_sink: Any, tmp_path: P
 
 
 @pytest.mark.parametrize(
-    ("request", "expected_status"),
+    ("raw_request", "expected_status"),
     (
         (
             b"POST /v1/metrics HTTP/1.1\r\nHost: localhost\r\n"
@@ -254,9 +254,9 @@ def test_accepts_bounded_gzip_json_and_sanitizes_it(local_sink: Any, tmp_path: P
     ),
 )
 def test_protocol_errors_return_status_without_persisting(
-    local_sink: Any, tmp_path: Path, request: bytes, expected_status: int
+    local_sink: Any, tmp_path: Path, raw_request: bytes, expected_status: int
 ) -> None:
-    status, content_type, response = _raw_request(local_sink, request)
+    status, content_type, response = _raw_request(local_sink, raw_request)
 
     assert status == expected_status
     assert content_type.split(";", 1)[0] == "application/json"

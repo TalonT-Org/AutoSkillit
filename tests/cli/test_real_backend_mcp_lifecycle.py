@@ -140,10 +140,9 @@ def test_drain_pty_observes_split_trust_prompt_without_responding() -> None:
 
         assert unexpected_trust_prompt.wait(timeout=1), diagnostics.decode(errors="replace")
         assert b"Do you trust this folder? Press Enter to confirm" in diagnostics
-        readable, _, _ = select.select([peer], [], [], 0.3)
-        if readable:
-            response = peer.recv(4096)
-            assert response == b"", f"trust prompt received unexpected response: {response!r}"
+        peer.settimeout(0.3)
+        with pytest.raises(TimeoutError):
+            peer.recv(4096)
     finally:
         stop.set()
         with contextlib.suppress(OSError):

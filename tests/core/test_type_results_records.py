@@ -11,6 +11,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 ROOT_PUBLIC_NAMES = (
     "CapturedStream",
     "SpilledOutput",
+    "SpillSpec",
     "FailureRecord",
     "CleanupResult",
     "CloneSuccessResult",

@@ -94,6 +94,7 @@ class TestResult:
     tests_deselected: int | None = None
     filter_mode: str | None = None
     full_run_reason: str | None = None
+    outer_timeout_seconds: float | None = None
 
 
 @dataclass

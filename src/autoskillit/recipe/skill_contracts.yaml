@@ -3684,6 +3684,15 @@ callable_contracts:
     - name: failed_step
       type: string
       required: false
+    - name: timed_out
+      type: boolean
+      required: false
+    - name: outer_timeout_seconds
+      type: string
+      required: false
+    - name: raw_output_artifact_path
+      type: string
+      required: false
     outputs:
     - name: diagnosis_path
       type: string

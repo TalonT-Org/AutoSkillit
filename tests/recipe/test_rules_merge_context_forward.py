@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from autoskillit.core import Severity
+from autoskillit.core import CaptureEntrySpec, Severity, pkg_root
+from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
@@ -490,11 +493,62 @@ def test_merge_failed_step_rule_does_not_fire_for_fixed_recipes(recipe_name: str
     """Post recipe fix: merge-failed-step-not-captured rule does not fire on the three
     pipeline recipes (they all capture merge_failed_step and pass it through).
     """
-    from autoskillit.core import pkg_root
-    from autoskillit.recipe.io import load_recipe
-
     recipe_path = pkg_root() / "recipes" / recipe_name
     recipe = load_recipe(recipe_path)
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-failed-step-not-captured"]
     assert len(flagged) == 0
+
+
+_TIMEOUT_CONTEXT_CAPTURES = {
+    "merge_timed_out": "${{ result.timed_out }}",
+    "merge_outer_timeout_seconds": "${{ result.outer_timeout_seconds }}",
+    "merge_raw_output_artifact_path": "${{ result.raw_output_artifact_path }}",
+}
+
+
+def _assert_final_merge_forwards_timeout_context(recipe: Recipe) -> None:
+    """Assert the final merge's timeout facts reach diagnose_merge_gate losslessly."""
+    merge = recipe.steps["merge"]
+    for context_key, result_ref in _TIMEOUT_CONTEXT_CAPTURES.items():
+        capture = merge.capture[context_key]
+        assert isinstance(capture, CaptureEntrySpec)
+        assert capture.from_ == result_ref
+        assert capture.value_type == "optional_string"
+
+    assert merge.on_result is not None
+    merge_routes = {condition.when: condition.route for condition in merge.on_result.conditions}
+    assert merge_routes["result.failed_step == 'test_gate'"] == "check_merge_fix_loop"
+    assert merge_routes["result.failed_step == 'post_rebase_test_gate'"] == "check_merge_fix_loop"
+
+    loop = recipe.steps["check_merge_fix_loop"]
+    assert loop.on_result is not None
+    assert any(
+        condition.when is None and condition.route == "diagnose_merge_gate"
+        for condition in loop.on_result.conditions
+    )
+
+    diagnosis = recipe.steps["diagnose_merge_gate"]
+    assert diagnosis.with_args["callable"] == "autoskillit.smoke_utils.diagnose_merge_gate"
+    for context_key in _TIMEOUT_CONTEXT_CAPTURES:
+        argument_name = context_key.removeprefix("merge_")
+        assert diagnosis.with_args[argument_name] == f"${{{{ context.{context_key} }}}}"
+        assert context_key in (diagnosis.optional_context_refs or [])
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation.yaml", "remediation.yaml", "implementation-groups.yaml"],
+)
+def test_final_merge_forwards_outer_timeout_context_to_diagnosis(recipe_name: str) -> None:
+    """Bundled recipes preserve merge-gate outer-timeout provenance for remediation."""
+    _assert_final_merge_forwards_timeout_context(load_recipe(pkg_root() / "recipes" / recipe_name))
+
+
+def test_project_remediation_fable_forwards_outer_timeout_context_to_diagnosis() -> None:
+    """The project-local remediation fable keeps the same merge-gate handoff shape."""
+    recipe_path = Path.cwd() / ".autoskillit" / "recipes" / "remediation-fable.yaml"
+    if not recipe_path.is_file():
+        pytest.skip("project-local remediation fable is not installed in this worktree")
+
+    _assert_final_merge_forwards_timeout_context(load_recipe(recipe_path))

@@ -41,7 +41,14 @@ class TestServerToolTypesImport:
     def test_merge_worktree_result_importable(self):
         from autoskillit.server.tools._types import MergeWorktreeResult
 
-        expected = {"merge_succeeded", "local_sha", "remote_sha", "remote_is_ancestor"}
+        expected = {
+            "merge_succeeded",
+            "local_sha",
+            "remote_sha",
+            "remote_is_ancestor",
+            "timed_out",
+            "outer_timeout_seconds",
+        }
         assert expected <= MergeWorktreeResult.__optional_keys__
 
 

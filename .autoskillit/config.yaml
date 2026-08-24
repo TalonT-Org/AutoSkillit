@@ -2,7 +2,7 @@ test_check:
   command: ["task", "test-all"]
   filter_mode: "conservative"
   base_ref: "develop"
-  # timeout: 600
+  timeout: 900
 
 safety:
   reset_guard_marker: ".autoskillit-workspace"

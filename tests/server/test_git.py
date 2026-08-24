@@ -1,5 +1,6 @@
 """Tests for server/git.py perform_merge()."""
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -32,6 +33,14 @@ def _make_result(
         termination=termination_reason,
         pid=12345,
     )
+
+
+def _assert_raw_test_output_artifact(
+    result: dict[str, object], *, stdout: str, stderr: str
+) -> None:
+    artifact = Path(str(result["raw_output_artifact_path"]))
+    assert artifact.is_file()
+    assert json.loads(artifact.read_text()) == {"stdout": stdout, "stderr": stderr}
 
 
 @pytest.fixture
@@ -132,20 +141,140 @@ async def test_perform_merge_blocks_on_failing_tests(
     from autoskillit.core.types import MergeFailedStep, MergeState
     from autoskillit.server.git import perform_merge
 
-    # Create a temp dir to use as a fake worktree path so os.path.isdir passes
     fake_wt = str(tmp_path)
-    # Queue: rev-parse (worktree ok), branch, dirty check, test (fails)
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
-    conftest_mock_runner.push(_make_result(1, "= 1 failed =", ""))  # test
+    tester = InMemoryTestRunner(
+        results=[
+            TestResult(
+                passed=False,
+                stdout="= 1 failed =",
+                stderr="ordinary failure",
+                outer_timeout_seconds=None,
+            )
+        ]
+    )
 
     result = await perform_merge(
-        fake_wt, "dev", config=default_config, runner=conftest_mock_runner
+        fake_wt,
+        "dev",
+        config=default_config,
+        runner=conftest_mock_runner,
+        tester=tester,
     )
     assert "error" in result
     assert result["failed_step"] == MergeFailedStep.TEST_GATE
     assert result["state"] == MergeState.WORKTREE_INTACT
+    assert result["timed_out"] is False
+    assert "outer_timeout_seconds" not in result
+
+
+@pytest.mark.anyio
+async def test_perform_merge_blocks_on_pre_rebase_timed_out_tests(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """A timed-out pre-rebase check blocks even when its test result otherwise passes."""
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    timed_out_stdout = "pre-timeout stdout\n" + "T" * 100_000
+    timed_out_stderr = "pre-timeout stderr\n" + "E" * 100_000
+    tester = InMemoryTestRunner(
+        results=[
+            TestResult(
+                passed=True,
+                stdout=timed_out_stdout,
+                stderr=timed_out_stderr,
+                outer_timeout_seconds=45.0,
+            )
+        ]
+    )
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain
+
+    with patch("autoskillit.server.git.resolve_main_worktree", return_value=None):
+        result = await perform_merge(
+            fake_wt,
+            "dev",
+            config=default_config,
+            runner=conftest_mock_runner,
+            tester=tester,
+        )
+
+    assert result["failed_step"] == MergeFailedStep.TEST_GATE
+    assert result["state"] == MergeState.WORKTREE_INTACT
+    assert "timed out" in result["error"].lower()
+    assert result["timed_out"] is True
+    assert result["outer_timeout_seconds"] == 45.0
+    _assert_raw_test_output_artifact(
+        result,
+        stdout=timed_out_stdout,
+        stderr=timed_out_stderr,
+    )
+    commands = [call[0] for call in conftest_mock_runner.call_args_list]
+    assert not any(command[:2] == ["git", "fetch"] for command in commands)
+    assert not any(command[:2] == ["git", "rebase"] for command in commands)
+
+
+@pytest.mark.anyio
+async def test_perform_merge_blocks_on_post_rebase_timed_out_tests(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """A timed-out post-rebase check stops before main-repository discovery or merge."""
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    timed_out_stdout = "post-timeout stdout\n" + "T" * 100_000
+    timed_out_stderr = "post-timeout stderr\n" + "E" * 100_000
+    tester = InMemoryTestRunner(
+        results=[
+            TestResult(passed=True, stdout="= 10 passed =", stderr=""),
+            TestResult(
+                passed=True,
+                stdout=timed_out_stdout,
+                stderr=timed_out_stderr,
+                outer_timeout_seconds=90.0,
+            ),
+        ]
+    )
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # remote tracking ref
+    conftest_mock_runner.push(_make_result(0, "", ""))  # merge-commit preflight
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git rebase
+
+    with patch("autoskillit.server.git.resolve_main_worktree", return_value=None) as resolve_main:
+        result = await perform_merge(
+            fake_wt,
+            "dev",
+            config=default_config,
+            runner=conftest_mock_runner,
+            tester=tester,
+        )
+
+    assert result["failed_step"] == MergeFailedStep.POST_REBASE_TEST_GATE
+    assert result["state"] == MergeState.WORKTREE_INTACT
+    assert "timed out" in result["error"].lower()
+    assert result["timed_out"] is True
+    assert result["outer_timeout_seconds"] == 90.0
+    _assert_raw_test_output_artifact(
+        result,
+        stdout=timed_out_stdout,
+        stderr=timed_out_stderr,
+    )
+    commands = [call[0] for call in conftest_mock_runner.call_args_list]
+    assert commands[-1][:2] == ["git", "rebase"]
+    assert not any(command[:2] == ["git", "merge"] for command in commands)
+    assert resolve_main.call_count == 1
 
 
 @pytest.mark.anyio

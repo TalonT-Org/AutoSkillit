@@ -328,6 +328,79 @@ async def test_default_test_runner_returns_test_result_with_stderr(tmp_path: Pat
     assert result.stderr == "PASSED [0.5s] all tests"
 
 
+@pytest.mark.anyio
+async def test_default_test_runner_reports_managed_outer_timeout(tmp_path: Path) -> None:
+    """A managed timeout remains distinct from an ordinary test failure."""
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(
+        _make_result(
+            returncode=143,
+            stdout="partial test output",
+            stderr="managed timeout evidence",
+            termination_reason=TerminationReason.TIMED_OUT,
+        )
+    )
+    config = make_test_config(test_check=make_test_check_config(timeout=900))
+
+    result = await DefaultTestRunner(config, runner).run(tmp_path)
+
+    assert result.passed is False
+    assert result.outer_timeout_seconds == 900
+    assert result.stdout == "partial test output"
+    assert result.stderr == "managed timeout evidence"
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_stops_after_managed_timeout_even_with_zero_returncode(
+    tmp_path: Path,
+) -> None:
+    """Termination reason wins over a misleading zero exit status."""
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(
+        _make_result(
+            returncode=0,
+            stdout="partial first command output",
+            termination_reason=TerminationReason.TIMED_OUT,
+        )
+    )
+    config = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["first-command"], ["second-command"]],
+            timeout=60,
+        )
+    )
+
+    result = await DefaultTestRunner(config, runner).run(tmp_path)
+
+    assert result.passed is False
+    assert result.outer_timeout_seconds == 60
+    assert len(runner.call_args_list) == 1
+    assert runner.call_args_list[0][0] == ["first-command"]
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_does_not_label_nonzero_exit_as_outer_timeout(
+    tmp_path: Path,
+) -> None:
+    """Test failures retain their ordinary non-timeout classification."""
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=1, stdout="1 failed", stderr="assertion failed"))
+
+    result = await DefaultTestRunner(make_test_config(), runner).run(tmp_path)
+
+    assert result.passed is False
+    assert result.outer_timeout_seconds is None
+
+
 def test_test_result_dataclass_fields() -> None:
     from autoskillit.core import TestResult
 
@@ -776,6 +849,47 @@ async def test_multi_command_timeout_ceiling(
     assert t1 == pytest.approx(10.0)
     assert t2 == pytest.approx(7.0)
     assert t2 < t1
+
+
+@pytest.mark.anyio
+async def test_multi_command_timeout_between_commands_reports_outer_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Expiry between commands preserves evidence and names the outer timeout."""
+    import autoskillit.execution.testing as testing_mod
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    # monotonic() call sequence: start, first remaining budget, second remaining
+    # budget, and final elapsed duration. The deadline expires before command two.
+    times = iter([0.0, 0.0, 60.0, 60.0])
+    monkeypatch.setattr(
+        testing_mod,
+        "time",
+        type("_FakeTime", (), {"monotonic": staticmethod(lambda: next(times))})(),
+    )
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=0, stdout="first stdout", stderr="first stderr"))
+    config = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["first-command"], ["second-command"]],
+            timeout=60,
+        )
+    )
+
+    result = await DefaultTestRunner(config, runner).run(tmp_path)
+
+    assert result.passed is False
+    assert result.outer_timeout_seconds == 60
+    assert "first stdout" in result.stdout
+    assert result.stderr == (
+        "first stderr\n"
+        "outer test timeout exhausted before command 2/2 could run "
+        "(configured budget: 60.0s)"
+    )
+    assert len(runner.call_args_list) == 1
+    assert runner.call_args_list[0][0] == ["first-command"]
 
 
 @pytest.mark.anyio

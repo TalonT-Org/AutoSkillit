@@ -258,6 +258,8 @@ class TestMergeWorktreeNoBypass:
         )  # test-check
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
+        assert result["timed_out"] is False
+        assert "outer_timeout_seconds" not in result
         artifact = Path(result["raw_output_artifact_path"])
         assert artifact.is_relative_to(wt / ".autoskillit" / "temp")
         raw = json.loads(artifact.read_text())

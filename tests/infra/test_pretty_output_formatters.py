@@ -421,6 +421,24 @@ def test_fmt_merge_worktree_dirty_tree_shows_files():
     assert "M b.py" in text
 
 
+def test_fmt_merge_worktree_outer_timeout_shows_deadline() -> None:
+    """merge_worktree failures retain structured outer-timeout provenance."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_merge_worktree
+
+    text = _fmt_merge_worktree(
+        {
+            "error": "merge test gate failed",
+            "failed_step": "test_gate",
+            "timed_out": True,
+            "outer_timeout_seconds": 900.0,
+        },
+        False,
+    )
+
+    assert "timed_out: True" in text
+    assert "outer_timeout_seconds: 900.0" in text
+
+
 # PHK-26
 def test_fmt_run_skill_pipeline_includes_stderr(tmp_path):
     """run_skill pipeline mode must include stderr."""
@@ -568,6 +586,25 @@ def test_fmt_test_check_displays_duration():
     data = {"passed": True, "stdout": "= 10 passed =", "duration_seconds": 12.34}
     out = _fmt_test_check(data, False)
     assert "12.3s" in out or "12.34" in out
+
+
+def test_fmt_test_check_outer_timeout_shows_deadline_and_artifact() -> None:
+    """Pretty output distinguishes the outer test-check deadline from test failures."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
+
+    data = {
+        "passed": False,
+        "stdout": "",
+        "timed_out": True,
+        "outer_timeout_seconds": 900.0,
+        "raw_output_artifact_path": "/tmp/test-check/raw-output.json",
+    }
+
+    out = _fmt_test_check(data, False)
+
+    assert "outer timeout" in out.lower()
+    assert "900.0" in out
+    assert "/tmp/test-check/raw-output.json" in out
 
 
 def test_fmt_test_check_displays_filter_stats():

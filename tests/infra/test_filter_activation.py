@@ -11,20 +11,16 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 REPO_ROOT = Path(__file__).parent.parent.parent
 
 
-def test_project_config_has_filter_mode_conservative():
-    """AC1: .autoskillit/config.yaml must set filter_mode to conservative."""
+def test_project_config_has_operational_test_gate_tuple():
+    """The repository's full test gate has its required command and budget."""
     from autoskillit.core.io import load_yaml
 
     cfg = load_yaml(REPO_ROOT / ".autoskillit/config.yaml")
-    assert cfg["test_check"]["filter_mode"] == "conservative"
-
-
-def test_project_config_has_base_ref():
-    """AC1: .autoskillit/config.yaml must set base_ref to develop."""
-    from autoskillit.core.io import load_yaml
-
-    cfg = load_yaml(REPO_ROOT / ".autoskillit/config.yaml")
-    assert cfg["test_check"]["base_ref"] == "develop"
+    test_check = cfg["test_check"]
+    assert test_check["command"] == ["task", "test-all"]
+    assert test_check["timeout"] == 900
+    assert test_check["filter_mode"] == "conservative"
+    assert test_check["base_ref"] == "develop"
 
 
 def test_hook_registry_tests_in_infra():

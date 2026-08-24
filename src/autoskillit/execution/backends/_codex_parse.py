@@ -25,6 +25,7 @@ from autoskillit.core import (
     SessionEvent,
     fast_loads,
     get_logger,
+    strict_walk,
 )
 from autoskillit.execution.process import _marker_is_standalone
 
@@ -74,23 +75,25 @@ def _safe_relative(path: Path, root: Path) -> Path:
 
 
 def _rollout_files(root: Path) -> Iterator[Path]:
+    """Enumerate rollout files under *root*, rejecting any symlink.
+
+    Traversal is delegated to :func:`strict_walk` (issue #4770): a subtree
+    that vanishes mid-enumeration now raises ``TreeVanishedError`` instead of
+    silently shrinking the returned set, which previously let leftover
+    rollout data escape ``_promote_view``'s post-promotion completeness
+    check.
+    """
     if not os.path.lexists(root):
         return
     _require_real_directory(root, label="rollout root")
     found: list[Path] = []
-    for directory, directory_names, file_names in os.walk(root, followlinks=False):
-        parent = Path(directory)
-        for name in directory_names:
-            candidate = parent / name
-            if candidate.is_symlink():
-                raise RuntimeError(f"Symlink directory in rollout tree: {candidate}")
-        for name in file_names:
-            candidate = parent / name
-            if candidate.is_symlink():
-                raise RuntimeError(f"Symlink file in rollout tree: {candidate}")
-            if name.endswith(_ROLLOUT_SUFFIXES):
-                _safe_relative(candidate, root)
-                found.append(candidate)
+    for entry in strict_walk(root):
+        candidate = root / entry.relative_path
+        if entry.kind == "l":
+            raise RuntimeError(f"Symlink in rollout tree: {candidate}")
+        if entry.kind == "f" and entry.name.endswith(_ROLLOUT_SUFFIXES):
+            _safe_relative_value(entry.relative_path)
+            found.append(candidate)
     yield from sorted(found)
 
 

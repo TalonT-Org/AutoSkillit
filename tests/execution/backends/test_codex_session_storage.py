@@ -1326,3 +1326,46 @@ def test_cook_startup_survives_unresolvable_view(
         with contextlib.suppress(Exception):
             child.kill()
             child.wait(timeout=2)
+
+
+def test_validate_pre_spawn_view_raises_when_subtree_vanishes_mid_walk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #4770 test 10: a directory deleted mid-enumeration during this
+    *security validation* walk must raise, not silently under-report
+    ``found`` — a shrunk ``found`` set biases the equality check toward a
+    false negative (unexpected/tampered content hidden from detection)."""
+    import shutil
+
+    import autoskillit.core.io as io_module
+
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NoResume(),
+    )
+    lease.view_lease.release()
+
+    vanishing = lease.view_path / "sessions" / "vanishing"
+    vanishing.mkdir()
+    (vanishing / "hidden.jsonl").write_bytes(b"{}\n")
+
+    original_open = os.open
+
+    def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if path == "vanishing" and (flags & os.O_DIRECTORY):
+            shutil.rmtree(vanishing)
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
+
+    from autoskillit.core.io import TreeVanishedError
+
+    with pytest.raises(TreeVanishedError):
+        store._validate_pre_spawn_view(  # noqa: SLF001
+            lease.view_path, {}, allow_missing_resume=True
+        )

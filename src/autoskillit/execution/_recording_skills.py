@@ -15,6 +15,7 @@ from autoskillit.core import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
     ValidatedAddDir,
     load_yaml,
+    strict_walk,
     write_versioned_json,
 )
 
@@ -26,9 +27,12 @@ _FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", re.DOT
 
 def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
     """Reject snapshots that could restore machine-only authority to an agent."""
-    for entry in skills_dir.rglob("*"):
-        if entry.is_symlink():
-            raise ValueError(f"agent-safe skill snapshots must not contain symlinks: {entry}")
+    for entry in strict_walk(skills_dir):
+        if entry.kind == "l":
+            raise ValueError(
+                "agent-safe skill snapshots must not contain symlinks: "
+                f"{skills_dir / entry.relative_path}"
+            )
     for skill_dir in skills_dir.iterdir():
         if not skill_dir.is_dir():
             raise ValueError(
@@ -37,7 +41,12 @@ def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
         children = {child.name for child in skill_dir.iterdir()}
         if children != {"SKILL.md"} or not (skill_dir / "SKILL.md").is_file():
             raise ValueError(f"agent-safe skill directory must contain only SKILL.md: {skill_dir}")
-    for skill_md in sorted(skills_dir.rglob("SKILL.md")):
+    skill_md_paths = sorted(
+        skills_dir / entry.relative_path
+        for entry in strict_walk(skills_dir)
+        if entry.name == "SKILL.md"
+    )
+    for skill_md in skill_md_paths:
         try:
             content = skill_md.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:

@@ -26,6 +26,7 @@ from autoskillit.core import (
     atomic_write,
     default_log_dir,
     read_versioned_json,
+    strict_walk,
     write_versioned_json,
 )
 
@@ -360,15 +361,16 @@ class DefaultSkillSessionContractStore:
             if digest != contract.projected_digests[name]:
                 raise ValueError(f"Skill session projected digest mismatch for {name!r}")
 
-        actual_files = (
-            {
-                path.relative_to(snapshot_root)
-                for path in snapshot_root.rglob("*")
-                if path.is_file()
-            }
-            if snapshot_root.is_dir()
-            else set()
-        )
+        actual_files: set[Path] = set()
+        if snapshot_root.is_dir():
+            for tree_entry in strict_walk(snapshot_root):
+                if tree_entry.kind == "l":
+                    raise ValueError(
+                        "Skill session projected snapshot contains a symlink: "
+                        f"{tree_entry.relative_path}"
+                    )
+                if tree_entry.kind == "f":
+                    actual_files.add(Path(tree_entry.relative_path))
         if actual_files != declared_files:
             raise ValueError("Skill session projected snapshot file set mismatch")
         return contract

@@ -17,6 +17,7 @@ from autoskillit.core import (
     installed_plugin_artifact_manifest_path,
     installed_plugin_artifact_root,
     installed_plugin_cache_dir,
+    strict_walk,
 )
 
 logger = get_logger(__name__)
@@ -233,8 +234,8 @@ class _InstallSnapshot:
         if shape == "file":
             return filecmp.cmp(path, backup, shallow=False)
 
-        current_entries = {entry.relative_to(path) for entry in path.rglob("*")}
-        backup_entries = {entry.relative_to(backup) for entry in backup.rglob("*")}
+        current_entries = {entry.relative_path for entry in strict_walk(path)}
+        backup_entries = {entry.relative_path for entry in strict_walk(backup)}
         if current_entries != backup_entries:
             return False
         for relative in current_entries:

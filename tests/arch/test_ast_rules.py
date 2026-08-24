@@ -1400,6 +1400,173 @@ def test_no_unguarded_stat_on_enumeration_derived_path_outside_funnel() -> None:
     )
 
 
+# Issue #4770: directory_tree_digest silently dropped subtrees whose scandir()
+# failed mid-walk because os.walk(followlinks=False) received no onerror callback.
+# Path.rglob() has the identical silent-suppression contract. strict_walk()
+# (core/io.py) is the one funnel that fails loudly on a race instead; every raw
+# os.walk/os.fwalk/Path.rglob() call used for identity- or tamper-evidence
+# enumeration must go through it. (path, rationale) rows, matching
+# _DETACHED_SPAWN_ALLOWLIST's shape — each entry documents the specific
+# mitigation that makes that site a genuinely different risk profile, not an
+# oversight.
+_TREE_ENUMERATION_ALLOWLIST: list[tuple[Path, str]] = [
+    (
+        SRC_ROOT / "exploration" / "profile.py",
+        "feeds activation_digest, compared via capture_repository_snapshot's "
+        "deliberate double-capture-and-compare (start/end walk); a transient "
+        "one-sided omission is caught as SnapshotCaptureStatus.STALE, not "
+        "silently accepted",
+    ),
+    (
+        SRC_ROOT / "exploration" / "snapshot.py",
+        "_untracked_special_paths's leaf lstat() is unguarded and raises "
+        "FileNotFoundError uncaught, propagating to capture_repository_snapshot's "
+        "outer except (OSError, ...) -> SnapshotCaptureStatus.FAILED; fails loud, "
+        "not silently wrong",
+    ),
+    (
+        SRC_ROOT / "execution" / "headless" / "_headless_helpers.py",
+        "_stat_snapshot feeds a before/after write-detection heuristic "
+        "(fs_writes_detected), not a persisted/security identity value; a "
+        "one-sided omission only skews toward reporting writes-detected, the "
+        "safe direction for that check",
+    ),
+    (
+        SRC_ROOT / "workspace" / "_projected_artifact" / "_generation_publication.py",
+        "_fsync_tree_contents computes no digest/hash/value at all — pure fsync "
+        "durability side effect over a private, exclusive staging directory "
+        "nothing else touches; a leaf vanish there raises uncaught (crash, not "
+        "silent corruption)",
+    ),
+    (
+        SRC_ROOT / "core" / "_plugin_artifact_identity.py",
+        "_classify_bytecode_contamination is diagnostic-only, called after a "
+        "digest mismatch has already been raised, purely to embellish the error "
+        "message with a bytecode-contamination hint; omission only affects "
+        "message wording, not the validation outcome",
+    ),
+    (
+        SRC_ROOT / "recipe" / "_api_cache.py",
+        "_compute_content_hash is a dev-cache staleness-invalidation hash for "
+        "the package's own source tree, not a security/tamper boundary; already "
+        "tolerates per-file OSError by explicit design (except OSError: continue)",
+    ),
+    (
+        SRC_ROOT / "recipe" / "rules" / "rules_pseudocode_sync.py",
+        "_find_frozenset_constants is a dev-tooling consistency helper scanning "
+        "the repo's own rule source to keep pseudocode docs in sync with code "
+        "constants; not identity/tamper-critical, best-effort by nature (already "
+        "wraps parse failures in a logged continue)",
+    ),
+    (
+        SRC_ROOT / "cli" / "install" / "_marketplace.py",
+        "one-time, explicitly idempotent CLI migration script (renames a "
+        "directory, rewrites YAML text); a vanished file during the walk simply "
+        "isn't migrated this run and the operation is safe to rerun per its own "
+        "docstring — not an identity/tamper check",
+    ),
+    (
+        SRC_ROOT / "hooks" / "skill_load_post_hook.py",
+        "_resolve_manifest_path only locates a manifest sidecar for later "
+        "validation elsewhere in the pipeline; it does not itself compute or "
+        "compare an identity/tamper value",
+    ),
+]
+
+_TREE_ENUMERATION_TARGETS = {("os", "walk"), ("os", "fwalk")}
+
+
+def _resolve_tree_enumeration_target(
+    node: ast.Call, aliases: dict[str, tuple[str, str | None]]
+) -> tuple[str, str] | None:
+    """Resolve a Call to (module, attr) if it targets os.walk/os.fwalk, honoring
+    import aliases (``import os as o``, ``from os import walk``)."""
+    func = node.func
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        module, _ = aliases.get(func.value.id, (func.value.id, None))
+        target = (module, func.attr)
+        return target if target in _TREE_ENUMERATION_TARGETS else None
+    if isinstance(func, ast.Name):
+        alias_entry = aliases.get(func.id)
+        if alias_entry is not None and alias_entry[1] is not None:
+            target = (alias_entry[0], alias_entry[1])
+            return target if target in _TREE_ENUMERATION_TARGETS else None
+    return None
+
+
+def test_no_bare_tree_enumeration_outside_strict_walk(tmp_path: Path) -> None:
+    """No src file may call os.walk/os.fwalk/Path.rglob() for identity- or
+    tamper-evidence directory enumeration — both silently drop entries whose
+    scandir() fails mid-walk. Route through core.strict_walk() instead, which
+    fails loudly (TreeVanishedError) on a race — or add a rationale-carrying
+    allowlist entry for a site with a genuinely different risk profile.
+
+    Known blind spots of _gather_import_aliases-based static resolution:
+    getattr(module, "walk")/globals().get(...)-style dynamic dispatch,
+    TYPE_CHECKING-guarded re-exports, and star imports (from os import *) all
+    defeat static alias tracking and are not caught by this rule.
+    """
+    allowed_files = {path for path, _ in _TREE_ENUMERATION_ALLOWLIST}
+    rationale_by_file = dict(_TREE_ENUMERATION_ALLOWLIST)
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file in allowed_files:
+            continue
+        try:
+            source = py_file.read_text()
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        aliases = _gather_import_aliases(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = _resolve_tree_enumeration_target(node, aliases)
+            if target is not None:
+                module, attr = target
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"{module}.{attr}() call outside strict_walk()"
+                )
+                continue
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "rglob"
+                and node.func.value is not None
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f".rglob() call outside strict_walk()"
+                )
+
+    # Prove the rule actually fires before asserting the real-source-tree pass:
+    # a deliberately-planted violation fixture must be caught.
+    planted = tmp_path / "planted_violation.py"
+    planted.write_text('import os\n\ndef f():\n    for _ in os.walk("/tmp"):\n        pass\n')
+    planted_tree = ast.parse(planted.read_text())
+    planted_aliases = _gather_import_aliases(planted_tree)
+    planted_hits = [
+        node
+        for node in ast.walk(planted_tree)
+        if isinstance(node, ast.Call)
+        and _resolve_tree_enumeration_target(node, planted_aliases) is not None
+    ]
+    assert planted_hits, "planted-violation fixture failed to trip the rule's own detector"
+
+    assert not violations, (
+        "Raw os.walk/os.fwalk/Path.rglob() calls found outside core.strict_walk(). "
+        "Route through strict_walk() — or add an allowlist entry to "
+        "_TREE_ENUMERATION_ALLOWLIST with rationale (issue #4770) — for:\n"
+        + "\n".join(violations)
+        + "\n\nAllowlisted files and why:\n"
+        + "\n".join(
+            f"  {path.relative_to(SRC_ROOT.parent.parent)}: {rationale}"
+            for path, rationale in rationale_by_file.items()
+        )
+    )
+
+
 def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
     """run_managed_async must not contain an if/elif chain that inspects
     TerminationReason.* or signals.process_exited directly.

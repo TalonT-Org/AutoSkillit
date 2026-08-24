@@ -135,3 +135,49 @@ class TestVersionConsistency:
             catalog,
         )
         assert not errors, "\n".join(errors)
+
+
+def test_validate_sanitized_plugin_artifact_appends_finding_string_on_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #4770 Related Issue 3: ``validate_sanitized_plugin_artifact`` must
+    preserve its non-raising ``tuple[str, ...]`` contract when the migrated
+    ``strict_walk`` scan races — two of its three callers depend on that
+    contract completely, with no surrounding try/except of their own."""
+    import shutil
+
+    import autoskillit.core.io as io_module
+    from autoskillit.core.io import write_versioned_json
+    from autoskillit.workspace import validate_sanitized_plugin_artifact
+
+    public_root = tmp_path / "public"
+    (public_root / "skills").mkdir(parents=True)
+    vanishing = public_root / "vanishing"
+    vanishing.mkdir()
+    (vanishing / "leaf.txt").write_text("leaf", encoding="utf-8")
+
+    manifest_path = tmp_path / "manifest.json"
+    write_versioned_json(
+        manifest_path,
+        {"projection_version": 1, "skills": {}},
+        schema_version=1,
+    )
+
+    import os
+
+    original_open = os.open
+
+    def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if path == "vanishing" and (flags & os.O_DIRECTORY):
+            shutil.rmtree(vanishing)
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
+
+    errors = validate_sanitized_plugin_artifact(
+        tmp_path,
+        public_root,
+        manifest_path,
+        (),
+    )
+    assert any("tree enumeration raced" in error for error in errors)

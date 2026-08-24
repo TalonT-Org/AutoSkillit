@@ -17,14 +17,12 @@ from urllib.parse import urlsplit
 import pytest
 import structlog
 
+from autoskillit.execution.otlp_sink import _SIGNALS as _OTLP_SIGNALS
+
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 
 
-_SIGNALS = (
-    ("metrics", "/v1/metrics"),
-    ("logs", "/v1/logs"),
-    ("traces", "/v1/traces"),
-)
+_SIGNALS = tuple((signal, path) for path, signal in _OTLP_SIGNALS.items())
 _FORBIDDEN = {
     "user.email": "private-email@example.test",
     "organization.id": "private-organization-id",

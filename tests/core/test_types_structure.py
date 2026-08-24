@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from importlib import import_module
+from importlib import import_module, reload
 from typing import get_args, get_type_hints
 
 import pytest
@@ -386,7 +386,7 @@ _CONTEXT_ADMISSION_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 def test_context_admission_facade_public_surface_is_frozen() -> None:
-    facade = import_module("autoskillit.core.types._type_context_admission")
+    facade = reload(import_module("autoskillit.core.types._type_context_admission"))
 
     assert len(_CONTEXT_ADMISSION_PUBLIC_SURFACE) == 94
     assert tuple(facade.__all__) == _CONTEXT_ADMISSION_PUBLIC_SURFACE

@@ -103,7 +103,7 @@ class CleanupResult:
     def success(self) -> bool:
         return len(self.failed) == 0
 
-    def to_dict(self) -> dict:  # type: ignore[type-arg]
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "deleted": self.deleted,

@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from tests.execution.conftest import _launch_preparation, _mock_backend
+from tests.execution.conftest import _launch_preparation, _mock_backend, _sink_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -24,33 +24,6 @@ _STUB_RESULT = SkillResult(
     retry_reason=RetryReason.NONE,
     stderr="",
 )
-
-
-def _sink_env() -> dict[str, str]:
-    base = "http://127.0.0.1:43199"
-    env = {
-        "OTEL_EXPORTER_OTLP_ENDPOINT": base,
-        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-    }
-    for signal in ("TRACES", "METRICS", "LOGS"):
-        prefix = f"OTEL_EXPORTER_OTLP_{signal}"
-        env[f"{prefix}_ENDPOINT"] = f"{base}/v1/{signal.lower()}"
-        env[f"{prefix}_PROTOCOL"] = "http/json"
-    for prefix in (
-        "OTEL_EXPORTER_OTLP",
-        "OTEL_EXPORTER_OTLP_TRACES",
-        "OTEL_EXPORTER_OTLP_METRICS",
-        "OTEL_EXPORTER_OTLP_LOGS",
-    ):
-        env.update(
-            {
-                f"{prefix}_HEADERS": "",
-                f"{prefix}_CERTIFICATE": "",
-                f"{prefix}_COMPRESSION": "none",
-                f"{prefix}_TIMEOUT": "",
-            }
-        )
-    return env
 
 
 @pytest.mark.anyio

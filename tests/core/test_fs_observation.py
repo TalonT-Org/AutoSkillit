@@ -28,6 +28,19 @@ def test_observe_path_mode_returns_none_for_path_unlinked_before_call(tmp_path: 
     assert observe_path_mode(target) is None
 
 
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX symlink support")
+def test_observe_path_mode_does_not_follow_symlinks(tmp_path: Path) -> None:
+    target = tmp_path / "target.txt"
+    target.write_text("hello")
+    link = tmp_path / "link.txt"
+    link.symlink_to(target)
+
+    mode = observe_path_mode(link)
+
+    assert mode is not None
+    assert stat.S_ISLNK(mode)
+
+
 def test_observe_path_mode_returns_none_when_intermediate_component_becomes_a_file(
     tmp_path: Path,
 ) -> None:
@@ -83,6 +96,23 @@ def test_safe_mtime_returns_none_for_path_unlinked_before_call(tmp_path: Path) -
     target.write_text("hello")
     target.unlink()
     assert safe_mtime(target) is None
+
+
+def test_safe_mtime_returns_mtime_for_directory(tmp_path: Path) -> None:
+    target = tmp_path / "directory"
+    target.mkdir()
+
+    assert safe_mtime(target) == pytest.approx(target.stat().st_mtime)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX symlink support")
+def test_safe_mtime_follows_symlinks(tmp_path: Path) -> None:
+    target = tmp_path / "target.txt"
+    target.write_text("hello")
+    link = tmp_path / "link.txt"
+    link.symlink_to(target)
+
+    assert safe_mtime(link) == pytest.approx(target.stat().st_mtime)
 
 
 def test_safe_mtime_returns_none_when_intermediate_component_becomes_a_file(

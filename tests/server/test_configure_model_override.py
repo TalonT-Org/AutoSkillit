@@ -55,6 +55,24 @@ async def test_configure_fleet_sets_model_override(tmp_path, monkeypatch) -> Non
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("model_override", [" opus-recovery", "opus\nrecovery"])
+async def test_configure_rejects_malformed_model_override(
+    tmp_path, monkeypatch, model_override
+) -> None:
+    from autoskillit.server import _state
+    from autoskillit.server.tools.tools_config import configure_order
+
+    ctx = _open_context(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", ctx)
+
+    payload = json.loads(await configure_order(model_override=model_override))
+
+    assert payload["success"] is False
+    assert "printable model identifier without surrounding whitespace" in payload["error"]
+    assert ctx.config.model.model_override is None
+
+
+@pytest.mark.anyio
 async def test_model_override_beats_providers_model_overrides(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:

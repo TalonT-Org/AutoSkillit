@@ -90,6 +90,16 @@ def _collect_order_params(
     }
 
 
+def _validate_model_override(value: str) -> str:
+    """Keep the empty clear sentinel but reject malformed model identifiers."""
+    if value and (value != value.strip() or not value.isprintable()):
+        raise ValueError(
+            "model_override must be empty or a printable model identifier "
+            "without surrounding whitespace"
+        )
+    return value
+
+
 def _stage_effective_config(
     ctx: ToolContext,
     domain: str,
@@ -215,7 +225,7 @@ async def configure_fleet(
         if default_model is not None:
             core_params["default_model"] = default_model
         if model_override is not None:
-            core_params["model_override"] = model_override
+            core_params["model_override"] = _validate_model_override(model_override)
         snapshot = _commit_effective_config(ctx, "fleet", params, core_params)
         return json.dumps({"success": True, "config": snapshot})
     except (OverlayStateError, TypeError, ValueError) as exc:
@@ -273,7 +283,7 @@ async def configure_order(
         if default_model is not None:
             core_params["default_model"] = default_model
         if model_override is not None:
-            core_params["model_override"] = model_override
+            core_params["model_override"] = _validate_model_override(model_override)
         snapshot = _commit_effective_config(ctx, "order", params, core_params)
         return json.dumps({"success": True, "config": snapshot})
     except (OverlayStateError, TypeError, ValueError) as exc:

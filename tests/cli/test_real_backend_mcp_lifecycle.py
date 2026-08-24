@@ -77,7 +77,7 @@ def _drain_pty(
     master_fd: int,
     stop: threading.Event,
     diagnostics: bytearray,
-    unexpected_trust_prompt: threading.Event,
+    trust_prompt_observed: threading.Event,
 ) -> None:
     responded: set[str] = set()
     while not stop.is_set():
@@ -109,7 +109,7 @@ def _drain_pty(
                 )
                 and "trust" not in responded
             ):
-                unexpected_trust_prompt.set()
+                trust_prompt_observed.set()
             if b"Hooks need review" in chunk and "hooks" not in responded:
                 responded.add("hooks")
                 os.write(master_fd, b"\x1b[B\x1b[B\r")
@@ -121,10 +121,10 @@ def test_drain_pty_observes_split_trust_prompt_without_responding() -> None:
     drain_socket, peer = socket.socketpair()
     diagnostics = bytearray()
     stop = threading.Event()
-    unexpected_trust_prompt = threading.Event()
+    trust_prompt_observed = threading.Event()
     drain = threading.Thread(
         target=_drain_pty,
-        args=(drain_socket.fileno(), stop, diagnostics, unexpected_trust_prompt),
+        args=(drain_socket.fileno(), stop, diagnostics, trust_prompt_observed),
         daemon=True,
     )
     started = False
@@ -138,7 +138,7 @@ def test_drain_pty_observes_split_trust_prompt_without_responding() -> None:
         assert b"Do you trust this fol" in diagnostics
         peer.sendall(b"der? Press Enter to confirm")
 
-        assert unexpected_trust_prompt.wait(timeout=1), diagnostics.decode(errors="replace")
+        assert trust_prompt_observed.wait(timeout=1), diagnostics.decode(errors="replace")
         assert b"Do you trust this folder? Press Enter to confirm" in diagnostics
         peer.settimeout(0.3)
         with pytest.raises(TimeoutError):
@@ -327,10 +327,10 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
     fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
     diagnostics = bytearray()
     stop_drain = threading.Event()
-    unexpected_trust_prompt = threading.Event()
+    trust_prompt_observed = threading.Event()
     drain = threading.Thread(
         target=_drain_pty,
-        args=(master_fd, stop_drain, diagnostics, unexpected_trust_prompt),
+        args=(master_fd, stop_drain, diagnostics, trust_prompt_observed),
         daemon=True,
     )
     client: subprocess.Popen[bytes] | None = None
@@ -351,7 +351,7 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
         drain.start()
         daemon = _wait_for_registered_daemon(launch_id, timeout=20)
         if backend_name == "codex":
-            assert not unexpected_trust_prompt.is_set(), (
+            assert not trust_prompt_observed.is_set(), (
                 "Codex displayed a project-trust prompt despite pretrusting its canonical cwd:\n"
                 + diagnostics.decode(errors="replace")
             )

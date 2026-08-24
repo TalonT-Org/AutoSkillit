@@ -1,15 +1,4 @@
-"""Runtime-settable model_override (#4707, S11 — issue #4238 recovery control).
-
-``configure_order``/``configure_fleet``'s ``model_override`` is a session-wide
-recovery control, deliberately outranking both independent model-precedence
-ladders (Ladder A: run_skill dispatch's ``providers.model_overrides``;
-Ladder B: headless launch's ``model.recipe_overrides``/``model.step_overrides``).
-This inverts "more-specific wins" on purpose — an operator who broke a
-per-recipe/per-step override needs a way to recover without restarting the
-server. #4238 is the tier-2 (``model.recipe_overrides``) incident this
-control exists to make recoverable; that case is the incident-recovery
-proof and must assert *after* ``resolve_model_pin`` runs, not before.
-"""
+"""Runtime configuration and precedence tests for the model override."""
 
 from __future__ import annotations
 

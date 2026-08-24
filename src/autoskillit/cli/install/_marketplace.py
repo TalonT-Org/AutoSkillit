@@ -457,7 +457,11 @@ def upgrade(*, project_dir: Path | None = None):
 
     changed = 0
     for yaml_file in sorted(recipes_dir.rglob("*.yaml")):
-        text = yaml_file.read_text()
+        try:
+            text = yaml_file.read_text()
+        except OSError as exc:
+            print(f"Skipping {yaml_file} (unreadable: {exc})")
+            continue
         new_text = re.sub(r"^inputs:", "ingredients:", text, flags=re.MULTILINE)
         new_text = re.sub(r"^constraints:", "kitchen_rules:", new_text, flags=re.MULTILINE)
         if new_text != text:

@@ -16,9 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from autoskillit.core import SkillExecutionRole
+from autoskillit.core import CodingAgentBackend, SkillExecutionRole
 from autoskillit.workspace import (
     CompiledSessionSkillCatalog,
     SkillProjectionContext,
@@ -199,7 +198,7 @@ def _read_full_sous_chef(
     skill_compilation: CompiledSessionSkillCatalog,
     *,
     project_root: Path,
-    backend: Any,
+    backend: CodingAgentBackend,
 ) -> str:
     """Project admitted sous-chef guidance for an orchestrator prompt."""
     if not isinstance(skill_compilation, CompiledSessionSkillCatalog):

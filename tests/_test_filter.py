@@ -187,9 +187,7 @@ _TYPE_RESULTS_CASCADE = frozenset(
     }
 )
 
-# Internal context-admission shards (Issue #4738) share a single consumer
-# scope. List is data-driven so both MODULE_CASCADE_CORE and the cascade
-# tests stay in lock-step.
+# Internal context-admission shards (Issue #4738).
 _CONTEXT_ADMISSION_SHARDS: tuple[str, ...] = (
     "_type_context_admission_base",
     "_type_context_admission_identities",

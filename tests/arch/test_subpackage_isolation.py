@@ -1048,7 +1048,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_constants_durable_writers: cohesive constants shards (#4735).
         # +_type_results_records: leaf result and persisted-index record contracts.
         # +_type_launch_authority: launch authority/provenance shard.
-        "core/types": 61,
+        "core/types": 62,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,

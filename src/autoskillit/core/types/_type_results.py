@@ -252,6 +252,14 @@ class SpillSpec:
         if self.inline_max_chars < 0 or self.head_chars < 0 or self.tail_chars < 0:
             raise ValueError("spill character budgets must be non-negative")
 
+    def with_forced_spill(self, force: bool) -> SpillSpec:
+        """Return a spec that forces artifact backing when ``force`` is true."""
+        if not force:
+            return self
+        return SpillSpec(
+            inline_max_chars=0, head_chars=self.head_chars, tail_chars=self.tail_chars
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ClosureAuthoritySpec:

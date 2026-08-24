@@ -55,11 +55,7 @@ def _shape_failed_test_output(
         tail_chars=config.output_budget.tail_chars,
     )
     raw = json.dumps({"stdout": test_result.stdout, "stderr": test_result.stderr})
-    spill_spec = (
-        SpillSpec(inline_max_chars=0, head_chars=spec.head_chars, tail_chars=spec.tail_chars)
-        if timed_out
-        else spec
-    )
+    spill_spec = spec.with_forced_spill(timed_out)
     spilled = spill_output(
         raw,
         resolve_temp_dir(Path(worktree_path), config.workspace.temp_dir) / "merge_worktree",
@@ -76,7 +72,7 @@ def _shape_failed_test_output(
             raw,
             resolve_temp_dir(Path(worktree_path), config.workspace.temp_dir) / "merge_worktree",
             "raw_test_output",
-            SpillSpec(inline_max_chars=0, head_chars=spec.head_chars, tail_chars=spec.tail_chars),
+            spec.with_forced_spill(True),
         )
 
     def preview(text: str) -> str:

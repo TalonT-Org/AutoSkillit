@@ -156,15 +156,7 @@ async def test_check(
                         resolve_temp_dir(Path(resolved), tool_ctx.config.workspace.temp_dir)
                         / "test_check"
                     )
-                    spill_spec = (
-                        SpillSpec(
-                            inline_max_chars=0,
-                            head_chars=spec.head_chars,
-                            tail_chars=spec.tail_chars,
-                        )
-                        if timed_out
-                        else spec
-                    )
+                    spill_spec = spec.with_forced_spill(timed_out)
                     raw_spill = spill_output(raw_output, spill_dir, "raw_output", spill_spec)
                     raw_artifact_path = raw_spill.artifact_path
                     if raw_artifact_path is None and (
@@ -175,11 +167,7 @@ async def test_check(
                             raw_output,
                             spill_dir,
                             "raw_output",
-                            SpillSpec(
-                                inline_max_chars=0,
-                                head_chars=spec.head_chars,
-                                tail_chars=spec.tail_chars,
-                            ),
+                            spec.with_forced_spill(True),
                         )
                         raw_artifact_path = raw_spill.artifact_path
                 response = {

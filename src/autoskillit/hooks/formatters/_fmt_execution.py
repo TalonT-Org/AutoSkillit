@@ -171,11 +171,11 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
     mark = _CHECK_MARK if passed else _CROSS_MARK
     status = "PASS" if passed else "FAIL"
     lines = [f"## test_check {mark} {status}", "", f"passed: {passed}"]
-
+    if data.get("timed_out") is True:
+        lines.append(f"outer timeout: {data.get('outer_timeout_seconds')}s")
     duration = data.get("duration_seconds")
     if duration is not None:
         lines.append(f"duration: {duration:.1f}s")
-
     filter_mode = data.get("filter_mode")
     if filter_mode:
         full_run_reason = data.get("full_run_reason")
@@ -287,6 +287,8 @@ _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
         "error",
         "infrastructure_missing",
         "raw_output_artifact_path",
+        "timed_out",
+        "outer_timeout_seconds",
         "recipe_segment",
     }
 )
@@ -351,6 +353,8 @@ _FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
         "remote_sha",
         "remote_is_ancestor",
         "raw_output_artifact_path",
+        "timed_out",
+        "outer_timeout_seconds",
         "recipe_segment",
     }
 )

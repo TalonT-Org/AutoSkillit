@@ -47,18 +47,20 @@ def _shape_failed_test_output(
     test_result: TestResult,
     worktree_path: str,
     config: AutomationConfig,
-) -> dict[str, str]:
+) -> dict[str, str | bool | float]:
+    timed_out = test_result.outer_timeout_seconds is not None
     spec = SpillSpec(
         inline_max_chars=config.output_budget.inline_max_chars,
         head_chars=config.output_budget.head_chars,
         tail_chars=config.output_budget.tail_chars,
     )
     raw = json.dumps({"stdout": test_result.stdout, "stderr": test_result.stderr})
+    spill_spec = spec.with_forced_spill(timed_out)
     spilled = spill_output(
         raw,
         resolve_temp_dir(Path(worktree_path), config.workspace.temp_dir) / "merge_worktree",
         "raw_test_output",
-        spec,
+        spill_spec,
     )
     condensed_stdout, condensed_stderr = condense_test_output(test_result)
 
@@ -70,7 +72,7 @@ def _shape_failed_test_output(
             raw,
             resolve_temp_dir(Path(worktree_path), config.workspace.temp_dir) / "merge_worktree",
             "raw_test_output",
-            SpillSpec(inline_max_chars=0, head_chars=spec.head_chars, tail_chars=spec.tail_chars),
+            spec.with_forced_spill(True),
         )
 
     def preview(text: str) -> str:
@@ -80,13 +82,20 @@ def _shape_failed_test_output(
         tail = text[-spec.tail_chars :] if spec.tail_chars else ""
         return "\n".join(part for part in (text[: spec.head_chars], marker, tail) if part)
 
-    shaped = {
+    shaped: dict[str, str | bool | float] = {
         "test_stdout": preview(condensed_stdout),
         "test_stderr": preview(condensed_stderr),
+        "timed_out": timed_out,
     }
+    if test_result.outer_timeout_seconds is not None:
+        shaped["outer_timeout_seconds"] = test_result.outer_timeout_seconds
     if spilled.artifact_path is not None:
         shaped["raw_output_artifact_path"] = spilled.artifact_path
     return shaped
+
+
+def _merge_test_gate_failed(test_result: TestResult) -> bool:
+    return not test_result.passed or test_result.outer_timeout_seconds is not None
 
 
 def validate_commit_paths(cwd: str, paths: list[str]) -> str | None:
@@ -365,9 +374,14 @@ async def perform_merge(
                 "worktree_path": worktree_path,
             }
         test_result = await tester.run(Path(worktree_path))
-        if not test_result.passed:
+        if _merge_test_gate_failed(test_result):
             return {
-                "error": "Tests failed in worktree — merge blocked",
+                "error": (
+                    f"Tests timed out after {test_result.outer_timeout_seconds:.1f}s "
+                    "in worktree — merge blocked"
+                    if test_result.outer_timeout_seconds is not None
+                    else "Tests failed in worktree — merge blocked"
+                ),
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
@@ -463,12 +477,17 @@ async def perform_merge(
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:
         test_result = await tester.run(Path(worktree_path))
-        passed = test_result.passed
-        if not passed:
+        if _merge_test_gate_failed(test_result):
             return {
                 "error": (
-                    "Tests failed after rebase. The worktree is intact; "
-                    "run resolve-failures to fix the regressions."
+                    f"Tests timed out after {test_result.outer_timeout_seconds:.1f}s "
+                    "after rebase. The worktree is intact; run resolve-failures "
+                    "to diagnose the outer timeout."
+                    if test_result.outer_timeout_seconds is not None
+                    else (
+                        "Tests failed after rebase. The worktree is intact; "
+                        "run resolve-failures to fix the regressions."
+                    )
                 ),
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,

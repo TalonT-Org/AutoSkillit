@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -13,11 +14,15 @@ from autoskillit.config import (
     ResetWorkspaceConfig,
     SafetyConfig,
 )
+from autoskillit.core import TestResult
 from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
 from autoskillit.server.tools.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_segment_test_helpers import (
+    assert_recovery_recipe_segment,
+    install_prepared_recipe_segment,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -139,17 +144,71 @@ class TestTestCheck:
 
     @pytest.mark.anyio
     async def test_passes_on_clean_run(self, tool_ctx):
-        """returncode=0 with passing summary -> passed=True."""
+        """Completed passing runs are explicitly not outer timeouts."""
         tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))
         result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is True
+        assert result["timed_out"] is False
+        assert "outer_timeout_seconds" not in result
 
     @pytest.mark.anyio
     async def test_fails_on_nonzero_exit(self, tool_ctx):
-        """returncode=1 -> passed=False regardless of output."""
+        """An ordinary pytest failure is not reported as an outer timeout."""
         tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =\n", ""))
         result = json.loads(await test_check(worktree_path=self.wt))
         assert result["passed"] is False
+        assert result["timed_out"] is False
+        assert "outer_timeout_seconds" not in result
+
+    @pytest.mark.anyio
+    async def test_outer_timeout_normalizes_a_contradictory_runner_result(
+        self,
+        tool_ctx,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A result deadline overrides a stale runner success flag at the handler boundary."""
+        timeout_seconds = 123.0
+        tool_ctx.config.test_check.timeout = 900
+        tool_ctx.config.output_budget.inline_max_chars = 20
+        tool_ctx.config.output_budget.head_chars = 10
+        tool_ctx.config.output_budget.tail_chars = 10
+        install_prepared_recipe_segment(monkeypatch, tools_workspace, step_name="gate")
+
+        async def timed_out_runner(_cwd: Path) -> TestResult:
+            return TestResult(
+                passed=True,
+                stdout="partial stdout",
+                stderr="partial stderr",
+                outer_timeout_seconds=timeout_seconds,
+            )
+
+        notifications: list[tuple[str, str, str, dict[str, object] | None]] = []
+
+        async def capture_notification(
+            _ctx: object,
+            level: str,
+            message: str,
+            logger_name: str,
+            extra: dict[str, object] | None = None,
+        ) -> None:
+            notifications.append((level, message, logger_name, extra))
+
+        monkeypatch.setattr(tool_ctx.tester, "run", timed_out_runner)
+        monkeypatch.setattr(tools_workspace, "_notify", capture_notification)
+
+        result = json.loads(await test_check(worktree_path=self.wt, step_name="gate"))
+
+        assert result["passed"] is False
+        assert result["timed_out"] is True
+        assert result["outer_timeout_seconds"] == timeout_seconds
+        assert Path(result["raw_output_artifact_path"]).is_file()
+        assert (
+            "error",
+            "test_check: outer timeout after 123.0s",
+            "autoskillit.test_check",
+            {"worktree": self.wt},
+        ) in notifications
+        assert_recovery_recipe_segment(result, step_name="gate")
 
     @pytest.mark.parametrize(
         ("returncode", "output", "expected_kind"),
@@ -314,10 +373,16 @@ class TestTestCheck:
 
     @pytest.mark.anyio
     async def test_response_schema_includes_stderr(self, tool_ctx):
-        """test_check response contains passed, stdout, and stderr keys."""
+        """test_check response contains the non-timeout status alongside streams."""
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
         result = json.loads(await test_check(worktree_path=self.wt))
-        assert set(result.keys()) == {"passed", "stdout", "stderr", "duration_seconds"}
+        assert set(result.keys()) == {
+            "passed",
+            "timed_out",
+            "stdout",
+            "stderr",
+            "duration_seconds",
+        }
 
     @pytest.mark.anyio
     async def test_pytest_failure_still_detected(self, tool_ctx):

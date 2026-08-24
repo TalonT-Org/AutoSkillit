@@ -51,11 +51,24 @@ def _extract_failed_tests(test_stdout: str, test_stderr: str) -> list[str]:
     return _FAILED_TEST_RE.findall(combined)
 
 
+def _normalize_timed_out(value: bool | str | None) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    return False
+
+
 def diagnose_merge_gate(
     test_stdout: str = "",
     test_stderr: str = "",
     output_dir: str = "",
     failed_step: str = "",
+    timed_out: bool | str | None = None,
+    outer_timeout_seconds: float | None = None,
+    raw_output_artifact_path: str | None = None,
     **_kwargs: object,
 ) -> dict[str, str]:
     """Write a structured merge gate failure diagnosis file and return its path.
@@ -74,7 +87,11 @@ def diagnose_merge_gate(
         failed_tests: list[str] = []
     elif failed_step in _TEST_STEPS:
         failure_type = "test"
-        subtype = _classify_test_subtype(test_stdout, test_stderr)
+        subtype = (
+            "outer_timeout"
+            if _normalize_timed_out(timed_out)
+            else _classify_test_subtype(test_stdout, test_stderr)
+        )
         failed_tests = _extract_failed_tests(test_stdout, test_stderr)
     elif failed_step:
         failure_type = "test"
@@ -94,6 +111,13 @@ def diagnose_merge_gate(
     if len(log_excerpt) > 4000:
         log_excerpt = log_excerpt[-4000:]
 
+    structured_timeout = ""
+    if subtype == "outer_timeout":
+        if outer_timeout_seconds is not None:
+            structured_timeout += f"outer_timeout_seconds = {outer_timeout_seconds}\n"
+        if raw_output_artifact_path:
+            structured_timeout += f"raw_output_artifact_path = {raw_output_artifact_path}\n"
+
     content = (
         "# Merge Gate Test Failure Diagnosis\n\n"
         "## Classification\n"
@@ -106,6 +130,7 @@ def diagnose_merge_gate(
         "## Structured Output\n"
         f"failure_type = {failure_type}\n"
         f"failure_subtype = {subtype}\n"
+        f"{structured_timeout}"
     )
 
     from autoskillit.core import atomic_write  # noqa: PLC0415

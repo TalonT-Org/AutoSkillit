@@ -17,7 +17,12 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, TestResult, get_logger
+from autoskillit.core import (
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
+    TerminationReason,
+    TestResult,
+    get_logger,
+)
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -310,7 +315,10 @@ class DefaultTestRunner:
 
         total = len(effective_commands)
         stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
         last_result = None
+        outer_timeout_seconds: float | None = None
+        deadline_diagnostic: str | None = None
         elapsed: float = 0.0
         stat_filter_mode: str | None = None
         stat_tests_selected: int | None = None
@@ -323,15 +331,24 @@ class DefaultTestRunner:
             for idx, command in enumerate(effective_commands, 1):
                 remaining = deadline - time.monotonic()
                 if remaining < 0.01:
+                    outer_timeout_seconds = timeout
+                    deadline_diagnostic = (
+                        f"outer test timeout exhausted before command {idx}/{total} "
+                        f"could run (configured budget: {timeout:.1f}s)"
+                    )
                     break
                 result = await self._runner(command, cwd=cwd, timeout=remaining, env=env)
                 last_result = result
+                stderr_parts.append(result.stderr)
                 if total > 1:
                     stdout_parts.append(
                         f"=== [{idx}/{total}] {' '.join(command)} ===\n{result.stdout}"
                     )
                 else:
                     stdout_parts.append(result.stdout)
+                if result.termination is TerminationReason.TIMED_OUT:
+                    outer_timeout_seconds = timeout
+                    break
                 if result.returncode != 0:
                     break
 
@@ -356,15 +373,25 @@ class DefaultTestRunner:
             Path(sidecar_path).unlink(missing_ok=True)
 
         combined_stdout = "\n".join(stdout_parts)
-        if last_result is not None:
+        if outer_timeout_seconds is not None:
+            final_returncode = last_result.returncode if last_result is not None else 1
+            timeout_stderr = [part for part in stderr_parts if part]
+            if deadline_diagnostic is not None:
+                timeout_stderr.append(deadline_diagnostic)
+            final_stderr = "\n".join(timeout_stderr)
+        elif last_result is not None:
             final_returncode = last_result.returncode
             final_stderr = last_result.stderr
         else:
             final_returncode = 1
             final_stderr = "timeout exhausted before first command could run"
+
+        if last_result is None:
             logger.warning("test_runner_timeout_before_first_command", timeout=timeout)
 
         passed = check_test_passed(final_returncode, combined_stdout, final_stderr)
+        if outer_timeout_seconds is not None:
+            passed = False
         return TestResult(
             passed=passed,
             stdout=combined_stdout,
@@ -374,4 +401,5 @@ class DefaultTestRunner:
             tests_selected=stat_tests_selected,
             tests_deselected=stat_tests_deselected,
             full_run_reason=stat_full_run_reason,
+            outer_timeout_seconds=outer_timeout_seconds,
         )

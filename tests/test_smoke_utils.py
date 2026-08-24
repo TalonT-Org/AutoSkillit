@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import math
@@ -4963,6 +4964,68 @@ def test_diagnose_merge_gate_extracts_failure_subtype(tmp_path: object) -> None:
     )
     content_t = Path(result_timeout["diagnosis_path"]).read_text()
     assert "failure_subtype = timing_race" in content_t
+
+
+def test_diagnose_merge_gate_structured_outer_timeout_wins_over_pytest_output(
+    tmp_path: Path,
+) -> None:
+    """Structured timeout provenance must not be mistaken for a failing test."""
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    artifact_path = "/tmp/test-check/raw-output.json"
+    result = diagnose_merge_gate(
+        test_stdout="FAILED tests/test_timeout.py::test_gate - AssertionError",
+        test_stderr="",
+        output_dir=str(tmp_path),
+        failed_step="test_gate",
+        timed_out=True,
+        outer_timeout_seconds=900.0,
+        raw_output_artifact_path=artifact_path,
+    )
+
+    content = Path(result["diagnosis_path"]).read_text()
+    assert "failure_subtype = outer_timeout" in content
+    assert "outer_timeout_seconds = 900.0" in content
+    assert f"raw_output_artifact_path = {artifact_path}" in content
+
+
+@pytest.mark.parametrize(
+    ("captured_timed_out", "expected_subtype"),
+    [("true", "outer_timeout"), ("false", "deterministic")],
+)
+def test_diagnose_merge_gate_run_python_normalizes_captured_timeout_values(
+    tmp_path: Path,
+    captured_timed_out: str,
+    expected_subtype: str,
+) -> None:
+    """run_python coerces recipe-captured boolean and numeric timeout values."""
+    from autoskillit.server.tools._execution_helpers import _import_and_call
+
+    result = asyncio.run(
+        _import_and_call(
+            "autoskillit.smoke_utils.diagnose_merge_gate",
+            args={
+                "test_stdout": "FAILED tests/test_example.py::test_gate - AssertionError",
+                "test_stderr": "",
+                "output_dir": str(tmp_path),
+                "failed_step": "test_gate",
+                "timed_out": captured_timed_out,
+                "outer_timeout_seconds": "900.0",
+                "raw_output_artifact_path": "/tmp/test-check/raw-output.json",
+            },
+        )
+    )
+
+    assert result["success"] is True
+    diagnosis = result["result"]
+    assert isinstance(diagnosis, dict)
+    diagnosis_path = diagnosis.get("diagnosis_path")
+    assert isinstance(diagnosis_path, str)
+    content = Path(diagnosis_path).read_text()
+    assert f"failure_subtype = {expected_subtype}" in content
+    if captured_timed_out == "true":
+        assert "outer_timeout_seconds = 900.0" in content
+        assert "raw_output_artifact_path = /tmp/test-check/raw-output.json" in content
 
 
 def test_diagnose_merge_gate_dirty_tree_step(tmp_path: object) -> None:

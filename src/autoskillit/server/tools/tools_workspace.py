@@ -124,12 +124,19 @@ async def test_check(
             _start = time.monotonic()
             try:
                 test_result = await tool_ctx.tester.run(Path(resolved))
+                timed_out = test_result.outer_timeout_seconds is not None
+                effective_passed = test_result.passed and not timed_out
 
-                if not test_result.passed:
+                if not effective_passed:
                     await _notify(
                         ctx,
                         "error",
-                        "test_check: tests failed",
+                        (
+                            f"test_check: outer timeout after "
+                            f"{test_result.outer_timeout_seconds:.1f}s"
+                            if timed_out
+                            else "test_check: tests failed"
+                        ),
                         "autoskillit.test_check",
                         extra={"worktree": worktree_path},
                     )
@@ -141,7 +148,7 @@ async def test_check(
                     tail_chars=tool_ctx.config.output_budget.tail_chars,
                 )
                 condensed_stdout, condensed_stderr = condense_test_output(test_result)
-                if not test_result.passed:
+                if not effective_passed:
                     raw_output = json.dumps(
                         {"stdout": test_result.stdout, "stderr": test_result.stderr}
                     )
@@ -149,7 +156,8 @@ async def test_check(
                         resolve_temp_dir(Path(resolved), tool_ctx.config.workspace.temp_dir)
                         / "test_check"
                     )
-                    raw_spill = spill_output(raw_output, spill_dir, "raw_output", spec)
+                    spill_spec = spec.with_forced_spill(timed_out)
+                    raw_spill = spill_output(raw_output, spill_dir, "raw_output", spill_spec)
                     raw_artifact_path = raw_spill.artifact_path
                     if raw_artifact_path is None and (
                         len(condensed_stdout) > spec.inline_max_chars
@@ -159,18 +167,17 @@ async def test_check(
                             raw_output,
                             spill_dir,
                             "raw_output",
-                            SpillSpec(
-                                inline_max_chars=0,
-                                head_chars=spec.head_chars,
-                                tail_chars=spec.tail_chars,
-                            ),
+                            spec.with_forced_spill(True),
                         )
                         raw_artifact_path = raw_spill.artifact_path
                 response = {
-                    "passed": test_result.passed,
+                    "passed": effective_passed,
+                    "timed_out": timed_out,
                     "stdout": _bounded_test_stream(condensed_stdout, spec, raw_artifact_path),
                     "stderr": _bounded_test_stream(condensed_stderr, spec, raw_artifact_path),
                 }
+                if test_result.outer_timeout_seconds is not None:
+                    response["outer_timeout_seconds"] = test_result.outer_timeout_seconds
                 if raw_artifact_path is not None:
                     response["raw_output_artifact_path"] = raw_artifact_path
                 if test_result.duration_seconds is not None:
@@ -187,7 +194,7 @@ async def test_check(
                     attach_recipe_segment(
                         response,
                         prepared_segment,
-                        success=test_result.passed is True,
+                        success=effective_passed,
                     )
                 )
             finally:

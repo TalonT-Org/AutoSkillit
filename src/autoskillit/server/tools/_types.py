@@ -154,6 +154,8 @@ class TestCheckResult(_TestCheckResultBase, total=False):
     stdout: str
     stderr: str
     raw_output_artifact_path: str
+    timed_out: bool
+    outer_timeout_seconds: float
     duration_seconds: float
     filter_mode: str
     tests_selected: int
@@ -184,6 +186,8 @@ class MergeWorktreeResult(TypedDict, total=False):
     test_stdout: str
     test_stderr: str
     raw_output_artifact_path: str
+    timed_out: bool
+    outer_timeout_seconds: float
     abort_failed: bool
     abort_stderr: str
     poisoned_installs: list[str]

@@ -852,7 +852,10 @@
         "test_stderr": "${{ context.merge_test_stderr }}",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate",
         "work_dir": "${{ context.work_dir }}",
-        "failed_step": "${{ context.merge_failed_step }}"
+        "failed_step": "${{ context.merge_failed_step }}",
+        "timed_out": "${{ context.merge_timed_out }}",
+        "outer_timeout_seconds": "${{ context.merge_outer_timeout_seconds }}",
+        "raw_output_artifact_path": "${{ context.merge_raw_output_artifact_path }}"
       },
       "capture": {
         "merge_gate_diagnosis_path": "${{ result.diagnosis_path }}",
@@ -863,7 +866,10 @@
       "optional_context_refs": [
         "merge_test_stdout",
         "merge_test_stderr",
-        "merge_failed_step"
+        "merge_failed_step",
+        "merge_timed_out",
+        "merge_outer_timeout_seconds",
+        "merge_raw_output_artifact_path"
       ],
       "note": "Writes a structured diagnosis file from merge gate test output, mirroring diagnose-ci format. Routes to assess on both success and failure — assess proceeds without context if diagnosis fails. Uses distinct context keys (merge_gate_*) to avoid collision with ci_watch/diagnose_ci context variables from the CI path.\n"
     },
@@ -1627,7 +1633,19 @@
         "worktree_path": "${{ result.worktree_path }}",
         "merge_test_stdout": "${{ result.test_stdout }}",
         "merge_test_stderr": "${{ result.test_stderr }}",
-        "merge_failed_step": "${{ result.failed_step }}"
+        "merge_failed_step": "${{ result.failed_step }}",
+        "merge_timed_out": {
+          "from": "${{ result.timed_out }}",
+          "type": "optional_string"
+        },
+        "merge_outer_timeout_seconds": {
+          "from": "${{ result.outer_timeout_seconds }}",
+          "type": "optional_string"
+        },
+        "merge_raw_output_artifact_path": {
+          "from": "${{ result.raw_output_artifact_path }}",
+          "type": "optional_string"
+        }
       },
       "on_result": [
         {
@@ -1636,11 +1654,11 @@
         },
         {
           "when": "result.failed_step == 'test_gate'",
-          "route": "release_issue_failure"
+          "route": "check_merge_fix_loop"
         },
         {
           "when": "result.failed_step == 'post_rebase_test_gate'",
-          "route": "release_issue_failure"
+          "route": "check_merge_fix_loop"
         },
         {
           "when": "result.failed_step == 'rebase'",

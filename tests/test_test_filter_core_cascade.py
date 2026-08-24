@@ -163,6 +163,7 @@ class TestModuleCascadeCore:
             "_step_context",
             "_execution_marker",
             "git_remote",
+            "fs_observation",
             "pipeline_tracker",
             "bash_write_targets",
             "_type_audit_admission",
@@ -181,6 +182,10 @@ class TestModuleCascadeCore:
             "closure_verifier",
             "context_admission",
             "_delivery_bounds",
+            "_type_enums_context_admission",
+            "_type_constants_skill_contract",
+            "_type_constants_durable_writers",
+            "_type_constants_retirements",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

@@ -38,7 +38,7 @@ _EXPECTED_MODES: dict[tuple[str, str], RecipeDeliveryMode] = {
     ("bem-wrapper", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
     ("bem-wrapper", "codex"): RecipeDeliveryMode.ENVELOPE,
     ("consolidate-health-reports", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
-    ("consolidate-health-reports", "codex"): RecipeDeliveryMode.ORDINARY_INLINE,
+    ("consolidate-health-reports", "codex"): RecipeDeliveryMode.ENVELOPE,
     ("full-audit", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,
     ("full-audit", "codex"): RecipeDeliveryMode.ENVELOPE,
     ("implement-findings", "claude-code"): RecipeDeliveryMode.ORDINARY_INLINE,

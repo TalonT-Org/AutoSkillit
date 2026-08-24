@@ -159,6 +159,7 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     monkeypatch.setattr(_guards, "_resolve_provider_profile", record_step_provider)
 
     ready = tool_ctx_ready_recipe
+    monkeypatch.setitem(ready.tool_ctx.config.features, "providers", True)
     executor = InMemoryHeadlessExecutor()
     ready.tool_ctx.executor = executor
     with_args = ready.with_args

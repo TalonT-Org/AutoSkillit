@@ -1040,7 +1040,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # entrypoint shim renderer/writer — stdlib-only and version-
         # independent by design, kept separate from the generation-store
         # publish machinery it is written alongside).
-        "core": 35,  # +_tool_registry_builders cohesive registry construction (#4739)
+        # +_tool_registry_builders cohesive registry construction (#4739).
+        # +fs_observation.py: the shared enumeration-derived-path observation
+        # funnel (rectify: exploration capture immunity part A) — stdlib-only,
+        # consumed from core/runtime/kitchen_state.py, so it cannot live under
+        # exploration/ (IL-1) or any module with non-stdlib dependencies.
+        "core": 36,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).

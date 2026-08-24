@@ -581,3 +581,120 @@ def test_terminal_capture_result_rejects_validated_activation(tmp_path: Path) ->
 
     with pytest.raises(ValueError, match="non-complete"):
         replace(terminal, validated_activation=complete.validated_activation)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation requires POSIX")
+def test_snapshot_survives_a_real_entry_deleted_during_the_worktree_walk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _new_repository(tmp_path)
+    fifo_path = root / "vanishing.pipe"
+    os.mkfifo(fifo_path)
+    real_observe_path_mode = snapshot_module.observe_path_mode
+    unlinked = False
+
+    def unlink_first_then_delegate(path: Path):
+        nonlocal unlinked
+        if not unlinked and path == fifo_path:
+            unlinked = True
+            fifo_path.unlink()
+        return real_observe_path_mode(path)
+
+    monkeypatch.setattr(snapshot_module, "observe_path_mode", unlink_first_then_delegate)
+
+    result = _capture(root)
+
+    assert result.status is not SnapshotCaptureStatus.FAILED
+    assert result.status in (SnapshotCaptureStatus.COMPLETE, SnapshotCaptureStatus.STALE)
+    assert result.snapshot is not None
+    # COMPLETE is itself the self-consistency proof: capture_repository_snapshot
+    # only reaches COMPLETE when the start and end internal captures agree on
+    # snapshot_identity (else it publishes STALE), so a COMPLETE result here
+    # means both internal captures independently agreed on the FIFO's fate —
+    # not merely "not FAILED", but a snapshot that never claims state it did
+    # not actually observe.
+    assert unlinked
+
+
+def test_snapshot_walk_does_not_descend_into_collapsed_ignored_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _new_repository(tmp_path)
+    scratch = root / "scratch"
+    scratch.mkdir()
+    (scratch / "a.txt").write_text("a")
+    (scratch / "b.txt").write_text("b")
+    with (root / ".gitignore").open("a") as f:
+        f.write("scratch/\n")
+
+    real_observe_path_mode = snapshot_module.observe_path_mode
+    observed_paths: list[Path] = []
+
+    def record_and_delegate(path: Path):
+        observed_paths.append(path)
+        return real_observe_path_mode(path)
+
+    monkeypatch.setattr(snapshot_module, "observe_path_mode", record_and_delegate)
+
+    result = _capture(root)
+
+    assert result.status is SnapshotCaptureStatus.COMPLETE
+    # `scratch` itself is legitimately observed once per capture as git's own
+    # collapsed ignored-directory entry (via _path_state) — the walk under
+    # test here is _untracked_special_paths, which must not descend *into* it.
+    assert not any(scratch in path.parents for path in observed_paths)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation requires POSIX")
+def test_snapshot_omits_special_file_inside_collapsed_ignored_directory(tmp_path: Path) -> None:
+    root = _new_repository(tmp_path)
+    scratch = root / "scratch"
+    scratch.mkdir()
+    (scratch / "keep.txt").write_text("keep")
+    os.mkfifo(scratch / "inside.pipe")
+    os.mkfifo(root / "outside.pipe")
+    with (root / ".gitignore").open("a") as f:
+        f.write("scratch/\n")
+
+    result = _capture(root)
+
+    assert result.status is SnapshotCaptureStatus.COMPLETE
+    assert result.snapshot is not None
+    assert not any(path == "scratch/inside.pipe" for path, _ in result.snapshot.untracked_records)
+    assert ("outside.pipe", "") in result.snapshot.untracked_records
+
+
+def test_ignore_policy_bump_changes_the_published_digest_for_unchanged_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An authority file's persisted snapshot_digest is only as trustworthy as the
+    ignore policy it was computed under (pipeline/exploration_context_durable.py
+    signs RepositorySnapshot.digest, which covers tree_digest and
+    ignore_policy_digest — see _terminal_snapshot/_complete_snapshot). Prove the
+    half of that contract this module owns: capturing identical repository state
+    under two different DEFAULT_IGNORE_POLICY values must not silently collide on
+    the same digest — a v1-era digest must not validate against a v2 capture. The
+    other half — that a digest mismatch degrades to the store's existing
+    fail-closed ValueError — is already pinned by
+    test_tampered_or_missing_signed_snapshot_binding_fails_closed in
+    tests/pipeline/test_exploration_context.py; that test lives in tests/pipeline/
+    and may not import autoskillit.exploration (tests/arch/test_layer_enforcement.py
+    mirrors contract IL-008), so the two halves are necessarily pinned separately.
+    """
+    root = _new_repository(tmp_path)
+
+    monkeypatch.setattr(
+        snapshot_module, "DEFAULT_IGNORE_POLICY", "ignored-names-modes-collapsed-v1"
+    )
+    under_v1 = _capture(root)
+    monkeypatch.setattr(
+        snapshot_module, "DEFAULT_IGNORE_POLICY", "ignored-names-modes-collapsed-v2"
+    )
+    under_v2 = _capture(root)
+
+    assert under_v1.status is SnapshotCaptureStatus.COMPLETE
+    assert under_v2.status is SnapshotCaptureStatus.COMPLETE
+    assert under_v1.snapshot is not None
+    assert under_v2.snapshot is not None
+    assert under_v1.snapshot.digest != under_v2.snapshot.digest
+    assert under_v1.snapshot.ignore_policy_digest != under_v2.snapshot.ignore_policy_digest

@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from autoskillit.config import load_config
+from autoskillit.core import safe_mtime
 from autoskillit.execution import DefaultSubprocessRunner
 from autoskillit.workspace import (
     RUNS_DIR,
@@ -119,16 +120,10 @@ async def run_workspace_clean(
     all_worktrees = git_worktrees | fs_worktrees
 
     # Filter out stale git-registered paths that no longer exist on disk.
-    def _safe_mtime(p: Path) -> float | None:
-        try:
-            return p.stat().st_mtime
-        except FileNotFoundError:
-            return None
-
     stale_wts: list[Path] = []
     recent_wts: list[Path] = []
     for p in sorted(all_worktrees):
-        mtime = _safe_mtime(p)
+        mtime = safe_mtime(p)
         if mtime is None:
             continue
         if now - mtime >= threshold:

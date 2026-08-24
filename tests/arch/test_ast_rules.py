@@ -1027,6 +1027,379 @@ def test_no_detached_spawn_outside_owned_funnel() -> None:
     )
 
 
+_ENUMERATION_ATTR_METHODS = {"glob", "rglob", "iterdir", "scandir"}
+_ENUMERATION_DOTTED_CALLS = {"os.walk", "os.scandir", "os.listdir"}
+_GUARDED_STAT_ATTRS = {"stat", "lstat", "read_text", "read_bytes"}
+_GUARDED_STAT_DOTTED_CALLS = {"os.stat", "os.lstat", "os.path.getmtime", "os.path.getsize"}
+_OSERROR_FAMILY = {
+    "OSError",
+    "FileNotFoundError",
+    "FileExistsError",
+    "PermissionError",
+    "NotADirectoryError",
+    "IsADirectoryError",
+    "InterruptedError",
+    "ProcessLookupError",
+    "ChildProcessError",
+    "BlockingIOError",
+    "BrokenPipeError",
+    "ConnectionError",
+    "ConnectionAbortedError",
+    "ConnectionRefusedError",
+    "ConnectionResetError",
+    "TimeoutError",
+}
+_FS_OBSERVATION_FUNNEL = {"observe_path_mode", "safe_mtime"}
+
+# (path, rationale, tracking issue) rows — mirrors _DETACHED_SPAWN_ALLOWLIST's
+# (path, rationale) shape, extended with the tracking-issue reference T-A3 requires
+# for every LATENT site this part's sweep found but did not fix.
+_ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
+    (
+        SRC_ROOT / "cli" / "doctor" / "_doctor_fleet.py",
+        "unguarded stat on an iterdir()-enumerated campaign state file — #4768",
+    ),
+    (
+        SRC_ROOT / "cli" / "session" / "_session_reload.py",
+        "unguarded stat in a glob()-then-sort key= — same function unlinks siblings "
+        "nearby, so this is a live TOCTOU window, not theoretical — #4769",
+    ),
+    (
+        SRC_ROOT / "core" / "io.py",
+        "directory_tree_digest stats every os.walk()-enumerated entry with no guard; "
+        "3 of 5 callers guard against this at the call site, this function does not — #4770",
+    ),
+    (
+        SRC_ROOT / "execution" / "session_log.py",
+        "unguarded stat in an iterdir()-then-sort key= over committed session dirs — #4771",
+    ),
+    (
+        SRC_ROOT / "hooks" / "session_start_hook.py",
+        "unguarded read on a glob()-enumerated kitchen-state marker inside a broad "
+        "except Exception — stdlib-only hook code, core.fs_observation is a safe import "
+        "here — #4772",
+    ),
+    (
+        SRC_ROOT / "server" / "_editable_guard.py",
+        "unguarded read on a glob()-enumerated direct_url.json inside a broad "
+        "except Exception — #4773",
+    ),
+    (
+        SRC_ROOT / "workspace" / "session_skills.py",
+        "unguarded stat on an iterdir()-enumerated lease-sweep candidate, no try/except "
+        "nearby at all — #4774",
+    ),
+]
+
+
+def _dotted_name(node: ast.expr, aliases: dict[str, tuple[str, str | None]]) -> str | None:
+    """Resolve an expression to a dotted string, honoring import aliases for the root name."""
+    if isinstance(node, ast.Name):
+        alias_entry = aliases.get(node.id)
+        if alias_entry is not None:
+            module, attr = alias_entry
+            return f"{module}.{attr}" if attr else module
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted_name(node.value, aliases)
+        return f"{base}.{node.attr}" if base is not None else None
+    return None
+
+
+def _is_enumeration_call(node: ast.expr, aliases: dict[str, tuple[str, str | None]]) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    if isinstance(node.func, ast.Attribute) and node.func.attr in _ENUMERATION_ATTR_METHODS:
+        return True
+    return _dotted_name(node.func, aliases) in _ENUMERATION_DOTTED_CALLS
+
+
+def _enumeration_source(
+    iterable: ast.expr,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+) -> bool:
+    """Return whether `iterable` is (or wraps via subscript/starred/comprehension) an
+    enumeration call, or a tainted name already established elsewhere in the function."""
+    if isinstance(iterable, (ast.Starred, ast.Subscript)):
+        inner = iterable.value
+        if _is_enumeration_call(inner, aliases):
+            return True
+        return isinstance(inner, ast.Name) and inner.id in tainted
+    if isinstance(iterable, ast.Name):
+        return iterable.id in tainted
+    if _is_enumeration_call(iterable, aliases):
+        return True
+    if isinstance(iterable, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+        return any(_is_enumeration_call(gen.iter, aliases) for gen in iterable.generators)
+    if isinstance(iterable, (ast.List, ast.Tuple, ast.Set)):
+        return any(_enumeration_source(elt, aliases, tainted) for elt in iterable.elts)
+    return False
+
+
+def _target_names(target: ast.expr) -> list[str]:
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: list[str] = []
+        for elt in target.elts:
+            names.extend(_target_names(elt))
+        return names
+    return []
+
+
+def _mentions_tainted_name(node: ast.AST, tainted: set[str]) -> bool:
+    return any(isinstance(sub, ast.Name) and sub.id in tainted for sub in ast.walk(node))
+
+
+def _guarded_call_subject(
+    node: ast.Call, aliases: dict[str, tuple[str, str | None]]
+) -> str | None:
+    """Return the tainted-shaped subject name `node` stats/reads, if any."""
+    if isinstance(node.func, ast.Attribute) and node.func.attr in _GUARDED_STAT_ATTRS:
+        return node.func.value.id if isinstance(node.func.value, ast.Name) else None
+    if isinstance(node.func, ast.Name) and node.func.id == "open" and node.args:
+        return node.args[0].id if isinstance(node.args[0], ast.Name) else None
+    dotted = _dotted_name(node.func, aliases)
+    if dotted in _GUARDED_STAT_DOTTED_CALLS and node.args and isinstance(node.args[0], ast.Name):
+        return node.args[0].id
+    return None
+
+
+def _is_funnel_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) -> bool:
+    if isinstance(node.func, ast.Name) and node.func.id in _FS_OBSERVATION_FUNNEL:
+        return True
+    if isinstance(node.func, ast.Attribute) and node.func.attr in _FS_OBSERVATION_FUNNEL:
+        return True
+    dotted = _dotted_name(node.func, aliases)
+    return dotted is not None and dotted.rsplit(".", 1)[-1] in _FS_OBSERVATION_FUNNEL
+
+
+def _handler_covers_oserror(handler: ast.ExceptHandler) -> bool:
+    kind = handler.type
+    if kind is None:
+        return True
+    if isinstance(kind, ast.Tuple):
+        return any(isinstance(elt, ast.Name) and elt.id in _OSERROR_FAMILY for elt in kind.elts)
+    return isinstance(kind, ast.Name) and kind.id in _OSERROR_FAMILY
+
+
+def _find_enumeration_stat_violations(
+    tree: ast.AST, aliases: dict[str, tuple[str, str | None]]
+) -> list[tuple[int, str]]:
+    """Scan every function in `tree` for an unguarded stat/read on an
+    enumeration-derived path. Each function gets its own taint set — this is
+    intentionally intra-function only; nested defs are analyzed separately
+    when the outer walk reaches them."""
+    violations: list[tuple[int, str]] = []
+
+    def scan_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        tainted: set[str] = set()
+
+        def check_expr(expr: ast.expr | None, guarded: bool) -> None:
+            if expr is None:
+                return
+            for node in ast.walk(expr):
+                if not isinstance(node, ast.Call):
+                    continue
+                if _is_funnel_call(node, aliases):
+                    continue
+                subject = _guarded_call_subject(node, aliases)
+                if subject is not None:
+                    if subject in tainted and not guarded:
+                        violations.append(
+                            (
+                                node.lineno,
+                                f"unguarded stat/read on enumeration-derived name {subject!r}",
+                            )
+                        )
+                    continue
+                if (
+                    isinstance(node.func, ast.Name)
+                    and node.func.id in {"sorted", "min", "max"}
+                    and node.args
+                    and _enumeration_source(node.args[0], aliases, tainted)
+                ):
+                    for kw in node.keywords:
+                        if kw.arg != "key" or not isinstance(kw.value, ast.Lambda):
+                            continue
+                        lam = kw.value
+                        if len(lam.args.args) != 1:
+                            continue
+                        param = lam.args.args[0].arg
+                        for sub in ast.walk(lam.body):
+                            if not isinstance(sub, ast.Call) or _is_funnel_call(sub, aliases):
+                                continue
+                            inner_subject = _guarded_call_subject(sub, aliases)
+                            if inner_subject == param:
+                                violations.append(
+                                    (
+                                        sub.lineno,
+                                        "unguarded stat in sorted/min/max key= lambda over "
+                                        "an enumeration call",
+                                    )
+                                )
+
+        def visit_stmts(stmts: list[ast.stmt], guarded: bool) -> None:
+            for stmt in stmts:
+                if isinstance(stmt, ast.For):
+                    if _enumeration_source(stmt.iter, aliases, tainted):
+                        tainted.update(_target_names(stmt.target))
+                    check_expr(stmt.iter, guarded)
+                    visit_stmts(stmt.body, guarded)
+                    visit_stmts(stmt.orelse, guarded)
+                elif isinstance(stmt, ast.Assign):
+                    check_expr(stmt.value, guarded)
+                    if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                        if _mentions_tainted_name(stmt.value, tainted):
+                            tainted.add(stmt.targets[0].id)
+                elif isinstance(stmt, ast.Try):
+                    body_guarded = guarded or any(
+                        _handler_covers_oserror(h) for h in stmt.handlers
+                    )
+                    visit_stmts(stmt.body, body_guarded)
+                    for handler in stmt.handlers:
+                        visit_stmts(handler.body, guarded)
+                    visit_stmts(stmt.orelse, guarded)
+                    visit_stmts(stmt.finalbody, guarded)
+                elif isinstance(stmt, (ast.If, ast.While)):
+                    check_expr(stmt.test, guarded)
+                    visit_stmts(stmt.body, guarded)
+                    visit_stmts(stmt.orelse, guarded)
+                elif isinstance(stmt, ast.With):
+                    for item in stmt.items:
+                        check_expr(item.context_expr, guarded)
+                    visit_stmts(stmt.body, guarded)
+                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    continue
+                else:
+                    for child in ast.iter_child_nodes(stmt):
+                        if isinstance(child, ast.expr):
+                            check_expr(child, guarded)
+
+        visit_stmts(func_node.body, False)
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scan_function(node)
+    return violations
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_lines"),
+    [
+        pytest.param(
+            "import os\n"
+            "def f(root):\n"
+            "    for d, names, files in os.walk(root):\n"
+            "        for name in names:\n"
+            "            candidate = d + name\n"
+            "            candidate.stat()\n",
+            [6],
+            id="os_walk_then_unguarded_stat",
+        ),
+        pytest.param(
+            "def f(d):\n    for p in d.rglob('*'):\n        p.lstat()\n",
+            [3],
+            id="rglob_then_unguarded_lstat",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*.json'):\n"
+            "        with open(p) as fh:\n"
+            "            fh.read()\n",
+            [3],
+            id="open_on_tainted_path_is_flagged_but_handle_dot_read_is_not_a_second_hit",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*.json'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except OSError:\n"
+            "            pass\n",
+            [],
+            id="guarded_by_oserror_try_except_is_not_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*.json'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except ValueError:\n"
+            "            pass\n",
+            [4],
+            id="try_except_naming_an_unrelated_type_is_still_flagged",
+        ),
+        pytest.param(
+            "from autoskillit.core import safe_mtime\n"
+            "def f(d):\n"
+            "    return sorted(d.glob('*'), key=lambda p: safe_mtime(p) or 0.0)\n",
+            [],
+            id="funnel_call_in_sort_key_is_not_flagged",
+        ),
+        pytest.param(
+            "import os\n"
+            "def f(d):\n"
+            "    return sorted(d.glob('*'), key=lambda p: os.path.getmtime(p))\n",
+            [3],
+            id="unguarded_getmtime_in_sort_key_is_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n    p = d\n    p.stat()\n",
+            [],
+            id="non_enumeration_name_is_never_tainted",
+        ),
+    ],
+)
+def test_enumeration_stat_detection_rule(source: str, expected_lines: list[int]) -> None:
+    """Pin the detection logic itself against literal source fixtures — the same
+    discipline test_distinct_layers_extraction applies to its own AST rule — so
+    the rule is pinned, not just its current verdict against the live tree."""
+    tree = ast.parse(source)
+    aliases = _gather_import_aliases(tree)
+    violations = _find_enumeration_stat_violations(tree, aliases)
+    assert sorted(lineno for lineno, _ in violations) == expected_lines
+
+
+def test_no_unguarded_stat_on_enumeration_derived_path_outside_funnel() -> None:
+    """No src file may stat/read a path obtained by enumerating a directory
+    (os.walk/os.scandir/os.listdir/.glob/.rglob/.iterdir/.scandir) without
+    routing it through core.fs_observation. Violations-by-default, explicit
+    allowlist below — each entry requires a rationale and a tracking issue.
+    """
+    allowed_files = {path for path, _ in _ENUMERATION_STAT_ALLOWLIST}
+    rationale_by_file = dict(_ENUMERATION_STAT_ALLOWLIST)
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file in allowed_files:
+            continue
+        try:
+            source = py_file.read_text()
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        aliases = _gather_import_aliases(tree)
+        for lineno, detail in _find_enumeration_stat_violations(tree, aliases):
+            violations.append(
+                f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{lineno}: {detail}"
+            )
+
+    assert not violations, (
+        "Enumeration-derived paths stat'd/read without routing through "
+        "core.fs_observation.observe_path_mode/safe_mtime. Route through the funnel — or "
+        "add an allowlist entry to _ENUMERATION_STAT_ALLOWLIST with rationale and a "
+        "tracking issue — for:\n"
+        + "\n".join(violations)
+        + "\n\nAllowlisted files and why:\n"
+        + "\n".join(
+            f"  {path.relative_to(SRC_ROOT.parent.parent)}: {rationale}"
+            for path, rationale in rationale_by_file.items()
+        )
+    )
+
+
 def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
     """run_managed_async must not contain an if/elif chain that inspects
     TerminationReason.* or signals.process_exited directly.

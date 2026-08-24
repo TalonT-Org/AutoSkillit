@@ -13,7 +13,7 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from autoskillit.core import RepositoryIdentity, RepositorySnapshot
+from autoskillit.core import RepositoryIdentity, RepositorySnapshot, observe_path_mode
 
 from ._digest import qualified_digest
 from .collectors import open_contained_regular_file
@@ -34,7 +34,7 @@ from .profile import RepositoryProfileActivation, activate_repository_profiles
 SNAPSHOT_SCHEMA_VERSION = 1
 SNAPSHOT_SCHEMA_ID = "autoskillit.repository-snapshot.v1"
 SNAPSHOT_DIGEST_DOMAIN = b"autoskillit.repository-snapshot.v1\0"
-DEFAULT_IGNORE_POLICY = "ignored-names-modes-collapsed-v1"
+DEFAULT_IGNORE_POLICY = "ignored-names-modes-collapsed-v2"
 STABLE_ARTIFACT_DIGEST_DOMAIN = b"autoskillit.stable-artifact.v1\0"
 _MAX_STABLE_ARTIFACT_BYTES = 1_000_000
 _MAX_STABLE_ARTIFACT_ATTEMPTS = 3
@@ -263,9 +263,8 @@ def _path_state(
     limits: SnapshotCaptureLimits,
 ) -> _ObservedPath:
     path = root / relative_path
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError:
+    raw_mode = observe_path_mode(path)
+    if raw_mode is None:
         return _ObservedPath(
             RepositoryPathState(
                 path=relative_path,
@@ -280,8 +279,8 @@ def _path_state(
             "",
         )
 
-    mode = stat.S_IMODE(metadata.st_mode)
-    if stat.S_ISLNK(metadata.st_mode):
+    mode = stat.S_IMODE(raw_mode)
+    if stat.S_ISLNK(raw_mode):
         target = os.readlink(path)
         payload = os.fsencode(target)
         content_digest = f"sha256:{hashlib.sha256(payload).hexdigest()}"
@@ -298,7 +297,7 @@ def _path_state(
             len(payload),
             content_digest,
         )
-    if stat.S_ISREG(metadata.st_mode):
+    if stat.S_ISREG(raw_mode):
         content_digest, size = _hash_file(root, relative_path, limits)
         if category == "ignored":
             return _ObservedPath(
@@ -327,7 +326,7 @@ def _path_state(
             size,
             content_digest,
         )
-    if stat.S_ISDIR(metadata.st_mode):
+    if stat.S_ISDIR(raw_mode):
         kind: Literal["directory", "other"] = "directory"
     else:
         kind = "other"
@@ -367,16 +366,35 @@ def _identity_state_payload(observation: _ObservedPath) -> dict[str, object]:
     return payload
 
 
-def _untracked_special_paths(root: Path) -> tuple[str, ...]:
-    """Find non-regular worktree entries omitted by git's untracked listing."""
+def _untracked_special_paths(root: Path, *, ignored: frozenset[str]) -> tuple[str, ...]:
+    """Find non-regular worktree entries omitted by git's untracked listing.
+
+    ``ignored`` is git's own collapsed-ignored-entry set (directories and
+    files — see the caller) so this walk does not descend into, or report
+    entries under, a directory the ignore policy has already declared
+    collapsed. A vanished entry (``observe_path_mode`` returning ``None``) is
+    skipped rather than treated as a failure: the walk made no commitment
+    about this path's presence the way a git-listed path does.
+    """
     paths: list[str] = []
     for directory, names, files in os.walk(root, followlinks=False):
-        names[:] = sorted(name for name in names if name != ".git")
+        directory_path = Path(directory)
+        candidates = sorted(name for name in names if name != ".git")
+        names[:] = [
+            name
+            for name in candidates
+            if (directory_path / name).relative_to(root).as_posix() not in ignored
+        ]
         for name in [*names, *sorted(files)]:
-            candidate = Path(directory) / name
-            mode = candidate.lstat().st_mode
+            candidate = directory_path / name
+            relative = candidate.relative_to(root).as_posix()
+            if relative in ignored:
+                continue
+            mode = observe_path_mode(candidate)
+            if mode is None:
+                continue
             if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
-                paths.append(candidate.relative_to(root).as_posix())
+                paths.append(relative)
     return tuple(paths)
 
 
@@ -406,23 +424,8 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
     raw_index = _git(root, "ls-files", "--stage", "-z", timeout=timeout)
     index_records = _index_records(raw_index)
     tracked_paths = tuple(sorted({record[3] for record in index_records}))
-    untracked_paths = tuple(
-        sorted(
-            set(
-                _nul_paths(
-                    _git(
-                        root,
-                        "ls-files",
-                        "--others",
-                        "--exclude-standard",
-                        "-z",
-                        timeout=timeout,
-                    )
-                )
-            )
-            | set(_untracked_special_paths(root))
-        )
-    )
+    # Ask git which entries are already collapsed as ignored before walking the
+    # worktree, so the walk can honour that decision instead of racing against it.
     ignored_paths = tuple(
         sorted(
             _nul_paths(
@@ -438,6 +441,24 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
                     timeout=timeout,
                 )
             )
+        )
+    )
+    ignored_prune_set = frozenset(entry.rstrip("/") for entry in ignored_paths)
+    untracked_paths = tuple(
+        sorted(
+            set(
+                _nul_paths(
+                    _git(
+                        root,
+                        "ls-files",
+                        "--others",
+                        "--exclude-standard",
+                        "-z",
+                        timeout=timeout,
+                    )
+                )
+            )
+            | set(_untracked_special_paths(root, ignored=ignored_prune_set))
         )
     )
     path_count = len(tracked_paths) + len(untracked_paths) + len(ignored_paths)

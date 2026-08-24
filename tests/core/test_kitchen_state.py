@@ -266,6 +266,40 @@ def test_find_caller_session_id_uses_state_dir_override(tmp_path, monkeypatch):
     assert result == "sess-override"
 
 
+def test_find_caller_session_id_survives_a_marker_swept_during_the_scan(tmp_path, monkeypatch):
+    """A marker deleted by a concurrent sweep between glob() and the mtime sort
+    key's evaluation must not crash find_caller_session_id — sweep_stale_markers
+    (called from open_kitchen) and this scan can run concurrently against the
+    same kitchen_state directory."""
+    import autoskillit.core.runtime.kitchen_state as kitchen_state_module
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    write_marker("sess-a", "recipe-1")
+    write_marker("sess-b", "recipe-2")
+    write_marker("sess-c", "recipe-3")
+
+    doomed_path = tmp_path / "kitchen_state" / "sess-b.json"
+    real_safe_mtime = kitchen_state_module.safe_mtime
+    swept = False
+
+    def unlink_a_different_marker_on_first_call(p):
+        nonlocal swept
+        if not swept and p != doomed_path:
+            swept = True
+            doomed_path.unlink()
+        return real_safe_mtime(p)
+
+    monkeypatch.setattr(
+        kitchen_state_module, "safe_mtime", unlink_a_different_marker_on_first_call
+    )
+
+    result = find_caller_session_id()
+
+    assert result in ("", "sess-a", "sess-b", "sess-c")
+    assert swept
+
+
 def test_find_caller_session_id_with_campaign_id(tmp_path, monkeypatch):
     from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
 

@@ -237,8 +237,6 @@ def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
 def _read_bounded_file_at(directory_fd: int, name: str) -> dict:
     try:
         fd = os.open(name, _READ_FLAGS, dir_fd=directory_fd)
-    except FileNotFoundError:
-        return {}
     except OSError:
         return {}
     try:

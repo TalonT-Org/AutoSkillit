@@ -33,7 +33,8 @@ HEADLESS_SIZE_BUDGETS = {
     # cancellation handlers.
     # #4686: threads natural_exit_grace_seconds through to run_managed_async so the
     # configured drain window reaches execute_termination_action's grace_seconds.
-    "headless/_headless_execute.py": 670,
+    # #4628: one run-scoped OTLP sink lifecycle spans attempts through final diagnostics.
+    "headless/_headless_execute.py": 687,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

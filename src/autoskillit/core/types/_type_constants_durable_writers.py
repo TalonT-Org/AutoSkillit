@@ -175,6 +175,15 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
+        writer="autoskillit.execution.otlp_sink:LocalOtlpSink._persist_line",
+        artifact=(
+            "otlp.jsonl and otlp.jsonl.1 host-local diagnostic stream under the "
+            "configured log root; never consumed as relocated configuration"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer="autoskillit.workspace.session_skills:write_skill_unavailability_metadata",
         artifact="add-dir/skill-unavailability.json",
         machine_local=False,

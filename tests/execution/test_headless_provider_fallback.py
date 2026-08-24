@@ -19,7 +19,7 @@ from autoskillit.core import (
 from autoskillit.core.types import PluginLoadMode, RetryReason, SkillResult
 from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
-from tests.execution.conftest import _launch_preparation, _mock_backend
+from tests.execution.conftest import _launch_preparation, _mock_backend, _sink_env
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -138,6 +138,7 @@ class _Authority:
 
 class TestProviderFallbackLoop:
     def _patch_common(self, monkeypatch, tmp_path, build_result_fn, ctx=None):
+        import autoskillit.execution.headless._headless_execute as _execute_module
         import autoskillit.execution.session_log as _sl_mod
         from autoskillit.execution.headless import PostSessionMetrics
         from tests.execution.conftest import _sr
@@ -180,10 +181,23 @@ class TestProviderFallbackLoop:
         )
         monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)  # noqa: ARG005
 
+        class DisabledSink:
+            env: dict[str, str] = {}
+
+            @classmethod
+            def start(cls, _log_dir: str) -> DisabledSink:
+                return cls()
+
+            def close(self) -> None:
+                return None
+
+        monkeypatch.setattr(_execute_module, "LocalOtlpSink", DisabledSink, raising=False)
+
         return fake_runner, call_count, runner_envs, runner_pass_fds
 
     @pytest.mark.anyio
     async def test_stale_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):
+        import autoskillit.execution.headless._headless_execute as _execute_module
         from autoskillit.execution.headless import _execute_claude_headless
 
         fake_runner, call_count, runner_envs, runner_pass_fds = self._patch_common(
@@ -194,6 +208,19 @@ class TestProviderFallbackLoop:
         )
         minimal_ctx.runner = fake_runner
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+        sink_env = _sink_env()
+
+        class FakeSink:
+            env = sink_env
+
+            @classmethod
+            def start(cls, _log_dir: str) -> FakeSink:
+                return cls()
+
+            def close(self) -> None:
+                return None
+
+        monkeypatch.setattr(_execute_module, "LocalOtlpSink", FakeSink, raising=False)
         authority = _Authority()
         lineage_store, lineage_observer = _managed_observer(tmp_path)
         lineage_coordinates: list[tuple[object, object, str]] = []
@@ -222,7 +249,10 @@ class TestProviderFallbackLoop:
             timeout=30.0,
             stale_threshold=5.0,
             provider_name="minimax",
-            provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
+            provider_fallback_env={
+                **{key: f"fallback-{key}" for key in sink_env},
+                "ANTHROPIC_API_KEY": "sk-test",
+            },
             provider_fallback_name="anthropic",
             plugin_authority=authority,
             plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
@@ -235,7 +265,7 @@ class TestProviderFallbackLoop:
         )
 
         assert call_count[0] == 2
-        assert runner_envs == [{}, {"ANTHROPIC_API_KEY": "sk-test"}]
+        assert runner_envs == [sink_env, {**sink_env, "ANTHROPIC_API_KEY": "sk-test"}]
         assert runner_pass_fds == [(77,), (77,)]
         assert len(authority.bindings) == 2
         assert authority.bindings[0] is not authority.bindings[1]

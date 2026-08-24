@@ -1024,7 +1024,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
         "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
-        "execution": 21,  # +session_index strict byte-bounded retained-index reads (#4514)
+        # +otlp_sink run-scoped loopback diagnostics receiver (#4628)
+        "execution": 22,  # +session_index strict byte-bounded retained-index reads (#4514)
         # +evidence_reader sterile reader lifecycle (#4585)
         # +agent_definition native-role authority (#4443).
         # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)

@@ -18,18 +18,18 @@ from dataclasses import replace
 import pytest
 
 from autoskillit.core import (
+    EXECUTION_TUNING_EXTERNALLY_RESOLVED,
+    EXECUTION_TUNING_STEP_FIELDS,
     RUN_SKILL_ATTESTATION_PARAMS,
+    RUNTIME_ADMISSION_BY_ROLE,
+    RuntimeAdmission,
     ToolParamRole,
     compute_tool_contract_identity,
     get_tool_def,
     runtime_exempt_param_names,
 )
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.server.tools.tools_execution import (
-    _EXECUTION_TUNING_EXTERNALLY_RESOLVED,
-    _EXECUTION_TUNING_STEP_FIELDS,
-    _build_actual_mcp_kwargs,
-)
+from autoskillit.server.tools.tools_execution import _build_actual_mcp_kwargs
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -48,16 +48,33 @@ def test_every_run_skill_param_has_a_role() -> None:
         )
 
 
-def test_gate_admit_set_matches_role_derivation() -> None:
-    """runtime_exempt_param_names (the symbol _binding.py's gate consumes) must equal
-    exactly the PROTOCOL | ORCHESTRATOR_SCOPING name set derived locally from role."""
+def test_every_tool_param_role_declares_a_runtime_admission_policy() -> None:
+    unmapped = sorted(set(ToolParamRole) - set(RUNTIME_ADMISSION_BY_ROLE))
+    assert not unmapped, f"ToolParamRole member(s) with no policy entry: {unmapped}"
+
+
+def test_gate_admit_set_is_derived_from_the_declared_policy() -> None:
+    """Replaces test_gate_admit_set_matches_role_derivation, which restated the
+    (PROTOCOL, ORCHESTRATOR_SCOPING) tuple in the test instead of validating it."""
     tool_def = _run_skill_tool_def()
     expected = frozenset(
-        param.name
-        for param in tool_def.params
-        if param.role in (ToolParamRole.PROTOCOL, ToolParamRole.ORCHESTRATOR_SCOPING)
+        p.name
+        for p in tool_def.params
+        if RUNTIME_ADMISSION_BY_ROLE[p.role] is RuntimeAdmission.ALWAYS
     )
     assert runtime_exempt_param_names(tool_def) == expected
+
+
+def test_admission_policy_totality_guard_is_live() -> None:
+    """Proves the module-scope forcing function in _type_recipe_binding.py actually
+    fires: a synthetic role set containing a name absent from the real policy must
+    raise, exactly as it would at import time if a new ToolParamRole member were
+    added without a matching RUNTIME_ADMISSION_BY_ROLE entry."""
+    from autoskillit.core.types._type_recipe_binding import _assert_admission_policy_total
+
+    synthetic_roles = frozenset(ToolParamRole) | {"unmapped_synthetic_role"}
+    with pytest.raises(AssertionError, match="unmapped_synthetic_role"):
+        _assert_admission_policy_total(synthetic_roles, RUNTIME_ADMISSION_BY_ROLE)  # type: ignore[arg-type]
 
 
 def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
@@ -69,8 +86,8 @@ def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
     execution_tuning_names = frozenset(
         param.name for param in tool_def.params if param.role is ToolParamRole.EXECUTION_TUNING
     )
-    loop_keys = frozenset(_EXECUTION_TUNING_STEP_FIELDS)
-    external_keys = frozenset(_EXECUTION_TUNING_EXTERNALLY_RESOLVED)
+    loop_keys = frozenset(EXECUTION_TUNING_STEP_FIELDS)
+    external_keys = frozenset(EXECUTION_TUNING_EXTERNALLY_RESOLVED)
 
     overlap = loop_keys & external_keys
     assert not overlap, (
@@ -85,8 +102,8 @@ def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
     )
 
     recipe_step_field_names = frozenset(field.name for field in dataclass_fields(RecipeStep))
-    mapped_fields = frozenset(_EXECUTION_TUNING_STEP_FIELDS.values()) | frozenset(
-        _EXECUTION_TUNING_EXTERNALLY_RESOLVED.values()
+    mapped_fields = frozenset(EXECUTION_TUNING_STEP_FIELDS.values()) | frozenset(
+        EXECUTION_TUNING_EXTERNALLY_RESOLVED.values()
     )
     unmapped = mapped_fields - recipe_step_field_names
     assert not unmapped, (

@@ -110,6 +110,56 @@ identifier via a `providers.profiles` entry and a matching `step_overrides` /
 `recipe_overrides` / `model_overrides` binding — those overrides are resolved
 before this alias and always take precedence.
 
+### Operator escape hatches
+
+Two distinct escape hatches exist, at different scopes:
+
+- `AUTOSKILLIT_MODEL__OVERRIDE=<model>` — **startup-only**. Must be set
+  before the server process starts; a running session does not observe a
+  later change. `AUTOSKILLIT_MODEL__MODEL_OVERRIDE` is **not** a valid
+  spelling — an unrecognized nested environment variable now raises a
+  startup error naming the key and suggesting the correct one, rather than
+  being silently ignored.
+- `configure_order(model_override=...)` / `configure_fleet(model_override=...)`
+  — **runtime-settable, session-scoped**. A recovery control (not a
+  per-step selector): it deliberately outranks `providers.model_overrides`
+  and `model.recipe_overrides`/`model.step_overrides`, so an operator whose
+  per-recipe or per-step override is broken can recover without restarting
+  the server. Pass `""` to clear it back to "not supplied"; `close_kitchen`
+  also restores the session's baseline. Contrast with the startup-only
+  variable above: this one takes effect immediately, mid-session.
+
+### Model precedence
+
+There are two independent precedence ladders — state which one you are
+reasoning about, since a source that governs one is invisible to the other.
+
+**Ladder A — `run_skill` dispatch.** Produces the model handed to the
+executor for an attested or unattested `run_skill` call.
+
+| Rank | Source |
+|---|---|
+| 1 | `model.override` (startup env var, or `model_override` set at runtime) |
+| 2 | `providers.model_overrides[recipe][step]` (falls back to `[recipe]["*"]`) |
+| 3 | the caller's `model` argument (an unattested call only) |
+| 4 | the step's declared `model:` field |
+
+**Ladder B — headless launch.** Applied to Ladder A's output before the
+coding-agent process actually starts.
+
+| Rank | Source |
+|---|---|
+| 1 | `model.override` (startup env var, or `model_override` set at runtime) |
+| 2 | `model.recipe_overrides[recipe][step]` |
+| 3 | `model.step_overrides[step]` |
+| 4 | the value Ladder A produced |
+| 5 | `model.default` |
+
+`model.recipe_overrides` / `model.step_overrides` / `model.default` play no
+part in Ladder A, and `providers.model_overrides` plays no part in Ladder B
+— each ladder is blind to the other's sources. `model.override` is the only
+source that wins in both, which is why it is the recovery control above.
+
 ## Specialized Explorer Agents
 
 `semantic-code-navigator` and `repository-impact-profiler` are built-in terminal Codex explorer

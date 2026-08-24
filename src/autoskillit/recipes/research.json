@@ -457,6 +457,7 @@
       "model": "",
       "stale_threshold": 14400,
       "idle_output_timeout": 0,
+      "provider": "anthropic",
       "retries": 1,
       "on_exhausted": "escalate_stop",
       "with": {

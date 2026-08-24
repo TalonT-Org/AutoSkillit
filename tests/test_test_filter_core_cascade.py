@@ -138,6 +138,7 @@ class TestModuleCascadeCore:
             "_type_launch_projection",
             "_type_managed_home",
             "_type_recipe_delivery",
+            "_type_orchestrator_instruction_surfaces",
             "_type_recipe_sections",
             "_type_dimensions",
             "_type_context_admission",
@@ -351,6 +352,11 @@ class TestModuleCascadeCore:
                 "workspace",
                 "arch/test_serve_surface_registry.py",
             }
+        )
+
+    def test_orchestrator_instruction_surfaces_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_orchestrator_instruction_surfaces"] == frozenset(
+            {"core"}
         )
 
     def test_type_exceptions_cascade(self) -> None:

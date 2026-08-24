@@ -318,8 +318,13 @@ from .runtime.session_registry import bridge_claude_session_id as bridge_claude_
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path
 from .runtime.session_registry import write_registry_entry as write_registry_entry
+from .tool_registry import (
+    EXECUTION_TUNING_EXTERNALLY_RESOLVED as EXECUTION_TUNING_EXTERNALLY_RESOLVED,
+)
+from .tool_registry import EXECUTION_TUNING_STEP_FIELDS as EXECUTION_TUNING_STEP_FIELDS
 from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
 from .tool_registry import all_tool_names as all_tool_names
+from .tool_registry import build_parameter_forwarding_rules as build_parameter_forwarding_rules
 from .tool_registry import compute_tool_contract_identity as compute_tool_contract_identity
 from .tool_registry import get_tool_def as get_tool_def
 from .tool_registry import runtime_exempt_param_names as runtime_exempt_param_names
@@ -520,6 +525,9 @@ from .types import (
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
 )
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
+from .types import (
+    ORCHESTRATOR_FACING_INSTRUCTION_SURFACES as ORCHESTRATOR_FACING_INSTRUCTION_SURFACES,
+)
 from .types import ORCHESTRATOR_SESSION_REQUIRED_ENV as ORCHESTRATOR_SESSION_REQUIRED_ENV
 from .types import ORDER_INTERACTIVE_REQUIRED_ENV as ORDER_INTERACTIVE_REQUIRED_ENV
 from .types import OUTPUT_DISCIPLINE_BLOCK as OUTPUT_DISCIPLINE_BLOCK
@@ -606,6 +614,7 @@ from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_PATH_LIKE_ARGS as RUN_PYTHON_PATH_LIKE_ARGS
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
 from .types import RUN_SKILL_ATTESTATION_PARAMS as RUN_SKILL_ATTESTATION_PARAMS
+from .types import RUNTIME_ADMISSION_BY_ROLE as RUNTIME_ADMISSION_BY_ROLE
 from .types import SCOPE_DIRECTION_SOURCE_TYPES as SCOPE_DIRECTION_SOURCE_TYPES
 from .types import SESSION_ADD_DIR_SUBDIR as SESSION_ADD_DIR_SUBDIR
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
@@ -892,6 +901,7 @@ from .types import InspectorVerdict as InspectorVerdict
 from .types import InstallationVersion as InstallationVersion
 from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import InstallMode as InstallMode
+from .types import InstructionExtractionMode as InstructionExtractionMode
 from .types import IntakeRuleDef as IntakeRuleDef
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
@@ -956,6 +966,7 @@ from .types import NoResume as NoResume
 from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
+from .types import OrchestratorSurfaceDef as OrchestratorSurfaceDef
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
@@ -1078,6 +1089,7 @@ from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
+from .types import RuntimeAdmission as RuntimeAdmission
 from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import SerializedChars as SerializedChars

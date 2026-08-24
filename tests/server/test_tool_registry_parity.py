@@ -289,6 +289,55 @@ def test_tool_contract_identity_tracks_registry_parameter_shape() -> None:
     assert compute_tool_contract_identity(changed) != compute_tool_contract_identity(run_skill)
 
 
+def test_dispatch_state_fields_cover_every_handler_param() -> None:
+    """Bidirectional diff between _RunSkillDispatchState's tool-input section
+    and run_skill's registered handler_parameter=True names (#4707 R5: the
+    dispatch-state field list was the one unguarded hand-maintained
+    parameter-name surface — registry<->values-dict is guarded by
+    _build_actual_mcp_kwargs, registry<->signature by
+    test_registry_matches_handler_order_and_requiredness above; this is the
+    fourth).
+
+    The tool-input section boundary is structural, not a hardcoded name
+    list: every field declared before `tool_ctx` (the first internal-state
+    field, per _state.py's own "Tool inputs" section comment) is a tool
+    input. This tracks future tool-input additions automatically as long as
+    they land before that sentinel — the same discipline the section
+    comment already documents.
+    """
+    from dataclasses import fields as dataclass_fields
+
+    from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
+
+    all_field_names = tuple(field.name for field in dataclass_fields(_RunSkillDispatchState))
+    assert all_field_names.count("tool_ctx") == 1, (
+        "tool_ctx sentinel boundary field must appear exactly once in "
+        "_RunSkillDispatchState — "
+        "has the tool-input section been renamed or reordered?"
+    )
+    tool_ctx_index = all_field_names.index("tool_ctx")
+    tool_input_names = frozenset(all_field_names[:tool_ctx_index])
+
+    handler_param_names = frozenset(
+        param.name for param in TOOL_REGISTRY["run_skill"].params if param.handler_parameter
+    )
+    handler_fields_after_boundary = sorted(
+        handler_param_names.intersection(all_field_names[tool_ctx_index + 1 :])
+    )
+    assert not handler_fields_after_boundary, (
+        "tool_ctx precedes registered handler fields in _RunSkillDispatchState: "
+        f"{handler_fields_after_boundary}"
+    )
+
+    missing_from_state = sorted(handler_param_names - tool_input_names)
+    extra_in_state = sorted(tool_input_names - handler_param_names)
+    assert not missing_from_state and not extra_in_state, (
+        "_RunSkillDispatchState's tool-input section and run_skill's registered "
+        f"handler params have drifted. In registry, not in dispatch state: "
+        f"{missing_from_state}. In dispatch state, not in registry: {extra_in_state}."
+    )
+
+
 def test_every_tool_has_an_explicit_initialization_operation() -> None:
     expected = {
         ToolInitializationOperation.RECOVERY: {

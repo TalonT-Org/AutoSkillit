@@ -1056,7 +1056,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # _type_audit_admission_validation, _type_audit_admission_artifact_ownership,
         # _type_audit_admission_reference_identity alongside the unchanged facades
         # and ledger module.
-        "core/types": 67,
+        # +_type_orchestrator_instruction_surfaces: cohesive instruction registry (#4707).
+        "core/types": 68,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,

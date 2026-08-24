@@ -10,7 +10,6 @@ No test here reads ``payload.json`` or any file under ``recipe-delivery/``.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -69,8 +68,11 @@ _OVERRIDES = {
 }
 
 
-def _write_attested_tracker(ready, with_args: Mapping[str, object]) -> None:
-    step_name = with_args["step_name"]
+def _write_attested_tracker(ready) -> None:
+    # Read the step identity from the fixture, not from with_args: a step need
+    # not declare step_name in its with: block (planner's fan-out steps do not),
+    # and ready.step_name is the attested identity in every case.
+    step_name = ready.step_name
     assert isinstance(step_name, str)
     _write_tracker(
         ready.tool_ctx.project_dir,
@@ -129,7 +131,7 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_attested_tracker(ready, with_args)
+    _write_attested_tracker(ready)
     ready.tool_ctx.runner.push(_make_result(returncode=1))
     ready.tool_ctx.runner.push(
         _make_result(
@@ -196,7 +198,7 @@ async def test_attested_run_skill_admits_explicit_order_id(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    _write_attested_tracker(ready, with_args)
+    _write_attested_tracker(ready)
 
     result = json.loads(
         await run_skill(
@@ -285,6 +287,37 @@ async def test_attested_run_skill_reports_missing_canonical_tool_def(
     assert "RuntimeError: run_skill must be a registered ToolDef" in result["result"]
 
 
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    [
+        (_RECIPE_ENVELOPE, _ATTESTED_STEP, _OVERRIDES),
+        (
+            "research",
+            "download_data",
+            {
+                "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
+                "source_dir": ".",
+                "task": "test task",
+                "task_description": "test task",
+            },
+        ),
+        pytest.param(
+            ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "Blocked by #4775: elaborate_phases declares dispatch_items, "
+                    "which is compiled into mcp_kwargs but filtered out of the "
+                    "runtime actual-kwargs assembly, so the genuine-digest half "
+                    "is denied at preflight:recipe_execution. The fixture itself "
+                    "is sound — only the attested call is unreachable. Independent "
+                    "of #4707; goes green automatically once #4775 lands."
+                ),
+            ),
+        ),
+    ],
+    indirect=True,
+)
 async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     tmp_path,
     tool_ctx_ready_recipe,
@@ -295,6 +328,11 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     fabricated one is denied at ``preflight:recipe_execution``. A mock that
     accepted any digest would pass the first half and fail to distinguish
     the second.
+
+    Parametrized over every (recipe, step, overrides) combination S7/S8
+    introduce (#4707) — without this, T4's conformance suite could run
+    green against a pair that never actually reached ``ReadyRecipe``, and
+    the whole suite would be attesting nothing.
     """
     from autoskillit.server.tools.tools_execution import run_skill
 
@@ -302,6 +340,7 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    _write_attested_tracker(ready)
     ready.tool_ctx.runner.push(_make_result(returncode=1))
     ready.tool_ctx.runner.push(
         _make_result(
@@ -319,15 +358,25 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
         )
     )
 
+    # A step may declare no skill_inputs: sub-key and instead carry its child
+    # inputs as placeholders inside skill_command; omitting the parameter lets
+    # the runtime binder derive them rather than guessing key names.
+    declared_inputs = with_args.get("skill_inputs")
+    optional_inputs = (
+        {"skill_inputs": {name: "probe value" for name in declared_inputs}}
+        if declared_inputs
+        else {}
+    )
+
     genuine = json.loads(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
-            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            **optional_inputs,
         )
     )
     assert genuine.get("stage") != "preflight:recipe_execution", genuine
@@ -336,11 +385,11 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
         await run_skill(
             with_args["skill_command"],
             str(work_dir),
-            step_name=with_args["step_name"],
+            step_name=ready.step_name,
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest="sha256:" + "0" * 64,
-            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            **optional_inputs,
         )
     )
     assert fabricated.get("stage") == "preflight:recipe_execution", fabricated

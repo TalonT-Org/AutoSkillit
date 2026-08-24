@@ -165,8 +165,9 @@ async def load_recipe(
       ${{ context.var_name }} in `with:` arguments.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
-    - Steps with a `model:` field: when calling `run_skill`,
-      pass the step's `model` value as the `model` parameter to the tool.
+    - Which run_skill parameters may be forwarded from a step's `with:` block is
+      stated in the delivered `orchestration_rules` — see that section, not this
+      docstring, for the current EXECUTION_TUNING field list.
 
     TOKEN USAGE TRACKING:
     - BEFORE executing the pipeline, call kitchen_status() and read

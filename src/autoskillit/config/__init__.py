@@ -64,6 +64,7 @@ from autoskillit.config.settings import (
     compute_codex_mcp_tool_timeout,
     load_config,
     remap_retired_keys,
+    validate_env_layer_keys,
     validate_layer_keys,
     write_config_layer,
 )
@@ -112,6 +113,7 @@ __all__ = [
     "load_config",
     "remap_retired_keys",
     "resolve_ingredient_defaults",
+    "validate_env_layer_keys",
     "CONFIG_DEFAULT_INGREDIENTS",
     "SERVER_AUTHORITATIVE_CONFIG_PATHS",
     "SERVER_AUTHORITATIVE_INGREDIENTS",

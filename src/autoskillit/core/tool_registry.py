@@ -14,6 +14,8 @@ from ._tool_registry_builders import _run_skill, _tool
 from .closure_hashing import compute_canonical_hash
 from .types._type_constants_registries import HEADLESS_TOOLS
 from .types._type_recipe_binding import (
+    RUNTIME_ADMISSION_BY_ROLE,
+    RuntimeAdmission,
     ToolDef,
     ToolParamRole,
     ToolWireType,
@@ -21,7 +23,10 @@ from .types._type_recipe_binding import (
 
 __all__ = [
     "TOOL_REGISTRY",
+    "EXECUTION_TUNING_EXTERNALLY_RESOLVED",
+    "EXECUTION_TUNING_STEP_FIELDS",
     "all_tool_names",
+    "build_parameter_forwarding_rules",
     "compute_tool_contract_identity",
     "get_tool_def",
     "runtime_exempt_param_names",
@@ -29,6 +34,25 @@ __all__ = [
 ]
 
 _TOOL_CONTRACT_IDENTITY_DOMAIN = "autoskillit:tool-contract:v1:sha256"
+
+# RecipeStep fallbacks for execution-tuning parameters left at their vacancy sentinel.
+# `_run_skill_prepare.py` keeps explicit branches because the sentinels differ by type.
+EXECUTION_TUNING_STEP_FIELDS: Mapping[str, str] = MappingProxyType(
+    {
+        "model": "model",
+        "stale_threshold": "stale_threshold",
+        "idle_output_timeout": "idle_output_timeout",
+    }
+)
+
+# Execution-tuning parameters resolved outside the prepare-phase fallback block.
+EXECUTION_TUNING_EXTERNALLY_RESOLVED: Mapping[str, str] = MappingProxyType(
+    {
+        # Pre-gate profile resolution — see the step_provider_resolved_from_recipe
+        # block earlier in run_skill().
+        "step_provider": "provider",
+    }
+)
 
 
 _TOOL_DEFS = (
@@ -211,6 +235,7 @@ _TOOL_DEFS = (
             "enable_deadline_extension",
             "inspector_model",
             "default_model",
+            "model_override",
         ),
         wire_types={
             "max_concurrent_dispatches": ToolWireType.INTEGER,
@@ -229,6 +254,7 @@ _TOOL_DEFS = (
             "idle_output_timeout",
             "max_suppression_seconds",
             "default_model",
+            "model_override",
         ),
         wire_types={
             "timeout": ToolWireType.INTEGER,
@@ -611,15 +637,57 @@ def get_tool_def(tool_name: str) -> ToolDef | None:
 def runtime_exempt_param_names(tool_def: ToolDef) -> frozenset[str]:
     """Names always admitted by the runtime attestation gate, regardless of with:.
 
-    PROTOCOL params are the attestation identity triple; ORCHESTRATOR_SCOPING
-    params are runtime scoping that is never recipe-authorable. Every other
-    role must be compiled into the template's with: block to be admitted.
+    Derived from RUNTIME_ADMISSION_BY_ROLE — the per-role admission policy
+    declared alongside ToolParamRole. Every role not mapped to ALWAYS there
+    must be compiled into the template's with: block to be admitted.
     """
     return frozenset(
         param.name
         for param in tool_def.params
-        if param.role in (ToolParamRole.PROTOCOL, ToolParamRole.ORCHESTRATOR_SCOPING)
+        if RUNTIME_ADMISSION_BY_ROLE[param.role] is RuntimeAdmission.ALWAYS
     )
+
+
+def build_parameter_forwarding_rules(tool_name: str = "run_skill") -> str:
+    """Orchestration prose for which params may be forwarded, derived from
+    RUNTIME_ADMISSION_BY_ROLE and the UNION of both param -> RecipeStep field
+    mappings (EXECUTION_TUNING_STEP_FIELDS | EXECUTION_TUNING_EXTERNALLY_RESOLVED).
+
+    Generated, not hand-copied, so the two cannot diverge the way
+    tools_recipe.py's docstring and sous-chef/SKILL.md once did (#4707).
+    """
+    tool_def = get_tool_def(tool_name)
+    if tool_def is None:
+        raise ValueError(f"{tool_name!r} is not a registered tool")
+
+    # The two tables are guaranteed disjoint and jointly total over the
+    # EXECUTION_TUNING role, so their union is exactly the role's parameter set.
+    field_by_param: dict[str, str] = {
+        **EXECUTION_TUNING_STEP_FIELDS,
+        **EXECUTION_TUNING_EXTERNALLY_RESOLVED,
+    }
+    tuning_param_names = sorted(
+        param.name for param in tool_def.params if param.role is ToolParamRole.EXECUTION_TUNING
+    )
+    if not tuning_param_names:
+        return ""
+
+    rules: list[str] = [f"EXECUTION-TUNING FIELDS ({tool_name}) — server-resolved, not restated:"]
+    for param_name in tuning_param_names:
+        if param_name not in field_by_param:
+            raise ValueError(
+                f"{tool_name!r} param {param_name!r} is EXECUTION_TUNING-roled but has no "
+                "EXECUTION_TUNING_STEP_FIELDS/EXECUTION_TUNING_EXTERNALLY_RESOLVED entry"
+            )
+        field_name = field_by_param[param_name]
+        rules.append(
+            f"- A step's `{field_name}:` field is resolved server-side; never include "
+            f"`{param_name}` in a `{tool_name}` call for that step. A per-step call-time "
+            f"override is expressed only by declaring `{param_name}` under that step's "
+            "`with:` block — a static with: value there admits only that exact value; "
+            "only a dynamically-bound value varies per call."
+        )
+    return "\n".join(rules)
 
 
 def compute_tool_contract_identity(tool_def: ToolDef) -> str:

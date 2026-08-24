@@ -2,13 +2,67 @@
 
 from __future__ import annotations
 
+import ast
+import importlib
 import re
 import sys
 from pathlib import Path
 
 from autoskillit.core import (
+    InstructionExtractionMode,
+    OrchestratorSurfaceDef,
+    ToolParamRole,
+    get_tool_def,
+)
+from autoskillit.core import (
     strip_markdown_code_regions as strip_markdown_code_regions,
 )
+
+_RUN_SKILL_WINDOW = 400
+_PROSE_TRIGGER_WINDOW = 60
+_PROSE_TRIGGER_WORDS = ("parameter", "pass", "forward")
+
+
+def execution_tuning_param_names() -> tuple[str, ...]:
+    """Return run_skill parameters whose role is execution tuning."""
+    tool_def = get_tool_def("run_skill")
+    assert tool_def is not None, "run_skill must be a registered ToolDef"
+    return tuple(
+        sorted(
+            param.name for param in tool_def.params if param.role is ToolParamRole.EXECUTION_TUNING
+        )
+    )
+
+
+def _literal_kwarg_pattern(names: tuple[str, ...]) -> re.Pattern[str]:
+    return re.compile(r"(?:" + "|".join(re.escape(name) for name in names) + r")=")
+
+
+def find_execution_tuning_forwarding_violations(text: str, names: tuple[str, ...]) -> list[str]:
+    """Find prose that tells callers to forward server-resolved tuning values."""
+    violations: list[str] = []
+
+    for match in _literal_kwarg_pattern(names).finditer(text):
+        window_start = max(0, match.start() - _RUN_SKILL_WINDOW)
+        window_end = min(len(text), match.end() + _RUN_SKILL_WINDOW)
+        if "run_skill" not in text[window_start:window_end]:
+            continue
+        violations.append(f"literal kwarg form {match.group(0)!r}")
+
+    for name in names:
+        for match in re.finditer(re.escape(name), text):
+            local_start = max(0, match.start() - _PROSE_TRIGGER_WINDOW)
+            local_end = min(len(text), match.end() + _PROSE_TRIGGER_WINDOW)
+            local_window = text[local_start:local_end]
+            if not any(word in local_window.lower() for word in _PROSE_TRIGGER_WORDS):
+                continue
+            wide_start = max(0, match.start() - _RUN_SKILL_WINDOW)
+            wide_end = min(len(text), match.end() + _RUN_SKILL_WINDOW)
+            if "run_skill" not in text[wide_start:wide_end]:
+                continue
+            violations.append(f"prose form near {name!r}: {local_window!r}")
+
+    return violations
 
 
 def seed_registry_owner(project_dir: Path, launch_id: str) -> None:
@@ -154,6 +208,66 @@ def extract_never_block(skill_text: str) -> str:
     block = skill_text[start:end]
     lines = [line for line in block.splitlines() if line.strip().startswith("- ")]
     return "\n".join(lines)
+
+
+def _extract_python_docstrings(path: Path) -> str:
+    """AST-parse a module and concatenate its module/function/class docstrings only.
+
+    Whole-file reading over-triggers on legitimate code (e.g. keyword-argument
+    ``model=`` calls); docstring-only extraction is both narrower (no false
+    positives) and semantically right — only docstrings ship to the
+    orchestrator as MCP tool descriptions.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    docs: list[str] = []
+    module_doc = ast.get_docstring(tree)
+    if module_doc:
+        docs.append(module_doc)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            node_doc = ast.get_docstring(node)
+            if node_doc:
+                docs.append(node_doc)
+    return "\n\n".join(docs)
+
+
+def resolve_orchestrator_surface_paths(
+    surface: OrchestratorSurfaceDef, src_root: Path
+) -> tuple[Path, ...]:
+    """Resolve a MARKDOWN_FULL/PYTHON_DOCSTRINGS surface's glob to matched file paths.
+
+    Raises for GENERATED_OUTPUT surfaces, which have no filesystem glob to resolve.
+    """
+    if surface.extraction_mode is InstructionExtractionMode.GENERATED_OUTPUT:
+        raise ValueError(f"{surface.name}: GENERATED_OUTPUT has no path_glob to resolve")
+    assert surface.path_glob is not None
+    return tuple(sorted(src_root.glob(surface.path_glob)))
+
+
+def extract_orchestrator_surface_texts(
+    surface: OrchestratorSurfaceDef, src_root: Path
+) -> dict[str, str]:
+    """Extract text per constituent source for one registered surface, honoring its mode.
+
+    Returns ``{identifier: text}`` — one entry per glob-matched file for
+    MARKDOWN_FULL/PYTHON_DOCSTRINGS (identifier = path relative to ``src_root``),
+    or a single entry for GENERATED_OUTPUT (identifier = ``"module:symbol"``).
+    Per-file granularity is preserved (rather than one concatenated blob) so a
+    sweep over a glob-matched surface can still name the specific offending file.
+    """
+    if surface.extraction_mode is InstructionExtractionMode.GENERATED_OUTPUT:
+        assert surface.producer_module is not None
+        assert surface.producer_symbol is not None
+        module = importlib.import_module(surface.producer_module)
+        producer = getattr(module, surface.producer_symbol)
+        identifier = f"{surface.producer_module}:{surface.producer_symbol}"
+        return {identifier: producer()}
+
+    paths = resolve_orchestrator_surface_paths(surface, src_root)
+    if surface.extraction_mode is InstructionExtractionMode.MARKDOWN_FULL:
+        return {str(p.relative_to(src_root)): p.read_text(encoding="utf-8") for p in paths}
+    # PYTHON_DOCSTRINGS
+    return {str(p.relative_to(src_root)): _extract_python_docstrings(p) for p in paths}
 
 
 def extract_always_block(skill_text: str) -> str:

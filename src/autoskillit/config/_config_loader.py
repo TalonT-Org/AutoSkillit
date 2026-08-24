@@ -128,7 +128,13 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
     from dynaconf import Dynaconf  # noqa: PLC0415
 
     from autoskillit.config._config_dataclasses import ConfigSchemaError
-    from autoskillit.config.settings import remap_retired_keys, validate_layer_keys
+    from autoskillit.config.settings import (
+        remap_retired_keys,
+        validate_env_layer_keys,
+        validate_layer_keys,
+    )
+
+    validate_env_layer_keys()
 
     defaults_path = pkg_root() / "config" / "defaults.yaml"
     root = project_dir or Path.cwd()

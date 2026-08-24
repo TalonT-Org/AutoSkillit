@@ -30,6 +30,8 @@ import shutil  # noqa: F401 — mock.patch("...tools_execution.shutil.which") re
 # attribute lookup (tools_execution.shutil) before reaching .which, so the facade
 # needs its own shutil attribute even though it's a shared stdlib module object.
 from autoskillit.core import (
+    EXECUTION_TUNING_EXTERNALLY_RESOLVED,  # noqa: F401
+    EXECUTION_TUNING_STEP_FIELDS,  # noqa: F401
     AuditResultOutcome,  # noqa: F401
     execution_marker,  # noqa: F401
     find_caller_session_id,  # noqa: F401
@@ -108,11 +110,7 @@ from ._run_skill_admission import (  # noqa: F401
     _build_actual_mcp_kwargs,
     _recipe_execution_deny,
 )
-from ._run_skill_dispatch import (  # noqa: F401
-    _EXECUTION_TUNING_EXTERNALLY_RESOLVED,
-    _EXECUTION_TUNING_STEP_FIELDS,
-    run_skill,
-)
+from ._run_skill_dispatch import run_skill  # noqa: F401
 from ._run_skill_finalize import _execute_and_finalize_run_skill  # noqa: F401
 from ._run_skill_prepare import (  # noqa: F401
     _ExplorerLaunchLease,
@@ -129,10 +127,10 @@ logger = get_logger(__name__)
 
 __all__ = [
     "DEPENDENCY_DENY_PREFIX",
+    "EXECUTION_TUNING_EXTERNALLY_RESOLVED",
+    "EXECUTION_TUNING_STEP_FIELDS",
     "INGREDIENT_LOCK_DENY_PREFIX",
     "AuditResultOutcome",
-    "_EXECUTION_TUNING_EXTERNALLY_RESOLVED",
-    "_EXECUTION_TUNING_STEP_FIELDS",
     "_ExplorerLaunchLease",
     "_PURE_SLEEP_RE",
     "_RunSkillContractLifecycle",

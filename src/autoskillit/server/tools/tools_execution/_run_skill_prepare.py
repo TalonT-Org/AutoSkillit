@@ -129,7 +129,7 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
 
     # step_provider's execution-tuning fallback lives here (pre-gate,
     # profile-interplay semantics) rather than in the post-gate
-    # fallback loop — see _EXECUTION_TUNING_EXTERNALLY_RESOLVED.
+    # fallback loop — see core.EXECUTION_TUNING_EXTERNALLY_RESOLVED.
     if (
         not state.step_provider
         and state.step_name
@@ -379,6 +379,10 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
                     )
 
             # Use each field's vacancy sentinel; zero is a valid explicit timeout.
+            # Under attestation this fallback only ever sees a genuine vacancy —
+            # an explicit caller value for these fields is denied upstream by the
+            # runtime gate before reaching here. For unattested calls, an explicit
+            # caller value survives untouched, as intended.
             if (
                 state.effective_model == ""
                 and _recipe_step.model

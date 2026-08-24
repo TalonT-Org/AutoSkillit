@@ -365,3 +365,8 @@ low-level `bind_recipe`/`build_recipe_execution_snapshot`/
 `install_recipe_execution` chain directly — those functions precondition on
 `InitializingRecipe` → `ReadyRecipe` staging that only the production flow
 performs, so bypassing it would test a context no real session ever has.
+Indirectly parametrizable over `(recipe_name, attested_step,
+ingredient_overrides)` via `@pytest.mark.parametrize("tool_ctx_ready_recipe",
+[(...)], indirect=True)` — requesting it without parametrization (every
+pre-#4707 consumer) defaults to the original `research`/`scope` combination,
+so existing tests stay source-compatible.

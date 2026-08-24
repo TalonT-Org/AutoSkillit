@@ -90,6 +90,16 @@ def _collect_order_params(
     }
 
 
+def _validate_model_override(value: str) -> str:
+    """Keep the empty clear sentinel but reject malformed model identifiers."""
+    if value and (value != value.strip() or not value.isprintable()):
+        raise ValueError(
+            "model_override must be empty or a printable model identifier "
+            "without surrounding whitespace"
+        )
+    return value
+
+
 def _stage_effective_config(
     ctx: ToolContext,
     domain: str,
@@ -174,6 +184,7 @@ async def configure_fleet(
     enable_deadline_extension: bool | None = None,
     inspector_model: str | None = None,
     default_model: str | None = None,
+    model_override: str | None = None,
 ) -> str:
     """Configure values observed by the next fleet operation in this kitchen.
 
@@ -181,6 +192,15 @@ async def configure_fleet(
     configuration tools update the same ``core.default_model`` override, so the last
     configuration call wins; explicit model values still take precedence. Fleet issue
     count limits remain static startup-prompt settings and are not dynamic parameters.
+
+    ``model_override`` is a session-wide recovery control (issue #4238), not a
+    per-step selector: it outranks ``providers.model_overrides`` and
+    ``model.recipe_overrides``/``model.step_overrides`` in both model-precedence
+    ladders. This is a deliberate inversion of "more-specific wins" — an operator
+    who broke a per-recipe/per-step override needs a way to recover without
+    restarting the server, and a session-wide value beating a per-step one is
+    the only shape that provides that. Pass ``""`` to clear it back to
+    "not supplied"; ``None`` (the default) leaves any existing override alone.
 
     The returned snapshot is serialized from the same effective configuration used by
     runtime consumers. Closing and reopening the kitchen restores construction defaults.
@@ -201,9 +221,11 @@ async def configure_fleet(
             enable_deadline_extension,
             inspector_model,
         )
-        core_params: dict[str, object] = (
-            {"default_model": default_model} if default_model is not None else {}
-        )
+        core_params: dict[str, object] = {}
+        if default_model is not None:
+            core_params["default_model"] = default_model
+        if model_override is not None:
+            core_params["model_override"] = _validate_model_override(model_override)
         snapshot = _commit_effective_config(ctx, "fleet", params, core_params)
         return json.dumps({"success": True, "config": snapshot})
     except (OverlayStateError, TypeError, ValueError) as exc:
@@ -224,12 +246,22 @@ async def configure_order(
     idle_output_timeout: int | None = None,
     max_suppression_seconds: int | None = None,
     default_model: str | None = None,
+    model_override: str | None = None,
 ) -> str:
     """Configure values observed by the next order operation in this kitchen.
 
     Explicit step/call values retain precedence over configured defaults. Both
     configuration tools update the same ``core.default_model`` override, so the last
     configuration call wins; explicit model values still take precedence.
+
+    ``model_override`` is a session-wide recovery control (issue #4238), not a
+    per-step selector: it outranks ``providers.model_overrides`` and
+    ``model.recipe_overrides``/``model.step_overrides`` in both model-precedence
+    ladders. This is a deliberate inversion of "more-specific wins" — an operator
+    who broke a per-recipe/per-step override needs a way to recover without
+    restarting the server, and a session-wide value beating a per-step one is
+    the only shape that provides that. Pass ``""`` to clear it back to
+    "not supplied"; ``None`` (the default) leaves any existing override alone.
 
     The returned snapshot is serialized from the same effective configuration used by
     runtime consumers. Closing and reopening the kitchen restores construction defaults.
@@ -247,9 +279,11 @@ async def configure_order(
             idle_output_timeout,
             max_suppression_seconds,
         )
-        core_params: dict[str, object] = (
-            {"default_model": default_model} if default_model is not None else {}
-        )
+        core_params: dict[str, object] = {}
+        if default_model is not None:
+            core_params["default_model"] = default_model
+        if model_override is not None:
+            core_params["model_override"] = _validate_model_override(model_override)
         snapshot = _commit_effective_config(ctx, "order", params, core_params)
         return json.dumps({"success": True, "config": snapshot})
     except (OverlayStateError, TypeError, ValueError) as exc:

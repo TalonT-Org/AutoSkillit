@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 import yaml
 
@@ -150,6 +154,49 @@ class TestAgentBackendConfigLoading:
         cfg = load_config(tmp_path)
         assert cfg.agent_backend.backend == "codex"
 
+    def test_flat_backend_env_var_remains_visible_during_config_load(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        import dynaconf
+
+        from autoskillit.config import load_config
+        from autoskillit.core import AGENT_BACKEND_DYNACONF_ENV_VAR, AGENT_BACKEND_ENV_VAR
+
+        monkeypatch.setenv(AGENT_BACKEND_ENV_VAR, "codex")
+        monkeypatch.setenv(AGENT_BACKEND_DYNACONF_ENV_VAR, "claude-code")
+        monkeypatch.setenv("AUTOSKILLIT_REVIEW__LOCAL_REVIEW_ROUNDS", "0")
+
+        constructor_entered = threading.Event()
+        observer_finished = threading.Event()
+        real_dynaconf = dynaconf.Dynaconf
+
+        def gated_dynaconf(*args: object, **kwargs: object):
+            constructor_entered.set()
+            if not observer_finished.wait(timeout=5):
+                raise TimeoutError("environment observer did not finish")
+            return real_dynaconf(*args, **kwargs)
+
+        monkeypatch.setattr(dynaconf, "Dynaconf", gated_dynaconf)
+
+        def observe_backend() -> str:
+            try:
+                if not constructor_entered.wait(timeout=5):
+                    raise TimeoutError("Dynaconf construction did not begin")
+                return os.environ[AGENT_BACKEND_ENV_VAR]
+            finally:
+                observer_finished.set()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            config_future = executor.submit(load_config, tmp_path)
+            observer_future = executor.submit(observe_backend)
+            cfg = config_future.result(timeout=10)
+            observed_backend = observer_future.result(timeout=10)
+
+        assert observed_backend == "codex"
+        assert cfg.agent_backend.backend == "claude-code"
+        assert cfg.review.local_review_rounds == 0
+        assert cfg.agent_backend.recipe_overrides == _DEFAULT_RECIPE_OVERRIDES
+
     def test_agent_backend_yaml_override(self, tmp_path, monkeypatch) -> None:
         from autoskillit.config import load_config
 
@@ -160,6 +207,20 @@ class TestAgentBackendConfigLoading:
         (config_dir / "config.yaml").write_text(yaml.dump({"agent_backend": {"backend": "aider"}}))
         cfg = load_config(tmp_path)
         assert cfg.agent_backend.backend == "aider"
+
+    def test_agent_backend_scalar_yaml_shorthand(self, tmp_path, monkeypatch) -> None:
+        from autoskillit.config import load_config
+        from autoskillit.core import AGENT_BACKEND_DYNACONF_ENV_VAR, AGENT_BACKEND_ENV_VAR
+
+        monkeypatch.delenv(AGENT_BACKEND_ENV_VAR, raising=False)
+        monkeypatch.delenv(AGENT_BACKEND_DYNACONF_ENV_VAR, raising=False)
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(yaml.dump({"agent_backend": "codex"}))
+
+        cfg = load_config(tmp_path)
+
+        assert cfg.agent_backend.backend == "codex"
 
     def test_agent_backend_key_accepted_by_schema_validator(self, tmp_path) -> None:
         from autoskillit.config import load_config

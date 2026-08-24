@@ -168,7 +168,10 @@ class TestCLIOrderCommand:
 
         def launch(*_args: object, **_kwargs: object) -> InteractiveProcessStub:
             warning_visible_at_launch.append(
-                expected_warning in capsys.readouterr().out.splitlines()
+                any(
+                    line.strip() == expected_warning
+                    for line in capsys.readouterr().out.splitlines()
+                )
             )
             return process
 

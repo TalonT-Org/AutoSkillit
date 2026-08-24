@@ -93,7 +93,7 @@ class FailureRecord:
         }
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class CleanupResult:
     deleted: list[str] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)

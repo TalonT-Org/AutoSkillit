@@ -32,10 +32,12 @@ import ast
 import hashlib
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
 
+from tests.arch._deferred_debt import TrackedDeferral, assert_not_stale, assert_rationale_present
 from tests.arch._helpers import (
     _SOURCE_FILES,
     SRC_ROOT,
@@ -1054,64 +1056,71 @@ _OSERROR_FAMILY = {
 }
 _FS_OBSERVATION_FUNNEL = {"observe_path_mode", "safe_mtime"}
 
-# (path, rationale, tracking issue) rows — mirrors _DETACHED_SPAWN_ALLOWLIST's
-# (path, rationale) shape, extended with the tracking-issue reference T-A3 requires
-# for every LATENT site this part's sweep found but did not fix.
-_ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
-    (
-        SRC_ROOT / "cli" / "_install_snapshot" / "_snapshot.py",
-        "_matches_staged_state lstat()s two rglob()-enumerated entries with no "
-        "try/except in the function; caller chain already absorbs it via "
-        "rollback()'s except BaseException, so not a live crash today — #4784",
+# Deferred-debt registry: each entry pairs a real, tracked violation with a
+# staleness-enforced shape (see tests/arch/_deferred_debt.py) rather than a bare
+# (path, rationale) exemption — so a deferred fix can't sit unaddressed forever
+# without someone actively re-affirming it. _doctor_fleet.py's entry (#4768) was
+# fixed directly (see _check_stale_fleet_state) rather than deferred here.
+_ENUMERATION_STAT_ALLOWLIST: dict[Path, TrackedDeferral] = {
+    SRC_ROOT / "cli" / "_install_snapshot" / "_snapshot.py": TrackedDeferral(
+        issue=4784,
+        rationale="_matches_staged_state lstat()s two rglob()-enumerated entries with no "
+        "try/except in the function; caller chain already absorbs it via rollback()'s "
+        "except BaseException, so not a live crash today",
+        added_date=date(2026, 8, 25),
     ),
-    (
-        SRC_ROOT / "cli" / "doctor" / "_doctor_fleet.py",
-        "unguarded stat on an iterdir()-enumerated campaign state file — #4768",
+    SRC_ROOT / "core" / "io.py": TrackedDeferral(
+        issue=4770,
+        rationale="directory_tree_digest stats every os.walk()-enumerated entry with no "
+        "guard; 3 of 5 callers guard against this at the call site, this function does not",
+        added_date=date(2026, 8, 24),
     ),
-    (
-        SRC_ROOT / "core" / "io.py",
-        "directory_tree_digest stats every os.walk()-enumerated entry with no guard; "
-        "3 of 5 callers guard against this at the call site, this function does not — #4770",
+    SRC_ROOT / "execution" / "_recording_skills.py": TrackedDeferral(
+        issue=4785,
+        rationale="build_skills_manifest reads an iterdir()-enumerated skill_md with no "
+        "try/except; safe today only because its one caller passes a private post-copytree "
+        "directory, not a live shared one",
+        added_date=date(2026, 8, 25),
     ),
-    (
-        SRC_ROOT / "execution" / "_recording_skills.py",
-        "build_skills_manifest reads an iterdir()-enumerated skill_md with no "
-        "try/except; safe today only because its one caller passes a private "
-        "post-copytree directory, not a live shared one — #4785",
+    SRC_ROOT / "execution" / "session_log.py": TrackedDeferral(
+        issue=4771,
+        rationale="unguarded stat in an iterdir()-then-sort key= over committed session dirs",
+        added_date=date(2026, 8, 24),
     ),
-    (
-        SRC_ROOT / "execution" / "session_log.py",
-        "unguarded stat in an iterdir()-then-sort key= over committed session dirs — #4771",
+    SRC_ROOT / "hooks" / "session_start_hook.py": TrackedDeferral(
+        issue=4772,
+        rationale="unguarded read on a glob()-enumerated kitchen-state marker inside a "
+        "broad except Exception — stdlib-only hook code, core.fs_observation is a safe "
+        "import here",
+        added_date=date(2026, 8, 24),
     ),
-    (
-        SRC_ROOT / "hooks" / "session_start_hook.py",
-        "unguarded read on a glob()-enumerated kitchen-state marker inside a broad "
-        "except Exception — stdlib-only hook code, core.fs_observation is a safe import "
-        "here — #4772",
-    ),
-    (
-        SRC_ROOT / "recipe" / "_cmd_rpc_issues.py",
-        "batch_create_issues reads a glob()-enumerated ticket_body_*.md with no "
+    SRC_ROOT / "recipe" / "_cmd_rpc_issues.py": TrackedDeferral(
+        issue=4786,
+        rationale="batch_create_issues reads a glob()-enumerated ticket_body_*.md with no "
         "try/except at all; no concurrent writer identified, but a hit would hard-fail "
-        "the whole ticket batch, not just the racing file — #4786",
+        "the whole ticket batch, not just the racing file",
+        added_date=date(2026, 8, 25),
     ),
-    (
-        SRC_ROOT / "server" / "_editable_guard.py",
-        "unguarded read on a glob()-enumerated direct_url.json inside a broad "
-        "except Exception — #4773",
+    SRC_ROOT / "server" / "_editable_guard.py": TrackedDeferral(
+        issue=4773,
+        rationale="unguarded read on a glob()-enumerated direct_url.json inside a broad "
+        "except Exception",
+        added_date=date(2026, 8, 24),
     ),
-    (
-        SRC_ROOT / "workspace" / "session_skills.py",
-        "unguarded stat on an iterdir()-enumerated lease-sweep candidate, no try/except "
-        "nearby at all — #4774",
+    SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py": TrackedDeferral(
+        issue=4787,
+        rationale="_render_agent_definitions reads a glob()-enumerated agent .md file with "
+        "no try/except; agents_dir is a private, synchronously-populated tempdir with no "
+        "identified concurrent writer at all",
+        added_date=date(2026, 8, 25),
     ),
-    (
-        SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py",
-        "_render_agent_definitions reads a glob()-enumerated agent .md file with no "
-        "try/except; agents_dir is a private, synchronously-populated tempdir with no "
-        "identified concurrent writer at all — #4787",
+    SRC_ROOT / "workspace" / "session_skills.py": TrackedDeferral(
+        issue=4774,
+        rationale="unguarded stat on an iterdir()-enumerated lease-sweep candidate, no "
+        "try/except nearby at all",
+        added_date=date(2026, 8, 24),
     ),
-]
+}
 
 
 def _dotted_name(node: ast.expr, aliases: dict[str, tuple[str, str | None]]) -> str | None:
@@ -1488,8 +1497,10 @@ def test_no_unguarded_stat_on_enumeration_derived_path_outside_funnel() -> None:
     routing it through core.fs_observation. Violations-by-default, explicit
     allowlist below — each entry requires a rationale and a tracking issue.
     """
-    allowed_files = {path for path, _ in _ENUMERATION_STAT_ALLOWLIST}
-    rationale_by_file = dict(_ENUMERATION_STAT_ALLOWLIST)
+    allowed_files = set(_ENUMERATION_STAT_ALLOWLIST.keys())
+    rationale_by_file = {
+        path: entry.rationale for path, entry in _ENUMERATION_STAT_ALLOWLIST.items()
+    }
     violations: list[str] = []
 
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
@@ -1684,6 +1695,27 @@ def test_no_bare_tree_enumeration_outside_strict_walk(tmp_path: Path) -> None:
             f"  {path.relative_to(SRC_ROOT.parent.parent)}: {rationale}"
             for path, rationale in rationale_by_file.items()
         )
+    )
+
+
+def test_enumeration_stat_allowlist_entries_not_stale() -> None:
+    assert_not_stale(_ENUMERATION_STAT_ALLOWLIST, registry_name="_ENUMERATION_STAT_ALLOWLIST")
+
+
+def test_enumeration_stat_allowlist_issue_numbers_are_positive() -> None:
+    invalid = {
+        str(path): entry.issue
+        for path, entry in _ENUMERATION_STAT_ALLOWLIST.items()
+        if entry.issue <= 0
+    }
+    assert not invalid, (
+        f"_ENUMERATION_STAT_ALLOWLIST entries with a non-positive issue number: {invalid}"
+    )
+
+
+def test_enumeration_stat_allowlist_rationale_is_substantive() -> None:
+    assert_rationale_present(
+        _ENUMERATION_STAT_ALLOWLIST, registry_name="_ENUMERATION_STAT_ALLOWLIST"
     )
 
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import os
 import types
 import warnings
 from collections.abc import Callable, Mapping
@@ -74,6 +75,7 @@ from autoskillit.config._config_loader import (
     load_config,
 )
 from autoskillit.core import (
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
     FEATURE_REGISTRY,
     FeatureLifecycle,
     SkillVisibilitySpec,
@@ -276,6 +278,7 @@ __all__ = [
     "RETIRED_CONFIG_KEYS",
     "RETIRED_PROFILE_KEYS",
     "RetiredConfigKeyDef",
+    "validate_env_layer_keys",
     "validate_layer_keys",
     "write_config_layer",
 ]
@@ -880,6 +883,52 @@ def remap_retired_keys(
         )
 
     return result, records
+
+
+def validate_env_layer_keys() -> None:
+    """Validate every ``AUTOSKILLIT_<SECTION>__<KEY>`` environment variable
+    names a real ``section.key`` — the env-layer analogue of
+    ``validate_layer_keys`` for file layers.
+
+    Deliberately does NOT introspect a merged Dynaconf document (``d.as_dict()``):
+    that view has no provenance, uppercases env-sourced keys, and would surface
+    every ambient ``AUTOSKILLIT_*`` process variable, raising at startup for
+    essentially every real session. Instead this enumerates ``os.environ``
+    directly and validates only names containing the ``__`` nested separator,
+    which unambiguously target a config ``section.key``.
+
+    Only the first two ``__``-separated segments are validated — deeper
+    nesting (e.g. ``AUTOSKILLIT_MODEL__RECIPE_OVERRIDES__myrecipe__mystep``)
+    is a real, working feature; validating past the second segment would
+    reject it (``_CONFIG_SCHEMA`` is only two levels deep).
+
+    ``AUTOSKILLIT_PRIVATE_ENV_VARS`` is a curated allowlist of session-plumbing
+    variables (process wiring, not user configuration), not a blanket
+    ignore-unknown-vars switch — a genuine typo in a nested config key still
+    fails loudly here.
+
+    Validated with ``is_secrets_layer=True``: unlike a ``config.yaml`` file,
+    an environment variable is a normal, expected channel for supplying a
+    secret (``AUTOSKILLIT_GITHUB__TOKEN``) — rejecting ``_SECRETS_ONLY_KEYS``
+    here would reject a legitimate deployment pattern, not catch a mistake.
+    """
+    synthesized: dict[str, dict[str, str]] = {}
+    for name, value in os.environ.items():
+        if name in AUTOSKILLIT_PRIVATE_ENV_VARS:
+            continue
+        if not name.startswith("AUTOSKILLIT_"):
+            continue
+        rest = name[len("AUTOSKILLIT_") :]
+        if "__" not in rest:
+            continue  # flat plumbing var, not a nested section.key override
+        section, remainder = rest.split("__", 1)
+        key = remainder.split("__", 1)[0]
+        synthesized.setdefault(section.lower(), {})[key.lower()] = value
+
+    if not synthesized:
+        return
+    remapped, _records = remap_retired_keys(synthesized, is_secrets_layer=False)
+    validate_layer_keys(remapped, Path("environment variables"), is_secrets_layer=True)
 
 
 def write_config_layer(path: Path, data: dict[str, Any]) -> None:

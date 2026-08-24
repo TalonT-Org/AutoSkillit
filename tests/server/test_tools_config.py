@@ -43,6 +43,7 @@ _BEHAVIOR_CASES = (
     ("order", "idle_output_timeout", 22, "order", "idle_output_timeout"),
     ("order", "max_suppression_seconds", 33, "order", "max_suppression_seconds"),
     ("order", "default_model", "opus", "core", "default_model"),
+    ("order", "model_override", "opus-recovery", "core", "model_override"),
     ("fleet", "max_concurrent_dispatches", 4, "fleet", "max_concurrent_dispatches"),
     ("fleet", "default_timeout_sec", 777, "fleet", "default_timeout_sec"),
     ("fleet", "max_extension_seconds", 800.0, "fleet", "max_extension_seconds"),
@@ -51,6 +52,7 @@ _BEHAVIOR_CASES = (
     ("fleet", "enable_deadline_extension", False, "fleet", "enable_deadline_extension"),
     ("fleet", "inspector_model", "inspector-x", "fleet", "inspector_model"),
     ("fleet", "default_model", "haiku", "core", "default_model"),
+    ("fleet", "model_override", "haiku-recovery", "core", "model_override"),
 )
 
 
@@ -114,7 +116,7 @@ async def test_every_public_parameter_changes_its_runtime_observer(
     assert payload["config"][snapshot_section][snapshot_field] == observed
 
     overlay = json.loads(tmp_path.joinpath(*_OVERLAY_RELPATH).read_text())
-    overlay_section = "core" if param == "default_model" else tool_name
+    overlay_section = "core" if param in ("default_model", "model_override") else tool_name
     assert overlay[overlay_section][param] == value
 
 

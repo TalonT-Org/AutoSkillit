@@ -235,6 +235,7 @@ _TOOL_DEFS = (
             "enable_deadline_extension",
             "inspector_model",
             "default_model",
+            "model_override",
         ),
         wire_types={
             "max_concurrent_dispatches": ToolWireType.INTEGER,
@@ -253,6 +254,7 @@ _TOOL_DEFS = (
             "idle_output_timeout",
             "max_suppression_seconds",
             "default_model",
+            "model_override",
         ),
         wire_types={
             "timeout": ToolWireType.INTEGER,

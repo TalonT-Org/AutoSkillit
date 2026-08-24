@@ -165,6 +165,12 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_CWD",
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_SESSION_DEADLINE",
+        # Hook-script-only escape hatch (src/autoskillit/hooks/_hook_settings.py) —
+        # read directly via os.environ, bypassing Dynaconf/_CONFIG_SCHEMA entirely.
+        # No quota_guard.disabled field exists; adding this name here (rather than
+        # a schema field) is what S12's env-layer validation requires so this
+        # legitimate operator escape hatch isn't rejected as an unrecognized key.
+        "AUTOSKILLIT_QUOTA_GUARD__DISABLED",
         AGENT_BACKEND_ENV_VAR,
         AGENT_BACKEND_DYNACONF_ENV_VAR,
         CODEX_STARTUP_TRACE_ENV_VAR,

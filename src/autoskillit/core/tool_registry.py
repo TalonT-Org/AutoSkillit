@@ -661,8 +661,7 @@ def build_parameter_forwarding_rules(tool_name: str = "run_skill") -> str:
         raise ValueError(f"{tool_name!r} is not a registered tool")
 
     # The two tables are guaranteed disjoint and jointly total over the
-    # EXECUTION_TUNING role (test_execution_tuning_fallback_tables_cover_role_exactly),
-    # so their union is exactly the role's parameter set.
+    # EXECUTION_TUNING role, so their union is exactly the role's parameter set.
     field_by_param: dict[str, str] = {
         **EXECUTION_TUNING_STEP_FIELDS,
         **EXECUTION_TUNING_EXTERNALLY_RESOLVED,

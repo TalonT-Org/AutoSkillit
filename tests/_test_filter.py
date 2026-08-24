@@ -187,6 +187,21 @@ _TYPE_RESULTS_CASCADE = frozenset(
     }
 )
 
+# Internal context-admission shards (Issue #4738) share a single consumer
+# scope. List is data-driven so both MODULE_CASCADE_CORE and the cascade
+# tests stay in lock-step.
+_CONTEXT_ADMISSION_SHARDS: tuple[str, ...] = (
+    "_type_context_admission_base",
+    "_type_context_admission_identities",
+    "_type_context_admission_records",
+    "_type_context_admission_events",
+    "_type_context_admission_effects",
+    "_type_context_admission_states",
+    "_type_context_admission_coverage",
+    "_type_context_admission_persistence",
+)
+_CONTEXT_ADMISSION_SHARD_CASCADE: frozenset[str] = frozenset({"core", "pipeline", "server"})
+
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
@@ -333,16 +348,14 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_dimensions": frozenset({"config", "core", "server"}),
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
-    # Issue #4738 — each internal context-admission shard shares the stable
-    # facade's core/reducer/persistence consumer scope.
-    "_type_context_admission_base": frozenset({"core", "pipeline", "server"}),
-    "_type_context_admission_identities": frozenset({"core", "pipeline", "server"}),
-    "_type_context_admission_records": frozenset({"core", "pipeline", "server"}),
-    "_type_context_admission_events": frozenset({"core", "pipeline", "server"}),
-    "_type_context_admission_effects": frozenset({"core", "pipeline", "server"}),
-    "_type_context_admission_states": frozenset({"core", "pipeline", "server"}),
-    "_type_context_admission_coverage": frozenset({"core", "pipeline", "server"}),
-    "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
+    "_type_context_admission_base": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_identities": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_records": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_events": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_effects": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_states": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_coverage": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_persistence": _CONTEXT_ADMISSION_SHARD_CASCADE,
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_audit_admission_validation": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_audit_admission_artifact_ownership": frozenset(

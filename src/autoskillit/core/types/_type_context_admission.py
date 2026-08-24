@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 # ruff: noqa: I001
+# Imported shards are grouped by topic rather than alphabetised so the facade
+# reads top-down: base -> identities -> records -> events -> effects ->
+# states -> coverage. The unsorted layout is the contract.
 
 from ._type_context_admission_base import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
     ContextAdmissionValidationError,
     UnsupportedContextAdmissionProtocolError,
-    _ContractValue,  # noqa: F401
-    _decode,  # noqa: F401
-    _encode,  # noqa: F401
 )
 from ._type_context_admission_identities import (
     AdmissionAttemptId,
@@ -115,7 +115,6 @@ from ._type_context_admission_coverage import (
     CoverageEvidence,
     ProducerCoverageDef,
 )
-from ._type_enums import ProducerSurface  # noqa: F401
 
 __all__ = [
     "CONTEXT_ADMISSION_PROTOCOL_VERSION",

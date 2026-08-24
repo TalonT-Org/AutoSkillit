@@ -99,21 +99,6 @@ _VERIFIED_SURFACES = frozenset(
         ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY,
     }
 )
-_NON_DISPATCH_PRODUCER_SURFACES = frozenset(
-    {
-        ProducerSurface.TOOL_ARGUMENT,
-        ProducerSurface.TOOL_RESULT_ENVELOPE,
-        ProducerSurface.USER_PROMPT,
-        ProducerSurface.ASSISTANT_OUTPUT_HISTORY,
-        ProducerSurface.SKILL_PLUGIN_CONTEXT,
-        ProducerSurface.OTHER_CONTEXT_INJECTION,
-        ProducerSurface.CLIENT_PROVIDER_RETRIEVAL,
-        ProducerSurface.CODE_MODE_AGGREGATE,
-        ProducerSurface.HOSTED_SPECIALIZED_TOOL,
-        ProducerSurface.HOOK_FEEDBACK,
-        ProducerSurface.COMPACTION_MODEL_WINDOW_TRANSITION,
-    }
-)
 _UNOBSERVABLE_SURFACES = frozenset(
     {
         ProducerSurface.CLIENT_PROVIDER_RETRIEVAL,

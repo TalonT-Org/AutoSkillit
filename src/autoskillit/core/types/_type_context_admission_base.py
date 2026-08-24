@@ -115,6 +115,8 @@ def _decode(value: object) -> object:
         try:
             return _ENUM_REGISTRY[enum_name](enum_value)
         except (TypeError, ValueError):
+            # Suppress cause: enum_value is attacker-controlled and must not
+            # leak into the error message or traceback.
             raise ContextAdmissionValidationError("invalid_serialized_enum") from None
     if "__tuple__" in value:
         if set(value) != {"__tuple__"}:
@@ -158,6 +160,8 @@ def _decode(value: object) -> object:
     try:
         return contract_type(**kwargs)
     except TypeError:
+        # Suppress cause: kwargs come from attacker-controlled serialized
+        # data and the unexpected-kwarg name must not leak.
         raise ContextAdmissionValidationError("invalid_serialized_contract") from None
 
 
@@ -168,6 +172,9 @@ class _ContractMeta(type):
         except ContextAdmissionValidationError:
             raise
         except (AttributeError, TypeError, ValueError):
+            # Suppress cause: the field value that triggered the error is
+            # caller-controlled and must not leak into error text or
+            # tracebacks.
             raise ContextAdmissionValidationError("invalid_contract_field_type") from None
         _validate_declared_field_types(instance)
         _validate_deep_immutability(instance)

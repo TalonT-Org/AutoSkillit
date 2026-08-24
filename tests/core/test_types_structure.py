@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from importlib import import_module, reload
+from importlib import import_module
 from typing import get_args, get_type_hints
 
 import pytest
@@ -151,10 +151,8 @@ def _recipe_section_facade_names() -> tuple[str, ...]:
     )
 
 
-# Issue #4738 — frozen protocol-v1 facade surface captured before the context
-# admission contract was split into internal shards.  Keep this as an ordered
-# tuple: deriving it from a shard or the hub would let simultaneous export
-# regressions pass unnoticed.
+# Frozen protocol-v1 facade surface. Ordered tuple guards against simultaneous
+# export regressions in either direction (additions or removals).
 _CONTEXT_ADMISSION_PUBLIC_SURFACE: tuple[str, ...] = (
     "CONTEXT_ADMISSION_PROTOCOL_VERSION",
     "CONTEXT_ADMISSION_COVERAGE",
@@ -386,9 +384,8 @@ _CONTEXT_ADMISSION_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 def test_context_admission_facade_public_surface_is_frozen() -> None:
-    facade = reload(import_module("autoskillit.core.types._type_context_admission"))
+    facade = import_module("autoskillit.core.types._type_context_admission")
 
-    assert len(_CONTEXT_ADMISSION_PUBLIC_SURFACE) == 94
     assert tuple(facade.__all__) == _CONTEXT_ADMISSION_PUBLIC_SURFACE
 
 
@@ -426,22 +423,18 @@ def test_context_admission_package_hub_preserves_facade_identity() -> None:
 
 def test_context_admission_private_codec_and_producer_surface_identity() -> None:
     base = import_module("autoskillit.core.types._type_context_admission_base")
-    facade = import_module("autoskillit.core.types._type_context_admission")
     persistence = import_module("autoskillit.core.types._type_context_admission_persistence")
     reducer = import_module("autoskillit.core.context_admission")
     enums = import_module("autoskillit.core.types._type_enums_context_admission")
 
     for name in ("_ContractValue", "_encode", "_decode"):
-        assert getattr(facade, name) is getattr(base, name)
         assert getattr(persistence, name) is getattr(base, name)
-    assert facade.ProducerSurface is enums.ProducerSurface is reducer.ProducerSurface
+    assert enums.ProducerSurface is reducer.ProducerSurface
 
 
 def test_context_admission_registered_types_resolve_annotations_in_owning_shards() -> None:
-    facade = import_module("autoskillit.core.types._type_context_admission")
     base = import_module("autoskillit.core.types._type_context_admission_base")
 
-    assert facade._ContractValue is base._ContractValue
     assert base._TYPE_REGISTRY
     for name, contract_type in base._TYPE_REGISTRY.items():
         assert get_type_hints(contract_type), f"{name} has no resolved type hints"

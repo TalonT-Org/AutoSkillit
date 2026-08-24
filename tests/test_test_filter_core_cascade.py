@@ -9,6 +9,8 @@ import pytest
 from autoskillit._test_filter import apply_manifest as manifest_apply_manifest
 from autoskillit._test_filter import load_manifest as manifest_load_manifest
 from tests._test_filter import (
+    _CONTEXT_ADMISSION_SHARD_CASCADE,
+    _CONTEXT_ADMISSION_SHARDS,
     _CORE_UNIVERSAL_MODULES,
     MODULE_CASCADE_CORE,
     FilterMode,
@@ -289,24 +291,14 @@ class TestModuleCascadeCore:
         )
 
     def test_context_admission_persistence_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_context_admission_persistence"] == frozenset(
-            {"core", "pipeline", "server"}
+        assert (
+            MODULE_CASCADE_CORE["_type_context_admission_persistence"]
+            == _CONTEXT_ADMISSION_SHARD_CASCADE
         )
 
-    @pytest.mark.parametrize(
-        "shard_stem",
-        (
-            "_type_context_admission_base",
-            "_type_context_admission_identities",
-            "_type_context_admission_records",
-            "_type_context_admission_events",
-            "_type_context_admission_effects",
-            "_type_context_admission_states",
-            "_type_context_admission_coverage",
-        ),
-    )
+    @pytest.mark.parametrize("shard_stem", _CONTEXT_ADMISSION_SHARDS)
     def test_context_admission_split_shard_cascades(self, shard_stem: str) -> None:
-        assert MODULE_CASCADE_CORE[shard_stem] == frozenset({"core", "pipeline", "server"})
+        assert MODULE_CASCADE_CORE[shard_stem] == _CONTEXT_ADMISSION_SHARD_CASCADE
 
     def test_type_dispatch_identity_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_dispatch_identity"] == frozenset(

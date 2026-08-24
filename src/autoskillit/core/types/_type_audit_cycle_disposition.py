@@ -8,13 +8,15 @@ from enum import StrEnum
 from typing import Any, Self
 
 from ..closure_hashing import canonical_json_bytes, compute_canonical_hash
+from ._type_audit_admission_validation import (
+    _require_digest,
+    _require_nonempty,
+    _require_positive_int,
+)
 from ._type_audit_cycle_authority import (
     AUDIT_CYCLE_SCHEMA_VERSION,
     ArtifactRef,
     _immutable_typed_tuple,
-    _require_digest,
-    _require_nonempty,
-    _require_positive_int,
 )
 
 _DISPOSITION_ROW_DOMAIN = "autoskillit:audit-cycle:disposition-row:v1:sha256"

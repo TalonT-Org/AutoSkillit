@@ -20,6 +20,15 @@ def _require_digest(name: str, value: object) -> str:
     return value
 
 
+def _require_positive_int(name: str, value: object, *, allow_zero: bool = False) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be an integer")
+    minimum = 0 if allow_zero else 1
+    if value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return value
+
+
 def _require_optional_digest(name: str, value: object) -> str | None:
     if value is None:
         return None

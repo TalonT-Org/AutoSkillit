@@ -7,7 +7,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Self, TypeVar
 
-from ..closure_hashing import HASH_RE, canonical_json_bytes, compute_canonical_hash
+from ..closure_hashing import canonical_json_bytes, compute_canonical_hash
+from ._type_audit_admission_validation import (
+    _require_digest,
+    _require_nonempty,
+    _require_positive_int,
+)
 
 AUDIT_CYCLE_SCHEMA_VERSION = 1
 
@@ -33,24 +38,6 @@ def _immutable_typed_tuple(
     if not all(isinstance(value, item_type) for value in normalized):
         raise ValueError(f"{name} must contain only {item_type.__name__} values")
     return normalized
-
-
-def _require_nonempty(name: str, value: str) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{name} must be a non-empty string")
-
-
-def _require_digest(name: str, value: str) -> None:
-    if not isinstance(value, str) or HASH_RE.fullmatch(value) is None:
-        raise ValueError(f"{name} must be an algorithm-qualified sha256 digest")
-
-
-def _require_positive_int(name: str, value: int, *, allow_zero: bool = False) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{name} must be an integer")
-    minimum = 0 if allow_zero else 1
-    if value < minimum:
-        raise ValueError(f"{name} must be >= {minimum}")
 
 
 class AuditVerdict(StrEnum):

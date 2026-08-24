@@ -109,12 +109,23 @@ def test_orchestrator_guidance_projects_only_admitted_sous_chef_and_logs_refusal
     assert isinstance(refusal["diagnostic"], str) and refusal["diagnostic"]
 
 
-@pytest.mark.parametrize("project_guidance", [_server_guidance, _fleet_guidance])
+@pytest.mark.parametrize(
+    ("project_guidance", "diagnostic_event"),
+    [
+        (_server_guidance, "orchestrator_guidance_no_backend"),
+        (_fleet_guidance, "food_truck_guidance_no_backend"),
+    ],
+)
 def test_orchestrator_guidance_without_backend_does_not_resolve_or_project(
     project_guidance: Callable[[object, object | None], str],
+    diagnostic_event: str,
 ) -> None:
     """No backend means no admission authority, so guidance is empty before resolution."""
     context = _guidance_context(backend=None)
     context.skill_resolver = _ResolverThatMustNotRun()
 
-    assert project_guidance(context, None) == ""
+    with structlog.testing.capture_logs() as logs:
+        assert project_guidance(context, None) == ""
+
+    assert [record["event"] for record in logs] == [diagnostic_event]
+    assert logs[0]["project_dir"] == str(_REPO_ROOT)

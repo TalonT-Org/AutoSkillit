@@ -175,6 +175,10 @@ def _project_food_truck_sous_chef(
     """Project L2 orchestration guidance before crossing into the fleet layer."""
     effective_backend = backend or getattr(tool_ctx, "backend", None)
     if effective_backend is None:
+        logger.warning(
+            "food_truck_guidance_no_backend",
+            project_dir=str(tool_ctx.project_dir),
+        )
         return ""
     if tool_ctx.skill_resolver is None:
         return ""

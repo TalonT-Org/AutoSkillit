@@ -96,6 +96,10 @@ def project_orchestrator_guidance(
     """Project the sous-chef document for an anonymous kitchen open."""
     effective_backend = backend or getattr(tool_ctx, "backend", None)
     if effective_backend is None:
+        logger.warning(
+            "orchestrator_guidance_no_backend",
+            project_dir=str(tool_ctx.project_dir),
+        )
         return ""
     if tool_ctx.skill_resolver is None:
         return ""

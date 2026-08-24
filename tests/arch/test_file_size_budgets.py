@@ -71,8 +71,8 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "core/types/_type_audit_cycle_disposition.py": 750,
     "core/types/_type_audit_admission.py": 750,
     "core/types/_type_audit_admission_validation.py": 750,
-    "core/types/_type_audit_artifact_ownership.py": 750,
-    "core/types/_type_audit_reference_identity.py": 750,
+    "core/types/_type_audit_admission_artifact_ownership.py": 750,
+    "core/types/_type_audit_admission_reference_identity.py": 750,
 }
 
 

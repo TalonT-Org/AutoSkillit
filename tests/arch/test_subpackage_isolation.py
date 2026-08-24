@@ -128,8 +128,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "tool_registry",  # immutable canonical MCP tool definition registry
         "_tool_registry_builders",  # immutable tool-role and definition construction
         # Frozen static ownership and identity-profile definitions are derived once.
-        "_type_audit_artifact_ownership",
-        "_type_audit_reference_identity",
+        "_type_audit_admission_artifact_ownership",
+        "_type_audit_admission_reference_identity",
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest

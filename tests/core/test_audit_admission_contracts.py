@@ -698,12 +698,24 @@ def test_runtime_protocols_accept_structural_implementations() -> None:
 @pytest.mark.parametrize(
     ("shard_name", "binding"),
     [
-        ("_type_audit_artifact_ownership", "AuditArtifactFieldOwnership"),
-        ("_type_audit_artifact_ownership", "AuditArtifactFieldOwnershipDef"),
-        ("_type_audit_artifact_ownership", "AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY"),
-        ("_type_audit_reference_identity", "AuditReferenceIdentityProfileDef"),
-        ("_type_audit_reference_identity", "AUDIT_REFERENCE_IDENTITY_PROFILE_V1"),
-        ("_type_audit_reference_identity", "compute_audit_reference_identity"),
+        ("_type_audit_admission_artifact_ownership", "AuditArtifactFieldOwnership"),
+        ("_type_audit_admission_artifact_ownership", "AuditArtifactFieldOwnershipDef"),
+        (
+            "_type_audit_admission_artifact_ownership",
+            "AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY",
+        ),
+        (
+            "_type_audit_admission_reference_identity",
+            "AuditReferenceIdentityProfileDef",
+        ),
+        (
+            "_type_audit_admission_reference_identity",
+            "AUDIT_REFERENCE_IDENTITY_PROFILE_V1",
+        ),
+        (
+            "_type_audit_admission_reference_identity",
+            "compute_audit_reference_identity",
+        ),
     ],
 )
 def test_admission_shard_public_bindings_preserve_object_identity(
@@ -743,6 +755,8 @@ def test_admission_validation_shard_preserves_private_validator_identity(
 
 def test_admission_ownership_shard_preserves_private_registry_builder_identity() -> None:
     facade = importlib.import_module("autoskillit.core.types._type_audit_admission")
-    shard = importlib.import_module("autoskillit.core.types._type_audit_artifact_ownership")
+    shard = importlib.import_module(
+        "autoskillit.core.types._type_audit_admission_artifact_ownership"
+    )
 
     assert getattr(facade, "_ownership_registry") is getattr(shard, "_ownership_registry")

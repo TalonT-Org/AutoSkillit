@@ -335,8 +335,12 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_audit_admission_validation": frozenset({"core", "execution", "pipeline", "server"}),
-    "_type_audit_artifact_ownership": frozenset({"core", "execution", "pipeline", "server"}),
-    "_type_audit_reference_identity": frozenset({"core", "execution", "pipeline", "server"}),
+    "_type_audit_admission_artifact_ownership": frozenset(
+        {"core", "execution", "pipeline", "server"}
+    ),
+    "_type_audit_admission_reference_identity": frozenset(
+        {"core", "execution", "pipeline", "server"}
+    ),
     "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server", "cli"}),
     "_type_audit_protocols": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_github_review": frozenset({"core", "execution", "pipeline", "server", "smoke_utils"}),

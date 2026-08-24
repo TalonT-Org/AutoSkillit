@@ -171,6 +171,7 @@ async def test_sink_close_failure_does_not_replace_runner_crash(
     )
 
     assert result.subtype == "crashed"
+    assert result.result.startswith("RuntimeError: runner crashed")
     assert events == ["start", "flush", "close"]
     assert {key: runner_envs[0][key] for key in sink_env} == sink_env
     assert os.environ == parent_environment

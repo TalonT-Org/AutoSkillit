@@ -88,16 +88,19 @@ def build_backend_capabilities_map(
     return out
 
 
-def project_orchestrator_guidance(
+def _project_orchestrator_sous_chef(
     tool_ctx: Any,
     *,
     backend: CodingAgentBackend | None = None,
+    cwd: Path,
+    no_backend_event: str,
+    unavailable_event: str,
 ) -> str:
-    """Project the sous-chef document for an anonymous kitchen open."""
+    """Compile and project admitted orchestrator guidance for server callers."""
     effective_backend = backend or getattr(tool_ctx, "backend", None)
     if effective_backend is None:
         logger.warning(
-            "orchestrator_guidance_no_backend",
+            no_backend_event,
             project_dir=str(tool_ctx.project_dir),
         )
         return ""
@@ -113,7 +116,7 @@ def project_orchestrator_guidance(
     skill_compilation = compile_session_skill_catalog(raw_catalog, effective_backend)
     for refusal in skill_compilation.unavailable:
         logger.info(
-            "orchestrator_guidance_skill_unavailable",
+            unavailable_event,
             skill=refusal.skill,
             backend=refusal.backend,
             operation=refusal.operation.value,
@@ -127,17 +130,32 @@ def project_orchestrator_guidance(
         or sous_chef.execution_role is not SkillExecutionRole.ORCHESTRATOR
     ):
         return ""
-    document = project_agent_skill_document(
+    return project_agent_skill_document(
         sous_chef,
         SkillProjectionContext(
-            cwd=tool_ctx.project_dir,
+            cwd=cwd,
             catalog=catalog,
             backend=effective_backend,
             conventions=effective_backend.conventions,
             gating=False,
         ),
+    ).content
+
+
+def project_orchestrator_guidance(
+    tool_ctx: Any,
+    *,
+    backend: CodingAgentBackend | None = None,
+) -> str:
+    """Project the sous-chef document for an anonymous kitchen open."""
+    content = _project_orchestrator_sous_chef(
+        tool_ctx,
+        backend=backend,
+        cwd=tool_ctx.project_dir,
+        no_backend_event="orchestrator_guidance_no_backend",
+        unavailable_event="orchestrator_guidance_skill_unavailable",
     )
-    return "\n\n" + document.content
+    return "\n\n" + content if content else ""
 
 
 def response_backstop_tool_meta(

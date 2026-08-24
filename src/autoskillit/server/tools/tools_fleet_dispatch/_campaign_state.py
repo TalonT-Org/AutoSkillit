@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CodingAgentBackend,
-    SkillExecutionRole,
     detect_autoskillit_mcp_prefix,
     get_logger,
 )
@@ -25,10 +24,8 @@ from autoskillit.fleet import (
     read_state,
     upsert_dispatch_record_by_name,
 )
-from autoskillit.server._misc import (
-    SkillProjectionContext,
-    compile_session_skill_catalog,
-    project_agent_skill_document,
+from autoskillit.server.tools._serve_helpers import (
+    _project_orchestrator_sous_chef,
 )
 
 if TYPE_CHECKING:
@@ -173,45 +170,13 @@ def _project_food_truck_sous_chef(
     backend: CodingAgentBackend | None,
 ) -> str:
     """Project L2 orchestration guidance before crossing into the fleet layer."""
-    effective_backend = backend or getattr(tool_ctx, "backend", None)
-    if effective_backend is None:
-        logger.warning(
-            "food_truck_guidance_no_backend",
-            project_dir=str(tool_ctx.project_dir),
-        )
-        return ""
-    if tool_ctx.skill_resolver is None:
-        return ""
-    raw_catalog = tool_ctx.skill_resolver.list_effective(
-        tool_ctx.project_dir,
-        SkillExecutionRole.ORCHESTRATOR,
-        visibility=tool_ctx.config.skill_visibility_spec(),
-        recipe_packs=tool_ctx.active_recipe_packs,
-        recipe_features=tool_ctx.active_recipe_features,
+    return _project_orchestrator_sous_chef(
+        tool_ctx,
+        backend=backend,
+        cwd=tool_ctx.project_dir.resolve(),
+        no_backend_event="food_truck_guidance_no_backend",
+        unavailable_event="food_truck_guidance_skill_unavailable",
     )
-    skill_compilation = compile_session_skill_catalog(raw_catalog, effective_backend)
-    for refusal in skill_compilation.unavailable:
-        logger.info(
-            "food_truck_guidance_skill_unavailable",
-            skill=refusal.skill,
-            backend=refusal.backend,
-            operation=refusal.operation.value,
-            diagnostic=refusal.diagnostic,
-        )
-    catalog = skill_compilation.catalog
-    sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
-    if sous_chef is None:
-        return ""
-    return project_agent_skill_document(
-        sous_chef,
-        SkillProjectionContext(
-            cwd=tool_ctx.project_dir.resolve(),
-            catalog=catalog,
-            backend=effective_backend,
-            conventions=effective_backend.conventions,
-            gating=False,
-        ),
-    ).content
 
 
 def _dispatch_effect_identities(

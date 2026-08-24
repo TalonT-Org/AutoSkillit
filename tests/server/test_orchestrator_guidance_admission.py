@@ -60,7 +60,6 @@ def _install_projection_spies(
 ) -> list[str]:
     """Capture the skill document selected by either live guidance helper."""
     from autoskillit.server.tools import _serve_helpers
-    from autoskillit.server.tools.tools_fleet_dispatch import _campaign_state
 
     selected: list[str] = []
 
@@ -69,7 +68,6 @@ def _install_projection_spies(
         return SimpleNamespace(content=f"projected:{getattr(skill, 'name')}")
 
     monkeypatch.setattr(_serve_helpers, "project_agent_skill_document", project)
-    monkeypatch.setattr(_campaign_state, "project_agent_skill_document", project)
     return selected
 
 

@@ -468,7 +468,13 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert test_job["name"] == "Test (${{ matrix.shard }}) on ${{ matrix.os }}"
     assert test_job["strategy"]["matrix"] == {
         "os": "${{ fromJSON(needs.preflight.outputs.os-matrix) }}",
-        "shard": ["execution", "recipe", "general"],
+        "shard": [
+            "execution-channel-b",
+            "execution-top-level",
+            "execution",
+            "recipe",
+            "general",
+        ],
     }
     test_checkout = next(
         step
@@ -478,7 +484,11 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert test_checkout["with"]["fetch-depth"] == 0
     install_rg = next(step for step in test_job["steps"] if step.get("name") == "Install ripgrep")
     run_tests = next(step for step in test_job["steps"] if step.get("name") == "Run tests")
+    lint_imports = [step for step in test_job["steps"] if step.get("name") == "Lint imports"]
     assert test_job["steps"].index(install_rg) < test_job["steps"].index(run_tests)
+    assert len(lint_imports) == 1
+    assert lint_imports[0]["if"] == "matrix.shard == 'execution'"
+    assert lint_imports[0]["run"] == "uv run lint-imports"
     assert install_rg["shell"] == "bash"
     assert "command -v rg" in install_rg["run"]
     # Linux installs ripgrep from a pinned, SHA256-verified GitHub Releases asset rather
@@ -490,12 +500,14 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert "sha256sum -c" in install_rg["run"]
     assert "brew install ripgrep" in install_rg["run"]
     assert 'case "$RUNNER_OS" in' in install_rg["run"]
-    assert run_tests["env"]["AUTOSKILLIT_TEST_FILTER"] == (
-        "${{ needs.preflight.outputs.test-filter-mode }}"
-    )
-    assert run_tests["env"]["AUTOSKILLIT_TEST_BASE_REF"] == (
-        "${{ needs.preflight.outputs.test-base-revision }}"
-    )
+    assert run_tests["env"] == {
+        "AUTOSKILLIT_FILTER_STATS_FILE": (
+            "${{ github.workspace }}/.autoskillit/temp/filter-stats.json"
+        ),
+        "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED": "true",
+        "AUTOSKILLIT_TEST_FILTER": "${{ needs.preflight.outputs.test-filter-mode }}",
+        "AUTOSKILLIT_TEST_BASE_REF": "${{ needs.preflight.outputs.test-base-revision }}",
+    }
     assert "github.event" not in run_tests["run"]
     assert "develop" not in run_tests["run"]
 
@@ -515,6 +527,19 @@ def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
     assert "`push` allows only `main|stable`; push-to-develop is rejected" in contributing
     assert "must not incidentally broaden or narrow CI runners or filtering" in contributing
     assert "explicit CI-policy task" in contributing
+    for shard in (
+        "execution-channel-b",
+        "execution-top-level",
+        "execution",
+        "recipe",
+        "general",
+    ):
+        assert f"| `{shard}` |" in contributing
+    assert "`tests/execution/test_process_channel_b.py`" in contributing
+    assert "Other direct `tests/execution/test_*.py` files" in contributing
+    assert "Nested `tests/execution/**`" in contributing
+    assert "before conservative filtering" in contributing
+    assert "Import lint runs only on the retained `execution` shard" in contributing
 
     agent_rules = (_repo_root() / ".github" / "AGENTS.md").read_text(encoding="utf-8")
     assert "scripts/ci_target_policy.py" in agent_rules

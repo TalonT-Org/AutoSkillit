@@ -41,6 +41,26 @@ must not incidentally broaden or narrow CI runners or filtering. An intentional 
 change requires an explicit CI-policy task and matching behavioral tests in
 `tests/infra/test_ci_workflow.py`.
 
+## CI Test Shards
+
+Static path ownership is exhaustive and disjoint before conservative filtering
+intersects each shard with the tests selected for a change:
+
+| Shard | Ownership |
+|---|---|
+| `execution-channel-b` | `tests/execution/test_process_channel_b.py` |
+| `execution-top-level` | Other direct `tests/execution/test_*.py` files |
+| `execution` | Nested `tests/execution/**`, `tests/contracts`, `tests/core`, `tests/exploration`, `tests/planner`, `tests/pipeline`, `tests/migration`, `tests/integration`, and root `tests/test_*.py` files |
+| `recipe` | `tests/recipe`, `tests/docs`, and `tests/server` |
+| `general` | Every supported test not owned by the preceding shards |
+
+Import lint runs only on the retained `execution` shard. Profiling for issue
+#4781 showed that separating direct execution tests from the remaining execution
+workload reduced the mean critical test step from 453.7 seconds to 317.3 seconds;
+the Channel-B file was isolated because its intentional wall-clock timeout tests
+dominated that direct-file scope. This is historical rationale for fixed routing,
+not an automated balancing rule or permanent timing SLA.
+
 ## Pre-commit Hooks
 
 Hooks run automatically on commit: ruff format, ruff check, mypy, uv lock check,

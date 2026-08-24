@@ -32,6 +32,7 @@ from autoskillit.core import (
 )
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from autoskillit.execution.launch_resolution import DefaultLaunchResolver
+from autoskillit.execution.otlp_sink import _build_env
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
 from tests._helpers import make_tracing_config
@@ -61,30 +62,7 @@ CODEX_OBSERVED_PROVIDER_FAILURE_CASES: tuple[
 
 
 def _sink_env() -> dict[str, str]:
-    base = "http://127.0.0.1:43199"
-    env = {
-        "OTEL_EXPORTER_OTLP_ENDPOINT": base,
-        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-    }
-    for signal in ("TRACES", "METRICS", "LOGS"):
-        prefix = f"OTEL_EXPORTER_OTLP_{signal}"
-        env[f"{prefix}_ENDPOINT"] = f"{base}/v1/{signal.lower()}"
-        env[f"{prefix}_PROTOCOL"] = "http/json"
-    for prefix in (
-        "OTEL_EXPORTER_OTLP",
-        "OTEL_EXPORTER_OTLP_TRACES",
-        "OTEL_EXPORTER_OTLP_METRICS",
-        "OTEL_EXPORTER_OTLP_LOGS",
-    ):
-        env.update(
-            {
-                f"{prefix}_HEADERS": "",
-                f"{prefix}_CERTIFICATE": "",
-                f"{prefix}_COMPRESSION": "none",
-                f"{prefix}_TIMEOUT": "",
-            }
-        )
-    return env
+    return _build_env("http://127.0.0.1:43199")
 
 
 def _mock_backend(**kw: Any) -> Mock:

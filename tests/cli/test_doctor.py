@@ -652,12 +652,15 @@ def test_collect_doctor_results_isolates_deferred_argument_failure(
     from autoskillit.cli import doctor as doctor_mod
     from autoskillit.core import Severity
 
+    cfg, _initial_results = doctor_mod._load_config_guarded(Path.cwd())
+
     def raise_home() -> Path:
         raise OSError("home unavailable")
 
     def _check_dual_mcp_registration() -> doctor_mod.DoctorResult:
         return doctor_mod.DoctorResult(Severity.OK, "post_home_probe", "ran")
 
+    monkeypatch.setattr(doctor_mod, "_load_config_guarded", lambda _cwd: (cfg, []))
     monkeypatch.setattr(Path, "home", raise_home)
     monkeypatch.setattr(
         doctor_mod,

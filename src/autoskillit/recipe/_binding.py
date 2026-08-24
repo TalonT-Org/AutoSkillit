@@ -873,7 +873,9 @@ def _undeclared_runtime_param_message(tool_def: ToolDef, undeclared_names: list[
     appends an actionable remedy for any EXECUTION_TUNING name: it is
     server-resolved from the recipe step, must be omitted from the call,
     and declaring it under the step's ``with:`` block is the only per-step
-    override channel. Every other role keeps the plain generic shape.
+    override channel — with the equality-pinning caveat that channel carries
+    (see ``bind_runtime_skill_invocation``'s static-value check). Every other
+    role keeps the plain generic shape.
     """
     message = (
         f"runtime tool parameters are absent from the compiled template: {undeclared_names!r}"
@@ -887,7 +889,9 @@ def _undeclared_runtime_param_message(tool_def: ToolDef, undeclared_names: list[
     if tuning_names:
         remedies = "; ".join(
             f"{name!r} is server-resolved from the recipe step — omit it, or declare "
-            f"{name!r} under this step's with: block for a per-step override"
+            f"{name!r} under this step's with: block for a per-step override (a static "
+            "with: value admits only that exact value; only a dynamically-bound value "
+            "varies per call)"
             for name in tuning_names
         )
         message = f"{message}; {remedies}"

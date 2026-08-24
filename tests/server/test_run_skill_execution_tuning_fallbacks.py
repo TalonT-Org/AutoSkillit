@@ -38,7 +38,14 @@ async def test_empty_caller_model_falls_back_to_recipe_step_model(
 async def test_explicit_caller_model_beats_recipe_step_model(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """An explicit non-empty caller model must win — the fallback only fills a vacancy."""
+    """An explicit non-empty caller model must win — the fallback only fills a vacancy.
+
+    Valid for the UNATTESTED path only (tool_ctx_kitchen_open leaves no active
+    recipe execution installed, so the runtime attestation gate never runs).
+    Under an attested call, this same explicit value would instead be denied
+    by the gate before ever reaching this fallback — see
+    tests/server/test_attested_param_admission_conformance.py.
+    """
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     step = RecipeStep(name="implement", model="claude-sonnet-5")

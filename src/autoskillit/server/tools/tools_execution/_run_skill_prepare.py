@@ -379,6 +379,10 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
                     )
 
             # Use each field's vacancy sentinel; zero is a valid explicit timeout.
+            # Under attestation this fallback only ever sees a genuine vacancy —
+            # an explicit caller value for these fields is denied upstream by the
+            # runtime gate before reaching here. For unattested calls, an explicit
+            # caller value survives untouched, as intended.
             if (
                 state.effective_model == ""
                 and _recipe_step.model

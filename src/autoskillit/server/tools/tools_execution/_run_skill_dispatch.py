@@ -122,6 +122,11 @@ async def run_skill(
         skill_command: Full recipe-declared skill invocation or resume continuation.
         cwd: Absolute working directory for the separate coding-agent worker.
         model: Optional model identifier. Empty string uses the configured default.
+            Under an attested call, a non-empty value is denied unless the step's
+            with: block declares model — the step's model: field is normally
+            resolved server-side instead. Retained (not removed) as a genuine
+            caller override for unattested calls, where the recipe-step gate
+            does not apply.
         step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
             accumulated in the server-side token log, grouped by this name.
         order_id: Optional per-issue/order identifier for token telemetry scoping. When set,

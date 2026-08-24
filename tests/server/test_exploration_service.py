@@ -396,6 +396,7 @@ def test_service_rejects_a_truncated_post_collection_publication(
         DefaultExplorationService().collect(ExplorationQuerySpec("needle"), root=root)
     assert excinfo.value.status is SnapshotCaptureStatus.TRUNCATED
     assert excinfo.value.reason is SnapshotCaptureReason.FILE_BYTES_EXCEEDED
+    assert "test limit" in excinfo.value.detail
 
 
 @pytest.mark.parametrize(

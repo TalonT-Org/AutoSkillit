@@ -252,8 +252,8 @@ class DefaultExplorationService:
             raise SnapshotUnavailable(
                 exc.status,
                 exc.reason,
-                "exploration publication rejected because repository state changed "
-                "or was incomplete",
+                f"{exc.detail} (exploration publication rejected because repository "
+                "state changed or was incomplete)",
             ) from exc
         if publication.digest != snapshot.digest:
             raise RuntimeError(

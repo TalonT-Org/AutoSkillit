@@ -19,12 +19,12 @@ from autoskillit.core import (
 )
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
 from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
-from autoskillit.hooks._capture_artifacts import (
-    CaptureLineageRef,
+from autoskillit.hooks._capture._observation import (
     record_runner_observation,
-    run_capture,
     validate_lineage_reference,
 )
+from autoskillit.hooks._capture_artifacts import run_capture
+from autoskillit.hooks._capture_contract import CaptureLineageRef
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 

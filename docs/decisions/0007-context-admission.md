@@ -203,11 +203,13 @@ when one exists, or otherwise the surface's single default row.
 | `PARENT_VISIBLE_CHILD_DELIVERY` | `default` | `COV-PARENT-VISIBLE-CHILD-DELIVERY` | `child_delivery_receipt` | `VERIFIED` | `UPSTREAM_GATED` |
 | `COMPACTION_MODEL_WINDOW_TRANSITION` | `default` | `COV-COMPACTION-MODEL-WINDOW-TRANSITION` | `compaction_receiver` | `PARTIAL` | `UPSTREAM_GATED` |
 
-AutoSkillit-backed rows use source at revision
+AutoSkillit-backed rows other than `COV-NATIVE-SHELL-DIRECT` use source at revision
 `ac8f653a00d24b6be50ef285958cfb0e1b7a351b`. Codex-backed rows use
 codex-cli `0.145.0` at revision `25af12f7e61572b0bc18ddb1008be543b91519b0`.
 The configured `NATIVE_SHELL/direct` row pins the direct runner at
-`src/autoskillit/hooks/_capture_artifacts.py`; it is `PARTIAL`, not `VERIFIED`.
+`src/autoskillit/hooks/_capture/_runner.py`, AutoSkillit `0.10.1013`, revision
+`548883ae5547d8a2cebc561d940c7a80ae7de47a`, checked on `2026-08-23`; it is
+`PARTIAL`, not `VERIFIED`.
 `CLIENT_PROVIDER_RETRIEVAL` and `OTHER_CONTEXT_INJECTION` are explicitly inference-backed gap
 claims, not verified source claims. Static source pins are documentation provenance, not runtime
 lineage.

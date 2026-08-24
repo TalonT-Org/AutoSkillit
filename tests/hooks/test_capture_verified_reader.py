@@ -19,7 +19,7 @@ import pytest
 import autoskillit.hooks._capture._cleanup as capture_cleanup
 import autoskillit.hooks._capture._descriptor as capture_descriptor
 import autoskillit.hooks._capture._reader as capture_reader
-import autoskillit.hooks._capture_artifacts as capture_artifacts
+import autoskillit.hooks._capture._runner as capture_runner
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._reader import (
     MAX_VERIFIED_READ_BYTES,
@@ -736,7 +736,7 @@ def test_transfer_requires_artifact_owned_drain_writer_to_be_closed(
         clock,
         b"ownership",
     )
-    capture_artifacts._duplicate_artifact_writer(artifact)
+    capture_runner._duplicate_artifact_writer(artifact)
     try:
         with pytest.raises(CaptureSetupError, match="drain writer"):
             artifact.transfer_to_reader(store, finalized)
@@ -773,7 +773,7 @@ def test_transfer_invalidates_descriptors_before_ambiguous_lease_close_failure(
             raise OSError("injected ambiguous lease close")
         real_close(fd)
 
-    monkeypatch.setattr(capture_artifacts.os, "close", close_then_report_failure)
+    monkeypatch.setattr(capture_runner.os, "close", close_then_report_failure)
     try:
         with pytest.raises(CaptureSetupError, match="transfer capture carrier lease"):
             artifact.transfer_to_reader(store, finalized)

@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ..closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus

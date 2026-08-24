@@ -1,5 +1,4 @@
 """Core result dataclasses — universal types.
-
 Execution-scoped types (SessionTelemetry, RecipeIdentity, CIRunScope) live in
 _type_results_execution.py for narrower test cascade. ProviderOutcome stays here
 because SkillResult.provider references it, and SkillResult is consumed by 13+

@@ -884,10 +884,7 @@ def _trip_git_timeout_seconds(
     return SnapshotCaptureLimits(git_timeout_seconds=1)
 
 
-def _trip_capture_deadline_seconds(
-    root: Path, monkeypatch: pytest.MonkeyPatch
-) -> SnapshotCaptureLimits:
-    _new_repository(root.parent, name=root.name)
+def _force_capture_deadline_overrun(monkeypatch: pytest.MonkeyPatch) -> None:
     real_capture_once = snapshot_module._capture_once
 
     def jump_then_delegate(
@@ -897,6 +894,13 @@ def _trip_capture_deadline_seconds(
         return real_capture_once(root_arg, limits, deadline=deadline)
 
     monkeypatch.setattr(snapshot_module, "_capture_once", jump_then_delegate)
+
+
+def _trip_capture_deadline_seconds(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> SnapshotCaptureLimits:
+    _new_repository(root.parent, name=root.name)
+    _force_capture_deadline_overrun(monkeypatch)
     return SnapshotCaptureLimits(capture_deadline_seconds=60)
 
 
@@ -977,15 +981,7 @@ def test_snapshot_capture_deadline_overrun_fails_with_a_named_reason(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _new_repository(tmp_path)
-    real_capture_once = snapshot_module._capture_once
-
-    def jump_then_delegate(
-        root_arg: Path, limits: SnapshotCaptureLimits, *, deadline: float
-    ) -> snapshot_module.CapturedRepositoryState:
-        monkeypatch.setattr(snapshot_module.time, "monotonic", lambda: deadline + 1)
-        return real_capture_once(root_arg, limits, deadline=deadline)
-
-    monkeypatch.setattr(snapshot_module, "_capture_once", jump_then_delegate)
+    _force_capture_deadline_overrun(monkeypatch)
 
     result = capture_repository_snapshot(
         root,

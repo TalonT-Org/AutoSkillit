@@ -427,7 +427,11 @@ class LocalOtlpSink:
                 continue
             if item is not _SENTINEL:
                 assert isinstance(item, bytes)
-                self._persist_line(item)
+                try:
+                    self._persist_line(item)
+                except Exception:
+                    logger.debug("local_otlp_sink_persist_failed", exc_info=True)
+                    self._increment("dropped_io")
             with self._condition:
                 if self._writer_stop and self._queue.empty():
                     return

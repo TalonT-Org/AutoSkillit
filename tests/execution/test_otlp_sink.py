@@ -439,6 +439,30 @@ def test_persistence_failures_drop_records_without_stopping_http_server(
         assert set(observed_blocking) == {False}
 
 
+def test_writer_loop_contains_unexpected_persistence_failure(monkeypatch) -> None:
+    from autoskillit.execution.otlp_sink import _SENTINEL, LocalOtlpSink
+
+    sink = LocalOtlpSink()
+    persisted: list[bytes] = []
+
+    def persist(line: bytes) -> None:
+        if not persisted:
+            persisted.append(line)
+            raise TypeError("unexpected persistence failure")
+        persisted.append(line)
+
+    monkeypatch.setattr(sink, "_persist_line", persist)
+    sink._queue.put_nowait(b'{"record":1}\n')
+    sink._queue.put_nowait(b'{"record":2}\n')
+    sink._queue.put_nowait(_SENTINEL)
+    sink._writer_stop = True
+
+    sink._writer_loop()
+
+    assert persisted == [b'{"record":1}\n', b'{"record":2}\n']
+    assert sink._counters["dropped_io"] == 1
+
+
 def test_close_logs_one_aggregate_summary_without_payload_data(tmp_path: Path) -> None:
     from autoskillit.execution.otlp_sink import LocalOtlpSink
 

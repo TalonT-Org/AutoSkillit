@@ -225,7 +225,9 @@ class TestModuleCascadeCore:
         )
 
     def test_fs_observation_inherits_paths_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["fs_observation"] == MODULE_CASCADE_CORE["paths"]
+        assert MODULE_CASCADE_CORE["fs_observation"] == (
+            MODULE_CASCADE_CORE["paths"] | {"exploration"}
+        )
 
     def test_audit_admission_shard_cascades(self) -> None:
         expected = frozenset({"core", "execution", "pipeline", "server"})

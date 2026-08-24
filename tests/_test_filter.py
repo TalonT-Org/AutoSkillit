@@ -273,13 +273,14 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     # fs_observation underlies paths.safe_mtime and is also consumed directly by
-    # CLI and server enumeration paths, so it inherits the paths cascade.
+    # CLI, exploration, and server enumeration paths.
     "fs_observation": frozenset(
         {
             "core",
             "cli",
             "config",
             "execution",
+            "exploration",
             "fleet",
             "hook_registry",
             "migration",

@@ -10,15 +10,25 @@ import pytest
 
 import autoskillit.pipeline as pipeline_module
 import autoskillit.pipeline.exploration_context as exploration_context_module
-from autoskillit.core import ExplorationQuerySpec, RepositoryIdentity, RepositorySnapshot
+from autoskillit.core import (
+    ExplorationFailureCode,
+    ExplorationQuerySpec,
+    RepositoryIdentity,
+    RepositorySnapshot,
+    SnapshotCaptureReason,
+    SnapshotCaptureStatus,
+    SnapshotUnavailable,
+)
 from autoskillit.pipeline.exploration_context import (
     EXPLORATION_AUTHORITY_PATH_ENV,
     EXPLORATION_CAPABILITY_ENV,
     EXPLORATION_PRINCIPAL_ROLE,
     EXPLORATION_ROLE_ENV,
     EXPLORATION_SESSION_ENV,
+    EXPLORATION_STORE_FAILURE_CODES,
     CapabilityResolutionStatus,
     OwnerBoundExplorationContextStore,
+    resolve_exploration_store_failure_code,
 )
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
@@ -628,3 +638,98 @@ def test_tampered_or_missing_signed_snapshot_binding_fails_closed(
     )
 
     assert child.validate_launch_environment() is False
+
+
+def test_every_store_exception_maps_to_a_code() -> None:
+    """EXPLORATION_STORE_FAILURE_CODES is a bidirectional registry: every
+    nested store exception is a key, and no key names a class that isn't one.
+    A ninth nested exception with no mapping entry fails the first assertion;
+    a stale mapping entry for a class no longer nested fails the second."""
+    nested_exceptions = {
+        value
+        for value in vars(OwnerBoundExplorationContextStore).values()
+        if isinstance(value, type) and issubclass(value, BaseException)
+    }
+    mapped_keys = set(EXPLORATION_STORE_FAILURE_CODES)
+
+    missing = nested_exceptions - mapped_keys
+    assert not missing, (
+        f"Store exception(s) missing from EXPLORATION_STORE_FAILURE_CODES: {missing}"
+    )
+    orphaned = mapped_keys - nested_exceptions
+    assert not orphaned, (
+        f"EXPLORATION_STORE_FAILURE_CODES key(s) not a live nested store exception: {orphaned}"
+    )
+    assert all(
+        isinstance(code, ExplorationFailureCode)
+        for code in EXPLORATION_STORE_FAILURE_CODES.values()
+    )
+
+
+def test_subclass_of_mapped_store_exception_resolves_to_ancestor_code() -> None:
+    """A subclass of a mapped store exception resolves to its ancestor's
+    code by MRO walk, rather than raising KeyError on an exact-type lookup —
+    the trap a naive ``MAPPING[type(exc)]`` implementation falls into."""
+
+    class _CustomSnapshotStale(OwnerBoundExplorationContextStore.SnapshotStale):
+        pass
+
+    exc = _CustomSnapshotStale(SnapshotCaptureReason.IDENTITY_DRIFT, "custom subclass")
+
+    assert resolve_exploration_store_failure_code(exc) is ExplorationFailureCode.SNAPSHOT_STALE
+
+
+@pytest.mark.parametrize("bind_path", ["bind_session_scoped", "bind_launches"])
+@pytest.mark.parametrize(
+    ("status", "reason", "expected_exception_name"),
+    [
+        (SnapshotCaptureStatus.STALE, SnapshotCaptureReason.IDENTITY_DRIFT, "SnapshotStale"),
+        (
+            SnapshotCaptureStatus.TRUNCATED,
+            SnapshotCaptureReason.FILE_BYTES_EXCEEDED,
+            "SnapshotTruncated",
+        ),
+    ],
+)
+def test_both_bind_paths_raise_the_same_typed_exception_for_a_bad_snapshot(
+    tmp_path: Path,
+    bind_path: str,
+    status: SnapshotCaptureStatus,
+    reason: SnapshotCaptureReason,
+    expected_exception_name: str,
+) -> None:
+    """bind_session_scoped:444-446 and _bind_launches:374-377 were dead code
+    before #4756 Part C — the service always raised before either guard could
+    observe a bad snapshot. Both are reachable now, and must agree."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    service = MagicMock()
+    service.capture_snapshot.side_effect = SnapshotUnavailable(status, reason, "bad snapshot")
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=project_dir,
+        service=service,
+    )
+    expected_exception = getattr(OwnerBoundExplorationContextStore, expected_exception_name)
+
+    if bind_path == "bind_session_scoped":
+        with pytest.raises(expected_exception):
+            store.bind_session_scoped(
+                owner_id="uid:1000",
+                session_id="session-a",
+                cwd=project_dir,
+                repository_root=project_dir,
+                source_identity="bundled:semantic-code-navigator:definition-digest",
+            )
+    else:
+        with pytest.raises(expected_exception):
+            store.bind_launches(
+                owner_id="uid:1000",
+                session_id="session-a",
+                cwd=project_dir,
+                repository_root=project_dir,
+                source_identities={
+                    "repository-impact-profiler": "profiler-a",
+                    "semantic-code-navigator": "navigator-a",
+                },
+                authority_home=tmp_path / "authority",
+            )

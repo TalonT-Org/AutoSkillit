@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,9 +13,11 @@ from autoskillit.core import (
     CollectorReport,
     CollectorStatus,
     ExplorationApplicability,
+    ExplorationFailureCode,
     ExplorationQuerySpec,
     ProfileActivation,
     RepositoryProfileId,
+    SnapshotUnavailable,
 )
 from autoskillit.exploration import SnapshotCaptureReason, SnapshotCaptureStatus
 from autoskillit.exploration._deterministic import CursorValidationError
@@ -24,7 +27,11 @@ from autoskillit.exploration.collectors import (
     CollectorLimits,
 )
 from autoskillit.exploration.snapshot import SnapshotCaptureResult
-from autoskillit.pipeline import CapabilityResolutionStatus, OwnerBoundExplorationContextStore
+from autoskillit.pipeline import (
+    CapabilityResolutionStatus,
+    OwnerBoundExplorationContextStore,
+    resolve_exploration_store_failure_code,
+)
 from autoskillit.server import _exploration_service
 from autoskillit.server._exploration_service import DefaultExplorationService
 
@@ -385,5 +392,79 @@ def test_service_rejects_a_truncated_post_collection_publication(
         _exploration_service, "capture_repository_snapshot", truncate_second_capture
     )
 
-    with pytest.raises(RuntimeError, match="publication rejected"):
+    with pytest.raises(SnapshotUnavailable, match="publication rejected") as excinfo:
         DefaultExplorationService().collect(ExplorationQuerySpec("needle"), root=root)
+    assert excinfo.value.status is SnapshotCaptureStatus.TRUNCATED
+    assert excinfo.value.reason is SnapshotCaptureReason.FILE_BYTES_EXCEEDED
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "expected_code"),
+    [
+        (
+            SnapshotCaptureStatus.FAILED,
+            SnapshotCaptureReason.GIT_TIMEOUT,
+            ExplorationFailureCode.SNAPSHOT_CAPTURE_FAILED,
+        ),
+        (
+            SnapshotCaptureStatus.STALE,
+            SnapshotCaptureReason.IDENTITY_DRIFT,
+            ExplorationFailureCode.SNAPSHOT_STALE,
+        ),
+        (
+            SnapshotCaptureStatus.TRUNCATED,
+            SnapshotCaptureReason.FILE_BYTES_EXCEEDED,
+            ExplorationFailureCode.SNAPSHOT_TRUNCATED,
+        ),
+    ],
+)
+def test_each_terminal_status_produces_a_distinct_code_and_chains_its_cause(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: SnapshotCaptureStatus,
+    reason: SnapshotCaptureReason,
+    expected_code: ExplorationFailureCode,
+) -> None:
+    """The four-way disjunction _capture_snapshot_and_activation replaced had
+    two duplicate pairs — activation is None for all three non-COMPLETE
+    statuses, snapshot is None only for FAILED — so parametrizing on the
+    four original disjuncts would give false confidence of four-way
+    coverage. This parametrizes on the three real axes instead: a distinct
+    code per status, the originating reason preserved through both the
+    service and store layers, and the SnapshotUnavailable that started the
+    chain reachable via __cause__ at the store boundary."""
+    root = tmp_path / "repository"
+    _seed_repository(root)
+    real = _exploration_service.capture_repository_snapshot(
+        root, collector_manifest_digest=_exploration_service.collector_manifest_digest()
+    )
+    assert real.snapshot is not None
+    marker = None if status is SnapshotCaptureStatus.FAILED else real.snapshot
+    synthetic = SnapshotCaptureResult(status, marker, "synthetic failure", reason=reason)
+    monkeypatch.setattr(
+        _exploration_service, "capture_repository_snapshot", lambda *a, **k: synthetic
+    )
+
+    with pytest.raises(SnapshotUnavailable) as excinfo:
+        DefaultExplorationService().capture_snapshot(root)
+    assert excinfo.value.status is status
+    assert excinfo.value.reason is reason
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    service = MagicMock()
+    service.capture_snapshot.side_effect = excinfo.value
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=project_dir,
+        service=service,
+    )
+    with pytest.raises(Exception) as store_excinfo:
+        store.bind_session_scoped(
+            owner_id="uid:1000",
+            session_id="session-a",
+            cwd=project_dir,
+            repository_root=project_dir,
+            source_identity="bundled:semantic-code-navigator:definition-digest",
+        )
+    assert store_excinfo.value.__cause__ is excinfo.value
+    assert resolve_exploration_store_failure_code(store_excinfo.value) is expected_code

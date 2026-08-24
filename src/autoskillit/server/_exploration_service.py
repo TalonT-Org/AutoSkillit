@@ -16,6 +16,8 @@ from autoskillit.core import (
     ProfileActivation,
     RepositoryProfileId,
     RepositorySnapshot,
+    SnapshotCaptureStatus,
+    SnapshotUnavailable,
     get_logger,
 )
 from autoskillit.exploration import (
@@ -49,11 +51,11 @@ class DefaultExplorationService:
             root,
             collector_manifest_digest=collector_manifest_digest(),
         )
-        snapshot = captured.snapshot
-        activation = captured.validated_activation
-        if snapshot is None or activation is None or snapshot.stale or snapshot.truncated:
-            raise RuntimeError(f"repository snapshot {captured.status}")
-        return snapshot, activation
+        if captured.status is not SnapshotCaptureStatus.COMPLETE:
+            raise SnapshotUnavailable(captured.status, captured.reason, captured.diagnostic)
+        assert captured.snapshot is not None
+        assert captured.validated_activation is not None
+        return captured.snapshot, captured.validated_activation
 
     def capture_snapshot(self, root: Path) -> RepositorySnapshot:
         """Capture one complete snapshot using the current collector manifest."""
@@ -246,10 +248,12 @@ class DefaultExplorationService:
                 )
         try:
             publication, _publication_activation = self._capture_snapshot_and_activation(root)
-        except RuntimeError as exc:
-            raise RuntimeError(
+        except SnapshotUnavailable as exc:
+            raise SnapshotUnavailable(
+                exc.status,
+                exc.reason,
                 "exploration publication rejected because repository state changed "
-                "or was incomplete"
+                "or was incomplete",
             ) from exc
         if publication.digest != snapshot.digest:
             raise RuntimeError(

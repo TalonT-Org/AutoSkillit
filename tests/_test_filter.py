@@ -373,7 +373,17 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_exceptions": frozenset(
-        {"cli", "core", "execution", "fleet", "migration", "recipe", "server", "workspace"}
+        {
+            "cli",
+            "core",
+            "execution",
+            "fleet",
+            "migration",
+            "pipeline",
+            "recipe",
+            "server",
+            "workspace",
+        }
     ),
     "_type_skill_contract": frozenset(
         {"cli", "config", "core", "execution", "recipe", "server", "workspace"}

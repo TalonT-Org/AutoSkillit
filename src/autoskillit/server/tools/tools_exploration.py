@@ -24,10 +24,12 @@ from autoskillit.core import (
     session_type as _resolve_session_type,
 )
 from autoskillit.pipeline import (
+    EXPLORATION_STORE_FAILURE_CODES,
     EXPLORER_INELIGIBLE_SESSION_TYPES,
     CapabilityResolutionStatus,
     OwnerBoundExplorationContextStore,
     bind_session_scoped_durable,
+    resolve_exploration_store_failure_code,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -90,6 +92,19 @@ class _GraphPayload(TypedDict):
 def _failure(code: str) -> str:
     """Return a small, typed failure which discloses no repository state."""
     return json.dumps({"status": "error", "code": code}, separators=(",", ":"))
+
+
+def _reason_field(exc: BaseException) -> dict[str, object]:
+    """Return ``{"reason": exc.reason}`` when the exception carries a
+    SnapshotCaptureReason, else ``{}``.
+
+    Of the exception types caught below, only ``SnapshotUnavailable`` (via
+    the store exceptions it is chained through) has a ``reason`` attribute;
+    synthesizing one for the rest purely to satisfy a uniform log shape
+    would misrepresent an unclassified failure as a classified one.
+    """
+    reason = getattr(exc, "reason", None)
+    return {} if reason is None else {"reason": reason}
 
 
 def _query(query: str, max_results: int) -> ExplorationQuerySpec | None:
@@ -311,10 +326,23 @@ async def submit_exploration_query(
             if page is None:
                 return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="accepted")
-    except StoreUnavailable:
+    except StoreUnavailable as exc:
+        logger.warning(
+            "exploration_query_submission_failed",
+            code=_FAILURE_BROKER_UNAVAILABLE,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
-    except Exception:  # truly unexpected — preserve the "Never raises" contract
-        logger.warning("exploration query submission failed", exc_info=True)
+    except Exception as exc:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning(
+            "exploration_query_submission_failed",
+            code=_FAILURE_UNEXPECTED_INTERNAL_ERROR,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
@@ -364,10 +392,23 @@ async def get_exploration_page(
                 if page is not None:
                     return _page_payload(page, status="ready")
         return result
-    except StoreUnavailable:
+    except StoreUnavailable as exc:
+        logger.warning(
+            "exploration_page_retrieval_failed",
+            code=_FAILURE_BROKER_UNAVAILABLE,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
-    except Exception:  # truly unexpected — preserve the "Never raises" contract
-        logger.warning("exploration page retrieval failed", exc_info=True)
+    except Exception as exc:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning(
+            "exploration_page_retrieval_failed",
+            code=_FAILURE_UNEXPECTED_INTERNAL_ERROR,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
@@ -413,10 +454,23 @@ async def resume_exploration_context(
                 if page is not None:
                     return _page_payload(page, status="resumed")
         return result
-    except StoreUnavailable:
+    except StoreUnavailable as exc:
+        logger.warning(
+            "exploration_context_resumption_failed",
+            code=_FAILURE_BROKER_UNAVAILABLE,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
-    except Exception:  # truly unexpected — preserve the "Never raises" contract
-        logger.warning("exploration context resumption failed", exc_info=True)
+    except Exception as exc:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning(
+            "exploration_context_resumption_failed",
+            code=_FAILURE_UNEXPECTED_INTERNAL_ERROR,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
 
 
@@ -482,14 +536,7 @@ async def enable_exploration(
                 repository_root=repository_root,
                 source_identity=f"interactive:{session_id}",
             )
-        except (
-            OwnerBoundExplorationContextStore.TrustedRootMismatch,
-            OwnerBoundExplorationContextStore.InvalidSourceIdentity,
-            OwnerBoundExplorationContextStore.ServiceNotConfigured,
-            OwnerBoundExplorationContextStore.SnapshotStale,
-            OwnerBoundExplorationContextStore.StoreClosed,
-            OwnerBoundExplorationContextStore.CapacityExceeded,
-        ):
+        except tuple(EXPLORATION_STORE_FAILURE_CODES):
             raise
         except Exception as exc:
             raise BindSessionScopedFailed(str(exc)) from exc
@@ -521,24 +568,40 @@ async def enable_exploration(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),
         )
-    except OwnerBoundExplorationContextStore.TrustedRootMismatch:
-        return _failure(ExplorationFailureCode.TRUSTED_ROOT_MISMATCH)
-    except OwnerBoundExplorationContextStore.InvalidSourceIdentity:
-        return _failure(ExplorationFailureCode.INVALID_SOURCE_IDENTITY)
-    except OwnerBoundExplorationContextStore.ServiceNotConfigured:
-        return _failure(ExplorationFailureCode.SERVICE_NOT_CONFIGURED)
-    except OwnerBoundExplorationContextStore.SnapshotStale:
-        return _failure(ExplorationFailureCode.SNAPSHOT_STALE)
-    except OwnerBoundExplorationContextStore.StoreClosed:
-        return _failure(ExplorationFailureCode.STORE_CLOSED)
-    except OwnerBoundExplorationContextStore.CapacityExceeded:
-        return _failure(ExplorationFailureCode.CAPACITY_EXCEEDED)
-    except BindSessionScopedFailed:
-        logger.warning("enable_exploration_bind_session_scoped_failed", exc_info=True)
+    except tuple(EXPLORATION_STORE_FAILURE_CODES) as exc:
+        code = resolve_exploration_store_failure_code(exc)
+        logger.warning(
+            "enable_exploration_store_failure",
+            code=code,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
+        return _failure(code)
+    except BindSessionScopedFailed as exc:
+        logger.warning(
+            "enable_exploration_bind_session_scoped_failed",
+            code=ExplorationFailureCode.BIND_FAILED,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(ExplorationFailureCode.BIND_FAILED)
-    except EnableComponentsFailed:
-        logger.warning("enable_exploration_enable_components_failed", exc_info=True)
+    except EnableComponentsFailed as exc:
+        logger.warning(
+            "enable_exploration_enable_components_failed",
+            code=ExplorationFailureCode.ENABLE_COMPONENTS_FAILED,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(ExplorationFailureCode.ENABLE_COMPONENTS_FAILED)
-    except Exception:  # truly unexpected — preserve the "Never raises" contract
-        logger.warning("enable_exploration: unexpected", exc_info=True)
+    except Exception as exc:  # truly unexpected — preserve the "Never raises" contract
+        logger.warning(
+            "enable_exploration_unexpected",
+            code=_FAILURE_UNEXPECTED_INTERNAL_ERROR,
+            exception_type=type(exc).__name__,
+            exc_info=True,
+            **_reason_field(exc),
+        )
         return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)

@@ -4,7 +4,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 
 ## Architecture Notes
 
-Internal dependency DAG: enums -> recipe_sections -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest. `_type_intake_policy` is a DAG leaf — stdlib-only, zero sibling imports. `_type_recipe_sections.py` owns recipe-section registry and pagination-policy construction; `_type_constants_registries.py` imports its ten public names as a facade. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
+Internal dependency DAG: enums -> recipe_sections -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest; enums -> exceptions; exploration -> exceptions. `_type_intake_policy` is a DAG leaf — stdlib-only, zero sibling imports. `_type_recipe_sections.py` owns recipe-section registry and pagination-policy construction; `_type_constants_registries.py` imports its ten public names as a facade. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
 
 ## Extension Bundle Pattern
 

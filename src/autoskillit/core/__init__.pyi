@@ -840,6 +840,7 @@ from .types import ExecutionIdentityDict as ExecutionIdentityDict
 from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
+from .types import ExplorationBindingFailed as ExplorationBindingFailed
 from .types import ExplorationDispatchConventions as ExplorationDispatchConventions
 from .types import ExplorationDispatchMaterialization as ExplorationDispatchMaterialization
 from .types import ExplorationDispatchRenderer as ExplorationDispatchRenderer
@@ -1128,6 +1129,7 @@ from .types import SkillSource as SkillSource
 from .types import SkillSourceIdentity as SkillSourceIdentity
 from .types import SkillSourceRef as SkillSourceRef
 from .types import SkillVisibilitySpec as SkillVisibilitySpec
+from .types import SnapshotUnavailable as SnapshotUnavailable
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent

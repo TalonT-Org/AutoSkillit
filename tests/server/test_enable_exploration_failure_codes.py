@@ -11,13 +11,18 @@ re-introduces a catch-all breaks a test in the right direction.
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from autoskillit.core import SessionType
+from autoskillit.exploration import SnapshotCaptureLimits, SnapshotCaptureReason
 from autoskillit.hooks._exploration_request_record import write_exploration_request_record
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+from autoskillit.server import _exploration_service
+from autoskillit.server._exploration_service import DefaultExplorationService
 from autoskillit.server.tools.tools_exploration import enable_exploration
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -106,6 +111,19 @@ async def test_trusted_root_mismatch_returns_own_code(
 
 
 @pytest.mark.asyncio
+async def test_invalid_source_identity_returns_own_code(
+    monkeypatch: pytest.MonkeyPatch, tool_ctx, exploration_snapshot_service: MagicMock
+) -> None:
+    await _bind_raising(
+        monkeypatch,
+        tool_ctx,
+        exploration_snapshot_service,
+        exc=OwnerBoundExplorationContextStore.InvalidSourceIdentity("invalid"),
+        expected_code="invalid_source_identity",
+    )
+
+
+@pytest.mark.asyncio
 async def test_service_not_configured_returns_own_code(
     monkeypatch: pytest.MonkeyPatch, tool_ctx, exploration_snapshot_service: MagicMock
 ) -> None:
@@ -126,8 +144,40 @@ async def test_snapshot_stale_returns_own_code(
         monkeypatch,
         tool_ctx,
         exploration_snapshot_service,
-        exc=OwnerBoundExplorationContextStore.SnapshotStale("stale"),
+        exc=OwnerBoundExplorationContextStore.SnapshotStale(
+            SnapshotCaptureReason.IDENTITY_DRIFT, "stale"
+        ),
         expected_code="snapshot_stale",
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_truncated_returns_own_code(
+    monkeypatch: pytest.MonkeyPatch, tool_ctx, exploration_snapshot_service: MagicMock
+) -> None:
+    await _bind_raising(
+        monkeypatch,
+        tool_ctx,
+        exploration_snapshot_service,
+        exc=OwnerBoundExplorationContextStore.SnapshotTruncated(
+            SnapshotCaptureReason.FILE_BYTES_EXCEEDED, "truncated"
+        ),
+        expected_code="snapshot_truncated",
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_capture_failed_returns_own_code(
+    monkeypatch: pytest.MonkeyPatch, tool_ctx, exploration_snapshot_service: MagicMock
+) -> None:
+    await _bind_raising(
+        monkeypatch,
+        tool_ctx,
+        exploration_snapshot_service,
+        exc=OwnerBoundExplorationContextStore.SnapshotCaptureFailed(
+            SnapshotCaptureReason.GIT_TIMEOUT, "capture failed"
+        ),
+        expected_code="snapshot_capture_failed",
     )
 
 
@@ -216,3 +266,64 @@ async def test_unexpected_internal_error_returns_own_code(
     )
     result = json.loads(await enable_exploration())
     assert result == {"status": "error", "code": "unexpected_internal_error"}
+
+
+def _seed_repository(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "module.py").write_text("def needle() -> str:\n    return 'needle'\n")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "module.py"], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=AutoSkillit Test",
+            "-c",
+            "user.email=autoskillit@example.invalid",
+            "commit",
+            "-qm",
+            "seed",
+        ],
+        cwd=root,
+        check=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_truncating_repository_surfaces_snapshot_truncated_code(
+    monkeypatch: pytest.MonkeyPatch, tool_ctx
+) -> None:
+    """A real capture against a real repository names its own truncation code.
+
+    Every other test in this module drives enable_exploration through a
+    MagicMock service and a synthetic exception. This one runs the real
+    DefaultExplorationService against a real fixture repository with limits
+    that actually truncate, proving the code reaches the tool boundary
+    without a mocked shortcut — 'bind_failed' before this part, per #4756.
+    """
+    _skill_session(monkeypatch)
+    repository_root = tool_ctx.project_dir
+    _seed_repository(repository_root)
+    real_capture = _exploration_service.capture_repository_snapshot
+
+    def truncating_capture(root, *, collector_manifest_digest, limits=None):
+        return real_capture(
+            root,
+            collector_manifest_digest=collector_manifest_digest,
+            limits=SnapshotCaptureLimits(max_file_bytes=4),
+        )
+
+    monkeypatch.setattr(_exploration_service, "capture_repository_snapshot", truncating_capture)
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=repository_root,
+        service=DefaultExplorationService(),
+    )
+    tool_ctx.exploration_context_store = store
+    (tool_ctx.project_dir / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
+    token = write_exploration_request_record(
+        tool_ctx.project_dir, "enable_exploration", "test-session"
+    )
+
+    result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))
+
+    assert result == {"status": "error", "code": "snapshot_truncated"}

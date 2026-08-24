@@ -586,6 +586,8 @@ class ExplorationFailureCode(StrEnum):
     INVALID_SOURCE_IDENTITY = "invalid_source_identity"
     SERVICE_NOT_CONFIGURED = "service_not_configured"
     SNAPSHOT_STALE = "snapshot_stale"
+    SNAPSHOT_TRUNCATED = "snapshot_truncated"
+    SNAPSHOT_CAPTURE_FAILED = "snapshot_capture_failed"
     STORE_CLOSED = "store_closed"
     CAPACITY_EXCEEDED = "capacity_exceeded"
     UNEXPECTED_INTERNAL_ERROR = "unexpected_internal_error"

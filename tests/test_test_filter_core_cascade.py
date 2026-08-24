@@ -290,12 +290,6 @@ class TestModuleCascadeCore:
             {"core", "recipe", "server"}
         )
 
-    def test_context_admission_persistence_cascade(self) -> None:
-        assert (
-            MODULE_CASCADE_CORE["_type_context_admission_persistence"]
-            == _CONTEXT_ADMISSION_SHARD_CASCADE
-        )
-
     @pytest.mark.parametrize("shard_stem", _CONTEXT_ADMISSION_SHARDS)
     def test_context_admission_split_shard_cascades(self, shard_stem: str) -> None:
         assert MODULE_CASCADE_CORE[shard_stem] == _CONTEXT_ADMISSION_SHARD_CASCADE

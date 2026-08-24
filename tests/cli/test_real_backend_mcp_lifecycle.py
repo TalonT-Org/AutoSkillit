@@ -230,10 +230,10 @@ def _codex_backend_enabled() -> bool:
         ),
     ],
 )
-def test_real_backend_client_death_closes_registered_mcp_stdio(
+def test_real_backend_pretrusts_project_and_closes_mcp_stdio_on_client_death(
     backend_name: str, tmp_path: Path
 ) -> None:
-    """A real client exit closes its registered MCP pipes across a separate PGID."""
+    """A pretrusted real client closes its registered MCP pipes when it exits."""
     import pwd
 
     assert fcntl is not None and pty is not None and termios is not None

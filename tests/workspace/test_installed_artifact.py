@@ -13,6 +13,9 @@ from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
     PluginArtifactIdentity,
+    PluginArtifactUnavailableError,
+    PluginArtifactValidationError,
+    TreeVanishedError,
     directory_tree_digest,
     installed_plugin_artifact_manifest_payload,
     installed_plugin_semantic_key,
@@ -25,6 +28,7 @@ from autoskillit.workspace import (
     InstallStateSpec,
     verify_installed_plugin_artifact,
 )
+from autoskillit.workspace._installed_artifact import _complete_tree_digest
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
     PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
@@ -511,3 +515,50 @@ def test_closed_or_wrong_path_supplied_lease_is_rejected(home: Path) -> None:
             "installed_plugin_lease_invalid"
         }
         assert not wrong.closed
+
+
+def test_complete_tree_digest_classifies_tree_vanished_as_unavailable_not_validation(
+    tmp_path: Path,
+) -> None:
+    """Related Issue 1 (#4770): ``_complete_tree_digest`` used to collapse
+    ``(OSError, ValueError)`` into a single ``PluginArtifactValidationError``
+    clause, unlike its three sibling call sites — meaning a race-induced
+    ``TreeVanishedError`` (a ``ValueError`` subclass) would land in the
+    durable/invalid bucket instead of transient/unavailable. It now routes
+    through the shared ``classify_directory_tree_digest_error``."""
+    vanished_error = TreeVanishedError("sub/entry.py", tmp_path)
+
+    def _raise(*_args: object, **_kwargs: object) -> str:
+        raise vanished_error
+
+    import autoskillit.workspace._installed_artifact as installed_artifact_module
+
+    original = installed_artifact_module.directory_tree_digest
+    installed_artifact_module.directory_tree_digest = _raise
+    try:
+        with pytest.raises(PluginArtifactUnavailableError) as excinfo:
+            _complete_tree_digest(tmp_path)
+        assert not isinstance(excinfo.value, PluginArtifactValidationError)
+    finally:
+        installed_artifact_module.directory_tree_digest = original
+
+
+def test_complete_tree_digest_still_classifies_plain_value_error_as_validation(
+    tmp_path: Path,
+) -> None:
+    """Companion regression: a genuine (non-vanish) ``ValueError`` — e.g. an
+    unexpected symlink — must still classify as the durable/invalid outcome,
+    proving the Related Issue 1 fix did not widen Unavailable to swallow
+    real validation failures."""
+    import autoskillit.workspace._installed_artifact as installed_artifact_module
+
+    def _raise(*_args: object, **_kwargs: object) -> str:
+        raise ValueError("artifact contains a symlink")
+
+    original = installed_artifact_module.directory_tree_digest
+    installed_artifact_module.directory_tree_digest = _raise
+    try:
+        with pytest.raises(PluginArtifactValidationError):
+            _complete_tree_digest(tmp_path)
+    finally:
+        installed_artifact_module.directory_tree_digest = original

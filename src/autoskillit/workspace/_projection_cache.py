@@ -32,6 +32,7 @@ from autoskillit.core import (
     RetiringAppendResult,
     RetiringArtifactRecord,
     _InstallLock,
+    classify_directory_tree_digest_error,
     directory_tree_digest,
     get_logger,
     is_canonical_plugin_artifact_digest,
@@ -105,14 +106,8 @@ def projected_plugin_artifact_digest(public_root: Path) -> str:
     """Hash the complete projection with the canonical artifact-tree contract."""
     try:
         return directory_tree_digest(public_root)
-    except OSError as exc:
-        raise PluginArtifactUnavailableError(
-            f"projected plugin artifact cannot be read for digest: {public_root}"
-        ) from exc
-    except ValueError as exc:
-        raise PluginArtifactValidationError(
-            f"projected plugin artifact cannot be digested: {public_root}"
-        ) from exc
+    except (OSError, ValueError) as exc:
+        raise classify_directory_tree_digest_error(exc) from exc
 
 
 def read_projected_plugin_identity(

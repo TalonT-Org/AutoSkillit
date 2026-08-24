@@ -29,6 +29,7 @@ from autoskillit.core import (
     RetirementOutcome,
     RetiringAppendResult,
     RetiringArtifactRecord,
+    classify_directory_tree_digest_error,
     directory_tree_digest,
     generation_artifact_root,
     generation_plugin_selector_path,
@@ -266,7 +267,10 @@ def publish_generation(
         content_root = staging / "content"
 
         # Compute the tree digest while still in staging (pre-manifest)
-        staged_digest = directory_tree_digest(content_root)
+        try:
+            staged_digest = directory_tree_digest(content_root)
+        except (OSError, ValueError) as exc:
+            raise classify_directory_tree_digest_error(exc) from exc
 
         # Fsync staged contents for durability before the rename
         _fsync_tree_contents(content_root)
@@ -321,9 +325,12 @@ def publish_install_root_generation(
         raise ValueError(f"install-root generation must be materialized at {expected_root}")
     version_root.mkdir(parents=True, exist_ok=True)
 
-    staged_digest = directory_tree_digest(
-        generation_root, allow_symlinks=True, ignore_bytecode=True
-    )
+    try:
+        staged_digest = directory_tree_digest(
+            generation_root, allow_symlinks=True, ignore_bytecode=True
+        )
+    except (OSError, ValueError) as exc:
+        raise classify_directory_tree_digest_error(exc) from exc
     _fsync_tree_contents(generation_root)
 
     return _finalize_generation(

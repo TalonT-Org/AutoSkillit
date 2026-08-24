@@ -1,0 +1,1 @@
+When creating this plan, include an adversarial review section: assume the plan will be implemented exactly as written and actively identify what could go wrong. For each proposed change, check cross-component contracts, downstream consumers, implicit conventions, and fixture completeness. If you find a gap, revise the plan to address it before finalizing.

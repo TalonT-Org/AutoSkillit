@@ -3,9 +3,10 @@
 Completeness test: every non-Python tracked file (outside Bucket A and the ignore
 list) must match at least one pattern in .autoskillit/test-filter-manifest.yaml.
 
-Orphan detection test: every manifest pattern must match at least one currently
-tracked file eligible for manifest routing (non-Python files plus Python files
-outside src/ and tests/ — no dead/stale patterns).
+Orphan detection test: every manifest pattern for repository files must match at
+least one currently tracked file eligible for manifest routing (non-Python files
+plus Python files outside src/ and tests/ — no dead/stale patterns). Session-local
+routes under .autoskillit/temp/ are excluded because that directory is gitignored.
 """
 
 from __future__ import annotations
@@ -133,6 +134,12 @@ def _files_to_check() -> list[str]:
 # _PER_PATTERN_SPECS to avoid redundant YAML loads across the two parametrize sites.
 _MANIFEST_PATTERNS: list[str] = list(load_manifest(_MANIFEST_PATH).keys())
 
+# Session-local artifacts are intentionally absent from clean checkouts, but their
+# manifest routes are still needed when those artifacts exist in a developer tree.
+_ORPHAN_CHECK_PATTERNS: list[str] = [
+    pattern for pattern in _MANIFEST_PATTERNS if not pattern.startswith(".autoskillit/temp/")
+]
+
 # Combined spec precomputed once; used by test_file_covered_by_manifest.
 _MANIFEST_SPEC: pathspec.PathSpec = pathspec.PathSpec.from_lines(
     "gitwildmatch", _MANIFEST_PATTERNS
@@ -161,9 +168,9 @@ def test_file_covered_by_manifest(file_path: str) -> None:
     )
 
 
-@pytest.mark.parametrize("pattern", _MANIFEST_PATTERNS)
+@pytest.mark.parametrize("pattern", _ORPHAN_CHECK_PATTERNS)
 def test_manifest_pattern_matches_real_file(pattern: str) -> None:
-    """Every manifest pattern must match at least one currently tracked file.
+    """Every repository-file pattern must match a currently tracked file.
 
     Failure means the pattern is orphaned — either the files it matched were deleted,
     renamed, or the pattern was misspelled from the start.

@@ -9,6 +9,8 @@ import pytest
 from autoskillit._test_filter import apply_manifest as manifest_apply_manifest
 from autoskillit._test_filter import load_manifest as manifest_load_manifest
 from tests._test_filter import (
+    _CONTEXT_ADMISSION_SHARD_CASCADE,
+    _CONTEXT_ADMISSION_SHARDS,
     _CORE_UNIVERSAL_MODULES,
     MODULE_CASCADE_CORE,
     FilterMode,
@@ -142,6 +144,13 @@ class TestModuleCascadeCore:
             "_type_recipe_sections",
             "_type_dimensions",
             "_type_context_admission",
+            "_type_context_admission_base",
+            "_type_context_admission_identities",
+            "_type_context_admission_records",
+            "_type_context_admission_events",
+            "_type_context_admission_effects",
+            "_type_context_admission_states",
+            "_type_context_admission_coverage",
             "_type_context_admission_persistence",
             "_type_enums_context_admission",
             "_type_github_review",
@@ -157,12 +166,13 @@ class TestModuleCascadeCore:
             "_type_phoropter",
             "_type_token",
             "_type_tradition_manifest",
+            "_type_enums_context_admission",
             "_type_constants_env",
             "_type_constants_features",
-            "_type_constants_durable_writers",
             "_type_constants_registries",
             "_type_constants_retirements",
             "_type_constants_skill_contract",
+            "_type_constants_durable_writers",
             "_type_exceptions",
             "_type_skill_contract",
             "_step_context",
@@ -285,10 +295,9 @@ class TestModuleCascadeCore:
             {"core", "recipe", "server"}
         )
 
-    def test_context_admission_persistence_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_context_admission_persistence"] == frozenset(
-            {"core", "pipeline", "server"}
-        )
+    @pytest.mark.parametrize("shard_stem", _CONTEXT_ADMISSION_SHARDS)
+    def test_context_admission_split_shard_cascades(self, shard_stem: str) -> None:
+        assert MODULE_CASCADE_CORE[shard_stem] == _CONTEXT_ADMISSION_SHARD_CASCADE
 
     def test_type_dispatch_identity_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_dispatch_identity"] == frozenset(
@@ -512,6 +521,35 @@ class TestBuildTestScopeCoreCascade:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_context_admission_persistence.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert isinstance(result, set)
+        dir_names = {path.name for path in result if path.is_dir()}
+        assert {"core", "pipeline", "server"} <= dir_names
+        assert "execution" not in dir_names
+
+    @pytest.mark.parametrize(
+        "source_path",
+        (
+            "src/autoskillit/core/types/_type_context_admission.py",
+            "src/autoskillit/core/types/_type_context_admission_base.py",
+            "src/autoskillit/core/types/_type_context_admission_identities.py",
+            "src/autoskillit/core/types/_type_context_admission_records.py",
+            "src/autoskillit/core/types/_type_context_admission_events.py",
+            "src/autoskillit/core/types/_type_context_admission_effects.py",
+            "src/autoskillit/core/types/_type_context_admission_states.py",
+            "src/autoskillit/core/types/_type_context_admission_coverage.py",
+        ),
+    )
+    def test_context_admission_split_selects_ledger_and_composition(
+        self,
+        tmp_path: Path,
+        source_path: str,
+    ) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={source_path},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

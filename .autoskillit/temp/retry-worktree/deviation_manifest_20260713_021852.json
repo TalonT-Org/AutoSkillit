@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "generated_by": "retry-worktree",
+  "generated_at": "2026-07-13T02:18:52Z",
+  "plan_path": "/home/talon/projects/autoskillit-runs/remediation-20260712-150048-132149/.autoskillit/temp/make-plan/remediation_temp_only_writes_false_success_plan_2026-07-12_181000.md",
+  "base_branch": "temp-only-writes-satisfy-worktree-implementation-progress-af/4234",
+  "deviations": [
+    {
+      "what_the_plan_said": "Step 6: Remove `has_implementation_progress` output entries from skill_contracts.yaml for both implement-worktree-no-merge and retry-worktree. Step 7: Remove `has_implementation_progress = true` emit lines from both SKILL.md Step-6 emit blocks. Plan's design rationale claimed `SkillResult.has_implementation_progress` is server-computed and reads fine from recipes via ${{ result.has_implementation_progress }}.",
+      "what_i_did_instead": "Reverted both Step 6 (contract declarations) and Step 7 (SKILL.md emit lines). The contract declarations and emit lines were restored to their original state. The audit finding REQ-036 and REQ-037 are NOT addressed by this commit.",
+      "why": "Removing the contract declarations triggered 19 test failures that the plan did not anticipate. The semantic rule `undeclared-capture-key` (`src/autoskillit/recipe/rules/dataflow/rules_dataflow.py:43`) strictly enforces that every `${{ result.X }}` capture in a recipe step corresponds to a declared output key in the skill's contract. Recipes `src/autoskillit/recipes/remediation.yaml` (lines 369, 391, 420) and `src/autoskillit/recipes/implementation.json` (lines 310, 333, 377) and `src/autoskillit/recipes/remediation.json` (lines 347, 371, 415) all capture `result.has_implementation_progress`, which is consumed by `detect_zero_changes` via `context.has_implementation_progress` as `write_evidence_override`. The plan failed to address this downstream consumer.",
+      "evidence": "`task test-check` reported 19 failures including `tests/recipe/test_rules_registry.py::test_bundled_workflows_pass_semantic_rules` with diagnostic: 'Step implement captures result.has_implementation_progress but skill implement-worktree-no-merge does not declare has_implementation_progress in its outputs contract.' Cascading failures in `tests/recipe/test_bundled_recipes_*`, `tests/recipe/test_recipe_backend_composition_matrix.py`, `tests/recipe/test_issue_url_pipeline.py`, `tests/recipe/test_content_integrity.py`, `tests/server/test_serve_idempotence.py`, `tests/server/test_capability_admission_e2e.py`, `tests/server/test_admission_dispatch_agreement.py`, `tests/server/test_tools_kitchen_cache_poison.py`, `tests/recipe/test_rules_integration_predicate.py`.",
+      "files_affected": [
+        "src/autoskillit/recipe/skill_contracts.yaml",
+        "src/autoskillit/skills_extended/implement-worktree-no-merge/SKILL.md",
+        "src/autoskillit/skills_extended/retry-worktree/SKILL.md"
+      ]
+    }
+  ]
+}

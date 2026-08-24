@@ -82,13 +82,8 @@ def test_autoskillit_subprocess_writes_only_under_the_isolated_home(
         check=True,
         capture_output=True,
         text=True,
-        # 60s budget: the audit-type shard decomposition (~1382 added lines
-        # across new core/types/_type_audit_* modules) noticeably slows the
-        # `python -m autoskillit doctor` cold-start path. The original 30s
-        # budget caused intermittent subprocess.TimeoutExpired failures under
-        # parallel pytest workers; the doubled window absorbs cold-start cost
-        # without masking real hangs (doctor returns in well under 10s on a
-        # warm cache). Reduce back to 30s once cold-start is profiled.
+        # Runs under four xdist workers; doctor startup can exceed the normal
+        # 30-second ceiling under CPU contention even though it is not hung.
         timeout=60,
         env=production_interpreter_env(),
     )

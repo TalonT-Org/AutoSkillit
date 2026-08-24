@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from importlib import import_module
+from typing import get_args, get_type_hints
+
 import pytest
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
@@ -145,6 +148,260 @@ def _recipe_section_facade_names() -> tuple[str, ...]:
             if name in canonical_names
             and legacy_mod.__dict__[name] is getattr(canonical_mod, name, None)
         )
+    )
+
+
+# Per-shard ownership of protocol-v1 facade names. The single source of truth:
+# the public surface is derived from this map, so additions or removals must
+# change exactly one place (the owning shard's tuple).
+_CONTEXT_ADMISSION_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "_type_context_admission_base",
+        (
+            "CONTEXT_ADMISSION_PROTOCOL_VERSION",
+            "ContextAdmissionValidationError",
+            "UnsupportedContextAdmissionProtocolError",
+        ),
+    ),
+    (
+        "_type_context_admission_identities",
+        (
+            "ContextSessionId",
+            "AgentInstanceId",
+            "ContextThreadId",
+            "ForkOccurrenceId",
+            "TurnId",
+            "ProducerInstanceId",
+            "ToolCallId",
+            "ModelItemId",
+            "AdmissionRequestId",
+            "AdmissionBatchId",
+            "WindowEpochId",
+            "TokenizerIdentity",
+            "CanonicalSpanId",
+            "AdmissionOccurrenceId",
+            "AdmissionAttemptId",
+            "DeliveryOccurrenceId",
+            "AdmissionEventId",
+            "AdmissionReservationId",
+            "AdmissionWitnessId",
+            "AuthoritySourceId",
+            "GenerationReservationId",
+            "ProtectedPoolOwnerId",
+            "RepresentationRevision",
+            "RepresentationBindingId",
+            "AggregateRevision",
+            "AdmissionSequence",
+            "IdempotencyNamespace",
+            "ContextLineage",
+        ),
+    ),
+    (
+        "_type_context_admission_records",
+        (
+            "ContextWindowSnapshot",
+            "CanonicalSpanOwner",
+            "CanonicalRepresentationManifest",
+            "AdmissionOccurrence",
+            "AdmissionBatch",
+            "AdmissionReservationKey",
+            "AdmissionReservation",
+            "AdmissionWitness",
+            "RepresentationBindingWitness",
+            "EpochFenceProof",
+            "ProtectedPoolSpec",
+            "AdmissionDecision",
+            "AdmissionOccurrenceRecord",
+            "AdmissionBatchRecord",
+            "GenerationReservationRecord",
+            "ClosedEpochAudit",
+        ),
+    ),
+    (
+        "_type_context_admission_events",
+        (
+            "OpenEpochEvent",
+            "AuthorityUnavailableEvent",
+            "ProposeOccurrenceEvent",
+            "ReserveRequestEvent",
+            "PrepareBatchEvent",
+            "StageHistoryEvent",
+            "DispatchRequestEvent",
+            "AcceptInputEvent",
+            "ReleaseNonAdmissionEvent",
+            "RollbackAdmissionEvent",
+            "MarkIndeterminateEvent",
+            "ResolveIndeterminateAcceptedEvent",
+            "ResolveIndeterminateNonAdmissionEvent",
+            "ResolveIndeterminateRollbackEvent",
+            "StartGenerationEvent",
+            "ReconcileGenerationEvent",
+            "MarkGenerationIndeterminateEvent",
+            "RequestReconciliationEvent",
+            "ExpireIdempotencyKeyEvent",
+            "RolloverEpochEvent",
+            "ContextAdmissionEvent",
+        ),
+    ),
+    (
+        "_type_context_admission_effects",
+        (
+            "ReservationRecordedEffect",
+            "ReservationReleasedEffect",
+            "OccurrenceStateChangedEffect",
+            "ChargeCommittedEffect",
+            "GenerationReservationRecordedEffect",
+            "GenerationReconciledEffect",
+            "ReconciliationQueryRequestedEffect",
+            "ReconciliationEscalationEffect",
+            "ConflictRejectedEffect",
+            "IdempotencyExpiredEffect",
+            "ReservationInvalidatedEffect",
+            "EpochClosedEffect",
+            "QuarantineRecordedEffect",
+            "AuthorityUnavailableEffect",
+            "AdmissionEffect",
+        ),
+    ),
+    (
+        "_type_context_admission_states",
+        (
+            "ProcessedEventRecord",
+            "IdempotencyRecord",
+            "ExpiredIdempotencyTombstone",
+            "UninitializedContextAdmissionState",
+            "ActiveContextAdmissionState",
+            "ContextAdmissionState",
+            "AdmissionTransition",
+            "AdmissionReplay",
+        ),
+    ),
+    (
+        "_type_context_admission_coverage",
+        (
+            "CONTEXT_ADMISSION_COVERAGE",
+            "CoverageEvidence",
+            "ProducerCoverageDef",
+        ),
+    ),
+)
+
+# Derived from _CONTEXT_ADMISSION_SHARD_OWNERS so the two stay in lock-step
+# without a hand-maintained duplicate.
+_CONTEXT_ADMISSION_PUBLIC_SURFACE: tuple[str, ...] = tuple(
+    name for _, names in _CONTEXT_ADMISSION_SHARD_OWNERS for name in names
+)
+
+
+def test_context_admission_facade_public_surface_is_frozen() -> None:
+    facade = import_module("autoskillit.core.types._type_context_admission")
+
+    # Set comparison because the derived surface follows shard-ownership order
+    # while facade.__all__ interleaves coverage near the top; order does not
+    # affect user-visible behaviour, only the frozen set does.
+    assert set(facade.__all__) == set(_CONTEXT_ADMISSION_PUBLIC_SURFACE)
+
+
+def test_context_admission_shard_ownership_covers_public_surface() -> None:
+    owned_names = tuple(name for _, names in _CONTEXT_ADMISSION_SHARD_OWNERS for name in names)
+
+    assert len(owned_names) == len(set(owned_names))
+    assert set(owned_names) == set(_CONTEXT_ADMISSION_PUBLIC_SURFACE)
+
+
+@pytest.mark.parametrize(
+    ("shard_stem", "owned_names"),
+    _CONTEXT_ADMISSION_SHARD_OWNERS,
+    ids=[shard_stem for shard_stem, _ in _CONTEXT_ADMISSION_SHARD_OWNERS],
+)
+def test_context_admission_facade_reexports_owned_shard_objects(
+    shard_stem: str,
+    owned_names: tuple[str, ...],
+) -> None:
+    """Each shard remains directly importable and owns its facade bindings."""
+    shard = import_module(f"autoskillit.core.types.{shard_stem}")
+    facade = import_module("autoskillit.core.types._type_context_admission")
+
+    for name in owned_names:
+        assert getattr(facade, name) is getattr(shard, name)
+
+
+def test_context_admission_package_hub_preserves_facade_identity() -> None:
+    facade = import_module("autoskillit.core.types._type_context_admission")
+    hub = import_module("autoskillit.core.types")
+
+    for name in _CONTEXT_ADMISSION_PUBLIC_SURFACE:
+        assert getattr(hub, name) is getattr(facade, name)
+
+
+def test_context_admission_private_codec_and_producer_surface_identity() -> None:
+    base = import_module("autoskillit.core.types._type_context_admission_base")
+    persistence = import_module("autoskillit.core.types._type_context_admission_persistence")
+    reducer = import_module("autoskillit.core.context_admission")
+    enums = import_module("autoskillit.core.types._type_enums_context_admission")
+
+    for name in ("_ContractValue", "_encode", "_decode"):
+        assert getattr(persistence, name) is getattr(base, name)
+    assert enums.ProducerSurface is reducer.ProducerSurface
+
+
+def test_context_admission_registered_types_resolve_annotations_in_owning_shards() -> None:
+    base = import_module("autoskillit.core.types._type_context_admission_base")
+
+    assert base._TYPE_REGISTRY
+    for name, contract_type in base._TYPE_REGISTRY.items():
+        assert get_type_hints(contract_type), f"{name} has no resolved type hints"
+
+
+def test_context_admission_event_union_is_closed_and_ordered() -> None:
+    events = import_module("autoskillit.core.types._type_context_admission_events")
+    facade = import_module("autoskillit.core.types._type_context_admission")
+
+    assert facade.ContextAdmissionEvent is events.ContextAdmissionEvent
+    assert get_args(events.ContextAdmissionEvent) == (
+        events.OpenEpochEvent,
+        events.AuthorityUnavailableEvent,
+        events.ProposeOccurrenceEvent,
+        events.ReserveRequestEvent,
+        events.PrepareBatchEvent,
+        events.StageHistoryEvent,
+        events.DispatchRequestEvent,
+        events.AcceptInputEvent,
+        events.ReleaseNonAdmissionEvent,
+        events.RollbackAdmissionEvent,
+        events.MarkIndeterminateEvent,
+        events.ResolveIndeterminateAcceptedEvent,
+        events.ResolveIndeterminateNonAdmissionEvent,
+        events.ResolveIndeterminateRollbackEvent,
+        events.StartGenerationEvent,
+        events.ReconcileGenerationEvent,
+        events.MarkGenerationIndeterminateEvent,
+        events.RequestReconciliationEvent,
+        events.ExpireIdempotencyKeyEvent,
+        events.RolloverEpochEvent,
+    )
+
+
+def test_context_admission_effect_union_is_closed_and_ordered() -> None:
+    effects = import_module("autoskillit.core.types._type_context_admission_effects")
+    facade = import_module("autoskillit.core.types._type_context_admission")
+
+    assert facade.AdmissionEffect is effects.AdmissionEffect
+    assert get_args(effects.AdmissionEffect) == (
+        effects.ReservationRecordedEffect,
+        effects.ReservationReleasedEffect,
+        effects.OccurrenceStateChangedEffect,
+        effects.ChargeCommittedEffect,
+        effects.GenerationReservationRecordedEffect,
+        effects.GenerationReconciledEffect,
+        effects.ReconciliationQueryRequestedEffect,
+        effects.ReconciliationEscalationEffect,
+        effects.ConflictRejectedEffect,
+        effects.IdempotencyExpiredEffect,
+        effects.ReservationInvalidatedEffect,
+        effects.EpochClosedEffect,
+        effects.QuarantineRecordedEffect,
+        effects.AuthorityUnavailableEffect,
     )
 
 

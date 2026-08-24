@@ -1,0 +1,1 @@
+A plan that traces all callers referencing `audit-cohesion`, provides a type-safe migration path, and verifies fixture completeness after the rename, including re-export aliases.

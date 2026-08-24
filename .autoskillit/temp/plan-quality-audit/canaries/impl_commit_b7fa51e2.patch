@@ -1,0 +1,12 @@
+--- begin patch ---
+diff --git a/src/autoskillit/smoke_utils.py b/src/autoskillit/smoke_utils.py
+--- a/src/autoskillit/smoke_utils.py
++++ b/src/autoskillit/smoke_utils.py
+@@ -10,7 +10,7 @@
+ from autoskillit.core import DISPATCH_ID_ENV_VAR, get_logger
+
+-    before_commit = canary.get("before_commit", "")
++    checkout_ref = canary.get("checkout_ref", "")
+     if before_commit:
+         # ... use it
+--- end patch ---

@@ -339,6 +339,17 @@ src/**/CLAUDE.md: []
   - contracts/
   - arch/
 
+.autoskillit/temp/*.md: []
+
+.autoskillit/temp/skill-eval/**/*.json:
+  - infra/
+
+.autoskillit/temp/skill-eval/**/*.md:
+  - infra/
+
+.autoskillit/temp/plan-quality-audit/canaries/**/*:
+  - infra/
+
 .autoskillit/recipes/eval/canaries/**/*:
   - recipe/
 

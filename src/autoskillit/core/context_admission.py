@@ -52,7 +52,6 @@ from .types._type_context_admission import (
     PrepareBatchEvent,
     ProcessedEventRecord,
     ProducerCoverageDef,
-    ProducerSurface,
     ProposeOccurrenceEvent,
     ProtectedPoolOwnerId,
     QuarantineRecordedEffect,
@@ -82,6 +81,7 @@ from .types._type_enums import (
     CoverageState,
     GenerationState,
     MeasurementKind,
+    ProducerSurface,
     ReserveClass,
     WitnessKind,
 )

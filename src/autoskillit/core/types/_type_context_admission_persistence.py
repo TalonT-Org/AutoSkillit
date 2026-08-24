@@ -44,6 +44,8 @@ from ._type_context_admission import (
     ToolCallId,
     TurnId,
     WindowEpochId,
+)
+from ._type_context_admission_base import (
     _ContractValue,
     _decode,
     _encode,

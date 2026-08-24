@@ -17,7 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ORCHESTRATOR_FACING_INSTRUCTION_SURFACES
+from autoskillit.core import ORCHESTRATOR_FACING_INSTRUCTION_SURFACES, SkillExecutionRole
+from autoskillit.workspace import read_skill_frontmatter
 from tests._helpers import extract_orchestrator_surface_texts, resolve_orchestrator_surface_paths
 
 pytestmark = [pytest.mark.small]
@@ -108,7 +109,7 @@ def test_every_open_kitchen_injected_skill_is_registered() -> None:
     injected_skills = [
         skill_md
         for skill_md in sorted(_SKILLS_ROOT.glob("*/SKILL.md"))
-        if "execution_role: orchestrator" in skill_md.read_text(encoding="utf-8")
+        if read_skill_frontmatter(skill_md).execution_role is SkillExecutionRole.ORCHESTRATOR
     ]
     assert injected_skills, (
         "no skill frontmatter declares execution_role: orchestrator — "

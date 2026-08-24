@@ -296,7 +296,7 @@ def test_find_caller_session_id_survives_a_marker_swept_during_the_scan(tmp_path
 
     result = find_caller_session_id()
 
-    assert result in ("", "sess-a", "sess-b", "sess-c")
+    assert result in ("sess-a", "sess-c")
     assert swept
 
 

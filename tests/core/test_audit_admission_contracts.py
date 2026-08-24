@@ -388,6 +388,11 @@ def test_ordered_full_reference_identity_covers_all_metadata() -> None:
     second = _reference("two.md", content_digest=_digest("2"))
     baseline = compute_audit_reference_identity((first, second))
 
+    # Baseline hash is the SHA-256 canonical digest emitted by
+    # AUDIT_REFERENCE_IDENTITY_PROFILE_V1 (profile_id="ordered-full-reference-v1",
+    # domain="autoskillit:audit-admission:ordered-full-reference:v1:sha256").
+    # Any legitimate change to the profile (field order, canonical JSON rules,
+    # domain string) must update this literal in lockstep with the profile.
     assert baseline == ("sha256:acd0546f3a36c7268b8a9d04359f88c2476224b37ef90792aac72e4d97eac04e")
     assert baseline != compute_audit_reference_identity((second, first))
     for changed in (

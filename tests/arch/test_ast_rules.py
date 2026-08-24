@@ -1727,6 +1727,7 @@ def test_fcntl_import_allowlist() -> None:
         "execution/session/_managed_headless_session_lineage_records.py",
         "hooks/guards/open_kitchen_guard.py",
         "hooks/_join_ledger.py",
+        "cli/session/_session_reload.py",
     }
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):

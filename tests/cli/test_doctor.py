@@ -586,6 +586,37 @@ class TestRunCheck:
         assert result.severity == Severity.ERROR
         assert result.check == "boom"
 
+    def test_non_string_callable_name_cannot_escape_isolation(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        class RaisingCheck:
+            __name__ = 7
+
+            def __call__(self) -> object:
+                raise RuntimeError("simulated")
+
+        [result] = _run_check(functools.partial(RaisingCheck()))
+        assert result.severity == Severity.ERROR
+        assert result.check == "unknown"
+
+    @pytest.mark.parametrize("malformed", [None, [object()]])
+    def test_malformed_result_is_isolated(self, malformed: object) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        def _check_malformed() -> object:
+            return malformed
+
+        [result] = _run_check(functools.partial(_check_malformed))
+        assert result.severity == Severity.ERROR
+        assert result.check == "malformed"
+        assert "must return DoctorResult" in result.message
+
 
 def test_collect_doctor_results_isolates_a_crashing_check(
     monkeypatch: pytest.MonkeyPatch,

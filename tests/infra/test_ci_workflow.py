@@ -508,11 +508,13 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
         ),
         "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED": "true",
         "AUTOSKILLIT_TEST_FILTER": (
-            f"${{{{ {profiling_predicate} && 'none' || needs.preflight.outputs.test-filter-mode }}"
+            "${{ "
+            + profiling_predicate
+            + " && 'none' || needs.preflight.outputs.test-filter-mode }}"
         ),
         "AUTOSKILLIT_TEST_BASE_REF": "${{ needs.preflight.outputs.test-base-revision }}",
         "PYTEST_ADDOPTS": (
-            f"${{{{ {profiling_predicate} && '--durations=0 --durations-min=0' || '' }}"
+            "${{ " + profiling_predicate + " && '--durations=0 --durations-min=0' || '' }}"
         ),
     }
     assert "github.event" not in run_tests["run"]

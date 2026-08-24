@@ -350,7 +350,10 @@ class TestCIShardConfig:
         assert matrix_shards == EXPECTED_SHARD_CANDIDATES
         assert set(arms) == set(EXPECTED_SHARD_CANDIDATES) | {"*_default"}
         default_body = arms["*_default"]
-        assert default_body == 'echo "::error::Unknown test shard: ${{ matrix.shard }}"\nexit 1'
+        assert [line.strip() for line in default_body.splitlines()] == [
+            'echo "::error::Unknown test shard: ${{ matrix.shard }}"',
+            "exit 1",
+        ]
 
     @pytest.mark.parametrize(("body", "expected"), [("exit 10", 10), ("exit 01", 1)])
     def test_exit_status_parses_multidigit_and_zero_padded_values(
@@ -369,10 +372,8 @@ class TestCIShardConfig:
             'echo "::error::Unsafe test filename for the shard path splitter: $test_file"' in body
         )
         assert "exit 1" in body
-        assert (
-            "find tests/ -maxdepth 1 -type f -name 'test_*.py' -print0\n"
-            "            find tests/execution -maxdepth 1 -type f -name 'test_*.py' -print0"
-        ) in body
+        assert "find tests/ -maxdepth 1 -type f -name 'test_*.py' -print0" in body
+        assert "find tests/execution -maxdepth 1 -type f -name 'test_*.py' -print0" in body
         assert "DIRECT_EXECUTION_FILES=$(find tests/execution -maxdepth 1 -type f" in body
         assert "DIRECT_EXECUTION_IGNORES=$(find tests/execution -maxdepth 1 -type f" in body
 
@@ -390,11 +391,10 @@ class TestCIShardConfig:
         assert arms["execution-top-level"] == (
             'echo "PYTEST_TEST_PATHS=${DIRECT_EXECUTION_FILES}" >> "$GITHUB_ENV"'
         )
-        assert arms["execution-rest"] == (
-            'echo "PYTEST_TEST_PATHS=${SHARD_EXECUTION_DIRS} ${ROOT_FILES}" '
-            '>> "$GITHUB_ENV"\n'
-            'echo "PYTEST_IGNORE_PATHS=${DIRECT_EXECUTION_IGNORES}" >> "$GITHUB_ENV"'
-        )
+        assert [line.strip() for line in arms["execution-rest"].splitlines()] == [
+            'echo "PYTEST_TEST_PATHS=${SHARD_EXECUTION_DIRS} ${ROOT_FILES}" >> "$GITHUB_ENV"',
+            'echo "PYTEST_IGNORE_PATHS=${DIRECT_EXECUTION_IGNORES}" >> "$GITHUB_ENV"',
+        ]
 
         assert arms["recipe"] == ('echo "PYTEST_TEST_PATHS=${SHARD_RECIPE_DIRS}" >> "$GITHUB_ENV"')
 

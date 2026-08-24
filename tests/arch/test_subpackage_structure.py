@@ -62,6 +62,7 @@ class TestCoreSubpackages:
             "_type_protocols_workspace",
             "_type_results",
             "_type_results_execution",
+            "_type_results_records",
             "_type_recipe_delivery",
             "_type_recipe_binding",
             "_type_recipe_execution",

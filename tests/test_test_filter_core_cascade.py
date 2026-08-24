@@ -124,6 +124,7 @@ class TestModuleCascadeCore:
             "tool_sequence_analysis",
             "_type_checkpoint",
             "_type_results",
+            "_type_results_records",
             "_type_execution_identity",
             "_type_exploration",
             "_type_results_execution",
@@ -156,6 +157,7 @@ class TestModuleCascadeCore:
             "_type_constants_durable_writers",
             "_type_constants_retirements",
             "_type_constants_skill_contract",
+            "_type_enums_context_admission",
             "_type_exceptions",
             "_type_skill_contract",
             "_step_context",
@@ -234,6 +236,7 @@ class TestModuleCascadeCore:
                 "smoke_utils",
             }
         )
+        assert MODULE_CASCADE_CORE["_type_results_records"] == MODULE_CASCADE_CORE["_type_results"]
 
     def test_type_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_backend"] == frozenset(
@@ -580,10 +583,17 @@ class TestBuildTestScopeCoreCascade:
                 f"_type_checkpoint cascade should not include {excluded}"
             )
 
-    def test_type_results_narrow_routing(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        "source_path",
+        [
+            "src/autoskillit/core/types/_type_results.py",
+            "src/autoskillit/core/types/_type_results_records.py",
+        ],
+    )
+    def test_type_results_narrow_routing(self, tmp_path: Path, source_path: str) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_results.py"},
+            changed_files={source_path},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

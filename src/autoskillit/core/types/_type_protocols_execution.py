@@ -11,13 +11,13 @@ from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_enums import FaultDomain
 from ._type_execution_identity import ExecutionIdentity
 from ._type_launch import (
-    BackendAuthority,
     LaunchAdapterResult,
     LaunchPreparation,
     LaunchResolutionRequest,
     ResolvedLaunchContract,
     SkillProjectionBinding,
 )
+from ._type_launch_authority import BackendAuthority
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,

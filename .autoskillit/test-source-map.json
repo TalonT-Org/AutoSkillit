@@ -408,7 +408,8 @@
   ],
   "src/autoskillit/cli/session/_session_constants.py": [
     "tests/cli/test_cook_cold_launch_medium.py",
-    "tests/contracts/test_launch_path_survives_unsafe_queue.py"
+    "tests/contracts/test_launch_path_survives_unsafe_queue.py",
+    "tests/contracts/test_claude_code_interface_contracts.py"
   ],
   "src/autoskillit/cli/session/_session_cook.py": [
     "tests/cli/test_cook_cold_launch_medium.py",
@@ -486,7 +487,8 @@
     "tests/cli/test_interactive_cold_launch_medium.py",
     "tests/cli/test_reload_loop.py",
     "tests/cli/test_session_launch.py",
-    "tests/contracts/test_launch_path_survives_unsafe_queue.py"
+    "tests/contracts/test_launch_path_survives_unsafe_queue.py",
+    "tests/contracts/test_claude_code_interface_contracts.py"
   ],
   "src/autoskillit/cli/session/_session_startup_trace.py": [
     "tests/cli/test_cook_cold_launch_medium.py",
@@ -2292,7 +2294,8 @@
     "tests/server/test_tools_status_kitchen.py",
     "tests/server/test_wire_compat.py",
     "tests/workspace/test_project_local_overrides_identity_projection.py",
-    "tests/workspace/test_skills_projection.py"
+    "tests/workspace/test_skills_projection.py",
+    "tests/server/test_response_backstop_metadata.py"
   ],
   "src/autoskillit/core/_plugin_ids.py": [
     "tests/arch/test_capability_consistency.py",
@@ -2405,7 +2408,8 @@
     "tests/workspace/test_installed_artifact.py",
     "tests/workspace/test_project_local_overrides_identity_projection.py",
     "tests/workspace/test_projection_destination_location.py",
-    "tests/workspace/test_session_skills_codex_layout.py"
+    "tests/workspace/test_session_skills_codex_layout.py",
+    "tests/server/test_response_backstop_metadata.py"
   ],
   "src/autoskillit/core/_terminal_table.py": [
     "tests/arch/test_recipe_delivery_provenance.py",
@@ -7057,6 +7061,83 @@
     "tests/server/test_tools_run_skill_retry.py",
     "tests/server/test_tools_status_kitchen.py"
   ],
+  "src/autoskillit/core/types/_type_launch_authority.py": [
+    "tests/arch/test_pty_coherence.py",
+    "tests/cli/test_cook_features.py",
+    "tests/cli/test_cook_order_command.py",
+    "tests/cli/test_cook_order_picker.py",
+    "tests/cli/test_cook_order_prompt.py",
+    "tests/cli/test_reload_loop.py",
+    "tests/cli/test_session_launch.py",
+    "tests/contracts/test_claude_code_interface_contracts.py",
+    "tests/execution/headless/test_headless_natural_exit_grace_seconds.py",
+    "tests/execution/headless/test_headless_recovery.py",
+    "tests/execution/test_backend_dispatch.py",
+    "tests/execution/test_boundary_pty_dispatch.py",
+    "tests/execution/test_flush_provider_integration.py",
+    "tests/execution/test_headless_add_dirs.py",
+    "tests/execution/test_headless_backend_mixing.py",
+    "tests/execution/test_headless_backend_override.py",
+    "tests/execution/test_headless_backend_resolution.py",
+    "tests/execution/test_headless_capture_diagnostics.py",
+    "tests/execution/test_headless_core.py",
+    "tests/execution/test_headless_debug_logging.py",
+    "tests/execution/test_headless_dispatch.py",
+    "tests/execution/test_headless_enum_recovery.py",
+    "tests/execution/test_headless_env_injection.py",
+    "tests/execution/test_headless_env_scrub.py",
+    "tests/execution/test_headless_execute.py",
+    "tests/execution/test_headless_path_validation.py",
+    "tests/execution/test_headless_provider_fallback.py",
+    "tests/execution/test_headless_provider_forwarding.py",
+    "tests/execution/test_headless_synthesis.py",
+    "tests/execution/test_idle_output_env.py",
+    "tests/execution/test_launch_resolution.py",
+    "tests/execution/test_managed_headless_attempt.py",
+    "tests/execution/test_model_backend_launch_contract.py",
+    "tests/execution/test_write_evidence.py",
+    "tests/execution/test_zero_write_detection.py",
+    "tests/fleet/test_api.py",
+    "tests/fleet/test_dispatch_backend_override.py",
+    "tests/fleet/test_fleet_e2e.py",
+    "tests/fleet/test_fleet_e2e_codex.py",
+    "tests/fleet/test_state.py",
+    "tests/integration/test_pipeline_step_completion_flow.py",
+    "tests/integration/test_write_guard_worktree_integration.py",
+    "tests/server/test_attestation_delivery_reachability.py",
+    "tests/server/test_audit_admission_fault_immunity.py",
+    "tests/server/test_audit_admission_production_seam.py",
+    "tests/server/test_audit_admission_projected_plugin_process.py",
+    "tests/server/test_explicit_backend_override.py",
+    "tests/server/test_factory_recording.py",
+    "tests/server/test_lifespan_fleet_boot.py",
+    "tests/server/test_progress_heartbeat_wiring.py",
+    "tests/server/test_recipe_composition_authority.py",
+    "tests/server/test_review_approach_input_contract.py",
+    "tests/server/test_run_skill_add_dirs.py",
+    "tests/server/test_run_skill_execution_tuning_fallbacks.py",
+    "tests/server/test_run_skill_locks.py",
+    "tests/server/test_run_skill_resume.py",
+    "tests/server/test_run_skill_stale_path.py",
+    "tests/server/test_server_tool_registration.py",
+    "tests/server/test_session_deadline.py",
+    "tests/server/test_tools_config.py",
+    "tests/server/test_tools_execution_backend_mixing.py",
+    "tests/server/test_tools_execution_command.py",
+    "tests/server/test_tools_execution_input_gates_command.py",
+    "tests/server/test_tools_execution_input_gates_cwd.py",
+    "tests/server/test_tools_execution_persistent_root.py",
+    "tests/server/test_tools_execution_provider.py",
+    "tests/server/test_tools_execution_results.py",
+    "tests/server/test_tools_execution_routing.py",
+    "tests/server/test_tools_execution_scope_discipline.py",
+    "tests/server/test_tools_execution_spill.py",
+    "tests/server/test_tools_execution_step_resolution.py",
+    "tests/server/test_tools_execution_write_prefix.py",
+    "tests/server/test_tools_exploration.py",
+    "tests/server/test_tools_run_skill_retry.py",
+    "tests/server/test_tools_status_kitchen.py"
+  ],
   "src/autoskillit/core/types/_type_launch_projection.py": [
     "tests/arch/test_pty_coherence.py",
     "tests/contracts/test_plugin_artifact_lifetime.py",
@@ -7261,7 +7342,8 @@
     "tests/server/test_tools_recipe.py",
     "tests/server/test_wire_compat.py",
     "tests/workspace/test_project_local_overrides_identity_projection.py",
-    "tests/workspace/test_skills_projection.py"
+    "tests/workspace/test_skills_projection.py",
+    "tests/server/test_response_backstop_metadata.py"
   ],
   "src/autoskillit/core/types/_type_native_shell_capture.py": [
     "tests/cli/test_fleet_run.py",
@@ -13270,6 +13352,16 @@
     "tests/hooks/test_capture_contract_decomposition.py",
     "tests/hooks/test_shell_capture_conformance.py",
     "tests/hooks/test_shell_capture_hook.py"
+  ],
+  "src/autoskillit/hooks/_capture_artifacts.py": [
+    "tests/execution/backends/test_codex_capture_lifecycle_integration.py",
+    "tests/execution/backends/test_shell_capture_marker_authority.py",
+    "tests/hooks/test_capture_artifacts.py",
+    "tests/hooks/test_capture_lifecycle.py",
+    "tests/hooks/test_capture_lifecycle_hook.py",
+    "tests/hooks/test_capture_observation.py",
+    "tests/hooks/test_capture_verified_reader.py",
+    "tests/hooks/test_session_replay.py"
   ],
   "src/autoskillit/hooks/_capture_contract.py": [
     "tests/execution/backends/test_codex_capture_lifecycle_integration.py",
@@ -34073,7 +34165,8 @@
     "tests/server/test_tools_agents.py",
     "tests/server/test_tools_kitchen_visibility.py",
     "tests/server/test_tools_recipe.py",
-    "tests/server/test_wire_compat.py"
+    "tests/server/test_wire_compat.py",
+    "tests/server/test_response_backstop_metadata.py"
   ],
   "src/autoskillit/workspace/_installed_artifact.py": [
     "tests/backend/test_codex_hooks_round_trip.py",

@@ -23,6 +23,7 @@ def test_all_core_stems_classified() -> None:
     )
 
 
-def test_launch_projection_cascade_matches_launch_authority() -> None:
+def test_launch_shard_cascades_match_launch() -> None:
     launch_cascade = MODULE_CASCADE_CORE["_type_launch"]
     assert MODULE_CASCADE_CORE["_type_launch_projection"] == launch_cascade
+    assert MODULE_CASCADE_CORE["_type_launch_authority"] == launch_cascade

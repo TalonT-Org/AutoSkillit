@@ -61,6 +61,8 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "core/types/_type_recipe_sections.py": 750,
     "core/tool_registry.py": 750,
     "core/_tool_registry_builders.py": 750,
+    "core/types/_type_launch.py": 750,
+    "core/types/_type_launch_authority.py": 750,
 }
 
 

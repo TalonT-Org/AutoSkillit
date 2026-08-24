@@ -509,6 +509,56 @@ def test_startup_failure_returns_disabled_sink_and_partial_start_releases_port(
     partial.close()
 
 
+@pytest.mark.parametrize("exception_type", (KeyboardInterrupt, SystemExit))
+def test_start_propagates_process_interrupt_after_partial_cleanup(
+    tmp_path: Path, monkeypatch, exception_type: type[BaseException]
+) -> None:
+    from autoskillit.execution.otlp_sink import LocalOtlpSink
+
+    class InterruptingServer:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise exception_type
+
+    cleanup_calls: list[LocalOtlpSink] = []
+    original_cleanup = LocalOtlpSink._disable_partial_start
+
+    def record_cleanup(sink: LocalOtlpSink) -> None:
+        cleanup_calls.append(sink)
+        original_cleanup(sink)
+
+    monkeypatch.setattr(LocalOtlpSink, "_server_class", InterruptingServer)
+    monkeypatch.setattr(LocalOtlpSink, "_disable_partial_start", record_cleanup)
+
+    with pytest.raises(exception_type):
+        LocalOtlpSink.start(str(tmp_path))
+
+    assert len(cleanup_calls) == 1
+    assert cleanup_calls[0].env == {}
+
+
+def test_partial_start_cleanup_propagates_process_interrupt() -> None:
+    from autoskillit.execution.otlp_sink import LocalOtlpSink
+
+    class InterruptingServer:
+        def shutdown(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            raise AssertionError("server_close must not mask the interrupt")
+
+    class AliveThread:
+        @staticmethod
+        def is_alive() -> bool:
+            return True
+
+    sink = LocalOtlpSink()
+    sink._server = InterruptingServer()  # type: ignore[assignment]
+    sink._server_thread = AliveThread()  # type: ignore[assignment]
+
+    with pytest.raises(KeyboardInterrupt):
+        sink._disable_partial_start()
+
+
 def test_close_rejects_handler_that_reaches_enqueue_after_shutdown_gate(
     tmp_path: Path, monkeypatch
 ) -> None:

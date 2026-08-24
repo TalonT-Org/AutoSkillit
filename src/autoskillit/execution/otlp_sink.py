@@ -351,10 +351,13 @@ class LocalOtlpSink:
                 sink._enqueue_allowed = True
                 sink._enabled = True
             return sink
-        except BaseException:
+        except Exception:
             logger.debug("local_otlp_sink_start_failed", exc_info=True)
             sink._disable_partial_start()
             return sink
+        except BaseException:
+            sink._disable_partial_start()
+            raise
 
     def _disable_partial_start(self) -> None:
         self.env = {}
@@ -374,17 +377,17 @@ class LocalOtlpSink:
             try:
                 if self._server_thread is not None and self._server_thread.is_alive():
                     server.shutdown()
-            except BaseException:
+            except Exception:
                 logger.debug("local_otlp_sink_partial_shutdown_failed", exc_info=True)
             try:
                 server.server_close()
-            except BaseException:
+            except Exception:
                 logger.debug("local_otlp_sink_partial_server_close_failed", exc_info=True)
         for thread in (self._server_thread, self._writer_thread):
             if thread is not None and thread.is_alive():
                 try:
                     thread.join(_THREAD_JOIN_SECONDS)
-                except BaseException:
+                except Exception:
                     logger.debug("local_otlp_sink_partial_thread_join_failed", exc_info=True)
 
     def _handler_enter(self) -> None:

@@ -61,9 +61,12 @@ def test_rules_name_every_execution_tuning_param_and_its_step_field() -> None:
 
 def test_rules_instruct_not_forwarding_them() -> None:
     rules = build_parameter_forwarding_rules()
-    assert "with:" in rules
-    assert "server-resolved" in rules or "resolved server-side" in rules
-    assert "never include" in rules or "do not include" in rules.lower()
+    for param_name, field_name in _execution_tuning_field_map().items():
+        instruction = (
+            f"A step's `{field_name}:` field is resolved server-side; never include "
+            f"`{param_name}` in a `run_skill` call for that step."
+        )
+        assert instruction in rules
 
 
 def test_generated_rules_survive_the_prose_forwarding_sweep() -> None:

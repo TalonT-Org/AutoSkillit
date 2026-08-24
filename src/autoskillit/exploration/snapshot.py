@@ -8,12 +8,19 @@ import os
 import stat
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Literal, TypeVar, assert_never
 
-from autoskillit.core import RepositoryIdentity, RepositorySnapshot, observe_path_mode
+from autoskillit.core import (
+    RepositoryIdentity,
+    RepositorySnapshot,
+    SnapshotCaptureReason,
+    SnapshotCaptureStatus,
+    observe_path_mode,
+)
 
 from ._digest import qualified_digest
 from .collectors import open_contained_regular_file
@@ -30,6 +37,8 @@ from .collectors._bounded import (
 from .identity import resolve_repository_identity
 from .pagination import PAGINATION_DIGEST_DOMAIN
 from .profile import RepositoryProfileActivation, activate_repository_profiles
+
+_StageResult = TypeVar("_StageResult")
 
 SNAPSHOT_SCHEMA_VERSION = 1
 SNAPSHOT_SCHEMA_ID = "autoskillit.repository-snapshot.v1"
@@ -70,13 +79,6 @@ class StableArtifactCapture:
     snapshot_digest: str
 
 
-class SnapshotCaptureStatus(StrEnum):
-    COMPLETE = "complete"
-    STALE = "stale"
-    TRUNCATED = "truncated"
-    FAILED = "failed"
-
-
 @dataclass(frozen=True, slots=True)
 class SnapshotCaptureLimits:
     """Hard bounds applied before a snapshot can become publishable."""
@@ -85,6 +87,7 @@ class SnapshotCaptureLimits:
     max_file_bytes: int = 64 * 1024 * 1024
     max_total_bytes: int = 256 * 1024 * 1024
     git_timeout_seconds: int = 30
+    capture_deadline_seconds: int = 120
 
     def __post_init__(self) -> None:
         for name in (
@@ -92,6 +95,7 @@ class SnapshotCaptureLimits:
             "max_file_bytes",
             "max_total_bytes",
             "git_timeout_seconds",
+            "capture_deadline_seconds",
         ):
             value = getattr(self, name)
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
@@ -113,10 +117,19 @@ class RepositoryPathState:
 
 @dataclass(frozen=True, slots=True)
 class _ObservedPath:
-    """Internal path authority that keeps ignored-file bytes out of returned state."""
+    """Internal path authority that keeps ignored-file bytes out of returned state.
+
+    ``published_bytes`` and ``identity_bytes`` diverge only for an ignored regular
+    file: its content is still read and hashed in full (``identity_bytes``) so a
+    rewrite still invalidates the fingerprint, but none of that size is charged
+    against ``max_total_bytes`` and none of it reaches the public state (``0``).
+    Every other observation reads and publishes the same bytes, so the two fields
+    are equal.
+    """
 
     state: RepositoryPathState
-    hashed_bytes: int
+    published_bytes: int
+    identity_bytes: int
     identity_content_digest: str
 
 
@@ -136,7 +149,7 @@ class CapturedRepositoryState:
     untracked_paths: int
     ignored_paths: int
     missing_paths: int
-    total_hashed_bytes: int
+    total_published_bytes: int
     snapshot_identity: str
     tracked_records: tuple[tuple[str, str], ...]
     untracked_records: tuple[tuple[str, str], ...]
@@ -153,11 +166,16 @@ class SnapshotCaptureResult:
     status: SnapshotCaptureStatus
     snapshot: RepositorySnapshot | None
     diagnostic: str = ""
+    reason: SnapshotCaptureReason | None = None
     start_identity: str = ""
     end_identity: str = ""
     validated_activation: RepositoryProfileActivation | None = None
 
     def __post_init__(self) -> None:
+        if self.status is SnapshotCaptureStatus.COMPLETE and self.reason is not None:
+            raise ValueError("complete snapshot capture cannot expose a failure reason")
+        if self.status is not SnapshotCaptureStatus.COMPLETE and self.reason is None:
+            raise ValueError("non-complete snapshot capture requires a failure reason")
         if self.status is SnapshotCaptureStatus.COMPLETE and self.snapshot is None:
             raise ValueError("complete snapshot capture requires a snapshot")
         if self.status is SnapshotCaptureStatus.COMPLETE and self.validated_activation is None:
@@ -187,8 +205,64 @@ class SnapshotCaptureResult:
             raise ValueError("snapshot and activation profile versions must match")
 
 
-class _SnapshotTruncated(RuntimeError):
-    pass
+def _expected_status_for_reason(reason: SnapshotCaptureReason) -> SnapshotCaptureStatus:
+    """The one legal :class:`SnapshotCaptureStatus` for each terminal cause.
+
+    Exhaustive over every member of :class:`SnapshotCaptureReason` so a reason
+    added without an assigned status is a mypy failure at ``assert_never``
+    (pre-commit), not a mismatched ``(status, reason)`` pair discovered later by
+    a caller.
+    """
+    match reason:
+        case (
+            SnapshotCaptureReason.PATH_COUNT_EXCEEDED
+            | SnapshotCaptureReason.FILE_BYTES_EXCEEDED
+            | SnapshotCaptureReason.TOTAL_BYTES_EXCEEDED
+        ):
+            return SnapshotCaptureStatus.TRUNCATED
+        case SnapshotCaptureReason.IDENTITY_DRIFT:
+            return SnapshotCaptureStatus.STALE
+        case (
+            SnapshotCaptureReason.GIT_TIMEOUT
+            | SnapshotCaptureReason.GIT_COMMAND_FAILED
+            | SnapshotCaptureReason.ROOT_NOT_WORKTREE
+            | SnapshotCaptureReason.IDENTITY_UNRESOLVED
+            | SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED
+            | SnapshotCaptureReason.WORKTREE_UNREADABLE
+            | SnapshotCaptureReason.COLLECTOR_SAFETY_FAULT
+            | SnapshotCaptureReason.MANIFEST_DIGEST_EMPTY
+            | SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED
+        ):
+            return SnapshotCaptureStatus.FAILED
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+class _CaptureAborted(RuntimeError):
+    """A structured internal abort of one repository snapshot capture attempt."""
+
+    def __init__(
+        self, status: SnapshotCaptureStatus, reason: SnapshotCaptureReason, detail: str
+    ) -> None:
+        expected = _expected_status_for_reason(reason)
+        if status is not expected:
+            raise AssertionError(
+                f"_CaptureAborted status/reason mismatch: {reason} requires "
+                f"{expected}, got {status}"
+            )
+        self.status = status
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{status}: {reason}: {detail}")
+
+
+def _check_deadline(deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise _CaptureAborted(
+            SnapshotCaptureStatus.FAILED,
+            SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED,
+            "repository snapshot capture exceeded its deadline",
+        )
 
 
 def _git(
@@ -233,24 +307,46 @@ def _index_records(value: bytes) -> tuple[tuple[str, str, str, str], ...]:
     return tuple(records)
 
 
-def _hash_file(root: Path, relative_path: str, limits: SnapshotCaptureLimits) -> tuple[str, int]:
+def _hash_file(
+    root: Path,
+    relative_path: str,
+    limits: SnapshotCaptureLimits,
+    *,
+    enforce_cap: bool,
+    deadline: float,
+) -> tuple[str, int]:
     digest = hashlib.sha256()
     total = 0
     descriptor = open_contained_regular_file(root, relative_path)
     try:
-        while total <= limits.max_file_bytes:
-            chunk = os.read(
-                descriptor,
-                min(1024 * 1024, limits.max_file_bytes + 1 - total),
-            )
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > limits.max_file_bytes:
-                raise _SnapshotTruncated(
-                    f"file exceeds max_file_bytes: {Path(relative_path).name}"
+        if enforce_cap:
+            while total <= limits.max_file_bytes:
+                _check_deadline(deadline)
+                chunk = os.read(
+                    descriptor,
+                    min(1024 * 1024, limits.max_file_bytes + 1 - total),
                 )
-            digest.update(chunk)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limits.max_file_bytes:
+                    raise _CaptureAborted(
+                        SnapshotCaptureStatus.TRUNCATED,
+                        SnapshotCaptureReason.FILE_BYTES_EXCEEDED,
+                        f"file exceeds max_file_bytes: {Path(relative_path).name}",
+                    )
+                digest.update(chunk)
+        else:
+            # No cap: an ignored file's true bytes are still hashed in full for
+            # identity purposes (see _ObservedPath), just never charged against
+            # max_file_bytes/max_total_bytes. The deadline is the only bound left.
+            while True:
+                _check_deadline(deadline)
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                digest.update(chunk)
     finally:
         os.close(descriptor)
     return f"sha256:{digest.hexdigest()}", total
@@ -261,6 +357,8 @@ def _path_state(
     relative_path: str,
     category: Literal["tracked", "untracked", "ignored"],
     limits: SnapshotCaptureLimits,
+    *,
+    deadline: float,
 ) -> _ObservedPath:
     path = root / relative_path
     raw_mode = observe_path_mode(path)
@@ -275,8 +373,9 @@ def _path_state(
                 content_digest="",
                 symlink_target="",
             ),
-            0,
-            "",
+            published_bytes=0,
+            identity_bytes=0,
+            identity_content_digest="",
         )
 
     mode = stat.S_IMODE(raw_mode)
@@ -294,11 +393,15 @@ def _path_state(
                 content_digest=content_digest,
                 symlink_target=target,
             ),
-            len(payload),
-            content_digest,
+            published_bytes=len(payload),
+            identity_bytes=len(payload),
+            identity_content_digest=content_digest,
         )
     if stat.S_ISREG(raw_mode):
-        content_digest, size = _hash_file(root, relative_path, limits)
+        enforce_cap = category != "ignored"
+        content_digest, size = _hash_file(
+            root, relative_path, limits, enforce_cap=enforce_cap, deadline=deadline
+        )
         if category == "ignored":
             return _ObservedPath(
                 RepositoryPathState(
@@ -310,8 +413,9 @@ def _path_state(
                     content_digest="",
                     symlink_target="",
                 ),
-                size,
-                content_digest,
+                published_bytes=0,
+                identity_bytes=size,
+                identity_content_digest=content_digest,
             )
         return _ObservedPath(
             RepositoryPathState(
@@ -323,8 +427,9 @@ def _path_state(
                 content_digest=content_digest,
                 symlink_target="",
             ),
-            size,
-            content_digest,
+            published_bytes=size,
+            identity_bytes=size,
+            identity_content_digest=content_digest,
         )
     if stat.S_ISDIR(raw_mode):
         kind: Literal["directory", "other"] = "directory"
@@ -340,8 +445,9 @@ def _path_state(
             content_digest="",
             symlink_target="",
         ),
-        0,
-        "",
+        published_bytes=0,
+        identity_bytes=0,
+        identity_content_digest="",
     )
 
 
@@ -398,8 +504,11 @@ def _untracked_special_paths(root: Path, *, ignored: frozenset[str]) -> tuple[st
     return tuple(paths)
 
 
-def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedRepositoryState:
+def _capture_once(
+    root: Path, limits: SnapshotCaptureLimits, *, deadline: float
+) -> CapturedRepositoryState:
     timeout = limits.git_timeout_seconds
+    _check_deadline(deadline)
     worktree_root = Path(
         _git(root, "rev-parse", "--show-toplevel", timeout=timeout)
         .decode("utf-8", errors="surrogateescape")
@@ -407,6 +516,7 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
     ).resolve()
     if worktree_root != root:
         raise ValueError(f"root must be the concrete Git worktree root: {worktree_root}")
+    _check_deadline(deadline)
     common_git_dir = Path(
         _git(
             root,
@@ -418,14 +528,17 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
         .decode("utf-8", errors="surrogateescape")
         .strip()
     ).resolve()
+    _check_deadline(deadline)
     head_result = _git(root, "rev-parse", "--verify", "HEAD", timeout=timeout, check=False)
     head = head_result.decode("ascii", errors="replace").strip()
 
+    _check_deadline(deadline)
     raw_index = _git(root, "ls-files", "--stage", "-z", timeout=timeout)
     index_records = _index_records(raw_index)
     tracked_paths = tuple(sorted({record[3] for record in index_records}))
     # Ask git which entries are already collapsed as ignored before walking the
     # worktree, so the walk can honour that decision instead of racing against it.
+    _check_deadline(deadline)
     ignored_paths = tuple(
         sorted(
             _nul_paths(
@@ -444,6 +557,7 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
         )
     )
     ignored_prune_set = frozenset(entry.rstrip("/") for entry in ignored_paths)
+    _check_deadline(deadline)
     untracked_paths = tuple(
         sorted(
             set(
@@ -463,27 +577,37 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
     )
     path_count = len(tracked_paths) + len(untracked_paths) + len(ignored_paths)
     if path_count > limits.max_paths:
-        raise _SnapshotTruncated(
-            f"repository path count {path_count} exceeds max_paths {limits.max_paths}"
+        raise _CaptureAborted(
+            SnapshotCaptureStatus.TRUNCATED,
+            SnapshotCaptureReason.PATH_COUNT_EXCEEDED,
+            f"repository path count {path_count} exceeds max_paths {limits.max_paths}",
         )
 
     observations: list[_ObservedPath] = []
     for path in tracked_paths:
-        observations.append(_path_state(root, path, "tracked", limits))
+        _check_deadline(deadline)
+        observations.append(_path_state(root, path, "tracked", limits, deadline=deadline))
     for path in untracked_paths:
-        observations.append(_path_state(root, path, "untracked", limits))
+        _check_deadline(deadline)
+        observations.append(_path_state(root, path, "untracked", limits, deadline=deadline))
     # Ignored directories remain collapsed, while ignored regular-file content is
     # represented only by private identity material.
     for path in ignored_paths:
-        observations.append(_path_state(root, path.rstrip("/"), "ignored", limits))
-
-    total_hashed_bytes = sum(observation.hashed_bytes for observation in observations)
-    if total_hashed_bytes > limits.max_total_bytes:
-        raise _SnapshotTruncated(
-            "repository content exceeds max_total_bytes "
-            f"({total_hashed_bytes} > {limits.max_total_bytes})"
+        _check_deadline(deadline)
+        observations.append(
+            _path_state(root, path.rstrip("/"), "ignored", limits, deadline=deadline)
         )
 
+    total_published_bytes = sum(observation.published_bytes for observation in observations)
+    if total_published_bytes > limits.max_total_bytes:
+        raise _CaptureAborted(
+            SnapshotCaptureStatus.TRUNCATED,
+            SnapshotCaptureReason.TOTAL_BYTES_EXCEEDED,
+            "repository content exceeds max_total_bytes "
+            f"({total_published_bytes} > {limits.max_total_bytes})",
+        )
+
+    _check_deadline(deadline)
     index_payload = [
         {"mode": mode, "object_id": object_id, "stage": stage, "path": path}
         for mode, object_id, stage, path in index_records
@@ -529,7 +653,7 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
         untracked_paths=len(untracked_paths),
         ignored_paths=len(ignored_paths),
         missing_paths=sum(state.kind == "missing" for state in states),
-        total_hashed_bytes=total_hashed_bytes,
+        total_published_bytes=total_published_bytes,
         snapshot_identity=snapshot_identity,
         tracked_records=tuple(
             (state.path, state.content_digest)
@@ -640,6 +764,70 @@ def _terminal_snapshot(
     )
 
 
+def _classify_capture_once_failure(exc: Exception) -> SnapshotCaptureReason:
+    """Map an exception that escaped ``_capture_once`` to its terminal cause.
+
+    Dispatches on exception class first (the source-of-truth signal), the same
+    discipline ``_artifact_unsupported_reason`` documents below: a new error
+    message that happens to share a substring with an existing case must not
+    silently misclassify. ``CollectorSafetyError`` is checked before the
+    generic ``ValueError`` arm because it is one of that class's subclasses;
+    the only member of the caught tuple left once ``TimeoutExpired``,
+    ``ValueError``, and ``RuntimeError`` are excluded is ``OSError``.
+    """
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return SnapshotCaptureReason.GIT_TIMEOUT
+    if isinstance(exc, CollectorSafetyError):
+        return SnapshotCaptureReason.COLLECTOR_SAFETY_FAULT
+    if isinstance(exc, ValueError):
+        return SnapshotCaptureReason.ROOT_NOT_WORKTREE
+    if isinstance(exc, RuntimeError):
+        return SnapshotCaptureReason.GIT_COMMAND_FAILED
+    return SnapshotCaptureReason.WORKTREE_UNREADABLE
+
+
+def _stage(
+    reason: SnapshotCaptureReason,
+    func: Callable[..., _StageResult],
+    *args: object,
+    **kwargs: object,
+) -> _StageResult:
+    """Run one identity/activation operation, attaching one fixed reason to any
+    failure. Unlike ``_capture_stage`` below, this operation has exactly one
+    meaningful way to fail at this level, so no further classification is
+    needed."""
+    try:
+        return func(*args, **kwargs)
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+        raise _CaptureAborted(
+            SnapshotCaptureStatus.FAILED, reason, f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+def _capture_stage(
+    root: Path, limits: SnapshotCaptureLimits, *, deadline: float
+) -> CapturedRepositoryState:
+    """Run one ``_capture_once`` attempt, classifying any exception that escapes it.
+
+    A ``_CaptureAborted`` raised from inside ``_capture_once`` already names its
+    own cause (a budget trip or a deadline overrun) and must pass through
+    unmodified — reclassifying it here by "which stage failed" would collapse
+    all three truncation reasons onto ``GIT_COMMAND_FAILED`` and status
+    ``FAILED``, silently defeating the distinction those raise sites exist to
+    make.
+    """
+    try:
+        return _capture_once(root, limits, deadline=deadline)
+    except _CaptureAborted:
+        raise
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+        raise _CaptureAborted(
+            SnapshotCaptureStatus.FAILED,
+            _classify_capture_once_failure(exc),
+            f"{type(exc).__name__}: {exc}",
+        ) from exc
+
+
 def capture_repository_snapshot(
     root: str | Path,
     *,
@@ -654,20 +842,49 @@ def capture_repository_snapshot(
             status=SnapshotCaptureStatus.FAILED,
             snapshot=None,
             diagnostic="collector_manifest_digest must be non-empty",
+            reason=SnapshotCaptureReason.MANIFEST_DIGEST_EMPTY,
         )
+    # Computed once and shared across both _capture_once calls below: recomputing
+    # per call would silently double the effective bound.
+    deadline = time.monotonic() + active_limits.capture_deadline_seconds
     identity_start = None
     activation_start = None
     try:
-        identity_start = resolve_repository_identity(resolved_root)
-        activation_start = activate_repository_profiles(resolved_root, identity=identity_start)
-        start = _capture_once(resolved_root, active_limits)
-        end = _capture_once(resolved_root, active_limits)
-        identity_end = resolve_repository_identity(resolved_root)
-        activation_end = activate_repository_profiles(resolved_root, identity=identity_end)
-    except _SnapshotTruncated as exc:
+        identity_start = _stage(
+            SnapshotCaptureReason.IDENTITY_UNRESOLVED,
+            resolve_repository_identity,
+            resolved_root,
+        )
+        activation_start = _stage(
+            SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED,
+            activate_repository_profiles,
+            resolved_root,
+            identity=identity_start,
+        )
+        start = _capture_stage(resolved_root, active_limits, deadline=deadline)
+        end = _capture_stage(resolved_root, active_limits, deadline=deadline)
+        identity_end = _stage(
+            SnapshotCaptureReason.IDENTITY_UNRESOLVED,
+            resolve_repository_identity,
+            resolved_root,
+        )
+        activation_end = _stage(
+            SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED,
+            activate_repository_profiles,
+            resolved_root,
+            identity=identity_end,
+        )
+    except _CaptureAborted as exc:
+        if exc.status is not SnapshotCaptureStatus.TRUNCATED:
+            return SnapshotCaptureResult(
+                status=exc.status, snapshot=None, diagnostic=exc.detail, reason=exc.reason
+            )
         if identity_start is None or activation_start is None:
             return SnapshotCaptureResult(
-                status=SnapshotCaptureStatus.FAILED, snapshot=None, diagnostic=str(exc)
+                status=SnapshotCaptureStatus.FAILED,
+                snapshot=None,
+                diagnostic=exc.detail,
+                reason=exc.reason,
             )
         terminal = _terminal_snapshot(
             identity=identity_start.repository_identity,
@@ -675,16 +892,13 @@ def capture_repository_snapshot(
             collector_manifest_digest=collector_manifest_digest,
             state="truncated",
             authority_digest="",
-            reason=str(exc),
+            reason=exc.detail,
         )
         return SnapshotCaptureResult(
-            status=SnapshotCaptureStatus.TRUNCATED, snapshot=terminal, diagnostic=str(exc)
-        )
-    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
-        return SnapshotCaptureResult(
-            status=SnapshotCaptureStatus.FAILED,
-            snapshot=None,
-            diagnostic=f"{type(exc).__name__}: {exc}",
+            status=SnapshotCaptureStatus.TRUNCATED,
+            snapshot=terminal,
+            diagnostic=exc.detail,
+            reason=exc.reason,
         )
     identity_changed = (
         identity_start.repository_identity.digest != identity_end.repository_identity.digest
@@ -714,6 +928,7 @@ def capture_repository_snapshot(
             status=SnapshotCaptureStatus.STALE,
             snapshot=terminal,
             diagnostic="repository changed during snapshot capture",
+            reason=SnapshotCaptureReason.IDENTITY_DRIFT,
             start_identity=start.snapshot_identity,
             end_identity=end.snapshot_identity,
         )

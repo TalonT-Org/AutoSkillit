@@ -1287,3 +1287,5 @@ from .types._type_exploration import RelationshipKind as RelationshipKind
 from .types._type_exploration import RepositoryIdentity as RepositoryIdentity
 from .types._type_exploration import RepositoryProfileId as RepositoryProfileId
 from .types._type_exploration import RepositorySnapshot as RepositorySnapshot
+from .types._type_exploration import SnapshotCaptureReason as SnapshotCaptureReason
+from .types._type_exploration import SnapshotCaptureStatus as SnapshotCaptureStatus

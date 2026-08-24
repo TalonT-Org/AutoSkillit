@@ -1,23 +1,26 @@
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
 import re
 import subprocess
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 import autoskillit.exploration.snapshot as snapshot_module
+from autoskillit.exploration import SnapshotCaptureReason, SnapshotCaptureStatus
 from autoskillit.exploration.collectors import _bounded
 from autoskillit.exploration.pagination import pagination_identity
 from autoskillit.exploration.snapshot import (
     ArtifactCaptureError,
     ArtifactCaptureStatus,
     SnapshotCaptureLimits,
-    SnapshotCaptureStatus,
+    SnapshotCaptureResult,
     StableArtifactCapture,
     capture_repository_snapshot,
     capture_stable_artifact,
@@ -404,10 +407,10 @@ def test_snapshot_publishes_atomic_stale_marker_when_start_and_end_differ(
     calls = 0
 
     def mutate_between_captures(
-        observed_root: Path, limits: SnapshotCaptureLimits
+        observed_root: Path, limits: SnapshotCaptureLimits, *, deadline: float
     ) -> snapshot_module.CapturedRepositoryState:
         nonlocal calls
-        observed = capture_once(observed_root, limits)
+        observed = capture_once(observed_root, limits, deadline=deadline)
         calls += 1
         if calls == 1:
             (root / "appeared-between-captures.txt").write_text("mutation")
@@ -420,6 +423,7 @@ def test_snapshot_publishes_atomic_stale_marker_when_start_and_end_differ(
     assert result.status is SnapshotCaptureStatus.STALE
     assert result.snapshot is not None
     assert result.validated_activation is None
+    assert result.reason is SnapshotCaptureReason.IDENTITY_DRIFT
     assert result.snapshot.stale
     assert result.snapshot.state == "stale"
     assert result.snapshot.tracked_records == ()
@@ -440,6 +444,7 @@ def test_snapshot_publishes_atomic_terminal_marker_when_a_limit_truncates(tmp_pa
     assert result.status is SnapshotCaptureStatus.TRUNCATED
     assert result.snapshot is not None
     assert result.validated_activation is None
+    assert result.reason is SnapshotCaptureReason.PATH_COUNT_EXCEEDED
     assert result.snapshot.truncated
     assert result.snapshot.state == "truncated"
     assert result.snapshot.tree_digest == ""
@@ -698,3 +703,335 @@ def test_ignore_policy_bump_changes_the_published_digest_for_unchanged_state(
     assert under_v2.snapshot is not None
     assert under_v1.snapshot.digest != under_v2.snapshot.digest
     assert under_v1.snapshot.ignore_policy_digest != under_v2.snapshot.ignore_policy_digest
+
+
+def _new_repository_with_tracked_file_in_ignored_dir(tmp_path: Path, name: str = "repo") -> Path:
+    """A ``vendor/`` directory that is ignored but not fully collapsed.
+
+    ``vendor/keep.txt`` is force-added, defeating git's ``--directory`` collapse
+    for ``ls-files --others --ignored --directory`` — the precondition that makes
+    the ignored-byte budgets reachable at all (T-B3).
+    """
+    root = tmp_path / name
+    root.mkdir()
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "snapshot@example.test")
+    _git(root, "config", "user.name", "Snapshot Test")
+    (root / ".gitignore").write_text("vendor/\n")
+    vendor = root / "vendor"
+    vendor.mkdir()
+    (vendor / "keep.txt").write_text("kept tracked bytes\n")
+    (vendor / "big.bin").write_bytes(b"\x00" * (3 * 1024 * 1024))
+    _git(root, "add", ".gitignore")
+    _git(root, "add", "-f", "vendor/keep.txt")
+    _git(root, "commit", "-qm", "initial")
+    return root
+
+
+def test_ignored_bytes_are_not_charged_but_still_invalidate_the_fingerprint(
+    tmp_path: Path,
+) -> None:
+    root = _new_repository_with_tracked_file_in_ignored_dir(tmp_path)
+    big = root / "vendor" / "big.bin"
+    big_size = big.stat().st_size
+    limits = SnapshotCaptureLimits(max_file_bytes=big_size - 1, max_total_bytes=big_size - 1)
+
+    result = capture_repository_snapshot(
+        root, collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST, limits=limits
+    )
+
+    assert result.status is SnapshotCaptureStatus.COMPLETE
+    assert result.snapshot is not None
+    assert ("vendor/big.bin", "") in result.snapshot.ignored_records
+
+    baseline_digest = result.snapshot.tree_digest
+    big.write_bytes(b"\x01" * big_size)
+    rewritten = capture_repository_snapshot(
+        root, collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST, limits=limits
+    )
+
+    assert rewritten.status is SnapshotCaptureStatus.COMPLETE
+    assert rewritten.snapshot is not None
+    assert rewritten.snapshot.tree_digest != baseline_digest
+
+    tracked_over_limit = capture_repository_snapshot(
+        root,
+        collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST,
+        limits=SnapshotCaptureLimits(max_file_bytes=10, max_total_bytes=1_000_000),
+    )
+
+    assert tracked_over_limit.status is SnapshotCaptureStatus.TRUNCATED
+    assert tracked_over_limit.reason is SnapshotCaptureReason.FILE_BYTES_EXCEEDED
+
+
+def _trip_max_paths(root: Path, monkeypatch: pytest.MonkeyPatch) -> SnapshotCaptureLimits:
+    _new_repository(root.parent, name=root.name)
+    return SnapshotCaptureLimits(max_paths=1)
+
+
+def _trip_max_file_bytes(root: Path, monkeypatch: pytest.MonkeyPatch) -> SnapshotCaptureLimits:
+    repo = _new_repository(root.parent, name=root.name)
+    (repo / "big.txt").write_text("x" * 64)
+    _git(repo, "add", "big.txt")
+    _git(repo, "commit", "-qm", "big file")
+    return SnapshotCaptureLimits(max_file_bytes=32)
+
+
+def _trip_max_total_bytes(root: Path, monkeypatch: pytest.MonkeyPatch) -> SnapshotCaptureLimits:
+    root.mkdir()
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "snapshot@example.test")
+    _git(root, "config", "user.name", "Snapshot Test")
+    for name in ("t1.txt", "t2.txt", "t3.txt"):
+        (root / name).write_text("x" * 20)
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "bulk files")
+    return SnapshotCaptureLimits(max_file_bytes=1000, max_total_bytes=30)
+
+
+def _trip_git_timeout_seconds(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> SnapshotCaptureLimits:
+    _new_repository(root.parent, name=root.name)
+
+    def raise_timeout(*args: object, **kwargs: object) -> None:
+        raise subprocess.TimeoutExpired(cmd="git", timeout=kwargs.get("timeout", 1))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(snapshot_module.subprocess, "run", raise_timeout)
+    return SnapshotCaptureLimits(git_timeout_seconds=1)
+
+
+def _trip_capture_deadline_seconds(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> SnapshotCaptureLimits:
+    _new_repository(root.parent, name=root.name)
+    real_capture_once = snapshot_module._capture_once
+
+    def jump_then_delegate(
+        root_arg: Path, limits: SnapshotCaptureLimits, *, deadline: float
+    ) -> snapshot_module.CapturedRepositoryState:
+        monkeypatch.setattr(snapshot_module.time, "monotonic", lambda: deadline + 1)
+        return real_capture_once(root_arg, limits, deadline=deadline)
+
+    monkeypatch.setattr(snapshot_module, "_capture_once", jump_then_delegate)
+    return SnapshotCaptureLimits(capture_deadline_seconds=60)
+
+
+_LIMIT_TRIP_BUILDERS: Mapping[str, Callable[[Path, pytest.MonkeyPatch], SnapshotCaptureLimits]] = {
+    "max_paths": _trip_max_paths,
+    "max_file_bytes": _trip_max_file_bytes,
+    "max_total_bytes": _trip_max_total_bytes,
+    "git_timeout_seconds": _trip_git_timeout_seconds,
+    "capture_deadline_seconds": _trip_capture_deadline_seconds,
+}
+
+_EXPECTED_REASON_BY_LIMIT_FIELD: Mapping[str, SnapshotCaptureReason] = {
+    "max_paths": SnapshotCaptureReason.PATH_COUNT_EXCEEDED,
+    "max_file_bytes": SnapshotCaptureReason.FILE_BYTES_EXCEEDED,
+    "max_total_bytes": SnapshotCaptureReason.TOTAL_BYTES_EXCEEDED,
+    "git_timeout_seconds": SnapshotCaptureReason.GIT_TIMEOUT,
+    "capture_deadline_seconds": SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED,
+}
+
+_EXPECTED_STATUS_BY_LIMIT_FIELD: Mapping[str, SnapshotCaptureStatus] = {
+    "max_paths": SnapshotCaptureStatus.TRUNCATED,
+    "max_file_bytes": SnapshotCaptureStatus.TRUNCATED,
+    "max_total_bytes": SnapshotCaptureStatus.TRUNCATED,
+    "git_timeout_seconds": SnapshotCaptureStatus.FAILED,
+    "capture_deadline_seconds": SnapshotCaptureStatus.FAILED,
+}
+
+
+@pytest.mark.parametrize(
+    "field",
+    sorted(field.name for field in dataclasses.fields(SnapshotCaptureLimits)),
+    ids=lambda name: name,
+)
+def test_every_bounding_limit_field_has_a_trip_builder(field: str) -> None:
+    assert field in _LIMIT_TRIP_BUILDERS, (
+        f"{field} has no trip builder in _LIMIT_TRIP_BUILDERS — a new "
+        "SnapshotCaptureLimits field must add one so its enforcement is exercised."
+    )
+
+
+@pytest.mark.parametrize(
+    "field",
+    sorted(field.name for field in dataclasses.fields(SnapshotCaptureLimits)),
+    ids=lambda name: name,
+)
+def test_each_bounding_limit_field_trips_its_own_reason(
+    field: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builder = _LIMIT_TRIP_BUILDERS[field]
+    root = tmp_path / field
+    limits = builder(root, monkeypatch)
+
+    result = capture_repository_snapshot(
+        root, collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST, limits=limits
+    )
+
+    assert result.reason is _EXPECTED_REASON_BY_LIMIT_FIELD[field]
+    assert result.status is _EXPECTED_STATUS_BY_LIMIT_FIELD[field]
+
+
+@pytest.mark.parametrize("status", list(SnapshotCaptureStatus), ids=lambda status: status.value)
+def test_snapshot_capture_result_requires_reason_iff_not_complete(
+    status: SnapshotCaptureStatus,
+) -> None:
+    if status is SnapshotCaptureStatus.COMPLETE:
+        with pytest.raises(ValueError, match="cannot expose a failure reason"):
+            SnapshotCaptureResult(
+                status=status,
+                snapshot=None,
+                reason=SnapshotCaptureReason.MANIFEST_DIGEST_EMPTY,
+            )
+    else:
+        with pytest.raises(ValueError, match="requires a failure reason"):
+            SnapshotCaptureResult(status=status, snapshot=None, reason=None)
+
+
+def test_snapshot_capture_deadline_overrun_fails_with_a_named_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _new_repository(tmp_path)
+    real_capture_once = snapshot_module._capture_once
+
+    def jump_then_delegate(
+        root_arg: Path, limits: SnapshotCaptureLimits, *, deadline: float
+    ) -> snapshot_module.CapturedRepositoryState:
+        monkeypatch.setattr(snapshot_module.time, "monotonic", lambda: deadline + 1)
+        return real_capture_once(root_arg, limits, deadline=deadline)
+
+    monkeypatch.setattr(snapshot_module, "_capture_once", jump_then_delegate)
+
+    result = capture_repository_snapshot(
+        root,
+        collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST,
+        limits=SnapshotCaptureLimits(capture_deadline_seconds=60),
+    )
+
+    assert result.status is SnapshotCaptureStatus.FAILED
+    assert result.reason is SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED
+
+
+def _raise_runtime_error(*args: object, **kwargs: object) -> None:
+    raise RuntimeError("simulated failure")
+
+
+def _setup_identity_resolution_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = _new_repository(tmp_path, name="identity-failure")
+    monkeypatch.setattr(snapshot_module, "resolve_repository_identity", _raise_runtime_error)
+    return root
+
+
+def _setup_profile_activation_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = _new_repository(tmp_path, name="activation-failure")
+    monkeypatch.setattr(snapshot_module, "activate_repository_profiles", _raise_runtime_error)
+    return root
+
+
+class _FailedGitProcess:
+    returncode = 1
+    stdout = b""
+    stderr = b"simulated git failure"
+
+
+def _setup_git_command_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = _new_repository(tmp_path, name="git-command-failure")
+    monkeypatch.setattr(
+        snapshot_module.subprocess, "run", lambda *args, **kwargs: _FailedGitProcess()
+    )
+    return root
+
+
+def _setup_git_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = _new_repository(tmp_path, name="git-timeout")
+
+    def raise_timeout(*args: object, **kwargs: object) -> None:
+        raise subprocess.TimeoutExpired(cmd="git", timeout=kwargs.get("timeout", 1))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(snapshot_module.subprocess, "run", raise_timeout)
+    return root
+
+
+def _setup_root_worktree_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = _new_repository(tmp_path, name="worktree-mismatch")
+    nested = root / "subdir"
+    nested.mkdir()
+    return nested
+
+
+_FAILED_CAUSE_SCENARIOS: tuple[
+    tuple[str, Callable[[Path, pytest.MonkeyPatch], Path], SnapshotCaptureReason], ...
+] = (
+    (
+        "identity_resolution",
+        _setup_identity_resolution_failure,
+        SnapshotCaptureReason.IDENTITY_UNRESOLVED,
+    ),
+    (
+        "profile_activation",
+        _setup_profile_activation_failure,
+        SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED,
+    ),
+    (
+        "git_command_failure",
+        _setup_git_command_failure,
+        SnapshotCaptureReason.GIT_COMMAND_FAILED,
+    ),
+    ("git_timeout", _setup_git_timeout, SnapshotCaptureReason.GIT_TIMEOUT),
+    (
+        "root_worktree_mismatch",
+        _setup_root_worktree_mismatch,
+        SnapshotCaptureReason.ROOT_NOT_WORKTREE,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "setup", "expected_reason"),
+    _FAILED_CAUSE_SCENARIOS,
+    ids=[case[0] for case in _FAILED_CAUSE_SCENARIOS],
+)
+def test_snapshot_failed_causes_are_named_distinctly(
+    scenario: str,
+    setup: Callable[[Path, pytest.MonkeyPatch], Path],
+    expected_reason: SnapshotCaptureReason,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = setup(tmp_path, monkeypatch)
+
+    result = capture_repository_snapshot(
+        root, collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST
+    )
+
+    assert result.status is SnapshotCaptureStatus.FAILED
+    assert result.reason is expected_reason
+
+
+def test_snapshot_failed_cause_scenarios_are_pairwise_distinct() -> None:
+    reasons = [reason for _scenario, _setup, reason in _FAILED_CAUSE_SCENARIOS]
+    assert len(reasons) == len(set(reasons))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="max_paths counts collapsed ignored entries toward the cap; tracked in #4778",
+)
+def test_max_paths_does_not_count_collapsed_ignored_entries(tmp_path: Path) -> None:
+    # Only 2 non-ignored paths exist (.gitignore, vendor/keep.txt); the 9 ignored
+    # files below (big.bin plus 8 more) currently count toward max_paths too,
+    # tripping PATH_COUNT_EXCEEDED at a cap that should comfortably admit them.
+    root = _new_repository_with_tracked_file_in_ignored_dir(tmp_path)
+    vendor = root / "vendor"
+    for index in range(8):
+        (vendor / f"ignored-{index}.bin").write_bytes(b"x")
+
+    result = capture_repository_snapshot(
+        root,
+        collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST,
+        limits=SnapshotCaptureLimits(max_paths=5),
+    )
+
+    assert result.status is SnapshotCaptureStatus.COMPLETE

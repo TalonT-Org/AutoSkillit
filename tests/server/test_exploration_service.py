@@ -16,13 +16,14 @@ from autoskillit.core import (
     ProfileActivation,
     RepositoryProfileId,
 )
+from autoskillit.exploration import SnapshotCaptureReason, SnapshotCaptureStatus
 from autoskillit.exploration._deterministic import CursorValidationError
 from autoskillit.exploration.collectors import (
     COLLECTOR_PROFILES,
     CollectorInvocation,
     CollectorLimits,
 )
-from autoskillit.exploration.snapshot import SnapshotCaptureResult, SnapshotCaptureStatus
+from autoskillit.exploration.snapshot import SnapshotCaptureResult
 from autoskillit.pipeline import CapabilityResolutionStatus, OwnerBoundExplorationContextStore
 from autoskillit.server import _exploration_service
 from autoskillit.server._exploration_service import DefaultExplorationService
@@ -373,7 +374,12 @@ def test_service_rejects_a_truncated_post_collection_publication(
             truncated=True,
             truncation_reason="test limit",
         )
-        return SnapshotCaptureResult(SnapshotCaptureStatus.TRUNCATED, terminal, "test limit")
+        return SnapshotCaptureResult(
+            SnapshotCaptureStatus.TRUNCATED,
+            terminal,
+            "test limit",
+            reason=SnapshotCaptureReason.FILE_BYTES_EXCEEDED,
+        )
 
     monkeypatch.setattr(
         _exploration_service, "capture_repository_snapshot", truncate_second_capture

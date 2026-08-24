@@ -1,39 +1,4 @@
-"""Attested end-to-end conformance for run_skill's execution-tuning
-parameters, parametrized over the live role registry (#4707, S8).
-
-Composes the two halves the pre-existing suite kept apart, per this plan's
-"How Tests Missed This" analysis:
-
-- **Denial half** — writable against the unparametrized ``tool_ctx_ready_recipe``
-  default: denial requires only that the *caller* send a non-empty value;
-  the step need declare nothing. Every EXECUTION_TUNING param is covered.
-- **Delivery half** — requires S7's fixture parametrization. The pinned
-  default (research/scope) declares no non-vacant tuning value for any of
-  the four parameters, so before S7 this half was unwritable — a passing
-  denial half was never evidence of a working delivery mechanism, the
-  precise gap #4707 fell through.
-
-Today's verdict recorded honestly per the plan: **denial half passes on
-current (pre-#4707-fix) behavior — correctly, the gate should deny.
-Delivery half was unwritable before S7/S8 landed.** A passing denial half
-alone must never be mistaken for full coverage; this module's own
-docstring is that record.
-
-Delivery-half status by parameter, stated plainly so a green run is not
-read as more than it is:
-
-- ``stale_threshold``, ``idle_output_timeout``, ``step_provider`` — covered
-  and passing, against research.yaml's ``download_data``.
-- ``model`` — bridged ``xfail(strict=True)`` on #4775, an independent
-  pre-existing defect (``dispatch_items`` is compiled into ``mcp_kwargs``
-  but filtered out of the runtime actual-kwargs assembly, so no fan-out
-  step can pass attestation). Every bundled recipe step carrying a literal
-  non-templated ``model:`` is a ``dispatch_items`` fan-out step, so there is
-  no unblocked vehicle. It is bridged rather than rewritten against the
-  unattested path: proving ``model`` delivery where the gate never engages
-  is what let #4707 through in the first place, and would be no evidence at
-  all here.
-"""
+"""Attested admission and delivery for run_skill execution-tuning parameters."""
 
 from __future__ import annotations
 

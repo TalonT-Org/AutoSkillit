@@ -82,7 +82,9 @@ def test_autoskillit_subprocess_writes_only_under_the_isolated_home(
         check=True,
         capture_output=True,
         text=True,
-        timeout=30,
+        # This contract runs with four xdist workers; doctor startup can exceed the
+        # normal 30-second ceiling under CPU contention even though it is not hung.
+        timeout=120,
         env=production_interpreter_env(),
     )
 

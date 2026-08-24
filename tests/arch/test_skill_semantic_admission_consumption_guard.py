@@ -24,11 +24,10 @@ _EXPECTED_CALLERS = Counter(
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
         (_COMPILE, "workspace/session_skills.py", "_materialize_profile_skill_infos"): 1,
         (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 2,
-        (_COMPILE, "server/tools/_serve_helpers.py", "project_orchestrator_guidance"): 1,
         (
             _COMPILE,
-            "server/tools/tools_fleet_dispatch/_campaign_state.py",
-            "_project_food_truck_sous_chef",
+            "server/tools/_serve_helpers.py",
+            "_project_orchestrator_sous_chef",
         ): 1,
         (_COMPILE, "cli/fleet/_fleet_run.py", "_execute_fleet_run"): 1,
         (_COMPILE, "cli/fleet/_fleet_session.py", "_launch_fleet_session"): 1,

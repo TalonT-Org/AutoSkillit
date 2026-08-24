@@ -293,7 +293,7 @@ class TreeVanishedError(ValueError):
         super().__init__(f"tree entry vanished during enumeration: {location}")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TreeEntry:
     """One entry yielded by :func:`strict_walk` — metadata only, no content read.
 

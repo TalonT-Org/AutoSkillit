@@ -73,8 +73,7 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "core/types/_type_audit_admission_validation.py": 750,
     "core/types/_type_audit_admission_artifact_ownership.py": 750,
     "core/types/_type_audit_admission_reference_identity.py": 750,
-    # Issue #4738 — context-admission protocol-v1 split. The stable facade and
-    # every cohesion shard remain below the repository-wide warning-zone cap.
+    # Issue #4738 — context-admission protocol-v1 split.
     "core/types/_type_context_admission.py": 750,
     "core/types/_type_context_admission_base.py": 750,
     "core/types/_type_context_admission_identities.py": 750,

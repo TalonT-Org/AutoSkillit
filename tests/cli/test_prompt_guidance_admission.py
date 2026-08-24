@@ -88,13 +88,21 @@ def test_read_full_sous_chef_rejects_a_backend_mismatch_before_projection(
 
 def test_prompt_builders_accept_the_shared_admitted_catalog() -> None:
     """Direct prompt construction accepts the same compiled authority at every layer."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from autoskillit.cli.prompts import (
+        _build_orchestrator_prompt,
+        _read_full_sous_chef,
+    )
     from autoskillit.cli.prompts._prompts_kitchen import (
         _build_fleet_dispatch_prompt,
         _build_open_kitchen_prompt,
     )
 
     compilation, backend, project_root = compiled_orchestrator_prompt_inputs()
+    admitted_guidance = _read_full_sous_chef(
+        compilation,
+        project_root=project_root,
+        backend=backend,
+    )
 
     prompts = (
         _build_open_kitchen_prompt(
@@ -118,4 +126,5 @@ def test_prompt_builders_accept_the_shared_admitted_catalog() -> None:
         ),
     )
 
-    assert all(prompts)
+    assert admitted_guidance
+    assert all(admitted_guidance in prompt for prompt in prompts)

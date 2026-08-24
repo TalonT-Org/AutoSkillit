@@ -53,6 +53,14 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     # skill_contract, durable_writers}.py carry the cohesive extractions.
     "core/types/_type_enums.py": 750,
     "core/types/_type_constants.py": 750,
+    "core/types/_type_results.py": 750,
+    "core/types/_type_results_records.py": 750,
+    # Issue #4739 — recipe-section and tool-registry authorities are split
+    # behind their existing import facades.
+    "core/types/_type_constants_registries.py": 750,
+    "core/types/_type_recipe_sections.py": 750,
+    "core/tool_registry.py": 750,
+    "core/_tool_registry_builders.py": 750,
 }
 
 

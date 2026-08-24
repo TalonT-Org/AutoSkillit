@@ -168,6 +168,25 @@ _CORE_UNIVERSAL_EXCLUSIONS: dict[str, frozenset[str]] = {
     "_type_enums": frozenset({"hooks", "skills"}),
 }
 
+_TYPE_RESULTS_CASCADE = frozenset(
+    {
+        "core",
+        "execution",
+        "exploration",
+        "pipeline",
+        "workspace",
+        "recipe",
+        "migration",
+        "fleet",
+        "server",
+        "cli",
+        "_llm_triage",
+        "_test_filter",
+        "hook_registry",
+        "smoke_utils",
+    }
+)
+
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
@@ -290,24 +309,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "session_registry": frozenset({"core"}),
     "tool_sequence_analysis": frozenset({"core", "execution", "server", "cli"}),
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
-    "_type_results": frozenset(
-        {
-            "core",
-            "execution",
-            "exploration",
-            "pipeline",
-            "workspace",
-            "recipe",
-            "migration",
-            "fleet",
-            "server",
-            "cli",
-            "_llm_triage",
-            "_test_filter",
-            "hook_registry",
-            "smoke_utils",
-        }
-    ),
+    "_type_results": _TYPE_RESULTS_CASCADE,
+    "_type_results_records": _TYPE_RESULTS_CASCADE,
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_execution_identity": frozenset({"core", "execution", "server", "cli", "fleet"}),
     "_type_exploration": frozenset({"core", "exploration", "pipeline", "server"}),
@@ -321,7 +324,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
     ),
     "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
-    "_type_recipe_sections": frozenset({"core", "execution", "server"}),
+    "_type_recipe_sections": frozenset(
+        {"cli", "config", "core", "execution", "pipeline", "recipe", "server", "workspace"}
+    ),
     "_type_dimensions": frozenset({"config", "core", "server"}),
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
@@ -383,6 +388,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
     "audit_semantic_codec": frozenset({"core", "server"}),
     "tool_registry": frozenset({"core", "recipe", "server"}),
+    "_tool_registry_builders": frozenset({"core", "recipe", "server"}),
     "closure_hashing": frozenset({"core", "pipeline", "recipe", "server"}),
     "path_containment": frozenset({"core", "recipe", "server"}),
     "closure_verifier": frozenset({"core", "execution"}),

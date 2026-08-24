@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
 
@@ -588,6 +589,22 @@ class TestEnsureCodexMcpRegistered:
         ensure_codex_mcp_registered(config_path=p)
         config = _read_codex_config(p).data
         assert "other" in config["mcp_servers"]
+        assert "autoskillit" in config["mcp_servers"]
+
+    def test_preserves_pretrusted_canonical_project(self, tmp_path):
+        p = tmp_path / "config.toml"
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        canonical_path = str(project_dir.resolve())
+        project_key = json.dumps(canonical_path)
+        p.write_text(f'[projects.{project_key}]\ntrust_level = "trusted"\n')
+
+        assert ensure_codex_mcp_registered(config_path=p) is True
+
+        raw = p.read_text()
+        assert f"[projects.{project_key}]" in raw
+        config = tomllib.loads(raw)
+        assert config["projects"][canonical_path]["trust_level"] == "trusted"
         assert "autoskillit" in config["mcp_servers"]
 
     def test_preserves_existing_config_with_list_values(self, tmp_path):

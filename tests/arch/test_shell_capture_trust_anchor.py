@@ -65,6 +65,7 @@ def test_capture_modules_import_with_hooks_directory_alone(tmp_path: Path) -> No
 
     stems = sorted(path.stem for path in capture_dir.glob("*.py"))
     assert stems, f"no standalone capture modules found in {capture_dir}"
+    assert "_runner" in stems
 
     child_code = r"""
 import importlib
@@ -263,7 +264,7 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
         for relative in (
             "hooks/_capture_contract.py",
             "hooks/shell_capture_hook.py",
-            "hooks/_capture_artifacts.py",
+            "hooks/_capture/_runner.py",
             "hooks/_capture_process.py",
         )
     }
@@ -284,7 +285,7 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
 
 
 def test_isolated_runner_never_reads_requested_mode_from_environment() -> None:
-    source = _source("hooks/_capture_artifacts.py")
+    source = _source("hooks/_capture/_runner.py")
     assert "NATIVE_SHELL_CAPTURE_MODE_ENV_VAR" not in source
     assert "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE" not in source
     assert "decode_capture_request" in source

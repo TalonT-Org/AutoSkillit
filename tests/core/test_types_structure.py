@@ -124,6 +124,30 @@ _PRE_SPLIT_CONSTANT_NAMES: frozenset[str] = frozenset(
 )
 
 
+def _recipe_section_facade_names() -> tuple[str, ...]:
+    """Resolve the facade's recipe-section re-exports dynamically.
+
+    The hardcoded list was previously a snapshot of the 10 names that the
+    legacy ``_type_constants_registries`` facade re-exports from
+    ``_type_recipe_sections``. Derive the list from the facade's own
+    attributes (intersected with the canonical module's __all__) so that
+    adding/removing a re-export in the facade cannot silently drift this
+    test's coverage.
+    """
+    import autoskillit.core.types._type_constants_registries as legacy_mod
+    import autoskillit.core.types._type_recipe_sections as canonical_mod
+
+    canonical_names = set(canonical_mod.__all__)
+    return tuple(
+        sorted(
+            name
+            for name in legacy_mod.__dict__
+            if name in canonical_names
+            and legacy_mod.__dict__[name] is getattr(canonical_mod, name, None)
+        )
+    )
+
+
 def test_decomposition_preserves_public_symbol_set() -> None:
     """Every pre-split _type_enums / _type_constants __all__ entry must remain
     reachable through the original facade path with object identity preserved."""
@@ -178,6 +202,23 @@ def test_decomposition_preserves_public_symbol_set() -> None:
         assert hasattr(constants_mod, name), f"_type_constants.{name} missing after decomposition"
 
 
+@pytest.mark.parametrize("name", _recipe_section_facade_names())
+def test_recipe_section_facade_preserves_identity_and_export_ownership(name: str) -> None:
+    import autoskillit.core as core_mod
+    import autoskillit.core.types as types_hub
+    import autoskillit.core.types._type_constants_registries as legacy_mod
+    import autoskillit.core.types._type_recipe_sections as canonical_mod
+
+    canonical = getattr(canonical_mod, name)
+    assert getattr(legacy_mod, name) is canonical
+    assert getattr(types_hub, name) is canonical
+    assert getattr(core_mod, name) is canonical
+    assert types_hub.__all__.count(name) == 1
+    assert name in core_mod.__all__
+    assert name in canonical_mod.__all__
+    assert name not in legacy_mod.__all__
+
+
 def test_enums_importable_from_sub_module():
     from autoskillit.core.types._type_enums import (
         RetryReason,
@@ -222,7 +263,7 @@ def test_types_hub_backward_compat():
     assert isinstance(FREE_RANGE_TOOLS, frozenset)  # _type_constants
     assert dataclasses.is_dataclass(LoadResult)  # _type_results
     assert dataclasses.is_dataclass(SkillResult)  # _type_results
-    assert dataclasses.is_dataclass(FailureRecord)  # _type_results
+    assert dataclasses.is_dataclass(FailureRecord)  # _type_results_records
     assert callable(GateState)  # _type_protocols_infra — Protocol
     assert callable(HeadlessExecutor)  # _type_protocols_execution — Protocol
     assert callable(extract_skill_name)  # _type_helpers — function

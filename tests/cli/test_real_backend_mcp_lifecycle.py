@@ -9,6 +9,7 @@ import os
 import secrets
 import select
 import shutil
+import socket
 import struct
 import subprocess
 import sys
@@ -72,7 +73,12 @@ def _wait_dead(process: psutil.Process, timeout: float) -> bool:
     return False
 
 
-def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) -> None:
+def _drain_pty(
+    master_fd: int,
+    stop: threading.Event,
+    diagnostics: bytearray,
+    trust_prompt_observed: threading.Event,
+) -> None:
     responded: set[str] = set()
     while not stop.is_set():
         try:
@@ -103,13 +109,51 @@ def _drain_pty(master_fd: int, stop: threading.Event, diagnostics: bytearray) ->
                 )
                 and "trust" not in responded
             ):
-                responded.add("trust")
-                os.write(master_fd, b"\r\r")
+                trust_prompt_observed.set()
             if b"Hooks need review" in chunk and "hooks" not in responded:
                 responded.add("hooks")
                 os.write(master_fd, b"\x1b[B\x1b[B\r")
         except OSError:
             return
+
+
+def test_drain_pty_observes_split_trust_prompt_without_responding() -> None:
+    drain_socket, peer = socket.socketpair()
+    diagnostics = bytearray()
+    stop = threading.Event()
+    trust_prompt_observed = threading.Event()
+    drain = threading.Thread(
+        target=_drain_pty,
+        args=(drain_socket.fileno(), stop, diagnostics, trust_prompt_observed),
+        daemon=True,
+    )
+    started = False
+    try:
+        drain.start()
+        started = True
+        peer.sendall(b"Do you trust this fol")
+        deadline = time.monotonic() + 1
+        while b"Do you trust this fol" not in diagnostics and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert b"Do you trust this fol" in diagnostics
+        peer.sendall(b"der? Press Enter to confirm")
+
+        assert trust_prompt_observed.wait(timeout=1), diagnostics.decode(errors="replace")
+        assert b"Do you trust this folder? Press Enter to confirm" in diagnostics
+        peer.settimeout(0.3)
+        with pytest.raises(TimeoutError):
+            peer.recv(4096)
+    finally:
+        stop.set()
+        with contextlib.suppress(OSError):
+            drain_socket.shutdown(socket.SHUT_RDWR)
+        drain_socket.close()
+        try:
+            if started:
+                drain.join(timeout=1)
+                assert not drain.is_alive()
+        finally:
+            peer.close()
 
 
 def _terminate(process: psutil.Process | None) -> None:
@@ -186,10 +230,10 @@ def _codex_backend_enabled() -> bool:
         ),
     ],
 )
-def test_real_backend_client_death_closes_registered_mcp_stdio(
+def test_real_backend_pretrusts_project_and_closes_mcp_stdio_on_client_death(
     backend_name: str, tmp_path: Path
 ) -> None:
-    """A real client exit closes its registered MCP pipes across a separate PGID."""
+    """A pretrusted real client closes its registered MCP pipes when it exits."""
     import pwd
 
     assert fcntl is not None and pty is not None and termios is not None
@@ -200,6 +244,7 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
 
     project = tmp_path / "project"
     project.mkdir()
+    project = project.resolve()
     state_root = project
     launch_id = secrets.token_hex(8)
     bin_dir = tmp_path / "bin"
@@ -215,8 +260,14 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
     client_home.mkdir()
     source_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
     source_claude_state = source_home / ".claude.json"
+    claude_state: dict[str, object] = {}
     if source_claude_state.is_file():
         shutil.copy2(source_claude_state, client_home / ".claude.json")
+        claude_state = json.loads((client_home / ".claude.json").read_text())
+    projects = claude_state.setdefault("projects", {})
+    assert isinstance(projects, dict)
+    projects[str(project)] = {"hasTrustDialogAccepted": True}
+    (client_home / ".claude.json").write_text(json.dumps(claude_state), encoding="utf-8")
     isolated_claude = client_home / ".claude"
     isolated_claude.mkdir()
     (isolated_claude / "settings.json").write_text(
@@ -276,9 +327,10 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
     fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
     diagnostics = bytearray()
     stop_drain = threading.Event()
+    trust_prompt_observed = threading.Event()
     drain = threading.Thread(
         target=_drain_pty,
-        args=(master_fd, stop_drain, diagnostics),
+        args=(master_fd, stop_drain, diagnostics, trust_prompt_observed),
         daemon=True,
     )
     client: subprocess.Popen[bytes] | None = None
@@ -298,6 +350,11 @@ def test_real_backend_client_death_closes_registered_mcp_stdio(
         slave_fd = -1
         drain.start()
         daemon = _wait_for_registered_daemon(launch_id, timeout=20)
+        if backend_name == "codex":
+            assert not trust_prompt_observed.is_set(), (
+                "Codex displayed a project-trust prompt despite pretrusting its canonical cwd:\n"
+                + diagnostics.decode(errors="replace")
+            )
         assert daemon is not None, diagnostics.decode(errors="replace")
         assert os.getpgid(daemon.pid) != os.getpgid(client.pid)
         with contextlib.suppress(psutil.NoSuchProcess):

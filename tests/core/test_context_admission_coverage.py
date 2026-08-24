@@ -18,6 +18,7 @@ from autoskillit.core import (
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 CHECKED_AT = "2026-07-23"
+DIRECT_CHECKED_AT = "2026-08-23"
 FRESHNESS_POLICY = "verify_on_version_or_configuration_change"
 CODEX_REVISION = "25af12f7e61572b0bc18ddb1008be543b91519b0"
 REASON_CODE = "authoritative-watermark-unavailable"
@@ -67,10 +68,10 @@ def _autoskillit_direct_evidence() -> ExpectedEvidence:
         "autoskillit",
         "direct",
         "source_inspection",
-        "src/autoskillit/hooks/_capture_artifacts.py",
-        "0.10.890",
-        "ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
-        CHECKED_AT,
+        "src/autoskillit/hooks/_capture/_runner.py",
+        "0.10.1013",
+        "548883ae5547d8a2cebc561d940c7a80ae7de47a",
+        DIRECT_CHECKED_AT,
         FRESHNESS_POLICY,
     )
 
@@ -396,7 +397,7 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
             evidence.backend,
             evidence.configuration_mode,
             evidence.tested_version,
-            CHECKED_AT,
+            evidence.checked_at,
         )
         assert resolved == row
 
@@ -405,19 +406,19 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
                 f"{evidence.backend}-mismatch",
                 evidence.configuration_mode,
                 evidence.tested_version,
-                CHECKED_AT,
+                evidence.checked_at,
             ),
             (
                 evidence.backend,
                 evidence.configuration_mode,
                 f"{evidence.tested_version}-mismatch",
-                CHECKED_AT,
+                evidence.checked_at,
             ),
             (
                 evidence.backend,
                 evidence.configuration_mode,
                 evidence.tested_version,
-                "2026-07-24",
+                "2000-01-01",
             ),
         )
         for backend, configuration_mode, source_version, as_of in mismatch_inputs:

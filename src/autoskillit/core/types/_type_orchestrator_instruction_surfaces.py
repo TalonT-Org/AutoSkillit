@@ -146,10 +146,9 @@ ORCHESTRATOR_FACING_INSTRUCTION_SURFACES: Mapping[str, OrchestratorSurfaceDef] =
         "parameter_forwarding_rules": OrchestratorSurfaceDef(
             name="parameter_forwarding_rules",
             extraction_mode=InstructionExtractionMode.GENERATED_OUTPUT,
-            delivery_channel=(
-                "recipe delivery (embedded in orchestration_rules; also independently "
-                "registered here so removing that wiring cannot silently drop coverage)"
-            ),
+            # Keep this independently registered so coverage survives any change
+            # to its current orchestration-rules embedding.
+            delivery_channel="recipe delivery (embedded in orchestration_rules)",
             producer_module="autoskillit.core.tool_registry",
             producer_symbol="build_parameter_forwarding_rules",
         ),

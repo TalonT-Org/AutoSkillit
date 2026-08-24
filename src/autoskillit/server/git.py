@@ -94,6 +94,10 @@ def _shape_failed_test_output(
     return shaped
 
 
+def _merge_test_gate_failed(test_result: TestResult) -> bool:
+    return not test_result.passed or test_result.outer_timeout_seconds is not None
+
+
 def validate_commit_paths(cwd: str, paths: list[str]) -> str | None:
     """Validate that every path resolves inside cwd and has no ``.git`` component.
 
@@ -370,7 +374,7 @@ async def perform_merge(
                 "worktree_path": worktree_path,
             }
         test_result = await tester.run(Path(worktree_path))
-        if not test_result.passed or test_result.outer_timeout_seconds is not None:
+        if _merge_test_gate_failed(test_result):
             return {
                 "error": (
                     f"Tests timed out after {test_result.outer_timeout_seconds:.1f}s "
@@ -473,7 +477,7 @@ async def perform_merge(
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:
         test_result = await tester.run(Path(worktree_path))
-        if not test_result.passed or test_result.outer_timeout_seconds is not None:
+        if _merge_test_gate_failed(test_result):
             return {
                 "error": (
                     f"Tests timed out after {test_result.outer_timeout_seconds:.1f}s "

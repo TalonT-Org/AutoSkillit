@@ -234,7 +234,7 @@ def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
         raise CaptureSetupError.from_os_error(exc, "cannot duplicate capture artifact fd") from exc
 
 
-def _read_bounded_file_at(directory_fd: int, name: str) -> dict:
+def _read_bounded_file_at(directory_fd: int, name: str) -> dict[str, object]:
     try:
         fd = os.open(name, _READ_FLAGS, dir_fd=directory_fd)
     except OSError:

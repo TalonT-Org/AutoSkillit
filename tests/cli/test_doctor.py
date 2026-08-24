@@ -546,6 +546,67 @@ class TestGroupFDoctor:
         assert r.check == "test"
 
 
+class TestRunCheck:
+    """Unit contract for the hub-level isolation wrapper (see issue #4768)."""
+
+    def test_wraps_single_result_in_a_list(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import DoctorResult, _run_check
+        from autoskillit.core import Severity
+
+        def _check_ok() -> DoctorResult:
+            return DoctorResult(Severity.OK, "ok", "fine")
+
+        assert _run_check(functools.partial(_check_ok)) == [
+            DoctorResult(Severity.OK, "ok", "fine")
+        ]
+
+    def test_passes_through_a_list_result(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import DoctorResult, _run_check
+        from autoskillit.core import Severity
+
+        def _check_many() -> list[DoctorResult]:
+            return [DoctorResult(Severity.OK, "a", "1"), DoctorResult(Severity.WARNING, "b", "2")]
+
+        assert _run_check(functools.partial(_check_many)) == _check_many()
+
+    def test_isolates_a_raising_check_as_a_single_error_result(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import DoctorResult, _run_check
+        from autoskillit.core import Severity
+
+        def _check_boom() -> DoctorResult:
+            raise RuntimeError("simulated")
+
+        [result] = _run_check(functools.partial(_check_boom))
+        assert result.severity == Severity.ERROR
+        assert result.check == "boom"
+
+
+def test_collect_doctor_results_isolates_a_crashing_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One check raising must not take the other 54 checks down with it (see #4768)."""
+    from autoskillit.cli import doctor as doctor_mod
+    from autoskillit.core import Severity
+
+    def _check_script_version_health() -> doctor_mod.DoctorResult:
+        raise RuntimeError("simulated check crash")
+
+    monkeypatch.setattr(doctor_mod, "_check_script_version_health", _check_script_version_health)
+
+    results = doctor_mod._collect_doctor_results()
+
+    crashed = [r for r in results if r.check == "script_version_health"]
+    assert len(crashed) == 1
+    assert crashed[0].severity == Severity.ERROR
+    assert len(results) > 5  # every other check still ran and reported
+
+
 def test_doctor_fix_parameter_does_not_exist():
     """The doctor --fix no-op flag must be removed from the CLI."""
     import inspect

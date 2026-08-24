@@ -14,6 +14,9 @@ Rules enforced here (compile-time, no execution required):
  11. __init__.pyi stub files must contain only re-export imports
  12. A frozen version reference must not be compared against a live
      importlib.metadata.version() read
+ 13. Every check invocation inside cli/doctor's _collect_doctor_results must
+     route through _run_check — a bare call lets one check's exception (or a
+     nested-list append/extend mistake) crash all other checks (see #4768)
 
 Note: `import logging` and `logging.getLogger()` are enforced by ruff TID251
 at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
@@ -2232,3 +2235,59 @@ def test_arch012_has_no_violations_in_real_source_tree() -> None:
     """ARCH-012 scans the complete production tree without exemptions."""
     violations = _check_frozen_vs_live_version_compare(SRC_ROOT)
     assert not violations, f"ARCH-012 false positive(s) on real src/ tree: {violations}"
+
+
+def test_no_bare_check_invocation_outside_run_check() -> None:
+    """Every check invocation inside _collect_doctor_results must route through
+    _run_check via results.extend(...) — a bare call, or an append(...) instead
+    of extend(...), means one check's exception (or a nested-list bug) can
+    crash the other 54 unrelated checks (see #4768)."""
+    doctor_init = SRC_ROOT / "cli" / "doctor" / "__init__.py"
+    tree = ast.parse(doctor_init.read_text())
+    aliases = _gather_import_aliases(tree)
+
+    collect_node = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "_collect_doctor_results"
+    )
+
+    violations: list[str] = []
+    for node in ast.walk(collect_node):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"append", "extend"}
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "results"
+        ):
+            continue
+        if not node.args or not isinstance(node.args[0], ast.Call):
+            violations.append(
+                f"  __init__.py:{node.lineno}: results.{node.func.attr} arg is not a call"
+            )
+            continue
+        inner = node.args[0]
+        # Bare-name check first (mirrors _is_funnel_call) — a from-import alias
+        # table would otherwise resolve the bare `_run_check` name itself to
+        # "_doctor_types._run_check" and never match the literal below.
+        resolved: str | None
+        if isinstance(inner.func, ast.Name):
+            resolved = inner.func.id
+        else:
+            dotted = _dotted_name(inner.func, aliases)
+            resolved = dotted.rsplit(".", 1)[-1] if dotted else None
+        if resolved not in {"_run_check", "run_check"}:
+            violations.append(
+                f"  __init__.py:{node.lineno}: bare check invocation, not wrapped in _run_check"
+            )
+        elif node.func.attr != "extend":
+            violations.append(
+                f"  __init__.py:{node.lineno}: results.append(_run_check(...)) must be "
+                "results.extend(...) — _run_check always returns a list"
+            )
+
+    assert not violations, (
+        "Every check invocation inside _collect_doctor_results must be "
+        "results.extend(_run_check(functools.partial(...))):\n" + "\n".join(violations)
+    )

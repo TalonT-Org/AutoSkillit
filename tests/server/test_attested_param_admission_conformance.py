@@ -172,6 +172,7 @@ async def test_stale_threshold_and_idle_output_timeout_delivered_from_recipe_ste
 async def test_step_provider_delivered_from_recipe_step_without_caller_forwarding(
     tmp_path,
     tool_ctx_ready_recipe,
+    monkeypatch,
 ) -> None:
     """research.yaml's download_data declares provider: anthropic (a bundled
     recipe purpose-added for this coverage — verified zero bundled recipe
@@ -179,8 +180,18 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     step_provider; the call must still succeed (never denied), proving the
     with: mapped field (provider), not the parameter name (step_provider),
     is what a recipe author writes."""
+    from autoskillit.server import _guards
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
+
+    resolved_step_providers: list[str] = []
+    resolve_provider_profile = _guards._resolve_provider_profile
+
+    def record_step_provider(*args, **kwargs):
+        resolved_step_providers.append(kwargs.get("step_provider", ""))
+        return resolve_provider_profile(*args, **kwargs)
+
+    monkeypatch.setattr(_guards, "_resolve_provider_profile", record_step_provider)
 
     ready = tool_ctx_ready_recipe
     executor = InMemoryHeadlessExecutor()
@@ -206,6 +217,7 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     assert result.get("stage") != "preflight:recipe_execution", result
     assert "RECIPE EXECUTION REJECTED" not in serialized
     assert len(executor.calls) == 1
+    assert resolved_step_providers == ["anthropic"]
 
 
 @pytest.mark.xfail(

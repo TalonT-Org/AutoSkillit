@@ -6,7 +6,7 @@ and server dispatch share these values without importing one another.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
@@ -27,6 +27,8 @@ __all__ = [
     "FinalizedRecipeProjection",
     "RecipeBindingProjection",
     "RecipeFlowEdge",
+    "RUNTIME_ADMISSION_BY_ROLE",
+    "RuntimeAdmission",
     "ToolDef",
     "ToolInitializationOperation",
     "ToolParamDef",
@@ -65,9 +67,11 @@ class ToolParamRole(StrEnum):
 
     The runtime attestation gate's always-admit set, the actual-kwargs
     assembly, and the server-side ``RecipeStep`` fallback obligation for
-    execution-tuning parameters are all derived from this field — see
-    ``runtime_exempt_param_names`` (core/tool_registry.py) and
-    ``bind_runtime_skill_invocation`` (recipe/_binding.py).
+    execution-tuning parameters are all derived from this field. The
+    per-role runtime-admission *policy* is declared once, alongside this
+    enum, in ``RUNTIME_ADMISSION_BY_ROLE`` — see ``runtime_exempt_param_names``
+    (core/tool_registry.py) and ``bind_runtime_skill_invocation``
+    (recipe/_binding.py) for its consumers.
     """
 
     PROTOCOL = "protocol"
@@ -85,6 +89,38 @@ class ToolParamRole(StrEnum):
 
     SESSION_FLOW = "session_flow"
     """Resume/retry/capture plumbing; admitted iff with:-compiled."""
+
+
+class RuntimeAdmission(StrEnum):
+    """Whether the runtime attestation gate admits a parameter unconditionally."""
+
+    ALWAYS = "always"
+    WITH_DECLARED_ONLY = "with_declared_only"
+
+
+RUNTIME_ADMISSION_BY_ROLE: Mapping[ToolParamRole, RuntimeAdmission] = MappingProxyType(
+    {
+        ToolParamRole.PROTOCOL: RuntimeAdmission.ALWAYS,
+        ToolParamRole.ORCHESTRATOR_SCOPING: RuntimeAdmission.ALWAYS,
+        ToolParamRole.CHILD_INPUT: RuntimeAdmission.WITH_DECLARED_ONLY,
+        ToolParamRole.EXECUTION_TUNING: RuntimeAdmission.WITH_DECLARED_ONLY,
+        ToolParamRole.SESSION_FLOW: RuntimeAdmission.WITH_DECLARED_ONLY,
+    }
+)
+
+
+def _assert_admission_policy_total(
+    roles: Iterable[ToolParamRole], policy: Mapping[ToolParamRole, RuntimeAdmission]
+) -> None:
+    unmapped = sorted(set(roles) - set(policy))
+    if unmapped:
+        raise AssertionError(
+            "Every ToolParamRole must declare a RUNTIME_ADMISSION_BY_ROLE entry — "
+            f"unmapped: {unmapped}. Adding a role changes gate admission; declare it."
+        )
+
+
+_assert_admission_policy_total(ToolParamRole, RUNTIME_ADMISSION_BY_ROLE)
 
 
 @dataclass(frozen=True, slots=True)

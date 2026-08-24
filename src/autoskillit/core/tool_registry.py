@@ -14,6 +14,8 @@ from ._tool_registry_builders import _run_skill, _tool
 from .closure_hashing import compute_canonical_hash
 from .types._type_constants_registries import HEADLESS_TOOLS
 from .types._type_recipe_binding import (
+    RUNTIME_ADMISSION_BY_ROLE,
+    RuntimeAdmission,
     ToolDef,
     ToolParamRole,
     ToolWireType,
@@ -611,14 +613,14 @@ def get_tool_def(tool_name: str) -> ToolDef | None:
 def runtime_exempt_param_names(tool_def: ToolDef) -> frozenset[str]:
     """Names always admitted by the runtime attestation gate, regardless of with:.
 
-    PROTOCOL params are the attestation identity triple; ORCHESTRATOR_SCOPING
-    params are runtime scoping that is never recipe-authorable. Every other
-    role must be compiled into the template's with: block to be admitted.
+    Derived from RUNTIME_ADMISSION_BY_ROLE — the per-role admission policy
+    declared alongside ToolParamRole. Every role not mapped to ALWAYS there
+    must be compiled into the template's with: block to be admitted.
     """
     return frozenset(
         param.name
         for param in tool_def.params
-        if param.role in (ToolParamRole.PROTOCOL, ToolParamRole.ORCHESTRATOR_SCOPING)
+        if RUNTIME_ADMISSION_BY_ROLE[param.role] is RuntimeAdmission.ALWAYS
     )
 
 

@@ -603,6 +603,7 @@ from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
 from .types import RETIREMENT_BACKSTOP_LEDGER as RETIREMENT_BACKSTOP_LEDGER
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
+from .types import RUNTIME_ADMISSION_BY_ROLE as RUNTIME_ADMISSION_BY_ROLE
 from .types import RUN_PYTHON_PATH_LIKE_ARGS as RUN_PYTHON_PATH_LIKE_ARGS
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
 from .types import RUN_SKILL_ATTESTATION_PARAMS as RUN_SKILL_ATTESTATION_PARAMS
@@ -1078,6 +1079,7 @@ from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
+from .types import RuntimeAdmission as RuntimeAdmission
 from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import SerializedChars as SerializedChars

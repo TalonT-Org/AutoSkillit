@@ -380,7 +380,7 @@ def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
     return lambda: monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", _forbidden)
 
 
-_READY_RECIPE_ENVELOPE = "research"
+_READY_RECIPE_NAME = "research"
 _READY_RECIPE_ATTESTED_STEP = "scope"
 _READY_RECIPE_OVERRIDES = {
     "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
@@ -388,6 +388,13 @@ _READY_RECIPE_OVERRIDES = {
     "task": "test task",
     "task_description": "test task",
 }
+# Default-preserving: every existing tool_ctx_ready_recipe consumer requests
+# it without parametrization and must keep getting exactly this triple.
+_READY_RECIPE_DEFAULT_PARAM = (
+    _READY_RECIPE_NAME,
+    _READY_RECIPE_ATTESTED_STEP,
+    _READY_RECIPE_OVERRIDES,
+)
 
 
 @dataclass(frozen=True)
@@ -424,6 +431,7 @@ class ReadyRecipeContext:
 
 @pytest.fixture
 async def tool_ctx_ready_recipe(
+    request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tool_ctx_kitchen_open,
@@ -440,6 +448,13 @@ async def tool_ctx_ready_recipe(
     mock of one. The credential-artifact-read poison is armed after the step
     pull completes (get_recipe_section legitimately reads the artifact to
     serve pages) and stays armed for the returned context's remaining calls.
+
+    Indirectly parametrizable over ``(recipe_name, attested_step, ingredient_overrides)``
+    via ``@pytest.mark.parametrize("tool_ctx_ready_recipe", [(...)], indirect=True)``.
+    Requesting the fixture without parametrization (every pre-existing consumer)
+    defaults to today's values — ``_READY_RECIPE_DEFAULT_PARAM`` — so
+    ``test_attestation_delivery_reachability.py`` and ``test_recipe_segment_delivery.py``
+    are source-compatible.
     """
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
@@ -450,22 +465,29 @@ async def tool_ctx_ready_recipe(
         _pull_step_section,
     )
 
+    recipe_name, attested_step, ingredient_overrides = getattr(
+        request, "param", _READY_RECIPE_DEFAULT_PARAM
+    )
+
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
-    envelope = await _open_kitchen_patched(
-        _READY_RECIPE_ENVELOPE, _READY_RECIPE_OVERRIDES, monkeypatch
-    )
+    envelope = await _open_kitchen_patched(recipe_name, ingredient_overrides, monkeypatch)
     assert envelope["success"] is True
     assert envelope["delivery_bound_spill"] is True
 
     await _credit_initialization_sections(envelope)
-    step_body = await _pull_step_section(envelope, _READY_RECIPE_ATTESTED_STEP)
+    step_body = await _pull_step_section(envelope, attested_step)
     forbid_artifact_reads()
     receipt = json.loads(await complete_recipe_initialization(envelope["initialization_id"]))
     assert receipt["success"] is True
 
-    return ReadyRecipeContext(tool_ctx=tool_ctx_kitchen_open, receipt=receipt, step_body=step_body)
+    return ReadyRecipeContext(
+        tool_ctx=tool_ctx_kitchen_open,
+        receipt=receipt,
+        step_body=step_body,
+        step_name=attested_step,
+    )
 
 
 @contextmanager

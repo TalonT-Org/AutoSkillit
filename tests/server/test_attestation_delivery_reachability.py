@@ -285,6 +285,24 @@ async def test_attested_run_skill_reports_missing_canonical_tool_def(
     assert "RuntimeError: run_skill must be a registered ToolDef" in result["result"]
 
 
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    [
+        (_RECIPE_ENVELOPE, _ATTESTED_STEP, _OVERRIDES),
+        (
+            "research",
+            "download_data",
+            {
+                "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
+                "source_dir": ".",
+                "task": "test task",
+                "task_description": "test task",
+            },
+        ),
+        ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
+    ],
+    indirect=True,
+)
 async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     tmp_path,
     tool_ctx_ready_recipe,
@@ -295,6 +313,11 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     fabricated one is denied at ``preflight:recipe_execution``. A mock that
     accepted any digest would pass the first half and fail to distinguish
     the second.
+
+    Parametrized over every (recipe, step, overrides) combination S7/S8
+    introduce (#4707) — without this, T4's conformance suite could run
+    green against a pair that never actually reached ``ReadyRecipe``, and
+    the whole suite would be attesting nothing.
     """
     from autoskillit.server.tools.tools_execution import run_skill
 
@@ -302,6 +325,7 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    _write_attested_tracker(ready, with_args)
     ready.tool_ctx.runner.push(_make_result(returncode=1))
     ready.tool_ctx.runner.push(
         _make_result(

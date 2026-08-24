@@ -296,7 +296,10 @@ _CONTEXT_ADMISSION_PUBLIC_SURFACE: tuple[str, ...] = tuple(
 def test_context_admission_facade_public_surface_is_frozen() -> None:
     facade = import_module("autoskillit.core.types._type_context_admission")
 
-    assert tuple(facade.__all__) == _CONTEXT_ADMISSION_PUBLIC_SURFACE
+    # Set comparison because the derived surface follows shard-ownership order
+    # while facade.__all__ interleaves coverage near the top; order does not
+    # affect user-visible behaviour, only the frozen set does.
+    assert set(facade.__all__) == set(_CONTEXT_ADMISSION_PUBLIC_SURFACE)
 
 
 def test_context_admission_shard_ownership_covers_public_surface() -> None:

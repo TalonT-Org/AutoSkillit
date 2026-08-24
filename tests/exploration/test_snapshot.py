@@ -13,6 +13,12 @@ from pathlib import Path
 import pytest
 
 import autoskillit.exploration.snapshot as snapshot_module
+from autoskillit.core import (
+    CompletenessReport,
+    EvidencePage,
+    ExplorationQuerySpec,
+    RepositorySnapshot,
+)
 from autoskillit.exploration import SnapshotCaptureReason, SnapshotCaptureStatus
 from autoskillit.exploration.collectors import _bounded
 from autoskillit.exploration.pagination import pagination_identity
@@ -26,6 +32,7 @@ from autoskillit.exploration.snapshot import (
     capture_stable_artifact,
     stable_artifact_matches,
 )
+from autoskillit.pipeline import ExplorationContext, OwnerBoundExplorationContextStore
 
 pytestmark = [
     pytest.mark.layer("exploration"),
@@ -679,12 +686,13 @@ def test_ignore_policy_bump_changes_the_published_digest_for_unchanged_state(
     half of that contract this module owns: capturing identical repository state
     under two different DEFAULT_IGNORE_POLICY values must not silently collide on
     the same digest — a v1-era digest must not validate against a v2 capture. The
-    other half — that a digest mismatch degrades to the store's existing
-    fail-closed ValueError — is already pinned by
+    other half — that this divergence actually degrades a live capability to the
+    store's existing fail-closed ValueError — is pinned immediately below by
+    test_ignore_policy_bump_rebind_against_v2_capture_fails_closed, and separately
+    (for the tampered/missing signed-authority-file variant of the same failure,
+    exercised through a mocked service) by
     test_tampered_or_missing_signed_snapshot_binding_fails_closed in
-    tests/pipeline/test_exploration_context.py; that test lives in tests/pipeline/
-    and may not import autoskillit.exploration (tests/arch/test_layer_enforcement.py
-    mirrors contract IL-008), so the two halves are necessarily pinned separately.
+    tests/pipeline/test_exploration_context.py.
     """
     root = _new_repository(tmp_path)
 
@@ -703,6 +711,81 @@ def test_ignore_policy_bump_changes_the_published_digest_for_unchanged_state(
     assert under_v2.snapshot is not None
     assert under_v1.snapshot.digest != under_v2.snapshot.digest
     assert under_v1.snapshot.ignore_policy_digest != under_v2.snapshot.ignore_policy_digest
+
+
+def test_ignore_policy_bump_rebind_against_v2_capture_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-A7: a capability bound while DEFAULT_IGNORE_POLICY is v1 must fail closed —
+    not silently re-validate — once the policy is bumped to v2 before the bound
+    capability's next use.
+
+    Complements test_ignore_policy_bump_changes_the_published_digest_for_unchanged_state
+    above: that test proves the two policies compute distinct digests for identical
+    repository state; this test proves OwnerBoundExplorationContextStore actually acts
+    on that divergence — submit_for_capability degrades to the store's existing
+    fail-closed ValueError (pipeline/exploration_context.py) rather than accepting a
+    stale v1-era lease against a live v2 capture. A thin real-capture service adapter
+    is used (not a mock) so the digest comparison exercises this module's own
+    capture_repository_snapshot on both sides of the bump.
+    """
+    root = _new_repository(tmp_path)
+
+    class _RealCaptureService:
+        """Adapts capture_repository_snapshot to ExplorationServiceProtocol."""
+
+        def capture_snapshot(self, root: Path) -> RepositorySnapshot:
+            captured = _capture(root)
+            assert captured.status is SnapshotCaptureStatus.COMPLETE
+            assert captured.snapshot is not None
+            return captured.snapshot
+
+        def collect(self, query: ExplorationQuerySpec, *, root: Path) -> ExplorationContext:
+            return ExplorationContext(
+                query=query,
+                snapshot=self.capture_snapshot(root),
+                evidence=(),
+                completeness=CompletenessReport(expected_collectors=(), reports=(), complete=True),
+            )
+
+        def page(
+            self,
+            context: ExplorationContext,
+            *,
+            page_size: int,
+            cursor: object | None = None,
+        ) -> EvidencePage:
+            raise AssertionError(
+                "page() must not be reached once the snapshot-digest check fails closed"
+            )
+
+    monkeypatch.setattr(
+        snapshot_module, "DEFAULT_IGNORE_POLICY", "ignored-names-modes-collapsed-v1"
+    )
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=root,
+        service=_RealCaptureService(),
+    )
+    capability = store.bind_session_scoped(
+        owner_id="uid:1000",
+        session_id="session-a",
+        cwd=root,
+        repository_root=root,
+        source_identity="bundled:definition-digest",
+    )
+
+    monkeypatch.setattr(
+        snapshot_module, "DEFAULT_IGNORE_POLICY", "ignored-names-modes-collapsed-v2"
+    )
+
+    with pytest.raises(
+        ValueError, match="repository snapshot changed since exploration authority issuance"
+    ):
+        store.submit_for_capability(
+            capability=capability,
+            query=ExplorationQuerySpec("needle"),
+            page_size=10,
+        )
 
 
 def _new_repository_with_tracked_file_in_ignored_dir(tmp_path: Path, name: str = "repo") -> Path:

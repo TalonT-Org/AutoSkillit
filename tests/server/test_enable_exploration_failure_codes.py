@@ -327,3 +327,77 @@ async def test_truncating_repository_surfaces_snapshot_truncated_code(
     result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))
 
     assert result == {"status": "error", "code": "snapshot_truncated"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("exc", "expected_code", "expected_exception_type", "expected_reason"),
+    (
+        (
+            OwnerBoundExplorationContextStore.SnapshotStale(
+                SnapshotCaptureReason.IDENTITY_DRIFT, "stale"
+            ),
+            "snapshot_stale",
+            "SnapshotStale",
+            SnapshotCaptureReason.IDENTITY_DRIFT,
+        ),
+        (
+            OwnerBoundExplorationContextStore.SnapshotTruncated(
+                SnapshotCaptureReason.FILE_BYTES_EXCEEDED, "truncated"
+            ),
+            "snapshot_truncated",
+            "SnapshotTruncated",
+            SnapshotCaptureReason.FILE_BYTES_EXCEEDED,
+        ),
+        (
+            OwnerBoundExplorationContextStore.SnapshotCaptureFailed(
+                SnapshotCaptureReason.GIT_TIMEOUT, "capture failed"
+            ),
+            "snapshot_capture_failed",
+            "SnapshotCaptureFailed",
+            SnapshotCaptureReason.GIT_TIMEOUT,
+        ),
+    ),
+    ids=("stale", "truncated", "capture_failed"),
+)
+async def test_snapshot_terminal_status_failure_logs_structured_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_ctx,
+    exploration_snapshot_service: MagicMock,
+    exc: BaseException,
+    expected_code: str,
+    expected_exception_type: str,
+    expected_reason: SnapshotCaptureReason,
+) -> None:
+    """T-C8: the failure detail must reach a sink an operator can actually read.
+
+    A ``code``/``exception_type``/``reason`` field on the log record is only a
+    diagnostic improvement if the record is genuinely emitted with those keys —
+    this is the reachability half of #4756's fix, complementing the code-value
+    assertions in test_snapshot_stale_returns_own_code and its FAILED/TRUNCATED
+    siblings above, which check the tool's JSON response but never inspect the
+    log record itself.
+
+    Uses structlog.testing.capture_logs(), not caplog: the conftest's autouse
+    _structlog_to_null fixture intercepts all structlog output before it would
+    reach stdlib logging handlers, so caplog.records would silently stay empty
+    regardless of what tools_exploration.py actually logs (see the identical
+    caveat documented on
+    test_run_skill_logs_warning_when_output_dir_resolved_from_recipe in
+    tests/server/test_tools_execution_step_resolution.py).
+    """
+    import structlog.testing
+
+    with structlog.testing.capture_logs() as cap:
+        await _bind_raising(
+            monkeypatch,
+            tool_ctx,
+            exploration_snapshot_service,
+            exc=exc,
+            expected_code=expected_code,
+        )
+
+    (entry,) = (e for e in cap if e.get("event") == "enable_exploration_store_failure")
+    assert entry["code"] == expected_code
+    assert entry["exception_type"] == expected_exception_type
+    assert entry["reason"] == expected_reason

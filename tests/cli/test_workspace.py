@@ -321,6 +321,7 @@ class TestRunWorkspaceCleanWorktrees:
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
         assert "impl-foo-20260101-120000" in sidecar_removed
 
+    @pytest.mark.medium
     @pytest.mark.anyio
     async def test_worktree_deleted_between_listing_and_mtime_check_is_skipped(
         self, tmp_path, monkeypatch

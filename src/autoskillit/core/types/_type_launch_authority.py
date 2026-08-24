@@ -181,8 +181,6 @@ class ProviderBinding:
         keys = tuple(sorted(set(self.secret_environment_keys)))
         if any(not key for key in keys):
             raise LaunchContractError("secret environment keys must be non-empty")
-        # `environment` is already frozen above; overlap check uses the canonical key set
-        # to reject any key whose value is exposed as both secret and non-secret.
         if set(keys) & set(self.environment):
             raise LaunchContractError("secret environment keys cannot be nonsecret environment")
         object.__setattr__(self, "secret_environment_keys", keys)

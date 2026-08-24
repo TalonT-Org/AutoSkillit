@@ -1,11 +1,17 @@
-"""Stable facade for context-admission protocol-v1 contract values."""
+"""Stable facade re-exporting context-admission protocol-v1 contract values.
+
+This module exists to preserve the public API after the protocol-v1 type
+contract was decomposed into sibling shards (Issue #4738). Importing
+shard symbols directly is fine; importing them through this facade
+guarantees the public surface survives future shard reorganisation.
+"""
 
 from __future__ import annotations
 
 # ruff: noqa: I001
-# Imported shards are grouped by topic rather than alphabetised so the facade
-# reads top-down: base -> identities -> records -> events -> effects ->
-# states -> coverage. The unsorted layout is the contract.
+# Import blocks are ordered by dependency tier rather than alphabetically:
+# base-only dependents (identities, coverage) come first, then layered
+# shards (records -> events -> effects -> states).
 
 from ._type_context_admission_base import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,

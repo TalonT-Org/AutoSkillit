@@ -14,6 +14,14 @@ from typing import Literal, NamedTuple
 
 from ._type_enums import ExplorationFailureCode, FleetErrorCode, SkillExecutionRole
 from ._type_exceptions import SkillContractError
+
+# Re-export recipe-section types from the canonical shard through this facade.
+# The ``X as X`` alias pattern is intentional: it marks each name as an explicit
+# re-export so ruff's F401 (unused-import) check treats these as facade passes
+# rather than unused imports, without forcing them into __all__ (which would
+# conflict with the identity-preservation invariant that the test
+# ``test_recipe_section_facade_preserves_identity_and_export_ownership``
+# enforces via ``assert name not in legacy_mod.__all__``).
 from ._type_recipe_sections import (
     DYNAMIC_RECIPE_SECTION_DEF as DYNAMIC_RECIPE_SECTION_DEF,
 )

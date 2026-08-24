@@ -110,7 +110,20 @@ def _initialization_operation(name: str) -> ToolInitializationOperation:
         return ToolInitializationOperation.EXECUTION
     if name in _MUTATION_TOOLS:
         return ToolInitializationOperation.MUTATION
-    raise ValueError(f"Tool {name!r} has no initialization-time operation class")
+    known_operations = (
+        ("recovery", _RECOVERY_TOOLS),
+        ("inspection", _INSPECTION_TOOLS),
+        ("lifecycle_control", _LIFECYCLE_CONTROL_TOOLS),
+        ("execution", _EXECUTION_TOOLS),
+        ("mutation", _MUTATION_TOOLS),
+    )
+    raise ValueError(
+        f"Tool {name!r} has no initialization-time operation class. "
+        f"Known operation classes: "
+        + ", ".join(f"{label}={{{', '.join(sorted(tools))}}}" for label, tools in known_operations)
+        + f". Add {name!r} to one of these sets in "
+        f"core/_tool_registry_builders.py, or extend ToolInitializationOperation."
+    )
 
 
 def _tool(
@@ -211,7 +224,12 @@ def _run_skill() -> ToolDef:
         )
         for name in string_params
     ]
-    params[8:8] = [
+    # Insert stale_threshold / idle_output_timeout in the canonical slot directly
+    # after ``output_dir`` (index 8 of ``string_params``). Build the list by
+    # name lookup so reordering ``string_params`` doesn't silently break the
+    # MCP schema's parameter order.
+    output_dir_index = string_params.index("output_dir")
+    int_param_inserts = [
         ToolParamDef(
             "stale_threshold",
             ToolWireType.INTEGER,
@@ -223,6 +241,7 @@ def _run_skill() -> ToolDef:
             role=_RUN_SKILL_PARAM_ROLES["idle_output_timeout"],
         ),
     ]
+    params = params[:output_dir_index] + int_param_inserts + params[output_dir_index:]
     params.append(
         ToolParamDef(
             "dispatch_items",

@@ -43,7 +43,7 @@ class RecipeSectionDef:
     ordinary_content_format: Literal["raw-text", "json-scalar-page", "json-array-page"]
     oversized_content_format: Literal["json-element-fragment"] | None
     has_default: bool = False
-    default_value: tuple[str, ...] | None = None
+    default_value: tuple[()] | None = None
 
     def __post_init__(self) -> None:
         """Reject contradictory public definitions at their construction boundary."""
@@ -212,7 +212,7 @@ _RECIPE_SECTION_DIGEST_DOMAINS: Mapping[str, str] = MappingProxyType(
 )
 
 
-def _qualified_registry_digest(value: object) -> str:
+def _qualified_registry_digest(value: Mapping[str, object]) -> str:
     payload = json.dumps(
         value,
         ensure_ascii=True,

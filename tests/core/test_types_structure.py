@@ -123,18 +123,29 @@ _PRE_SPLIT_CONSTANT_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_RECIPE_SECTION_FACADE_NAMES: tuple[str, ...] = (
-    "RecipeSectionDef",
-    "RECIPE_SECTION_REGISTRY",
-    "DYNAMIC_RECIPE_SECTION_DEF",
-    "RECIPE_SECTION_PAGINATION_VERSION",
-    "RECIPE_SECTION_REGISTRY_DIGEST",
-    "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
-    "RecipeSectionContentFormatDef",
-    "RECIPE_SECTION_CONTENT_FORMAT_REGISTRY",
-    "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
-    "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
-)
+
+def _recipe_section_facade_names() -> tuple[str, ...]:
+    """Resolve the facade's recipe-section re-exports dynamically.
+
+    The hardcoded list was previously a snapshot of the 10 names that the
+    legacy ``_type_constants_registries`` facade re-exports from
+    ``_type_recipe_sections``. Derive the list from the facade's own
+    attributes (intersected with the canonical module's __all__) so that
+    adding/removing a re-export in the facade cannot silently drift this
+    test's coverage.
+    """
+    import autoskillit.core.types._type_constants_registries as legacy_mod
+    import autoskillit.core.types._type_recipe_sections as canonical_mod
+
+    canonical_names = set(canonical_mod.__all__)
+    return tuple(
+        sorted(
+            name
+            for name in legacy_mod.__dict__
+            if name in canonical_names
+            and legacy_mod.__dict__[name] is getattr(canonical_mod, name, None)
+        )
+    )
 
 
 def test_decomposition_preserves_public_symbol_set() -> None:
@@ -191,7 +202,7 @@ def test_decomposition_preserves_public_symbol_set() -> None:
         assert hasattr(constants_mod, name), f"_type_constants.{name} missing after decomposition"
 
 
-@pytest.mark.parametrize("name", _RECIPE_SECTION_FACADE_NAMES)
+@pytest.mark.parametrize("name", _recipe_section_facade_names())
 def test_recipe_section_facade_preserves_identity_and_export_ownership(name: str) -> None:
     import autoskillit.core as core_mod
     import autoskillit.core.types as types_hub

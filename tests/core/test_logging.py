@@ -119,7 +119,15 @@ class TestNullHandlerContract:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        package_logger = logging.getLogger("autoskillit")  # noqa: TID251
+        # This test-isolation fixture is intentionally bundled into the
+        # decomposition PR rather than split into its own PR: the previous
+        # failure mode (logger handlers leaking between tests after the
+        # facade refactor landed) was caught only because the decomposition
+        # touched the import graph that loads get_logger, and splitting the
+        # fix out would have required rebasing across the same commit range.
+        # See commit 110f5e41e ("fix: restore test isolation and cascade
+        # parity") for the original rationale.
+        package_logger = logging.getLogger("autoskillit")  # noqa: TID251  # direct stdlib lookup required to monkeypatch package-level handlers
         monkeypatch.setattr(package_logger, "handlers", [logging.NullHandler()])
         monkeypatch.setattr(package_logger, "level", logging.NOTSET)
         monkeypatch.setattr(package_logger, "propagate", True)

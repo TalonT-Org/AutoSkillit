@@ -147,11 +147,16 @@ def test_registry_constants_have_production_consumer() -> None:
     for name, def_file in all_constants:
         if name in _REGISTRY_EXEMPTIONS:
             continue
-        excluded_files = (
-            frozenset({src_root / "core" / "types" / "_type_constants_registries.py"})
-            if def_file.name == "_type_recipe_sections.py"
-            else frozenset()
-        )
+        # When the constants file is the recipe-section authority, also skip
+        # the constants facade so we don't double-count identical re-exports
+        # from a single facade source. Same logic applies for any future
+        # owner→facade pair: find the facade under ``core/types/`` whose
+        # module name starts with ``_type_constants_`` and exclude it.
+        excluded_files: frozenset[Path] = frozenset()
+        if def_file.name == "_type_recipe_sections.py":
+            facade_candidate = def_file.parent / "_type_constants_registries.py"
+            if facade_candidate.exists():
+                excluded_files = frozenset({facade_candidate})
         if not _has_production_import(
             src_root,
             name,

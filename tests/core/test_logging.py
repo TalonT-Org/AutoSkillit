@@ -115,22 +115,15 @@ class TestGetLogger:
 
 class TestNullHandlerContract:
     @pytest.fixture(autouse=True)
-    def _reset_package_logger_to_preconfigure_state(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        # This test-isolation fixture is intentionally bundled into the
-        # decomposition PR rather than split into its own PR: the previous
-        # failure mode (logger handlers leaking between tests after the
-        # facade refactor landed) was caught only because the decomposition
-        # touched the import graph that loads get_logger, and splitting the
-        # fix out would have required rebasing across the same commit range.
-        # See commit 110f5e41e ("fix: restore test isolation and cascade
-        # parity") for the original rationale.
-        package_logger = logging.getLogger("autoskillit")  # noqa: TID251  # direct stdlib lookup required to monkeypatch package-level handlers
+    def _restore_unconfigured_package_logger(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # TestConfigureLogging mutates the global autoskillit package logger
+        # (handlers, level, propagate) without teardown. Under xdist worksteal
+        # the StreamHandler it installs can leak into this class's only test
+        # and defeat the lastResort suppression the NullHandler is meant to
+        # provide. Resetting handlers before each test restores the
+        # import-time NullHandler-only state that __init__.py installs.
+        package_logger = logging.getLogger("autoskillit")  # noqa: TID251
         monkeypatch.setattr(package_logger, "handlers", [logging.NullHandler()])
-        monkeypatch.setattr(package_logger, "level", logging.NOTSET)
-        monkeypatch.setattr(package_logger, "propagate", True)
 
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
         """NullHandler in autoskillit/__init__.py prevents stdlib lastResort output.

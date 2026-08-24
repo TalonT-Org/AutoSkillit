@@ -25,6 +25,8 @@ from ._type_audit_admission import (
     InstallationVersion,
     RecipeExecutionId,
     ReservationDecision,
+)
+from ._type_audit_admission_validation import (
     _require_absolute_path,
     _require_digest,
     _require_nonempty,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
@@ -363,3 +364,55 @@ def test_head_allows_successor_only_for_go(tmp_path: Path) -> None:
 
 def test_schema_version_is_public() -> None:
     assert AUDIT_CYCLE_SCHEMA_VERSION == 1
+
+
+@pytest.mark.parametrize(
+    ("shard_name", "binding"),
+    [
+        ("_type_audit_cycle_authority", "AUDIT_CYCLE_SCHEMA_VERSION"),
+        ("_type_audit_cycle_authority", "ArtifactRef"),
+        ("_type_audit_cycle_authority", "AuditVerdict"),
+        ("_type_audit_cycle_authority", "AuditAssessment"),
+        ("_type_audit_cycle_authority", "AuditAssessmentRow"),
+        ("_type_audit_cycle_authority", "compute_findings_digest"),
+        ("_type_audit_cycle_authority", "AuditCycleAuthority"),
+        ("_type_audit_cycle_authority", "AuditCycleHead"),
+        ("_type_audit_cycle_disposition", "AdmissionStatus"),
+        ("_type_audit_cycle_disposition", "AdmissionReason"),
+        ("_type_audit_cycle_disposition", "PlanDispositionRow"),
+        ("_type_audit_cycle_disposition", "PlanDispositionReport"),
+        ("_type_audit_cycle_disposition", "InventoryAdmissionDecision"),
+    ],
+)
+def test_cycle_shard_public_bindings_preserve_object_identity(
+    shard_name: str,
+    binding: str,
+) -> None:
+    facade = importlib.import_module("autoskillit.core.types._type_audit_cycle")
+    types_package = importlib.import_module("autoskillit.core.types")
+    core_package = importlib.import_module("autoskillit.core")
+    shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
+
+    shard_binding = getattr(shard, binding)
+    assert getattr(facade, binding) is shard_binding
+    assert getattr(types_package, binding) is shard_binding
+    assert getattr(core_package, binding) is shard_binding
+
+
+@pytest.mark.parametrize(
+    ("shard_name", "binding"),
+    [
+        ("_type_audit_cycle_authority", "_MAX_REFERENCED_ARTIFACTS_PER_CALL"),
+        ("_type_audit_cycle_disposition", "_MAX_ASSOCIATION_FILES"),
+        ("_type_audit_cycle_disposition", "_PLAN_ASSOCIATION_DOMAIN"),
+        ("_type_audit_cycle_disposition", "_PLAN_ASSOCIATION_KEYS"),
+    ],
+)
+def test_cycle_shard_private_bindings_preserve_object_identity(
+    shard_name: str,
+    binding: str,
+) -> None:
+    facade = importlib.import_module("autoskillit.core.types._type_audit_cycle")
+    shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
+
+    assert getattr(facade, binding) is getattr(shard, binding)

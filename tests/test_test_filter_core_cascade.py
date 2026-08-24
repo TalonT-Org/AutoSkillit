@@ -170,8 +170,13 @@ class TestModuleCascadeCore:
             "pipeline_tracker",
             "bash_write_targets",
             "_type_audit_admission",
+            "_type_audit_admission_artifact_ownership",
             "_type_audit_admission_ledger",
+            "_type_audit_admission_reference_identity",
+            "_type_audit_admission_validation",
             "_type_audit_cycle",
+            "_type_audit_cycle_authority",
+            "_type_audit_cycle_disposition",
             "_type_audit_protocols",
             "_type_recipe_binding",
             "_type_recipe_execution",
@@ -192,9 +197,22 @@ class TestModuleCascadeCore:
         assert MODULE_CASCADE_CORE["_type_audit_cycle"] == frozenset(
             {"core", "pipeline", "recipe", "server"}
         )
+        assert MODULE_CASCADE_CORE["_type_audit_cycle_authority"] == frozenset(
+            {"core", "pipeline", "recipe", "server"}
+        )
+        assert MODULE_CASCADE_CORE["_type_audit_cycle_disposition"] == frozenset(
+            {"core", "pipeline", "recipe", "server"}
+        )
         assert MODULE_CASCADE_CORE["audit_cycle_verifier"] == frozenset(
             {"core", "recipe", "server"}
         )
+
+    def test_audit_admission_shard_cascades(self) -> None:
+        expected = frozenset({"core", "execution", "pipeline", "server"})
+        assert MODULE_CASCADE_CORE["_type_audit_admission"] == expected
+        assert MODULE_CASCADE_CORE["_type_audit_admission_validation"] == expected
+        assert MODULE_CASCADE_CORE["_type_audit_admission_artifact_ownership"] == expected
+        assert MODULE_CASCADE_CORE["_type_audit_admission_reference_identity"] == expected
 
     def test_recipe_execution_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_recipe_execution"] == frozenset(

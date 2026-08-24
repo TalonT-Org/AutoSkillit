@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import importlib
 from pathlib import Path
 
 import pytest
@@ -387,6 +388,12 @@ def test_ordered_full_reference_identity_covers_all_metadata() -> None:
     second = _reference("two.md", content_digest=_digest("2"))
     baseline = compute_audit_reference_identity((first, second))
 
+    # Baseline hash is the SHA-256 canonical digest emitted by
+    # AUDIT_REFERENCE_IDENTITY_PROFILE_V1 (profile_id="ordered-full-reference-v1",
+    # domain="autoskillit:audit-admission:ordered-full-reference:v1:sha256").
+    # Any legitimate change to the profile (field order, canonical JSON rules,
+    # domain string) must update this literal in lockstep with the profile.
+    assert baseline == ("sha256:acd0546f3a36c7268b8a9d04359f88c2476224b37ef90792aac72e4d97eac04e")
     assert baseline != compute_audit_reference_identity((second, first))
     for changed in (
         _reference("renamed.md", content_digest=_digest("1")),
@@ -686,3 +693,70 @@ def test_runtime_protocols_accept_structural_implementations() -> None:
         authority_digest=_digest("1"),
         plan_digest=_digest("2"),
     ) == Path("/tmp/audit/disposition.json")
+
+
+@pytest.mark.parametrize(
+    ("shard_name", "binding"),
+    [
+        ("_type_audit_admission_artifact_ownership", "AuditArtifactFieldOwnership"),
+        ("_type_audit_admission_artifact_ownership", "AuditArtifactFieldOwnershipDef"),
+        (
+            "_type_audit_admission_artifact_ownership",
+            "AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY",
+        ),
+        (
+            "_type_audit_admission_reference_identity",
+            "AuditReferenceIdentityProfileDef",
+        ),
+        (
+            "_type_audit_admission_reference_identity",
+            "AUDIT_REFERENCE_IDENTITY_PROFILE_V1",
+        ),
+        (
+            "_type_audit_admission_reference_identity",
+            "compute_audit_reference_identity",
+        ),
+    ],
+)
+def test_admission_shard_public_bindings_preserve_object_identity(
+    shard_name: str,
+    binding: str,
+) -> None:
+    facade = importlib.import_module("autoskillit.core.types._type_audit_admission")
+    types_package = importlib.import_module("autoskillit.core.types")
+    core_package = importlib.import_module("autoskillit.core")
+    shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
+
+    shard_binding = getattr(shard, binding)
+    assert getattr(facade, binding) is shard_binding
+    assert getattr(types_package, binding) is shard_binding
+    assert getattr(core_package, binding) is shard_binding
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        "_require_nonempty",
+        "_require_digest",
+        "_require_optional_digest",
+        "_require_absolute_path",
+        "_require_tracker_target",
+        "_typed_tuple",
+    ],
+)
+def test_admission_validation_shard_preserves_private_validator_identity(
+    binding: str,
+) -> None:
+    facade = importlib.import_module("autoskillit.core.types._type_audit_admission")
+    shard = importlib.import_module("autoskillit.core.types._type_audit_admission_validation")
+
+    assert getattr(facade, binding) is getattr(shard, binding)
+
+
+def test_admission_ownership_shard_preserves_private_registry_builder_identity() -> None:
+    facade = importlib.import_module("autoskillit.core.types._type_audit_admission")
+    shard = importlib.import_module(
+        "autoskillit.core.types._type_audit_admission_artifact_ownership"
+    )
+
+    assert getattr(facade, "_ownership_registry") is getattr(shard, "_ownership_registry")

@@ -334,6 +334,13 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),
+    "_type_audit_admission_validation": frozenset({"core", "execution", "pipeline", "server"}),
+    "_type_audit_admission_artifact_ownership": frozenset(
+        {"core", "execution", "pipeline", "server"}
+    ),
+    "_type_audit_admission_reference_identity": frozenset(
+        {"core", "execution", "pipeline", "server"}
+    ),
     "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server", "cli"}),
     "_type_audit_protocols": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_github_review": frozenset({"core", "execution", "pipeline", "server", "smoke_utils"}),
@@ -384,6 +391,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "bash_write_targets": frozenset({"core", "execution", "server"}),
     "_delivery_bounds": frozenset({"core", "execution", "server"}),
     "_type_audit_cycle": frozenset({"core", "pipeline", "recipe", "server"}),
+    "_type_audit_cycle_authority": frozenset({"core", "pipeline", "recipe", "server"}),
+    "_type_audit_cycle_disposition": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_binding": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_execution": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_closure_report": frozenset({"core"}),

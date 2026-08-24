@@ -6,14 +6,30 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any
 
-from ..closure_hashing import (
-    HASH_RE,
-    canonical_json_bytes,
-    compute_bytes_hash,
-    compute_canonical_hash,
+from ..closure_hashing import compute_bytes_hash, compute_canonical_hash
+from ._type_audit_admission_artifact_ownership import (
+    AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY,
+    AuditArtifactFieldOwnership,
+    AuditArtifactFieldOwnershipDef,
+    _ownership_registry,  # noqa: F401
+)
+from ._type_audit_admission_reference_identity import (  # noqa: F401
+    _FULL_REFERENCE_FIELDS,
+    _REFERENCE_IDENTITY_DOMAIN,
+    AUDIT_REFERENCE_IDENTITY_PROFILE_V1,
+    AuditReferenceIdentityProfileDef,
+    _full_reference_key,
+    compute_audit_reference_identity,
+)
+from ._type_audit_admission_validation import (
+    _require_absolute_path,
+    _require_digest,
+    _require_nonempty,
+    _require_optional_digest,
+    _require_tracker_target,
+    _typed_tuple,
 )
 from ._type_audit_cycle import (
     ArtifactRef,
@@ -58,24 +74,6 @@ AUDIT_SEMANTIC_SCHEMA_VERSION = 1
 STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION = 1
 STANDALONE_AUDIT_EVIDENCE_KIND = "standalone_audit_evidence"
 
-_REFERENCE_IDENTITY_DOMAIN = "autoskillit:audit-admission:ordered-full-reference:v1:sha256"
-_FULL_REFERENCE_FIELDS = (
-    "locator",
-    "media_type",
-    "schema_version",
-    "byte_size",
-    "content_digest",
-)
-
-
-class AuditArtifactFieldOwnership(StrEnum):
-    """The sole authority allowed to supply one artifact field."""
-
-    CHILD_SEMANTIC = "CHILD_SEMANTIC"
-    SERVER_INJECTED = "SERVER_INJECTED"
-    SERVER_DERIVED = "SERVER_DERIVED"
-    VERIFIED_COPY = "VERIFIED_COPY"
-
 
 class AuditMaterializationStatus(StrEnum):
     """Internal result status before caller-visible response commitment."""
@@ -119,54 +117,6 @@ class AuditAttemptLifecycle(StrEnum):
 class AuditPreparedEffectDeliveryStatus(StrEnum):
     PENDING = "PENDING"
     DELIVERED = "DELIVERED"
-
-
-def _require_nonempty(name: str, value: object) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{name} must be a non-empty string")
-    return value
-
-
-def _require_digest(name: str, value: object) -> str:
-    if not isinstance(value, str) or HASH_RE.fullmatch(value) is None:
-        raise ValueError(f"{name} must be an algorithm-qualified sha256 digest")
-    return value
-
-
-def _require_optional_digest(name: str, value: object) -> str | None:
-    if value is None:
-        return None
-    return _require_digest(name, value)
-
-
-def _require_absolute_path(name: str, value: object) -> Path:
-    if not isinstance(value, Path) or not value.is_absolute() or ".." in value.parts:
-        raise ValueError(f"{name} must be an absolute non-traversing Path")
-    return value
-
-
-def _require_tracker_target(
-    owner: str,
-    tracker_expected: object,
-    tracker_target_order_id: object,
-) -> None:
-    if type(tracker_expected) is not bool:
-        raise ValueError(f"{owner}.tracker_expected must be a boolean")
-    if tracker_target_order_id is not None:
-        _require_nonempty(f"{owner}.tracker_target_order_id", tracker_target_order_id)
-    if tracker_expected and tracker_target_order_id is None:
-        raise ValueError("expected tracker authority requires a target order id")
-
-
-def _typed_tuple(name: str, value: object, item_type: type[Any]) -> tuple[Any, ...]:
-    if not isinstance(value, tuple) or not all(isinstance(item, item_type) for item in value):
-        raise ValueError(f"{name} must be a tuple of {item_type.__name__} values")
-    return value
-
-
-def _full_reference_key(reference: ArtifactRef) -> tuple[object, ...]:
-    payload = reference.to_dict()
-    return tuple(payload[field_name] for field_name in _FULL_REFERENCE_FIELDS)
 
 
 def _validate_semantic_fields(
@@ -223,256 +173,6 @@ def _semantic_payload(
         "schema_version": schema_version,
         "verdict": verdict.value,
     }
-
-
-@dataclass(frozen=True, slots=True)
-class AuditArtifactFieldOwnershipDef:
-    artifact_kind: str
-    field_name: str
-    ownership: AuditArtifactFieldOwnership
-
-    def __post_init__(self) -> None:
-        _require_nonempty("AuditArtifactFieldOwnershipDef.artifact_kind", self.artifact_kind)
-        _require_nonempty("AuditArtifactFieldOwnershipDef.field_name", self.field_name)
-        if not isinstance(self.ownership, AuditArtifactFieldOwnership):
-            raise ValueError(
-                "AuditArtifactFieldOwnershipDef.ownership must be an AuditArtifactFieldOwnership"
-            )
-
-
-def _ownership_registry() -> Mapping[tuple[str, str], AuditArtifactFieldOwnershipDef]:
-    definitions: list[AuditArtifactFieldOwnershipDef] = []
-    groups: dict[
-        str,
-        dict[AuditArtifactFieldOwnership, tuple[str, ...]],
-    ] = {
-        "semantic_result": {
-            AuditArtifactFieldOwnership.CHILD_SEMANTIC: (
-                "audited_plan_refs",
-                "assessments",
-                "verdict",
-                "remediation_ref",
-            ),
-            AuditArtifactFieldOwnership.SERVER_DERIVED: ("schema_version",),
-        },
-        "standalone_evidence": {
-            AuditArtifactFieldOwnership.CHILD_SEMANTIC: (
-                "audited_plan_refs",
-                "assessments",
-                "verdict",
-                "remediation_ref",
-            ),
-            AuditArtifactFieldOwnership.SERVER_DERIVED: ("schema_version", "kind"),
-        },
-        "authority": {
-            AuditArtifactFieldOwnership.CHILD_SEMANTIC: (
-                "assessments",
-                "verdict",
-                "remediation_ref",
-            ),
-            AuditArtifactFieldOwnership.SERVER_INJECTED: (
-                "execution_generation",
-                "cycle_id",
-                "scope_id",
-                "part_id",
-                "audit_round",
-                "generated_at",
-            ),
-            AuditArtifactFieldOwnership.SERVER_DERIVED: (
-                "schema_version",
-                "plan_set_id",
-                "inventory_ref",
-                "findings_digest",
-                "authority_digest",
-            ),
-            AuditArtifactFieldOwnership.VERIFIED_COPY: (
-                "parent_authority_digest",
-                "audited_plan_refs",
-            ),
-        },
-        "disposition_report": {
-            AuditArtifactFieldOwnership.CHILD_SEMANTIC: ("dispositions",),
-            AuditArtifactFieldOwnership.SERVER_INJECTED: ("generated_at",),
-            AuditArtifactFieldOwnership.SERVER_DERIVED: (
-                "schema_version",
-                "current_plan_ref",
-                "report_digest",
-            ),
-            AuditArtifactFieldOwnership.VERIFIED_COPY: (
-                "execution_generation",
-                "cycle_id",
-                "plan_set_id",
-                "scope_id",
-                "part_id",
-                "audit_round",
-                "parent_authority_digest",
-                "inventory_digest",
-                "findings_digest",
-            ),
-        },
-        "plan_association": {
-            AuditArtifactFieldOwnership.SERVER_DERIVED: (
-                "schema_version",
-                "plan_ref",
-                "disposition_ref",
-                "association_digest",
-            ),
-            AuditArtifactFieldOwnership.VERIFIED_COPY: ("parent_authority_digest",),
-        },
-    }
-    for artifact_kind, ownership_groups in groups.items():
-        for ownership, field_names in ownership_groups.items():
-            definitions.extend(
-                AuditArtifactFieldOwnershipDef(
-                    artifact_kind=artifact_kind,
-                    field_name=field_name,
-                    ownership=ownership,
-                )
-                for field_name in field_names
-            )
-    return MappingProxyType(
-        {
-            (definition.artifact_kind, definition.field_name): definition
-            for definition in definitions
-        }
-    )
-
-
-AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY = _ownership_registry()
-
-
-@dataclass(frozen=True, slots=True)
-class AuditReferenceIdentityProfileDef:
-    profile_id: str
-    reference_fields: tuple[str, ...]
-    domain: str
-    canonical_json_required: bool
-    plan_set_domain: str
-    digest_algorithm_allowlist: tuple[str, ...]
-    verifier_byte_limit: int
-    resolved_absolute_contained_paths_required: bool
-    uri_locators_allowed: bool
-    traversal_allowed: bool
-    symlinks_allowed: bool
-    hardlinks_allowed: bool
-    world_writable_allowed: bool
-    reject_duplicate_canonical_records: bool
-    reject_duplicate_resolved_locators: bool
-    ordered_sequence: bool
-
-    def __post_init__(self) -> None:
-        _require_nonempty("AuditReferenceIdentityProfileDef.profile_id", self.profile_id)
-        if (
-            not isinstance(self.reference_fields, tuple)
-            or self.reference_fields != _FULL_REFERENCE_FIELDS
-        ):
-            raise ValueError("audit reference identity profile must cover the full reference")
-        _require_nonempty("AuditReferenceIdentityProfileDef.domain", self.domain)
-        _require_nonempty(
-            "AuditReferenceIdentityProfileDef.plan_set_domain",
-            self.plan_set_domain,
-        )
-        if self.canonical_json_required is not True:
-            raise ValueError("audit reference identity requires canonical JSON")
-        if self.digest_algorithm_allowlist != ("sha256",):
-            raise ValueError("audit reference identity permits only sha256")
-        if (
-            isinstance(self.verifier_byte_limit, bool)
-            or not isinstance(self.verifier_byte_limit, int)
-            or self.verifier_byte_limit < 1
-        ):
-            raise ValueError(
-                "AuditReferenceIdentityProfileDef.verifier_byte_limit must be positive"
-            )
-        required_true = (
-            self.resolved_absolute_contained_paths_required,
-            self.reject_duplicate_canonical_records,
-            self.reject_duplicate_resolved_locators,
-            self.ordered_sequence,
-        )
-        required_false = (
-            self.uri_locators_allowed,
-            self.traversal_allowed,
-            self.symlinks_allowed,
-            self.hardlinks_allowed,
-            self.world_writable_allowed,
-        )
-        if not all(value is True for value in required_true) or not all(
-            value is False for value in required_false
-        ):
-            raise ValueError("audit reference identity path policy is not strict")
-
-
-AUDIT_REFERENCE_IDENTITY_PROFILE_V1 = AuditReferenceIdentityProfileDef(
-    profile_id="ordered-full-reference-v1",
-    reference_fields=_FULL_REFERENCE_FIELDS,
-    domain=_REFERENCE_IDENTITY_DOMAIN,
-    canonical_json_required=True,
-    plan_set_domain="audit-plan-set-v1",
-    digest_algorithm_allowlist=("sha256",),
-    verifier_byte_limit=10_000_000,
-    resolved_absolute_contained_paths_required=True,
-    uri_locators_allowed=False,
-    traversal_allowed=False,
-    symlinks_allowed=False,
-    hardlinks_allowed=False,
-    world_writable_allowed=False,
-    reject_duplicate_canonical_records=True,
-    reject_duplicate_resolved_locators=True,
-    ordered_sequence=True,
-)
-
-
-def compute_audit_reference_identity(
-    references: tuple[ArtifactRef, ...],
-    *,
-    profile: AuditReferenceIdentityProfileDef = AUDIT_REFERENCE_IDENTITY_PROFILE_V1,
-) -> str:
-    """Hash exact, ordered reference metadata under the declared profile."""
-
-    if not isinstance(profile, AuditReferenceIdentityProfileDef):
-        raise ValueError("profile must be an AuditReferenceIdentityProfileDef")
-    refs = _typed_tuple("references", references, ArtifactRef)
-    if not refs:
-        raise ValueError("references must be non-empty")
-    canonical_records: list[bytes] = []
-    normalized_locators: list[str] = []
-    for reference in refs:
-        payload = reference.to_dict()
-        locator = reference.locator
-        normalized_locator = str(Path(locator))
-        if (
-            "://" in locator
-            or not Path(locator).is_absolute()
-            or ".." in Path(locator).parts
-            or normalized_locator != locator
-        ):
-            raise ValueError("reference locator must be absolute, normalized, and non-URI")
-        algorithm, separator, _ = reference.content_digest.partition(":")
-        if not separator or algorithm not in profile.digest_algorithm_allowlist:
-            raise ValueError("reference digest algorithm is not allowed")
-        if reference.byte_size > profile.verifier_byte_limit:
-            raise ValueError("reference byte_size exceeds verifier limit")
-        canonical_records.append(canonical_json_bytes(payload))
-        normalized_locators.append(normalized_locator)
-    if len(set(canonical_records)) != len(canonical_records):
-        raise ValueError("references contain duplicate canonical records")
-    if len(set(normalized_locators)) != len(normalized_locators):
-        raise ValueError("references contain duplicate resolved locators")
-    return compute_canonical_hash(
-        {
-            "profile_id": profile.profile_id,
-            "plan_set_domain": profile.plan_set_domain,
-            "references": [
-                {
-                    field_name: reference.to_dict()[field_name]
-                    for field_name in profile.reference_fields
-                }
-                for reference in refs
-            ],
-        },
-        domain=profile.domain,
-    )
 
 
 @dataclass(frozen=True, slots=True)

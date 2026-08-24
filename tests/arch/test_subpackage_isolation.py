@@ -128,7 +128,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "tool_registry",  # immutable canonical MCP tool definition registry
         "_tool_registry_builders",  # immutable tool-role and definition construction
         # Frozen static ownership and identity-profile definitions are derived once.
-        "_type_audit_admission",
+        "_type_audit_admission_artifact_ownership",
+        "_type_audit_admission_reference_identity",
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
@@ -1047,9 +1048,15 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_enums_context_admission: context-admission enums shard (#4735).
         # +_type_constants_retirements, +_type_constants_skill_contract,
         # +_type_constants_durable_writers: cohesive constants shards (#4735).
-        # +_type_results_records: leaf result and persisted-index record contracts.
+        # +_type_results_records: leaf result and persisted-index record contracts (#4760).
         # +_type_launch_authority: launch authority/provenance shard.
-        "core/types": 62,
+        # Wavefront 1 splits the audit-cycle and audit-admission facade modules into
+        # five cohesive ownership shards (#4736) — adding
+        # _type_audit_cycle_authority, _type_audit_cycle_disposition,
+        # _type_audit_admission_validation, _type_audit_admission_artifact_ownership,
+        # _type_audit_admission_reference_identity alongside the unchanged facades
+        # and ledger module.
+        "core/types": 67,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,

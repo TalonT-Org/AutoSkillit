@@ -1039,6 +1039,7 @@ class DefaultSessionSkillManager:
         explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> tuple[ValidatedAddDir, tuple[SkillAuthority, ...], SkillUnavailabilityPayload]:
         backend = projection_context.backend
+        backend_name = backend.name if backend is not None else None
         add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
         skills_base = add_dir / skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
@@ -1122,12 +1123,12 @@ class DefaultSessionSkillManager:
 
         ordinary_payload = (
             _merge_skill_unavailability_payloads(
-                backend.name if backend is not None else None,
+                backend_name,
                 compilation.unavailability_payload,
             )
             if compilation is not None
             else _canonical_skill_unavailability_payload(
-                backend.name if backend is not None else None,
+                backend_name,
                 (),
             )
         )
@@ -1149,7 +1150,7 @@ class DefaultSessionSkillManager:
             )
         unavailability_payload = (
             _merge_skill_unavailability_payloads(
-                backend.name if backend is not None else None,
+                backend_name,
                 ordinary_payload,
                 profile_compilation.unavailability_payload,
             )

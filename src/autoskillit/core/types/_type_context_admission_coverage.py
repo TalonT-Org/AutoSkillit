@@ -140,12 +140,16 @@ def _coverage_row(surface: ProducerSurface, mode: str = "default") -> ProducerCo
         backend = "autoskillit"
         verifier = "source_inspection"
         locator = (
-            "src/autoskillit/hooks/_capture_artifacts.py"
+            "src/autoskillit/hooks/_capture/_runner.py"
             if native_shell_direct
             else _LOCAL_SOURCE_LOCATORS[surface]
         )
-        version = "0.10.890"
-        revision = "ac8f653a00d24b6be50ef285958cfb0e1b7a351b"
+        version = "0.10.1013" if native_shell_direct else "0.10.890"
+        revision = (
+            "548883ae5547d8a2cebc561d940c7a80ae7de47a"
+            if native_shell_direct
+            else "ac8f653a00d24b6be50ef285958cfb0e1b7a351b"
+        )
     elif surface in _UNOBSERVABLE_SURFACES:
         observation_state = CoverageState.UPSTREAM_GATED
         evidence_kind = CoverageEvidenceKind.INFERENCE
@@ -187,7 +191,7 @@ def _coverage_row(surface: ProducerSurface, mode: str = "default") -> ProducerCo
         source_locator=locator,
         tested_version=version,
         tested_revision=revision,
-        checked_at="2026-07-23",
+        checked_at="2026-08-23" if native_shell_direct else "2026-07-23",
         freshness_policy="verify_on_version_or_configuration_change",
     )
     return ProducerCoverageDef(

@@ -18,6 +18,21 @@ current (pre-#4707-fix) behavior — correctly, the gate should deny.
 Delivery half was unwritable before S7/S8 landed.** A passing denial half
 alone must never be mistaken for full coverage; this module's own
 docstring is that record.
+
+Delivery-half status by parameter, stated plainly so a green run is not
+read as more than it is:
+
+- ``stale_threshold``, ``idle_output_timeout``, ``step_provider`` — covered
+  and passing, against research.yaml's ``download_data``.
+- ``model`` — bridged ``xfail(strict=True)`` on #4775, an independent
+  pre-existing defect (``dispatch_items`` is compiled into ``mcp_kwargs``
+  but filtered out of the runtime actual-kwargs assembly, so no fan-out
+  step can pass attestation). Every bundled recipe step carrying a literal
+  non-templated ``model:`` is a ``dispatch_items`` fan-out step, so there is
+  no unblocked vehicle. It is bridged rather than rewritten against the
+  unattested path: proving ``model`` delivery where the gate never engages
+  is what let #4707 through in the first place, and would be no evidence at
+  all here.
 """
 
 from __future__ import annotations
@@ -190,6 +205,18 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     assert len(executor.calls) == 1
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Blocked by #4775: dispatch_items is filtered out of the runtime "
+        "actual-kwargs assembly (handler_parameter=False) but not out of the "
+        "compile-time mcp_kwargs binding, and _binding.py:1028 demands every "
+        "compiled kwarg be present — so no fan-out step can pass attestation. "
+        "Every bundled recipe step with a literal non-templated model: is a "
+        "dispatch_items fan-out step, so this is the only reachable vehicle. "
+        "Independent of #4707; goes green automatically once #4775 lands."
+    ),
+)
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
     [("planner", "elaborate_phases", _PLANNER_OVERRIDES)],
@@ -200,12 +227,19 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
     tool_ctx_ready_recipe,
 ) -> None:
     """planner.yaml's elaborate_phases declares model: "opus[1m]" — the
-    concretely reachable #4707 trigger from a shipped compiled recipe
-    (R2). Every literal-model step in planner.yaml declares dispatch_items
-    fan-out; there is no fan-out-free alternative, so this step is used
-    directly rather than sidestepped. Not sent by the caller; must reach
-    the executor with model omitted from the call, matching R2's own
-    verification (executor receives opus[1m] with model omitted)."""
+    concretely reachable #4707 trigger from a shipped compiled recipe (R2).
+
+    This is the delivery half for ``model`` itself, the parameter #4707 was
+    actually about. It is written against the *attested* path deliberately:
+    proving model delivery on the unattested path instead (as
+    test_run_skill_execution_tuning_fallbacks.py does, where the gate never
+    engages) would reproduce the exact coverage gap this plan exists to
+    close — a green test that is no evidence at all about attestation.
+
+    So it is bridged rather than weakened. See the xfail reason for why it
+    cannot pass today; the assertions below are the real contract and are
+    what will be checked once #4775 is fixed.
+    """
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -217,6 +251,16 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
     work_dir.mkdir()
     _write_tracker_for(ready, with_args)
 
+    # elaborate_phases declares no skill_inputs: sub-key — its child inputs come
+    # from parsing skill_command's placeholders. Omitting the parameter lets the
+    # runtime binder derive them (_binding.py:965-990) rather than guessing keys.
+    declared_inputs = with_args.get("skill_inputs")
+    optional_inputs = (
+        {"skill_inputs": {name: "probe value" for name in declared_inputs}}
+        if declared_inputs
+        else {}
+    )
+
     result = json.loads(
         await run_skill(
             with_args["skill_command"],
@@ -225,7 +269,7 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
-            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            **optional_inputs,
         )
     )
 

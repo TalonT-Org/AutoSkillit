@@ -474,7 +474,13 @@ async def tool_ctx_ready_recipe(
 
     envelope = await _open_kitchen_patched(recipe_name, ingredient_overrides, monkeypatch)
     assert envelope["success"] is True
-    assert envelope["delivery_bound_spill"] is True
+    # Delivery shape depends on compiled recipe size, not on this fixture:
+    # research.yaml (~80KB) exceeds the inline-response budget and delivers
+    # bounded (delivery_bound_spill=True, required_sections populated);
+    # planner.yaml (~22KB) fits inline (content delivered directly, no
+    # separate pull phase). _credit_initialization_sections already handles
+    # both — it falls back to the live ReadyRecipe state when
+    # required_sections is absent — so no bounded-only assertion belongs here.
 
     await _credit_initialization_sections(envelope)
     step_body = await _pull_step_section(envelope, attested_step)

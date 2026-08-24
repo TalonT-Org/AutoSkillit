@@ -299,7 +299,20 @@ async def test_attested_run_skill_reports_missing_canonical_tool_def(
                 "task_description": "test task",
             },
         ),
-        ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
+        pytest.param(
+            ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "Blocked by #4775: elaborate_phases declares dispatch_items, "
+                    "which is compiled into mcp_kwargs but filtered out of the "
+                    "runtime actual-kwargs assembly, so the genuine-digest half "
+                    "is denied at preflight:recipe_execution. The fixture itself "
+                    "is sound — only the attested call is unreachable. Independent "
+                    "of #4707; goes green automatically once #4775 lands."
+                ),
+            ),
+        ),
     ],
     indirect=True,
 )
@@ -343,6 +356,16 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
         )
     )
 
+    # A step may declare no skill_inputs: sub-key and instead carry its child
+    # inputs as placeholders inside skill_command; omitting the parameter lets
+    # the runtime binder derive them rather than guessing key names.
+    declared_inputs = with_args.get("skill_inputs")
+    optional_inputs = (
+        {"skill_inputs": {name: "probe value" for name in declared_inputs}}
+        if declared_inputs
+        else {}
+    )
+
     genuine = json.loads(
         await run_skill(
             with_args["skill_command"],
@@ -351,7 +374,7 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
-            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            **optional_inputs,
         )
     )
     assert genuine.get("stage") != "preflight:recipe_execution", genuine
@@ -364,7 +387,7 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
             output_dir=with_args["output_dir"],
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest="sha256:" + "0" * 64,
-            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            **optional_inputs,
         )
     )
     assert fabricated.get("stage") == "preflight:recipe_execution", fabricated

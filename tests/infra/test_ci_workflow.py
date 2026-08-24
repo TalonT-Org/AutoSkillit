@@ -468,7 +468,13 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert test_job["name"] == "Test (${{ matrix.shard }}) on ${{ matrix.os }}"
     assert test_job["strategy"]["matrix"] == {
         "os": "${{ fromJSON(needs.preflight.outputs.os-matrix) }}",
-        "shard": ["execution", "recipe", "general"],
+        "shard": [
+            "execution",
+            "execution-top-level",
+            "execution-rest",
+            "recipe",
+            "general",
+        ],
     }
     test_checkout = next(
         step
@@ -490,12 +496,25 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert "sha256sum -c" in install_rg["run"]
     assert "brew install ripgrep" in install_rg["run"]
     assert 'case "$RUNNER_OS" in' in install_rg["run"]
-    assert run_tests["env"]["AUTOSKILLIT_TEST_FILTER"] == (
-        "${{ needs.preflight.outputs.test-filter-mode }}"
+    profiling_predicate = (
+        "github.event_name == 'pull_request' && "
+        "github.base_ref == 'develop' && "
+        "github.head_ref == 'experiment/4781-execution-shard-profile' && "
+        "github.event.pull_request.head.repo.full_name == github.repository"
     )
-    assert run_tests["env"]["AUTOSKILLIT_TEST_BASE_REF"] == (
-        "${{ needs.preflight.outputs.test-base-revision }}"
-    )
+    assert run_tests["env"] == {
+        "AUTOSKILLIT_FILTER_STATS_FILE": (
+            "${{ github.workspace }}/.autoskillit/temp/filter-stats.json"
+        ),
+        "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED": "true",
+        "AUTOSKILLIT_TEST_FILTER": (
+            f"${{{{ {profiling_predicate} && 'none' || needs.preflight.outputs.test-filter-mode }}"
+        ),
+        "AUTOSKILLIT_TEST_BASE_REF": "${{ needs.preflight.outputs.test-base-revision }}",
+        "PYTEST_ADDOPTS": (
+            f"${{{{ {profiling_predicate} && '--durations=0 --durations-min=0' || '' }}"
+        ),
+    }
     assert "github.event" not in run_tests["run"]
     assert "develop" not in run_tests["run"]
 

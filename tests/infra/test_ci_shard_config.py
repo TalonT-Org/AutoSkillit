@@ -34,6 +34,14 @@ EXPECTED_EXPLICIT_SHARDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+EXPECTED_SHARD_CANDIDATES = (
+    "execution",
+    "execution-top-level",
+    "execution-rest",
+    "recipe",
+    "general",
+)
+
 _SHARD_ASSIGNMENT_RE: re.Pattern[str] = re.compile(r'SHARD_([A-Z][A-Z0-9_]*)_DIRS="([^"]+)"')
 
 
@@ -332,21 +340,17 @@ class TestCIShardConfig:
         assert "tests/server/test_server.py" in ownership["recipe"]
         assert "tests/brand_new_unassigned/test_brand_new.py" in ownership["general"]
 
-    def test_case_arms_include_execution_recipe_general_and_default_error(self) -> None:
+    def test_case_arms_match_exact_candidates_and_reject_unknown_shards(self) -> None:
         text = _read_workflow_text()
         body = _compute_test_paths_body(text)
         arms = _parse_case_arms(body)
         matrix_match = re.search(r"(?m)^\s*shard:\s*\[([^]]+)]\s*$", text)
         assert matrix_match, "Workflow test matrix has no inline shard declaration"
-        matrix_shards = {name.strip() for name in matrix_match.group(1).split(",")}
-        assert set(arms) == matrix_shards | {"*_default"}
+        matrix_shards = tuple(name.strip() for name in matrix_match.group(1).split(","))
+        assert matrix_shards == EXPECTED_SHARD_CANDIDATES
+        assert set(arms) == set(EXPECTED_SHARD_CANDIDATES) | {"*_default"}
         default_body = arms["*_default"]
-        assert "::error::" in default_body
-        assert "Unknown test shard" in default_body or "unknown shard" in default_body
-        exit_status = _exit_status(default_body)
-        assert exit_status is not None and exit_status != 0, (
-            f"Default arm does not exit with a nonzero status: {default_body!r}"
-        )
+        assert default_body == 'echo "::error::Unknown test shard: ${{ matrix.shard }}"\nexit 1'
 
     @pytest.mark.parametrize(("body", "expected"), [("exit 10", 10), ("exit 01", 1)])
     def test_exit_status_parses_multidigit_and_zero_padded_values(
@@ -354,7 +358,25 @@ class TestCIShardConfig:
     ) -> None:
         assert _exit_status(body) == expected
 
-    def test_case_arm_wiring_matches_ownership_model(self) -> None:
+    def test_dynamic_path_candidates_reject_unsafe_root_and_direct_execution_filenames(
+        self,
+    ) -> None:
+        body = _compute_test_paths_body(_read_workflow_text())
+
+        assert "while IFS= read -r -d '' test_file; do" in body
+        assert '[[ "$test_file" =~ [[:space:]] || "$test_file" =~ [*?\\[] ]]' in body
+        assert (
+            'echo "::error::Unsafe test filename for the shard path splitter: $test_file"' in body
+        )
+        assert "exit 1" in body
+        assert (
+            "find tests/ -maxdepth 1 -type f -name 'test_*.py' -print0\n"
+            "            find tests/execution -maxdepth 1 -type f -name 'test_*.py' -print0"
+        ) in body
+        assert "DIRECT_EXECUTION_FILES=$(find tests/execution -maxdepth 1 -type f" in body
+        assert "DIRECT_EXECUTION_IGNORES=$(find tests/execution -maxdepth 1 -type f" in body
+
+    def test_case_arm_wiring_matches_exact_candidate_routing(self) -> None:
         text = _read_workflow_text()
         body = _compute_test_paths_body(text)
         arms = _parse_case_arms(body)
@@ -362,26 +384,19 @@ class TestCIShardConfig:
         assert "ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort" in body
         assert "ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort" in body
 
-        exec_body = arms["execution"]
-        assert "SHARD_EXECUTION_DIRS" in exec_body
-        assert "${ROOT_FILES}" in exec_body
-        assert re.search(
-            r'(?m)^\s*echo "PYTEST_TEST_PATHS=\${SHARD_EXECUTION_DIRS} '
-            r'\${ROOT_FILES}" >> "\$GITHUB_ENV"\s*$',
-            exec_body,
+        assert arms["execution"] == (
+            'echo "PYTEST_TEST_PATHS=${SHARD_EXECUTION_DIRS} ${ROOT_FILES}" >> "$GITHUB_ENV"'
         )
-        assert "PYTEST_IGNORE_PATHS" not in exec_body
+        assert arms["execution-top-level"] == (
+            'echo "PYTEST_TEST_PATHS=${DIRECT_EXECUTION_FILES}" >> "$GITHUB_ENV"'
+        )
+        assert arms["execution-rest"] == (
+            'echo "PYTEST_TEST_PATHS=${SHARD_EXECUTION_DIRS} ${ROOT_FILES}" '
+            '>> "$GITHUB_ENV"\n'
+            'echo "PYTEST_IGNORE_PATHS=${DIRECT_EXECUTION_IGNORES}" >> "$GITHUB_ENV"'
+        )
 
-        recipe_body = arms["recipe"]
-        assert "SHARD_RECIPE_DIRS" in recipe_body
-        assert re.search(
-            r'(?m)^\s*echo "PYTEST_TEST_PATHS=\${SHARD_RECIPE_DIRS}" '
-            r'>> "\$GITHUB_ENV"\s*$',
-            recipe_body,
-        )
-        assert "find tests/ -maxdepth 1" not in recipe_body
-        assert "ROOT_FILES" not in recipe_body
-        assert "ROOT_IGNORES" not in recipe_body
+        assert arms["recipe"] == ('echo "PYTEST_TEST_PATHS=${SHARD_RECIPE_DIRS}" >> "$GITHUB_ENV"')
 
         general_body = arms["general"]
         assert re.search(

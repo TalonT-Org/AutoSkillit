@@ -11,10 +11,58 @@ from pathlib import Path
 from autoskillit.core import (
     InstructionExtractionMode,
     OrchestratorSurfaceDef,
+    ToolParamRole,
+    get_tool_def,
 )
 from autoskillit.core import (
     strip_markdown_code_regions as strip_markdown_code_regions,
 )
+
+_RUN_SKILL_WINDOW = 400
+_PROSE_TRIGGER_WINDOW = 60
+_PROSE_TRIGGER_WORDS = ("parameter", "pass", "forward")
+
+
+def execution_tuning_param_names() -> tuple[str, ...]:
+    """Return run_skill parameters whose role is execution tuning."""
+    tool_def = get_tool_def("run_skill")
+    assert tool_def is not None, "run_skill must be a registered ToolDef"
+    return tuple(
+        sorted(
+            param.name for param in tool_def.params if param.role is ToolParamRole.EXECUTION_TUNING
+        )
+    )
+
+
+def _literal_kwarg_pattern(names: tuple[str, ...]) -> re.Pattern[str]:
+    return re.compile(r"(?:" + "|".join(re.escape(name) for name in names) + r")=")
+
+
+def find_execution_tuning_forwarding_violations(text: str, names: tuple[str, ...]) -> list[str]:
+    """Find prose that tells callers to forward server-resolved tuning values."""
+    violations: list[str] = []
+
+    for match in _literal_kwarg_pattern(names).finditer(text):
+        window_start = max(0, match.start() - _RUN_SKILL_WINDOW)
+        window_end = min(len(text), match.end() + _RUN_SKILL_WINDOW)
+        if "run_skill" not in text[window_start:window_end]:
+            continue
+        violations.append(f"literal kwarg form {match.group(0)!r}")
+
+    for name in names:
+        for match in re.finditer(re.escape(name), text):
+            local_start = max(0, match.start() - _PROSE_TRIGGER_WINDOW)
+            local_end = min(len(text), match.end() + _PROSE_TRIGGER_WINDOW)
+            local_window = text[local_start:local_end]
+            if not any(word in local_window.lower() for word in _PROSE_TRIGGER_WORDS):
+                continue
+            wide_start = max(0, match.start() - _RUN_SKILL_WINDOW)
+            wide_end = min(len(text), match.end() + _RUN_SKILL_WINDOW)
+            if "run_skill" not in text[wide_start:wide_end]:
+                continue
+            violations.append(f"prose form near {name!r}: {local_window!r}")
+
+    return violations
 
 
 def seed_registry_owner(project_dir: Path, launch_id: str) -> None:

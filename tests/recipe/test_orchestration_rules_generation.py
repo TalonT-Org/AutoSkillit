@@ -20,6 +20,10 @@ from autoskillit.core import (
     build_parameter_forwarding_rules,
     get_tool_def,
 )
+from tests._helpers import (
+    execution_tuning_param_names,
+    find_execution_tuning_forwarding_violations,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -72,17 +76,12 @@ def test_rules_instruct_not_forwarding_them() -> None:
 def test_generated_rules_survive_the_prose_forwarding_sweep() -> None:
     """The generator must not emit text its own sweep would flag — without
     this, T1 and S10 can contradict each other."""
-    from tests.contracts.test_skill_prose_forwarding import (
-        _execution_tuning_param_names,
-        _find_violations,
-    )
-
-    names = _execution_tuning_param_names()
+    names = execution_tuning_param_names()
     rules = build_parameter_forwarding_rules()
     # Prefix with "run_skill" so the sweep's scope-in window (does this
     # passage concern run_skill at all?) matches, mirroring how the rules
     # are actually delivered — always adjacent to run_skill-referencing text.
-    violations = _find_violations("run_skill " + rules, names)
+    violations = find_execution_tuning_forwarding_violations("run_skill " + rules, names)
     assert not violations, f"generated rules trip their own prose-forwarding sweep: {violations}"
 
 

@@ -11,6 +11,7 @@ from ._type_execution_identity import ChildExecutionIdentityDict
 __all__ = [
     "CapturedStream",
     "SpilledOutput",
+    "SpillSpec",
     "FailureRecord",
     "CleanupResult",
     "CloneSuccessResult",
@@ -34,6 +35,32 @@ class CapturedStream:
     head: str
     tail: str
     complete: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SpillSpec:
+    """Character budgets for lossless artifact-backed output previews.
+
+    Dual denomination: ``spill_output`` uses ``inline_max_chars`` as a character
+    threshold; ``summarize_capture`` uses it as a byte threshold (identical for
+    ASCII; at most more conservative for multibyte).
+    """
+
+    inline_max_chars: int = 5000
+    head_chars: int = 2500
+    tail_chars: int = 2500
+
+    def __post_init__(self) -> None:
+        if self.inline_max_chars < 0 or self.head_chars < 0 or self.tail_chars < 0:
+            raise ValueError("spill character budgets must be non-negative")
+
+    def with_forced_spill(self, force: bool) -> SpillSpec:
+        """Return a spec that forces artifact backing when ``force`` is true."""
+        if not force:
+            return self
+        return SpillSpec(
+            inline_max_chars=0, head_chars=self.head_chars, tail_chars=self.tail_chars
+        )
 
 
 @dataclass(frozen=True, slots=True)

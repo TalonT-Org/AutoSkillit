@@ -89,3 +89,7 @@ def test_context_admission_shards_follow_one_way_import_graph(
         f"{path.name} imports higher-level or forbidden context-admission shards: "
         f"{sorted(imports - allowed_imports)}"
     )
+    # Mirror the negative check with a positive one so dropping a declared dependency
+    # surfaces as a clear failure rather than silently passing the subset assertion.
+    missing = allowed_imports - imports
+    assert not missing, f"{path.name} is missing declared dependencies: {sorted(missing)}"

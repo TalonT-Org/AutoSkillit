@@ -296,7 +296,6 @@ class LocalOtlpSink:
 
     def __init__(self) -> None:
         self.env: dict[str, str] = {}
-        self._log_root: Path | None = None
         self._active_path: Path | None = None
         self._archive_path: Path | None = None
         self._lock_path: Path | None = None
@@ -325,7 +324,6 @@ class LocalOtlpSink:
             locks_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
             locks_dir.chmod(0o700)
 
-            sink._log_root = log_root
             sink._active_path = log_root / "otlp.jsonl"
             sink._archive_path = log_root / "otlp.jsonl.1"
             sink._lock_path = locks_dir / "otlp-sink.lock"

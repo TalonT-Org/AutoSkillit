@@ -520,6 +520,9 @@ from .types import (
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
 )
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
+from .types import (
+    ORCHESTRATOR_FACING_INSTRUCTION_SURFACES as ORCHESTRATOR_FACING_INSTRUCTION_SURFACES,
+)
 from .types import ORCHESTRATOR_SESSION_REQUIRED_ENV as ORCHESTRATOR_SESSION_REQUIRED_ENV
 from .types import ORDER_INTERACTIVE_REQUIRED_ENV as ORDER_INTERACTIVE_REQUIRED_ENV
 from .types import OUTPUT_DISCIPLINE_BLOCK as OUTPUT_DISCIPLINE_BLOCK
@@ -893,6 +896,7 @@ from .types import InspectorVerdict as InspectorVerdict
 from .types import InstallationVersion as InstallationVersion
 from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import InstallMode as InstallMode
+from .types import InstructionExtractionMode as InstructionExtractionMode
 from .types import IntakeRuleDef as IntakeRuleDef
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
@@ -957,6 +961,7 @@ from .types import NoResume as NoResume
 from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
+from .types import OrchestratorSurfaceDef as OrchestratorSurfaceDef
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef

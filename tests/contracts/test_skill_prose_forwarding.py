@@ -1,12 +1,23 @@
-"""Prose-contract sweep: no bundled skill instructs forwarding an
-EXECUTION_TUNING run_skill parameter (#4402).
+"""Prose-contract sweep: no orchestrator-facing instruction surface instructs
+forwarding an EXECUTION_TUNING run_skill parameter (#4402, recurred as #4707).
 
 Before #4402, sous-chef's PARAMETER FORWARDING and MODEL PROPAGATION
 sections mandated forwarding ``stale_threshold``/``idle_output_timeout``/
 ``step_provider``/``model`` to ``run_skill`` — a channel the runtime
 attestation gate guaranteed would deny (an int or non-empty str is never
-``""``, the gate's undeclared-name exemption). This sweeps every bundled
-skill for the same instruction pattern recurring.
+``""``, the gate's undeclared-name exemption). This sweeps every registered
+orchestrator-facing instruction surface for the same instruction pattern
+recurring.
+
+**#4707 was a scope failure, not a heuristic-quality failure.** This exact
+sweep already existed and was already correct — its only flaw was that it
+scanned ``skills/*/SKILL.md`` alone, while the actual offending sentence
+lived in ``server/tools/tools_recipe.py``'s ``load_recipe`` docstring, a
+surface the original glob never reached. The sweep now iterates
+``ORCHESTRATOR_FACING_INSTRUCTION_SURFACES``
+(core/types/_type_orchestrator_instruction_surfaces.py)
+instead of a hardcoded skills-only glob, honoring each surface's declared
+extraction mode, so a defense aimed at the wrong file cannot recur silently.
 
 **Literal ``param=`` regex alone is insufficient** — verified during
 authoring: the only pre-#4402 literal-form hit in the whole tree was
@@ -33,12 +44,13 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ToolParamRole, get_tool_def
+from autoskillit.core import ORCHESTRATOR_FACING_INSTRUCTION_SURFACES, ToolParamRole, get_tool_def
+from tests._helpers import extract_orchestrator_surface_texts
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_SKILLS_ROOT = _REPO_ROOT / "src" / "autoskillit" / "skills"
+_SRC_ROOT = _REPO_ROOT / "src" / "autoskillit"
 
 # Generous scope-in window: does this passage concern run_skill at all?
 _RUN_SKILL_WINDOW = 400
@@ -88,23 +100,25 @@ def _find_violations(text: str, names: tuple[str, ...]) -> list[str]:
     return violations
 
 
-def test_no_bundled_skill_instructs_forwarding_execution_tuning_params() -> None:
+def test_no_orchestrator_facing_surface_instructs_forwarding_execution_tuning_params() -> None:
     names = _execution_tuning_param_names()
     assert names, (
         "no EXECUTION_TUNING-role run_skill params found — has the role registry drifted?"
     )
 
     offenders: dict[str, list[str]] = {}
-    for skill_md in sorted(_SKILLS_ROOT.glob("*/SKILL.md")):
-        text = skill_md.read_text(encoding="utf-8")
-        violations = _find_violations(text, names)
-        if violations:
-            offenders[str(skill_md.relative_to(_REPO_ROOT))] = violations
+    for surface_name, surface in ORCHESTRATOR_FACING_INSTRUCTION_SURFACES.items():
+        texts = extract_orchestrator_surface_texts(surface, _SRC_ROOT)
+        for identifier, text in texts.items():
+            violations = _find_violations(text, names)
+            if violations:
+                offenders[f"{surface_name} :: {identifier}"] = violations
 
     assert not offenders, (
-        "bundled skill(s) instruct forwarding an EXECUTION_TUNING-role run_skill "
-        "parameter — these are server-resolved from the recipe step and the runtime "
-        f"attestation gate denies them if forwarded: {offenders!r}"
+        "orchestrator-facing instruction surface(s) instruct forwarding an "
+        "EXECUTION_TUNING-role run_skill parameter — these are server-resolved "
+        "from the recipe step and the runtime attestation gate denies them if "
+        f"forwarded: {offenders!r}"
     )
 
 

@@ -700,7 +700,6 @@ def validate_skill_capability_roles(
         raise SkillContractError(
             f"unknown skill capabilities for {execution_role.value}: {sorted(unknown)}"
         )
-
     incompatible = sorted(
         capability
         for capability in uses_capabilities

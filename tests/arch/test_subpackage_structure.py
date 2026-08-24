@@ -56,6 +56,7 @@ class TestCoreSubpackages:
             "_type_launch_projection",
             "_type_managed_home",
             "_type_native_shell_capture",
+            "_type_orchestrator_instruction_surfaces",
             "_type_phoropter",
             "_type_persisted_formats",
             "_type_plugin_source",

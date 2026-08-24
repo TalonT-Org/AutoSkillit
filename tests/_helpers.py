@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import ast
+import importlib
 import re
 import sys
 from pathlib import Path
 
+from autoskillit.core import (
+    InstructionExtractionMode,
+    OrchestratorSurfaceDef,
+)
 from autoskillit.core import (
     strip_markdown_code_regions as strip_markdown_code_regions,
 )
@@ -154,6 +160,66 @@ def extract_never_block(skill_text: str) -> str:
     block = skill_text[start:end]
     lines = [line for line in block.splitlines() if line.strip().startswith("- ")]
     return "\n".join(lines)
+
+
+def _extract_python_docstrings(path: Path) -> str:
+    """AST-parse a module and concatenate its module/function/class docstrings only.
+
+    Whole-file reading over-triggers on legitimate code (e.g. keyword-argument
+    ``model=`` calls); docstring-only extraction is both narrower (no false
+    positives) and semantically right — only docstrings ship to the
+    orchestrator as MCP tool descriptions.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    docs: list[str] = []
+    module_doc = ast.get_docstring(tree)
+    if module_doc:
+        docs.append(module_doc)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            node_doc = ast.get_docstring(node)
+            if node_doc:
+                docs.append(node_doc)
+    return "\n\n".join(docs)
+
+
+def resolve_orchestrator_surface_paths(
+    surface: OrchestratorSurfaceDef, src_root: Path
+) -> tuple[Path, ...]:
+    """Resolve a MARKDOWN_FULL/PYTHON_DOCSTRINGS surface's glob to matched file paths.
+
+    Raises for GENERATED_OUTPUT surfaces, which have no filesystem glob to resolve.
+    """
+    if surface.extraction_mode is InstructionExtractionMode.GENERATED_OUTPUT:
+        raise ValueError(f"{surface.name}: GENERATED_OUTPUT has no path_glob to resolve")
+    assert surface.path_glob is not None
+    return tuple(sorted(src_root.glob(surface.path_glob)))
+
+
+def extract_orchestrator_surface_texts(
+    surface: OrchestratorSurfaceDef, src_root: Path
+) -> dict[str, str]:
+    """Extract text per constituent source for one registered surface, honoring its mode.
+
+    Returns ``{identifier: text}`` — one entry per glob-matched file for
+    MARKDOWN_FULL/PYTHON_DOCSTRINGS (identifier = path relative to ``src_root``),
+    or a single entry for GENERATED_OUTPUT (identifier = ``"module:symbol"``).
+    Per-file granularity is preserved (rather than one concatenated blob) so a
+    sweep over a glob-matched surface can still name the specific offending file.
+    """
+    if surface.extraction_mode is InstructionExtractionMode.GENERATED_OUTPUT:
+        assert surface.producer_module is not None
+        assert surface.producer_symbol is not None
+        module = importlib.import_module(surface.producer_module)
+        producer = getattr(module, surface.producer_symbol)
+        identifier = f"{surface.producer_module}:{surface.producer_symbol}"
+        return {identifier: producer()}
+
+    paths = resolve_orchestrator_surface_paths(surface, src_root)
+    if surface.extraction_mode is InstructionExtractionMode.MARKDOWN_FULL:
+        return {str(p.relative_to(src_root)): p.read_text(encoding="utf-8") for p in paths}
+    # PYTHON_DOCSTRINGS
+    return {str(p.relative_to(src_root)): _extract_python_docstrings(p) for p in paths}
 
 
 def extract_always_block(skill_text: str) -> str:

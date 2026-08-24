@@ -78,6 +78,10 @@ from ._type_managed_home import *  # noqa: F401, F403
 from ._type_managed_home import __all__ as _managed_home_all
 from ._type_native_shell_capture import *  # noqa: F401, F403
 from ._type_native_shell_capture import __all__ as _native_shell_capture_all
+from ._type_orchestrator_instruction_surfaces import *  # noqa: F401, F403
+from ._type_orchestrator_instruction_surfaces import (
+    __all__ as _orchestrator_instruction_surfaces_all,
+)
 from ._type_persisted_formats import *  # noqa: F401, F403
 from ._type_persisted_formats import __all__ as _persisted_formats_all
 from ._type_phoropter import *  # noqa: F401, F403
@@ -163,6 +167,7 @@ __all__ = (
     + _launch_authority_all
     + _managed_home_all
     + _native_shell_capture_all
+    + _orchestrator_instruction_surfaces_all
     + _phoropter_all
     + _persisted_formats_all
     + _plugin_source_all

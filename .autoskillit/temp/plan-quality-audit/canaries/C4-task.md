@@ -1,0 +1,1 @@
+Rename the `before_commit` field to `checkout_ref` across all recipe YAML files, migration scripts, and workspace utilities. Update all affected call sites and tests.

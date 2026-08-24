@@ -31,8 +31,8 @@ from ._type_audit_admission_validation import (
     _require_tracker_target,
     _typed_tuple,
 )
-from ._type_audit_cycle import (
-    ArtifactRef,
+from ._type_audit_artifact_ref import ArtifactRef
+from ._type_audit_cycle_authority import (
     AuditAssessmentRow,
     AuditCycleHead,
     AuditVerdict,

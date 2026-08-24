@@ -11,13 +11,15 @@ from .closure_hashing import compute_bytes_hash
 from .io import decode_versioned_json_bytes
 from .logging import get_logger
 from .path_containment import ContainmentError, read_stable_contained_bytes
-from .types._type_audit_cycle import (
+from .types._type_audit_artifact_ref import ArtifactRef
+from .types._type_audit_cycle_authority import (
     AUDIT_CYCLE_SCHEMA_VERSION,
-    AdmissionReason,
-    ArtifactRef,
     AuditCycleAuthority,
     AuditCycleHead,
     AuditVerdict,
+)
+from .types._type_audit_cycle_disposition import (
+    AdmissionReason,
     InventoryAdmissionDecision,
     PlanDispositionReport,
     PlanDispositionRow,

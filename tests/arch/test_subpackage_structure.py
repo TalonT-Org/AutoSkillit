@@ -20,7 +20,7 @@ class TestCoreSubpackages:
             "_type_audit_admission_ledger",
             "_type_audit_admission_reference_identity",
             "_type_audit_admission_validation",
-            "_type_audit_cycle",
+            "_type_audit_artifact_ref",
             "_type_audit_cycle_authority",
             "_type_audit_cycle_disposition",
             "_type_audit_protocols",

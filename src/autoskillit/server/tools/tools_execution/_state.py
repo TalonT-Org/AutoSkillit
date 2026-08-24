@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
     from autoskillit.core import (
         ArtifactLease,
+        ArtifactRef,
         AuditCycleAuthority,
         AuditIdentityReservation,
         AuditMaterializationResult,
@@ -80,7 +81,6 @@ if TYPE_CHECKING:
         VerifiedInputPreflightResult,
         WriteBehaviorSpec,
     )
-    from autoskillit.core.types._type_audit_cycle import ArtifactRef
     from autoskillit.core.types._type_skill_contract import (
         ExplorationVectorApplicabilityId,
         SkillSessionContract,

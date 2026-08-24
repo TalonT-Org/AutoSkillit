@@ -17,7 +17,7 @@ from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ..closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
-from ._type_audit_cycle import AuditVerdict
+from ._type_audit_cycle_authority import AuditVerdict
 from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
 from ._type_execution_identity import ExecutionIdentity
 from ._type_results_records import (

@@ -33,7 +33,8 @@ from ._type_audit_admission_validation import (
     _require_optional_digest,
     _require_tracker_target,
 )
-from ._type_audit_cycle import ArtifactRef, AuditCycleHead
+from ._type_audit_artifact_ref import ArtifactRef
+from ._type_audit_cycle_authority import AuditCycleHead
 
 __all__ = [
     "AuditAdmissionAuthorityMismatchError",

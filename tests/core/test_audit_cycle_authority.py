@@ -369,8 +369,8 @@ def test_schema_version_is_public() -> None:
 @pytest.mark.parametrize(
     ("shard_name", "binding"),
     [
+        ("_type_audit_artifact_ref", "ArtifactRef"),
         ("_type_audit_cycle_authority", "AUDIT_CYCLE_SCHEMA_VERSION"),
-        ("_type_audit_cycle_authority", "ArtifactRef"),
         ("_type_audit_cycle_authority", "AuditVerdict"),
         ("_type_audit_cycle_authority", "AuditAssessment"),
         ("_type_audit_cycle_authority", "AuditAssessmentRow"),
@@ -388,13 +388,11 @@ def test_cycle_shard_public_bindings_preserve_object_identity(
     shard_name: str,
     binding: str,
 ) -> None:
-    facade = importlib.import_module("autoskillit.core.types._type_audit_cycle")
     types_package = importlib.import_module("autoskillit.core.types")
     core_package = importlib.import_module("autoskillit.core")
     shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
 
     shard_binding = getattr(shard, binding)
-    assert getattr(facade, binding) is shard_binding
     assert getattr(types_package, binding) is shard_binding
     assert getattr(core_package, binding) is shard_binding
 
@@ -412,7 +410,10 @@ def test_cycle_shard_private_bindings_preserve_object_identity(
     shard_name: str,
     binding: str,
 ) -> None:
-    facade = importlib.import_module("autoskillit.core.types._type_audit_cycle")
+    types_package = importlib.import_module("autoskillit.core.types")
+    core_package = importlib.import_module("autoskillit.core")
     shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
 
-    assert getattr(facade, binding) is getattr(shard, binding)
+    shard_binding = getattr(shard, binding)
+    assert getattr(types_package, binding) is shard_binding
+    assert getattr(core_package, binding) is shard_binding

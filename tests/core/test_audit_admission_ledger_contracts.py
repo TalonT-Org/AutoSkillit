@@ -41,7 +41,8 @@ from autoskillit.core.types._type_audit_admission_ledger import (
     AuditReservationOutcome,
     AuditReservationRequest,
 )
-from autoskillit.core.types._type_audit_cycle import ArtifactRef, AuditCycleHead, AuditVerdict
+from autoskillit.core.types._type_audit_artifact_ref import ArtifactRef
+from autoskillit.core.types._type_audit_cycle_authority import AuditCycleHead, AuditVerdict
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

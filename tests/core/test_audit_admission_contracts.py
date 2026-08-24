@@ -36,14 +36,14 @@ from autoskillit.core.types._type_audit_admission import (
     StandaloneAuditEvidence,
     compute_audit_reference_identity,
 )
-from autoskillit.core.types._type_audit_cycle import (
-    ArtifactRef,
+from autoskillit.core.types._type_audit_artifact_ref import ArtifactRef
+from autoskillit.core.types._type_audit_cycle_authority import (
     AuditAssessment,
     AuditAssessmentRow,
     AuditCycleAuthority,
     AuditVerdict,
-    PlanDispositionReport,
 )
+from autoskillit.core.types._type_audit_cycle_disposition import PlanDispositionReport
 from autoskillit.core.types._type_audit_protocols import (
     AuditAuthorityMaterializer,
     CommittedDispositionResolver,

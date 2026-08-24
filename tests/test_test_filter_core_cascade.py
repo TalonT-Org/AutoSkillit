@@ -175,6 +175,7 @@ class TestModuleCascadeCore:
             "audit_cycle_verifier",
             "audit_semantic_codec",
             "tool_registry",
+            "_tool_registry_builders",
             "closure_hashing",
             "path_containment",
             "closure_verifier",
@@ -246,6 +247,14 @@ class TestModuleCascadeCore:
     def test_type_recipe_delivery_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_recipe_delivery"] == frozenset(
             {"core", "execution", "pipeline", "server"}
+        )
+
+    def test_recipe_sections_and_tool_registry_builders_cascades(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_recipe_sections"] == frozenset(
+            {"cli", "config", "core", "execution", "pipeline", "recipe", "server", "workspace"}
+        )
+        assert MODULE_CASCADE_CORE["_tool_registry_builders"] == frozenset(
+            {"core", "recipe", "server"}
         )
 
     def test_context_admission_persistence_cascade(self) -> None:
@@ -341,6 +350,58 @@ class TestBuildTestScopeCoreCascade:
         for d in dirs:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         return tests_root
+
+    @pytest.mark.parametrize(
+        ("changed_file", "included", "excluded"),
+        [
+            (
+                "src/autoskillit/core/types/_type_recipe_sections.py",
+                {
+                    "cli",
+                    "config",
+                    "core",
+                    "execution",
+                    "pipeline",
+                    "recipe",
+                    "server",
+                    "workspace",
+                },
+                {"fleet", "hooks", "migration", "planner"},
+            ),
+            (
+                "src/autoskillit/core/_tool_registry_builders.py",
+                {"core", "recipe", "server"},
+                {
+                    "cli",
+                    "config",
+                    "execution",
+                    "fleet",
+                    "hooks",
+                    "migration",
+                    "pipeline",
+                    "planner",
+                    "workspace",
+                },
+            ),
+        ],
+    )
+    def test_new_authority_modules_use_exact_cascades(
+        self,
+        tmp_path: Path,
+        changed_file: str,
+        included: set[str],
+        excluded: set[str],
+    ) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={changed_file},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {path.name for path in result}
+        assert included <= dir_names
+        assert excluded.isdisjoint(dir_names)
 
     ALL_DIRS = [
         "core",

@@ -115,6 +115,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # module-load self-check block (#4351).
         "_type_intake_policy",
         "_type_constants_registries",  # measured response-exemption registry digest
+        "_type_recipe_sections",  # recipe registry and pagination-policy construction
         # Issue #4735 — Wavefront 1 decomposition. The retirement shard builds
         # _ABSOLUTE_ARTIFACT_KEYS = sorted(...) at import time so the absolute-path
         # guard can run at module load.
@@ -125,6 +126,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_type_constants_skill_contract",
         "_type_dimensions",  # named conversion policies (BytesToTokensPolicy instances)
         "tool_registry",  # immutable canonical MCP tool definition registry
+        "_tool_registry_builders",  # immutable tool-role and definition construction
         # Frozen static ownership and identity-profile definitions are derived once.
         "_type_audit_admission",
         "_codex_config",  # Codex output ceiling derived from measured exemptions
@@ -1038,7 +1040,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # entrypoint shim renderer/writer — stdlib-only and version-
         # independent by design, kept separate from the generation-store
         # publish machinery it is written alongside).
-        "core": 34,
+        "core": 35,  # +_tool_registry_builders cohesive registry construction (#4739)
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).
@@ -1479,12 +1481,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
-    ),
-    "core/types/_type_constants_registries.py": (
-        1100,
-        "REQ-CNST-010-E16: canonical immutable registries and their measured digests remain "
-        "co-located so the #4411 execution-install-site binding cannot drift from the other "
-        "tool and delivery registries that define its surfaces.",
     ),
     "core/context_admission.py": (
         3050,

@@ -324,7 +324,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
     ),
     "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
-    "_type_recipe_sections": frozenset({"core", "execution", "server"}),
+    "_type_recipe_sections": frozenset(
+        {"cli", "config", "core", "execution", "pipeline", "recipe", "server", "workspace"}
+    ),
     "_type_dimensions": frozenset({"config", "core", "server"}),
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
@@ -386,6 +388,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
     "audit_semantic_codec": frozenset({"core", "server"}),
     "tool_registry": frozenset({"core", "recipe", "server"}),
+    "_tool_registry_builders": frozenset({"core", "recipe", "server"}),
     "closure_hashing": frozenset({"core", "pipeline", "recipe", "server"}),
     "path_containment": frozenset({"core", "recipe", "server"}),
     "closure_verifier": frozenset({"core", "execution"}),

@@ -108,19 +108,18 @@ def _collect_doctor_results() -> list[DoctorResult]:
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     results.extend(
         _run_check(
-            functools.partial(
-                _check_stale_mcp_servers, Path.home() / ".claude.json", backend=_backend
-            )
+            lambda: _check_stale_mcp_servers(Path.home() / ".claude.json", backend=_backend),
+            check_name="stale_mcp_servers",
         )
     )
     # Check 2: MCP server registered in ~/.claude.json or via plugin
     results.extend(
         _run_check(
-            functools.partial(
-                _check_mcp_server_registered,
+            lambda: _check_mcp_server_registered(
                 claude_json_path=Path.home() / ".claude.json",
                 backend=_backend,
-            )
+            ),
+            check_name="mcp_server_registered",
         )
     )
 
@@ -144,26 +143,32 @@ def _collect_doctor_results() -> list[DoctorResult]:
     # Check 4b: Config secrets placement
     results.extend(_run_check(functools.partial(_check_config_layers_for_secrets)))
     # Check 6: Hook executability — validates deployed scripts for all event types (all scopes)
-    results.extend(_run_check(functools.partial(_check_hook_health_all_scopes, Path.cwd())))
+    results.extend(
+        _run_check(
+            lambda: _check_hook_health_all_scopes(Path.cwd()),
+            check_name="hook_health_all_scopes",
+        )
+    )
     # Check 7: Hook registration in settings.json
     results.extend(
         _run_check(
-            functools.partial(
-                _check_hook_registration, _claude_settings_path("user", cwd=Path.cwd())
-            )
+            lambda: _check_hook_registration(_claude_settings_path("user", cwd=Path.cwd())),
+            check_name="hook_registration",
         )
     )
     # Check 7b: Hook registry drift (multi-scope)
     results.extend(
-        _run_check(functools.partial(_check_hook_registry_drift_all_scopes, Path.cwd()))
+        _run_check(
+            lambda: _check_hook_registry_drift_all_scopes(Path.cwd()),
+            check_name="hook_registry_drift_all_scopes",
+        )
     )
 
     # Check 7c: Dual registration (plugin active + hooks in settings.json)
     results.extend(
         _run_check(
-            functools.partial(
-                _check_dual_registration, _claude_settings_path("user", cwd=Path.cwd())
-            )
+            lambda: _check_dual_registration(_claude_settings_path("user", cwd=Path.cwd())),
+            check_name="dual_registration",
         )
     )
 
@@ -171,10 +176,20 @@ def _collect_doctor_results() -> list[DoctorResult]:
     results.extend(_run_check(functools.partial(_check_script_version_health)))
 
     # Check 9: gitignore completeness
-    results.extend(_run_check(functools.partial(_check_gitignore_completeness, Path.cwd())))
+    results.extend(
+        _run_check(
+            lambda: _check_gitignore_completeness(Path.cwd()),
+            check_name="gitignore_completeness",
+        )
+    )
 
     # Check 10: Secret scanning hook
-    results.extend(_run_check(functools.partial(_check_secret_scanning_hook, Path.cwd())))
+    results.extend(
+        _run_check(
+            lambda: _check_secret_scanning_hook(Path.cwd()),
+            check_name="secret_scanning_hook",
+        )
+    )
 
     # Check 11: Editable install source directory still exists
     results.extend(_run_check(functools.partial(_check_editable_install_source_exists)))
@@ -210,7 +225,12 @@ def _collect_doctor_results() -> list[DoctorResult]:
     results.extend(_run_check(functools.partial(_check_ambient_campaign_id)))
 
     # Check 22: Feature dependency consistency
-    results.extend(_run_check(functools.partial(_check_feature_dependencies, cfg.features)))
+    results.extend(
+        _run_check(
+            lambda: _check_feature_dependencies(cfg.features),
+            check_name="feature_dependencies",
+        )
+    )
 
     # Check 23: Feature registry import consistency
     results.extend(_run_check(functools.partial(_check_feature_registry_consistency)))

@@ -646,6 +646,38 @@ def test_collect_doctor_results_isolates_a_crashing_check(
     assert any(result.check == "continuation_probe" for result in results)
 
 
+def test_collect_doctor_results_isolates_deferred_argument_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import doctor as doctor_mod
+    from autoskillit.core import Severity
+
+    def raise_home() -> Path:
+        raise OSError("home unavailable")
+
+    def _check_dual_mcp_registration() -> doctor_mod.DoctorResult:
+        return doctor_mod.DoctorResult(Severity.OK, "post_home_probe", "ran")
+
+    monkeypatch.setattr(Path, "home", raise_home)
+    monkeypatch.setattr(
+        doctor_mod,
+        "_check_dual_mcp_registration",
+        _check_dual_mcp_registration,
+    )
+
+    results = doctor_mod._collect_doctor_results()
+
+    assert any(
+        result.check == "stale_mcp_servers" and result.severity == Severity.ERROR
+        for result in results
+    )
+    assert any(
+        result.check == "mcp_server_registered" and result.severity == Severity.ERROR
+        for result in results
+    )
+    assert any(result.check == "post_home_probe" for result in results)
+
+
 def test_doctor_fix_parameter_does_not_exist():
     """The doctor --fix no-op flag must be removed from the CLI."""
     import inspect

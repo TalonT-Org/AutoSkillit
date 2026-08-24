@@ -43,6 +43,8 @@ class SnapshotUnavailable(Exception):
     ) -> None:
         if status is SnapshotCaptureStatus.COMPLETE:
             raise ValueError("SnapshotUnavailable must not be raised for a COMPLETE status")
+        if reason is None:
+            raise ValueError("a non-COMPLETE SnapshotUnavailable must carry a reason")
         self.status = status
         self.reason = reason
         self.detail = detail

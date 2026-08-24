@@ -23,6 +23,8 @@ from autoskillit.core import (
     RepositoryProfileId,
     RepositorySnapshot,
     SkillContractError,
+    SnapshotCaptureStatus,
+    SnapshotUnavailable,
     normalize_parent_sandbox_mode,
 )
 
@@ -55,6 +57,15 @@ def test_repository_snapshot_state_invariants(changes: dict[str, object], valid:
     else:
         with pytest.raises(ValueError):
             _snapshot(**changes)
+
+
+@pytest.mark.parametrize(
+    "status",
+    [status for status in SnapshotCaptureStatus if status is not SnapshotCaptureStatus.COMPLETE],
+)
+def test_snapshot_unavailable_requires_a_reason(status: SnapshotCaptureStatus) -> None:
+    with pytest.raises(ValueError, match="must carry a reason"):
+        SnapshotUnavailable(status, None, "capture failed")
 
 
 @pytest.mark.parametrize(

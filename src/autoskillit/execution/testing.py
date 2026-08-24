@@ -379,14 +379,14 @@ class DefaultTestRunner:
             if deadline_diagnostic is not None:
                 timeout_stderr.append(deadline_diagnostic)
             final_stderr = "\n".join(timeout_stderr)
-            if last_result is None:
-                logger.warning("test_runner_timeout_before_first_command", timeout=timeout)
         elif last_result is not None:
             final_returncode = last_result.returncode
             final_stderr = last_result.stderr
         else:
             final_returncode = 1
             final_stderr = "timeout exhausted before first command could run"
+
+        if last_result is None:
             logger.warning("test_runner_timeout_before_first_command", timeout=timeout)
 
         passed = check_test_passed(final_returncode, combined_stdout, final_stderr)

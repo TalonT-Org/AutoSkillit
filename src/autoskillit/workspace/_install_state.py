@@ -409,14 +409,20 @@ def _enqueue_legacy_installed_plugin_versions(
         if candidate.name == running_version and running_generation is None:
             continue
         try:
-            identity = read_installed_plugin_artifact_identity(
-                candidate,
-                expected_semantic_key=installed_plugin_semantic_key(
-                    _AUTOSKILLIT_PLUGIN_KEY,
-                    candidate.name,
-                ),
-                manifest_path=installed_plugin_artifact_manifest_path(candidate),
-            )
+            # acquire_shared (not acquire_existing_shared): unlike the generation
+            # store's artifacts, a legacy Claude-cache install predating the lease
+            # mechanism may never have had a lock sidecar created for it — this
+            # lazily materializes one rather than failing every legacy candidate
+            # outright (issue #4770 Related Issue 2).
+            with ArtifactLease.acquire_shared(installed_plugin_artifact_lease_path(candidate)):
+                identity = read_installed_plugin_artifact_identity(
+                    candidate,
+                    expected_semantic_key=installed_plugin_semantic_key(
+                        _AUTOSKILLIT_PLUGIN_KEY,
+                        candidate.name,
+                    ),
+                    manifest_path=installed_plugin_artifact_manifest_path(candidate),
+                )
         except (PluginArtifactValidationError, PluginArtifactUnavailableError, OSError) as exc:
             logger.warning(
                 "reconcile_install_artifacts: legacy version %s unreadable, skipping: %s",

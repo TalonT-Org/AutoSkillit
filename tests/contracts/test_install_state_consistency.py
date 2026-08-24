@@ -763,3 +763,44 @@ class TestRetiredArtifactShapeRegistry:
         assert any(
             record.managed_path == legacy_version for record in read_retiring_cache().records
         )
+
+    def test_legacy_reconciliation_acquires_a_lease_before_the_identity_read(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Issue #4770 Related Issue 2: unlike its sibling at
+        ``_generation_store_findings`` (:150-159), this legacy-artifact
+        reconciliation path previously called
+        ``read_installed_plugin_artifact_identity`` with no lease acquired
+        anywhere in the loop — an unleased read races against any concurrent
+        leased writer with no protection at all."""
+        from autoskillit import __version__
+        from autoskillit.core import ArtifactLease
+        from autoskillit.workspace import (
+            reconcile_install_artifacts,
+            write_installed_plugin_artifact_manifest_locked,
+        )
+
+        legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit" / __version__
+        legacy_version.mkdir(parents=True)
+        (legacy_version / "content.txt").write_text("legacy", encoding="utf-8")
+        write_installed_plugin_artifact_manifest_locked(
+            legacy_version,
+            semantic_key=f"{_PLUGIN_KEY}:{__version__}",
+            action="publish",
+        )
+        _publish_generation(home, __version__)
+
+        acquire_shared = ArtifactLease.acquire_shared
+        acquired_paths: list[Path] = []
+
+        def recording_acquire_shared(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+            acquired_paths.append(lock_path)
+            return acquire_shared(lock_path)
+
+        monkeypatch.setattr(ArtifactLease, "acquire_shared", classmethod(recording_acquire_shared))
+
+        reconcile_install_artifacts()
+
+        assert acquired_paths, "no lease was acquired for the legacy candidate read"

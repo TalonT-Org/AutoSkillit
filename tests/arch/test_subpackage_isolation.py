@@ -1050,7 +1050,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_results_records: leaf result and persisted-index record contracts (#4760).
         # +_type_launch_authority: launch authority/provenance shard.
         # Wavefront 1 splits the audit-cycle and audit-admission facade modules into
-        # five cohesive ownership shards (#4736).
+        # five cohesive ownership shards (#4736) — adding
+        # _type_audit_cycle_authority, _type_audit_cycle_disposition,
+        # _type_audit_admission_validation, _type_audit_admission_artifact_ownership,
+        # _type_audit_admission_reference_identity alongside the unchanged facades
+        # and ledger module.
         "core/types": 67,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,

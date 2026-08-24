@@ -82,6 +82,14 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "core/types/_type_context_admission_effects.py": 750,
     "core/types/_type_context_admission_states.py": 750,
     "core/types/_type_context_admission_coverage.py": 750,
+    # Issue #4741 — Wavefront 1 decomposition of plugin-cache lifecycle.
+    # _plugin_cache.py stays as a thin facade; the three concern shards
+    # carry the lock + mutation boundary colocated per the E26 rationale,
+    # which is now retired.
+    "core/_plugin_cache.py": 750,
+    "core/_retiring_cache.py": 750,
+    "core/_plugin_artifact_retirement.py": 750,
+    "core/_active_kitchens.py": 750,
 }
 
 

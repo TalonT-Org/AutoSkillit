@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import _plugin_cache as plugin_cache
-from autoskillit.core import managed_home_for
+from autoskillit.core import _active_kitchens, managed_home_for
 from autoskillit.hooks.guards import mcp_health_advisor
 from scripts.check_ambient_home_boundary import (
     AMBIENT_HOME_MODULES,
@@ -41,7 +40,7 @@ def test_guard_detects_an_injected_ambient_read(tmp_path: Path) -> None:
 def test_every_registered_module_exists() -> None:
     assert not find_missing_registered_modules(_SRC_ROOT)
     assert AMBIENT_HOME_MODULES == {
-        "core/_plugin_cache.py": frozenset(),
+        "core/_active_kitchens.py": frozenset(),
         "cli/install/_plugin_artifact.py": frozenset(),
         "workspace/_install_state.py": frozenset({"_home"}),
         "workspace/_projected_artifact/authority.py": frozenset(),
@@ -59,6 +58,8 @@ def test_hook_side_active_kitchens_path_matches_core(
     monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
 
     hook_relative = mcp_health_advisor._active_kitchens_path().relative_to(home)
-    core_relative = plugin_cache._active_kitchens_path(managed_home_for(home)).relative_to(home)
+    core_relative = _active_kitchens._active_kitchens_path(managed_home_for(home)).relative_to(
+        home
+    )
 
     assert hook_relative == core_relative

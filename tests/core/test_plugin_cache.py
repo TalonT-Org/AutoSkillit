@@ -282,7 +282,9 @@ def test_scoped_kitchen_lookup_canonicalizes_project_path(monkeypatch, tmp_path:
     project_link = tmp_path / "project-link"
     project_link.symlink_to(project, target_is_directory=True)
     register_active_kitchen(KitchenProcessIdentity("kitchen", 42, 123.5, str(project)))
-    monkeypatch.setattr("autoskillit.core._plugin_cache.kitchen_entry_alive", lambda _entry: True)
+    monkeypatch.setattr(
+        "autoskillit.core._active_kitchens.kitchen_entry_alive", lambda _entry: True
+    )
 
     assert any_kitchen_open(str(project_link)) is True
 

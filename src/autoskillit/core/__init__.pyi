@@ -1,3 +1,16 @@
+from ._active_kitchens import (
+    ActiveKitchensReadResult as ActiveKitchensReadResult,
+)
+from ._active_kitchens import ActiveKitchensState as ActiveKitchensState
+from ._active_kitchens import KitchenProcessIdentity as KitchenProcessIdentity
+from ._active_kitchens import any_kitchen_open as any_kitchen_open
+from ._active_kitchens import kitchen_entry_alive as kitchen_entry_alive
+from ._active_kitchens import read_active_kitchens_registry as read_active_kitchens_registry
+from ._active_kitchens import register_active_kitchen as register_active_kitchen
+from ._active_kitchens import (
+    sample_kitchen_process_identity as sample_kitchen_process_identity,
+)
+from ._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
 from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
 from ._claude_env import build_maintenance_env as build_maintenance_env
@@ -80,24 +93,9 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
 )
-from ._plugin_cache import ActiveKitchensReadResult as ActiveKitchensReadResult
-from ._plugin_cache import ActiveKitchensState as ActiveKitchensState
-from ._plugin_cache import KitchenProcessIdentity as KitchenProcessIdentity
-from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
-from ._plugin_cache import _InstallLock as _InstallLock
-from ._plugin_cache import any_kitchen_open as any_kitchen_open
-from ._plugin_cache import append_retiring_record as append_retiring_record
-from ._plugin_cache import due_retiring_records as due_retiring_records
-from ._plugin_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
-from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
-from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
-from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
-from ._plugin_cache import read_retiring_cache as read_retiring_cache
-from ._plugin_cache import register_active_kitchen as register_active_kitchen
-from ._plugin_cache import remove_retiring_records as remove_retiring_records
-from ._plugin_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
-from ._plugin_cache import sample_kitchen_process_identity as sample_kitchen_process_identity
-from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
+from ._plugin_artifact_retirement import (
+    PluginArtifactRetirementEngine as PluginArtifactRetirementEngine,
+)
 from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
@@ -110,6 +108,14 @@ from ._plugin_ids import parse_installed_plugin_semantic_key as parse_installed_
 from ._plugin_ids import project_agent_tool_name as project_agent_tool_name
 from ._plugin_ids import registered_install_paths as registered_install_paths
 from ._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
+from ._retiring_cache import _InstallLock as _InstallLock
+from ._retiring_cache import append_retiring_record as append_retiring_record
+from ._retiring_cache import due_retiring_records as due_retiring_records
+from ._retiring_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
+from ._retiring_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
+from ._retiring_cache import read_retiring_cache as read_retiring_cache
+from ._retiring_cache import remove_retiring_records as remove_retiring_records
+from ._retiring_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from ._step_context import current_order_id as current_order_id
 from ._step_context import current_step_name as current_step_name
 from ._terminal_table import TerminalColumn as TerminalColumn

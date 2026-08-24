@@ -73,11 +73,39 @@ def _validate_durable_artifact_writer_defs(
 
 DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     DurableArtifactWriterDef(
-        writer="autoskillit.core._plugin_cache:repair_corrupt_retiring_cache",
+        writer="autoskillit.core._retiring_cache:_write_retiring_cache_unlocked",
+        artifact=(
+            "retiring_cache.json — v2 retiring-cache state under the retiring-cache "
+            "lock; serialized by every retirement-v2 mutation (cancel, append, "
+            "promote-legacy-evidence, repair-rebuild)"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.core._retiring_cache:repair_corrupt_retiring_cache",
         artifact=(
             "immutable retiring_cache.corrupt-<timestamp>.json forensic sidecar; "
             "the original machine-local bytes are preserved for diagnosis and are "
             "never consumed as relocated configuration"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.core._active_kitchens:register_active_kitchen",
+        artifact=(
+            "active_kitchens.json — append-only kitchen registry under the "
+            "active-kitchens lock; one writer per kitchen open/transition"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.core._active_kitchens:unregister_active_kitchen",
+        artifact=(
+            "active_kitchens.json — kitchen registry survivor-list rewrite under "
+            "the active-kitchens lock; one writer per kitchen close/transition"
         ),
         machine_local=False,
         detection=None,

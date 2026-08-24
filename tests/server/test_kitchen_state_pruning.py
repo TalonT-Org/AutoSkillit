@@ -96,11 +96,11 @@ def test_unsafe_active_registry_preserves_tracker(monkeypatch, tmp_path, registr
     registry_path = tmp_path / "active_kitchens.json"
     registry_path.write_text(registry_text)
     monkeypatch.setattr(
-        "autoskillit.core._plugin_cache._active_kitchens_path",
+        "autoskillit.core._active_kitchens._active_kitchens_path",
         lambda _home: registry_path,
     )
     monkeypatch.setattr(
-        "autoskillit.core._plugin_cache._active_kitchens_lock",
+        "autoskillit.core._active_kitchens._active_kitchens_lock",
         lambda _home: tmp_path / "active_kitchens.lock",
     )
 

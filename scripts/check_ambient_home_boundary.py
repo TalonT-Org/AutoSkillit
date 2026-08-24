@@ -19,7 +19,7 @@ SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 # Keep this registry deliberately narrow: it protects only modules where an
 # injected-root/ambient-root mismatch can redirect AutoSkillit's own state.
 AMBIENT_HOME_MODULES: Mapping[str, frozenset[str]] = {
-    "core/_plugin_cache.py": frozenset(),
+    "core/_active_kitchens.py": frozenset(),
     "cli/install/_plugin_artifact.py": frozenset(),
     "workspace/_install_state.py": frozenset({"_home"}),
     "workspace/_projected_artifact/authority.py": frozenset(),

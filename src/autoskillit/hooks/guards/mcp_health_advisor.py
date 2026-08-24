@@ -41,7 +41,7 @@ def _pid_alive(pid: int) -> bool:
     Excludes both 'Z' (zombie) and 'X' (dead, transient reaping per
     proc_pid_stat(5)) to match the shared is_pid_alive primitive in
     core/runtime/_linux_proc.py — prevents a split-brain liveness answer
-    with the psutil-based check in core/_plugin_cache._check_pid_with_psutil.
+    with the psutil-based check in core/_active_kitchens._check_pid_with_psutil.
     """
     try:
         os.kill(pid, 0)

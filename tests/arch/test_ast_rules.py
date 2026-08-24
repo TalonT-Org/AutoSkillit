@@ -1350,6 +1350,28 @@ def _find_enumeration_stat_violations(
             [],
             id="non_enumeration_name_is_never_tainted",
         ),
+        pytest.param(
+            "def f(d):\n"
+            "    candidates = sorted(d.glob('*.json'), key=lambda p: p.stat().st_mtime)\n"
+            "    sentinel = candidates[0]\n"
+            "    return sentinel.read_text()\n",
+            [2, 4],
+            id="sorted_result_bound_then_indexed_and_read_is_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    candidates = d.glob('*.json')\n"
+            "    for p in candidates:\n"
+            "        p.stat()\n",
+            [4],
+            id="bare_glob_bound_then_iterated_is_flagged",
+        ),
+        pytest.param(
+            "def f(d, cutoff):\n"
+            "    return [p for p in d.iterdir() if p.stat().st_mtime > cutoff]\n",
+            [2],
+            id="comprehension_over_enumeration_internal_stat_is_flagged",
+        ),
     ],
 )
 def test_enumeration_stat_detection_rule(source: str, expected_lines: list[int]) -> None:

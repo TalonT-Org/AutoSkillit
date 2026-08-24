@@ -471,7 +471,7 @@ class LocalOtlpSink:
         """Stop accepting work, drain bounded in-flight work, and release the port."""
         try:
             self._close()
-        except BaseException:
+        except Exception:
             logger.debug("local_otlp_sink_close_failed", exc_info=True)
 
     def _close(self) -> None:

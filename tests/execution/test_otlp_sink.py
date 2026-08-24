@@ -460,6 +460,23 @@ def test_close_logs_one_aggregate_summary_without_payload_data(tmp_path: Path) -
     assert secret not in json.dumps(summaries[0])
 
 
+@pytest.mark.parametrize("exception_type", (KeyboardInterrupt, SystemExit))
+def test_close_propagates_process_interrupt(
+    monkeypatch, exception_type: type[BaseException]
+) -> None:
+    from autoskillit.execution.otlp_sink import LocalOtlpSink
+
+    sink = LocalOtlpSink()
+
+    def interrupt() -> None:
+        raise exception_type
+
+    monkeypatch.setattr(sink, "_close", interrupt)
+
+    with pytest.raises(exception_type):
+        sink.close()
+
+
 def test_startup_failure_returns_disabled_sink_and_partial_start_releases_port(
     tmp_path: Path, monkeypatch
 ) -> None:

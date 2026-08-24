@@ -552,7 +552,7 @@ class TestConservativeFilterShardIntersection:
         assert not isinstance(scope, FullRunReason), (
             f"Conservative filter requested a full run: {scope}"
         )
-        expanded = _expand_scope_to_files(set(scope), tests_root)
+        expanded = {str(entry) for entry in scope}
 
         assert expanded == {CHANNEL_B_TEST}
         assert _intersected_shards(expanded, self._ownership()) == {"execution-channel-b"}

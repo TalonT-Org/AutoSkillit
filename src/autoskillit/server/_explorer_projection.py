@@ -18,6 +18,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
     ExecutionIdentity,
+    ExplorationBindingFailed,
     ExplorationContextStoreProtocol,
     ExplorationVectorApplicabilityId,
     ExplorationVectorDisposition,
@@ -33,7 +34,11 @@ from autoskillit.core import (
     session_type as _resolve_session_type,
 )
 from autoskillit.exploration import resolve_repository_profile
-from autoskillit.pipeline import is_explorer_binding_eligible
+from autoskillit.pipeline import (
+    EXPLORATION_STORE_FAILURE_CODES,
+    is_explorer_binding_eligible,
+    resolve_exploration_store_failure_code,
+)
 from autoskillit.server._misc import SkillProjectionContext
 
 if TYPE_CHECKING:
@@ -177,19 +182,25 @@ def _issue_explorer_binding_env(
     )
     if {definition.name for definition in definitions} != BUNDLED_EXPLORER_ROLES:
         raise SkillContractError("Canonical explorer AgentDef registry is incomplete")
-    bindings = store.bind_launches(
-        owner_id=f"uid:{os.getuid()}",
-        session_id=session_id,
-        cwd=projection_context.cwd,
-        repository_root=repository_root,
-        source_identities={
-            definition.name: (
-                f"{definition.name}:{agent_definition_digest(definition)}:{parent_source_identity}"
-            )
-            for definition in definitions
-        },
-        authority_home=authority_home,
-    )
+    try:
+        bindings = store.bind_launches(
+            owner_id=f"uid:{os.getuid()}",
+            session_id=session_id,
+            cwd=projection_context.cwd,
+            repository_root=repository_root,
+            source_identities={
+                definition.name: (
+                    f"{definition.name}:{agent_definition_digest(definition)}:"
+                    f"{parent_source_identity}"
+                )
+                for definition in definitions
+            },
+            authority_home=authority_home,
+        )
+    except tuple(EXPLORATION_STORE_FAILURE_CODES) as exc:
+        code = resolve_exploration_store_failure_code(exc)
+        reason = getattr(exc, "reason", None)
+        raise ExplorationBindingFailed(code, reason, str(exc)) from exc
     return {role: dict(environment) for role, environment in bindings.items()}
 
 

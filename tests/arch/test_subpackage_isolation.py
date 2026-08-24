@@ -1042,7 +1042,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # entrypoint shim renderer/writer — stdlib-only and version-
         # independent by design, kept separate from the generation-store
         # publish machinery it is written alongside).
-        "core": 35,  # +_tool_registry_builders cohesive registry construction (#4739)
+        # +_tool_registry_builders cohesive registry construction (#4739).
+        # +fs_observation.py: the shared enumeration-derived-path observation
+        # funnel (rectify: exploration capture immunity part A) — stdlib-only,
+        # consumed from core/runtime/kitchen_state.py, so it cannot live under
+        # exploration/ (IL-1) or any module with non-stdlib dependencies.
+        "core": 36,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).
@@ -1544,6 +1549,21 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "predicate is_explorer_binding_eligible, session-scoped Claude-native "
         "bind_session_scoped/session_scoped_capability authority mode, and the "
         "supporting lease management (+89 net lines)",
+    ),
+    "exploration/snapshot.py": (
+        1250,
+        "REQ-CNST-010-E30: #4756 exploration-capture-immunity rectify. Part A routes "
+        "the enumeration-derived worktree walk through the shared observation funnel "
+        "and honours git's ignored-directory collapse decision; Part B moves the "
+        "capture status/reason enums to IL-0, splits published/identity byte "
+        "accounting so ignored-file bytes stop charging the budgets, threads a "
+        "capture deadline through the hashing loop and the two _capture_once calls, "
+        "and replaces the untyped truncation signal with a status-classified "
+        "_CaptureAborted dispatch. The capture pipeline (_capture_once, _path_state, "
+        "_hash_file, _untracked_special_paths) is one cohesive atomic-capture unit "
+        "that a prior pass (#4735) already extracted this module's siblings out of; "
+        "splitting it further would separate the deadline/budget/reason plumbing "
+        "from the single capture loop it threads through.",
     ),
 }
 

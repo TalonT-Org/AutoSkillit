@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from autoskillit.core.fs_observation import safe_mtime
+
 OVERLAY_MAPPING_DOMAINS: frozenset[str] = frozenset(
     {
         "order",
@@ -227,7 +229,7 @@ def find_caller_session_id(project_dir: Path | None = None) -> str:
     if not base.is_dir():
         return ""
 
-    markers = sorted(base.glob("*.json"), key=lambda p: os.path.getmtime(p), reverse=True)
+    markers = sorted(base.glob("*.json"), key=lambda p: safe_mtime(p) or 0.0, reverse=True)
 
     for p in markers:
         marker = _read_marker_path(p)

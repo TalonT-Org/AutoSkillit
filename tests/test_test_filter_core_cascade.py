@@ -168,6 +168,7 @@ class TestModuleCascadeCore:
             "_step_context",
             "_execution_marker",
             "git_remote",
+            "fs_observation",
             "pipeline_tracker",
             "bash_write_targets",
             "_type_audit_admission",
@@ -191,6 +192,10 @@ class TestModuleCascadeCore:
             "closure_verifier",
             "context_admission",
             "_delivery_bounds",
+            "_type_enums_context_admission",
+            "_type_constants_skill_contract",
+            "_type_constants_durable_writers",
+            "_type_constants_retirements",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
@@ -361,7 +366,17 @@ class TestModuleCascadeCore:
 
     def test_type_exceptions_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_exceptions"] == frozenset(
-            {"cli", "core", "execution", "fleet", "migration", "recipe", "server", "workspace"}
+            {
+                "cli",
+                "core",
+                "execution",
+                "fleet",
+                "migration",
+                "pipeline",
+                "recipe",
+                "server",
+                "workspace",
+            }
         )
 
     def test_step_context_cascade(self) -> None:
@@ -913,7 +928,7 @@ class TestBuildTestScopeCoreCascade:
             )
 
     def test_type_exceptions_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_exceptions → narrow cascade of 8 dirs."""
+        """_type_exceptions → narrow cascade of 9 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_exceptions.py"},
@@ -922,9 +937,11 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        required = set("cli core execution fleet migration recipe server workspace".split())
+        required = set(
+            "cli core execution fleet migration pipeline recipe server workspace".split()
+        )
         assert required <= dir_names
-        excluded = {"config", "pipeline", "hooks"}
+        excluded = {"config", "hooks"}
         assert dir_names.isdisjoint(excluded)
 
     def test_step_context_narrow_cascade(self, tmp_path: Path) -> None:

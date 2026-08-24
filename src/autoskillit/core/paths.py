@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from ._install_binding import resolve_install_binding
+from .fs_observation import safe_mtime
 
 
 def github_review_ledger_path(
@@ -158,15 +159,9 @@ def find_latest_session_id(cwd: str | None = None) -> str | None:
     if not project_dir.exists():
         return None
 
-    def _safe_mtime(f: Path) -> float:
-        try:
-            return f.stat().st_mtime
-        except OSError:
-            return 0.0
-
     jsonl_files = sorted(
         (f for f in project_dir.glob("*.jsonl")),
-        key=_safe_mtime,
+        key=lambda f: safe_mtime(f) or 0.0,
         reverse=True,
     )
     if not jsonl_files:

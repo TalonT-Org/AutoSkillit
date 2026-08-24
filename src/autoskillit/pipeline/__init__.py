@@ -36,6 +36,7 @@ from autoskillit.pipeline.exploration_context import (
     EXPLORATION_PRINCIPAL_ROLE,
     EXPLORATION_ROLE_ENV,
     EXPLORATION_SESSION_ENV,
+    EXPLORATION_STORE_FAILURE_CODES,
     EXPLORER_INELIGIBLE_SESSION_TYPES,
     EXPLORER_ROLE_NAMES,
     CapabilityResolution,
@@ -46,6 +47,7 @@ from autoskillit.pipeline.exploration_context import (
     OwnerBoundExplorationContextStore,
     exploration_auto_provision_eligible,
     is_explorer_binding_eligible,
+    resolve_exploration_store_failure_code,
 )
 from autoskillit.pipeline.exploration_context_durable import bind_session_scoped_durable
 from autoskillit.pipeline.gate import (
@@ -154,6 +156,7 @@ __all__ = [
     "EXPLORATION_PRINCIPAL_ROLE",
     "EXPLORATION_ROLE_ENV",
     "EXPLORATION_SESSION_ENV",
+    "EXPLORATION_STORE_FAILURE_CODES",
     "ExplorationContext",
     "ExplorationContextStoreProtocol",
     "ExplorationLaunchBinding",
@@ -161,6 +164,7 @@ __all__ = [
     "bind_session_scoped_durable",
     "exploration_auto_provision_eligible",
     "is_explorer_binding_eligible",
+    "resolve_exploration_store_failure_code",
     "DefaultAuditAdmissionLedger",
     "DefaultContextAdmissionLedger",
     # kitchen transition

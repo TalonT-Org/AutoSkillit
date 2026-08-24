@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from ._type_enums import ExplorationFailureCode
+from ._type_exploration import SnapshotCaptureReason, SnapshotCaptureStatus
+
 __all__ = [
     "BoundedDeliveryRoundTripBudgetExceededError",
     "CapabilityNotSupportedError",
     "ChildSpawnCardinalityError",
+    "ExplorationBindingFailed",
     "InfrastructureFaultError",
     "PluginArtifactContentionError",
     "PluginArtifactPublicationError",
     "PluginArtifactUnavailableError",
     "PluginArtifactValidationError",
     "SkillContractError",
+    "SnapshotUnavailable",
     "RecipeLoadError",
     "ProcessStaleError",
     "RecipeDeliveryBudgetError",
@@ -19,6 +24,31 @@ __all__ = [
     "RecipeNotFoundError",
     "StaleGeneratorError",
 ]
+
+
+class SnapshotUnavailable(Exception):
+    """A repository snapshot capture did not reach a complete, publishable state.
+
+    Carries the same status/reason vocabulary ``exploration/snapshot.py`` emits
+    so a caller two layers removed from the capture itself can still
+    distinguish a truncation from a stale race from a hard failure, instead of
+    parsing a formatted diagnostic string.
+    """
+
+    def __init__(
+        self,
+        status: SnapshotCaptureStatus,
+        reason: SnapshotCaptureReason | None,
+        detail: str,
+    ) -> None:
+        if status is SnapshotCaptureStatus.COMPLETE:
+            raise ValueError("SnapshotUnavailable must not be raised for a COMPLETE status")
+        if reason is None:
+            raise ValueError("a non-COMPLETE SnapshotUnavailable must carry a reason")
+        self.status = status
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{status}: {reason}: {detail}")
 
 
 class InfrastructureFaultError(Exception):
@@ -127,6 +157,26 @@ class SkillContractError(ValueError):
 
 class ChildSpawnCardinalityError(SkillContractError):
     """A child spawn does not declare exactly one valid cardinality authority."""
+
+
+class ExplorationBindingFailed(SkillContractError):
+    """An explorer child's launch binding could not be minted for a named cause.
+
+    Carries the same ``ExplorationFailureCode``/``SnapshotCaptureReason``
+    vocabulary the Claude-native ``enable_exploration`` tool returns, so the
+    Codex terminal-explorer path can report a named failure instead of
+    degrading to an untyped crash.
+    """
+
+    def __init__(
+        self,
+        code: ExplorationFailureCode,
+        reason: SnapshotCaptureReason | None,
+        detail: str,
+    ) -> None:
+        self.code = code
+        self.reason = reason
+        super().__init__(f"{code}: {reason}: {detail}")
 
 
 class PluginArtifactContentionError(RuntimeError, InfrastructureFaultError):

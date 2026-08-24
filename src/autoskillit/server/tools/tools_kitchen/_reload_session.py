@@ -12,6 +12,7 @@ from autoskillit.core import (
     get_state_dir,
     is_marker_fresh,
     read_marker,
+    safe_mtime,
 )
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
@@ -30,14 +31,9 @@ def _find_session_id_for_reload(cwd: Path) -> str | None:
     """Return the session_id to use for reload; kitchen marker preferred, mtime fallback."""
     state_dir = get_state_dir()
     if state_dir.is_dir():
-
-        def _safe_mtime(p: Path) -> float:
-            try:
-                return p.stat().st_mtime
-            except OSError:
-                return 0.0
-
-        candidates = sorted(state_dir.glob("*.json"), key=_safe_mtime, reverse=True)
+        candidates = sorted(
+            state_dir.glob("*.json"), key=lambda p: safe_mtime(p) or 0.0, reverse=True
+        )
         for p in candidates:
             marker = read_marker(p.stem)
             if marker is not None and is_marker_fresh(marker):

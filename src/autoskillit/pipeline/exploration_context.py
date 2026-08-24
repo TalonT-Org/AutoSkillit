@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generic, Protocol, TypeVar, cast, runtime_checkable
+from typing import Generic, NoReturn, Protocol, TypeVar, assert_never, cast, runtime_checkable
 
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
@@ -27,9 +27,13 @@ from autoskillit.core import (
     EvidencePage,
     EvidenceRecord,
     ExplorationContextStoreProtocol,
+    ExplorationFailureCode,
     ExplorationQuerySpec,
     RepositorySnapshot,
     SessionType,
+    SnapshotCaptureReason,
+    SnapshotCaptureStatus,
+    SnapshotUnavailable,
     canonical_json_bytes,
     get_logger,
 )
@@ -47,6 +51,7 @@ from autoskillit.pipeline.exploration_context_durable import (
 __all__ = [
     "CapabilityResolution",
     "CapabilityResolutionStatus",
+    "EXPLORATION_STORE_FAILURE_CODES",
     "EXPLORER_ROLE_NAMES",
     "EXPLORER_INELIGIBLE_SESSION_TYPES",
     "EXPLORATION_AUTHORITY_PATH_ENV",
@@ -61,6 +66,7 @@ __all__ = [
     "OwnerBoundExplorationContextStore",
     "exploration_auto_provision_eligible",
     "is_explorer_binding_eligible",
+    "resolve_exploration_store_failure_code",
 ]
 
 
@@ -204,11 +210,55 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     class SnapshotStale(ValueError):
         """exploration issuance requires a complete immutable snapshot."""
 
+        def __init__(self, reason: SnapshotCaptureReason, detail: str) -> None:
+            self.reason = reason
+            super().__init__(detail)
+
+    class SnapshotTruncated(ValueError):
+        """exploration issuance's repository snapshot capture was truncated."""
+
+        def __init__(self, reason: SnapshotCaptureReason, detail: str) -> None:
+            self.reason = reason
+            super().__init__(detail)
+
+    class SnapshotCaptureFailed(RuntimeError):
+        """exploration issuance's repository snapshot capture failed outright."""
+
+        def __init__(self, reason: SnapshotCaptureReason, detail: str) -> None:
+            self.reason = reason
+            super().__init__(detail)
+
     class StoreClosed(RuntimeError):
         """exploration context store is closed."""
 
     class CapacityExceeded(RuntimeError):
         """exploration context store capacity exceeded."""
+
+    def _raise_for_snapshot_unavailable(self, exc: SnapshotUnavailable) -> NoReturn:
+        """Translate a capture-layer failure into the one matching store exception.
+
+        Both bind paths (``bind_session_scoped`` and ``_bind_launches``) share
+        this dispatch so a stale or truncated snapshot always raises the same
+        typed exception regardless of which path observed it. Exhaustive over
+        every :class:`SnapshotCaptureStatus` member so a future status added
+        without a translation here is a mypy failure at ``assert_never``, not a
+        silently-swallowed case.
+        """
+        reason = exc.reason
+        assert reason is not None, "a non-COMPLETE SnapshotUnavailable must carry a reason"
+        match exc.status:
+            case SnapshotCaptureStatus.TRUNCATED:
+                raise self.SnapshotTruncated(reason, exc.detail) from exc
+            case SnapshotCaptureStatus.STALE:
+                raise self.SnapshotStale(reason, exc.detail) from exc
+            case SnapshotCaptureStatus.FAILED:
+                raise self.SnapshotCaptureFailed(reason, exc.detail) from exc
+            case SnapshotCaptureStatus.COMPLETE:
+                raise AssertionError(
+                    "SnapshotUnavailable must not be raised for a COMPLETE capture"
+                ) from exc
+            case _ as unreachable:
+                assert_never(unreachable)
 
     def __init__(
         self,
@@ -371,10 +421,11 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             raise ValueError("repository_root does not match the trusted project root")
         if self._service is None:
             raise RuntimeError("exploration service is not configured")
-        issuance_snapshot = self._service.capture_snapshot(canonical_repository_root)
+        try:
+            issuance_snapshot = self._service.capture_snapshot(canonical_repository_root)
+        except SnapshotUnavailable as exc:
+            self._raise_for_snapshot_unavailable(exc)
         snapshot_digest = issuance_snapshot.digest
-        if issuance_snapshot.stale or issuance_snapshot.truncated:
-            raise ValueError("exploration issuance requires a complete immutable snapshot")
         shared_source_identity = self._shared_source_identity(source_identities)
         with self._lock:
             if self._closed:
@@ -441,9 +492,10 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             raise self.TrustedRootMismatch("repository_root does not match the trusted root")
         if self._service is None:
             raise self.ServiceNotConfigured("exploration service is not configured")
-        issuance_snapshot = self._service.capture_snapshot(canonical_repository_root)
-        if issuance_snapshot.stale or issuance_snapshot.truncated:
-            raise self.SnapshotStale("exploration issuance requires a complete immutable snapshot")
+        try:
+            issuance_snapshot = self._service.capture_snapshot(canonical_repository_root)
+        except SnapshotUnavailable as exc:
+            self._raise_for_snapshot_unavailable(exc)
         with self._lock:
             if self._closed:
                 raise self.StoreClosed("exploration context store is closed")
@@ -914,3 +966,45 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             and value.startswith("explore_")
             and len(value) <= _MAX_CAPABILITY_LENGTH
         )
+
+
+EXPLORATION_STORE_FAILURE_CODES: Mapping[type[BaseException], ExplorationFailureCode] = {
+    OwnerBoundExplorationContextStore.TrustedRootMismatch: (
+        ExplorationFailureCode.TRUSTED_ROOT_MISMATCH
+    ),
+    OwnerBoundExplorationContextStore.InvalidSourceIdentity: (
+        ExplorationFailureCode.INVALID_SOURCE_IDENTITY
+    ),
+    OwnerBoundExplorationContextStore.ServiceNotConfigured: (
+        ExplorationFailureCode.SERVICE_NOT_CONFIGURED
+    ),
+    OwnerBoundExplorationContextStore.SnapshotStale: ExplorationFailureCode.SNAPSHOT_STALE,
+    OwnerBoundExplorationContextStore.SnapshotTruncated: (
+        ExplorationFailureCode.SNAPSHOT_TRUNCATED
+    ),
+    OwnerBoundExplorationContextStore.SnapshotCaptureFailed: (
+        ExplorationFailureCode.SNAPSHOT_CAPTURE_FAILED
+    ),
+    OwnerBoundExplorationContextStore.StoreClosed: ExplorationFailureCode.STORE_CLOSED,
+    OwnerBoundExplorationContextStore.CapacityExceeded: ExplorationFailureCode.CAPACITY_EXCEEDED,
+}
+
+
+def resolve_exploration_store_failure_code(exc: BaseException) -> ExplorationFailureCode:
+    """Resolve the nearest mapped ancestor's code by walking the MRO.
+
+    ``except tuple(EXPLORATION_STORE_FAILURE_CODES)`` matches by
+    ``isinstance``, so a subclass of a mapped store exception is caught even
+    though it is not an exact key of the mapping. Walking the MRO instead of
+    doing an exact-type lookup preserves the subclass-resolves-to-its-
+    nearest-ancestor property without risking a ``KeyError`` from inside a
+    caller's exception handler — which would escape a "Never raises" contract
+    rather than being converted to a structured failure envelope.
+    """
+    for klass in type(exc).__mro__:
+        if klass in EXPLORATION_STORE_FAILURE_CODES:
+            return EXPLORATION_STORE_FAILURE_CODES[klass]
+    raise AssertionError(
+        f"{type(exc)!r} matched the exploration store-exception allowlist but has no "
+        "mapped ancestor in EXPLORATION_STORE_FAILURE_CODES"
+    )

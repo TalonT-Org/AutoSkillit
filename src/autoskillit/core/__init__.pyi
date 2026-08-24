@@ -194,6 +194,8 @@ from .context_admission import (
 )
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
+from .fs_observation import observe_path_mode as observe_path_mode
+from .fs_observation import safe_mtime as safe_mtime
 from .git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
 from .git_remote import GitHubRepositoryRef as GitHubRepositoryRef
 from .git_remote import RemoteIdentityProbe as RemoteIdentityProbe
@@ -847,6 +849,7 @@ from .types import ExecutionIdentityDict as ExecutionIdentityDict
 from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
+from .types import ExplorationBindingFailed as ExplorationBindingFailed
 from .types import ExplorationDispatchConventions as ExplorationDispatchConventions
 from .types import ExplorationDispatchMaterialization as ExplorationDispatchMaterialization
 from .types import ExplorationDispatchRenderer as ExplorationDispatchRenderer
@@ -1140,6 +1143,7 @@ from .types import SkillSourceRef as SkillSourceRef
 from .types import SkillUnavailabilityPayload as SkillUnavailabilityPayload
 from .types import SkillUnavailabilityRecord as SkillUnavailabilityRecord
 from .types import SkillVisibilitySpec as SkillVisibilitySpec
+from .types import SnapshotUnavailable as SnapshotUnavailable
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
@@ -1299,3 +1303,5 @@ from .types._type_exploration import RelationshipKind as RelationshipKind
 from .types._type_exploration import RepositoryIdentity as RepositoryIdentity
 from .types._type_exploration import RepositoryProfileId as RepositoryProfileId
 from .types._type_exploration import RepositorySnapshot as RepositorySnapshot
+from .types._type_exploration import SnapshotCaptureReason as SnapshotCaptureReason
+from .types._type_exploration import SnapshotCaptureStatus as SnapshotCaptureStatus

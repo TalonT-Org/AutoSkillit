@@ -7,7 +7,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import StrEnum, unique
 from pathlib import Path
 from typing import Final, Generic, Protocol, TypeVar, runtime_checkable
 
@@ -75,6 +75,39 @@ class CollectorStatus(StrEnum):
     UNSUPPORTED = "unsupported"
     FAILED = "failed"
     TRUNCATED = "truncated"
+
+
+class SnapshotCaptureStatus(StrEnum):
+    """Terminal state of one repository snapshot capture attempt."""
+
+    COMPLETE = "complete"
+    STALE = "stale"
+    TRUNCATED = "truncated"
+    FAILED = "failed"
+
+
+@unique
+class SnapshotCaptureReason(StrEnum):
+    """The distinct cause of a non-``COMPLETE`` :class:`SnapshotCaptureStatus`.
+
+    One member per distinguishable terminal cause a capture can report, so a
+    consumer never has to parse a free-text diagnostic to tell two failures
+    apart.
+    """
+
+    PATH_COUNT_EXCEEDED = "path_count_exceeded"
+    FILE_BYTES_EXCEEDED = "file_bytes_exceeded"
+    TOTAL_BYTES_EXCEEDED = "total_bytes_exceeded"
+    GIT_TIMEOUT = "git_timeout"
+    GIT_COMMAND_FAILED = "git_command_failed"
+    ROOT_NOT_WORKTREE = "root_not_worktree"
+    IDENTITY_UNRESOLVED = "identity_unresolved"
+    PROFILE_ACTIVATION_FAILED = "profile_activation_failed"
+    WORKTREE_UNREADABLE = "worktree_unreadable"
+    COLLECTOR_SAFETY_FAULT = "collector_safety_fault"
+    MANIFEST_DIGEST_EMPTY = "manifest_digest_empty"
+    IDENTITY_DRIFT = "identity_drift"
+    CAPTURE_DEADLINE_EXCEEDED = "capture_deadline_exceeded"
 
 
 class CapabilityResolutionStatus(StrEnum):
@@ -531,4 +564,6 @@ __all__ = [
     "RepositoryIdentity",
     "RepositoryProfileId",
     "RepositorySnapshot",
+    "SnapshotCaptureReason",
+    "SnapshotCaptureStatus",
 ]

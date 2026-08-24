@@ -321,6 +321,55 @@ class TestRunWorkspaceCleanWorktrees:
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
         assert "impl-foo-20260101-120000" in sidecar_removed
 
+    @pytest.mark.medium
+    @pytest.mark.anyio
+    async def test_worktree_deleted_between_listing_and_mtime_check_is_skipped(
+        self, tmp_path, monkeypatch
+    ):
+        """A worktree deleted between list_git_worktrees and the mtime check must be
+        skipped rather than crash. Regression guard for the `or 0.0` pitfall this
+        migration must avoid: a vanished path's mtime must stay None (skipped by
+        the `if mtime is None: continue` filter), not silently become 0.0 — which
+        would route it into stale_wts and crash at the unguarded wt.stat() calls
+        in the display loops below."""
+        import shutil
+
+        import autoskillit.cli._workspace as workspace_module
+
+        base = tmp_path
+        wt_root = base / "worktrees"
+        wt_root.mkdir()
+        vanishing_wt = wt_root / "impl-vanishing-20260101-120000"
+        vanishing_wt.mkdir()
+
+        project_root = base / "myproject"
+        project_root.mkdir()
+
+        async def fake_list(proj, prefix, runner):
+            return [vanishing_wt]
+
+        async def fake_remove(path, main_repo, runner):
+            raise AssertionError("a vanished worktree must never reach removal")
+
+        real_safe_mtime = workspace_module.safe_mtime
+        stat_attempted = False
+
+        def unlink_then_delegate(p):
+            nonlocal stat_attempted
+            stat_attempted = True
+            if p == vanishing_wt and vanishing_wt.exists():
+                shutil.rmtree(vanishing_wt)
+            return real_safe_mtime(p)
+
+        monkeypatch.setattr(workspace_module, "list_git_worktrees", fake_list)
+        monkeypatch.setattr(workspace_module, "remove_git_worktree", fake_remove)
+        monkeypatch.setattr(workspace_module, "safe_mtime", unlink_then_delegate)
+        monkeypatch.setattr(workspace_module, "load_config", lambda p=None: _make_workspace_cfg())
+
+        await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
+
+        assert stat_attempted
+
     @pytest.mark.anyio
     async def test_workspace_clean_calls_load_config(self, tmp_path, monkeypatch):
         """run_workspace_clean calls load_config to resolve workspace paths."""

@@ -109,35 +109,27 @@ class TestNonMachineLocalWritersAreRelocatable:
         self,
         tmp_path: Path,
     ) -> None:
-        from autoskillit.core import SkillExecutionRole, SkillSemanticOperation
-        from autoskillit.workspace import (
-            CompiledSessionSkillCatalog,
-            EffectiveSkillCatalog,
-            SkillUnavailableMetadata,
-            write_skill_unavailability_metadata,
-        )
+        from autoskillit.core import SkillUnavailabilityPayload
+        from autoskillit.workspace import write_skill_unavailability_metadata
 
-        compilation = CompiledSessionSkillCatalog(
-            backend="codex",
-            catalog=EffectiveSkillCatalog(
-                skills=(),
-                execution_role=SkillExecutionRole.SESSION,
+        payload: SkillUnavailabilityPayload = {
+            "backend": "codex",
+            "unavailable": (
+                {
+                    "skill": "join-dependent",
+                    "backend": "codex",
+                    "operation": "required_join",
+                    "diagnostic": "fixed join unavailable",
+                },
             ),
-            unavailable=(
-                SkillUnavailableMetadata(
-                    skill="join-dependent",
-                    backend="codex",
-                    operation=SkillSemanticOperation.REQUIRED_JOIN,
-                    diagnostic="fixed join unavailable",
-                ),
-            ),
-        )
+        }
         add_dir = tmp_path / "add-dir"
         add_dir.mkdir()
 
-        write_skill_unavailability_metadata(add_dir, compilation=compilation)
+        write_skill_unavailability_metadata(add_dir, unavailability_payload=payload)
 
         content = (add_dir / "skill-unavailability.json").read_text(encoding="utf-8")
+        assert set(payload) == {"backend", "unavailable"}
         assert json.loads(content) == {
             "backend": "codex",
             "schema_version": 1,
@@ -151,6 +143,41 @@ class TestNonMachineLocalWritersAreRelocatable:
             ],
         }
         _assert_relocatable(content)
+
+    def test_skill_unavailability_writer_preserves_canonical_payload_identity(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import SkillUnavailabilityPayload
+        from autoskillit.workspace import write_skill_unavailability_metadata
+
+        payload: SkillUnavailabilityPayload = {
+            "backend": "codex",
+            "unavailable": (),
+        }
+        captured: dict[str, object] = {}
+
+        def capture_versioned_json(
+            path: Path,
+            content: object,
+            *,
+            schema_version: int,
+        ) -> None:
+            captured.update(path=path, content=content, schema_version=schema_version)
+
+        monkeypatch.setattr(
+            "autoskillit.workspace.session_skills.write_versioned_json",
+            capture_versioned_json,
+        )
+
+        write_skill_unavailability_metadata(
+            tmp_path,
+            unavailability_payload=payload,
+        )
+
+        assert captured["content"] is payload
+        assert captured["schema_version"] == 1
 
     def test_codex_reconciliation_audit_output_is_relocatable(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex_session_storage import (

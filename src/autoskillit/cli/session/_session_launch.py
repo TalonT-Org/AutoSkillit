@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         ManagedSessionHome,
         PluginLaunchBinding,
         ResumeSpec,
+        SkillUnavailabilityPayload,
         ValidatedAddDir,
     )
     from autoskillit.workspace import (
@@ -67,11 +68,11 @@ def render_skill_catalog_exclusions(exclusions: tuple[SkillExclusion, ...]) -> N
             print(f"  hint: {hint}")
 
 
-def render_skill_unavailability(compilation: CompiledSessionSkillCatalog) -> None:
+def render_skill_unavailability(unavailability_payload: SkillUnavailabilityPayload) -> None:
     """Print one deterministic operator warning per refusal reason."""
     grouped: dict[tuple[str, str], list[str]] = {}
-    for item in compilation.unavailable:
-        grouped.setdefault((item.operation.value, item.diagnostic), []).append(item.skill)
+    for item in unavailability_payload["unavailable"]:
+        grouped.setdefault((item["operation"], item["diagnostic"]), []).append(item["skill"])
     for (operation, diagnostic), skill_names in sorted(grouped.items()):
         names = ", ".join(sorted(skill_names))
         print(
@@ -83,26 +84,26 @@ def render_skill_unavailability(compilation: CompiledSessionSkillCatalog) -> Non
 @overload
 def append_skill_unavailability(
     system_prompt: None,
-    skill_compilation: CompiledSessionSkillCatalog,
+    unavailability_payload: SkillUnavailabilityPayload,
 ) -> None: ...
 
 
 @overload
 def append_skill_unavailability(
     system_prompt: str,
-    skill_compilation: CompiledSessionSkillCatalog,
+    unavailability_payload: SkillUnavailabilityPayload,
 ) -> str: ...
 
 
 def append_skill_unavailability(
     system_prompt: str | None,
-    skill_compilation: CompiledSessionSkillCatalog,
+    unavailability_payload: SkillUnavailabilityPayload,
 ) -> str | None:
     """Append the canonical machine-readable refusal payload to a prompt."""
-    if system_prompt is None or not skill_compilation.unavailable:
+    if system_prompt is None or not unavailability_payload["unavailable"]:
         return system_prompt
     unavailable_json = json.dumps(
-        skill_compilation.unavailability_payload,
+        unavailability_payload,
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -564,7 +565,7 @@ def _launch_cook_session(
     _max_reloads = 10
     _max_infra_resumes = 3
     launch_project_dir = (project_dir if project_dir is not None else Path.cwd()).resolve()
-    system_prompt = append_skill_unavailability(system_prompt, skill_compilation)
+    unavailability_payload = skill_compilation.unavailability_payload
 
     current_resume_spec: ResumeSpec = resume_spec
     _current_initial_message = initial_message
@@ -624,6 +625,8 @@ def _launch_cook_session(
             _current_initial_message = None
 
     if not backend.capabilities.session_dir_persistent:
+        render_skill_unavailability(unavailability_payload)
+        system_prompt = append_skill_unavailability(system_prompt, unavailability_payload)
         run_loop()
         return
 
@@ -683,6 +686,11 @@ def _launch_cook_session(
             skill_compilation,
             projection_context,
         ) as managed_home:
+            render_skill_unavailability(managed_home.unavailability_payload)
+            system_prompt = append_skill_unavailability(
+                system_prompt,
+                managed_home.unavailability_payload,
+            )
             trace = StartupTrace(launch_project_dir, launch_id, enabled=False)
             trace.record_launch_anchor()
             launch_binding = projection_binding if launch_load_mode.consumes_artifact else None

@@ -182,6 +182,7 @@ def _install_harness(
                 generated_home=generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
                 pass_fds=(7,),
+                unavailability_payload={"backend": None, "unavailable": ()},
             )
         finally:
             events.append(("managed-exit", launch_id))
@@ -654,6 +655,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
                 generated_home=generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
                 pass_fds=(),
+                unavailability_payload={"backend": None, "unavailable": ()},
             )
         finally:
             events.append(("managed-exit", launch_id))

@@ -21,7 +21,13 @@ from ._type_plugin_source import (
     RetiringArtifactRecord,
 )
 from ._type_protocols_backend import CodingAgentBackend
-from ._type_results import CleanupResult, CloneResult, ManagedSessionHome, ValidatedAddDir
+from ._type_results import (
+    CleanupResult,
+    CloneResult,
+    ManagedSessionHome,
+    SkillUnavailabilityPayload,
+    ValidatedAddDir,
+)
 from ._type_skill_contract import (
     ExplorationVectorApplicabilityId,
     ExplorationVectorDef,
@@ -239,7 +245,7 @@ class CompiledSessionSkillCatalogAuthority(Protocol):
     def catalog(self) -> EffectiveSkillCatalogAuthority: ...
 
     @property
-    def unavailability_payload(self) -> Mapping[str, object]: ...
+    def unavailability_payload(self) -> SkillUnavailabilityPayload: ...
 
 
 @runtime_checkable

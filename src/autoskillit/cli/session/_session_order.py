@@ -17,7 +17,6 @@ from autoskillit.cli.session._session_launch import (
     _write_order_entry,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
-    render_skill_unavailability,
 )
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
@@ -174,8 +173,6 @@ def order(
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(skill_catalog.exclusions)
     skill_compilation = compile_session_skill_catalog(skill_catalog, backend)
-    render_skill_unavailability(skill_compilation)
-    skill_catalog = skill_compilation.catalog
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
 
@@ -204,8 +201,8 @@ def order(
             _build_open_kitchen_prompt(
                 mcp_prefix=mcp_prefix,
                 has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
-                skill_catalog=skill_catalog,
-                project_dir=project_dir,
+                skill_compilation=skill_compilation,
+                project_root=project_dir,
                 backend=backend,
             )
             if isinstance(resume_spec, NoResume)
@@ -261,8 +258,8 @@ def order(
                 _build_open_kitchen_prompt(
                     mcp_prefix=mcp_prefix,
                     has_unguarded_filesystem_access=(backend_caps.has_unguarded_filesystem_access),
-                    skill_catalog=skill_catalog,
-                    project_dir=project_dir,
+                    skill_compilation=skill_compilation,
+                    project_root=project_dir,
                     backend=backend,
                 )
                 if isinstance(resume_spec, NoResume)
@@ -405,8 +402,8 @@ def order(
             mcp_prefix=mcp_prefix,
             ingredients_table=_itable,
             has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
-            skill_catalog=skill_catalog,
-            project_dir=project_dir,
+            skill_compilation=skill_compilation,
+            project_root=project_dir,
             backend=backend,
         )
         if isinstance(resume_spec, NoResume)

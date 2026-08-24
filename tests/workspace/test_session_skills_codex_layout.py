@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import structlog.testing
 
 import autoskillit.workspace.session_skills as session_skills
 from autoskillit.core import (
@@ -15,9 +14,6 @@ from autoskillit.core import (
     RepositoryProfileId,
     SkillContractError,
     SkillExecutionRole,
-    SkillSemanticAdaptationResult,
-    SkillSemanticOperation,
-    SkillSemanticPlan,
     ValidatedAddDir,
     pkg_root,
 )
@@ -30,6 +26,32 @@ from tests.workspace._helpers import (
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+
+
+def _write_profile_skill(
+    source_skills: Path,
+    name: str,
+    *,
+    frontmatter: str = "",
+    body: str = "Follow the profile contract.\n",
+) -> Path:
+    skill_path = source_skills / name / "SKILL.md"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    skill_path.write_text(
+        f"---\nname: {name}\ndescription: Profile fixture.\n{frontmatter}---\n{body}",
+        encoding="utf-8",
+    )
+    return skill_path
+
+
+def _prepare_codex_profile_source(tmp_path: Path) -> Path:
+    source_home = tmp_path / "source-codex-home"
+    source_home.mkdir()
+    (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
+    (source_home / "config.toml").write_text(
+        'cli_auth_credentials_store = "keyring"\n', encoding="utf-8"
+    )
+    return source_home
 
 
 def test_generated_home_skill_removal_rejects_non_child_path(tmp_path: Path) -> None:
@@ -206,38 +228,42 @@ def test_codex_generated_home_links_projected_catalog_into_discovery_root(
     assert discoverable.resolve() == projected.resolve()
 
 
-def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
+def test_codex_discovery_root_uses_admitted_profile_union_with_profile_precedence(
     make_session_skill_manager,
-    codex_env,
+    tmp_path: Path,
 ) -> None:
-    profile_content = "---\nname: make-arch-diag\ndescription: profile copy\n---\n"
+    from autoskillit.execution.backends.codex import CodexBackend
 
-    def setup_session_dir(
-        session_dir: Path,
-        *,
-        parent_sandbox_mode: str = "workspace-write",
-        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-    ) -> None:
-        del parent_sandbox_mode, execution_role
-        profile_skill = session_dir / "skills" / "make-arch-diag"
-        profile_skill.mkdir(parents=True)
-        (profile_skill / "SKILL.md").write_text(profile_content)
-
-    codex_env.backend.setup_session_dir.side_effect = setup_session_dir
-    mgr = make_session_skill_manager()
-    add_dir = _materialize(
-        mgr,
-        "sid",
-        backend=codex_env.backend,
-        names=frozenset({"make-arch-diag"}),
+    source_home = _prepare_codex_profile_source(tmp_path)
+    source_skills = source_home / "skills"
+    _write_profile_skill(
+        source_skills,
+        "make-arch-diag",
+        body="PROFILE_COPY_SENTINEL\n",
     )
+    _write_profile_skill(source_skills, "profile-only")
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
 
-    add_dir_path = Path(str(add_dir))
-    discoverable = add_dir_path.parent / "skills" / "make-arch-diag"
+    with _managed(
+        manager,
+        "profile-union",
+        backend=backend,
+        names=frozenset({"make-arch-diag"}),
+    ) as managed:
+        discovery_root = managed.generated_home / "skills"
+        staged_skill = Path(managed.skills_dir.path) / "skills" / "make-arch-diag"
+        profile_skill = discovery_root / "make-arch-diag"
 
-    assert not discoverable.is_symlink()
-    assert (discoverable / "SKILL.md").read_text() == profile_content
-    assert (add_dir_path / "skills" / "make-arch-diag" / "SKILL.md").is_file()
+        assert {entry.name for entry in discovery_root.iterdir()} == {
+            "make-arch-diag",
+            "profile-only",
+        }
+        assert not profile_skill.is_symlink()
+        assert "PROFILE_COPY_SENTINEL" in (profile_skill / "SKILL.md").read_text(encoding="utf-8")
+        assert "PROFILE_COPY_SENTINEL" not in (staged_skill / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
 
 
 def test_codex_init_session_delegates_to_setup_session_dir(
@@ -375,41 +401,59 @@ def test_codex_init_session_raises_when_pre_launch_fails(
         _materialize(mgr, "sid", backend=codex_env.backend, names=frozenset({"make-arch-diag"}))
 
 
-def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) -> None:
-    """Codex profile skills are copied as projections, never linked to raw sources."""
+def test_profile_skills_are_projected_from_the_declared_source(tmp_path: Path) -> None:
+    """Profile documents are safely projected, rather than linking their source tree."""
     from autoskillit.core.io import load_yaml
     from autoskillit.execution.backends.codex import CodexBackend
-    from autoskillit.workspace import materialize_codex_profile_skills
-
-    fake_home = tmp_path / "fake_home"
-    profile_skill = fake_home / ".codex" / "skills" / "my-skill"
-    profile_skill.mkdir(parents=True)
-    (profile_skill / "SKILL.md").write_text(
-        "---\n"
-        "name: my-skill\n"
-        "description: Public profile description.\n"
-        "uses_capabilities: []\n"
-        "execution_role: session\n"
-        "semantic_version: 1\n"
-        "semantic_requirements:\n"
-        "  logical_roles:\n"
-        "  - name: helper\n"
-        "    purpose: perform the delegated task\n"
-        "  child_model_policies:\n"
-        "  - role: helper\n"
-        "    model_class: sonnet\n"
-        "---\n"
-        "Delegate the work to the helper role.\n"
-        "# MY SKILL\n"
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillsDirectoryProvider,
+        materialize_profile_skills,
     )
 
-    session_dir = tmp_path / "session"
-    (session_dir / "skills").mkdir(parents=True)
+    source_home = tmp_path / "source-codex-home"
+    source_skills = source_home / "skills"
+    _write_profile_skill(
+        source_skills,
+        "my-skill",
+        frontmatter=(
+            "uses_capabilities: []\n"
+            "execution_role: session\n"
+            "semantic_version: 1\n"
+            "semantic_requirements:\n"
+            "  logical_roles:\n"
+            "  - name: helper\n"
+            "    purpose: perform the delegated task\n"
+            "  child_model_policies:\n"
+            "  - role: helper\n"
+            "    model_class: sonnet\n"
+        ),
+        body="Delegate the work to the helper role.\n# MY SKILL\n",
+    )
+    _write_profile_skill(
+        source_skills,
+        "orchestrator-only",
+        frontmatter="execution_role: orchestrator\n",
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    catalog = EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION)
+    context = SkillsDirectoryProvider().catalog_projection_context(
+        catalog,
+        tmp_path,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
 
-    monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
-    count = materialize_codex_profile_skills(session_dir, CodexBackend())
+    generated_home = tmp_path / "generated-home"
+    compilation = materialize_profile_skills(
+        generated_home,
+        source_skills,
+        backend,
+        context,
+        finalized_native_roles=None,
+    )
 
-    target = session_dir / "skills" / "my-skill"
+    target = generated_home / "skills" / "my-skill"
     assert target.is_dir()
     assert not target.is_symlink()
     content = (target / "SKILL.md").read_text()
@@ -419,72 +463,164 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
         "uses_capabilities",
         "execution_role",
     }.isdisjoint(frontmatter)
-    assert frontmatter["description"] == "Public profile description."
+    assert frontmatter["description"] == "Profile fixture."
     assert "# MY SKILL\n" in content
     assert "## Backend-adapted semantic execution contract" in content
-    assert count == 1
+    assert [skill.name for skill in compilation.catalog.skills] == ["my-skill"]
+    assert compilation.unavailable == ()
+    assert not (generated_home / "skills" / "orchestrator-only").exists()
 
 
-def test_refused_codex_profile_skill_is_excluded_with_structured_warning(
+def test_profile_materialization_applies_semantic_and_finalized_native_role_admission(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.execution.backends.codex import CodexBackend
-    from autoskillit.workspace import materialize_codex_profile_skills
-
-    class _RefusingCodexBackend(CodexBackend):
-        def adapt_skill_semantics(
-            self,
-            plan: SkillSemanticPlan,
-        ) -> SkillSemanticAdaptationResult:
-            assert SkillSemanticOperation.CHILD_SPAWN in plan.operations
-            return SkillSemanticAdaptationResult.unsupported(
-                backend=self.name,
-                operation=SkillSemanticOperation.CHILD_SPAWN,
-            )
-
-    fake_home = tmp_path / "fake-home"
-    profile_skill = fake_home / ".codex" / "skills" / "profile-helper"
-    profile_skill.mkdir(parents=True)
-    (profile_skill / "SKILL.md").write_text(
-        "---\n"
-        "name: profile-helper\n"
-        "description: Delegate profile work.\n"
-        "execution_role: session\n"
-        "semantic_version: 1\n"
-        "semantic_requirements:\n"
-        "  logical_roles:\n"
-        "  - name: helper\n"
-        "    purpose: perform delegated work\n"
-        "  child_spawns:\n"
-        "  - role: helper\n"
-        "    count: 1\n"
-        "---\n"
-        "Delegate the work.\n",
-        encoding="utf-8",
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillsDirectoryProvider,
+        materialize_profile_skills,
     )
-    session_dir = tmp_path / "session"
-    (session_dir / "skills").mkdir(parents=True)
-    monkeypatch.setattr(Path, "home", lambda: fake_home)
 
-    with structlog.testing.capture_logs() as logs:
-        count = materialize_codex_profile_skills(session_dir, _RefusingCodexBackend())
+    source_home = tmp_path / "source-codex-home"
+    source_skills = source_home / "skills"
+    _write_profile_skill(
+        source_skills,
+        "join-required",
+        frontmatter=("semantic_version: 1\nsemantic_requirements:\n  join:\n    required: true\n"),
+    )
+    _write_profile_skill(
+        source_skills,
+        "profile-helper",
+        frontmatter=(
+            "semantic_version: 1\n"
+            "semantic_requirements:\n"
+            "  logical_roles:\n"
+            "  - name: helper\n"
+            "    purpose: perform delegated work\n"
+            "  child_spawns:\n"
+            "  - role: helper\n"
+            "    count: 1\n"
+        ),
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    catalog = EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION)
+    context = SkillsDirectoryProvider().catalog_projection_context(
+        catalog,
+        tmp_path,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
 
-    assert count == 0
-    assert not (session_dir / "skills" / "profile-helper").exists()
-    assert logs == [
-        {
-            "event": "codex_profile_skill_unavailable",
-            "log_level": "warning",
-            "logger": "autoskillit.workspace.session_skills",
-            "skill": "profile-helper",
-            "backend": "codex",
-            "operation": "child_spawn",
-            "diagnostic": (
-                "backend 'codex' does not support skill semantic operation 'child_spawn'"
-            ),
+    compilation = materialize_profile_skills(
+        tmp_path / "generated-home",
+        source_skills,
+        backend,
+        context,
+        finalized_native_roles=frozenset(),
+    )
+
+    refusals = {refusal.skill: refusal.operation.value for refusal in compilation.unavailable}
+    assert refusals == {
+        "join-required": "required_join",
+        "profile-helper": "child_spawn",
+    }
+    assert not (tmp_path / "generated-home" / "skills" / "join-required").exists()
+    assert not (tmp_path / "generated-home" / "skills" / "profile-helper").exists()
+
+
+def test_managed_codex_session_surfaces_profile_refusals_after_materialization(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    import json
+
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    source_skills = source_home / "skills"
+    _write_profile_skill(source_skills, "profile-admitted")
+    _write_profile_skill(
+        source_skills,
+        "profile-refused",
+        frontmatter=("semantic_version: 1\nsemantic_requirements:\n  join:\n    required: true\n"),
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+
+    with _managed(
+        manager,
+        "profile-refusal",
+        backend=backend,
+        names=frozenset({"make-arch-diag"}),
+    ) as managed:
+        generated_skills = managed.generated_home / "skills"
+        payload = managed.unavailability_payload
+        persisted = json.loads(
+            (Path(managed.skills_dir.path) / "skill-unavailability.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        assert (generated_skills / "profile-admitted" / "SKILL.md").is_file()
+        assert not (generated_skills / "profile-refused").exists()
+        assert payload["backend"] == "codex"
+        assert {record["skill"]: record["operation"] for record in payload["unavailable"]} == {
+            "profile-refused": "required_join"
         }
-    ]
+        assert persisted["backend"] == payload["backend"]
+        assert persisted["unavailable"] == list(payload["unavailable"])
+
+
+def test_refused_profile_collision_leaves_the_admitted_ordinary_skill_discoverable(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    _write_profile_skill(
+        source_home / "skills",
+        "make-arch-diag",
+        frontmatter=("semantic_version: 1\nsemantic_requirements:\n  join:\n    required: true\n"),
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+
+    with _managed(
+        manager,
+        "refused-profile-collision",
+        backend=backend,
+        names=frozenset({"make-arch-diag"}),
+    ) as managed:
+        discovery = managed.generated_home / "skills" / "make-arch-diag"
+
+        assert discovery.is_symlink()
+        assert (discovery.resolve() / "SKILL.md").is_file()
+        assert {
+            record["skill"]: record["operation"]
+            for record in managed.unavailability_payload["unavailable"]
+        } == {"make-arch-diag": "required_join"}
+
+
+def test_profile_only_managed_codex_session_has_a_valid_discovery_root(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    _write_profile_skill(source_home / "skills", "profile-only")
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+
+    with _managed(
+        manager,
+        "profile-only",
+        backend=backend,
+        names=frozenset(),
+    ) as managed:
+        assert list((Path(managed.skills_dir.path) / "skills").iterdir()) == []
+        assert (managed.generated_home / "skills" / "profile-only" / "SKILL.md").is_file()
 
 
 @pytest.mark.parametrize(
@@ -533,6 +669,16 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
             f'\n[agents.helper]\ndescription = "absolute helper"\nconfig_file = "{valid_target}"\n'
         )
     (source_home / "config.toml").write_text(config, encoding="utf-8")
+    _write_profile_skill(
+        source_home / "skills",
+        "helper-skill",
+        body="PROFILE_HELPER_SENTINEL\n",
+    )
+    _write_profile_skill(
+        source_home / "skills",
+        "profile-refused",
+        frontmatter=("semantic_version: 1\nsemantic_requirements:\n  join:\n    required: true\n"),
+    )
 
     project_root = tmp_path / "project"
     semantic_path = project_root / "skills" / "helper-skill" / "SKILL.md"
@@ -594,7 +740,6 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
     if helper_available:
         expected_names.add("helper-skill")
 
-    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
     with manager.managed_session(
         session_id,
@@ -609,43 +754,65 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
             )
         )
         unavailable = metadata["unavailable"]
+        unavailable_by_skill = {record["skill"]: record for record in unavailable}
 
         assert projected_names == expected_names
         assert set(manager._session_skill_infos[session_id]) == expected_names
         assert (managed.generated_home / "skills" / "unrelated-skill").is_symlink()
+        assert unavailable == list(managed.unavailability_payload["unavailable"])
+        assert unavailable_by_skill["profile-refused"]["operation"] == "required_join"
+        assert not (managed.generated_home / "skills" / "profile-refused").exists()
+        profile_helper = managed.generated_home / "skills" / "helper-skill"
+        assert not profile_helper.is_symlink()
+        assert "PROFILE_HELPER_SENTINEL" in (profile_helper / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
         if helper_available:
-            assert unavailable == []
-            assert (managed.generated_home / "skills" / "helper-skill").is_symlink()
+            assert set(unavailable_by_skill) == {"profile-refused"}
         else:
-            assert unavailable == [
-                {
-                    "backend": "codex",
-                    "diagnostic": "native child-spawn targets are unavailable: ['helper']",
-                    "operation": "child_spawn",
-                    "skill": "helper-skill",
-                }
-            ]
-            assert not (managed.generated_home / "skills" / "helper-skill").exists()
+            assert unavailable_by_skill["helper-skill"] == {
+                "backend": "codex",
+                "diagnostic": "native child-spawn targets are unavailable: ['helper']",
+                "operation": "child_spawn",
+                "skill": "helper-skill",
+            }
+            assert set(unavailable_by_skill) == {"helper-skill", "profile-refused"}
 
     assert session_id not in manager._session_skill_infos
     assert not (tmp_path / "persistent" / "codex-sessions" / session_id).exists()
 
 
-def test_missing_profile_skills_dir_does_not_raise(tmp_path, monkeypatch) -> None:
-    """Profile projection returns 0 when ~/.codex/skills is absent."""
+def test_missing_declared_profile_skills_dir_returns_an_empty_compilation(tmp_path: Path) -> None:
+    """Profile materialization treats an absent declared source as an empty catalog."""
     from autoskillit.execution.backends.codex import CodexBackend
-    from autoskillit.workspace import materialize_codex_profile_skills
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillsDirectoryProvider,
+        materialize_profile_skills,
+    )
 
-    fake_home = tmp_path / "fake_home"
-    fake_home.mkdir()
+    source_home = tmp_path / "source-codex-home"
+    source_home.mkdir()
+    source_skills = source_home / "skills"
+    backend = CodexBackend(source_codex_home=source_home)
+    catalog = EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION)
+    context = SkillsDirectoryProvider().catalog_projection_context(
+        catalog,
+        tmp_path,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
 
-    session_dir = tmp_path / "session"
-    (session_dir / "skills").mkdir(parents=True)
+    compilation = materialize_profile_skills(
+        tmp_path / "generated-home",
+        source_skills,
+        backend,
+        context,
+        finalized_native_roles=None,
+    )
 
-    monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
-    count = materialize_codex_profile_skills(session_dir, CodexBackend())
-
-    assert count == 0
+    assert compilation.catalog.skills == ()
+    assert compilation.unavailable == ()
 
 
 def test_managed_codex_home_uses_private_empty_inert_rollout_links(

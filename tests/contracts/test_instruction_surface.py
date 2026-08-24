@@ -273,7 +273,9 @@ class TestOrchestratorPromptDelegation:
         behavioral instructions only. Recipe content is discovered by the
         session via MCP tools.
         """
-        from autoskillit.cli.prompts import _build_orchestrator_prompt
+        from tests.cli._orchestrator_prompt_helpers import (
+            build_orchestrator_prompt as _build_orchestrator_prompt,
+        )
 
         prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
         # Must NOT contain recipe YAML markers
@@ -380,13 +382,17 @@ class TestSourceIsolationContract:
 
 def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
     from autoskillit.cli.prompts._prompts_campaign import _build_fleet_campaign_prompt
-    from autoskillit.cli.prompts._prompts_kitchen import (
-        _build_fleet_dispatch_prompt,
-        _build_open_kitchen_prompt,
-    )
-    from autoskillit.cli.prompts._prompts_orchestrator import _build_orchestrator_prompt
     from autoskillit.fleet._prompts import _build_food_truck_prompt
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
+    )
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_open_kitchen_prompt as _build_open_kitchen_prompt,
+    )
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     campaign_recipe = Recipe(
         name="test",

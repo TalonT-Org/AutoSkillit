@@ -15,9 +15,9 @@ import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, NotRequired, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, NotRequired, TypeAlias, TypedDict, cast
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
@@ -39,6 +39,8 @@ from autoskillit.core import (
     SkillSemanticOperation,
     SkillSource,
     SkillSourceRef,
+    SkillUnavailabilityPayload,
+    SkillUnavailabilityRecord,
     ValidatedAddDir,
     destination_location,
     get_logger,
@@ -223,6 +225,7 @@ class _InitializedSession:
     skills_dir: ValidatedAddDir
     skills_subdir: Path
     lease: _SessionLease | None
+    unavailability_payload: SkillUnavailabilityPayload
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,7 +237,7 @@ class SkillUnavailableMetadata:
     operation: SkillSemanticOperation
     diagnostic: str
 
-    def to_payload(self) -> dict[str, str]:
+    def to_payload(self) -> SkillUnavailabilityRecord:
         return {
             "skill": self.skill,
             "backend": self.backend,
@@ -248,13 +251,50 @@ class CompiledSessionSkillCatalog:
     backend: str
     catalog: EffectiveSkillCatalog
     unavailable: tuple[SkillUnavailableMetadata, ...]
+    unavailability_payload: SkillUnavailabilityPayload = field(init=False)
 
-    @property
-    def unavailability_payload(self) -> dict[str, object]:
-        return {
-            "backend": self.backend,
-            "unavailable": tuple(item.to_payload() for item in self.unavailable),
-        }
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "unavailability_payload",
+            _canonical_skill_unavailability_payload(
+                self.backend,
+                (item.to_payload() for item in self.unavailable),
+            ),
+        )
+
+
+def _canonical_skill_unavailability_payload(
+    backend: str | None,
+    unavailable: Iterable[SkillUnavailabilityRecord],
+) -> SkillUnavailabilityPayload:
+    """Return one deterministic payload, deduplicated by its wire identity."""
+    records_by_identity: dict[tuple[str, str, str, str], SkillUnavailabilityRecord] = {}
+    for record in unavailable:
+        identity = (
+            record["skill"],
+            record["backend"],
+            record["operation"],
+            record["diagnostic"],
+        )
+        records_by_identity[identity] = record
+    return {
+        "backend": backend,
+        "unavailable": tuple(
+            records_by_identity[identity] for identity in sorted(records_by_identity)
+        ),
+    }
+
+
+def _merge_skill_unavailability_payloads(
+    backend: str | None,
+    *payloads: SkillUnavailabilityPayload,
+) -> SkillUnavailabilityPayload:
+    """Merge backend admission results without changing their record identities."""
+    return _canonical_skill_unavailability_payload(
+        backend,
+        (record for payload in payloads for record in payload["unavailable"]),
+    )
 
 
 def compile_session_skill_catalog(
@@ -326,24 +366,17 @@ def compile_session_skill_catalog(
 def write_skill_unavailability_metadata(
     add_dir: Path,
     *,
-    compilation: CompiledSessionSkillCatalogAuthority | None,
-    backend: str | None = None,
+    unavailability_payload: SkillUnavailabilityPayload,
 ) -> None:
     """Publish deterministic machine-readable SESSION catalog omissions."""
-    metadata = (
-        dict(compilation.unavailability_payload)
-        if compilation is not None
-        else {"backend": backend, "unavailable": ()}
-    )
     write_versioned_json(
         add_dir / "skill-unavailability.json",
-        metadata,
+        cast(dict[str, Any], unavailability_payload),
         schema_version=_SKILL_UNAVAILABILITY_SCHEMA_VERSION,
     )
 
 
-def _codex_profile_skill_infos() -> tuple[SkillInfo, ...]:
-    profile_skills_root = Path.home() / ".codex" / "skills"
+def _profile_skill_infos(profile_skills_root: Path) -> tuple[SkillInfo, ...]:
     if not profile_skills_root.is_dir():
         return ()
     result: list[SkillInfo] = []
@@ -369,7 +402,7 @@ def _codex_profile_skill_infos() -> tuple[SkillInfo, ...]:
         )
         if info.invalidities or info.execution_role is not SkillExecutionRole.SESSION:
             logger.warning(
-                "codex_profile_skill_contract_rejected",
+                "profile_skill_contract_rejected",
                 skill=entry.name,
                 reason=(
                     render_skill_invalidities(info.invalidities)
@@ -382,48 +415,73 @@ def _codex_profile_skill_infos() -> tuple[SkillInfo, ...]:
     return tuple(result)
 
 
-def _materialize_codex_profile_skill_infos(
-    session_dir: Path,
+def _materialize_profile_skill_infos(
+    generated_home: Path,
+    profile_skills_source: Path,
     backend: CodingAgentBackend,
-) -> tuple[SkillInfo, ...]:
-    profile_skills_root = Path.home() / ".codex" / "skills"
-    if not profile_skills_root.is_dir():
-        return ()
-    infos = _codex_profile_skill_infos()
+    projection_context: SkillProjectionContextAuthority,
+    *,
+    finalized_native_roles: frozenset[str] | None,
+) -> CompiledSessionSkillCatalog:
+    infos = _profile_skill_infos(profile_skills_source)
     catalog = EffectiveSkillCatalog(
         skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
         execution_role=SkillExecutionRole.SESSION,
+        namespace_sources={info.name: info.source for info in infos},
     )
-    compilation = compile_session_skill_catalog(catalog, backend)
+    compilation = compile_session_skill_catalog(
+        catalog,
+        backend,
+        finalized_native_roles=finalized_native_roles,
+    )
     for unavailable in compilation.unavailable:
         logger.warning(
-            "codex_profile_skill_unavailable",
+            "profile_skill_unavailable",
             skill=unavailable.skill,
             backend=unavailable.backend,
             operation=unavailable.operation.value,
             diagnostic=unavailable.diagnostic,
         )
-    catalog = compilation.catalog
-    materialize_agent_skill_tree(
-        session_dir / backend.conventions.skills_subdir,
-        catalog,
-        SkillProjectionContext(
-            cwd=Path.cwd().resolve(),
-            catalog=catalog,
-            backend=backend,
-            conventions=backend.conventions,
-        ),
+    profile_context = SkillProjectionContext(
+        cwd=projection_context.cwd,
+        project_root=projection_context.project_root,
+        catalog=compilation.catalog,
+        backend=backend,
+        conventions=backend.conventions,
+        substitutions=projection_context.substitutions,
+        gating=False,
+        namespace=projection_context.namespace,
+        exploration_launch_context_ref=projection_context.exploration_launch_context_ref,
+        resolved_exploration_profile=projection_context.resolved_exploration_profile,
+        active_exploration_applicabilities=projection_context.active_exploration_applicabilities,
+        parent_sandbox_mode=projection_context.parent_sandbox_mode,
+        explorer_provisioning_eligible=projection_context.explorer_provisioning_eligible,
+        projection_version=projection_context.projection_version,
     )
-    published_names = {skill.name for skill in catalog.skills}
-    return tuple(info for info in infos if info.name in published_names)
+    materialize_agent_skill_tree(
+        generated_home / backend.conventions.skills_subdir,
+        compilation.catalog,
+        profile_context,
+    )
+    return compilation
 
 
-def materialize_codex_profile_skills(
-    session_dir: Path,
+def materialize_profile_skills(
+    generated_home: Path,
+    profile_skills_source: Path,
     backend: CodingAgentBackend,
-) -> int:
-    """Project profile skills into a Codex session without exposing machine fields."""
-    return len(_materialize_codex_profile_skill_infos(session_dir, backend))
+    projection_context: SkillProjectionContextAuthority,
+    *,
+    finalized_native_roles: frozenset[str] | None,
+) -> CompiledSessionSkillCatalog:
+    """Safely project the admitted skill catalog from one declared profile source."""
+    return _materialize_profile_skill_infos(
+        generated_home,
+        profile_skills_source,
+        backend,
+        projection_context,
+        finalized_native_roles=finalized_native_roles,
+    )
 
 
 def _link_generated_home_skill_view(
@@ -819,6 +877,7 @@ class DefaultSessionSkillManager:
                 generated_home=initialized.generated_home,
                 skills_dir=initialized.skills_dir,
                 pass_fds=(lease_fd,),
+                unavailability_payload=initialized.unavailability_payload,
             )
         except BaseException as exc:
             logger.error("managed_session_body_failed", exc_info=True)
@@ -923,7 +982,7 @@ class DefaultSessionSkillManager:
             if persistent:
                 _remove_and_verify(generated_home)
 
-            skills_dir, finalized_records = self._materialize_session(
+            skills_dir, finalized_records, unavailability_payload = self._materialize_session(
                 generated_home,
                 records,
                 projection_context,
@@ -937,6 +996,7 @@ class DefaultSessionSkillManager:
                 skills_dir=skills_dir,
                 skills_subdir=owned_skills_subdir,
                 lease=lease,
+                unavailability_payload=unavailability_payload,
             )
             self._session_roots[session_id] = effective_root
             self._session_skills_subdirs[session_id] = owned_skills_subdir
@@ -977,8 +1037,9 @@ class DefaultSessionSkillManager:
         compilation: CompiledSessionSkillCatalogAuthority | None = None,
         explorer_binding_env: _ExplorerBindingEnv | None = None,
         explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
-    ) -> tuple[ValidatedAddDir, tuple[SkillAuthority, ...]]:
+    ) -> tuple[ValidatedAddDir, tuple[SkillAuthority, ...], SkillUnavailabilityPayload]:
         backend = projection_context.backend
+        backend_name = backend.name if backend is not None else None
         add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
         skills_base = add_dir / skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
@@ -1059,14 +1120,47 @@ class DefaultSessionSkillManager:
             )
             effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
-            discovery_root = generated_home / skills_subdir
-            for unavailable in reachability_compilation.unavailable:
-                _remove_generated_home_skill_entry(discovery_root, unavailable.skill)
+
+        ordinary_payload = (
+            _merge_skill_unavailability_payloads(
+                backend_name,
+                compilation.unavailability_payload,
+            )
+            if compilation is not None
+            else _canonical_skill_unavailability_payload(
+                backend_name,
+                (),
+            )
+        )
+        profile_compilation: CompiledSessionSkillCatalog | None = None
+        profile_skills_source = (
+            backend.conventions.profile_skills_source if backend is not None else None
+        )
+        if (
+            backend is not None
+            and execution_role is SkillExecutionRole.SESSION
+            and profile_skills_source is not None
+        ):
+            profile_compilation = materialize_profile_skills(
+                generated_home,
+                profile_skills_source,
+                backend,
+                projection_context,
+                finalized_native_roles=finalized_native_roles,
+            )
+        unavailability_payload = (
+            _merge_skill_unavailability_payloads(
+                backend_name,
+                ordinary_payload,
+                profile_compilation.unavailability_payload,
+            )
+            if profile_compilation is not None
+            else ordinary_payload
+        )
 
         write_skill_unavailability_metadata(
             add_dir,
-            compilation=compilation,
-            backend=backend.name if backend is not None else None,
+            unavailability_payload=unavailability_payload,
         )
 
         ungated_context = SkillProjectionContext(
@@ -1116,7 +1210,7 @@ class DefaultSessionSkillManager:
             )
             if layout_errors:
                 raise RuntimeError("Session layout validation failed: " + "; ".join(layout_errors))
-        return ValidatedAddDir(path=str(add_dir)), records
+        return ValidatedAddDir(path=str(add_dir)), records, unavailability_payload
 
     @staticmethod
     def _create_inert_rollout_paths(
@@ -1183,6 +1277,7 @@ class DefaultSessionSkillManager:
                     ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR,
                 ),
                 lease=self._session_leases.get(session_id),
+                unavailability_payload=_canonical_skill_unavailability_payload(None, ()),
             )
             existed = os.path.lexists(generated_home)
             failures = self._cleanup_owned(session_id, initialized)

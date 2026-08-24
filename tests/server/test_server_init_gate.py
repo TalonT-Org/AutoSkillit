@@ -402,16 +402,20 @@ class TestOpenKitchenSousChef:
     @pytest.mark.anyio
     async def test_open_kitchen_degrades_gracefully_without_sous_chef(self, tool_ctx):
         """open_kitchen must not raise when the effective catalog omits sous-chef."""
-        from types import SimpleNamespace
         from unittest.mock import AsyncMock, MagicMock
 
         import autoskillit.server.tools.tools_kitchen as tools_kitchen_mod
+        from autoskillit.core import SkillExecutionRole
         from autoskillit.server.tools.tools_kitchen import open_kitchen
+        from autoskillit.workspace import EffectiveSkillCatalog
 
         mock_ctx = MagicMock()
         mock_ctx.enable_components = AsyncMock()
         tool_ctx.skill_resolver = MagicMock()
-        tool_ctx.skill_resolver.list_effective.return_value = SimpleNamespace(skills=())
+        tool_ctx.skill_resolver.list_effective.return_value = EffectiveSkillCatalog(
+            skills=(),
+            execution_role=SkillExecutionRole.ORCHESTRATOR,
+        )
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
                 result = await open_kitchen(ctx=mock_ctx)  # must not raise

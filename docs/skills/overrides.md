@@ -23,6 +23,51 @@ Example: to override `review-pr`, copy the bundled `SKILL.md` from
 `src/autoskillit/skills_extended/review-pr/SKILL.md` as a starting point, then modify it
 to add your team's review guidelines.
 
+## Semantic Requirements
+
+An override that shadows a bundled skill must preserve the bundled skill's semantic
+requirements. In particular, if the bundled skill declares a semantic schema version,
+the override must declare that version or a later one. If the bundled skill requires a
+fixed-set join, the override must retain:
+
+```yaml
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
+```
+
+This prevents a local customization from making a skill admissible on a backend that
+cannot honestly support the bundled skill's required coordination.
+
+Project-local skills are discovered from all four supported roots, in precedence order:
+
+1. `.claude/skills`
+2. `.autoskillit/skills`
+3. `.codex/skills`
+4. `.agents/skills`
+
+A same-name project-local skill remains the effective override, but precedence does not
+bypass admission. After resolution, the override is checked against the bundled skill's
+semantic contract and the selected backend's capabilities. An override rejected during
+managed-session admission is visible in `ManagedSessionHome.unavailability_payload`, the
+terminal warning from `render_skill_unavailability`, the
+`<autoskillit_skill_unavailability>` prompt block, and the generated add-dir's
+`skill-unavailability.json` artifact.
+
+The current `promote-to-main` and `validate-audit` bundled skills declare
+`semantic_requirements.join.required: true`; their project-local overrides preserve that
+requirement and pass the monotonicity guard unchanged. The bundled `make-arch-diag` skill
+has no `semantic_requirements.join` field, so the join-monotonicity rule does not apply to
+its project-local shadow.
+
+For this repository, the guard repair produces the expected nine-entry reduction in the
+override-influenced Codex catalog: 9 weakened required-join overrides admitted before, 0
+admitted after. `test_required_join_overrides_resolve_and_codex_refuses_them` verifies that
+normal resolver and backend admission now refuse each with operation `required_join`. The
+bundled-only admission ledger remains byte-for-byte unchanged (a zero-entry diff), because
+the bundled skill definitions were not changed.
+
 ## Name-Matching Behavior
 
 When a project-local skill matches a bundled skill by name:

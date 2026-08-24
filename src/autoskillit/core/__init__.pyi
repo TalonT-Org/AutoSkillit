@@ -1125,6 +1125,8 @@ from .types import SkillSessionContractStore as SkillSessionContractStore
 from .types import SkillSource as SkillSource
 from .types import SkillSourceIdentity as SkillSourceIdentity
 from .types import SkillSourceRef as SkillSourceRef
+from .types import SkillUnavailabilityPayload as SkillUnavailabilityPayload
+from .types import SkillUnavailabilityRecord as SkillUnavailabilityRecord
 from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec

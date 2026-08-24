@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError
 from typing import Any, ClassVar
 
@@ -311,15 +312,24 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path):
     from typing import get_type_hints
 
     import autoskillit.core as core
-    from autoskillit.core import ManagedSessionHome, ValidatedAddDir
+    from autoskillit.core import (
+        ManagedSessionHome,
+        SkillUnavailabilityPayload,
+        ValidatedAddDir,
+    )
     from autoskillit.core.types._type_results import __all__ as results_all
 
     skills_dir = ValidatedAddDir(tmp_path / "home" / "skills")
+    unavailability_payload: SkillUnavailabilityPayload = {
+        "backend": "codex",
+        "unavailable": (),
+    }
     handle = ManagedSessionHome(
         launch_id="launch-1",
         generated_home=tmp_path / "home",
         skills_dir=skills_dir,
         pass_fds=(3, 5),
+        unavailability_payload=unavailability_payload,
     )
 
     assert tuple(field.name for field in dataclasses.fields(ManagedSessionHome)) == (
@@ -327,16 +337,23 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path):
         "generated_home",
         "skills_dir",
         "pass_fds",
+        "unavailability_payload",
     )
     assert get_type_hints(ManagedSessionHome) == {
         "launch_id": str,
         "generated_home": Path,
         "skills_dir": ValidatedAddDir,
         "pass_fds": tuple[int, ...],
+        "unavailability_payload": SkillUnavailabilityPayload,
     }
+    assert handle.unavailability_payload is unavailability_payload
+    assert set(handle.unavailability_payload) == {"backend", "unavailable"}
+    assert isinstance(handle.unavailability_payload, Mapping)
     assert not hasattr(handle, "__dict__")
     assert "ManagedSessionHome" in results_all
     assert "ManagedSessionHome" in core.__all__
+    assert "SkillUnavailabilityPayload" in results_all
+    assert "SkillUnavailabilityPayload" in core.__all__
     with pytest.raises(FrozenInstanceError):
         handle.launch_id = "other"  # type: ignore[misc]
 

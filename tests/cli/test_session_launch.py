@@ -1155,9 +1155,20 @@ def test_launch_cook_session_accepts_backend_param(
     """_launch_cook_session must accept a backend= kwarg and forward it to
     _run_interactive_session, which calls backend.build_interactive_cmd."""
     from autoskillit.cli.session._session_launch import _launch_cook_session
-    from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+    from autoskillit.core import (
+        CLAUDE_CODE_CAPABILITIES,
+        CmdSpec,
+        SkillExecutionRole,
+        SkillSemanticOperation,
+    )
+    from autoskillit.workspace import (
+        CompiledSessionSkillCatalog,
+        EffectiveSkillCatalog,
+        SkillUnavailableMetadata,
+    )
 
     build_calls: list[dict] = []
+    rendered_payloads: list[object] = []
 
     class _CapturingBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
@@ -1176,17 +1187,42 @@ def test_launch_cook_session_accepts_backend_param(
         "Popen",
         _popen_from_run(lambda *a, **kw: type("Result", (), {"returncode": 0})()),
     )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_launch.render_skill_unavailability",
+        rendered_payloads.append,
+    )
     _stub_plugin_installed(monkeypatch, installed=True)
+    compilation = CompiledSessionSkillCatalog(
+        backend="claude-code",
+        catalog=EffectiveSkillCatalog(
+            skills=(),
+            execution_role=SkillExecutionRole.SESSION,
+        ),
+        unavailable=(
+            SkillUnavailableMetadata(
+                skill="precompiled-refusal",
+                backend="claude-code",
+                operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic="fixed join unavailable",
+            ),
+        ),
+    )
     _launch_cook_session(
         system_prompt="test",
         backend=_CapturingBackend(),
         required_env=frozenset(),
-        skill_compilation=launch_kwargs["skill_compilation"],
+        skill_compilation=compilation,
         launch_id=launch_kwargs["launch_id"],
         default_base_branch=launch_kwargs["default_base_branch"],
         workspace_temp_dir=launch_kwargs["workspace_temp_dir"],
     )
     assert build_calls, "backend.build_interactive_cmd must be called via _launch_cook_session"
+    assert rendered_payloads == [compilation.unavailability_payload]
+    assert all(
+        call["system_prompt"].count("<autoskillit_skill_unavailability>") == 1
+        for call in build_calls
+    )
+    assert all("precompiled-refusal" in call["system_prompt"] for call in build_calls)
 
 
 # ---------------------------------------------------------------------------
@@ -1520,6 +1556,7 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
         pass_fds=(7,),
+        unavailability_payload={"backend": "claude-code", "unavailable": ()},
     )
     retained_binding = MagicMock(inherited_fds=(8,))
     trace = MagicMock()
@@ -1581,6 +1618,7 @@ def test_managed_launch_rejects_executable_drift_before_spawn(
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
         pass_fds=(),
+        unavailability_payload={"backend": "claude-code", "unavailable": ()},
     )
 
     with pytest.raises(SystemExit, match="1"):
@@ -1914,6 +1952,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         PluginLoadMode,
         SkillExecutionRole,
         SkillProjectionContextAuthority,
+        SkillUnavailabilityPayload,
         ValidatedAddDir,
     )
     from autoskillit.execution import SessionState
@@ -1927,6 +1966,23 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     projection_root = tmp_path / "projection"
     projection_root.mkdir()
     launch_id = "fedcba9876543210"
+    profile_payload: SkillUnavailabilityPayload = {
+        "backend": "codex",
+        "unavailable": (
+            {
+                "skill": "profile-required-join",
+                "backend": "codex",
+                "operation": "required_join",
+                "diagnostic": "fixed join unavailable",
+            },
+        ),
+    }
+    rendered_payloads: list[SkillUnavailabilityPayload] = []
+    built_prompts: list[str | None] = []
+
+    def record_render(payload: SkillUnavailabilityPayload) -> None:
+        rendered_payloads.append(payload)
+        events.append(("render", payload))
 
     class _LifecycleManager:
         def cleanup_stale(self) -> None:
@@ -1947,6 +2003,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
                     generated_home=generated_home,
                     skills_dir=ValidatedAddDir(str(skills_dir)),
                     pass_fds=(7,),
+                    unavailability_payload=profile_payload,
                 )
             finally:
                 events.append(("managed-exit", session_id))
@@ -1973,6 +2030,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             return "true"
 
         def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
+            built_prompts.append(kwargs["system_prompt"])
             return CmdSpec(
                 cmd=("true",),
                 env={
@@ -2028,6 +2086,10 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     )
     compilation = compile_session_skill_catalog(catalog, backend)
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/true")
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_launch.render_skill_unavailability",
+        record_render,
+    )
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager",
         lambda *args, **kwargs: _LifecycleManager(),
@@ -2137,7 +2199,19 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     infra_classified = events.index(("infra-classified", InfraExitCategory.API_ERROR))
     assert first_exit < first_sentinel
     assert second_exit < infra_classified
-    assert events.index(("managed-enter", launch_id)) < events.index(("run", *run_events[0][1:]))
+    assert rendered_payloads == [profile_payload]
+    assert (
+        events.index(("managed-enter", launch_id))
+        < events.index(("render", profile_payload))
+        < events.index(("run", *run_events[0][1:]))
+    )
+    assert all(prompt is not None for prompt in built_prompts)
+    assert all(
+        prompt.count("<autoskillit_skill_unavailability>") == 1
+        for prompt in built_prompts
+        if prompt is not None
+    )
+    assert all("profile-required-join" in prompt for prompt in built_prompts if prompt is not None)
     assert events.index(("managed-exit", launch_id)) > events.index(
         next(event for event in events if event[:2] == ("attempt-exit", 3))
     )

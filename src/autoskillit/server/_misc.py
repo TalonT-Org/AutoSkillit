@@ -71,6 +71,9 @@ from autoskillit.workspace import (
 )
 from autoskillit.workspace import clone_registry as clone_registry
 from autoskillit.workspace import (
+    compile_session_skill_catalog as compile_session_skill_catalog,
+)
+from autoskillit.workspace import (
     project_agent_skill_document as project_agent_skill_document,
 )
 from autoskillit.workspace import (

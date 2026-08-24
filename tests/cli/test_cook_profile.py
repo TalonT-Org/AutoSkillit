@@ -131,6 +131,7 @@ def _run_cook(
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),
             pass_fds=(),
+            unavailability_payload=compilation.unavailability_payload,
         )
 
     mock_mgr.managed_session.side_effect = managed_session
@@ -407,6 +408,7 @@ def _run_finalized_profile_cook(
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),
             pass_fds=(3,),
+            unavailability_payload={"backend": None, "unavailable": ()},
         )
 
     manager.managed_session.side_effect = managed_session

@@ -49,7 +49,9 @@ _EXPECTED_ROUTES: dict[RetryReason, tuple[str, str | None]] = {
 
 def test_all_retry_reasons_have_routing_rules() -> None:
     """Every orchestrator-visible RetryReason must have an explicit routing rule."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
     missing = []
@@ -74,7 +76,9 @@ def test_reason_routes_to_expected_destination(
     expected: tuple[str, str | None],
 ) -> None:
     """Every RetryReason must route to its declared destination in _prompts.py."""
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
     idx = prompt_text.find(reason.value)
@@ -107,7 +111,9 @@ def test_infrastructure_fault_override_is_documented() -> None:
     `to_json()` never emits would still pass a value-only check, which is
     exactly the failure mode this test exists to catch.
     """
-    from autoskillit.cli.prompts._prompts_orchestrator import _build_orchestrator_prompt
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
 

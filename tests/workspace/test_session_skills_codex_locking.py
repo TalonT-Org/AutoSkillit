@@ -184,6 +184,60 @@ def test_managed_codex_home_never_reacquires_its_lease_after_initialization(
     assert len(calls) == 1
 
 
+def test_managed_codex_session_materializes_profiles_under_its_existing_lease(
+    make_session_skill_manager,
+    codex_env,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    profile_source = tmp_path / "profile-source"
+    codex_env.backend.conventions = replace(
+        codex_env.backend.conventions,
+        profile_skills_source=profile_source,
+    )
+    manager = make_session_skill_manager(codex_root=tmp_path / "persistent" / "codex-sessions")
+    original_acquire = session_skills._SessionLease.acquire.__func__
+    materialize_profiles = session_skills.materialize_profile_skills
+    events: list[str] = []
+
+    def recording_acquire(
+        cls: type[session_skills._SessionLease],
+        path: Path,
+        *,
+        blocking: bool,
+    ) -> session_skills._SessionLease | None:
+        events.append("lease")
+        return original_acquire(cls, path, blocking=blocking)
+
+    def recording_profile_materialization(*args, **kwargs):
+        assert events == ["lease"]
+        events.append("profiles")
+        return materialize_profiles(*args, **kwargs)
+
+    monkeypatch.setattr(
+        session_skills._SessionLease,
+        "acquire",
+        classmethod(recording_acquire),
+    )
+    monkeypatch.setattr(
+        session_skills,
+        "materialize_profile_skills",
+        recording_profile_materialization,
+    )
+
+    with _managed(
+        manager,
+        "profile-lease",
+        backend=codex_env.backend,
+        names=frozenset({"make-arch-diag"}),
+    ):
+        pass
+
+    assert events == ["lease", "profiles"]
+
+
 def test_unowned_cleanup_refuses_a_contended_generated_home(
     make_session_skill_manager,
     codex_env,

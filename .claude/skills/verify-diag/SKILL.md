@@ -1,6 +1,10 @@
 ---
 name: verify-diag
 description: Verify an architecture diagram against the actual codebase. Checks component existence, connection accuracy, and read/write directionality. Use when user says "verify diagram", "verify diag", "check diagram", or wants to validate diagram accuracy.
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Verify Diagram Skill

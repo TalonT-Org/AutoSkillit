@@ -1786,7 +1786,7 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
         {"autoskillit.execution"}
     ),
     # codex session skills split — layout, locking, persistent_root tests import
-    # codex backend helpers (CodexBackend, materialize_codex_profile_skills, get_backend)
+    # codex backend helpers (CodexBackend, materialize_profile_skills, get_backend)
     "tests/workspace/test_session_skills_codex_layout.py": frozenset({"autoskillit.execution"}),
     "tests/workspace/test_session_skills_codex_locking.py": frozenset({"autoskillit.execution"}),
     "tests/workspace/test_session_skills_codex_persistent_root.py": frozenset(

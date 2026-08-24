@@ -80,7 +80,9 @@ def _parse_predicate_lines(block: str) -> dict[str, str]:
 
 
 def _render_orchestrator() -> str:
-    return _build_orchestrator_prompt(
+    from tests.cli._orchestrator_prompt_helpers import build_orchestrator_prompt
+
+    return build_orchestrator_prompt(
         recipe_name="stub-recipe",
         mcp_prefix="mcp__stub",
     )

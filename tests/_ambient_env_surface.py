@@ -575,7 +575,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
-    "cli/session/_session_launch.py:149": (
+    "cli/session/_session_launch.py:150": (
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
@@ -603,23 +603,23 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:378": (
+    "execution/backends/codex.py:380": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:520": (
+    "execution/backends/codex.py:522": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:655": (
+    "execution/backends/codex.py:657": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:775": (
+    "execution/backends/codex.py:777": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/codex.py:848": (
+    "execution/backends/codex.py:850": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

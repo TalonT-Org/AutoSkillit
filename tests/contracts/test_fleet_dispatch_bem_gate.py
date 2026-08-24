@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.cli.prompts._prompts_kitchen import _build_fleet_dispatch_prompt
+from tests.cli._orchestrator_prompt_helpers import (
+    build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 

@@ -185,6 +185,7 @@ class _CookSessionManager:
                 generated_home=self._generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
                 pass_fds=(),
+                unavailability_payload={"backend": None, "unavailable": ()},
             )
         finally:
             self._events.append(("managed-exit", launch_id))

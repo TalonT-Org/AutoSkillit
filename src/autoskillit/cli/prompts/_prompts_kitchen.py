@@ -14,7 +14,7 @@ from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, ROUTING_AUTHORITY_CLAUSE
 from autoskillit.execution import codex_recipe_delivery_calling_contract
 
 if TYPE_CHECKING:
-    from autoskillit.workspace import EffectiveSkillCatalog
+    from autoskillit.workspace import CompiledSessionSkillCatalog
 
 __all__ = [
     "_build_open_kitchen_prompt",
@@ -25,14 +25,15 @@ __all__ = [
 def _build_open_kitchen_prompt(
     mcp_prefix: str,
     has_unguarded_filesystem_access: bool = False,
-    skill_catalog: EffectiveSkillCatalog | None = None,
-    project_dir: Path | None = None,
-    backend: object | None = None,
+    *,
+    skill_compilation: CompiledSessionSkillCatalog,
+    project_root: Path,
+    backend: object,
 ) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
     raw = _read_full_sous_chef(
-        skill_catalog,
-        project_dir=project_dir,
+        skill_compilation,
+        project_root=project_root,
         backend=backend,
     )
     sous_chef_content = "\n\n" + raw if raw else ""
@@ -114,8 +115,8 @@ def _build_open_kitchen_prompt(
         f"## ROUTING AUTHORITY\n\n{ROUTING_AUTHORITY_CLAUSE}\n" + sous_chef_content
     )
 
-    scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
-    recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
+    scripts_dir = project_root / ".autoskillit" / "scripts"
+    recipes_dir = project_root / ".autoskillit" / "recipes"
     if scripts_dir.exists() and not recipes_dir.exists():
         text += (
             "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated to the new recipe format.\n"
@@ -137,8 +138,18 @@ def _build_fleet_dispatch_prompt(
     max_total_issues: int = 12,
     max_concurrent_dispatches: int = 3,
     has_unguarded_filesystem_access: bool = False,
+    *,
+    skill_compilation: CompiledSessionSkillCatalog,
+    project_root: Path,
+    backend: object,
 ) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
+    raw = _read_full_sous_chef(
+        skill_compilation,
+        project_root=project_root,
+        backend=backend,
+    )
+    sous_chef_content = "\n\n" + raw if raw else ""
     _food_truck_section = ""
     if recipe_table:
         _food_truck_section = (
@@ -148,7 +159,8 @@ def _build_fleet_dispatch_prompt(
             "list_recipes call and proceed directly to load_recipe for ingredient "
             "inspection when dispatching any of the above.\n"
         )
-    return f"""\
+    return (
+        f"""\
 You are a fleet dispatcher. You coordinate recipe execution across targets \
 by dispatching food trucks.
 
@@ -316,4 +328,7 @@ NEVER use run_skill or any non-fleet tool.
 
 After all dispatches complete, call {mcp_prefix}batch_cleanup_clones() to clean up \
 clone artifacts before ending the session.
-""" + _backend_supplement(has_unguarded_filesystem_access)
+"""
+        + sous_chef_content
+        + _backend_supplement(has_unguarded_filesystem_access)
+    )

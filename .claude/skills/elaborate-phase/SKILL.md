@@ -8,6 +8,10 @@ hooks:
         - type: command
           command: "echo '📝 [SKILL: elaborate-phase] Elaborating migration phase into self-contained plan...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Phase Elaboration Skill

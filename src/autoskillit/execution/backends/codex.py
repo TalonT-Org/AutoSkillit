@@ -124,7 +124,6 @@ from autoskillit.execution.backends._codex_explorer_projection import (
     _bundled_agent_definitions,
     _canonical_codex_model_effort,
     _generate_agent_tomls,
-    _materialize_profile_skills,
     _preflight_agent_projection,
     _register_agent_tomls,
     _render_cli_auth_store,
@@ -283,9 +282,12 @@ class CodexBackend(BackendCmdBuilderBase):
 
     @property
     def conventions(self) -> BackendConventions:
+        source_codex_home = self.source_codex_home
+        assert source_codex_home is not None
         return BackendConventions(
             skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
             project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
+            profile_skills_source=source_codex_home / "skills",
             persistent_session_root_subdir=Path(CODEX_SESSIONS_SUBDIR),
             skill_sigil=self.capabilities.skill_sigil,
         )
@@ -887,9 +889,12 @@ class CodexBackend(BackendCmdBuilderBase):
             / SESSION_ADD_DIR_SUBDIR
             / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
         )
+        discovery_skills_dir = session_dir / self.conventions.skills_subdir
         if not skills_dir.is_dir():
             errors.append(f"skills directory does not exist: {skills_dir}")
-        elif not any(skills_dir.iterdir()):
+        elif not any(skills_dir.iterdir()) and not (
+            discovery_skills_dir.is_dir() and any(discovery_skills_dir.iterdir())
+        ):
             errors.append(f"skills directory is empty: {skills_dir}")
 
         config_path = session_dir / "config.toml"
@@ -1073,11 +1078,6 @@ class CodexBackend(BackendCmdBuilderBase):
             explorer_binding_envs=explorer_binding_envs,
         )
         logger.debug("codex_agents_registered", count=registered)
-        if execution_role is SkillExecutionRole.SESSION:
-            _materialize_profile_skills(
-                session_dir,
-                source_codex_home=codex_home_source,
-            )
         return _codex_cfg.effective_codex_agent_names(session_dir)
 
     def refresh_explorer_binding_env(

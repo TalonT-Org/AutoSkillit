@@ -18,8 +18,10 @@ def test_quota_guard_deny_trigger_coupled_to_prompt():
     """QUOTA_GUARD_DENY_TRIGGER constant in quota_guard must appear verbatim
     in the orchestrator prompt's QUOTA DENIAL ROUTING section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
     from autoskillit.hooks.guards.quota_guard import QUOTA_GUARD_DENY_TRIGGER
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert QUOTA_GUARD_DENY_TRIGGER in prompt, (
@@ -32,8 +34,10 @@ def test_quota_post_warning_trigger_coupled_to_prompt():
     """QUOTA_POST_WARNING_TRIGGER constant in quota_post_hook must appear verbatim
     in the orchestrator prompt's QUOTA DENIAL ROUTING section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli.prompts import _build_orchestrator_prompt
     from autoskillit.hooks.quota_post_hook import QUOTA_POST_WARNING_TRIGGER
+    from tests.cli._orchestrator_prompt_helpers import (
+        build_orchestrator_prompt as _build_orchestrator_prompt,
+    )
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert QUOTA_POST_WARNING_TRIGGER in prompt, (
@@ -107,8 +111,10 @@ class TestPromptToolReachability:
 
     def test_prompt_tool_reachability(self):
         """Each MCP tool name in FIRST ACTION must exist in the FastMCP tool registry."""
-        from autoskillit.cli.prompts import _build_orchestrator_prompt
         from autoskillit.core.types._type_constants_registries import FREE_RANGE_TOOLS, GATED_TOOLS
+        from tests.cli._orchestrator_prompt_helpers import (
+            build_orchestrator_prompt as _build_orchestrator_prompt,
+        )
 
         registered_tools = {*GATED_TOOLS, *FREE_RANGE_TOOLS}
 
@@ -134,8 +140,10 @@ class TestPromptToolsWhitelistCoupling:
     def test_first_action_references_no_blocked_native_tools(self):
         """FIRST ACTION must not mention any PIPELINE_FORBIDDEN_TOOLS by name."""
         from autoskillit.cli._mcp_names import DIRECT_PREFIX
-        from autoskillit.cli.prompts import _build_orchestrator_prompt
         from autoskillit.core.types._type_constants_registries import PIPELINE_FORBIDDEN_TOOLS
+        from tests.cli._orchestrator_prompt_helpers import (
+            build_orchestrator_prompt as _build_orchestrator_prompt,
+        )
 
         prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
         start = prompt.index("FIRST ACTION")

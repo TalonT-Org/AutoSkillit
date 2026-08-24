@@ -357,9 +357,11 @@ def test_backend_conventions_frozen_slots_fields():
     inst = BackendConventions(
         skills_subdir=Path("/claude/skills"),
         project_local_skill_search_dirs=(".claude/skills",),
+        profile_skills_source=Path("/source/skills"),
     )
     assert inst.skills_subdir == Path("/claude/skills")
     assert inst.project_local_skill_search_dirs == (".claude/skills",)
+    assert inst.profile_skills_source == Path("/source/skills")
     assert inst.persistent_session_root_subdir is None
 
     with pytest.raises(FrozenInstanceError):
@@ -371,6 +373,7 @@ def test_backend_conventions_frozen_slots_fields():
     hints = typing.get_type_hints(BackendConventions)
     assert hints["skills_subdir"] is Path
     assert hints["project_local_skill_search_dirs"] == tuple[str, ...]
+    assert hints["profile_skills_source"] == Path | None
     assert hints["persistent_session_root_subdir"] == Path | None
 
 

@@ -1,5 +1,4 @@
 """Core result dataclasses — universal types.
-
 Execution-scoped types (SessionTelemetry, RecipeIdentity, CIRunScope) live in
 _type_results_execution.py for narrower test cascade. ProviderOutcome stays here
 because SkillResult.provider references it, and SkillResult is consumed by 13+
@@ -14,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ..closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
@@ -52,6 +51,8 @@ __all__ = [
     "SpillSpec",
     "TestResult",
     "ManagedSessionHome",
+    "SkillUnavailabilityPayload",
+    "SkillUnavailabilityRecord",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "VALID_INPUT_SPEC_TYPES",
@@ -119,6 +120,22 @@ class PreLaunchReadiness:
     attested_env: Mapping[str, str] = field(default_factory=dict)
 
 
+class SkillUnavailabilityRecord(TypedDict):
+    """One deterministic backend-admission refusal exposed to the session."""
+
+    skill: str
+    backend: str
+    operation: str
+    diagnostic: str
+
+
+class SkillUnavailabilityPayload(TypedDict):
+    """Canonical machine-readable backend-admission refusals for one session."""
+
+    backend: str | None
+    unavailable: tuple[SkillUnavailabilityRecord, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class ValidatedAddDir:
     """An --add-dir path validated for Claude Code convention compliance.
@@ -161,6 +178,7 @@ class ManagedSessionHome:
     generated_home: Path
     skills_dir: ValidatedAddDir
     pass_fds: tuple[int, ...]
+    unavailability_payload: SkillUnavailabilityPayload
 
 
 @dataclass(frozen=True, slots=True)

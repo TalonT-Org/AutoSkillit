@@ -20,8 +20,10 @@ from autoskillit.core import (
     RecipeLoadError,
     RecipeNotFoundError,
     SkillExecutionRole,
+    get_logger,
 )
 from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
+from autoskillit.workspace import compile_session_skill_catalog
 
 if TYPE_CHECKING:
     from autoskillit.core import (
@@ -30,6 +32,8 @@ if TYPE_CHECKING:
     )
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.recipe import RecipeInfo
+
+logger = get_logger(__name__)
 
 
 def _admit_recipe_name(tool_ctx: ToolContext, name: str) -> RecipeInfo:
@@ -84,17 +88,41 @@ def build_backend_capabilities_map(
     return out
 
 
-def project_orchestrator_guidance(tool_ctx: Any) -> str:
-    """Project the sous-chef document for an anonymous kitchen open."""
+def _project_orchestrator_sous_chef(
+    tool_ctx: Any,
+    *,
+    backend: CodingAgentBackend | None = None,
+    cwd: Path,
+    no_backend_event: str,
+    unavailable_event: str,
+) -> str:
+    """Compile and project admitted orchestrator guidance for server callers."""
+    effective_backend = backend or getattr(tool_ctx, "backend", None)
+    if effective_backend is None:
+        logger.warning(
+            no_backend_event,
+            project_dir=str(tool_ctx.project_dir),
+        )
+        return ""
     if tool_ctx.skill_resolver is None:
         return ""
-    catalog = tool_ctx.skill_resolver.list_effective(
+    raw_catalog = tool_ctx.skill_resolver.list_effective(
         tool_ctx.project_dir,
         SkillExecutionRole.ORCHESTRATOR,
         visibility=tool_ctx.config.skill_visibility_spec(),
         recipe_packs=tool_ctx.active_recipe_packs,
         recipe_features=tool_ctx.active_recipe_features,
     )
+    skill_compilation = compile_session_skill_catalog(raw_catalog, effective_backend)
+    for refusal in skill_compilation.unavailable:
+        logger.info(
+            unavailable_event,
+            skill=refusal.skill,
+            backend=refusal.backend,
+            operation=refusal.operation.value,
+            diagnostic=refusal.diagnostic,
+        )
+    catalog = skill_compilation.catalog
     sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
     if (
         sous_chef is None
@@ -102,18 +130,32 @@ def project_orchestrator_guidance(tool_ctx: Any) -> str:
         or sous_chef.execution_role is not SkillExecutionRole.ORCHESTRATOR
     ):
         return ""
-    backend = tool_ctx.backend
-    document = project_agent_skill_document(
+    return project_agent_skill_document(
         sous_chef,
         SkillProjectionContext(
-            cwd=tool_ctx.project_dir,
+            cwd=cwd,
             catalog=catalog,
-            backend=backend,
-            conventions=backend.conventions if backend is not None else None,
+            backend=effective_backend,
+            conventions=effective_backend.conventions,
             gating=False,
         ),
+    ).content
+
+
+def project_orchestrator_guidance(
+    tool_ctx: Any,
+    *,
+    backend: CodingAgentBackend | None = None,
+) -> str:
+    """Project the sous-chef document for an anonymous kitchen open."""
+    content = _project_orchestrator_sous_chef(
+        tool_ctx,
+        backend=backend,
+        cwd=tool_ctx.project_dir,
+        no_backend_event="orchestrator_guidance_no_backend",
+        unavailable_event="orchestrator_guidance_skill_unavailable",
     )
-    return "\n\n" + document.content
+    return "\n\n" + content if content else ""
 
 
 def response_backstop_tool_meta(

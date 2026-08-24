@@ -8,6 +8,10 @@ hooks:
         - type: command
           command: "echo 'Decomposing into requirements...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  join:
+    required: true
 ---
 
 # Requirements Decomposition Skill

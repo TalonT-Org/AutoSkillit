@@ -20,8 +20,7 @@ from typing import Any
 
 from autoskillit.core import SkillExecutionRole
 from autoskillit.workspace import (
-    DefaultSkillResolver,
-    EffectiveSkillCatalog,
+    CompiledSessionSkillCatalog,
     SkillProjectionContext,
     parse_frontmatter_content,
     project_agent_skill_document,
@@ -197,17 +196,19 @@ _MCP_RETRY_INSTRUCTION: str = _MCP_STARTUP_RECOVERY_SPEC.render()
 
 
 def _read_full_sous_chef(
-    skill_catalog: EffectiveSkillCatalog | None = None,
+    skill_compilation: CompiledSessionSkillCatalog,
     *,
-    project_dir: Path | None = None,
-    backend: Any | None = None,
+    project_root: Path,
+    backend: Any,
 ) -> str:
-    """Project the effective sous-chef contract for an orchestrator prompt."""
-    effective_root = (project_dir or Path.cwd()).resolve()
-    catalog = skill_catalog or DefaultSkillResolver().list_effective(
-        effective_root,
-        SkillExecutionRole.ORCHESTRATOR,
-    )
+    """Project admitted sous-chef guidance for an orchestrator prompt."""
+    if not isinstance(skill_compilation, CompiledSessionSkillCatalog):
+        raise TypeError("sous-chef projection requires CompiledSessionSkillCatalog")
+    backend_name = getattr(backend, "name", None)
+    if skill_compilation.backend != backend_name:
+        raise ValueError("sous-chef projection backend does not match skill compilation")
+
+    catalog = skill_compilation.catalog
     if catalog.execution_role is not SkillExecutionRole.ORCHESTRATOR:
         raise ValueError("sous-chef projection requires an orchestrator skill catalog")
     sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
@@ -220,7 +221,8 @@ def _read_full_sous_chef(
     projected = project_agent_skill_document(
         sous_chef,
         SkillProjectionContext(
-            cwd=effective_root,
+            cwd=project_root.resolve(),
+            project_root=project_root,
             catalog=catalog,
             backend=backend,
             conventions=getattr(backend, "conventions", None),

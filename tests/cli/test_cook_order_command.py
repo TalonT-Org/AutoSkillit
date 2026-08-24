@@ -167,9 +167,7 @@ class TestCLIOrderCommand:
         warning_visible_at_launch: list[bool] = []
 
         def launch(*_args: object, **_kwargs: object) -> InteractiveProcessStub:
-            warning_visible_at_launch.append(
-                expected_warning in capsys.readouterr().out.splitlines()
-            )
+            warning_visible_at_launch.append(expected_warning in capsys.readouterr().out)
             return process
 
         mock_run.side_effect = launch
@@ -179,7 +177,7 @@ class TestCLIOrderCommand:
             _backend: object,
         ) -> CompiledSessionSkillCatalog:
             return CompiledSessionSkillCatalog(
-                backend="limited",
+                backend=getattr(_backend, "name"),
                 catalog=catalog,
                 unavailable=(
                     SkillUnavailableMetadata(

@@ -271,8 +271,6 @@ def cook(
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(session_catalog.exclusions)
     skill_compilation = compile_session_skill_catalog(session_catalog, backend)
-    render_skill_unavailability(skill_compilation)
-    cook_system_prompt = append_skill_unavailability(cook_system_prompt, skill_compilation)
     session_catalog = skill_compilation.catalog
     requires_resolved_exploration_profile = any(
         vector.disposition is ExplorationVectorDisposition.MIGRATED
@@ -329,6 +327,11 @@ def cook(
             ),
         ) as managed_home,
     ):
+        render_skill_unavailability(managed_home.unavailability_payload)
+        cook_system_prompt = append_skill_unavailability(
+            cook_system_prompt,
+            managed_home.unavailability_payload,
+        )
         if isinstance(resume_spec, BareResume):
             try:
                 sweep_orphaned_tethers(default_tether_dir())

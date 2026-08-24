@@ -1030,13 +1030,14 @@ async def test_open_kitchen_sous_chef_projection_raises_returns_failure_envelope
     monkeypatch,
 ):
     """Projection failure returns the project_sous_chef failure envelope."""
+    from autoskillit.execution.backends import ClaudeCodeBackend
     from autoskillit.workspace import SkillsDirectoryProvider
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.project_dir = tmp_path
-    mock_ctx.backend = None
+    mock_ctx.backend = ClaudeCodeBackend()
     mock_ctx.skill_resolver = SkillsDirectoryProvider().resolver
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):

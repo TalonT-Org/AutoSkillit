@@ -145,8 +145,12 @@ class TestAdmiralDispatchBlock:
             )
 
     def test_completion_handshake_is_shared_verbatim_across_prompts(self) -> None:
-        from autoskillit.cli.prompts import _build_orchestrator_prompt
-        from autoskillit.cli.prompts._prompts_kitchen import _build_open_kitchen_prompt
+        from tests.cli._orchestrator_prompt_helpers import (
+            build_open_kitchen_prompt as _build_open_kitchen_prompt,
+        )
+        from tests.cli._orchestrator_prompt_helpers import (
+            build_orchestrator_prompt as _build_orchestrator_prompt,
+        )
 
         source = _projected_sous_chef()
         match = re.search(

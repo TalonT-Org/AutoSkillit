@@ -136,12 +136,16 @@ async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
 @pytest.mark.anyio
 async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monkeypatch):
     """When sous-chef SKILL.md is absent, Path B must return a valid response without raising."""
-    from types import SimpleNamespace
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace import EffectiveSkillCatalog
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
-    mock_ctx.skill_resolver.list_effective.return_value = SimpleNamespace(skills=())
+    mock_ctx.skill_resolver.list_effective.return_value = EffectiveSkillCatalog(
+        skills=(),
+        execution_role=SkillExecutionRole.ORCHESTRATOR,
+    )
     mock_ctx.skill_resolver.resolve_effective.return_value = None
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):

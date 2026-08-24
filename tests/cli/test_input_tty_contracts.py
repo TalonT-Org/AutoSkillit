@@ -158,6 +158,7 @@ def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPat
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),
             pass_fds=(),
+            unavailability_payload={"backend": None, "unavailable": ()},
         )
 
     manager.managed_session.side_effect = managed_session

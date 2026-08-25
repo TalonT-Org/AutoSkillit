@@ -1,4 +1,4 @@
-"""Tests for the bulk_close_issues MCP tool (split from test_tools_integrations.py per issue #4796)."""
+"""Tests for the bulk_close_issues MCP tool."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 class TestBulkCloseIssues:
     @pytest.fixture(autouse=True)
-    def _mock_rate_limit_sleep(self, monkeypatch):
+    def _mock_rate_limit_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
             AsyncMock(),

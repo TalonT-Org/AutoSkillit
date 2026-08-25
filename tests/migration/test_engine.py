@@ -1,25 +1,15 @@
-"""Tests for migration_engine.py — ME1 through ME21."""
+"""Tests for the MigrationEngine default registration and MIGRATE_RECIPES_MAX_RETRIES."""
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
-from autoskillit.core.types import RetryReason
-from autoskillit.execution.session import SkillResult
 from autoskillit.migration.engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
-    AdvisoryMigrationAdapter,
-    AdvisoryResult,
     ContractMigrationAdapter,
-    DeterministicMigrationAdapter,
-    DiagramMigrationAdapter,
-    HeadlessMigrationAdapter,
-    MigrationAdapter,
     MigrationEngine,
     MigrationFile,
     MigrationResult,
@@ -27,324 +17,10 @@ from autoskillit.migration.engine import (
     SkillMigrationAdapter,
     default_migration_engine,
 )
-from autoskillit.migration.loader import MigrationChange, MigrationNote
+
+from .conftest import make_migration_note, make_skill_result
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_skill_result(success: bool, result: str = "") -> SkillResult:
-    """Create a minimal SkillResult for testing headless return values."""
-    return SkillResult(
-        success=success,
-        result=result,
-        session_id="",
-        subtype="success" if success else "error",
-        is_error=not success,
-        exit_code=0 if success else 1,
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        stderr="",
-    )
-
-
-def _make_migration_note(
-    from_version: str = "0.0.0",
-    to_version: str = "1.0.0",
-    tmp_path: Path | None = None,
-) -> MigrationNote:
-    return MigrationNote(
-        from_version=from_version,
-        to_version=to_version,
-        description="test migration",
-        changes=[
-            MigrationChange(
-                id="CH1",
-                description="test change",
-                instruction="do something",
-            )
-        ],
-        path=Path("/fake/migration.yaml"),
-    )
-
-
-# ---------------------------------------------------------------------------
-# RecipeMigrationAdapter tests (ME1–ME9)
-# ---------------------------------------------------------------------------
-
-
-class TestRecipeMigrationAdapter:
-    # ME1
-    def test_recipe_adapter_discover_finds_recipes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "alpha.yaml").write_text("name: alpha\n")
-        (recipes_dir / "beta.yaml").write_text("name: beta\n")
-        # contracts subdir — should NOT be picked up
-        contracts_dir = recipes_dir / "contracts"
-        contracts_dir.mkdir()
-        (contracts_dir / "contract.yaml").write_text("skill_hashes: {}")
-
-        adapter = RecipeMigrationAdapter()
-        files = adapter.discover(tmp_path)
-
-        assert len(files) == 2
-        names = {f.name for f in files}
-        assert names == {"alpha", "beta"}
-        assert all(f.file_type == "recipe" for f in files)
-
-    # ME2
-    def test_recipe_adapter_discover_empty_dir(self, tmp_path: Path) -> None:
-        adapter = RecipeMigrationAdapter()
-        files = adapter.discover(tmp_path)
-        assert files == []
-
-    # ME3
-    def test_recipe_adapter_needs_migration_when_outdated(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [_make_migration_note()],
-        )
-        file = MigrationFile(
-            name="test", path=tmp_path / "test.yaml", file_type="recipe", current_version="0.0.1"
-        )
-        adapter = RecipeMigrationAdapter()
-        assert adapter.needs_migration(file) is True
-
-    # ME4
-    def test_recipe_adapter_no_migration_when_current(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [],
-        )
-        file = MigrationFile(
-            name="test", path=tmp_path / "test.yaml", file_type="recipe", current_version="99.0.0"
-        )
-        adapter = RecipeMigrationAdapter()
-        assert adapter.needs_migration(file) is False
-
-    # ME5
-    def test_recipe_adapter_needs_migration_when_no_version(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # current_version=None is treated as 0.0.0 by applicable_migrations;
-        # we return a non-empty list to verify that None still causes needs_migration=True
-        monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [_make_migration_note()],
-        )
-        file = MigrationFile(
-            name="test", path=tmp_path / "test.yaml", file_type="recipe", current_version=None
-        )
-        adapter = RecipeMigrationAdapter()
-        assert adapter.needs_migration(file) is True
-
-    # ME6
-    @pytest.mark.anyio
-    async def test_recipe_adapter_build_skill_command(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
-        recipe_path.parent.mkdir(parents=True)
-        recipe_path.write_text("name: myrecipe\n")
-
-        # Pre-create temp output so migrate() doesn't return "no output" failure
-        temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_out = temp_dir / "migrations" / "myrecipe.yaml"
-        temp_out.parent.mkdir(parents=True)
-        temp_out.write_text("name: myrecipe\n# migrated\n")
-
-        monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [_make_migration_note()],
-        )
-        mock_headless = AsyncMock(return_value=_make_skill_result(True))
-
-        adapter = RecipeMigrationAdapter()
-        file = MigrationFile(
-            name="myrecipe", path=recipe_path, file_type="recipe", current_version="0.0.1"
-        )
-        await adapter.migrate(file, run_headless=mock_headless, temp_dir=temp_dir)
-
-        assert mock_headless.await_count == 1
-        call_kwargs = mock_headless.call_args.kwargs
-        assert "skill_command" in call_kwargs
-        skill_cmd: str = call_kwargs["skill_command"]
-        assert "script_path=" in skill_cmd
-        assert "script_content=" in skill_cmd
-        assert "migration_notes=" in skill_cmd
-        assert "target_version=" in skill_cmd
-
-    # ME7
-    def test_recipe_adapter_temp_output_path(self, tmp_path: Path) -> None:
-        adapter = RecipeMigrationAdapter()
-        file = MigrationFile(
-            name="myscript",
-            path=tmp_path / "myscript.yaml",
-            file_type="recipe",
-            current_version=None,
-        )
-        temp_dir = tmp_path / "temp"
-        result = adapter.get_temp_output_path(file, temp_dir)
-        assert result == temp_dir / "migrations" / "myscript.yaml"
-
-    # ME8
-    def test_recipe_adapter_validate_valid_bundled_recipe(self) -> None:
-        recipe_path = pkg_root() / "recipes" / "implementation.yaml"
-
-        adapter = RecipeMigrationAdapter()
-        is_valid, error = adapter.validate(recipe_path)
-
-        assert is_valid is True
-        assert error == ""
-
-    # ME9
-    def test_recipe_adapter_validate_invalid_yaml_structure(self, tmp_path: Path) -> None:
-        recipe_path = tmp_path / "broken.yaml"
-        recipe_path.write_text("steps: 'not_a_dict'\ningredients: 42\n")
-
-        adapter = RecipeMigrationAdapter()
-        is_valid, error = adapter.validate(recipe_path)
-
-        assert is_valid is False
-        assert len(error) > 0
-        assert (
-            "dict" in error.lower() or "expected" in error.lower() or "attribute" in error.lower()
-        )
-
-    # ME9b
-    def test_recipe_adapter_validate_errors_non_empty_branch(self, tmp_path: Path) -> None:
-        recipe_path = tmp_path / "no-kitchen-rules.yaml"
-        recipe_path.write_text(
-            textwrap.dedent("""\
-                name: bad-recipe
-                steps:
-                  step1:
-                    tool: run_skill
-                    with:
-                      skill_command: "/foo"
-                    on_success: step1
-            """)
-        )
-
-        adapter = RecipeMigrationAdapter()
-        is_valid, error = adapter.validate(recipe_path)
-
-        assert is_valid is False
-        assert len(error) > 0
-        assert "kitchen_rules" in error.lower()
-
-
-# ---------------------------------------------------------------------------
-# ContractMigrationAdapter tests (ME10–ME14)
-# ---------------------------------------------------------------------------
-
-
-class TestContractMigrationAdapter:
-    # ME10
-    def test_contract_adapter_discover_finds_contracts(self, tmp_path: Path) -> None:
-        contracts_dir = tmp_path / ".autoskillit" / "recipes" / "contracts"
-        contracts_dir.mkdir(parents=True)
-        (contracts_dir / "foo.yaml").write_text("skill_hashes: {}")
-        (contracts_dir / "bar.yaml").write_text("skill_hashes: {}")
-
-        adapter = ContractMigrationAdapter()
-        files = adapter.discover(tmp_path)
-
-        assert len(files) == 2
-        names = {f.name for f in files}
-        assert names == {"foo", "bar"}
-        assert all(f.file_type == "contract" for f in files)
-        assert all(f.current_version is None for f in files)
-
-    # ME11
-    def test_contract_adapter_discover_empty_dir(self, tmp_path: Path) -> None:
-        adapter = ContractMigrationAdapter()
-        files = adapter.discover(tmp_path)
-        assert files == []
-
-    # ME12
-    def test_contract_adapter_needs_migration_stale_contract_on_disk(self, tmp_path: Path) -> None:
-        """ME12: needs_migration returns True for an on-disk contract with empty skill_hashes."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        contracts_dir = recipes_dir / "contracts"
-        contracts_dir.mkdir(parents=True)
-        # A contract with empty skill_hashes is stale because bundled skills have real hashes.
-        contract_path = contracts_dir / "test.yaml"
-        contract_path.write_text("skill_hashes: {}\nbundled_manifest_version: '0.0.1'\n")
-
-        file = MigrationFile(
-            name="test", path=contract_path, file_type="contract", current_version=None
-        )
-        adapter = ContractMigrationAdapter()
-        # Should be True: stale contract or load_recipe_card returns None → needs migration
-        assert adapter.needs_migration(file) is True
-
-    # ME13
-    @pytest.mark.anyio
-    async def test_contract_adapter_migrate_regenerates_card_on_disk(self, tmp_path: Path) -> None:
-        """ME13: migrate() runs generate_recipe_card and writes a contract file to disk."""
-        import shutil
-
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        contracts_dir = recipes_dir / "contracts"
-        contracts_dir.mkdir(parents=True)
-
-        # Copy the project-local smoke-test recipe so generate_recipe_card has valid input
-        src_recipe = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
-        assert src_recipe.exists(), f"smoke-test source missing: {src_recipe}"
-        shutil.copy2(src_recipe, recipes_dir / "smoke-test.yaml")
-
-        contract_path = contracts_dir / "smoke-test.yaml"
-        contract_path.write_text("skill_hashes: {}\n")  # stale placeholder
-
-        file = MigrationFile(
-            name="smoke-test", path=contract_path, file_type="contract", current_version=None
-        )
-        adapter = ContractMigrationAdapter()
-        result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
-
-        assert result.success is True
-        assert result.name == "smoke-test"
-        # generate_recipe_card writes a real contract file; verify it exists and is non-trivial
-        written = contract_path.read_text()
-        assert "skill_hashes" in written
-
-    # ME14
-    @pytest.mark.anyio
-    async def test_contract_adapter_migrate_fails_gracefully_when_no_source(
-        self, tmp_path: Path
-    ) -> None:
-        contracts_dir = tmp_path / ".autoskillit" / "recipes" / "contracts"
-        contracts_dir.mkdir(parents=True)
-        contract_path = contracts_dir / "missing.yaml"
-        contract_path.write_text("skill_hashes: {}")
-        # recipes_dir / "missing.yaml" does NOT exist
-
-        file = MigrationFile(
-            name="missing", path=contract_path, file_type="contract", current_version=None
-        )
-        adapter = ContractMigrationAdapter()
-        result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
-
-        assert result.success is False
-        assert "not found" in (result.error or "")
-
-
-# ---------------------------------------------------------------------------
-# MigrationEngine tests (ME15–ME21)
-# ---------------------------------------------------------------------------
 
 
 class TestMigrationEngine:
@@ -399,9 +75,9 @@ class TestMigrationEngine:
 
         monkeypatch.setattr(
             "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [_make_migration_note()],
+            lambda *a, **kw: [make_migration_note()],
         )
-        mock_headless = AsyncMock(return_value=_make_skill_result(True))
+        mock_headless = AsyncMock(return_value=make_skill_result(True))
 
         file = MigrationFile(
             name="mypipe", path=recipe_path, file_type="recipe", current_version="0.0.1"
@@ -424,11 +100,9 @@ class TestMigrationEngine:
 
         monkeypatch.setattr(
             "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [_make_migration_note()],
+            lambda *a, **kw: [make_migration_note()],
         )
-        mock_headless = AsyncMock(
-            return_value=_make_skill_result(False, "headless session failed")
-        )
+        mock_headless = AsyncMock(return_value=make_skill_result(False, "headless session failed"))
 
         file = MigrationFile(
             name="test", path=recipe_path, file_type="recipe", current_version="0.0.1"
@@ -454,9 +128,9 @@ class TestMigrationEngine:
 
         monkeypatch.setattr(
             "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [_make_migration_note()],
+            lambda *a, **kw: [make_migration_note()],
         )
-        mock_headless = AsyncMock(return_value=_make_skill_result(True))
+        mock_headless = AsyncMock(return_value=make_skill_result(True))
 
         file = MigrationFile(
             name="test", path=recipe_path, file_type="recipe", current_version="0.0.1"
@@ -512,239 +186,6 @@ class TestMigrationEngine:
         assert source.read_text() == "invalid migrated content\n"
 
 
-def test_skill_validation_checks_deterministic_contract(tmp_path: Path) -> None:
-    skill_dir = tmp_path / ".claude" / "skills" / "missing-declaration"
-    skill_dir.mkdir(parents=True)
-    skill_path = skill_dir / "SKILL.md"
-    skill_path.write_text("---\nname: missing-declaration\n---\nRead .claude/settings.json.\n")
-
-    is_valid, error = SkillMigrationAdapter().validate(skill_path)
-
-    assert is_valid is False
-    assert "deterministic skill invalidities remain" in error
-    assert "claude_dir" in error
-
-
-class TestAdapterHierarchy:
-    # ME-ADP1
-    def test_adapter_abcs_are_importable(self) -> None:
-        from abc import ABC
-
-        assert issubclass(HeadlessMigrationAdapter, MigrationAdapter)
-        assert issubclass(DeterministicMigrationAdapter, MigrationAdapter)
-        assert issubclass(MigrationAdapter, ABC)
-
-    # ME-ADP2
-    def test_recipe_adapter_is_headless(self) -> None:
-        assert isinstance(RecipeMigrationAdapter(), HeadlessMigrationAdapter)
-
-    # ME-ADP3
-    def test_contract_adapter_is_deterministic(self) -> None:
-        assert isinstance(ContractMigrationAdapter(), DeterministicMigrationAdapter)
-
-    # ME-ADP4
-    def test_contract_migrate_has_no_run_headless_param(self) -> None:
-        import inspect
-
-        sig = inspect.signature(ContractMigrationAdapter.migrate)
-        assert "run_headless" not in sig.parameters
-
-    # ME-RT1
-    def test_incomplete_adapter_raises_type_error(self) -> None:
-        class BrokenAdapter(HeadlessMigrationAdapter):
-            file_type = "broken"
-            # missing: discover, needs_migration, validate, migrate
-
-        with pytest.raises(TypeError):
-            BrokenAdapter()
-
-    # ME-ADP5
-    def test_diagram_adapter_is_advisory_not_deterministic(self) -> None:
-        assert isinstance(DiagramMigrationAdapter(), AdvisoryMigrationAdapter)
-        assert not isinstance(DiagramMigrationAdapter(), DeterministicMigrationAdapter)
-
-
-# ---------------------------------------------------------------------------
-# DiagramMigrationAdapter tests (DG-16 through DG-20)
-# ---------------------------------------------------------------------------
-
-_SAMPLE_RECIPE_YAML_FOR_DIAG = """\
-name: my-recipe
-description: A test recipe
-summary: step1 -> done
-ingredients:
-  task:
-    description: What to do
-    required: true
-steps:
-  step1:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:investigate ${{ inputs.task }}"
-      cwd: "."
-    on_success: done
-    on_failure: escalate
-  done:
-    action: stop
-    message: "Done."
-  escalate:
-    action: stop
-    message: "Failed."
-kitchen_rules:
-  - "Use AutoSkillit tools only"
-"""
-
-
-@pytest.fixture
-def sample_recipe_yaml_for_diagram(tmp_path: Path) -> Path:
-    path = tmp_path / "my-recipe.yaml"
-    path.write_text(_SAMPLE_RECIPE_YAML_FOR_DIAG)
-    return path
-
-
-class TestDiagramMigrationAdapter:
-    # DG-16
-    def test_diagram_adapter_discover_finds_md_files(self, tmp_path: Path) -> None:
-        """DG-16: DiagramMigrationAdapter.discover() finds .md files in diagrams/."""
-        diag_dir = tmp_path / ".autoskillit" / "recipes" / "diagrams"
-        diag_dir.mkdir(parents=True)
-        (diag_dir / "my-recipe.md").write_text("<!-- autoskillit-recipe-hash: sha256:abc -->")
-        adapter = DiagramMigrationAdapter()
-        files = adapter.discover(tmp_path)
-        assert len(files) == 1
-        assert files[0].name == "my-recipe"
-        assert files[0].file_type == "diagram"
-
-    # DG-17
-    def test_diagram_adapter_discover_returns_empty_when_dir_missing(self, tmp_path: Path) -> None:
-        """DG-17: DiagramMigrationAdapter.discover() returns [] when dir missing."""
-        adapter = DiagramMigrationAdapter()
-        assert adapter.discover(tmp_path) == []
-
-    # DG-18
-    def test_diagram_adapter_needs_migration_stale(
-        self, tmp_path: Path, sample_recipe_yaml_for_diagram: Path
-    ) -> None:
-        """DG-18: DiagramMigrationAdapter.needs_migration() True when diagram stale."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        diagrams_dir = recipes_dir / "diagrams"
-        diagrams_dir.mkdir(parents=True)
-        import shutil
-
-        shutil.copy2(sample_recipe_yaml_for_diagram, recipes_dir / "my-recipe.yaml")
-        # Write diagram with a wrong hash (stale)
-        (diagrams_dir / "my-recipe.md").write_text(
-            "<!-- autoskillit-recipe-hash: sha256:wronghashvalue -->\n## my-recipe\n"
-        )
-        file = MigrationFile(
-            name="my-recipe",
-            path=diagrams_dir / "my-recipe.md",
-            file_type="diagram",
-            current_version=None,
-        )
-        assert DiagramMigrationAdapter().needs_migration(file) is True
-
-    # DG-19 (replaced: advisory path instead of destructive migrate)
-    def test_diagram_adapter_check_staleness_returns_advisory(self) -> None:
-        """DG-19: DiagramMigrationAdapter.check_staleness() returns AdvisoryResult."""
-        file = MigrationFile(
-            name="my-recipe",
-            path=Path("/fake/diagrams/my-recipe.md"),
-            file_type="diagram",
-            current_version=None,
-        )
-        result = DiagramMigrationAdapter().check_staleness(file)
-        assert isinstance(result, AdvisoryResult)
-        assert "/render-recipe" in result.suggestion
-        assert "my-recipe" in result.suggestion
-
-    def test_diagram_adapter_validate_passes_when_hash_present(self, tmp_path: Path) -> None:
-        """DG-20: DiagramMigrationAdapter.validate() passes when hash comment present."""
-        md = tmp_path / "test.md"
-        md.write_text("<!-- autoskillit-recipe-hash: sha256:abc123def456 -->\n## My Recipe\n")
-        adapter = DiagramMigrationAdapter()
-        valid, msg = adapter.validate(md)
-        assert valid is True
-        assert msg == ""
-
-    def test_diagram_adapter_validate_fails_when_hash_absent(self, tmp_path: Path) -> None:
-        """validate() fails when hash comment missing."""
-        md = tmp_path / "test.md"
-        md.write_text("## My Recipe\nNo hash here.\n")
-        adapter = DiagramMigrationAdapter()
-        valid, msg = adapter.validate(md)
-        assert valid is False
-        assert "missing" in msg
-
-    def test_default_engine_includes_diagram_adapter(self) -> None:
-        """default_migration_engine() registers the DiagramMigrationAdapter."""
-        engine = default_migration_engine()
-        assert isinstance(engine.get_adapter("diagram"), DiagramMigrationAdapter)
-
-
-def test_diagram_adapter_type_is_not_deterministic() -> None:
-    """T-ADAPTER-TYPE: DiagramMigrationAdapter must NOT be a DeterministicMigrationAdapter."""
-    assert not isinstance(DiagramMigrationAdapter(), DeterministicMigrationAdapter)
-
-
-@pytest.mark.anyio
-async def test_advisory_dispatch_does_not_write_file(tmp_path: Path) -> None:
-    """T-ADVISORY-DISPATCH: MigrationEngine returns advisory for stale diagrams without writing."""
-    recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    diagrams_dir = recipes_dir / "diagrams"
-    diagrams_dir.mkdir(parents=True)
-    recipe_yaml = recipes_dir / "my-recipe.yaml"
-    recipe_yaml.write_text(_SAMPLE_RECIPE_YAML_FOR_DIAG)
-
-    original_content = (
-        "<!-- autoskillit-recipe-hash: sha256:wronghash -->\n## my-recipe\nASCII art here\n"
-    )
-    diagram_md = diagrams_dir / "my-recipe.md"
-    diagram_md.write_text(original_content)
-
-    file = MigrationFile(
-        name="my-recipe",
-        path=diagram_md,
-        file_type="diagram",
-        current_version=None,
-    )
-    engine = MigrationEngine([DiagramMigrationAdapter()])
-    result = await engine.migrate_file(
-        file,
-        run_headless=AsyncMock(),
-        temp_dir=tmp_path / "temp",
-    )
-    assert result.success is True
-    assert result.advisory is not None
-    assert "/render-recipe" in result.advisory
-    assert diagram_md.read_text() == original_content
-
-
-@pytest.mark.anyio
-async def test_skill_migration_rejects_non_list_capabilities(tmp_path: Path) -> None:
-    skill_dir = tmp_path / ".claude" / "skills" / "malformed-capabilities"
-    skill_dir.mkdir(parents=True)
-    skill_path = skill_dir / "SKILL.md"
-    skill_path.write_text(
-        "---\n"
-        "name: malformed-capabilities\n"
-        "uses_capabilities: claude_dir\n"
-        "---\n"
-        "Read .claude/settings.json.\n"
-    )
-    file = MigrationFile(
-        name="malformed-capabilities",
-        path=skill_path,
-        file_type="skill",
-        current_version=None,
-    )
-
-    result = await SkillMigrationAdapter().migrate(file, temp_dir=tmp_path / "temp")
-
-    assert result.success is False
-    assert result.error == "uses_capabilities must be a list before deterministic migration"
-
-
 class TestMigrateRecipesConstant:
     @pytest.mark.anyio
     async def test_failed_headless_retries_match_constant(
@@ -755,9 +196,9 @@ class TestMigrateRecipesConstant:
         recipe_path.write_text("name: myrecipe\n")
         monkeypatch.setattr(
             "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [_make_migration_note()],
+            lambda *a, **kw: [make_migration_note()],
         )
-        mock_rh = AsyncMock(return_value=_make_skill_result(False, "boom"))
+        mock_rh = AsyncMock(return_value=make_skill_result(False, "boom"))
         adapter = RecipeMigrationAdapter()
         file = MigrationFile(
             name="myrecipe",
@@ -768,124 +209,3 @@ class TestMigrateRecipesConstant:
         result = await adapter.migrate(file, run_headless=mock_rh, temp_dir=tmp_path)
         assert not result.success
         assert result.retries_attempted == MIGRATE_RECIPES_MAX_RETRIES
-
-
-# ---------------------------------------------------------------------------
-# SkillMigrationAdapter tests (T10)
-# ---------------------------------------------------------------------------
-
-_SKILL_CORPUS_DIR = (
-    Path(__file__).resolve().parent.parent / "contracts" / "fixtures" / "skill_contract_corpus"
-)
-
-
-class TestSkillMigrationAdapter:
-    def test_default_adapter_registered_in_engine(self) -> None:
-        assert default_migration_engine().get_adapter("skill") is not None
-        assert isinstance(SkillMigrationAdapter(), DeterministicMigrationAdapter)
-
-    def test_discover_finds_files_across_all_search_dirs(self, tmp_path: Path) -> None:
-        from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
-
-        for index, search_dir in enumerate(ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS):
-            skill_dir = tmp_path / search_dir / f"skill-{index}"
-            skill_dir.mkdir(parents=True)
-            (skill_dir / "SKILL.md").write_text(
-                f"---\nname: skill-{index}\ndescription: test\n---\nbody\n",
-                encoding="utf-8",
-            )
-
-        files = SkillMigrationAdapter().discover(tmp_path)
-
-        expected = {f"skill-{i}" for i in range(len(ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS))}
-        assert {f.name for f in files} == expected
-        assert all(f.file_type == "skill" for f in files)
-
-    def test_needs_migration_true_for_corpus_false_for_valid(self, tmp_path: Path) -> None:
-        stale_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
-        stale_dir.mkdir(parents=True)
-        stale_path = stale_dir / "SKILL.md"
-        stale_path.write_text(
-            (_SKILL_CORPUS_DIR / "precontract_audit_bugs.md").read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
-        valid_dir = tmp_path / ".claude" / "skills" / "valid-skill"
-        valid_dir.mkdir(parents=True)
-        valid_path = valid_dir / "SKILL.md"
-        valid_path.write_text(
-            "---\nname: valid-skill\ndescription: a clean skill\n---\nbody\n",
-            encoding="utf-8",
-        )
-
-        adapter = SkillMigrationAdapter()
-        stale_file = MigrationFile(
-            name="audit-bugs", path=stale_path, file_type="skill", current_version=None
-        )
-        valid_file = MigrationFile(
-            name="valid-skill", path=valid_path, file_type="skill", current_version=None
-        )
-        assert adapter.needs_migration(stale_file) is True
-        assert adapter.needs_migration(valid_file) is False
-
-    @pytest.mark.anyio
-    async def test_migrate_inserts_missing_capability_preserving_body(
-        self, tmp_path: Path
-    ) -> None:
-        skill_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
-        skill_dir.mkdir(parents=True)
-        skill_path = skill_dir / "SKILL.md"
-        original = (_SKILL_CORPUS_DIR / "precontract_audit_bugs.md").read_text(encoding="utf-8")
-        skill_path.write_text(original, encoding="utf-8")
-
-        adapter = SkillMigrationAdapter()
-        file = MigrationFile(
-            name="audit-bugs", path=skill_path, file_type="skill", current_version=None
-        )
-        result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
-
-        assert result.success
-        assert result.migrated_content is not None
-        assert "claude_dir" in result.migrated_content
-        original_body = original.split("---", 2)[2]
-        migrated_body = result.migrated_content.split("---", 2)[2]
-        assert migrated_body == original_body
-
-    @pytest.mark.anyio
-    async def test_migrate_stamps_missing_semantic_version(self, tmp_path: Path) -> None:
-        skill_dir = tmp_path / ".claude" / "skills" / "research-helper"
-        skill_dir.mkdir(parents=True)
-        skill_path = skill_dir / "SKILL.md"
-        skill_path.write_text(
-            (_SKILL_CORPUS_DIR / "missing_semantic_version.md").read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
-
-        adapter = SkillMigrationAdapter()
-        file = MigrationFile(
-            name="research-helper", path=skill_path, file_type="skill", current_version=None
-        )
-        result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
-
-        assert result.success
-        assert result.migrated_content is not None
-        assert "semantic_version" in result.migrated_content
-
-    @pytest.mark.anyio
-    async def test_migrate_no_op_when_nothing_deterministic(self, tmp_path: Path) -> None:
-        """A skill with no invalidity at all is a MigrationResult(success=True) no-op."""
-        skill_dir = tmp_path / ".claude" / "skills" / "valid-skill"
-        skill_dir.mkdir(parents=True)
-        skill_path = skill_dir / "SKILL.md"
-        skill_path.write_text(
-            "---\nname: valid-skill\ndescription: a clean skill\n---\nbody\n",
-            encoding="utf-8",
-        )
-
-        adapter = SkillMigrationAdapter()
-        file = MigrationFile(
-            name="valid-skill", path=skill_path, file_type="skill", current_version=None
-        )
-        result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
-
-        assert result.success
-        assert result.migrated_content is None

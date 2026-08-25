@@ -28,17 +28,10 @@ def _find_env_set_constants(constants_file: Path) -> list[str]:
     return names
 
 
-def _has_production_import(
-    src_root: Path,
-    constant_name: str,
-    definition_file: Path,
-    *,
-    excluded_files: frozenset[Path] = frozenset(),
-) -> bool:
-    """Check if any production file (excluding the definition) imports the constant."""
+def _build_production_importers(src_root: Path) -> dict[str, set[Path]]:
+    """Index imported names by the production files that import them."""
+    importers: dict[str, set[Path]] = {}
     for py_file in src_root.rglob("*.py"):
-        if py_file == definition_file or py_file in excluded_files:
-            continue
         if py_file.name.startswith("test_"):
             continue
         try:
@@ -48,17 +41,123 @@ def _has_production_import(
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 for alias in node.names:
-                    actual_name = alias.asname if alias.asname else alias.name
-                    if actual_name == constant_name or alias.name == constant_name:
-                        return True
-            if isinstance(node, ast.Import):
+                    importers.setdefault(alias.name, set()).add(py_file)
+                    if alias.asname:
+                        importers.setdefault(alias.asname, set()).add(py_file)
+            elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == constant_name:
-                        return True
-    return False
+                    importers.setdefault(alias.name, set()).add(py_file)
+    return importers
 
 
-def test_env_forward_constants_have_production_consumer() -> None:
+def _has_production_import(
+    importers: dict[str, set[Path]],
+    constant_name: str,
+    definition_file: Path,
+    *,
+    excluded_files: frozenset[Path] = frozenset(),
+) -> bool:
+    """Check if any production file (excluding the definition) imports the constant."""
+    return bool(importers.get(constant_name, set()) - {definition_file} - excluded_files)
+
+
+@pytest.fixture(scope="module")
+def production_importers() -> dict[str, set[Path]]:
+    """Build the production importer index once per worker fixture instance."""
+    from autoskillit.core import paths
+
+    return _build_production_importers(paths.pkg_root())
+
+
+def _write_synthetic_module(src_root: Path, relative_path: str, source: str) -> Path:
+    module_path = src_root / relative_path
+    module_path.parent.mkdir(parents=True, exist_ok=True)
+    module_path.write_text(source)
+    return module_path
+
+
+def test_production_importer_index_preserves_query_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src_root = tmp_path / "src"
+    definition_file = _write_synthetic_module(
+        src_root,
+        "package/definition.py",
+        "from package import DEFINITION_ONLY\n",
+    )
+    facade_file = _write_synthetic_module(
+        src_root,
+        "package/facade.py",
+        "from package.definition import EXCLUDED_ONLY\n",
+    )
+    consumer_file = _write_synthetic_module(
+        src_root,
+        "package/consumer.py",
+        """from typing import TYPE_CHECKING
+from package.definition import EXTERNAL_CONSUMER
+from package import ORIGINAL as LOCAL
+import package.PLAIN_ORIGINAL as PLAIN_LOCAL
+
+if TYPE_CHECKING:
+    from package.definition import TYPE_CHECKING_ONLY
+""",
+    )
+    _write_synthetic_module(
+        src_root,
+        "package/test_generated.py",
+        "from package.definition import TEST_ONLY\n",
+    )
+    invalid_file = _write_synthetic_module(
+        src_root,
+        "package/invalid.py",
+        "from package.definition import INVALID_ONLY\nif (\n",
+    )
+
+    real_parse = ast.parse
+    parse_calls = 0
+
+    def counting_parse(source: str) -> ast.Module:
+        nonlocal parse_calls
+        parse_calls += 1
+        return real_parse(source)
+
+    monkeypatch.setattr(ast, "parse", counting_parse)
+    importers = _build_production_importers(src_root)
+
+    cases = [
+        ("UNCONSUMED", frozenset(), False),
+        ("DEFINITION_ONLY", frozenset(), False),
+        ("EXCLUDED_ONLY", frozenset({facade_file}), False),
+        ("EXTERNAL_CONSUMER", frozenset(), True),
+        ("ORIGINAL", frozenset(), True),
+        ("LOCAL", frozenset(), True),
+        ("package.PLAIN_ORIGINAL", frozenset(), True),
+        ("PLAIN_LOCAL", frozenset(), False),
+        ("TYPE_CHECKING_ONLY", frozenset(), True),
+        ("TEST_ONLY", frozenset(), False),
+        ("INVALID_ONLY", frozenset(), False),
+    ]
+    for constant_name, excluded_files, expected in cases:
+        assert (
+            _has_production_import(
+                importers,
+                constant_name,
+                definition_file,
+                excluded_files=excluded_files,
+            )
+            is expected
+        )
+
+    assert importers["ORIGINAL"] == {consumer_file}
+    assert importers["LOCAL"] == {consumer_file}
+    assert importers["package.PLAIN_ORIGINAL"] == {consumer_file}
+    assert "PLAIN_LOCAL" not in importers
+    assert parse_calls == len((definition_file, facade_file, consumer_file, invalid_file))
+
+
+def test_env_forward_constants_have_production_consumer(
+    production_importers: dict[str, set[Path]],
+) -> None:
     """Every env-var-set constant must be imported by at least one production module."""
     from autoskillit.core import paths
 
@@ -68,7 +167,9 @@ def test_env_forward_constants_have_production_consumer() -> None:
     assert constants, "No env-var-set constants found — test premise broken"
 
     unconsumed = [
-        name for name in constants if not _has_production_import(src_root, name, constants_file)
+        name
+        for name in constants
+        if not _has_production_import(production_importers, name, constants_file)
     ]
     assert not unconsumed, (
         f"Env-var-set constants (*_ENV_FORWARD_VARS / *_REQUIRED_ENV) with zero production "
@@ -125,7 +226,9 @@ def _find_registry_constants(constants_file: Path) -> list[str]:
     return names
 
 
-def test_registry_constants_have_production_consumer() -> None:
+def test_registry_constants_have_production_consumer(
+    production_importers: dict[str, set[Path]],
+) -> None:
     """Every registry/tools/tags/names constant must be imported by production code or exempted."""
     from autoskillit.core import paths
 
@@ -158,7 +261,7 @@ def test_registry_constants_have_production_consumer() -> None:
             if facade_candidate.exists():
                 excluded_files = frozenset({facade_candidate})
         if not _has_production_import(
-            src_root,
+            production_importers,
             name,
             def_file,
             excluded_files=excluded_files,

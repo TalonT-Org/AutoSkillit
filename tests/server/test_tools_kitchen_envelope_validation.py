@@ -133,8 +133,8 @@ def test_recipe_validation_error_response_handles_malformed_suggestions():
 
     Regression contract: a suggestion dict that omits `rule` and `message` must
     still produce a structured error response (success=False) that surfaces the
-    severity-tagged fallback (`[unknown-rule]`) rather than a generic
-    "unknown structural error" placeholder or a crash.
+    rule-tagged fallback (`[unknown-rule]` in place of the missing rule name)
+    rather than a generic "unknown structural error" placeholder or a crash.
     """
     from autoskillit.server.tools.tools_kitchen import _recipe_validation_error_response
 

@@ -157,7 +157,7 @@ def test_binary_signal_silent_when_target_unresolved() -> None:
     from autoskillit.cli.update._update_checks import _binary_signal
 
     installed = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.7.77")
-    assert _binary_signal(installed, None, False) is None
+    assert _binary_signal(installed, None, True) is None
 
 
 @pytest.mark.parametrize("revision", ["main", "v0.9.0"])

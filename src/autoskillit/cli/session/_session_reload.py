@@ -8,7 +8,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from autoskillit.core import safe_mtime
+from autoskillit.core import get_logger, safe_mtime
+
+logger = get_logger(__name__)
 
 
 def _reload_sentinel_dir(project_dir: Path) -> Path:
@@ -50,7 +52,8 @@ def consume_reload_sentinel(project_dir: Path) -> str | None:
             try:
                 stale.unlink(missing_ok=True)
             except OSError:
-                pass
+                logger.warning("reload_sentinel_cleanup_failed", path=str(stale), exc_info=True)
+                return None
         sentinel = candidates[0]
         try:
             data = json.loads(sentinel.read_text(encoding="utf-8"))
@@ -60,5 +63,6 @@ def consume_reload_sentinel(project_dir: Path) -> str | None:
         try:
             sentinel.unlink(missing_ok=True)
         except OSError:
-            pass
+            logger.warning("reload_sentinel_cleanup_failed", path=str(sentinel), exc_info=True)
+            return None
         return session_id or None

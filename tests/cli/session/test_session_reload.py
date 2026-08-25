@@ -14,6 +14,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -75,6 +76,33 @@ def test_consume_reload_sentinel_prunes_stale_candidates(tmp_path: Path) -> None
 
     assert result == "newest-session"
     assert list(sentinel_dir.glob("*.json")) == []
+
+
+@pytest.mark.parametrize("failed_session_id", ["older-session", "newer-session"])
+def test_consume_reload_sentinel_reports_cleanup_failure_without_consuming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failed_session_id: str
+) -> None:
+    sentinel_dir = tmp_path / ".autoskillit" / "temp" / "reload_sentinel"
+    now = time.time()
+    older = _write_sentinel(sentinel_dir, "older-session", mtime=now - 1)
+    newer = _write_sentinel(sentinel_dir, "newer-session", mtime=now)
+    failed_path = {older.stem: older, newer.stem: newer}[failed_session_id]
+    real_unlink = Path.unlink
+
+    def fail_selected_unlink(path: Path, missing_ok: bool = False) -> None:
+        if path == failed_path:
+            raise PermissionError(f"cannot unlink {path.name}")
+        real_unlink(path, missing_ok=missing_ok)
+
+    logger = Mock()
+    monkeypatch.setattr(Path, "unlink", fail_selected_unlink)
+    monkeypatch.setattr("autoskillit.cli.session._session_reload.logger", logger)
+
+    assert consume_reload_sentinel(tmp_path) is None
+    assert failed_path.exists()
+    logger.warning.assert_called_once_with(
+        "reload_sentinel_cleanup_failed", path=str(failed_path), exc_info=True
+    )
 
 
 def test_consume_reload_sentinel_serializes_concurrent_callers(tmp_path: Path) -> None:

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
-import shutil
-import tempfile
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from pathlib import Path
 
 import pytest
 from hypothesis import settings
-from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule
+from hypothesis.stateful import (
+    RuleBasedStateMachine,
+    invariant,
+    precondition,
+    rule,
+    run_state_machine_as_test,
+)
 
 from autoskillit.core import (
     AuditAdmissionStorageHealthStatus,
@@ -203,11 +207,9 @@ class _AuditReferenceModel:
 
 
 class AuditAdmissionStateMachine(RuleBasedStateMachine):
-    def __init__(self) -> None:
+    def __init__(self, root: Path) -> None:
         super().__init__()
-        temp_root = Path(__file__).resolve().parents[2] / ".autoskillit" / "temp"
-        temp_root.mkdir(parents=True, exist_ok=True)
-        self.root = Path(tempfile.mkdtemp(prefix="audit-state-machine-", dir=temp_root))
+        self.root = root
         self.store_authority = _authority(self.root)
         self.ledger = DefaultAuditAdmissionLedger(self.store_authority)
         self.execution_id = RecipeExecutionId("state-machine-execution")
@@ -219,9 +221,6 @@ class AuditAdmissionStateMachine(RuleBasedStateMachine):
         self.plan_set_ids: dict[str, str] = {}
         self.audit_rounds: dict[str, int] = {}
         self._activate_installation()
-
-    def teardown(self) -> None:
-        shutil.rmtree(self.root)
 
     def _activate_installation(self) -> None:
         self.installation_index += 1
@@ -617,9 +616,16 @@ class AuditAdmissionStateMachine(RuleBasedStateMachine):
             self._assert_redelivery(label)
 
 
-TestAuditAdmissionStateMachine = AuditAdmissionStateMachine.TestCase
-TestAuditAdmissionStateMachine.settings = settings(
-    max_examples=18,
-    stateful_step_count=16,
-    deadline=None,
-)
+def test_audit_admission_state_machine(tmp_path_factory: pytest.TempPathFactory) -> None:
+    def make_audit_admission_state_machine() -> AuditAdmissionStateMachine:
+        root = tmp_path_factory.mktemp("audit-state-machine")
+        return AuditAdmissionStateMachine(root)
+
+    run_state_machine_as_test(
+        make_audit_admission_state_machine,
+        settings=settings(
+            max_examples=18,
+            stateful_step_count=16,
+            deadline=None,
+        ),
+    )

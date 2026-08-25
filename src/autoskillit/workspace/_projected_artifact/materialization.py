@@ -840,11 +840,9 @@ def validate_sanitized_plugin_artifact(
                         f"{public_root / tree_entry.relative_path}"
                     )
         except TreeVanishedError as exc:
-            # Preserve this function's non-raising contract (tuple[str, ...] of
-            # findings, never raises) — two of its three callers wrap it without
-            # a surrounding try/except, trusting that contract completely
-            # (issue #4770 Related Issue 3).
             errors.append(f"public plugin tree enumeration raced with a mutation: {exc}")
+        except OSError as exc:
+            errors.append(f"public plugin tree cannot be read during validation: {exc}")
     if not public_skills.is_dir() or public_skills.is_symlink():
         errors.append("public plugin skills root is missing or is a symlink")
     else:

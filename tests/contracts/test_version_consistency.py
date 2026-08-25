@@ -181,3 +181,39 @@ def test_validate_sanitized_plugin_artifact_appends_finding_string_on_race(
         (),
     )
     assert any("tree enumeration raced" in error for error in errors)
+
+
+def test_validate_sanitized_plugin_artifact_appends_finding_string_on_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    import autoskillit.core.io as io_module
+    from autoskillit.core.io import write_versioned_json
+    from autoskillit.workspace import validate_sanitized_plugin_artifact
+
+    public_root = tmp_path / "public"
+    (public_root / "skills").mkdir(parents=True)
+    manifest_path = tmp_path / "manifest.json"
+    write_versioned_json(
+        manifest_path,
+        {"projection_version": 1, "skills": {}},
+        schema_version=1,
+    )
+
+    original_scandir = os.scandir
+
+    def deny_descriptor_scan(path):  # type: ignore[no-untyped-def]
+        if isinstance(path, int):
+            raise PermissionError("injected validation scan failure")
+        return original_scandir(path)
+
+    monkeypatch.setattr(io_module.os, "scandir", deny_descriptor_scan)
+
+    errors = validate_sanitized_plugin_artifact(
+        tmp_path,
+        public_root,
+        manifest_path,
+        (),
+    )
+    assert any("cannot be read during validation" in error for error in errors)

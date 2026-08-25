@@ -297,6 +297,7 @@ from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_pid_namespace_inode as read_pid_namespace_inode
 from .runtime._linux_proc import read_process_state as read_process_state
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
+from .runtime._reclamation import PYTEST_GENERATION_NAME_RE as PYTEST_GENERATION_NAME_RE
 from .runtime._reclamation import SESSION_STALE_SECONDS as SESSION_STALE_SECONDS
 from .runtime._reclamation import BoundedCandidate as BoundedCandidate
 from .runtime._reclamation import EvidenceSource as EvidenceSource

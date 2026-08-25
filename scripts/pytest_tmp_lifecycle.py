@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shlex
 import shutil
 import stat
@@ -53,6 +52,7 @@ from autoskillit.core import (  # noqa: E402
     default_space_probe,
 )
 from autoskillit.core.runtime import (  # noqa: E402
+    PYTEST_GENERATION_NAME_RE,
     SESSION_STALE_SECONDS,
     BoundedCandidate,
     EvidenceSource,
@@ -72,7 +72,6 @@ from autoskillit.core.runtime import (  # noqa: E402
     veto_paths,
 )
 
-_GENERATION_RE = re.compile(r"^pytest-[0-9a-f]{8}-.+$")
 _LEGACY_PREFIXES = (
     "pytest-tmp-",
     "pytest-cache-",
@@ -136,7 +135,9 @@ def _validate_setup_paths(
     if tmp_dir.parent != cache_dir.parent:
         raise LifecycleError("tmp and cache must belong to the same generation")
     generation = tmp_dir.parent
-    if generation.parent != expected_root or not _GENERATION_RE.fullmatch(generation.name):
+    if generation.parent != expected_root or not PYTEST_GENERATION_NAME_RE.fullmatch(
+        generation.name
+    ):
         raise LifecycleError(
             "generation must be pytest-<8-hex-worktree-hash>-<run-id> "
             f"directly under {expected_root}"

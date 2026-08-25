@@ -15,6 +15,7 @@ from ._linux_proc import (
     read_starttime_ticks,
 )
 from ._reclamation import (
+    PYTEST_GENERATION_NAME_RE,
     SESSION_STALE_SECONDS,
     BoundedCandidate,
     EvidenceSource,
@@ -82,6 +83,7 @@ from .session_registry import (
 __all__ = [
     "ArtifactLease",
     "ArtifactLeaseContention",
+    "PYTEST_GENERATION_NAME_RE",
     "SESSION_STALE_SECONDS",
     "BoundedCandidate",
     "EvidenceSource",

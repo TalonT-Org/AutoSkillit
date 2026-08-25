@@ -19,6 +19,7 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_MODEL_ALIASES_LAST_VERIFIED,
     MIN_FREE_BYTES_THRESHOLD,
+    PYTEST_GENERATION_NAME_RE,
     ArtifactLease,
     CodingAgentBackend,
     Severity,
@@ -698,7 +699,7 @@ def _check_pytest_temp_capacity(*, space_probe: SpaceProbe = default_space_probe
         generation_count = sum(
             1
             for entry in user_root.iterdir()
-            if entry.name.startswith("pytest-") and entry.is_dir()
+            if PYTEST_GENERATION_NAME_RE.fullmatch(entry.name) and entry.is_dir()
         )
     except OSError as exc:
         logger.warning(

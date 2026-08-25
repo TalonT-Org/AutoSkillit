@@ -30,12 +30,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+import regex as re
+
 from ..io import atomic_write
 
 __all__ = [
     "BoundedCandidate",
     "EvidenceSource",
     "LivenessScanUnavailable",
+    "PYTEST_GENERATION_NAME_RE",
     "PathEvidence",
     "ReclamationBound",
     "Revocability",
@@ -280,6 +283,15 @@ def user_generation_root(platform_root: Path) -> Path:
     import-layer contracts that keep scripts/ unreachable from src/autoskillit/.
     """
     return _absolute_path(platform_root) / f"autoskillit-pytest-{os.getuid()}"
+
+
+#: Matches a real pytest generation directory name, e.g. "pytest-a1b2c3d4-1234". Shared
+#: between scripts/pytest_tmp_lifecycle.py's own validation (the reason this regex exists)
+#: and any IL-0-or-above generation count -- a loose `name.startswith("pytest-")` also
+#: matches legacy-prefix roots (pytest-probes, pytest-coverage, ...) that
+#: scripts/pytest_tmp_lifecycle.py's own `_LEGACY_PREFIXES` treats as a distinct, non-
+#: generation candidate class.
+PYTEST_GENERATION_NAME_RE = re.compile(r"^pytest-[0-9a-f]{8}-.+$")
 
 
 @dataclass(frozen=True, slots=True)

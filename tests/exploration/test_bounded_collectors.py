@@ -480,15 +480,9 @@ _EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD: Mapping[str, str] = {
 }
 
 
-@pytest.mark.parametrize(
-    "field",
-    sorted(field.name for field in dataclasses.fields(CollectorLimits)),
-    ids=lambda name: name,
-)
-def test_every_collector_limit_field_has_a_trip_builder(field: str) -> None:
+def test_every_collector_limit_field_has_a_trip_builder() -> None:
     live_fields = {item.name for item in dataclasses.fields(CollectorLimits)}
 
-    assert field in _COLLECTOR_LIMIT_TRIP_BUILDERS
     assert set(_COLLECTOR_LIMIT_TRIP_BUILDERS) == live_fields
     assert set(_EXPECTED_STATUS_BY_LIMIT_FIELD) == live_fields
     assert set(_EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD) == live_fields

@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Create invocation-unique pytest temp generations and reap provably dead ones."""
+"""Create invocation-unique pytest temp generations and reap provably dead ones.
+
+Bootstraps `src/` onto sys.path so this script can import the IL-0 reclamation-evidence
+primitives (core/runtime/_reclamation.py, core/runtime/_linux_proc.py) without requiring the
+project venv -- both modules are stdlib-only, the same guarantee core/AGENTS.md makes for hook
+subprocesses. See core/runtime/_reclamation.py's module docstring for the evidence-classification
+rationale (REVOCABLE vs MONOTONIC) this reaper's retention logic depends on.
+"""
 
 from __future__ import annotations
 
@@ -14,18 +21,85 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterable, Sequence
+from enum import StrEnum
 from pathlib import Path
 
+
+def _ensure_autoskillit_importable() -> None:
+    """Idempotent, conditional sys.path insert -- safe under repeated in-process module loads.
+
+    tests/infra/test_pytest_tmp_lifecycle.py loads this script in-process via
+    importlib.util.spec_from_file_location() from multiple test functions in the same xdist
+    worker. An unguarded module-level sys.path.insert would mutate that worker's interpreter
+    state on every load -- exactly the bare module-level global mutation
+    tests/AGENTS.md's xdist Compatibility section forbids. Only insert when autoskillit is not
+    already importable, and only when the resolved src/ is not already on sys.path.
+    """
+    try:
+        import autoskillit  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        return
+    src_root = str(Path(__file__).resolve().parent.parent / "src")
+    if src_root not in sys.path:
+        sys.path.insert(0, src_root)
+
+
+_ensure_autoskillit_importable()
+
+from autoskillit.core.runtime import (  # noqa: E402
+    BoundedCandidate,
+    EvidenceSource,
+    LivenessScanUnavailable,
+    PathEvidence,
+    ReclamationBound,
+    Revocability,
+    bound_unsatisfied,
+    harvest_kernel_references,
+    harvest_snapshot_references,
+    is_pid_zombie,
+    read_boot_id,
+    read_starttime_ticks,
+    select_overflow,
+    snapshot_referenced,
+    user_generation_root,
+    veto_paths,
+)
+
 _GENERATION_RE = re.compile(r"^pytest-[0-9a-f]{8}-.+$")
-_LEGACY_PREFIXES = ("pytest-tmp-", "pytest-cache-")
+_LEGACY_PREFIXES = (
+    "pytest-tmp-",
+    "pytest-cache-",
+    "pytest-tmp",
+    "pytest-cache",
+    "test-basetemp",
+    "reader-live-diagnostic",
+)
 
 
 class LifecycleError(Exception):
     """A setup safety invariant was violated."""
 
 
-class LivenessScanUnavailable(Exception):
-    """The process-wide liveness scan could not be completed."""
+class _OwnerMarkerState(StrEnum):
+    """The three outcomes reading owner.json can produce -- collapsing corrupt into absent
+    demotes a mature, live-owned generation to markerless (120-minute) protection the instant
+    a kill-mid-write truncates the marker, leaving only a kernel reference at scan time between
+    a live run and deletion.
+    """
+
+    ABSENT = "absent"
+    VALID = "valid"
+    CORRUPT = "corrupt"
+
+
+class _OwnerLiveness(StrEnum):
+    """Alive / provably dead / cannot tell -- only DEAD may ever be reclaimed."""
+
+    ALIVE = "alive"
+    DEAD = "dead"
+    INDETERMINATE = "indeterminate"
 
 
 def _log(message: str) -> None:
@@ -37,7 +111,7 @@ def _absolute(path: Path) -> Path:
 
 
 def _user_root(platform_root: Path) -> Path:
-    return _absolute(platform_root) / f"autoskillit-pytest-{os.getuid()}"
+    return user_generation_root(platform_root)
 
 
 def _validate_setup_paths(
@@ -84,6 +158,13 @@ def _ensure_private_root(path: Path) -> None:
 
 
 def _paths_from_tokens(tokens: Iterable[str]) -> set[Path]:
+    """Extract TMPDIR=/--basetemp=/cache_dir= path values from ps-sweep tokens.
+
+    Deliberately kept as a small, private, local copy rather than reaching into
+    core.runtime._reclamation's private namespace -- this parser is a stable, trivial primitive
+    and the macOS ps-sweep is the only remaining consumer left in this file after the Linux
+    harvest moved into core/runtime/_reclamation.py.
+    """
     references: set[Path] = set()
     for token in tokens:
         for prefix in ("TMPDIR=", "--basetemp=", "cache_dir="):
@@ -96,47 +177,33 @@ def _paths_from_tokens(tokens: Iterable[str]) -> set[Path]:
     return references
 
 
-def parse_ps_live_references(output: str) -> set[Path]:
-    """Extract lifecycle path references from one macOS ps environment sweep."""
-    references: set[Path] = set()
+def parse_ps_live_references(output: str) -> list[PathEvidence]:
+    """Extract lifecycle path references from one macOS ps environment sweep.
+
+    Always MONOTONIC -- ps offers no cwd/fd/maps equivalent on macOS, so this source can never
+    veto; macOS reclamation rests on the owner marker plus the ReclamationBound (see S1-5 /
+    tests/AGENTS.md's Performance section).
+    """
+    evidence: list[PathEvidence] = []
     for line in output.splitlines():
         try:
             tokens = shlex.split(line)
         except ValueError:
             tokens = line.split()
-        references.update(_paths_from_tokens(tokens))
-    return references
+        for path in _paths_from_tokens(tokens):
+            evidence.append(PathEvidence(path, EvidenceSource.PS_SWEEP, Revocability.MONOTONIC))
+    return evidence
 
 
-def scan_linux_live_references(proc_root: Path) -> set[Path]:
-    """Read every accessible process environment and command line exactly once."""
-    try:
-        process_dirs = list(proc_root.iterdir())
-    except OSError as exc:
-        raise LivenessScanUnavailable(f"cannot enumerate {proc_root}: {exc}") from exc
-    references: set[Path] = set()
-    for process_dir in process_dirs:
-        if not process_dir.name.isdigit() or not process_dir.is_dir():
-            continue
-        try:
-            cwd = Path(os.readlink(process_dir / "cwd"))
-        except OSError:
-            pass
-        else:
-            references.add(_absolute(cwd))
-        for filename in ("environ", "cmdline"):
-            try:
-                raw = (process_dir / filename).read_bytes()
-            except OSError:
-                continue
-            tokens = [part.decode(errors="surrogateescape") for part in raw.split(b"\0") if part]
-            references.update(_paths_from_tokens(tokens))
-    return references
-
-
-def _scan_live_references(proc_root: Path) -> set[Path]:
+def _harvest_kernel_evidence(proc_root: Path) -> list[PathEvidence]:
     if sys.platform == "linux":
-        return scan_linux_live_references(proc_root)
+        return harvest_kernel_references(proc_root)
+    return []  # no revocable-evidence source on macOS -- ps offers no cwd/fd/maps equivalent
+
+
+def _harvest_snapshot_evidence(proc_root: Path) -> list[PathEvidence]:
+    if sys.platform == "linux":
+        return harvest_snapshot_references(proc_root)
     try:
         result = subprocess.run(
             ["ps", "axww", "-E", "-o", "pid=,command="],
@@ -154,17 +221,6 @@ def _scan_live_references(proc_root: Path) -> set[Path]:
     return parse_ps_live_references(result.stdout)
 
 
-def _linux_start_id(pid: int, proc_root: Path) -> str:
-    raw = (proc_root / str(pid) / "stat").read_text()
-    close_paren = raw.rfind(")")
-    if close_paren < 0:
-        raise OSError(f"malformed stat record for pid {pid}")
-    fields_after_comm = raw[close_paren + 1 :].split()
-    if len(fields_after_comm) <= 19:
-        raise OSError(f"short stat record for pid {pid}")
-    return fields_after_comm[19]
-
-
 def _macos_start_id(pid: int) -> str:
     result = subprocess.run(
         ["ps", "-p", str(pid), "-o", "lstart="],
@@ -178,56 +234,68 @@ def _macos_start_id(pid: int) -> str:
     return result.stdout.strip()
 
 
-def _start_id(pid: int, proc_root: Path) -> str:
-    if sys.platform == "linux":
-        return _linux_start_id(pid, proc_root)
-    return _macos_start_id(pid)
+def _owner_liveness(owner: dict[str, object], proc_root: Path) -> _OwnerLiveness:
+    """Alive / provably dead / cannot tell -- only DEAD may ever be reclaimed.
 
-
-def _boot_id(proc_root: Path) -> str:
-    if sys.platform != "linux":
-        return ""
-    return (proc_root / "sys" / "kernel" / "random" / "boot_id").read_text().strip()
-
-
-def _pid_exists(pid: int) -> bool:
+    os.kill(pid, 0) is the existence probe (matches the original _pid_exists, and works without
+    /proc read access -- it distinguishes ESRCH, a genuine ProcessLookupError, from EPERM, a
+    process that exists but cannot be signalled). The IL-0 /proc-reading primitives refine an
+    existence-confirmed pid into alive/dead/indeterminate; on any of their own read failures the
+    result is INDETERMINATE, restoring the fail-CLOSED posture the reaper needs -- a transient
+    /proc read failure must retain the candidate, not reclaim it the moment grace lapses.
+    """
+    pid = owner["pid"]
+    if not isinstance(pid, int) or pid <= 0:
+        return _OwnerLiveness.DEAD
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
-        return False
+        return _OwnerLiveness.DEAD
     except OSError:
-        return True
-    return True
+        return _OwnerLiveness.INDETERMINATE
 
+    if sys.platform == "linux":
+        if is_pid_zombie(pid, proc_root=proc_root):
+            return _OwnerLiveness.DEAD
+        boot_id = read_boot_id(proc_root=proc_root)
+        if boot_id is None:
+            return _OwnerLiveness.INDETERMINATE
+        starttime_ticks = read_starttime_ticks(pid, proc_root=proc_root)
+        if starttime_ticks is None:
+            return _OwnerLiveness.INDETERMINATE
+        if boot_id != owner["boot_id"] or str(starttime_ticks) != owner["start_id"]:
+            return _OwnerLiveness.DEAD
+        return _OwnerLiveness.ALIVE
 
-def _owner_is_alive(owner: dict[str, object], proc_root: Path) -> bool:
-    pid = owner["pid"]
-    if not isinstance(pid, int) or pid <= 0 or not _pid_exists(pid):
-        return False
     try:
-        return owner["boot_id"] == _boot_id(proc_root) and owner["start_id"] == _start_id(
-            pid, proc_root
-        )
-    except (OSError, subprocess.SubprocessError):
-        return True
+        macos_start_id = _macos_start_id(pid)
+    except OSError:
+        return _OwnerLiveness.INDETERMINATE
+    if macos_start_id != owner["start_id"]:
+        return _OwnerLiveness.DEAD
+    return _OwnerLiveness.ALIVE
 
 
-def _load_owner(marker: Path) -> dict[str, object] | None:
+def _load_owner(marker: Path) -> tuple[_OwnerMarkerState, dict[str, object] | None]:
     try:
-        payload = json.loads(marker.read_text())
-    except (OSError, ValueError, TypeError):
-        return None
+        raw = marker.read_text()
+    except OSError:
+        return _OwnerMarkerState.ABSENT, None
+    try:
+        payload = json.loads(raw)
+    except (ValueError, TypeError):
+        return _OwnerMarkerState.CORRUPT, None
     if not isinstance(payload, dict):
-        return None
+        return _OwnerMarkerState.CORRUPT, None
     if not isinstance(payload.get("pid"), int):
-        return None
+        return _OwnerMarkerState.CORRUPT, None
     if not isinstance(payload.get("start_id"), str):
-        return None
+        return _OwnerMarkerState.CORRUPT, None
     if not isinstance(payload.get("boot_id"), str):
-        return None
+        return _OwnerMarkerState.CORRUPT, None
     if not isinstance(payload.get("created_at"), (int, float)):
-        return None
-    return payload
+        return _OwnerMarkerState.CORRUPT, None
+    return _OwnerMarkerState.VALID, payload
 
 
 def _older_than(path: Path, minutes: float) -> bool:
@@ -237,7 +305,7 @@ def _older_than(path: Path, minutes: float) -> bool:
         return False
 
 
-def _contains_reference(candidate: Path, references: set[Path]) -> bool:
+def _contains_reference(candidate: Path, references: Iterable[Path]) -> bool:
     candidate = _absolute(candidate)
     try:
         resolved_candidate = candidate.resolve()
@@ -300,6 +368,32 @@ def _remove_candidate(candidate: Path) -> None:
         _log(f"could not remove {candidate}: {exc}")
 
 
+def _directory_size_bytes(path: Path) -> int:
+    total = 0
+    try:
+        entries = list(path.rglob("*"))
+    except OSError:
+        return 0
+    for entry in entries:
+        try:
+            if entry.is_file() and not entry.is_symlink():
+                total += entry.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def _bounded_candidate(
+    candidate: Path, candidate_stat: os.stat_result, *, protected: bool
+) -> BoundedCandidate:
+    return BoundedCandidate(
+        path=_absolute(candidate),
+        mtime=candidate_stat.st_mtime,
+        size_bytes=_directory_size_bytes(candidate),
+        protected=protected,
+    )
+
+
 def _reap(
     platform_root: Path,
     *,
@@ -307,14 +401,25 @@ def _reap(
     legacy_age_minutes: float,
     proc_root: Path,
     excluded: set[Path] | None = None,
-) -> None:
+) -> list[BoundedCandidate]:
+    """Reap provably dead, unreferenced candidates; return the survivors for ReclamationBound.
+
+    Retention shape (owner-state table, see the plan): a REVOCABLE reference (veto_paths) or a
+    live/indeterminate owner always retains, unconditionally. A monotonic reference
+    (snapshot_referenced) protects only the markerless branch, since a marked generation already
+    has a sound owner-liveness proof and does not need a fallback signal. Scan failure retains
+    everything -- returns an empty survivor list, same fail-closed contract as before.
+    """
     try:
-        references = _scan_live_references(proc_root)
+        kernel_evidence = _harvest_kernel_evidence(proc_root)
+        snapshot_evidence = _harvest_snapshot_evidence(proc_root)
     except LivenessScanUnavailable as exc:
         _log(f"liveness scan unavailable; reaping skipped: {exc}")
-        return
+        return []
+    revocable_paths = veto_paths(kernel_evidence)
     user_root = _user_root(platform_root)
     excluded_paths = {_absolute(path) for path in (excluded or set())}
+    survivors: list[BoundedCandidate] = []
     for candidate in _safe_candidates(_absolute(platform_root), user_root):
         if _absolute(candidate) in excluded_paths:
             continue
@@ -331,23 +436,65 @@ def _reap(
         if candidate_stat.st_uid != os.getuid():
             _log(f"skipping candidate owned by uid {candidate_stat.st_uid}: {candidate}")
             continue
-        if _contains_reference(candidate, references):
-            continue
+
+        has_revocable_reference = _contains_reference(candidate, revocable_paths)
         marker = candidate / "owner.json"
-        owner = _load_owner(marker)
-        if owner is not None:
-            if _owner_is_alive(owner, proc_root) or not _older_than(marker, grace_minutes):
+        marker_state, owner = _load_owner(marker)
+
+        if marker_state is _OwnerMarkerState.VALID:
+            assert owner is not None
+            if _owner_liveness(owner, proc_root) is not _OwnerLiveness.DEAD:
+                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
                 continue
-        elif not _older_than(candidate, legacy_age_minutes):
-            continue
+            if has_revocable_reference:
+                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
+                continue
+            if not _older_than(marker, grace_minutes):
+                # provably dead, no revocable reference, still within grace: normal reap
+                # retains it, but this is exactly select_overflow's eligibility criterion --
+                # the bound MAY reclaim it early under capacity pressure.
+                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=False))
+                continue
+        elif marker_state is _OwnerMarkerState.CORRUPT:
+            # Treated as *valid, dead*: grace-gated and revocable-reference-gated, never
+            # demoted to markerless protection -- a kill mid-write must not weaken a mature,
+            # live-owned generation to relying solely on the instantaneous reference scan.
+            if has_revocable_reference:
+                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
+                continue
+            if not _older_than(marker, grace_minutes):
+                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=False))
+                continue
+        else:  # ABSENT
+            if has_revocable_reference or snapshot_referenced(candidate, snapshot_evidence):
+                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
+                continue
+            if not _older_than(candidate, legacy_age_minutes):
+                # No owner marker to prove dead -- the bound must never touch a markerless
+                # candidate; it might be another concurrent _setup mid-creation, protected
+                # today only by this age gate.
+                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
+                continue
         _remove_candidate(candidate)
+    return survivors
 
 
 def _write_owner(marker: Path, owner_pid: int, proc_root: Path) -> None:
+    if sys.platform == "linux":
+        starttime_ticks = read_starttime_ticks(owner_pid, proc_root=proc_root)
+        if starttime_ticks is None:
+            raise OSError(f"cannot read process start identity for pid {owner_pid}")
+        start_id = str(starttime_ticks)
+        boot_id = read_boot_id(proc_root=proc_root)
+        if boot_id is None:
+            raise OSError("cannot read system boot id")
+    else:
+        start_id = _macos_start_id(owner_pid)
+        boot_id = ""
     payload = {
         "pid": owner_pid,
-        "start_id": _start_id(owner_pid, proc_root),
-        "boot_id": _boot_id(proc_root),
+        "start_id": start_id,
+        "boot_id": boot_id,
         "created_at": time.time(),
     }
     descriptor = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -360,13 +507,28 @@ def _setup(args: argparse.Namespace) -> int:
     platform_root = _absolute(args.root)
     user_root, generation = _validate_setup_paths(platform_root, args.tmp_dir, args.cache_dir)
     _ensure_private_root(user_root)
-    _reap(
+    survivors = _reap(
         platform_root,
         grace_minutes=args.grace_minutes,
         legacy_age_minutes=args.legacy_age_minutes,
         proc_root=args.proc_root,
         excluded={generation},
     )
+    bound = ReclamationBound(max_generations=args.max_generations, max_bytes=args.max_bytes)
+    selected = select_overflow(survivors, bound)
+    for overflow_candidate in selected:
+        _log(f"bound exceeded; reclaiming {overflow_candidate.path} ahead of its grace window")
+        _remove_candidate(overflow_candidate.path)
+    if bound_unsatisfied(survivors, selected, bound):
+        selected_paths = {c.path for c in selected}
+        protected_count = sum(1 for c in survivors if c.path not in selected_paths and c.protected)
+        raise LifecycleError(
+            f"pytest temp generation ceiling exceeded (max_generations={bound.max_generations}, "
+            f"max_bytes={bound.max_bytes}) and cannot be satisfied by reclamation: "
+            f"{protected_count} candidates remain protected by a live owner or a revocable "
+            "reference. Remedy: investigate leaked processes holding stale generations, or "
+            "raise --max-generations/--max-bytes to accommodate legitimate concurrency."
+        )
     try:
         generation.mkdir(mode=0o700)
     except FileExistsError:
@@ -416,6 +578,12 @@ def _parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--dir", dest="tmp_dir", type=Path, required=True)
     setup_parser.add_argument("--cache-dir", type=Path, required=True)
     setup_parser.add_argument("--owner-pid", type=int)
+    # Generous headroom over the realistic concurrency ceiling (23 registered worktrees x 4
+    # xdist workers = ~92 simultaneous legitimate generations) while still finite -- unlike
+    # today's unbounded growth. max-bytes defaults to half of a typical /dev/shm allocation
+    # (20 GiB observed during this rectify), leaving headroom for everything else sharing it.
+    setup_parser.add_argument("--max-generations", type=int, default=100)
+    setup_parser.add_argument("--max-bytes", type=int, default=10_000_000_000)
     setup_parser.set_defaults(handler=_setup)
     reap_parser = subparsers.add_parser("reap")
     _add_reap_options(reap_parser)

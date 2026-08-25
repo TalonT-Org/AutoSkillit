@@ -16,8 +16,9 @@ AUDITED_DESTRUCTIVE_TASKFILE_OPS: dict[str, str] = {
         "Age-gated cleanup for session artifacts owned by the #3214 session lifecycle."
     ),
     "cleanup-shm::pytest_tmp_lifecycle.py reap": (
-        "Liveness-verified pytest reaper; macOS ps environment visibility is narrower, "
-        "and scan failures prevent deletion."
+        "Liveness-verified pytest reaper; only a revocable kernel reference (cwd/fd/maps) or "
+        "a live/indeterminate owner vetoes reclamation, a monotonic environ/cmdline token "
+        "never does, and scan failures prevent deletion."
     ),
     "install-worktree::uv venv --clear": (
         "Per-worktree environment rebuild with an accepted same-worktree concurrency residual."

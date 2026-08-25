@@ -91,9 +91,9 @@ class _ImportMap:
                 return (_module_to_relpath(module), name)
             return None
         if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-            module = self._module_imports.get(func.value.id)
-            if module is not None:
-                return (_module_to_relpath(module), func.attr)
+            resolved_module = self._module_imports.get(func.value.id)
+            if resolved_module is not None:
+                return (_module_to_relpath(resolved_module), func.attr)
         return None
 
 

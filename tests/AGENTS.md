@@ -124,7 +124,16 @@ in `tests/conftest.py` named by the registry's `parity_fixture` field, e.g.
   (`cache_dir`), and `owner.json`. The marker stays outside `tmp/` because pytest clears
   its basetemp.
 - `scripts/pytest_tmp_lifecycle.py` reaps only dead-owner or sufficiently old unmarked
-  generations after a live-process reference scan. Scan failure skips all deletion.
+  generations after a live-process reference scan. Evidence is classified by
+  `core.runtime.Revocability`: a REVOCABLE reference (cwd/fd/maps — a live kernel view) can
+  veto reclamation; a MONOTONIC reference (environ/cmdline — an `execve()`-time snapshot that
+  can only ever gain a path, never lose one) never can, and only protects a *markerless*
+  candidate as a fallback. A ceiling (`ReclamationBound`, `--max-generations`/`--max-bytes` on
+  `setup`) may reclaim a provably-dead, unreferenced-but-still-within-grace generation early
+  under capacity pressure, but never a live/indeterminate owner or a revocably-referenced one;
+  `_setup` fails loudly (`LifecycleError`) if the ceiling cannot be met by reclamation alone.
+  Scan failure skips all deletion. macOS has no revocable-evidence source (`ps` offers no
+  cwd/fd/maps equivalent), so its reclamation rests on the owner marker plus the bound.
 - Never use bare `rm -rf /dev/shm/pytest-tmp-*`; `task cleanup-shm` invokes the safe reaper.
 - `test_tmp_path_is_ram_backed` in `tests/arch/test_ast_rules.py` enforces the `/dev/shm` prefix
   on Linux; on macOS it is a no-op (disk temp is acceptable there)

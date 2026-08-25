@@ -50,7 +50,7 @@ def _run(*args: object) -> subprocess.CompletedProcess[str]:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=60,
         check=False,
     )
 

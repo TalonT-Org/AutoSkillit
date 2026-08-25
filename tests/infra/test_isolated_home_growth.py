@@ -2,9 +2,11 @@
 
 Uses pytester to run a nested pytest sub-suite exercising the same mktemp +
 addfinalizer(shutil.rmtree) pattern _isolated_home uses (tests/conftest.py), then asserts
-the standing directory count after the sub-run stays near zero rather than accumulating one
-entry per test -- before S3-5, 6,737-13,426 such directories were measured per xdist worker
-within a single generation.
+every directory is cleaned up after the sub-run rather than accumulating one entry per test
+-- before S3-5, 6,737-13,426 such directories were measured per xdist worker within a single
+generation. pytester.runpytest() drives the 20 nested tests synchronously/sequentially (no
+xdist, no concurrency inside this reproduction), so the count is deterministically zero, not
+merely near it.
 """
 
 from __future__ import annotations
@@ -39,8 +41,7 @@ def test_isolated_home_directories_stay_bounded_within_a_generation(
     result.assert_outcomes(passed=20)
 
     remaining = list(pytester.path.rglob("isolated-home*"))
-    assert len(remaining) <= 1, (
-        f"expected the finalizer to clean up every isolated-home dir except at most the "
-        f"one belonging to a test running concurrently with the last one torn down; "
-        f"found {len(remaining)}: {remaining}"
+    assert not remaining, (
+        f"expected the finalizer to clean up every isolated-home dir after the "
+        f"in-process sub-run completes; found {len(remaining)}: {remaining}"
     )

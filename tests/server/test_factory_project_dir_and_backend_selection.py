@@ -1,4 +1,5 @@
-"""make_context() project-directory resolution, fixture gate defaults, backend selection, and persistent roots."""
+"""make_context() project-directory resolution, fixture gate defaults, backend selection,
+and persistent roots."""
 
 from __future__ import annotations
 

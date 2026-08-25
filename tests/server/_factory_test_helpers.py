@@ -37,7 +37,10 @@ def _install_shared_explorer_authority(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> tuple[Path, Path, Path]:
-    """Install a verified exploration authority and return (repo_root, exec_cwd, authority_path)."""
+    """Install a verified exploration authority.
+
+    Returns (repo_root, exec_cwd, authority_path).
+    """
     repository_root = tmp_path / "repository"
     execution_cwd = tmp_path / "sterile-agent-cwd"
     authority_home = tmp_path / "authority-home"

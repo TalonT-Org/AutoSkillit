@@ -337,6 +337,9 @@ class PluginArtifactRetirementEngine:
         ``recognized_kind`` — evidence already persisted with a wrong kind
         must not become authority now.
         """
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("artifact retirement sweep time must be timezone-aware")
+        now = now.astimezone(UTC)
         if evidence.recognized_kind is not self.artifact_kind:
             return RetirementOutcome.LEGACY_EVIDENCE
         try:

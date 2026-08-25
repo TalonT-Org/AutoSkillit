@@ -566,10 +566,11 @@ class TestConservativeFilterShardIntersection:
         tests_root = tmp_path / "tests"
         for d in ("server", "pipeline"):
             (tests_root / d).mkdir(parents=True)
-        # test_factory.py lives under tests/server/ in production and exercises
-        # the server-side cascade. test_context.py lives under tests/pipeline/
-        # in production and exercises the cross-layer pipeline overlay.
-        (tests_root / "server" / "test_factory.py").write_text("")
+        # test_factory_context_construction.py lives under tests/server/ in
+        # production and exercises the server-side cascade. test_context.py
+        # lives under tests/pipeline/ in production and exercises the cross-layer
+        # pipeline overlay.
+        (tests_root / "server" / "test_factory_context_construction.py").write_text("")
         (tests_root / "pipeline" / "test_context.py").write_text("")
 
         scope = build_test_scope(

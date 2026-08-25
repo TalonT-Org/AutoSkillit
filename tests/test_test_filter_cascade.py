@@ -150,7 +150,7 @@ class TestCascadeNewEntries:
 
 
 _SERVER_FILE_LEVEL_ENTRIES = [
-    "test_factory.py",
+    "test_factory_context_construction.py",
     "test_tools_load_recipe.py",
     "test_server_tool_registration.py",
     "test_mcp_overrides.py",
@@ -418,7 +418,7 @@ class TestServerFleetCascadeNarrowing:
         (fleet_dir / "test_fleet.py").touch()
         server_dir = tests_root / "server"
         server_dir.mkdir(parents=True, exist_ok=True)
-        (server_dir / "test_factory.py").touch()
+        (server_dir / "test_factory_context_construction.py").touch()
 
         result = build_test_scope(
             changed_files={"src/autoskillit/server/tools/tools_kitchen/_open_kitchen.py"},
@@ -447,7 +447,7 @@ class TestServerFleetCascadeNarrowing:
         (fleet_dir / "test_fleet.py").touch()
         server_dir = tests_root / "server"
         server_dir.mkdir(parents=True, exist_ok=True)
-        (server_dir / "test_factory.py").touch()
+        (server_dir / "test_factory_context_construction.py").touch()
 
         result = build_test_scope(
             changed_files={"src/autoskillit/server/tools/tools_kitchen/_open_kitchen.py"},

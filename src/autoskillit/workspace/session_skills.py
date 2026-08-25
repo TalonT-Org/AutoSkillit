@@ -732,6 +732,11 @@ class DefaultSessionSkillManager:
         self._session_skills_subdirs: dict[str, Path] = {}
         self._session_skill_infos: dict[str, dict[str, SkillAuthority]] = {}
 
+    @property
+    def ephemeral_root(self) -> Path:
+        """Return the root used for ephemeral session directories."""
+        return self._root
+
     def materialize_invocation(
         self,
         session_id: str,

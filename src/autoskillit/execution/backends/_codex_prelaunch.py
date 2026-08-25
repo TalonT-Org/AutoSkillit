@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import NoReturn
 
 from autoskillit.execution.backends._codex_config import (
     _ensure_codex_mcp_registered_unlocked,
@@ -13,6 +14,11 @@ from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 from autoskillit.execution.backends._codex_hooks import (
     _sync_hooks_to_codex_config_unlocked,
 )
+
+
+def _reraise_staged(stage: str, exc: Exception) -> NoReturn:
+    """Re-raise *exc* as a RuntimeError tagged with the pre-launch stage that failed."""
+    raise RuntimeError(f"{stage}: {type(exc).__name__}: {exc}") from exc
 
 
 @contextmanager
@@ -34,7 +40,7 @@ def codex_prelaunch_transaction(
         try:
             _ensure_codex_mcp_registered_unlocked(config_path=config_path)
         except Exception as exc:
-            raise RuntimeError(f"source-config sync: {type(exc).__name__}: {exc}") from exc
+            _reraise_staged("source-config sync", exc)
         try:
             _sync_hooks_to_codex_config_unlocked(
                 config_path=config_path,
@@ -42,5 +48,5 @@ def codex_prelaunch_transaction(
                 plugin_dir=plugin_dir,
             )
         except Exception as exc:
-            raise RuntimeError(f"hook update: {type(exc).__name__}: {exc}") from exc
+            _reraise_staged("hook update", exc)
         yield config_path

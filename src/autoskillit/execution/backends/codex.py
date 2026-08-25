@@ -132,7 +132,10 @@ from autoskillit.execution.backends._codex_explorer_projection import (
     refresh_explorer_binding_env,
 )
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
-from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
+from autoskillit.execution.backends._codex_prelaunch import (
+    _reraise_staged,
+    codex_prelaunch_transaction,
+)
 from autoskillit.execution.backends._codex_probes import (
     _validate_global_codex_home,
     _validate_inert_rollout_paths,
@@ -1209,7 +1212,7 @@ class CodexBackend(BackendCmdBuilderBase):
                         snapshot = config_path.read_bytes()
                         atomic_write(Path(session_dir) / "config.toml", snapshot.decode("utf-8"))
                     except Exception as exc:
-                        raise RuntimeError(f"snapshot write: {type(exc).__name__}: {exc}") from exc
+                        _reraise_staged("snapshot write", exc)
                     return PreLaunchReadiness(())
                 try:
                     errors = tuple(
@@ -1218,9 +1221,7 @@ class CodexBackend(BackendCmdBuilderBase):
                         )
                     )
                 except Exception as exc:
-                    raise RuntimeError(
-                        f"native home validation: {type(exc).__name__}: {exc}"
-                    ) from exc
+                    _reraise_staged("native home validation", exc)
                 return PreLaunchReadiness(errors)
         except Exception as exc:
             logger.error("codex_prelaunch_transaction_failed", exc_info=True)

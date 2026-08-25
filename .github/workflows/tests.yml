@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(needs.preflight.outputs.os-matrix) }}
-        shard: [execution, recipe, general]
+        shard: [execution-channel-b, execution-top-level, execution, recipe, general]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -125,15 +125,30 @@ jobs:
         run: |
           SHARD_EXECUTION_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
           SHARD_RECIPE_DIRS="tests/recipe tests/docs tests/server"
-          if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then
-            echo "::error::Test filenames with spaces are not supported by the shard path splitter"
-            exit 1
-          fi
-          ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | tr '\n' ' ')
-          ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')
+          CHANNEL_B_FILE="tests/execution/test_process_channel_b.py"
+          while IFS= read -r -d '' test_file; do
+            if [[ "$test_file" =~ [[:space:]] || "$test_file" =~ [*?\[] ]]; then
+              echo "::error::Unsafe test filename for the shard path splitter: $test_file"
+              exit 1
+            fi
+          done < <(
+            find tests/ -maxdepth 1 -type f -name 'test_*.py' -print0
+            find tests/execution -maxdepth 1 -type f -name 'test_*.py' -print0
+          )
+          ROOT_FILES=$(find tests/ -maxdepth 1 -type f -name 'test_*.py' | sort | tr '\n' ' ')
+          ROOT_IGNORES=$(find tests/ -maxdepth 1 -type f -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')
+          DIRECT_EXECUTION_FILES=$(find tests/execution -maxdepth 1 -type f -name 'test_*.py' ! -path "$CHANNEL_B_FILE" | sort | tr '\n' ' ')
+          DIRECT_EXECUTION_IGNORES=$(find tests/execution -maxdepth 1 -type f -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')
           case "${{ matrix.shard }}" in
+            execution-channel-b)
+              echo "PYTEST_TEST_PATHS=${CHANNEL_B_FILE}" >> "$GITHUB_ENV"
+              ;;
+            execution-top-level)
+              echo "PYTEST_TEST_PATHS=${DIRECT_EXECUTION_FILES}" >> "$GITHUB_ENV"
+              ;;
             execution)
               echo "PYTEST_TEST_PATHS=${SHARD_EXECUTION_DIRS} ${ROOT_FILES}" >> "$GITHUB_ENV"
+              echo "PYTEST_IGNORE_PATHS=${DIRECT_EXECUTION_IGNORES}" >> "$GITHUB_ENV"
               ;;
             recipe)
               echo "PYTEST_TEST_PATHS=${SHARD_RECIPE_DIRS}" >> "$GITHUB_ENV"
@@ -168,7 +183,17 @@ jobs:
           AUTOSKILLIT_TEST_BASE_REF: ${{ needs.preflight.outputs.test-base-revision }}
         run: |
           mkdir -p .autoskillit/temp
-          task test-check
+          set +e
+          task test-check 2>&1 | tee .autoskillit/temp/test-check.log
+          TEST_CHECK_EXIT="${PIPESTATUS[0]}"
+          set -e
+          if [[ "$TEST_CHECK_EXIT" -ne 0 ]] \
+            && [[ "$AUTOSKILLIT_TEST_FILTER" == "conservative" ]] \
+            && rg -q '^PYTEST_EXIT_CODE=5$' .autoskillit/temp/test-check.log; then
+            echo "No tests selected for this shard after conservative filtering"
+            exit 0
+          fi
+          exit "$TEST_CHECK_EXIT"
 
       - name: Upload filter stats
         if: always()

@@ -15,6 +15,14 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "tests.yml"
+CHANNEL_B_TEST = "tests/execution/test_process_channel_b.py"
+EXPECTED_SHARDS = (
+    "execution-channel-b",
+    "execution-top-level",
+    "execution",
+    "recipe",
+    "general",
+)
 
 EXPECTED_EXPLICIT_SHARDS: dict[str, tuple[str, ...]] = {
     "EXECUTION": (
@@ -141,17 +149,35 @@ def _root_test_files(tests_root: Path) -> set[str]:
     }
 
 
+def _direct_execution_test_files(tests_root: Path) -> set[str]:
+    execution_root = tests_root / "execution"
+    return {
+        str(p.relative_to(tests_root.parent))
+        for p in execution_root.iterdir()
+        if p.is_file() and p.name.startswith("test_") and p.suffix == ".py"
+    }
+
+
 def _assign_files_to_shards(
     supported_files: set[str],
     explicit_sets: dict[str, tuple[str, ...]],
     root_files: set[str],
 ) -> dict[str, set[str]]:
     """Assign each supported test file to its lower-case shard name."""
-    names = sorted({name.lower() for name in explicit_sets} | {"general"})
+    names = sorted(
+        {name.lower() for name in explicit_sets}
+        | {"execution-channel-b", "execution-top-level", "general"}
+    )
     ownership: dict[str, set[str]] = {name: set() for name in names}
     ownership["execution"].update(root_files)
     for f in supported_files:
         if f in root_files:
+            continue
+        if f == CHANNEL_B_TEST:
+            ownership["execution-channel-b"].add(f)
+            continue
+        if f.startswith("tests/execution/") and "/" not in f.removeprefix("tests/execution/"):
+            ownership["execution-top-level"].add(f)
             continue
         assigned = False
         for shard_name, dirs in explicit_sets.items():
@@ -168,12 +194,13 @@ def _expand_scope_to_files(scope: set[Path], tests_root: Path) -> set[str]:
     """Expand a filter scope into repo-relative test-file paths."""
     result: set[str] = set()
     for entry in scope:
-        if entry.is_dir():
-            for child in entry.rglob("test_*.py"):
+        resolved = entry if entry.is_absolute() else tests_root.parent / entry
+        if resolved.is_dir():
+            for child in resolved.rglob("test_*.py"):
                 if child.is_file():
                     result.add(str(child.relative_to(tests_root.parent)))
-        elif entry.is_file():
-            result.add(str(entry.relative_to(tests_root.parent)))
+        elif resolved.is_file():
+            result.add(str(resolved.relative_to(tests_root.parent)))
     return result
 
 
@@ -271,17 +298,25 @@ class TestCIShardConfig:
                     if not p.is_file():
                         continue
                     f = str(p.relative_to(REPO_ROOT))
+                    if d == "tests/execution" and f in _direct_execution_test_files(tests_root):
+                        continue
                     assert f in ownership[key], (
                         f"File {f} under explicit directory {d} not owned by {key}"
                     )
 
-    def test_three_ownership_sets_disjoint_and_exhaustive(self) -> None:
+    def test_five_ownership_sets_are_nonempty_disjoint_and_exhaustive(self) -> None:
         text = _read_workflow_text()
         assignments = _parse_shard_assignments(text)
         tests_root = REPO_ROOT / "tests"
         ownership = _assign_files_to_shards(
             _supported_test_files(tests_root), assignments, _root_test_files(tests_root)
         )
+        assert set(ownership) == set(EXPECTED_SHARDS)
+        assert all(ownership.values())
+        assert ownership["execution-channel-b"] == {CHANNEL_B_TEST}
+        direct_execution = _direct_execution_test_files(tests_root)
+        assert ownership["execution-top-level"] == direct_execution - {CHANNEL_B_TEST}
+        assert ownership["execution"].isdisjoint(direct_execution)
         shards = list(ownership.values())
         for i in range(len(shards)):
             for j in range(i + 1, len(shards)):
@@ -302,6 +337,9 @@ class TestCIShardConfig:
         for d in ("execution", "contracts", "core", "recipe", "docs", "server"):
             (tests_root / d).mkdir()
             (tests_root / d / f"test_{d}.py").write_text("")
+        (tests_root.parent / CHANNEL_B_TEST).write_text("")
+        (tests_root / "execution" / "nested").mkdir()
+        (tests_root / "execution" / "nested" / "test_nested.py").write_text("")
         # Brand-new unassigned top-level directory.
         new_dir = tests_root / "brand_new_unassigned"
         new_dir.mkdir()
@@ -326,20 +364,23 @@ class TestCIShardConfig:
         ownership = _assign_files_to_shards(supported, assignments, root_files)
 
         assert "tests/test_root_one.py" in ownership["execution"]
-        assert "tests/execution/test_execution.py" in ownership["execution"]
+        assert "tests/execution/test_process_channel_b.py" in ownership["execution-channel-b"]
+        assert "tests/execution/test_execution.py" in ownership["execution-top-level"]
+        assert "tests/execution/nested/test_nested.py" in ownership["execution"]
         assert "tests/recipe/test_recipe.py" in ownership["recipe"]
         assert "tests/docs/test_docs.py" in ownership["recipe"]
         assert "tests/server/test_server.py" in ownership["recipe"]
         assert "tests/brand_new_unassigned/test_brand_new.py" in ownership["general"]
 
-    def test_case_arms_include_execution_recipe_general_and_default_error(self) -> None:
+    def test_case_arms_match_exact_matrix_and_include_default_error(self) -> None:
         text = _read_workflow_text()
         body = _compute_test_paths_body(text)
         arms = _parse_case_arms(body)
         matrix_match = re.search(r"(?m)^\s*shard:\s*\[([^]]+)]\s*$", text)
         assert matrix_match, "Workflow test matrix has no inline shard declaration"
-        matrix_shards = {name.strip() for name in matrix_match.group(1).split(",")}
-        assert set(arms) == matrix_shards | {"*_default"}
+        matrix_shards = tuple(name.strip() for name in matrix_match.group(1).split(","))
+        assert matrix_shards == EXPECTED_SHARDS
+        assert set(arms) == set(matrix_shards) | {"*_default"}
         default_body = arms["*_default"]
         assert "::error::" in default_body
         assert "Unknown test shard" in default_body or "unknown shard" in default_body
@@ -359,8 +400,30 @@ class TestCIShardConfig:
         body = _compute_test_paths_body(text)
         arms = _parse_case_arms(body)
 
-        assert "ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort" in body
-        assert "ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort" in body
+        assert "while IFS= read -r -d '' test_file; do" in body
+        assert '[[ "$test_file" =~ [[:space:]] || "$test_file" =~ [*?\\[] ]]' in body
+        assert "find tests/ -maxdepth 1 -type f -name 'test_*.py' -print0" in body
+        assert "find tests/execution -maxdepth 1 -type f -name 'test_*.py' -print0" in body
+        assert "ROOT_FILES=$(find tests/ -maxdepth 1 -type f -name 'test_*.py' | sort" in body
+        assert "ROOT_IGNORES=$(find tests/ -maxdepth 1 -type f -name 'test_*.py' | sort" in body
+        assert 'CHANNEL_B_FILE="tests/execution/test_process_channel_b.py"' in body
+        assert "DIRECT_EXECUTION_FILES=$(find tests/execution -maxdepth 1 -type f" in body
+        assert '! -path "$CHANNEL_B_FILE"' in body
+        assert "DIRECT_EXECUTION_IGNORES=$(find tests/execution -maxdepth 1 -type f" in body
+
+        channel_b_body = arms["execution-channel-b"]
+        assert re.search(
+            r'(?m)^\s*echo "PYTEST_TEST_PATHS=\${CHANNEL_B_FILE}" '
+            r'>> "\$GITHUB_ENV"\s*$',
+            channel_b_body,
+        )
+
+        top_level_body = arms["execution-top-level"]
+        assert re.search(
+            r'(?m)^\s*echo "PYTEST_TEST_PATHS=\${DIRECT_EXECUTION_FILES}" '
+            r'>> "\$GITHUB_ENV"\s*$',
+            top_level_body,
+        )
 
         exec_body = arms["execution"]
         assert "SHARD_EXECUTION_DIRS" in exec_body
@@ -370,7 +433,11 @@ class TestCIShardConfig:
             r'\${ROOT_FILES}" >> "\$GITHUB_ENV"\s*$',
             exec_body,
         )
-        assert "PYTEST_IGNORE_PATHS" not in exec_body
+        assert re.search(
+            r'(?m)^\s*echo "PYTEST_IGNORE_PATHS=\${DIRECT_EXECUTION_IGNORES}" '
+            r'>> "\$GITHUB_ENV"\s*$',
+            exec_body,
+        )
 
         recipe_body = arms["recipe"]
         assert "SHARD_RECIPE_DIRS" in recipe_body
@@ -412,7 +479,9 @@ class TestConservativeFilterShardIntersection:
             _supported_test_files(tests_root), assignments, _root_test_files(tests_root)
         )
 
-    def test_headless_execute_intersects_execution_and_recipe(self, tmp_path: Path) -> None:
+    def test_headless_execute_intersects_top_level_execution_and_recipe(
+        self, tmp_path: Path
+    ) -> None:
         tests_root = tmp_path / "tests"
         (tests_root / "execution").mkdir(parents=True)
         (tests_root / "server").mkdir()
@@ -432,11 +501,16 @@ class TestConservativeFilterShardIntersection:
         expanded = _expand_scope_to_files(set(scope), tests_root)
         ownership = self._ownership()
 
-        assert _intersected_shards(expanded, ownership) == {"execution", "recipe"}
+        assert _intersected_shards(expanded, ownership) == {
+            "execution-top-level",
+            "recipe",
+        }
         assert exec_file in expanded
         assert server_file in expanded
 
-    def test_recipe_schema_intersects_recipe_execution_and_general(self, tmp_path: Path) -> None:
+    def test_recipe_schema_intersects_recipe_top_level_execution_and_general(
+        self, tmp_path: Path
+    ) -> None:
         tests_root = tmp_path / "tests"
         for d in ("recipe", "server", "execution", "cli"):
             (tests_root / d).mkdir(parents=True)
@@ -461,10 +535,32 @@ class TestConservativeFilterShardIntersection:
         ownership = self._ownership()
 
         assert _intersected_shards(expanded, ownership) == {
-            "execution",
+            "execution-top-level",
             "general",
             "recipe",
         }
+
+    def test_changed_channel_b_test_reaches_channel_b_shard(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        (tests_root / "execution").mkdir(parents=True)
+        (tests_root / "execution" / "test_process_channel_b.py").write_text("")
+
+        scope = build_test_scope(
+            {CHANNEL_B_TEST},
+            FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert not isinstance(scope, FullRunReason), (
+            f"Conservative filter requested a full run: {scope}"
+        )
+        expanded = _expand_scope_to_files(set(scope), tests_root)
+        ownership = self._ownership()
+
+        assert CHANNEL_B_TEST in expanded
+        assert CHANNEL_B_TEST in ownership["execution-channel-b"]
+        for shard, files in ownership.items():
+            if shard != "execution-channel-b":
+                assert CHANNEL_B_TEST not in files
 
     def test_server_state_intersects_recipe_and_execution(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"

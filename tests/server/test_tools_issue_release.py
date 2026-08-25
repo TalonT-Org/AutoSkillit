@@ -1,4 +1,4 @@
-"""Tests for the release_issue MCP tool (split from test_tools_integrations.py per issue #4796)."""
+"""Tests for the release_issue MCP tool."""
 
 from __future__ import annotations
 

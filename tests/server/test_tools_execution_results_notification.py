@@ -1,4 +1,4 @@
-"""Tests for the _notify notification helper (split from test_tools_execution_results.py per issue #4796)."""
+"""Tests for the _notify notification helper."""
 
 from __future__ import annotations
 

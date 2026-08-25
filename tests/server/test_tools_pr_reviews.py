@@ -1,4 +1,4 @@
-"""get_pr_reviews MCP tool tests (split from test_tools_integrations.py #4796)."""
+"""get_pr_reviews MCP tool tests."""
 
 from __future__ import annotations
 

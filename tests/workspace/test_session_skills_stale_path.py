@@ -40,7 +40,7 @@ def _catalog_context(manager, *, backend=None):
     from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
 
-    project_root = manager._root
+    project_root = manager.ephemeral_root
     catalog = DefaultSkillResolver().list_effective(
         project_root,
         SkillExecutionRole.SESSION,
@@ -93,7 +93,7 @@ def test_catalog_context_uses_manager_root_when_cwd_has_project_override(
     catalog, context = _catalog_context(manager)
 
     open_kitchen = next(skill for skill in catalog.skills if skill.name == "open-kitchen")
-    assert context.cwd == manager._root.resolve()
+    assert context.cwd == manager.ephemeral_root.resolve()
     assert open_kitchen.source is SkillSource.BUNDLED
 
 
@@ -125,7 +125,7 @@ def test_cleanup_stale_emits_log_event(make_session_skill_manager, monkeypatch) 
     import autoskillit.workspace.session_skills as skills_mod
 
     mgr = make_session_skill_manager()
-    session_dir = mgr._root / "sess-stale"  # type: ignore[attr-defined]
+    session_dir = mgr.ephemeral_root / "sess-stale"
     session_dir.mkdir(parents=True)
     (session_dir / "orphaned-session-marker").touch()
 

@@ -151,7 +151,7 @@ def _catalog_context(
 ):
     from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
 
-    project_root = manager._root
+    project_root = manager.ephemeral_root
     catalog = DefaultSkillResolver().list_effective(
         project_root,
         role,

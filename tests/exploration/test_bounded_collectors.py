@@ -428,16 +428,18 @@ def _install_fake_rg(
 def _trip_max_output_bytes(case_root: Path, monkeypatch: pytest.MonkeyPatch) -> CollectorReport:
     root = case_root / "repo"
     root.mkdir()
+    stdout_payload = "12345"
+    stderr_payload = "abcde"
     _install_fake_rg(
         case_root,
-        "printf '12345'\nprintf 'abcde' >&2\n",
+        f"printf '{stdout_payload}'\nprintf '{stderr_payload}' >&2\n",
         monkeypatch,
     )
     return collect_search(
         root,
         "snapshot",
         "needle",
-        CollectorLimits(max_output_bytes=9),
+        CollectorLimits(max_output_bytes=len((stdout_payload + stderr_payload).encode()) - 1),
     )
 
 

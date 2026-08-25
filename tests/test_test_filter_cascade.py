@@ -46,12 +46,12 @@ class TestCascadeNewEntries:
                 ["server", "test_llm_triage.py"],
                 ["server", "test_llm_triage.py"],
             ),
-            # Conservative: smoke_utils cascades into recipe + direct test file
+            # Conservative: smoke_utils cascades into recipe + smoke-utils directory
             (
                 "src/autoskillit/smoke_utils/__init__.py",
                 FilterMode.CONSERVATIVE,
-                ["recipe", "test_smoke_utils.py"],
-                ["recipe", "test_smoke_utils.py"],
+                ["recipe", "smoke_utils"],
+                ["recipe", "smoke_utils"],
             ),
             # Conservative: version cascades into server + direct test file
             (
@@ -88,12 +88,12 @@ class TestCascadeNewEntries:
                 ["test_llm_triage.py"],
                 ["test_llm_triage.py"],
             ),
-            # Aggressive: smoke_utils scoped to its direct test file
+            # Aggressive: smoke_utils scoped to its test directory
             (
                 "src/autoskillit/smoke_utils/__init__.py",
                 FilterMode.AGGRESSIVE,
-                ["test_smoke_utils.py"],
-                ["test_smoke_utils.py"],
+                ["smoke_utils"],
+                ["smoke_utils"],
             ),
             # Aggressive: version scoped to its direct test file
             (

@@ -34,6 +34,7 @@ EXPECTED_EXPLICIT_SHARDS: dict[str, tuple[str, ...]] = {
         "tests/pipeline",
         "tests/migration",
         "tests/integration",
+        "tests/smoke_utils",
     ),
     "RECIPE": (
         "tests/recipe",
@@ -283,6 +284,13 @@ class TestCIShardConfig:
                 if other == "execution":
                     continue
                 assert f not in ownership[other], f"Root test file {f} wrongly owned by {other}"
+
+    def test_smoke_utils_directory_is_owned_only_by_execution(self) -> None:
+        assignments = _parse_shard_assignments(_read_workflow_text())
+        ownership = _assign_files_to_shards({"tests/smoke_utils/test_git.py"}, assignments, set())
+
+        assert "tests/smoke_utils/test_git.py" in ownership["execution"]
+        assert "tests/smoke_utils/test_git.py" not in ownership["general"]
 
     def test_explicit_directory_files_owned_by_named_shard(self) -> None:
         text = _read_workflow_text()

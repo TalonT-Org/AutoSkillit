@@ -793,10 +793,6 @@ def test_test_suite_oversized_files_split():
     """No test file at tests/ root exceeds 1,000 lines after groupE split.
 
     Exemptions (rule ID | rationale):
-      test_smoke_utils.py — REQ-CNST-004-E1: Contains 13 callable-unders tests,
-        all using tmp_path isolation and dict[str,str] assertions. No shared state.
-        Splitting would scatter the T_* pattern across files, reducing discoverability.
-        Exempt at 1348 lines.
       test_test_filter_core_cascade.py — REQ-CNST-004-E2: Cascade-map guard test
         whose per-stem expected-set mirroring is a one-line cascade consumers pin
         into ``expected_stems``. Adding issue #4741's three plugin-cache shards
@@ -808,10 +804,22 @@ def test_test_suite_oversized_files_split():
         f"{f.name} ({len(f.read_text().splitlines())} lines)"
         for f in tests_root.glob("test_*.py")
         if len(f.read_text().splitlines()) > 1000
-        and f.name != "test_smoke_utils.py"  # REQ-CNST-004-E1
         and f.name != "test_test_filter_core_cascade.py"  # REQ-CNST-004-E2
     ]
     assert not over, f"Oversized test files remain (run groupE): {over}"
+
+
+def test_smoke_utils_suite_is_split() -> None:
+    tests_root = Path(__file__).parent.parent
+    smoke_utils_root = tests_root / "smoke_utils"
+    shards = sorted(smoke_utils_root.glob("test_*.py"))
+    old_monolith = tests_root / f"test_{smoke_utils_root.name}.py"
+
+    assert not old_monolith.exists()
+    assert smoke_utils_root.is_dir()
+    assert shards
+    oversized = [path.name for path in shards if len(path.read_text().splitlines()) > 1000]
+    assert not oversized, f"Smoke-utils shards exceed 1,000 lines: {oversized}"
 
 
 def test_no_subpackage_exceeds_10_files() -> None:

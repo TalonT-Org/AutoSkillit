@@ -2749,6 +2749,7 @@ def _reserve_many(store: CaptureLifecycleStore, count: int, *, offset: int = 0) 
     return ids
 
 
+@pytest.mark.timeout(180)
 def test_production_scale_backlog_converges_within_bounded_invocations(
     tmp_path: Path,
 ) -> None:

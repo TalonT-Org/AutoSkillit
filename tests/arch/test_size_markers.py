@@ -34,6 +34,7 @@ SIZE_DIRECTORIES: dict[str, str] = {
     "server": "server",
     "skills": "skills",
     "skills_extended": "skills_extended",
+    "smoke_utils": "smoke_utils",
     "workspace": "workspace",
 }
 
@@ -147,3 +148,12 @@ def test_root_test_files_have_size_marker() -> None:
         if not markers:
             missing.append(f.name)
     assert not missing, f"Root test files missing size marker: {missing}"
+
+
+def test_smoke_utils_shards_are_medium() -> None:
+    shards = sorted((TESTS_ROOT / "smoke_utils").glob("test_*.py"))
+    assert shards, "No smoke-utils test shards found"
+    for shard in shards:
+        assert _extract_size_markers(shard) == ["medium"], (
+            f"{shard.name} must have exactly the medium size marker"
+        )

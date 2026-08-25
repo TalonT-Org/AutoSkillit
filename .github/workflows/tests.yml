@@ -123,7 +123,7 @@ jobs:
       - name: Compute test paths
         id: test-paths
         run: |
-          SHARD_EXECUTION_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
+          SHARD_EXECUTION_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration tests/smoke_utils"
           SHARD_RECIPE_DIRS="tests/recipe tests/docs tests/server"
           CHANNEL_B_FILE="tests/execution/test_process_channel_b.py"
           while IFS= read -r -d '' test_file; do

@@ -131,66 +131,66 @@ _CT = "cli.install._plugin_artifact::sweep_due"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # -- scripts.pytest_tmp_lifecycle::_reap --
-    f"{_R}::L426": SafetyDecision(
+    f"{_R}::L434": SafetyDecision(
         "Scan-level failure retains every candidate rather than treating an empty result "
         "as absence of evidence; the fail-closed contract tests/AGENTS.md documents."
     ),
-    f"{_R}::L433": SafetyDecision(
+    f"{_R}::L441": SafetyDecision(
         "The generation _setup is currently claiming is excluded from its own reap pass."
     ),
-    f"{_R}::L437": SafetyDecision(
+    f"{_R}::L445": SafetyDecision(
         "FileNotFoundError on lstat means the candidate is already gone; nothing to reclaim."
     ),
-    f"{_R}::L440": SafetyDecision(
+    f"{_R}::L448": SafetyDecision(
         "An OSError inspecting the candidate is an inspection failure, not eligibility evidence."
     ),
-    f"{_R}::L443": SafetyDecision(
+    f"{_R}::L451": SafetyDecision(
         "A symlink or non-directory entry under the platform root is a safety exclusion, "
         "never a reclamation candidate regardless of any evidence."
     ),
-    f"{_R}::L446": SafetyDecision(
+    f"{_R}::L454": SafetyDecision(
         "A candidate owned by a different uid is out of this reaper's authority to touch."
     ),
-    f"{_R}::L456": RetentionDecision(
+    f"{_R}::L464": RetentionDecision(
         Revocability.REVOCABLE,
         "A live or indeterminate owner is retained unconditionally; only provably dead may "
         "ever be reclaimed, per the three-outcome liveness contract.",
     ),
-    f"{_R}::L459": RetentionDecision(
+    f"{_R}::L467": RetentionDecision(
         Revocability.REVOCABLE,
         "A dead-owner generation still holding a revocable kernel reference (cwd/fd/maps) "
         "is retained -- proof of present use overrides a dead owner marker.",
     ),
-    f"{_R}::L465": RetentionDecision(
+    f"{_R}::L473": RetentionDecision(
         Revocability.REVOCABLE,
         "A dead owner within the grace window is retained by the normal reap pass, but is "
         "eligible for early reclamation under capacity pressure.",
         bounded_by="ReclamationBound (select_overflow eligibility)",
     ),
-    f"{_R}::L472": RetentionDecision(
+    f"{_R}::L480": RetentionDecision(
         Revocability.REVOCABLE,
         "A corrupt marker treated as valid-dead is still retained under a revocable "
         "reference, exactly like a parseable marker would be.",
     ),
-    f"{_R}::L475": RetentionDecision(
+    f"{_R}::L483": RetentionDecision(
         Revocability.REVOCABLE,
         "A corrupt marker is grace-gated on its own mtime, never demoted to the weaker "
         "markerless/legacy-age path, matching a valid dead marker within grace.",
         bounded_by="ReclamationBound (select_overflow eligibility)",
     ),
-    f"{_R}::L479": RetentionDecision(
+    f"{_R}::L487": RetentionDecision(
         Revocability.MONOTONIC,
         "A markerless candidate is retained by either a revocable reference or a monotonic "
         "snapshot reference -- the only branch where monotonic evidence may protect, since "
         "there is no owner marker to supply a sound liveness proof instead.",
         bounded_by="never bound-reclaimable (no owner to prove provably dead)",
     ),
-    f"{_R}::L485": SafetyDecision(
+    f"{_R}::L493": SafetyDecision(
         "A markerless candidate younger than legacy_age_minutes might be another "
         "concurrent _setup mid-creation; never touched by the bound, only by this age gate."
     ),
     # -- scripts.pytest_tmp_lifecycle::_safe_candidates --
-    f"{_S}::L354": SafetyDecision(
+    f"{_S}::L362": SafetyDecision(
         "Cannot normalize private-root permissions; the whole private-root scan is skipped "
         "rather than risk enumerating an untrusted-mode directory."
     ),

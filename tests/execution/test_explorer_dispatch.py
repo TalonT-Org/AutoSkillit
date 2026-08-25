@@ -363,3 +363,33 @@ def test_branch_selection_builds_a_plan_only_for_the_selected_vector(
     assert plan.tasks == (selected.task,)
     assert set(rendered.replacements) == {selected.id}
     assert selected.applicability is ExplorationVectorApplicabilityId.ALWAYS
+
+
+def test_claude_provisioning_preamble_names_pluginless_explorer_and_authorized_codes() -> None:
+    """The Claude preamble instructs a fallback dispatch on exactly the
+    FALLBACK-classified codes — no more, no fewer — so it cannot drift from
+    the AGENTS.md / pluginless-explorer.md classification (verified in
+    tests/core/test_exploration_failure_classification.py, which cannot
+    import this execution-layer backend)."""
+    from autoskillit.core import (
+        EXPLORATION_FALLBACK_CODES,
+        PLUGINLESS_EXPLORER_ROLE,
+        ExplorationFailureCode,
+    )
+
+    preamble = ClaudeCodeBackend().exploration_dispatch_renderer.conventions.provisioning_preamble
+    assert preamble is not None
+    assert PLUGINLESS_EXPLORER_ROLE in preamble
+    assert EXPLORATION_FALLBACK_CODES, "expected at least one FALLBACK-classified code"
+    for code in EXPLORATION_FALLBACK_CODES:
+        assert code.value in preamble, f"expected authorized fallback code {code.value!r}"
+    for code in set(ExplorationFailureCode) - set(EXPLORATION_FALLBACK_CODES):
+        assert code.value not in preamble, (
+            f"provisioning preamble names non-FALLBACK code {code.value!r} as a fallback trigger"
+        )
+
+
+def test_codex_provisioning_preamble_is_absent() -> None:
+    """Codex never calls enable_exploration, so it carries no provisioning preamble at all."""
+    conventions = CodexBackend().exploration_dispatch_renderer.conventions
+    assert conventions.provisioning_preamble is None

@@ -199,7 +199,9 @@ class TestRecordPipelineStepInit:
         assert completed["success"] is False
         assert completed["is_error"] is True
         assert completed["stage"] == "pipeline_marker"
-        assert completed["error"] == "record_pipeline_step: pipeline marker failed."
+        assert completed["error"] == (
+            "record_pipeline_step: pipeline marker failed: OSError: marker failed"
+        )
         assert self.ctx.tracker_leases == {}
 
     @pytest.mark.anyio
@@ -256,6 +258,8 @@ class TestRecordPipelineStepInit:
         assert result["success"] is False
         assert lease_observed
         assert self.ctx.tracker_leases == {}
+        assert result["stage"] == f"pipeline_tracker:{op}"
+        assert result["error"] == f"record_pipeline_step: {op} failed: OSError: handler failed"
 
 
 class TestRecordPipelineStepGateClosed:

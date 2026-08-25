@@ -16,7 +16,16 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generic, NoReturn, Protocol, TypeVar, assert_never, cast, runtime_checkable
+from typing import (
+    Generic,
+    Literal,
+    NoReturn,
+    Protocol,
+    TypeVar,
+    assert_never,
+    cast,
+    runtime_checkable,
+)
 
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
@@ -155,6 +164,7 @@ class _CapabilityLease(Generic[_T]):
     session_id: str
     expires_at: float
     value: _T
+    origin: Literal["session", "launch"]
     cwd: Path | None = None
     repository_root: Path | None = None
     source_identity: str = ""
@@ -203,6 +213,9 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
 
     class InvalidSourceIdentity(ValueError):
         """source_identity is missing or exceeds the bounded length."""
+
+    class InvalidSessionBinding(ValueError):
+        """owner_id, role, or session_id is missing or exceeds the bounded length."""
 
     class ServiceNotConfigured(RuntimeError):
         """exploration service is not configured."""
@@ -313,6 +326,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         role: str,
         session_id: str,
         value: _T,
+        origin: Literal["session", "launch"],
         ttl_seconds: float | None = None,
     ) -> str:
         """Create one bounded opaque capability for an already trusted value."""
@@ -329,6 +343,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 role=role,
                 session_id=session_id,
                 value=value,
+                origin=origin,
                 ttl=ttl,
             )
 
@@ -454,6 +469,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 session_id=session_id,
                 expires_at=self._clock() + self._max_ttl_seconds,
                 value=cast(_T, None),
+                origin="launch",
                 cwd=canonical_cwd,
                 repository_root=canonical_repository_root,
                 source_identity=shared_source_identity,
@@ -511,6 +527,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 session_id=session_id,
                 expires_at=self._clock() + self._max_ttl_seconds,
                 value=cast(_T, None),
+                origin="session",
                 cwd=canonical_cwd,
                 repository_root=canonical_repository_root,
                 source_identity=source_identity,
@@ -530,6 +547,23 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 if lease is not None and lease.expires_at > self._clock():
                     return cap
             return None
+
+    def has_session_scoped_binding(self) -> bool:
+        """Return whether any live session-origin lease is currently bound.
+
+        Parameterless and store-wide: ``kitchen_status()`` never receives a
+        session id (the one-shot request token is issued only to
+        ``enable_exploration``), so this scans every live lease rather than
+        resolving one session's capability. Counts only ``origin == "session"``
+        leases — a launch-mode (Codex per-child) binding must not be reported
+        as an available session-scoped broker.
+        """
+        now = self._clock()
+        with self._lock:
+            return any(
+                lease.origin == "session" and lease.expires_at > now
+                for lease in self._leases.values()
+            )
 
     def lease_for_capability(self, capability: str) -> _CapabilityLease[_T] | None:
         """Return the active lease for an already-minted capability, else None.
@@ -592,6 +626,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             role=role,
             session_id=session_id,
             value=cast(_T, context),
+            origin="session",
         )
         return capability, self._service.page(context, page_size=page_size)
 
@@ -613,6 +648,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 owner_id,
                 role,
                 session_id,
+                origin,
                 cwd,
                 repository_root,
                 source_identity,
@@ -621,6 +657,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 lease.owner_id,
                 lease.role,
                 lease.session_id,
+                lease.origin,
                 lease.cwd,
                 lease.repository_root,
                 lease.source_identity,
@@ -636,6 +673,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 current.owner_id,
                 current.role,
                 current.session_id,
+                current.origin,
                 current.cwd,
                 current.repository_root,
                 current.source_identity,
@@ -644,6 +682,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 owner_id,
                 role,
                 session_id,
+                origin,
                 cwd,
                 repository_root,
                 source_identity,
@@ -656,6 +695,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 session_id=session_id,
                 expires_at=current.expires_at,
                 value=cast(_T, context),
+                origin=origin,
                 cwd=cwd,
                 repository_root=repository_root,
                 source_identity=source_identity,
@@ -820,6 +860,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         role: str,
         session_id: str,
         value: _T,
+        origin: Literal["session", "launch"],
         ttl: float,
         cwd: Path | None = None,
         repository_root: Path | None = None,
@@ -835,6 +876,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             session_id=session_id,
             expires_at=self._clock() + ttl,
             value=value,
+            origin=origin,
             cwd=cwd,
             repository_root=repository_root,
             source_identity=source_identity,
@@ -921,6 +963,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                     max(0.0, authority.expires_at - time.time()),
                 ),
                 value=cast(_T, None),
+                origin="launch",
                 cwd=authority.cwd,
                 repository_root=self._trusted_root,
                 source_identity=authority.source_identity,
@@ -957,7 +1000,9 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             ("session_id", session_id),
         ):
             if not isinstance(value, str) or not value or len(value) > _MAX_CAPABILITY_LENGTH:
-                raise ValueError(f"{field_name} must be a non-empty bounded string")
+                raise OwnerBoundExplorationContextStore.InvalidSessionBinding(
+                    f"{field_name} must be a non-empty bounded string"
+                )
 
     @staticmethod
     def _is_capability_shape(value: str) -> bool:
@@ -972,8 +1017,14 @@ EXPLORATION_STORE_FAILURE_CODES: Mapping[type[BaseException], ExplorationFailure
     OwnerBoundExplorationContextStore.TrustedRootMismatch: (
         ExplorationFailureCode.TRUSTED_ROOT_MISMATCH
     ),
+    # InvalidSourceIdentity is unreachable from enable_exploration's own call
+    # site (it always passes a well-formed interactive:<session_id> string) —
+    # the store is the contract boundary this row proves, not that call site.
     OwnerBoundExplorationContextStore.InvalidSourceIdentity: (
         ExplorationFailureCode.INVALID_SOURCE_IDENTITY
+    ),
+    OwnerBoundExplorationContextStore.InvalidSessionBinding: (
+        ExplorationFailureCode.SESSION_ID_INVALID
     ),
     OwnerBoundExplorationContextStore.ServiceNotConfigured: (
         ExplorationFailureCode.SERVICE_NOT_CONFIGURED

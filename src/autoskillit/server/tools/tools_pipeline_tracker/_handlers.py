@@ -139,14 +139,14 @@ async def record_pipeline_step(
                 retriable=False,
             )
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("record_pipeline_step_unexpected_error")
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": "record_pipeline_step: unexpected internal error.",
-            }
+            deny_envelope(
+                f"record_pipeline_step: {op} failed: {type(exc).__name__}: {exc}",
+                stage=f"pipeline_tracker:{op}",
+                retriable=False,
+            )
         )
 
 
@@ -313,16 +313,15 @@ def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: st
             stage="preflight:pipeline_tracker_credit",
             retriable=False,
         )
-    except Exception:
+    except Exception as exc:
         _release_context_tracker(ctx, key)
         logger.exception("record_pipeline_step_marker_failed")
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": "record_pipeline_step: pipeline marker failed.",
-                "stage": "pipeline_marker",
-            }
+            deny_envelope(
+                f"record_pipeline_step: pipeline marker failed: {type(exc).__name__}: {exc}",
+                stage="pipeline_marker",
+                retriable=False,
+            )
         )
     if not result.get("success") or result.get("done") == result.get("total"):
         _release_context_tracker(ctx, key)
@@ -479,12 +478,13 @@ async def recover_run_skill_result(
                 retriable=False,
             )
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("recover_run_skill_result_unexpected_error")
         return json.dumps(
             deny_envelope(
-                "recover_run_skill_result: unexpected internal error.",
-                stage="complete:run_skill_completion",
+                f"recover_run_skill_result: unexpected internal error: "
+                f"{type(exc).__name__}: {exc}",
+                stage="recover:run_skill_completion",
                 retriable=True,
             )
         )
@@ -603,11 +603,12 @@ async def complete_run_skill_result(
                 retriable=False,
             )
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("complete_run_skill_result_unexpected_error")
         return json.dumps(
             deny_envelope(
-                "complete_run_skill_result: unexpected internal error.",
+                f"complete_run_skill_result: unexpected internal error: "
+                f"{type(exc).__name__}: {exc}",
                 stage="complete:run_skill_completion",
                 retriable=True,
             )

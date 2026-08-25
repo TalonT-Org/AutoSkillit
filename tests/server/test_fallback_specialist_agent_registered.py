@@ -68,3 +68,20 @@ def test_pluginless_explorer_discovered_by_agents_directory_walk() -> None:
         p.stem for p in agents_dir.glob("*.md") if p.name not in ("CLAUDE.md", "AGENTS.md")
     }
     assert "pluginless-explorer" in discovered
+
+
+def test_pluginless_explorer_is_wired_by_a_production_surface_outside_agents() -> None:
+    """A registered-but-unconnected fallback is the exact defect this file exists to
+    catch (#4684's occurrence note: "Fix D without Fix E" dead-ends). Registration
+    tests alone cannot detect deletion of the wiring while the agent definition
+    survives — this asserts at least one non-agents/ production surface actually
+    names the specialist, so removing the wiring (without removing the agent)
+    fails loudly."""
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    preamble = ClaudeCodeBackend().exploration_dispatch_renderer.conventions.provisioning_preamble
+    assert preamble is not None
+    assert "pluginless-explorer" in preamble, (
+        "pluginless-explorer is registered but no production dispatch surface "
+        "(the exploration renderer preamble) names it"
+    )

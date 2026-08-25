@@ -19,6 +19,8 @@ from typing import Literal, NamedTuple
 
 __all__ = [
     "KNOWN_UNAFFECTED_SKILL_IDS",
+    "KNOWN_BLOCKED_SKILL_IDS",
+    "KNOWN_DEGRADED_SKILL_IDS",
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
     "RETIRED_INTAKE_RULE_IDS",
@@ -149,6 +151,74 @@ KNOWN_UNAFFECTED_SKILL_IDS: frozenset[str] = frozenset(
         "validate-test-audit",
         "verify-diag",
         "write-recipe",
+    }
+)
+
+# Skill-impact matrix registries for issue #4684 AC7. A skill is BLOCKED iff its
+# SKILL.md carries the exploration-vector marker AND declares `for_each:
+# exploration_vectors` in its frontmatter (a child_spawns entry that iterates
+# per-vector); DEGRADED iff it carries the marker but not that frontmatter
+# field. Both predicates mirror tests/contracts/test_skill_impact_matrix_registry.py's
+# live discovery over the same skills/ and skills_extended/ trees used by
+# KNOWN_UNAFFECTED_SKILL_IDS above. The three buckets partition the same
+# population: |BLOCKED| + |DEGRADED| + |UNAFFECTED| == the combined skill count.
+# Update all three registries together in the same PR when a skill's bucket changes.
+KNOWN_BLOCKED_SKILL_IDS: frozenset[str] = frozenset(
+    {
+        "arch-lens-c4-container",
+        "arch-lens-concurrency",
+        "arch-lens-data-lineage",
+        "arch-lens-deployment",
+        "arch-lens-development",
+        "arch-lens-error-resilience",
+        "arch-lens-module-dependency",
+        "arch-lens-operational",
+        "arch-lens-process-flow",
+        "arch-lens-repository-access",
+        "arch-lens-scenarios",
+        "arch-lens-security",
+        "arch-lens-state-lifecycle",
+    }
+)
+
+KNOWN_DEGRADED_SKILL_IDS: frozenset[str] = frozenset(
+    {
+        "audit-docs",
+        "exp-lens-benchmark-representativeness",
+        "exp-lens-causal-assumptions",
+        "exp-lens-comparator-construction",
+        "exp-lens-error-budget",
+        "exp-lens-estimand-clarity",
+        "exp-lens-exploratory-confirmatory",
+        "exp-lens-fair-comparison",
+        "exp-lens-governance-risk",
+        "exp-lens-iterative-learning",
+        "exp-lens-measurement-validity",
+        "exp-lens-pipeline-integrity",
+        "exp-lens-randomization-blocking",
+        "exp-lens-reproducibility-artifacts",
+        "exp-lens-sensitivity-robustness",
+        "exp-lens-severity-testing",
+        "exp-lens-unit-interference",
+        "exp-lens-validity-threats",
+        "exp-lens-variance-stability",
+        "investigate",
+        "planner-analyze",
+        "planner-elaborate-phase",
+        "planner-extract-domain",
+        "scope",
+        "vis-lens-always-on",
+        "vis-lens-antipattern",
+        "vis-lens-caption-annot",
+        "vis-lens-chart-select",
+        "vis-lens-color-access",
+        "vis-lens-figure-table",
+        "vis-lens-methodology-norms",
+        "vis-lens-multi-compare",
+        "vis-lens-reproducibility",
+        "vis-lens-story-arc",
+        "vis-lens-temporal",
+        "vis-lens-uncertainty",
     }
 )
 

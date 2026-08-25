@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 
 from autoskillit.core import (
+    EXPLORATION_FALLBACK_CODES,
+    PLUGINLESS_EXPLORER_ROLE,
     AgentDef,
     ExplorationDispatchConventions,
     ExplorationDispatchMaterialization,
@@ -14,6 +16,15 @@ from autoskillit.core import (
     ExplorationVectorDisposition,
     agent_definition_digest,
     load_bundled_agent_definitions,
+)
+
+_EXPLORATION_FALLBACK_CODES = tuple(sorted(code.value for code in EXPLORATION_FALLBACK_CODES))
+
+_EXPLORATION_FALLBACK_SENTENCE = (
+    f"If enable_exploration() fails with one of {list(_EXPLORATION_FALLBACK_CODES)}, "
+    f"dispatch the {PLUGINLESS_EXPLORER_ROLE!r} specialist (Read/Grep/Glob only, no "
+    "broker tools) for each selected vector role instead of the broker-bound explorer. "
+    "For any other failure code, surface the code to the user rather than improvising."
 )
 
 _PARENT_ROUTING_INSTRUCTIONS = (
@@ -187,7 +198,9 @@ CLAUDE_EXPLORATION_DISPATCH_RENDERER = _NativeExplorationDispatchRenderer(
             "Before dispatching explorer subagents, call enable_exploration() to "
             "establish session-scoped exploration authority. The three broker tools "
             "(submit_exploration_query, get_exploration_page, resume_exploration_context) "
-            "become visible only after enable_exploration succeeds."
+            "become visible only after enable_exploration succeeds.\n\n"
+            f"{_EXPLORATION_FALLBACK_SENTENCE} Dispatch it as "
+            f'Agent(subagent_type="autoskillit:{PLUGINLESS_EXPLORER_ROLE}", prompt=...).'
         ),
     )
 )

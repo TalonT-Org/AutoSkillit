@@ -1205,21 +1205,26 @@ class CodexBackend(BackendCmdBuilderBase):
                 plugin_dir=plugin_dir,
             ) as config_path:
                 if session_dir is not None:
-                    snapshot = config_path.read_bytes()
-                    atomic_write(Path(session_dir) / "config.toml", snapshot.decode("utf-8"))
+                    try:
+                        snapshot = config_path.read_bytes()
+                        atomic_write(Path(session_dir) / "config.toml", snapshot.decode("utf-8"))
+                    except Exception as exc:
+                        raise RuntimeError(f"snapshot write: {type(exc).__name__}: {exc}") from exc
                     return PreLaunchReadiness(())
-                return PreLaunchReadiness(
-                    tuple(
+                try:
+                    errors = tuple(
                         _validate_global_codex_home(
                             self.source_codex_home, config_path=config_path
                         )
                     )
-                )
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"native home validation: {type(exc).__name__}: {exc}"
+                    ) from exc
+                return PreLaunchReadiness(errors)
         except Exception as exc:
             logger.error("codex_prelaunch_transaction_failed", exc_info=True)
-            return PreLaunchReadiness(
-                (f"Codex pre-launch configuration failed: {type(exc).__name__}: {exc}",)
-            )
+            return PreLaunchReadiness((f"Codex pre-launch configuration failed: {exc}",))
 
     def recover_cook_history(self) -> None:
         CodexSessionStore(log_dir=default_log_dir()).recover()

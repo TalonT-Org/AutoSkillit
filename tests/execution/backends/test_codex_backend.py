@@ -1643,6 +1643,78 @@ class TestCodexDiscardDispositions:
         assert warning_events == []
 
 
+class TestCodexBackendEnsurePreLaunchStageTagging:
+    """No existing test drives a failure through ensure_pre_launch's composed
+    transaction — every existing caller only exercises the success path. The
+    4 sub-steps (source-config sync, hook update; then, mutually exclusive per
+    call, snapshot write or native home validation) each get their own stage
+    prefix inside the single ``errors`` tuple element, since ``PreLaunchReadiness``
+    has no dedicated ``stage`` field."""
+
+    _CANONICAL_AUTOSKILLIT_MCP_CONFIG = (
+        "[mcp_servers.autoskillit]\n"
+        'command = "autoskillit"\n'
+        'args = ["mcp"]\n'
+        'env_vars = ["AUTOSKILLIT_HEADLESS_AUTO_GATE"]\n'
+        "startup_timeout_sec = 20\n"
+        "tool_timeout_sec = 30\n"
+    )
+
+    @pytest.fixture(autouse=True)
+    def _setup_dirs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.fake_home = tmp_path / "fakehome"
+        self.codex_home = self.fake_home / ".codex"
+        self.codex_home.mkdir(parents=True)
+        (self.codex_home / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
+        (self.codex_home / "auth.json").write_text("{}")
+        self.session_dir = tmp_path / "session"
+        self.session_dir.mkdir()
+        (self.session_dir / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
+
+    def test_source_config_sync_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends._codex_prelaunch._ensure_codex_mcp_registered_unlocked",
+            lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
+        assert len(readiness.errors) == 1
+        assert "source-config sync" in readiness.errors[0]
+        assert "boom" in readiness.errors[0]
+
+    def test_hook_update_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends._codex_prelaunch._sync_hooks_to_codex_config_unlocked",
+            lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
+        assert len(readiness.errors) == 1
+        assert "hook update" in readiness.errors[0]
+        assert "boom" in readiness.errors[0]
+
+    def test_snapshot_write_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.atomic_write",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
+        assert len(readiness.errors) == 1
+        assert "snapshot write" in readiness.errors[0]
+        assert "boom" in readiness.errors[0]
+
+    def test_native_home_validation_failure_is_tagged(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex._validate_global_codex_home",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        readiness = CodexBackend().ensure_pre_launch(session_dir=None)
+        assert len(readiness.errors) == 1
+        assert "native home validation" in readiness.errors[0]
+        assert "boom" in readiness.errors[0]
+
+
 class TestCodexBackendSetupSessionDir:
     _CANONICAL_AUTOSKILLIT_MCP_CONFIG = (
         "[mcp_servers.autoskillit]\n"

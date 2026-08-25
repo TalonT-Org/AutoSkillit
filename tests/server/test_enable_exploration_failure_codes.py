@@ -124,6 +124,42 @@ async def test_invalid_source_identity_returns_own_code(
 
 
 @pytest.mark.asyncio
+async def test_session_id_invalid_returns_own_code(
+    monkeypatch: pytest.MonkeyPatch, tool_ctx, exploration_snapshot_service: MagicMock
+) -> None:
+    await _bind_raising(
+        monkeypatch,
+        tool_ctx,
+        exploration_snapshot_service,
+        exc=OwnerBoundExplorationContextStore.InvalidSessionBinding(
+            "session_id must be a non-empty bounded string"
+        ),
+        expected_code="session_id_invalid",
+    )
+
+
+@pytest.mark.asyncio
+async def test_empty_resolved_session_id_surfaces_session_id_invalid_not_bind_failed(
+    monkeypatch: pytest.MonkeyPatch, tool_ctx, exploration_snapshot_service: MagicMock
+) -> None:
+    """The _validate_binding promotion (Step 3), driven end-to-end and unmocked past
+    session-id resolution: enable_exploration's own `if session_id is None` guard only
+    rejects None, not an empty string, so a resolved-but-empty session_id reaches the
+    real store's _validate_binding and must surface as session_id_invalid — the exact
+    distinction that degraded to generic bind_failed before this promotion."""
+    _skill_session(monkeypatch)
+    _bound_store(tool_ctx, exploration_snapshot_service)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_exploration._resolve_request_session",
+        MagicMock(return_value=""),
+    )
+
+    result = json.loads(await enable_exploration())
+
+    assert result == {"status": "error", "code": "session_id_invalid"}
+
+
+@pytest.mark.asyncio
 async def test_service_not_configured_returns_own_code(
     monkeypatch: pytest.MonkeyPatch, tool_ctx, exploration_snapshot_service: MagicMock
 ) -> None:

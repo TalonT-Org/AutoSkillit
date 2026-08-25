@@ -9,7 +9,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import Final, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Final, Generic, Literal, Protocol, TypeVar, runtime_checkable
+
+from ._type_enums import ExplorationFailureCode
 
 _T = TypeVar("_T")
 
@@ -37,6 +39,68 @@ class RepositoryProfileId(StrEnum):
     LANGUAGE_NEUTRAL = "language-neutral"
     GENERIC_PYTHON = "generic-python"
     AUTOSKILLIT = "autoskillit"
+
+
+class ExplorationFailureResponse(StrEnum):
+    """How a dispatching parent should react to an ``ExplorationFailureCode``.
+
+    FALLBACK dispatches ``pluginless-explorer`` (Read/Grep/Glob only) instead of
+    a broker-bound explorer. RETRY_THEN_SURFACE retries the failed operation once
+    before surfacing the code. SURFACE reports the code to the caller without
+    retry or fallback.
+    """
+
+    FALLBACK = "fallback"
+    RETRY_THEN_SURFACE = "retry_then_surface"
+    SURFACE = "surface"
+
+
+PLUGINLESS_EXPLORER_ROLE: Final[str] = "pluginless-explorer"
+
+EXPLORATION_FAILURE_CODE_RESPONSES: Mapping[ExplorationFailureCode, ExplorationFailureResponse] = {
+    ExplorationFailureCode.SESSION_TYPE_INELIGIBLE: ExplorationFailureResponse.FALLBACK,
+    ExplorationFailureCode.STORE_UNAVAILABLE: ExplorationFailureResponse.FALLBACK,
+    ExplorationFailureCode.NO_SESSION_ID: ExplorationFailureResponse.FALLBACK,
+    ExplorationFailureCode.SERVICE_NOT_CONFIGURED: ExplorationFailureResponse.FALLBACK,
+    ExplorationFailureCode.SNAPSHOT_TRUNCATED: ExplorationFailureResponse.FALLBACK,
+    ExplorationFailureCode.STORE_CLOSED: ExplorationFailureResponse.FALLBACK,
+    ExplorationFailureCode.CAPACITY_EXCEEDED: ExplorationFailureResponse.RETRY_THEN_SURFACE,
+    ExplorationFailureCode.ENABLE_COMPONENTS_FAILED: ExplorationFailureResponse.RETRY_THEN_SURFACE,
+    ExplorationFailureCode.SNAPSHOT_STALE: ExplorationFailureResponse.RETRY_THEN_SURFACE,
+    # Security boundary: never fallback, even though it resembles the other
+    # permanent-condition codes above — falling back would let an unauthenticated
+    # read proceed after the server explicitly refused this repository's trust.
+    ExplorationFailureCode.TRUSTED_ROOT_MISMATCH: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.SESSION_ID_INVALID: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.BIND_FAILED: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.SNAPSHOT_CAPTURE_FAILED: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.INVALID_SOURCE_IDENTITY: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.INVALID_REQUEST: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.CONTEXT_UNAVAILABLE: ExplorationFailureResponse.SURFACE,
+    ExplorationFailureCode.BROKER_UNAVAILABLE: ExplorationFailureResponse.SURFACE,
+}
+
+EXPLORATION_FALLBACK_CODES: frozenset[ExplorationFailureCode] = frozenset(
+    code
+    for code, response in EXPLORATION_FAILURE_CODE_RESPONSES.items()
+    if response is ExplorationFailureResponse.FALLBACK
+)
+
+
+class BrokerAuthorityStatus(StrEnum):
+    """Exhaustive, truthful states for ``kitchen_status()``'s broker_authority field.
+
+    Total by construction: session_type() is fail-closed over a closed
+    SessionType enum, EXPLORER_INELIGIBLE_SESSION_TYPES is a closed frozenset,
+    the store-type check is a boolean isinstance, and the binding probe
+    returns bool — every path lands on exactly one of these four states.
+    """
+
+    AVAILABLE = "available"
+    NO_SESSION_BOUND = "no_session_bound"
+    SESSION_TYPE_INELIGIBLE = ExplorationFailureCode.SESSION_TYPE_INELIGIBLE.value
+    STORE_UNAVAILABLE = ExplorationFailureCode.STORE_UNAVAILABLE.value
 
 
 class ExplorationApplicability(StrEnum):
@@ -143,6 +207,7 @@ class ExplorationContextStoreProtocol(Protocol[_T]):
         role: str,
         session_id: str,
         value: _T,
+        origin: Literal["session", "launch"],
         ttl_seconds: float | None = None,
     ) -> str:
         """Issue a capability or raise when binding, TTL, capacity, or state is invalid."""
@@ -541,6 +606,7 @@ class EvidencePage:
 
 
 __all__ = [
+    "BrokerAuthorityStatus",
     "CapabilityResolution",
     "CapabilityResolutionStatus",
     "CollectorReport",
@@ -549,8 +615,11 @@ __all__ = [
     "ContinuationCursor",
     "EvidencePage",
     "EvidenceRecord",
+    "EXPLORATION_FAILURE_CODE_RESPONSES",
+    "EXPLORATION_FALLBACK_CODES",
     "ExplorationApplicability",
     "ExplorationContextStoreProtocol",
+    "ExplorationFailureResponse",
     "ExplorationQuerySpec",
     "ExplorationRouterPlan",
     "ExplorationTaskSpec",
@@ -559,6 +628,7 @@ __all__ = [
     "GraphNode",
     "MethodProvenance",
     "NodeKey",
+    "PLUGINLESS_EXPLORER_ROLE",
     "ProfileActivation",
     "RelationshipKind",
     "RepositoryIdentity",

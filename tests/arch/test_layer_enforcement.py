@@ -1785,6 +1785,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/workspace/test_project_local_overrides_identity_projection.py": frozenset(
         {"autoskillit.execution"}
     ),
+    # ineligible-context fallback routing test needs a real ClaudeCodeBackend to
+    # exercise context.backend.exploration_dispatch_renderer.conventions
+    "tests/workspace/test_explorer_eligibility_rendering.py": frozenset({"autoskillit.execution"}),
     # codex session skills split — layout, locking, persistent_root tests import
     # codex backend helpers (CodexBackend, materialize_profile_skills, get_backend)
     "tests/workspace/test_session_skills_codex_layout.py": frozenset({"autoskillit.execution"}),

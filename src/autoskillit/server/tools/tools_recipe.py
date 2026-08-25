@@ -98,9 +98,9 @@ async def list_recipes() -> str:
                 tool_ctx.project_dir, features=tool_ctx.config.features
             )
             return json.dumps(result)
-    except Exception:
+    except Exception as exc:
         logger.error("list_recipes unhandled exception", exc_info=True)
-        return json.dumps({"error": "internal error listing recipes — see server logs"})
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(

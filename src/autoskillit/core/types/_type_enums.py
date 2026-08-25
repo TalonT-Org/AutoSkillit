@@ -580,6 +580,7 @@ class ExplorationFailureCode(StrEnum):
     SESSION_TYPE_INELIGIBLE = "session_type_ineligible"
     STORE_UNAVAILABLE = "exploration_store_unavailable"
     NO_SESSION_ID = "no_session_id"
+    SESSION_ID_INVALID = "session_id_invalid"
     BIND_FAILED = "bind_failed"
     ENABLE_COMPONENTS_FAILED = "enable_components_failed"
     TRUSTED_ROOT_MISMATCH = "trusted_root_mismatch"

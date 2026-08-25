@@ -49,6 +49,24 @@ class TestListRecipeTools:
         assert result["recipes"][0]["summary"] == "plan > impl"
         assert "errors" not in result
 
+    @pytest.mark.anyio
+    async def test_list_recipes_unexpected_error_includes_exception_identity(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """An unhandled exception must surface its type identity, not a static
+        'see server logs' string that discards exception detail entirely
+        unlike every sibling handler in this file (load_recipe, validate_recipe,
+        migrate_recipe)."""
+
+        def raise_unexpected(*_args, **_kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(tool_ctx_kitchen_open.recipes, "list_all", raise_unexpected)
+
+        result = json.loads(await list_recipes())
+
+        assert result == {"error": "RuntimeError: boom"}
+
     # SS4
     @pytest.mark.anyio
     @patch("autoskillit.recipe._api_listing.list_recipes")

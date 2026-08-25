@@ -16,7 +16,9 @@ from typing import Any, assert_never
 import regex as re
 
 from autoskillit.core import (
+    EXPLORATION_FALLBACK_CODES,
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
+    PLUGINLESS_EXPLORER_ROLE,
     SKILL_PROJECTION_VERSION,
     BackendConventions,
     CodingAgentBackend,
@@ -415,11 +417,18 @@ def project_agent_skill_document(
             }
             if not active_vectors or context.explorer_provisioning_eligible is False:
                 if context.explorer_provisioning_eligible is False and active_vectors:
+                    conventions = context.backend.exploration_dispatch_renderer.conventions
+                    dispatch_role = f"{conventions.role_prefix}{PLUGINLESS_EXPLORER_ROLE}"
+                    fallback_codes = sorted(code.value for code in EXPLORATION_FALLBACK_CODES)
                     replacements.update(
                         {
                             vector.id: (
-                                "Explorer provisioning is unavailable in this context; "
-                                "do not dispatch this exploration vector."
+                                "Explorer provisioning is unavailable in this context "
+                                f"({fallback_codes}); dispatch the {dispatch_role!r} "
+                                f"specialist ({conventions.launcher}({conventions.role_argument}="
+                                f"{dispatch_role!r})) for this exploration vector's task "
+                                "instead — it is read-only (Read/Grep/Glob) and does not "
+                                "require enable_exploration."
                             )
                             for vector in active_vectors
                             if vector.id not in replacements

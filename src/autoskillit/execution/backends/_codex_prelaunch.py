@@ -31,10 +31,16 @@ def codex_prelaunch_transaction(
     resolved_home = Path(source_codex_home).expanduser().resolve(strict=False)
     config_path = resolved_home / "config.toml"
     with CodexConfigLock(config_path):
-        _ensure_codex_mcp_registered_unlocked(config_path=config_path)
-        _sync_hooks_to_codex_config_unlocked(
-            config_path=config_path,
-            hook_config_format=hook_config_format,
-            plugin_dir=plugin_dir,
-        )
+        try:
+            _ensure_codex_mcp_registered_unlocked(config_path=config_path)
+        except Exception as exc:
+            raise RuntimeError(f"source-config sync: {type(exc).__name__}: {exc}") from exc
+        try:
+            _sync_hooks_to_codex_config_unlocked(
+                config_path=config_path,
+                hook_config_format=hook_config_format,
+                plugin_dir=plugin_dir,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"hook update: {type(exc).__name__}: {exc}") from exc
         yield config_path

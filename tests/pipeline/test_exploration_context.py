@@ -63,6 +63,7 @@ def test_capability_is_opaque_and_bound_to_owner_role_and_session() -> None:
         role="semantic-code-navigator",
         session_id="session-a",
         value="trusted-state",
+        origin="session",
     )
 
     assert capability.startswith("explore_")
@@ -115,6 +116,7 @@ def test_expired_or_discarded_capability_cannot_be_reused() -> None:
         role="semantic-code-navigator",
         session_id="session-a",
         value="trusted-state",
+        origin="session",
         ttl_seconds=1,
     )
 
@@ -135,6 +137,7 @@ def test_expired_or_discarded_capability_cannot_be_reused() -> None:
         role="semantic-code-navigator",
         session_id="session-a",
         value="replacement-state",
+        origin="session",
     )
     store.discard(fresh)
     assert (
@@ -155,6 +158,7 @@ def test_close_removes_all_capabilities_and_rejects_future_issuance() -> None:
         role="semantic-code-navigator",
         session_id="session-a",
         value="trusted-state",
+        origin="session",
     )
 
     store.close()
@@ -174,6 +178,7 @@ def test_close_removes_all_capabilities_and_rejects_future_issuance() -> None:
             role="semantic-code-navigator",
             session_id="session-a",
             value="new-state",
+            origin="session",
         )
 
 

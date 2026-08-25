@@ -263,6 +263,10 @@ class ExplorationContextStoreProtocol(Protocol[_T]):
 
     def close(self) -> None: ...
 
+    def has_session_scoped_binding(self) -> bool:
+        """Return whether any live session-origin lease is currently bound."""
+        ...
+
     def submit(
         self,
         *,

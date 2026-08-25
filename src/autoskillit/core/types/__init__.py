@@ -43,9 +43,7 @@ from ._type_constants_skill_contract import __all__ as _constants_skill_contract
 from ._type_context_admission import *  # noqa: F401, F403
 from ._type_context_admission import __all__ as _context_admission_all
 from ._type_context_admission_persistence import *  # noqa: F401, F403
-from ._type_context_admission_persistence import (
-    __all__ as _context_admission_persistence_all,
-)
+from ._type_context_admission_persistence import __all__ as _context_admission_persistence_all
 from ._type_dimensions import *  # noqa: F401, F403
 from ._type_dimensions import __all__ as _dimensions_all
 from ._type_dispatch_identity import *  # noqa: F401, F403

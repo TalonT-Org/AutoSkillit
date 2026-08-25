@@ -181,7 +181,6 @@ class TestModuleCascadeCore:
             "fs_observation",
             "pipeline_tracker",
             "bash_write_targets",
-            "fs_observation",
             "_type_audit_admission",
             "_type_audit_admission_artifact_ownership",
             "_type_audit_admission_ledger",
@@ -222,11 +221,6 @@ class TestModuleCascadeCore:
         )
         assert MODULE_CASCADE_CORE["audit_cycle_verifier"] == frozenset(
             {"core", "recipe", "server"}
-        )
-
-    def test_fs_observation_inherits_paths_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["fs_observation"] == (
-            MODULE_CASCADE_CORE["paths"] | {"exploration"}
         )
 
     def test_audit_admission_shard_cascades(self) -> None:

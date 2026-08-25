@@ -73,6 +73,20 @@ else:
     class StoreCapacityExhaustedError(RuntimeError):
         """Standalone capacity fault used before the project environment exists."""
 
+        def __init__(
+            self,
+            *,
+            path: Path,
+            free_bytes: int,
+            total_bytes: int,
+            remedy: str,
+        ) -> None:
+            self.path = path
+            self.free_bytes = free_bytes
+            self.total_bytes = total_bytes
+            self.remedy = remedy
+            super().__init__(f"{path}: {free_bytes} bytes free of {total_bytes} total -- {remedy}")
+
     default_space_probe = capacity.default_space_probe
     PYTEST_GENERATION_NAME_RE = reclamation.PYTEST_GENERATION_NAME_RE
     SESSION_STALE_SECONDS = reclamation.SESSION_STALE_SECONDS

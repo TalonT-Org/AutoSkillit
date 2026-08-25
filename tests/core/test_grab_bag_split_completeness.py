@@ -465,6 +465,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             # Pre-existing files (preserved)
             "test_add_dir_validation.py",
             "test_agent_definition.py",
+            "test_append_only_store_bounds.py",
             "test_artifact_lease.py",
             "test_audit_admission_contracts.py",
             "test_audit_admission_ledger_contracts.py",
@@ -480,7 +481,9 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_branch_guard.py",
             "test_build_agent_env.py",
             "test_canonical_token_usage.py",
+            "test_capacity_fault.py",
             "test_capture.py",
+            "test_child_env_bus_address.py",
             "test_claude_env.py",
             "test_client_serialized_char_len.py",
             "test_closure_attacks.py",

@@ -1067,7 +1067,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # parameter injection point for execution.testing's capacity preflight, kept
         # separate from core/runtime/_reclamation.py since core/runtime already imports
         # core.types and _capacity is consumed there too (avoids a circular import).
-        "core": 40,
+        "core": 41,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).

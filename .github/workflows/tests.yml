@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [main, develop, stable]
   merge_group:
+  schedule:
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read
@@ -13,6 +15,7 @@ permissions:
 jobs:
   preflight:
     name: Preflight checks
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     outputs:
       os-matrix: ${{ steps.ci-policy.outputs.os-matrix }}
@@ -42,9 +45,42 @@ jobs:
           echo "uv: $(uv --version)"
           uv run python --version
 
+  cache_metadata:
+    name: Resolve uv cache identity
+    runs-on: ubuntu-latest
+    outputs:
+      python_cache_tag: ${{ steps.cache-identity.outputs.python_cache_tag }}
+      api_simulator_rev: ${{ steps.cache-identity.outputs.api_simulator_rev }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Resolve cache identity
+        id: cache-identity
+        shell: bash
+        run: |
+          python3 <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          python_selector = Path(".python-version").read_text(encoding="utf-8").strip()
+          if re.fullmatch(r"\d+\.\d+", python_selector) is None:
+              raise SystemExit(f"invalid .python-version selector: {python_selector!r}")
+
+          with Path("pyproject.toml").open("rb") as pyproject_file:
+              project = tomllib.load(pyproject_file)
+          revision = project["tool"]["uv"]["sources"]["api-simulator"]["rev"]
+          if not isinstance(revision, str) or re.fullmatch(r"[0-9a-fA-F]{40}", revision) is None:
+              raise SystemExit(f"invalid api-simulator revision: {revision!r}")
+
+          print(f"python_cache_tag={python_selector.replace('.', '')}")
+          print(f"api_simulator_rev={revision}")
+          PY
+
   test:
     name: Test (${{ matrix.shard }}) on ${{ matrix.os }}
-    needs: preflight
+    if: github.event_name != 'schedule'
+    needs: [preflight, cache_metadata]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

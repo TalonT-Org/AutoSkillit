@@ -54,7 +54,10 @@ async def run_workspace_clean(
         recent: list[tuple[Path, float]] = []
         for entry in sorted(runs_dir.iterdir()):
             if entry.is_dir():
-                age = now - entry.stat().st_mtime
+                mtime = safe_mtime(entry)
+                if mtime is None:
+                    continue
+                age = now - mtime
                 if age >= threshold:
                     stale.append((entry, age))
                 else:

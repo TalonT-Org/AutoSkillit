@@ -1056,18 +1056,25 @@ _FS_OBSERVATION_FUNNEL = {"observe_path_mode", "safe_mtime"}
 # for every LATENT site this part's sweep found but did not fix.
 _ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
     (
-        SRC_ROOT / "cli" / "doctor" / "_doctor_fleet.py",
-        "unguarded stat on an iterdir()-enumerated campaign state file — #4768",
+        SRC_ROOT / "cli" / "_install_snapshot" / "_snapshot.py",
+        "_matches_staged_state lstat()s two rglob()-enumerated entries with no "
+        "try/except in the function; caller chain already absorbs it via "
+        "rollback()'s except BaseException, so not a live crash today — #4784",
     ),
     (
-        SRC_ROOT / "cli" / "session" / "_session_reload.py",
-        "unguarded stat in a glob()-then-sort key= — same function unlinks siblings "
-        "nearby, so this is a live TOCTOU window, not theoretical — #4769",
+        SRC_ROOT / "cli" / "doctor" / "_doctor_fleet.py",
+        "unguarded stat on an iterdir()-enumerated campaign state file — #4768",
     ),
     (
         SRC_ROOT / "core" / "io.py",
         "directory_tree_digest stats every os.walk()-enumerated entry with no guard; "
         "3 of 5 callers guard against this at the call site, this function does not — #4770",
+    ),
+    (
+        SRC_ROOT / "execution" / "_recording_skills.py",
+        "build_skills_manifest reads an iterdir()-enumerated skill_md with no "
+        "try/except; safe today only because its one caller passes a private "
+        "post-copytree directory, not a live shared one — #4785",
     ),
     (
         SRC_ROOT / "execution" / "session_log.py",
@@ -1080,6 +1087,12 @@ _ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
         "here — #4772",
     ),
     (
+        SRC_ROOT / "recipe" / "_cmd_rpc_issues.py",
+        "batch_create_issues reads a glob()-enumerated ticket_body_*.md with no "
+        "try/except at all; no concurrent writer identified, but a hit would hard-fail "
+        "the whole ticket batch, not just the racing file — #4786",
+    ),
+    (
         SRC_ROOT / "server" / "_editable_guard.py",
         "unguarded read on a glob()-enumerated direct_url.json inside a broad "
         "except Exception — #4773",
@@ -1088,6 +1101,12 @@ _ENUMERATION_STAT_ALLOWLIST: list[tuple[Path, str]] = [
         SRC_ROOT / "workspace" / "session_skills.py",
         "unguarded stat on an iterdir()-enumerated lease-sweep candidate, no try/except "
         "nearby at all — #4774",
+    ),
+    (
+        SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py",
+        "_render_agent_definitions reads a glob()-enumerated agent .md file with no "
+        "try/except; agents_dir is a private, synchronously-populated tempdir with no "
+        "identified concurrent writer at all — #4787",
     ),
 ]
 
@@ -1119,8 +1138,9 @@ def _enumeration_source(
     aliases: dict[str, tuple[str, str | None]],
     tainted: set[str],
 ) -> bool:
-    """Return whether `iterable` is (or wraps via subscript/starred/comprehension) an
-    enumeration call, or a tainted name already established elsewhere in the function."""
+    """Return whether `iterable` is (or wraps via subscript/starred/comprehension/
+    sorted/min/max) an enumeration call, or a tainted name already established
+    elsewhere in the function."""
     if isinstance(iterable, (ast.Starred, ast.Subscript)):
         inner = iterable.value
         if _is_enumeration_call(inner, aliases):
@@ -1130,6 +1150,14 @@ def _enumeration_source(
         return iterable.id in tainted
     if _is_enumeration_call(iterable, aliases):
         return True
+    if isinstance(iterable, ast.Call):
+        dotted = _dotted_name(iterable.func, aliases)
+        if (
+            dotted is not None
+            and dotted.rsplit(".", 1)[-1] in {"sorted", "min", "max"}
+            and iterable.args
+        ):
+            return _enumeration_source(iterable.args[0], aliases, tainted)
     if isinstance(iterable, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
         return any(_is_enumeration_call(gen.iter, aliases) for gen in iterable.generators)
     if isinstance(iterable, (ast.List, ast.Tuple, ast.Set)):
@@ -1175,13 +1203,43 @@ def _is_funnel_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) 
     return dotted is not None and dotted.rsplit(".", 1)[-1] in _FS_OBSERVATION_FUNNEL
 
 
+# Superclasses of OSError that genuinely catch it at runtime despite not being
+# a literal OSError-family member name — kept separate from _OSERROR_FAMILY,
+# which enumerates OSError itself and its subclasses, not its superclasses.
+_BROAD_EXCEPTION_COVERAGE = {"Exception", "BaseException"}
+
+
 def _handler_covers_oserror(handler: ast.ExceptHandler) -> bool:
     kind = handler.type
     if kind is None:
         return True
+    covers = _OSERROR_FAMILY | _BROAD_EXCEPTION_COVERAGE
     if isinstance(kind, ast.Tuple):
-        return any(isinstance(elt, ast.Name) and elt.id in _OSERROR_FAMILY for elt in kind.elts)
-    return isinstance(kind, ast.Name) and kind.id in _OSERROR_FAMILY
+        return any(isinstance(elt, ast.Name) and elt.id in covers for elt in kind.elts)
+    return isinstance(kind, ast.Name) and kind.id in covers
+
+
+def _comprehension_local_taint(
+    expr: ast.expr, aliases: dict[str, tuple[str, str | None]], tainted: set[str]
+) -> frozenset[str]:
+    """Return names bound by a comprehension's own generator target inside `expr`,
+    scoped locally to that comprehension. Lets check_expr recognize e.g. `p` in
+    `[p for p in d.iterdir() if p.stat()...]` as tainted within that
+    comprehension's own subtree — even where `p` is never tainted at function
+    level at all. A comprehension's own generator target never leaks into the
+    function-level `tainted` set (real Python scoping), but the reverse can
+    coincide: an unrelated function-level-tainted name (e.g. a `for` loop
+    target elsewhere in the same function) may share a name with a later
+    comprehension's own generator variable — ordinary name reuse, not a
+    scoping bug, so the two sets are allowed to overlap.
+    """
+    local: set[str] = set()
+    for node in ast.walk(expr):
+        if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            for gen in node.generators:
+                if _enumeration_source(gen.iter, aliases, tainted):
+                    local.update(_target_names(gen.target))
+    return frozenset(local)
 
 
 def _find_enumeration_stat_violations(
@@ -1196,7 +1254,9 @@ def _find_enumeration_stat_violations(
     def scan_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         tainted: set[str] = set()
 
-        def check_expr(expr: ast.expr | None, guarded: bool) -> None:
+        def check_expr(
+            expr: ast.expr | None, guarded: bool, local_tainted: frozenset[str] = frozenset()
+        ) -> None:
             if expr is None:
                 return
             for node in ast.walk(expr):
@@ -1206,7 +1266,7 @@ def _find_enumeration_stat_violations(
                     continue
                 subject = _guarded_call_subject(node, aliases)
                 if subject is not None:
-                    if subject in tainted and not guarded:
+                    if (subject in tainted or subject in local_tainted) and not guarded:
                         violations.append(
                             (
                                 node.lineno,
@@ -1231,7 +1291,7 @@ def _find_enumeration_stat_violations(
                             if not isinstance(sub, ast.Call) or _is_funnel_call(sub, aliases):
                                 continue
                             inner_subject = _guarded_call_subject(sub, aliases)
-                            if inner_subject == param:
+                            if inner_subject == param and not guarded:
                                 violations.append(
                                     (
                                         sub.lineno,
@@ -1245,13 +1305,21 @@ def _find_enumeration_stat_violations(
                 if isinstance(stmt, ast.For):
                     if _enumeration_source(stmt.iter, aliases, tainted):
                         tainted.update(_target_names(stmt.target))
-                    check_expr(stmt.iter, guarded)
+                    check_expr(
+                        stmt.iter, guarded, _comprehension_local_taint(stmt.iter, aliases, tainted)
+                    )
                     visit_stmts(stmt.body, guarded)
                     visit_stmts(stmt.orelse, guarded)
                 elif isinstance(stmt, ast.Assign):
-                    check_expr(stmt.value, guarded)
+                    check_expr(
+                        stmt.value,
+                        guarded,
+                        _comprehension_local_taint(stmt.value, aliases, tainted),
+                    )
                     if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
-                        if _mentions_tainted_name(stmt.value, tainted):
+                        if _mentions_tainted_name(stmt.value, tainted) or _enumeration_source(
+                            stmt.value, aliases, tainted
+                        ):
                             tainted.add(stmt.targets[0].id)
                 elif isinstance(stmt, ast.Try):
                     body_guarded = guarded or any(
@@ -1263,19 +1331,27 @@ def _find_enumeration_stat_violations(
                     visit_stmts(stmt.orelse, guarded)
                     visit_stmts(stmt.finalbody, guarded)
                 elif isinstance(stmt, (ast.If, ast.While)):
-                    check_expr(stmt.test, guarded)
+                    check_expr(
+                        stmt.test, guarded, _comprehension_local_taint(stmt.test, aliases, tainted)
+                    )
                     visit_stmts(stmt.body, guarded)
                     visit_stmts(stmt.orelse, guarded)
                 elif isinstance(stmt, ast.With):
                     for item in stmt.items:
-                        check_expr(item.context_expr, guarded)
+                        check_expr(
+                            item.context_expr,
+                            guarded,
+                            _comprehension_local_taint(item.context_expr, aliases, tainted),
+                        )
                     visit_stmts(stmt.body, guarded)
                 elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     continue
                 else:
                     for child in ast.iter_child_nodes(stmt):
                         if isinstance(child, ast.expr):
-                            check_expr(child, guarded)
+                            check_expr(
+                                child, guarded, _comprehension_local_taint(child, aliases, tainted)
+                            )
 
         visit_stmts(func_node.body, False)
 
@@ -1349,6 +1425,47 @@ def _find_enumeration_stat_violations(
             "def f(d):\n    p = d\n    p.stat()\n",
             [],
             id="non_enumeration_name_is_never_tainted",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    candidates = sorted(d.glob('*.json'), key=lambda p: p.stat().st_mtime)\n"
+            "    sentinel = candidates[0]\n"
+            "    return sentinel.read_text()\n",
+            [2, 4],
+            id="sorted_result_bound_then_indexed_and_read_is_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    candidates = d.glob('*.json')\n"
+            "    for p in candidates:\n"
+            "        p.stat()\n",
+            [4],
+            id="bare_glob_bound_then_iterated_is_flagged",
+        ),
+        pytest.param(
+            "def f(d, cutoff):\n"
+            "    return [p for p in d.iterdir() if p.stat().st_mtime > cutoff]\n",
+            [2],
+            id="comprehension_over_enumeration_internal_stat_is_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    try:\n"
+            "        return sorted(d.glob('*'), key=lambda p: p.stat().st_mtime)\n"
+            "    except OSError:\n"
+            "        return None\n",
+            [],
+            id="sorted_min_max_key_lambda_guarded_by_try_except_is_not_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*.json'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except Exception:\n"
+            "            pass\n",
+            [],
+            id="guarded_by_broad_exception_handler_is_not_flagged",
         ),
     ],
 )
@@ -1610,6 +1727,7 @@ def test_fcntl_import_allowlist() -> None:
         "execution/session/_managed_headless_session_lineage_records.py",
         "hooks/guards/open_kitchen_guard.py",
         "hooks/_join_ledger.py",
+        "cli/session/_session_reload.py",
     }
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):

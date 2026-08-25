@@ -474,6 +474,7 @@ class TestBuildTestScopeCoreCascade:
         "skills",
         "planner",
         "report",
+        "smoke_utils",
         "arch",
         "contracts",
         "infra",
@@ -901,7 +902,7 @@ class TestBuildTestScopeCoreCascade:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_constants_env_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_constants_env → narrow cascade (smoke_utils silently dropped, no test dir)."""
+        """_type_constants_env → narrow cascade including smoke-utils tests."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_constants_env.py"},
@@ -918,6 +919,7 @@ class TestBuildTestScopeCoreCascade:
             "fleet",
             "recipe",
             "server",
+            "smoke_utils",
             "workspace",
         ]:
             assert pkg in dir_names, f"_type_constants_env cascade should include {pkg}"

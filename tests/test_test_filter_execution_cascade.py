@@ -28,6 +28,7 @@ _ALL_DIRS = [
     "cli",
     "hooks",
     "skills",
+    "smoke_utils",
     "arch",
     "contracts",
     "infra",
@@ -144,6 +145,18 @@ class TestBuildTestScopeExecutionCascade:
         assert "execution" in dir_names
         for excluded in ["core", "cli", "server", "workspace", "migration"]:
             assert excluded not in dir_names, f"ci narrow cascade should not include {excluded}"
+
+    @pytest.mark.parametrize("stem", ["diff_annotator", "pr_analysis"])
+    def test_diff_consumers_include_smoke_utils(self, tmp_path: Path, stem: str) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={f"src/autoskillit/execution/{stem}.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+
+        assert result is not None
+        assert {"execution", "smoke_utils"} <= {path.name for path in result}
 
     def test_recording_medium_scope_includes_server_files(self, tmp_path: Path) -> None:
         """recording.py entry includes specific server/ test files."""

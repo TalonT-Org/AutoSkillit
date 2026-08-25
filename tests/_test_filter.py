@@ -504,8 +504,8 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "clone_guard": frozenset({"execution"}),
     # --- Medium: execution + specific file-level consumers ---
     "ci": frozenset({"execution"}),
-    "diff_annotator": frozenset({"execution", "test_smoke_utils.py"}),
-    "pr_analysis": frozenset({"execution", "test_smoke_utils.py"}),
+    "diff_annotator": frozenset({"execution", "smoke_utils"}),
+    "pr_analysis": frozenset({"execution", "smoke_utils"}),
     "testing": frozenset(
         {
             "execution",
@@ -1238,7 +1238,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
     "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
-    "smoke_utils": frozenset({"test_smoke_utils.py", "recipe", "smoke_utils"}),
+    "smoke_utils": frozenset({"recipe", "smoke_utils"}),
     "version": frozenset({"test_version.py", "server", "cli"}),
     "_probe_canary": frozenset(
         {
@@ -1372,7 +1372,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py"}),
     "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
-    "smoke_utils": frozenset({"test_smoke_utils.py"}),
+    "smoke_utils": frozenset({"smoke_utils"}),
     "version": frozenset({"test_version.py"}),
     "_test_filter": frozenset({"arch", "contracts"}),
     "report": frozenset({"report"}),

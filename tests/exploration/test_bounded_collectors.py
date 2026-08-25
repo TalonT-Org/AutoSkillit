@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import dataclasses
 import os
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 import autoskillit.exploration.collectors.extractors as extractors_module
-from autoskillit.core import CollectorStatus, RelationshipKind
+from autoskillit.core import CollectorReport, CollectorStatus, RelationshipKind
 from autoskillit.exploration.collectors import (
     COLLECTOR_PROFILES,
     BoundedCommandResult,
@@ -25,6 +27,7 @@ from autoskillit.exploration.collectors.extractors import (
     collect_autoskillit_registry,
     collect_autoskillit_toml,
     collect_coverage_observation,
+    collect_file_list,
     collect_generated_artifact,
     collect_python_ast,
     collect_search,
@@ -75,15 +78,6 @@ def test_contained_path_entrypoints_share_lexical_rejection(
             match="non-empty contained relative path",
         ):
             entrypoint(root, relative_path)
-
-
-def test_read_contained_file_enforces_byte_limit(tmp_path: Path) -> None:
-    root = tmp_path / "repo"
-    root.mkdir()
-    (root / "large.txt").write_bytes(b"x" * 9)
-
-    with pytest.raises(CollectorSafetyError, match="byte limit"):
-        read_contained_file(root, "large.txt", CollectorLimits(max_file_bytes=8))
 
 
 def test_stable_contained_read_returns_current_bytes_and_metadata(tmp_path: Path) -> None:
@@ -381,14 +375,140 @@ def test_list_contained_files_rejects_replacement_before_queued_directory_open(
     assert replaced
 
 
-def test_list_contained_files_fails_closed_at_limit(tmp_path: Path) -> None:
-    root = tmp_path / "repo"
+def _trip_max_files(case_root: Path, _monkeypatch: pytest.MonkeyPatch) -> CollectorReport:
+    root = case_root / "repo"
     root.mkdir()
     (root / "a.txt").write_text("a")
     (root / "b.txt").write_text("b")
+    return collect_file_list(root, "snapshot", "", CollectorLimits(max_files=1))
 
-    with pytest.raises(CollectorSafetyError, match="limit exceeded"):
-        list_contained_files(root, CollectorLimits(max_files=1))
+
+def _trip_max_file_bytes(case_root: Path, _monkeypatch: pytest.MonkeyPatch) -> CollectorReport:
+    root = case_root / "repo"
+    root.mkdir()
+    (root / "artifact.txt").write_bytes(b"x" * 9)
+    return collect_artifact(
+        root,
+        "snapshot",
+        "artifact.txt",
+        CollectorLimits(max_file_bytes=8),
+    )
+
+
+def _trip_max_matches(case_root: Path, monkeypatch: pytest.MonkeyPatch) -> CollectorReport:
+    root = case_root / "repo"
+    root.mkdir()
+    matches = (
+        b'{"type":"match","data":{"path":{"text":"a.py"},"line_number":1,'
+        b'"lines":{"text":"needle one\\n"}}}\n'
+        b'{"type":"match","data":{"path":{"text":"b.py"},"line_number":2,'
+        b'"lines":{"text":"needle two\\n"}}}\n'
+    )
+    monkeypatch.setattr(
+        extractors_module,
+        "run_bounded_rg",
+        lambda *_args, **_kwargs: BoundedCommandResult(0, matches, b""),
+    )
+    return collect_search(root, "snapshot", "needle", CollectorLimits(max_matches=1))
+
+
+def _install_fake_rg(
+    case_root: Path,
+    body: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host_bin = case_root / "host-bin"
+    host_bin.mkdir()
+    fake_rg = host_bin / "rg"
+    fake_rg.write_text(f"#!/bin/sh\n{body}")
+    fake_rg.chmod(0o755)
+    monkeypatch.setenv("PATH", str(host_bin))
+
+
+def _trip_max_output_bytes(case_root: Path, monkeypatch: pytest.MonkeyPatch) -> CollectorReport:
+    root = case_root / "repo"
+    root.mkdir()
+    _install_fake_rg(
+        case_root,
+        "printf '12345'\nprintf 'abcde' >&2\n",
+        monkeypatch,
+    )
+    return collect_search(
+        root,
+        "snapshot",
+        "needle",
+        CollectorLimits(max_output_bytes=9),
+    )
+
+
+def _trip_timeout_seconds(case_root: Path, monkeypatch: pytest.MonkeyPatch) -> CollectorReport:
+    root = case_root / "repo"
+    root.mkdir()
+    _install_fake_rg(case_root, "sleep 2\n", monkeypatch)
+    return collect_search(
+        root,
+        "snapshot",
+        "needle",
+        CollectorLimits(timeout_seconds=1),
+    )
+
+
+_COLLECTOR_LIMIT_TRIP_BUILDERS: Mapping[
+    str, Callable[[Path, pytest.MonkeyPatch], CollectorReport]
+] = {
+    "max_files": _trip_max_files,
+    "max_file_bytes": _trip_max_file_bytes,
+    "max_matches": _trip_max_matches,
+    "max_output_bytes": _trip_max_output_bytes,
+    "timeout_seconds": _trip_timeout_seconds,
+}
+_EXPECTED_STATUS_BY_LIMIT_FIELD: Mapping[str, CollectorStatus] = {
+    "max_files": CollectorStatus.FAILED,
+    "max_file_bytes": CollectorStatus.FAILED,
+    "max_matches": CollectorStatus.TRUNCATED,
+    "max_output_bytes": CollectorStatus.FAILED,
+    "timeout_seconds": CollectorStatus.FAILED,
+}
+_EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD: Mapping[str, str] = {
+    "max_files": "collector entry limit exceeded",
+    "max_file_bytes": "requested artifact exceeds collector byte limit",
+    "max_matches": "match limit exceeded",
+    "max_output_bytes": "output limit exceeded",
+    "timeout_seconds": "timeout",
+}
+
+
+@pytest.mark.parametrize(
+    "field",
+    sorted(field.name for field in dataclasses.fields(CollectorLimits)),
+    ids=lambda name: name,
+)
+def test_every_collector_limit_field_has_a_trip_builder(field: str) -> None:
+    live_fields = {item.name for item in dataclasses.fields(CollectorLimits)}
+
+    assert field in _COLLECTOR_LIMIT_TRIP_BUILDERS
+    assert set(_COLLECTOR_LIMIT_TRIP_BUILDERS) == live_fields
+    assert set(_EXPECTED_STATUS_BY_LIMIT_FIELD) == live_fields
+    assert set(_EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD) == live_fields
+
+
+@pytest.mark.parametrize(
+    "field",
+    sorted(field.name for field in dataclasses.fields(CollectorLimits)),
+    ids=lambda name: name,
+)
+def test_each_collector_limit_field_trips_its_own_outcome(
+    field: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case_root = tmp_path / field
+    case_root.mkdir()
+
+    report = _COLLECTOR_LIMIT_TRIP_BUILDERS[field](case_root, monkeypatch)
+
+    assert report.status is _EXPECTED_STATUS_BY_LIMIT_FIELD[field]
+    assert report.diagnostic == _EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD[field]
 
 
 def test_collector_manifest_is_derived_from_the_versioned_registry() -> None:

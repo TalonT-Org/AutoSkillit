@@ -58,12 +58,7 @@ _BOUNDED_LIMITS_REGISTRY: dict[str, tuple[str, tuple[str, ...]]] = {
 
 # dataclass name -> rationale — the shape _DETACHED_SPAWN_ALLOWLIST uses, keyed
 # by name instead of path since a *Limits dataclass is what this guard tracks.
-_BOUNDED_LIMITS_ALLOWLIST: dict[str, str] = {
-    "CollectorLimits": (
-        "timeout_seconds and max_output_bytes are never constructed non-default "
-        "anywhere; per-field trip coverage tracked in #4777"
-    ),
-}
+_BOUNDED_LIMITS_ALLOWLIST: dict[str, str] = {}
 
 
 def _is_dataclass_decorator(decorator: ast.expr) -> bool:

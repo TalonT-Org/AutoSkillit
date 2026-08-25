@@ -5,6 +5,7 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -455,37 +456,45 @@ def _trip_timeout_seconds(case_root: Path, monkeypatch: pytest.MonkeyPatch) -> C
     )
 
 
-_COLLECTOR_LIMIT_TRIP_BUILDERS: Mapping[
-    str, Callable[[Path, pytest.MonkeyPatch], CollectorReport]
-] = {
-    "max_files": _trip_max_files,
-    "max_file_bytes": _trip_max_file_bytes,
-    "max_matches": _trip_max_matches,
-    "max_output_bytes": _trip_max_output_bytes,
-    "timeout_seconds": _trip_timeout_seconds,
-}
-_EXPECTED_STATUS_BY_LIMIT_FIELD: Mapping[str, CollectorStatus] = {
-    "max_files": CollectorStatus.FAILED,
-    "max_file_bytes": CollectorStatus.FAILED,
-    "max_matches": CollectorStatus.TRUNCATED,
-    "max_output_bytes": CollectorStatus.FAILED,
-    "timeout_seconds": CollectorStatus.FAILED,
-}
-_EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD: Mapping[str, str] = {
-    "max_files": "collector entry limit exceeded",
-    "max_file_bytes": "requested artifact exceeds collector byte limit",
-    "max_matches": "match limit exceeded",
-    "max_output_bytes": "output limit exceeded",
-    "timeout_seconds": "timeout",
+class _LimitTripCase(NamedTuple):
+    builder: Callable[[Path, pytest.MonkeyPatch], CollectorReport]
+    expected_status: CollectorStatus
+    expected_diagnostic: str
+
+
+_COLLECTOR_LIMIT_TRIP_CASES: Mapping[str, _LimitTripCase] = {
+    "max_files": _LimitTripCase(
+        _trip_max_files,
+        CollectorStatus.FAILED,
+        "collector entry limit exceeded",
+    ),
+    "max_file_bytes": _LimitTripCase(
+        _trip_max_file_bytes,
+        CollectorStatus.FAILED,
+        "requested artifact exceeds collector byte limit",
+    ),
+    "max_matches": _LimitTripCase(
+        _trip_max_matches,
+        CollectorStatus.TRUNCATED,
+        "match limit exceeded",
+    ),
+    "max_output_bytes": _LimitTripCase(
+        _trip_max_output_bytes,
+        CollectorStatus.FAILED,
+        "output limit exceeded",
+    ),
+    "timeout_seconds": _LimitTripCase(
+        _trip_timeout_seconds,
+        CollectorStatus.FAILED,
+        "timeout",
+    ),
 }
 
 
-def test_every_collector_limit_field_has_a_trip_builder() -> None:
+def test_every_collector_limit_field_has_a_trip_case() -> None:
     live_fields = {item.name for item in dataclasses.fields(CollectorLimits)}
 
-    assert set(_COLLECTOR_LIMIT_TRIP_BUILDERS) == live_fields
-    assert set(_EXPECTED_STATUS_BY_LIMIT_FIELD) == live_fields
-    assert set(_EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD) == live_fields
+    assert set(_COLLECTOR_LIMIT_TRIP_CASES) == live_fields
 
 
 @pytest.mark.parametrize(
@@ -500,11 +509,12 @@ def test_each_collector_limit_field_trips_its_own_outcome(
 ) -> None:
     case_root = tmp_path / field
     case_root.mkdir()
+    trip_case = _COLLECTOR_LIMIT_TRIP_CASES[field]
 
-    report = _COLLECTOR_LIMIT_TRIP_BUILDERS[field](case_root, monkeypatch)
+    report = trip_case.builder(case_root, monkeypatch)
 
-    assert report.status is _EXPECTED_STATUS_BY_LIMIT_FIELD[field]
-    assert report.diagnostic == _EXPECTED_DIAGNOSTIC_BY_LIMIT_FIELD[field]
+    assert report.status is trip_case.expected_status
+    assert report.diagnostic == trip_case.expected_diagnostic
 
 
 def test_collector_manifest_is_derived_from_the_versioned_registry() -> None:

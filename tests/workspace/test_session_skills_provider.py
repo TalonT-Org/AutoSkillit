@@ -192,7 +192,7 @@ def test_skills_directory_provider_lists_public_skills() -> None:
     assert "sous-chef" not in names
 
 
-def test_provider_gating_is_agent_safe(
+def test_provider_direct_resolution_remains_bundled_with_project_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -209,6 +209,12 @@ def test_provider_gating_is_agent_safe(
     skill = provider.resolver.resolve("open-kitchen")
     assert skill is not None
     assert skill.source is SkillSource.BUNDLED
+
+
+def test_provider_gating_is_agent_safe(tmp_path: Path) -> None:
+    provider = SkillsDirectoryProvider()
+    skill = provider.resolver.resolve("open-kitchen")
+    assert skill is not None
 
     content = provider.get_skill_content(skill, cwd=tmp_path, gated=True)
 

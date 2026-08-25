@@ -195,7 +195,6 @@ def test_installed_reclaim_lease_failure_stays_queued_for_retry(
     monkeypatch: pytest.MonkeyPatch,
     error: Exception,
 ) -> None:
-    import autoskillit.core._plugin_cache as plugin_cache
     from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -211,7 +210,7 @@ def test_installed_reclaim_lease_failure_stays_queued_for_retry(
     def fail_acquire(*_args, **_kwargs):
         raise error
 
-    monkeypatch.setattr(plugin_cache.ArtifactLease, "acquire_exclusive", fail_acquire)
+    monkeypatch.setattr(ArtifactLease, "acquire_exclusive", fail_acquire)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
     assert identity.managed_path.is_dir()

@@ -743,7 +743,9 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "server/test_factory.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_service_wrappers.py",
             "contracts/test_protocol_satisfaction.py",
         }
@@ -795,7 +797,9 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "server/test_tools_list_recipes.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_load_recipe.py",
             "server/test_mcp_overrides.py",
             "server/test_service_wrappers.py",
@@ -985,9 +989,13 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_explicit_backend_override.py",
             "server/test_factory.py",
             "server/test_tools_agents.py",
-            "server/test_tools_issue_lifecycle.py",
+            "server/test_tools_issue_lifecycle_handlers.py",
+            "server/test_tools_issue_lifecycle_helpers.py",
+            "server/test_tools_issue_lifecycle_state.py",
             "server/test_tools_report_bug.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_sous_chef.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_persistent_root.py",
@@ -1029,7 +1037,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",
             "server/test_smoke_pipeline.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_cache_poison.py",
             "server/test_service_wrappers.py",
             "server/test_tools_list_recipes.py",
@@ -1159,7 +1169,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
             "execution/test_quota_sleep.py",
             "execution/test_session_log_fields.py",
             # file-level: Codex output-budget config and generated agent contracts
@@ -1179,7 +1189,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # +smoke_utils: _cross_interpreter_upgrade imports PLUGIN_ROOT_TOKEN
             "smoke_utils",
             # server/ narrowed to 4 files
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_preflight.py",
             "server/test_preflight_explicit_backend.py",
             "server/test_tools_fleet_dispatch_preflight.py",

@@ -1,4 +1,4 @@
-"""Tests for env-var constants (CODEX_SCHEMA_VERSION, HEADLESS_AUTO_GATE, ORDER_INTERACTIVE, codex subdirs)."""
+"""Tests for env-var constants."""
 
 from __future__ import annotations
 

@@ -21,7 +21,7 @@ sidecar lease.
 "what does this point at?" instead of "where may I write?".
 
 **Changing the shape of an artifact we write under `~/` requires an entry in
-`RETIRED_INSTALL_ARTIFACT_SHAPES`** (`core/types/_type_constants.py`), consumed
+`RETIRED_INSTALL_ARTIFACT_SHAPES`** (`core/types/_type_constants_retirements.py`), consumed
 at runtime by `reconcile_install_artifacts()` here. `~/.autoskillit/` outlives
 years of releases, so a shape change with no registry entry strands every
 pre-existing install.

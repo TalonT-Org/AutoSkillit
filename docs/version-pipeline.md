@@ -4,6 +4,15 @@
 
 `pyproject.toml` `[project].version` is the single source of truth for the package version.
 
+That PEP 440 version is the ordering authority only for the **released** channel
+(stable, main, and release tags). A branch-tracking install such as `develop`
+uses the resolved commit SHA as its release identity: availability means the
+tracked ref points at a different commit, and a successful update converges to
+the exact resolved SHA even when `pyproject.toml` is unchanged. Local working-tree
+installs have no monotonic release criterion. The shared policy lives in
+`core/_release_identity.py`; update checks, transaction verification, and doctor
+diagnostics consume it rather than re-deriving version or commit comparisons.
+
 ## Version Propagation
 
 `scripts/sync_versions.py` reads the canonical version from `pyproject.toml` via `tomllib`, then

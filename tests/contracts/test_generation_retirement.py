@@ -421,6 +421,93 @@ def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:
             held_lease.close()
 
 
+def test_two_generations_same_version_distinct_incarnations(home: Path) -> None:
+    """Same-version republication updates both selectors without invalidating I1.
+
+    ``test_install_root_selector_is_never_absent_during_flip`` already proves the
+    per-version selector flips atomically. This pins the additional same-version
+    guarantees: the plugin-level selector follows I2, while both exact incarnations
+    remain readable and validate independently.
+    """
+    from autoskillit.core import (
+        read_installed_plugin_artifact_identity,
+        resolve_current_generation,
+    )
+
+    first = _publish_install_root(home, "1.0.0")
+    second = _publish_install_root(home, "1.0.0")
+
+    assert first.incarnation_id != second.incarnation_id
+    assert resolve_current_generation(home, _INSTALL_ROOT_REF, "1.0.0") == second.managed_path
+    assert resolve_current_generation_for_plugin(home, _INSTALL_ROOT_REF) == second.managed_path
+    assert (first.managed_path / "marker").read_text(encoding="utf-8") == "1.0.0"
+    assert (
+        read_installed_plugin_artifact_identity(
+            first.managed_path,
+            expected_semantic_key=first.semantic_key,
+            allow_symlinks=True,
+        ).incarnation_id
+        == first.incarnation_id
+    )
+    assert (
+        read_installed_plugin_artifact_identity(
+            second.managed_path,
+            expected_semantic_key=second.semantic_key,
+            allow_symlinks=True,
+        ).incarnation_id
+        == second.incarnation_id
+    )
+
+
+def test_same_version_republication_does_not_reclaim_a_live_generation(
+    home: Path,
+) -> None:
+    """A running I1 remains lease-protected when publishing I2 at the same version."""
+    from autoskillit.core import due_retiring_records
+    from autoskillit.core._plugin_artifact_identity import (
+        installed_plugin_artifact_lease_path,
+    )
+    from autoskillit.core.runtime.artifact_lease import ArtifactLease
+    from autoskillit.workspace import GenerationArtifactRetirementOwner
+
+    first = _publish_install_root(home, "1.0.0")
+    held_lease = ArtifactLease.acquire_existing_shared(
+        installed_plugin_artifact_lease_path(first.managed_path)
+    )
+    try:
+        second = _publish_install_root(home, "1.0.0")
+        assert first.managed_path.is_dir()
+        assert (
+            resolve_current_generation_for_plugin(home, _INSTALL_ROOT_REF) == second.managed_path
+        )
+
+        owner = GenerationArtifactRetirementOwner(
+            home / ".autoskillit" / "plugin-generations" / "autoskillit-install",
+            home=managed_home_for(home),
+            plugin_ref=_INSTALL_ROOT_REF,
+            artifact_kind=PluginArtifactKind.INSTALL_ROOT_GENERATION,
+        )
+        far_future = datetime.now(UTC) + timedelta(hours=1)
+        enqueued = owner.enqueue_retirement(first, not_before=far_future)
+        assert enqueued.created
+        past_due = datetime.now(UTC) + timedelta(hours=2)
+        (record,) = [
+            record
+            for record in due_retiring_records(past_due)
+            if record.record_id == enqueued.record_id
+        ]
+
+        assert owner.try_reclaim(record, past_due) is RetirementOutcome.DEFERRED_CONTENDED
+        assert first.managed_path.is_dir()
+
+        held_lease.close()
+        assert owner.try_reclaim(record, past_due) is RetirementOutcome.RECLAIMED
+        assert not first.managed_path.exists()
+    finally:
+        if not held_lease.closed:
+            held_lease.close()
+
+
 # ---------------------------------------------------------------------------
 # The version-independent selector Codex pins
 # ---------------------------------------------------------------------------

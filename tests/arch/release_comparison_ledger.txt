@@ -1,0 +1,15 @@
+# Recipe artifact version versus the installed package.
+cli/doctor/_doctor_fleet.py::_check_script_version_health::recipe-artifact-staleness
+# Release-availability authority.
+core/_release_identity.py::advance_verdict::upgrade-advanced
+core/_release_identity.py::update_available::update-available
+# Release-presentation version comparison; not an availability criterion.
+core/_release_identity.py::version_advanced::release-presentation
+# Live-probed Claude Code version versus supported minima.
+execution/backends/claude.py::_claude_host_attestation_env::backend-feature-minimum
+execution/backends/claude.py::ensure_pre_launch::backend-minimum-version
+# Migration-note selection bounds.
+migration/loader.py::applicable_migrations::migration-applicability
+# Recipe and campaign compatibility checks.
+recipe/rules/campaign/rules_campaign_flow.py::_check_autoskillit_version_compatible::campaign-compatibility
+recipe/rules/rules_inputs.py::_check_outdated_version::recipe-artifact-staleness

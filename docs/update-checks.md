@@ -6,12 +6,32 @@ On every interactive CLI invocation (excluding headless/MCP sessions and CI),
 AutoSkillit checks for available updates and shows a single `[Y/n]` prompt if
 any of the following conditions fire:
 
-- **binary** — a newer release is available on your install's branch
+- **binary** — a newer released package version is available
 - **hooks** — new or changed hook entries have been added since last install
-- **branch drift** — the installed commit SHA lags the HEAD of your tracked branch
+- **branch drift** — the installed commit SHA differs from the HEAD of your tracked branch
 
 All three conditions are consolidated into a single prompt listing each reason.
 Answering `Y` runs the appropriate upgrade command followed by `autoskillit install`.
+
+## Release channels and their criteria
+
+An install has one release channel and therefore one answer to "is an update
+available?" The binary and branch-drift lines are presentations of that shared
+answer; they are not independent freshness checks.
+
+| Channel | Installs | Update available | Successful advance |
+|---------|----------|------------------|--------------------|
+| released | stable, main, and release tags | target PEP 440 version is greater | observed version is greater |
+| branch | develop and other non-stable VCS refs | resolved target commit differs | observed commit equals the resolved target commit |
+| working tree | local editable/path installs | never automatic | monotonic advance is not applicable |
+
+For a branch channel, the tracked ref is the authority. The update pins the SHA
+resolved during the check, and success means convergence to that exact commit even
+when the package version is unchanged. A ref rewind is therefore not treated as a
+version downgrade: if the branch now points at an older commit, converging to that
+commit is the requested branch-tracking behavior. Working-tree installs have no
+meaningful monotonic identity; their update still has to complete its subprocess,
+install, and artifact-verification checks, but no invented ordering is imposed.
 
 For the `develop`-tracking (dev) branch, the upgrade command no longer force-replaces
 the shared `uv`-managed tool root in place. It installs into a fresh, version-addressed
@@ -37,7 +57,7 @@ not from what was stored when you dismissed.
 
 **Recommendation: pin to a release tag and upgrade deliberately.** The
 `develop` track's HEAD advances 3.7–5.1 times per day, so a `develop`-tracking
-install finds a newer version on essentially every invocation — every one of
+install finds a different target commit on essentially every invocation — every one of
 those is a prompt (or an auto-accepted upgrade) you didn't ask for. Phase 3
 (see [Runtime Health](version-pipeline.md#runtime-health)) means an accepted
 upgrade can no longer destroy in-flight work on either track, but it does not
@@ -50,7 +70,8 @@ requires it.
 Dismissal expires on two axes:
 
 1. **Time** — the window elapses.
-2. **Version delta** — the running version advances past the dismissed version.
+2. **Release-identity delta** — the running released version or tracked-branch
+   commit differs from the identity recorded at dismissal time.
 
 ## The `autoskillit update` command
 
@@ -59,7 +80,8 @@ To upgrade immediately without waiting for a prompt:
     autoskillit update
 
 This runs the install-type-aware upgrade command, then `autoskillit install`,
-then verifies that the version advanced.  On success it clears any active
+then verifies that the release identity advanced under the channel contract above.
+On success it clears any active
 dismissal state so the next check starts fresh.
 
 For unknown install types (e.g. installed from PyPI without a VCS reference),

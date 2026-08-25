@@ -12,6 +12,14 @@ vars:
   PYTEST_GEN_DIR: '{{.PYTEST_TMP_ROOT}}/autoskillit-pytest-{{.AUTOSKILLIT_UID}}/pytest-{{.WORKTREE_HASH}}-{{.PYTEST_RUN_ID}}'
   PYTEST_TMPDIR: '{{.PYTEST_GEN_DIR}}/tmp'
   PYTEST_CACHEDIR: '{{.PYTEST_GEN_DIR}}/cache'
+  # Machine-scoped, outside the per-test isolated home (which mints a fresh $HOME every
+  # pytest test via tests/conftest.py's _isolated_home) and outside PYTEST_TMP_ROOT's
+  # ephemeral generation tree (this is meant to persist across runs, not get reaped with
+  # pytest generations) -- resolved from the real invoking user's $HOME, unaffected by
+  # per-test HOME patching, so uv's ~90MB interpreter download and package cache are shared
+  # across the whole test run instead of re-fetched by every isolated-home-scoped test.
+  UV_CACHE_ROOT:
+    sh: echo "$HOME/.cache/autoskillit-test-uv-cache"
 
 tasks:
   _tmpdir-setup:
@@ -27,6 +35,8 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
       AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
     cmds:
       - |
@@ -61,6 +71,8 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
       AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
     cmds:
       - |
@@ -121,6 +133,8 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     cmds:
       - |
         mkdir -p temp
@@ -169,6 +183,8 @@ tasks:
       OMP_NUM_THREADS: "1"
       SMOKE_TEST: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     cmds:
       - |
         mkdir -p temp
@@ -201,6 +217,8 @@ tasks:
       OMP_NUM_THREADS: "1"
       RESEARCH_SMOKE_TEST: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: test -n "$ANTHROPIC_API_KEY"
         msg: "ANTHROPIC_API_KEY must be set"
@@ -236,6 +254,8 @@ tasks:
       OMP_NUM_THREADS: "1"
       CODEX_SMOKE_TEST: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
         msg: "Codex authentication required: set OPENAI_API_KEY or CODEX_API_KEY, or run 'codex login'"
@@ -271,6 +291,8 @@ tasks:
       OMP_NUM_THREADS: "1"
       CODEX_SMOKE_TEST: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
@@ -343,6 +365,8 @@ tasks:
       CODEX_SMOKE_TEST: "1"
       AUTOSKILLIT_EXPLORER_LIVE_GATE: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
@@ -390,6 +414,8 @@ tasks:
       CODEX_SMOKE_TEST: "1"
       AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
@@ -441,6 +467,8 @@ tasks:
       CODEX_SMOKE_TEST: "1"
       AUTOSKILLIT_WEB_AGENT_LIVE_GATE: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
@@ -489,6 +517,8 @@ tasks:
       OMP_NUM_THREADS: "1"
       AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: command -v claude >/dev/null 2>&1
         msg: "Claude Code CLI must be installed"
@@ -530,6 +560,8 @@ tasks:
       OMP_NUM_THREADS: "1"
       AUTOSKILLIT_COOK_REAL_ROOT_SMOKE: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: command -v claude >/dev/null 2>&1
         msg: "Claude Code CLI must be installed"
@@ -574,6 +606,8 @@ tasks:
       CLAUDE_CODE_SMOKE_TEST: "1"
       CLAUDE_STARTUP_READINESS_SMOKE: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: command -v claude >/dev/null 2>&1
         msg: "Claude Code CLI must be installed"
@@ -614,6 +648,8 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     preconditions:
       - sh: test "$CODEX_SMOKE_TEST" = "1" || test "$CLAUDE_CODE_SMOKE_TEST" = "1"
         msg: "Set CODEX_SMOKE_TEST=1 or CLAUDE_CODE_SMOKE_TEST=1"
@@ -686,6 +722,8 @@ tasks:
     deps: [_tmpdir-setup]
     env:
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
     cmds:
       - uv run pytest --update-fixtures -n0 --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" tests/execution/backends/test_codex_deterministic_conformance.py -k test_update_fixtures_writes_snapshot
 
@@ -756,6 +794,8 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
       AUTOSKILLIT_TEST_FILTER: "none"
     cmds:
       - |
@@ -796,6 +836,8 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
       AUTOSKILLIT_TEST_FILTER: "none"
     cmds:
       - |

@@ -17,6 +17,7 @@ from ._capacity import default_space_probe as default_space_probe
 from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
 from ._claude_env import build_maintenance_env as build_maintenance_env
+from ._claude_env import resolve_dbus_session_bus_address as resolve_dbus_session_bus_address
 from ._cmd_runner import CmdRunner as CmdRunner
 from ._cmd_runner import default_cmd_runner as default_cmd_runner
 from ._cmd_runner import run_gh as run_gh

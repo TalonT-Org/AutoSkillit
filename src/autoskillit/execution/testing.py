@@ -27,6 +27,7 @@ from autoskillit.core import (
     TestResult,
     default_space_probe,
     get_logger,
+    resolve_dbus_session_bus_address,
 )
 
 if TYPE_CHECKING:
@@ -44,7 +45,9 @@ def build_sanitized_env() -> dict[str, str]:
     runs launched by test_check). Callers passing this dict as env= to a
     subprocess runner get full env inheritance minus the internal vars.
     """
-    return {k: v for k, v in os.environ.items() if k not in AUTOSKILLIT_PRIVATE_ENV_VARS}
+    env = {k: v for k, v in os.environ.items() if k not in AUTOSKILLIT_PRIVATE_ENV_VARS}
+    env["DBUS_SESSION_BUS_ADDRESS"] = resolve_dbus_session_bus_address()
+    return env
 
 
 def _read_sidecar_base_branch(cwd: Path) -> str | None:

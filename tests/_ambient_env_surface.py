@@ -1839,6 +1839,17 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "Code/Cursor/Zed) attach across the trust boundary; scrubbed to prevent test leakage."
         ),
     ),
+    "DBUS_SESSION_BUS_ADDRESS": AmbientEnvDisposition(
+        var="DBUS_SESSION_BUS_ADDRESS",
+        disposition="preserve",
+        owner="posix",
+        justification=(
+            "Every child-env builder now reads and unconditionally sets this: forward the "
+            "host value when present, else 'disabled:' -- an *unset* var, not an unreachable "
+            "one, is what triggers libdbus dbus-launch autolaunch, so a conditional-forward "
+            "rule would be a no-op in exactly the headless environments that leak daemons."
+        ),
+    ),
     "DELETE": AmbientEnvDisposition(
         var="DELETE",
         disposition="scrub",
@@ -2914,6 +2925,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "not AutoSkillit-private state."
         ),
     ),
+    "UV_CACHE_DIR": AmbientEnvDisposition(
+        var="UV_CACHE_DIR",
+        disposition="preserve",
+        owner="posix",
+        justification=(
+            "Pinned by Taskfile.yml to a machine-scoped location outside the per-test "
+            "isolated home so uv's package cache is shared across the test run instead "
+            "of re-fetched per test; read via _MAINTENANCE_BASE_ENV_KEYS membership."
+        ),
+    ),
     "UV_DEFAULT_INDEX": AmbientEnvDisposition(
         var="UV_DEFAULT_INDEX",
         disposition="preserve",
@@ -2942,6 +2963,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "Generic POSIX/system environment configuration (process"
             "locate/locale/proxy/certificate config) required for basic subprocess correctness;"
             "not AutoSkillit-private state."
+        ),
+    ),
+    "UV_PYTHON_INSTALL_DIR": AmbientEnvDisposition(
+        var="UV_PYTHON_INSTALL_DIR",
+        disposition="preserve",
+        owner="posix",
+        justification=(
+            "Pinned by Taskfile.yml to a machine-scoped location outside the per-test "
+            "isolated home so uv's ~90 MiB interpreter download is fetched once per run "
+            "instead of once per test; read via _MAINTENANCE_BASE_ENV_KEYS membership."
         ),
     ),
     "VSCODE_GIT_ASKPASS_MAIN": AmbientEnvDisposition(

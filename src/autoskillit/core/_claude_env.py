@@ -126,6 +126,8 @@ _MAINTENANCE_BASE_ENV_KEYS: frozenset[str] = frozenset(
         "UV_INDEX_URL",
         "UV_EXTRA_INDEX_URL",
         "UV_DEFAULT_INDEX",
+        "UV_PYTHON_INSTALL_DIR",
+        "UV_CACHE_DIR",
     }
 )
 _MAINTENANCE_WINDOWS_BASE_ENV_KEYS: frozenset[str] = frozenset(
@@ -142,6 +144,24 @@ _MAINTENANCE_EXTRA_KEYS: frozenset[str] = frozenset(
         "AUTOSKILLIT_SKIP_UPDATE_CHECK",
     }
 )
+
+
+def resolve_dbus_session_bus_address(base_env: Mapping[str, str] | None = None) -> str:
+    """Forward the host's DBUS_SESSION_BUS_ADDRESS, or explicitly disable autolaunch.
+
+    libdbus attempts autolaunch (dbus-launch -> dbus-daemon --fork) only when
+    DBUS_SESSION_BUS_ADDRESS is *unset* -- the mechanism that stops the leak is the
+    variable being defined at all, not the value being reachable. A conditional-forward
+    rule ("only set it when the host has one") is a no-op in exactly the headless/
+    container environments that leak, so every child environment builder must call this
+    and set the result unconditionally. "disabled:" is not a specified transport -- it is
+    the sentinel Chromium introduced (2017, CL 2861163002) to stop libdbus's nested
+    fork()/exec() autolaunch; jeepney's address parser (this repo's dbus client) raises
+    ValueError on it before ever reaching a connect attempt, which is what actually
+    prevents the daemon spawn.
+    """
+    source = os.environ if base_env is None else base_env
+    return source.get("DBUS_SESSION_BUS_ADDRESS") or "disabled:"
 
 
 def _is_protected_maintenance_extra(key: str) -> bool:
@@ -180,6 +200,10 @@ def build_maintenance_env(
     if os.name == "nt":
         allowed_base_keys = allowed_base_keys | _MAINTENANCE_WINDOWS_BASE_ENV_KEYS
     out = {key: base_env[key] for key in sorted(allowed_base_keys) if key in base_env}
+    # Unconditional, not allowlist-forwarded: build_maintenance_env only copies a base
+    # key when it's already present in base_env, but DBUS_SESSION_BUS_ADDRESS must be set
+    # even when base_env lacks it -- an unset var is exactly what triggers dbus autolaunch.
+    out["DBUS_SESSION_BUS_ADDRESS"] = resolve_dbus_session_bus_address(base_env)
     out.update(supplied_extras)
     return MappingProxyType(out)
 
@@ -221,6 +245,7 @@ def build_agent_env(
         and k not in AUTOSKILLIT_PRIVATE_ENV_VARS
         and not any(k.startswith(p) for p in IDE_ENV_PREFIX_DENYLIST)
     }
+    out["DBUS_SESSION_BUS_ADDRESS"] = resolve_dbus_session_bus_address(src)
     out.update(IDE_ENV_ALWAYS_EXTRAS)
     if extras:
         out.update(extras)

@@ -2,6 +2,7 @@
 
 import functools
 import os
+import shutil
 from collections.abc import Mapping
 from pathlib import Path as _Path
 from types import MappingProxyType
@@ -280,7 +281,7 @@ def parse_stdout_json(capsys):
 
 
 @pytest.fixture(autouse=True)
-def _isolated_home(monkeypatch, tmp_path_factory):
+def _isolated_home(monkeypatch, tmp_path_factory, request):
     """Redirect home resolution to a per-test temp directory.
 
     Prevents the developer's real ~/.autoskillit/config.yaml from being
@@ -295,8 +296,16 @@ def _isolated_home(monkeypatch, tmp_path_factory):
 
     Tests that need a specific home structure override this by calling:
         monkeypatch.setattr("pathlib.Path.home", lambda: my_home)
+
+    S3-5: tmp_path_factory.mktemp() mints a new numbered directory on every call and
+    nothing rotates it -- tmp_path_retention_policy governs the tmp_path fixture, not
+    mktemp(). Measured per xdist worker within a single generation: 6,737-13,426
+    directories. A finalizer removes this test's isolated home at teardown so the
+    steady-state count stays near the number of concurrently-running tests (one per
+    xdist worker), not the cumulative count of every test the worker has ever run.
     """
     isolated_home = tmp_path_factory.mktemp("isolated-home")
+    request.addfinalizer(lambda: shutil.rmtree(isolated_home, ignore_errors=True))
     monkeypatch.setattr("pathlib.Path.home", lambda: isolated_home)
     monkeypatch.setenv("HOME", str(isolated_home))
     monkeypatch.setenv("XDG_CACHE_HOME", str(isolated_home / ".cache"))

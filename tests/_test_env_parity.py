@@ -84,4 +84,26 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         ),
         parity_fixture=None,
     ),
+    "UV_PYTHON_INSTALL_DIR": HarnessEnvOverride(
+        var="UV_PYTHON_INSTALL_DIR",
+        value="{{.UV_CACHE_ROOT}}/python",
+        justification=(
+            "Pins uv's Python interpreter install dir outside the per-test isolated "
+            "home (which mints a fresh $HOME every test) so the ~90 MiB interpreter "
+            "download is fetched once per run, not once per test. Additive, not "
+            "masking: production has no equivalent forced-download path, so no "
+            "parity fixture is needed."
+        ),
+        parity_fixture=None,
+    ),
+    "UV_CACHE_DIR": HarnessEnvOverride(
+        var="UV_CACHE_DIR",
+        value="{{.UV_CACHE_ROOT}}/cache",
+        justification=(
+            "Pins uv's package cache outside the per-test isolated home for the same "
+            "reason as UV_PYTHON_INSTALL_DIR -- avoids re-fetching packages every "
+            "test. Additive, not masking; no parity fixture needed."
+        ),
+        parity_fixture=None,
+    ),
 }

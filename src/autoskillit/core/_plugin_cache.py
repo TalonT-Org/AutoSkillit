@@ -1,19 +1,15 @@
-"""Facade for the plugin-cache lifecycle concerns (issue #4741 decomposition).
+"""Backward-compat facade for the plugin-cache lifecycle (issue #4741 decomposition).
 
-Decomposed into three siblings:
+The lifecycle concerns now live in three siblings:
 
 - ``_retiring_cache`` — retiring-cache persistence + lock + mutation primitives
 - ``_plugin_artifact_retirement`` — ``PluginArtifactRetirementEngine``
 - ``_active_kitchens`` — active-kitchen registry + liveness
 
-This module preserves every public and private name that was previously
-defined here so existing callers and tests continue to bind to
-``autoskillit.core._plugin_cache`` without following moved symbols.
-
-The three module imports (``os``, ``psutil``, ``shutil``) are bound at module
-scope so ``monkeypatch.setattr("autoskillit.core._plugin_cache.{psutil,os,shutil}", ...)``
-patches the underlying modules — the same objects that ``_active_kitchens``
-and ``_plugin_artifact_retirement`` call into.
+This module re-exports the public names those shards define so existing
+importers continue to bind to ``autoskillit.core._plugin_cache``. The
+``os``, ``psutil``, and ``shutil`` bindings are kept solely as monkeypatch
+targets for tests that patch them through this facade path.
 """
 
 from __future__ import annotations
@@ -70,7 +66,3 @@ from ._retiring_cache import (  # noqa: F401 — re-exported
     repair_corrupt_retiring_cache,
 )
 from .io import write_versioned_json  # noqa: F401 — re-exported for tests/server/_helpers.py
-from .runtime.artifact_lease import (  # noqa: F401 — re-exported for monkeypatch
-    ArtifactLease,
-    ArtifactLeaseContention,
-)

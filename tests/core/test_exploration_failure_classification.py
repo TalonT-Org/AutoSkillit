@@ -43,8 +43,6 @@ def test_trusted_root_mismatch_is_surface_never_fallback() -> None:
     trusted_root_mismatch is unreachable from enable_exploration today but is
     reachable on the launch path; falling back would let an unauthenticated
     read proceed after the server explicitly refused this repository's trust.
-    A future "route every residual code to fallback" pass must not flip this
-    without reading the security rationale recorded at the mapping row.
     """
     assert (
         EXPLORATION_FAILURE_CODE_RESPONSES[ExplorationFailureCode.TRUSTED_ROOT_MISMATCH]

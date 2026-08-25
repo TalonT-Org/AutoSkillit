@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import os
 import stat
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -98,14 +99,41 @@ class ArtifactLease:
         lock_path: Path,
         *,
         blocking: bool = False,
+        timeout: float | None = None,
     ) -> ArtifactLease:
-        """Acquire a writer lease, nonblocking unless explicitly requested."""
+        """Acquire a writer lease, nonblocking unless explicitly requested.
+
+        `timeout` (only meaningful when `blocking` is False, its default) polls
+        nonblocking attempts with a short backoff until the deadline, then raises
+        `ArtifactLeaseContention` -- for a caller on a hot path that must degrade to a
+        fallback rather than either fail on the very first contention or block
+        indefinitely. #4511 traced a store-wide capacity exhaustion to exactly an
+        un-timeboxed `fcntl.flock` on a hot path under concurrent load; this is the
+        seam that prevents S3-1's shared asset store from reproducing it.
+        """
+        if timeout is not None and not blocking:
+            return cls._acquire_with_timeout(Path(lock_path), shared=False, timeout=timeout)
         return cls._acquire(
             Path(lock_path),
             shared=False,
             blocking=blocking,
             create=True,
         )
+
+    @classmethod
+    def _acquire_with_timeout(
+        cls, lock_path: Path, *, shared: bool, timeout: float
+    ) -> ArtifactLease:
+        deadline = time.monotonic() + timeout
+        poll_interval = 0.05
+        while True:
+            try:
+                return cls._acquire(lock_path, shared=shared, blocking=False, create=True)
+            except ArtifactLeaseContention:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise
+                time.sleep(min(poll_interval, remaining))
 
     @classmethod
     def _acquire(

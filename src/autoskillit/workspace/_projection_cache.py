@@ -50,6 +50,7 @@ __all__ = [
     "ProjectedPluginRetirementOwner",
     "is_projected_asset",
     "iter_public_plugin_asset_files",
+    "per_file_asset_digest",
     "projected_artifact_lease_path",
     "projected_artifact_manifest_path",
     "projected_plugin_artifact_digest",
@@ -267,6 +268,23 @@ def iter_public_plugin_asset_files(source_root: Path, *, top_level: bool = True)
 _RENDERED_HOOKS_MANIFEST_RELPATH = "hooks/hooks.json"
 
 
+def per_file_asset_digest(path: Path) -> str:
+    """Content-only SHA-256 of one file, independent of its relpath or projection.
+
+    Extracted from public_plugin_asset_digest's per-file loop (S3-1) so a
+    content-addressed shared asset store can key on file bytes alone: 91 separate
+    copies of the identical mermaid.min.js each recompute the SAME digest here and
+    therefore hash to the same store entry, regardless of which projection or
+    relative path they arrived at. Distinct from public_plugin_asset_digest
+    (whole-set, path-qualified), authority.py's asset_digest/semantic_key
+    (asset-set + skill/adaptation/namespace identities), and artifact_digest (over
+    the staged *output* tree) -- none of the other three is per-file or
+    path-independent.
+    """
+    with path.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
 def public_plugin_asset_digest(source_root: Path) -> str:
     """Digest every byte a projection copies out of *source_root*.
 
@@ -292,8 +310,7 @@ def public_plugin_asset_digest(source_root: Path) -> str:
             continue
         digest.update(rel.encode())
         digest.update(b"\0")
-        with path.open("rb") as handle:
-            digest.update(hashlib.file_digest(handle, "sha256").digest())
+        digest.update(bytes.fromhex(per_file_asset_digest(path)))
         digest.update(b"\0")
     return digest.hexdigest()
 

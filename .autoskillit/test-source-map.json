@@ -6,7 +6,6 @@
   ],
   "src/autoskillit/_llm_triage.py": [
     "tests/contracts/test_discipline_delivery_matrix.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py"
   ],
   "src/autoskillit/_probe_canary.py": [
@@ -1362,7 +1361,6 @@
     "tests/server/test_tools_execution_spill.py",
     "tests/server/test_tools_run_skill_retry.py",
     "tests/server/test_tools_status_kitchen.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py"
   ],
   "src/autoskillit/core/_cmd_runner.py": [
@@ -3965,7 +3963,6 @@
     "tests/smoke_utils/test_merge_gate_diagnosis.py",
     "tests/smoke_utils/test_review_design_artifacts.py",
     "tests/smoke_utils/test_review_design_lifecycle.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_conftest.py",
     "tests/test_llm_triage.py",
     "tests/test_review_pr_worktree_immunity.py",
@@ -4704,7 +4701,6 @@
     "tests/skills_extended/test_bundle_local_report.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
     "tests/smoke_utils/test_review_design_artifacts.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_conftest.py",
     "tests/test_fakes_conformance.py",
     "tests/test_llm_triage.py",
@@ -6369,7 +6365,6 @@
     "tests/skills/test_validate_test_audit_contracts.py",
     "tests/skills/test_vis_lens_methodology_norms.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_audit_docs_exploration.py",
     "tests/workspace/test_corridor_composition.py",
@@ -6849,7 +6844,6 @@
     "tests/server/test_tools_execution_spill.py",
     "tests/server/test_tools_run_skill_retry.py",
     "tests/server/test_tools_status_kitchen.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py"
   ],
   "src/autoskillit/core/types/_type_exceptions.py": [
@@ -9003,7 +8997,6 @@
     "tests/skills/test_validate_test_audit_contracts.py",
     "tests/skills/test_vis_lens_methodology_norms.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_agent_definition_rendering.py",
     "tests/workspace/test_audit_docs_exploration.py",
@@ -10529,7 +10522,6 @@
     "tests/server/test_wire_compat.py",
     "tests/skills/test_arch_lens_structural.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_explorer_eligibility_rendering.py",
     "tests/workspace/test_project_local_overrides_detection.py",
@@ -10707,7 +10699,7 @@
     "tests/server/test_tools_status_kitchen.py",
     "tests/server/test_wire_compat.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
+    "tests/test_llm_triage.py",
     "tests/workspace/test_project_local_overrides_detection.py",
     "tests/workspace/test_session_skills_codex_layout.py",
     "tests/workspace/test_session_skills_codex_locking.py",
@@ -12566,7 +12558,6 @@
     "tests/server/test_tools_execution_spill.py",
     "tests/server/test_tools_run_skill_retry.py",
     "tests/server/test_tools_status_kitchen.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py"
   ],
   "src/autoskillit/execution/session/_session_outcome.py": [
@@ -17062,7 +17053,6 @@
     "tests/skills/test_graphql_invocation_completeness.py",
     "tests/skills/test_planner_skill_contracts.py",
     "tests/skills/test_vis_lens_methodology_norms.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py"
   ],
   "src/autoskillit/recipe/_api_listing.py": [
@@ -17571,7 +17561,6 @@
     "tests/server/test_tools_status_kitchen.py",
     "tests/skills/test_graphql_invocation_completeness.py",
     "tests/skills/test_planner_skill_contracts.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py"
   ],
   "src/autoskillit/recipe/_contracts_staleness.py": [
@@ -35563,7 +35552,6 @@
     "tests/server/test_tools_status_kitchen.py",
     "tests/skills/test_arch_lens_structural.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_agent_definition_rendering.py",
     "tests/workspace/test_corridor_composition.py",
@@ -35803,7 +35791,6 @@
     "tests/server/test_tools_session_diagnostics.py",
     "tests/server/test_tools_status_kitchen.py",
     "tests/server/test_wire_compat.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_corridor_composition.py",
     "tests/workspace/test_session_skills_allow_only_and_closure.py",
@@ -36080,7 +36067,6 @@
     "tests/skills/test_validate_test_audit_contracts.py",
     "tests/skills/test_vis_lens_methodology_norms.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_audit_docs_exploration.py",
     "tests/workspace/test_corridor_composition.py",
@@ -36388,7 +36374,6 @@
     "tests/skills/test_validate_test_audit_contracts.py",
     "tests/skills/test_vis_lens_methodology_norms.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_agent_definition_rendering.py",
     "tests/workspace/test_audit_docs_exploration.py",
@@ -36824,7 +36809,6 @@
     "tests/skills/test_validate_test_audit_contracts.py",
     "tests/skills/test_vis_lens_methodology_norms.py",
     "tests/skills_extended/test_explorer_adoption_inventory.py",
-    "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py",
     "tests/workspace/test_agent_definition_rendering.py",
     "tests/workspace/test_audit_docs_exploration.py",

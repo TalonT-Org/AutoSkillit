@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -107,6 +108,13 @@ def test_backend_gating_root_relocation_is_complete() -> None:
     """Guard against partial reverts restoring the retired test or its source-map links."""
     assert not (REPO_ROOT / "tests/test_backend_gating_root.py").is_file()
     assert (REPO_ROOT / "tests/test_llm_triage.py").is_file()
+
+    source_map = json.loads((REPO_ROOT / ".autoskillit/test-source-map.json").read_text())
+    mapped_tests = {
+        test_path for source_tests in source_map.values() for test_path in source_tests
+    }
+    assert "tests/test_backend_gating_root.py" not in mapped_tests
+    assert "tests/test_llm_triage.py" in source_map["src/autoskillit/_llm_triage.py"]
 
 
 def test_build_test_scope_returns_full_run_reason_for_unmapped():

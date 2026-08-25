@@ -10,12 +10,7 @@ from autoskillit.migration.loader import MigrationChange, MigrationNote
 
 
 def make_skill_result(success: bool, result: str = "") -> SkillResult:
-    """Build a minimal SkillResult for mocking headless return values.
-
-    Mirrors the original _make_skill_result helper from test_engine.py
-    (lines 41–53). The retry_reason field uses RetryReason.NONE; the
-    is_error/exit_code/subtype fields track success.
-    """
+    """Build a minimal SkillResult for mocking headless return values."""
     return SkillResult(
         success=success,
         result=result,
@@ -32,15 +27,8 @@ def make_skill_result(success: bool, result: str = "") -> SkillResult:
 def make_migration_note(
     from_version: str = "0.0.0",
     to_version: str = "1.0.0",
-    tmp_path: Path | None = None,
 ) -> MigrationNote:
-    """Build a MigrationNote with one MigrationChange for migration tests.
-
-    Mirrors the original _make_migration_note helper from test_engine.py
-    (lines 56–73). The defaults allow zero-arg calls from existing test
-    sites; the tmp_path arg is accepted but unused (the placeholder path
-    is hard-coded).
-    """
+    """Build a MigrationNote with one MigrationChange for migration tests."""
     return MigrationNote(
         from_version=from_version,
         to_version=to_version,

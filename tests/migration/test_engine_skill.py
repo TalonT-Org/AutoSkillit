@@ -16,7 +16,6 @@ from autoskillit.migration.engine import (
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
-# Copy _SKILL_CORPUS_DIR verbatim from test_engine.py lines 777–779.
 _SKILL_CORPUS_DIR: Path = (
     Path(__file__).resolve().parent.parent / "contracts" / "fixtures" / "skill_contract_corpus"
 )

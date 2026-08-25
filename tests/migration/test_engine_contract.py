@@ -13,8 +13,6 @@ from autoskillit.migration.engine import (
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
-# Mirrors the original PROJECT_ROOT at test_engine.py:34. The path math
-# is unchanged because the new file lives at the same path as the old.
 PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent.parent
 
 

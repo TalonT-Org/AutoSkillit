@@ -18,9 +18,6 @@ from autoskillit.migration.engine import (
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
-# Copy _SAMPLE_RECIPE_YAML_FOR_DIAG verbatim from test_engine.py
-# lines 571–595. The exact YAML string content must be preserved
-# byte-for-byte because the advisory test asserts on the loaded structure.
 _SAMPLE_RECIPE_YAML_FOR_DIAG: str = """\
 name: my-recipe
 description: A test recipe

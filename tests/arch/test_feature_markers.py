@@ -57,7 +57,7 @@ _FLEET_CLASS_MARKERS: dict[str, set[str]] = {
         "TestFleetAutoGateBoot",
         "TestFleetAutoGateBootProjectDir",
     },
-    "server/test_tools_execution_results.py": {"TestTierAwareGateEnforcement"},
+    "server/test_tools_execution_results_gate.py": {"TestTierAwareGateEnforcement"},
     "cli/test_doctor_fleet_checks.py": {
         "TestGroupMFranchiseDoctorChecks",
         "TestGroupNFeatureGateDoctorChecks",

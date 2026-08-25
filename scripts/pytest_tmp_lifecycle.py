@@ -170,13 +170,9 @@ def _ensure_private_root(path: Path) -> None:
 
 
 def _paths_from_tokens(tokens: Iterable[str]) -> set[Path]:
-    """Extract TMPDIR=/--basetemp=/cache_dir= path values from ps-sweep tokens.
-
-    Deliberately kept as a small, private, local copy rather than reaching into
-    core.runtime._reclamation's private namespace -- this parser is a stable, trivial primitive
-    and the macOS ps-sweep is the only remaining consumer left in this file after the Linux
-    harvest moved into core/runtime/_reclamation.py.
-    """
+    """Extract TMPDIR=/--basetemp=/cache_dir= path values from ps-sweep tokens."""
+    # Local copy: core.runtime._reclamation's equivalent parser is module-private, not
+    # importable -- this is the macOS ps-sweep's only remaining consumer.
     references: set[Path] = set()
     for token in tokens:
         for prefix in ("TMPDIR=", "--basetemp=", "cache_dir="):

@@ -602,6 +602,23 @@ class TestRunCheck:
         assert result.severity == Severity.ERROR
         assert result.check == "unknown"
 
+    def test_raising_callable_name_lookup_cannot_escape_isolation(self) -> None:
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        class RaisingNameLookup:
+            def __getattribute__(self, name: str) -> object:
+                if name in {"func", "__name__"}:
+                    raise RuntimeError("name unavailable")
+                return super().__getattribute__(name)
+
+            def __call__(self) -> object:
+                raise RuntimeError("simulated")
+
+        [result] = _run_check(RaisingNameLookup())
+        assert result.severity == Severity.ERROR
+        assert result.check == "unknown"
+
     @pytest.mark.parametrize("malformed", [None, [object()]])
     def test_malformed_result_is_isolated(self, malformed: object) -> None:
         import functools

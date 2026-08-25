@@ -24,7 +24,11 @@ class DoctorResult:
 def _check_display_name(fn: Callable[[], object]) -> str:
     """Best-effort check name for logging/reporting — must never raise, since
     it is also used on the exception path inside _run_check."""
-    name = getattr(getattr(fn, "func", fn), "__name__", "unknown")
+    try:
+        name = getattr(getattr(fn, "func", fn), "__name__", "unknown")
+    except Exception:  # noqa: BLE001 - diagnostic metadata cannot escape isolation
+        logger.exception("doctor_check_name_resolution_failed")
+        return "unknown"
     return name.removeprefix("_check_") if isinstance(name, str) else "unknown"
 
 

@@ -1096,14 +1096,8 @@ def test_snapshot_failed_cause_scenarios_are_pairwise_distinct() -> None:
     assert len(reasons) == len(set(reasons))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="max_paths counts collapsed ignored entries toward the cap; tracked in #4778",
-)
-def test_max_paths_does_not_count_collapsed_ignored_entries(tmp_path: Path) -> None:
-    # Only 2 non-ignored paths exist (.gitignore, vendor/keep.txt); the 9 ignored
-    # files below (big.bin plus 8 more) currently count toward max_paths too,
-    # tripping PATH_COUNT_EXCEEDED at a cap that should comfortably admit them.
+def test_max_paths_counts_ignored_snapshot_records(tmp_path: Path) -> None:
+    # Two tracked and nine Git-enumerated ignored records exceed the five-record cap.
     root = _new_repository_with_tracked_file_in_ignored_dir(tmp_path)
     vendor = root / "vendor"
     for index in range(8):
@@ -1115,4 +1109,18 @@ def test_max_paths_does_not_count_collapsed_ignored_entries(tmp_path: Path) -> N
         limits=SnapshotCaptureLimits(max_paths=5),
     )
 
-    assert result.status is SnapshotCaptureStatus.COMPLETE
+    assert result.status is SnapshotCaptureStatus.TRUNCATED
+    assert result.snapshot is not None
+    assert result.validated_activation is None
+    assert result.reason is SnapshotCaptureReason.PATH_COUNT_EXCEEDED
+    assert result.snapshot.truncated
+    assert result.snapshot.state == "truncated"
+    assert result.snapshot.tree_digest == ""
+    assert result.snapshot.index_digest == ""
+    assert result.snapshot.pagination_identity == ""
+    assert result.snapshot.tracked_records == ()
+    assert result.snapshot.untracked_records == ()
+    assert result.snapshot.ignored_records == ()
+    assert result.snapshot.missing_records == ()
+    assert result.snapshot.mode_records == ()
+    assert result.snapshot.symlink_records == ()

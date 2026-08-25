@@ -108,6 +108,24 @@ def test_invalid_source_identity_raises_from_the_real_store(
         )
 
 
+def test_source_identity_at_exact_max_length_is_accepted(tmp_path: Path) -> None:
+    """The exact-max boundary (1024 chars) must NOT raise — only over-length does.
+    Complements the too_long parametrize case above by exercising the valid side
+    of the same `> _MAX_SOURCE_IDENTITY_LENGTH` bound."""
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tmp_path, service=_snapshot_service()
+    )
+
+    capability = store.bind_session_scoped(
+        owner_id="uid:test",
+        session_id="session-a",
+        cwd=tmp_path,
+        repository_root=tmp_path,
+        source_identity="x" * 1024,
+    )
+    assert capability.startswith("explore_")
+
+
 @pytest.mark.parametrize("session_id", ["", "x" * 129], ids=["empty", "too_long"])
 def test_invalid_session_binding_raises_from_the_real_store(
     tmp_path: Path, session_id: str
@@ -128,6 +146,24 @@ def test_invalid_session_binding_raises_from_the_real_store(
             repository_root=tmp_path,
             source_identity="interactive:session-a",
         )
+
+
+def test_session_id_at_exact_max_length_is_accepted(tmp_path: Path) -> None:
+    """The exact-max boundary (128 chars) must NOT raise — only over-length does.
+    Complements the too_long parametrize case above by exercising the valid side
+    of the same `> _MAX_CAPABILITY_LENGTH` bound in _validate_binding."""
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tmp_path, service=_snapshot_service()
+    )
+
+    capability = store.bind_session_scoped(
+        owner_id="uid:test",
+        session_id="x" * 128,
+        cwd=tmp_path,
+        repository_root=tmp_path,
+        source_identity="interactive:session-a",
+    )
+    assert capability.startswith("explore_")
 
 
 def test_invalid_session_binding_promotion_leaves_the_other_five_call_sites_unchanged(

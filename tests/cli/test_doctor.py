@@ -1556,7 +1556,6 @@ def test_check_source_version_drift_ok_outside_source_repo(
     """GIT_VCS install with empty cache reports OK (no drift observable)."""
     from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli.install._install_info import InstallInfo, InstallType
-    from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1569,8 +1568,7 @@ def test_check_source_version_drift_ok_outside_source_repo(
     monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     # Simulate empty cache and no source repo: resolve returns None
     monkeypatch.setattr(
-        update_checks_module,
-        "resolve_reference_sha",
+        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
         lambda info, home, **kw: None,
     )
 
@@ -1594,6 +1592,10 @@ def test_check_source_version_drift_ok_for_editable_install(
         editable_source=Path("/home/user/autoskillit"),
     )
     monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        lambda *_args, **_kwargs: pytest.fail("editable installs must not resolve a target"),
+    )
 
     result = _check_source_version_drift(home=tmp_path)
     assert result.severity == Severity.OK
@@ -1603,11 +1605,10 @@ def test_check_source_version_drift_ok_for_editable_install(
 def test_check_source_version_drift_ok_for_pinned_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
+    """A SHA-pinned install whose target is unchanged reports no drift."""
     from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli.install._install_info import InstallInfo, InstallType
-    from autoskillit.cli.update import _update_checks as update_checks_module
-    from autoskillit.core import Severity
+    from autoskillit.core import ReleaseChannel, ReleaseIdentity, Severity
 
     sha = "abcdef1234567890abcdef1234567890"
     info = InstallInfo(
@@ -1618,11 +1619,14 @@ def test_check_source_version_drift_ok_for_pinned_sha(
         editable_source=None,
     )
     monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
-    # When requested_revision == commit_id, resolve_reference_sha returns commit_id
     monkeypatch.setattr(
-        update_checks_module,
-        "resolve_reference_sha",
-        lambda info, home, **kw: sha,
+        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        lambda info, home, **kw: ReleaseIdentity(
+            ReleaseChannel.BRANCH,
+            version="0.0.0",
+            commit=sha,
+            ref=sha,
+        ),
     )
 
     result = _check_source_version_drift(home=tmp_path)
@@ -1635,7 +1639,6 @@ def test_check_source_version_drift_ok_when_cache_empty(
     """When SHA cannot be resolved (network/cache miss), doctor reports OK."""
     from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli.install._install_info import InstallInfo, InstallType
-    from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1647,8 +1650,7 @@ def test_check_source_version_drift_ok_when_cache_empty(
     )
     monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        update_checks_module,
-        "resolve_reference_sha",
+        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
         lambda info, home, **kw: None,
     )
 
@@ -1666,8 +1668,7 @@ def test_check_source_version_drift_warning_on_drift(
     """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
     from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli.install._install_info import InstallInfo, InstallType
-    from autoskillit.cli.update import _update_checks as update_checks_module
-    from autoskillit.core import Severity
+    from autoskillit.core import ReleaseChannel, ReleaseIdentity, Severity
 
     installed_sha = "installed123abc"
     ref_sha = "reference456def"
@@ -1681,15 +1682,72 @@ def test_check_source_version_drift_warning_on_drift(
     )
     monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        update_checks_module,
-        "resolve_reference_sha",
-        lambda info, home, **kw: ref_sha,
+        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        lambda info, home, **kw: ReleaseIdentity(
+            ReleaseChannel.BRANCH,
+            version="0.0.0",
+            commit=ref_sha,
+            ref="develop",
+        ),
     )
 
     result = _check_source_version_drift(home=tmp_path)
     assert result.severity == Severity.WARNING
     assert installed_sha[:8] in result.message
     assert ref_sha[:8] in result.message
+
+
+@pytest.mark.parametrize(
+    ("installed_sha", "target_sha"),
+    [("samecommit", "samecommit"), ("oldcommit", "newcommit")],
+)
+def test_drift_signal_and_doctor_agree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    installed_sha: str,
+    target_sha: str,
+) -> None:
+    import autoskillit as _pkg
+    from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import (
+        InstallInfo,
+        InstallType,
+        release_identity,
+    )
+    from autoskillit.cli.update._update_checks import _source_drift_signal
+    from autoskillit.core import (
+        ReleaseChannel,
+        ReleaseIdentity,
+        Severity,
+        update_available,
+    )
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id=installed_sha,
+        requested_revision="develop",
+        url=None,
+        editable_source=None,
+    )
+    target = ReleaseIdentity(
+        ReleaseChannel.BRANCH,
+        version="0.7.77",
+        commit=target_sha,
+        ref="develop",
+    )
+    monkeypatch.setattr(_pkg, "__version__", "0.7.77")
+    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        lambda *_args, **_kwargs: target,
+    )
+    installed = release_identity(info, version="0.7.77")
+    available = update_available(installed, target)
+
+    signal = _source_drift_signal(installed, target, available)
+    doctor = _check_source_version_drift(home=tmp_path)
+
+    assert (signal is not None) is (doctor.severity is Severity.WARNING)
 
 
 # ---------------------------------------------------------------------------

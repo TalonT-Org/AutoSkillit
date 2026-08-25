@@ -34,7 +34,10 @@ from autoskillit.cli.update._transaction import (
 )
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
+    DirectUrlInfo,
     InfrastructureFaultError,
+    ReleaseChannel,
+    ReleaseIdentity,
     generation_staging_root,
 )
 from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
@@ -42,6 +45,10 @@ from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+_OLD_SHA = "a" * 40
+_TARGET_SHA = "b" * 40
+_DIVERGED_SHA = "c" * 40
 
 
 @pytest.mark.parametrize(
@@ -90,6 +97,45 @@ def _info() -> InstallInfo:
         url="https://github.com/TalonT-Org/AutoSkillit.git",
         editable_source=None,
     )
+
+
+def _dev_info(commit: str = _OLD_SHA) -> InstallInfo:
+    return InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id=commit,
+        requested_revision="develop",
+        url="https://github.com/TalonT-Org/AutoSkillit.git",
+        editable_source=None,
+    )
+
+
+def _editable_info() -> InstallInfo:
+    return InstallInfo(
+        install_type=InstallType.LOCAL_EDITABLE,
+        commit_id=None,
+        requested_revision=None,
+        url="file:///source/autoskillit",
+        editable_source=Path("/source/autoskillit"),
+    )
+
+
+def _branch_identity(commit: str, *, version: str = "1.0.0") -> ReleaseIdentity:
+    return ReleaseIdentity(
+        ReleaseChannel.BRANCH,
+        version=version,
+        commit=commit,
+        ref="develop",
+    )
+
+
+def _staged_direct_url(commit: str) -> DirectUrlInfo:
+    return {
+        "install_type": "git-vcs",
+        "requested_revision": "develop",
+        "commit_id": commit,
+        "editable": False,
+        "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+    }
 
 
 def _register_plugin(home: Path, version: str = "1.0.0") -> Path:
@@ -628,6 +674,8 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: "1.0.0",
         fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        target_identity=_branch_identity(_TARGET_SHA, version="1.1.0"),
+        staged_identity_reader=lambda _root: _staged_direct_url(_TARGET_SHA),
         process_runner=runner,
     )
 
@@ -639,7 +687,7 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
         "tool",
         "install",
         "--force",
-        _INSTALL_FROM_DEVELOP,
+        f"{_INSTALL_FROM_DEVELOP.rsplit('@', 1)[0]}@{_TARGET_SHA}",
         "--python",
         python_pin,
     ]
@@ -728,6 +776,8 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: "1.0.0",
         fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        target_identity=_branch_identity(_TARGET_SHA, version="1.1.0"),
+        staged_identity_reader=lambda _root: _staged_direct_url(_TARGET_SHA),
         process_runner=_publication_runner(calls, failure_point),
     )
 
@@ -764,6 +814,8 @@ def test_dev_track_publication_infrastructure_fault_propagates(
             base_env={"PATH": "/bin"},
             version_reader=lambda _name: "1.0.0",
             fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+            target_identity=_branch_identity(_TARGET_SHA, version="1.1.0"),
+            staged_identity_reader=lambda _root: _staged_direct_url(_TARGET_SHA),
             process_runner=_publication_runner(calls),
         )
 
@@ -797,6 +849,34 @@ def test_claudecode_with_existing_registration_defers_before_mutation(
     _assert_terminal_history(result, UpdateTransactionPhase.SAFETY_CAPABILITY_PREFLIGHT)
     assert result.irreversible_pivot_crossed is False
     _assert_environment_not_logged(logs, sensitive_env)
+
+
+def test_dev_claudecode_defers_before_target_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.detect_install",
+        _dev_info,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.resolve_target_identity",
+        lambda _info, _home: (_ for _ in ()).throw(
+            AssertionError("target resolution must remain after deferral")
+        ),
+    )
+    _register_plugin(tmp_path)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin", "CLAUDECODE": "1"},
+        version_reader=lambda _name: "1.0.0",
+        process_runner=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("subprocess must not launch")
+        ),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.DEFERRED
 
 
 def test_upgrade_failure_gates_install_and_cleans_cwd(
@@ -842,6 +922,146 @@ def test_metadata_must_advance_before_install(
     assert len(calls) == 1
     _assert_terminal_history(result, UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE)
     assert result.irreversible_pivot_crossed is True
+
+
+@pytest.mark.parametrize(
+    (
+        "info",
+        "previous_version",
+        "observed_version",
+        "observed_commit",
+        "target",
+        "expected_outcome",
+    ),
+    [
+        (
+            _dev_info(),
+            "1.0.0",
+            "1.0.0",
+            _TARGET_SHA,
+            _branch_identity(_TARGET_SHA),
+            UpdateTransactionOutcome.COMPLETED,
+        ),
+        (
+            _dev_info(),
+            "1.0.0",
+            "1.0.0",
+            _OLD_SHA,
+            _branch_identity(_TARGET_SHA),
+            UpdateTransactionOutcome.FAILED_UPGRADE,
+        ),
+        (
+            _dev_info(),
+            "1.0.0",
+            "1.0.0",
+            _DIVERGED_SHA,
+            _branch_identity(_TARGET_SHA),
+            UpdateTransactionOutcome.FAILED_UPGRADE,
+        ),
+        (
+            _dev_info(),
+            "1.0.0",
+            "1.0.0",
+            _TARGET_SHA,
+            None,
+            UpdateTransactionOutcome.COMPLETED,
+        ),
+        (
+            _info(),
+            "1.0.0",
+            "1.0.0",
+            None,
+            None,
+            UpdateTransactionOutcome.FAILED_UPGRADE,
+        ),
+        (
+            _info(),
+            "1.1.0",
+            "1.0.0",
+            None,
+            None,
+            UpdateTransactionOutcome.FAILED_UPGRADE,
+        ),
+        (
+            _editable_info(),
+            "1.0.0",
+            "1.0.0",
+            None,
+            None,
+            UpdateTransactionOutcome.COMPLETED,
+        ),
+    ],
+)
+def test_update_transaction_uses_channel_advance_criterion(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    info: InstallInfo,
+    previous_version: str,
+    observed_version: str,
+    observed_commit: str | None,
+    target: ReleaseIdentity | None,
+    expected_outcome: UpdateTransactionOutcome,
+) -> None:
+    _prepare(monkeypatch)
+    monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", lambda: info)
+    is_branch = info.requested_revision == "develop"
+
+    def fake_upgrade_command(
+        _info: InstallInfo,
+        *,
+        install_root_destination: Path,
+        pin_commit: str | None = None,
+    ) -> UpgradeCommand:
+        del pin_commit
+        if is_branch:
+            return UpgradeCommand(
+                argv=["uv", "tool", "install", "--force", "autoskillit"],
+                mutates_shared_root=False,
+                env={
+                    "UV_TOOL_DIR": str(install_root_destination),
+                    "UV_TOOL_BIN_DIR": str(install_root_destination.with_name("probe-bin")),
+                },
+            )
+        return UpgradeCommand(
+            argv=["uv", "tool", "upgrade", "autoskillit"],
+            mutates_shared_root=True,
+        )
+
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.upgrade_command",
+        fake_upgrade_command,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.resolve_target_identity",
+        lambda _info, _home: None,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.publish_install_root_generation",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.write_entrypoint_shim",
+        lambda _home: None,
+    )
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: previous_version,
+        fresh_version_prober=lambda _info, _env, _runner: observed_version,
+        target_identity=target,
+        staged_identity_reader=(
+            (lambda _root: _staged_direct_url(observed_commit))
+            if observed_commit is not None
+            else None
+        ),
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+    )
+
+    assert result.outcome is expected_outcome
+    if expected_outcome is UpdateTransactionOutcome.FAILED_UPGRADE:
+        assert result.findings
+        assert "advance verdict" in result.findings[0]
 
 
 def test_unregistered_success_preserves_preexisting_obligation(
@@ -1622,10 +1842,13 @@ def test_obligation_survives_failures_at_or_after_upgrade_subprocess(
     assert result.outcome is not UpdateTransactionOutcome.COMPLETED, failure_point
     obligation = read_obligation(tmp_path)
     assert obligation is not None, failure_point
+    assert obligation.previous_identity_key == "1.0.0", failure_point
     if expect_expected_version:
         assert obligation.expected_version == "1.1.0", failure_point
+        assert obligation.expected_identity_key == "1.1.0", failure_point
     else:
         assert obligation.expected_version is None, failure_point
+        assert obligation.expected_identity_key is None, failure_point
     assert validate_plugin_cache_hooks(cache_dir=hooks_dir.parent.parent) == [], failure_point
 
 

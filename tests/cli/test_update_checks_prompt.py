@@ -12,13 +12,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli.install._install_info import InstallInfo, InstallType
+from autoskillit.cli.install._install_info import (
+    InstallInfo,
+    InstallType,
+    release_identity,
+)
 from autoskillit.cli.update._update_checks import (
     _is_dismissed,
     _read_dismiss_state,
     _write_dismiss_state,
     run_update_checks,
 )
+from autoskillit.core import ReleaseChannel, ReleaseIdentity
 
 from ._update_checks_helpers import _make_develop_info, _make_stable_info
 
@@ -74,9 +79,26 @@ def _setup_run_checks(
 
     monkeypatch.setattr(_pkg, "__version__", current_version)
 
+    installed = release_identity(_info, version=current_version)
+    if installed.channel is ReleaseChannel.BRANCH:
+        target: ReleaseIdentity | None = ReleaseIdentity(
+            ReleaseChannel.BRANCH,
+            version="0.9.0",
+            commit="target456",
+            ref=installed.ref,
+        )
+    elif installed.channel is ReleaseChannel.WORKING_TREE:
+        target = None
+    else:
+        target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.0")
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.resolve_target_identity",
+        lambda info, home: target,
+    )
+
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks._binary_signal",
-        lambda info, home, current: (
+        lambda installed, target, available: (
             Signal("binary", "New release: 0.9.0 (you have 0.7.77)") if binary_signal else None
         ),
     )
@@ -88,7 +110,7 @@ def _setup_run_checks(
     )
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks._source_drift_signal",
-        lambda info, home: (
+        lambda installed, target, available: (
             Signal("source_drift", "A newer version is available on the stable branch (aaa..bbb)")
             if source_drift_signal
             else None
@@ -203,6 +225,12 @@ def test_yes_delegates_to_shared_update_transaction(
     printed, input_calls = _setup_run_checks(
         monkeypatch, tmp_path, binary_signal=True, answer="y", info=info
     )
+    target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.0")
+    resolutions: list[ReleaseIdentity] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.resolve_target_identity",
+        lambda info, home: resolutions.append(target) or target,
+    )
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.run_update_transaction",
@@ -217,8 +245,10 @@ def test_yes_delegates_to_shared_update_transaction(
     monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock)
     monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
+    assert resolutions == [target]
     assert calls[0]["home"] == tmp_path
     assert "process_runner" in calls[0]
+    assert calls[0]["target_identity"] is target
 
 
 def test_yes_noncompleted_transaction_returns_without_restart_or_state_clear(
@@ -305,6 +335,8 @@ def test_no_records_conditions_list_in_dismissal_entry(
     conditions = entry["conditions"]
     assert "binary" in conditions
     assert "hooks" in conditions
+    assert entry["dismissed_version"] == "0.7.77"
+    assert entry["dismissed_identity_key"] == "0.7.77"
 
 
 def test_no_prints_expiry_date_line_with_correct_date(
@@ -336,14 +368,16 @@ def _dismissed_state(
     ago: timedelta,
     version: str = "0.7.77",
     conditions: list[str] | None = None,
+    identity_key: str | None = None,
 ) -> dict:
-    return {
-        "update_prompt": {
-            "dismissed_at": (datetime.now(UTC) - ago).isoformat(),
-            "dismissed_version": version,
-            "conditions": conditions or ["binary"],
-        }
+    entry: dict[str, object] = {
+        "dismissed_at": (datetime.now(UTC) - ago).isoformat(),
+        "dismissed_version": version,
+        "conditions": conditions or ["binary"],
     }
+    if identity_key is not None:
+        entry["dismissed_identity_key"] = identity_key
+    return {"update_prompt": entry}
 
 
 def test_stable_install_dismissal_silent_within_six_days(
@@ -448,11 +482,40 @@ def test_source_drift_dismissal_expires_on_version_delta(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Version advanced past dismissed_version → re-prompts regardless of time."""
-    state = _dismissed_state(ago=timedelta(hours=1), version="0.7.77", conditions=["source_drift"])
+    state = _dismissed_state(
+        ago=timedelta(hours=1),
+        version="0.7.77",
+        conditions=["source_drift"],
+        identity_key="0.7.77",
+    )
     printed, input_calls = _setup_run_checks(
         monkeypatch, tmp_path, source_drift_signal=True, state=state, current_version="0.7.78"
     )
     run_update_checks(home=tmp_path)
+    assert len(input_calls) == 1
+
+
+def test_source_drift_dismissal_expires_on_identity_delta(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    info = _make_develop_info(commit_id="newcommit")
+    state = _dismissed_state(
+        ago=timedelta(hours=1),
+        version="0.7.77",
+        conditions=["source_drift"],
+        identity_key="0.7.77+develop.goldcommit",
+    )
+    _, input_calls = _setup_run_checks(
+        monkeypatch,
+        tmp_path,
+        info=info,
+        source_drift_signal=True,
+        state=state,
+        current_version="0.7.77",
+    )
+
+    run_update_checks(home=tmp_path)
+
     assert len(input_calls) == 1
 
 
@@ -464,7 +527,12 @@ def test_source_drift_dismissal_expires_on_version_delta(
 def test_hook_dismissal_expires_when_version_advances(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    state = _dismissed_state(ago=timedelta(hours=1), version="0.7.77", conditions=["hooks"])
+    state = _dismissed_state(
+        ago=timedelta(hours=1),
+        version="0.7.77",
+        conditions=["hooks"],
+        identity_key="0.7.77",
+    )
     printed, input_calls = _setup_run_checks(
         monkeypatch, tmp_path, hooks_signal=True, state=state, current_version="0.7.78"
     )
@@ -526,7 +594,7 @@ def test_is_dismissed_within_window() -> None:
         }
     }
     assert _is_dismissed(
-        state, window=timedelta(hours=12), current_version="0.7.77", condition="binary"
+        state, window=timedelta(hours=12), installed_key="0.7.77", condition="binary"
     )
 
 
@@ -539,20 +607,21 @@ def test_is_dismissed_expired() -> None:
         }
     }
     assert not _is_dismissed(
-        state, window=timedelta(days=7), current_version="0.7.77", condition="binary"
+        state, window=timedelta(days=7), installed_key="0.7.77", condition="binary"
     )
 
 
-def test_is_dismissed_newer_version_resets() -> None:
+def test_is_dismissed_changed_identity_resets() -> None:
     state = {
         "update_prompt": {
             "dismissed_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat(),
             "dismissed_version": "0.7.77",
+            "dismissed_identity_key": "0.7.77",
             "conditions": ["binary"],
         }
     }
     assert not _is_dismissed(
-        state, window=timedelta(days=7), current_version="0.7.78", condition="binary"
+        state, window=timedelta(days=7), installed_key="0.7.78", condition="binary"
     )
 
 
@@ -566,13 +635,13 @@ def test_is_dismissed_condition_not_in_list() -> None:
     }
     # hooks was NOT dismissed — should still fire
     assert not _is_dismissed(
-        state, window=timedelta(days=7), current_version="0.7.77", condition="hooks"
+        state, window=timedelta(days=7), installed_key="0.7.77", condition="hooks"
     )
 
 
 def test_is_dismissed_empty_state() -> None:
     assert not _is_dismissed(
-        {}, window=timedelta(days=7), current_version="0.7.77", condition="binary"
+        {}, window=timedelta(days=7), installed_key="0.7.77", condition="binary"
     )
 
 

@@ -21,7 +21,7 @@ __all__ = [
 logger = get_logger(__name__)
 
 _OBLIGATION_FILENAME = "update_obligation.json"
-_OBLIGATION_SCHEMA_VERSION = 1
+_OBLIGATION_SCHEMA_VERSION = 2
 
 
 def _obligation_path(home: Path) -> Path:
@@ -49,10 +49,16 @@ class PublicationObligation:
     expected_version: str | None
     written_at: str
     originating_phase: str
+    previous_identity_key: str | None = None
+    expected_identity_key: str | None = None
 
 
 def write_obligation(
-    home: Path, *, previous_version: str, originating_phase: str
+    home: Path,
+    *,
+    previous_version: str,
+    originating_phase: str,
+    previous_identity_key: str | None = None,
 ) -> PublicationObligation:
     """Persist that publication is owed, before the irreversible mutation.
 
@@ -72,6 +78,8 @@ def write_obligation(
         expected_version=None,
         written_at=datetime.now(UTC).isoformat(),
         originating_phase=originating_phase,
+        previous_identity_key=previous_identity_key,
+        expected_identity_key=None,
     )
     with ArtifactLease.acquire_exclusive(_obligation_lock_path(home), blocking=True):
         _write(home, record)
@@ -83,6 +91,7 @@ def update_obligation_expected_version(
     *,
     expected: PublicationObligation,
     expected_version: str,
+    expected_identity_key: str | None = None,
 ) -> PublicationObligation | None:
     """Backfill ``expected_version`` once the post-pivot probe succeeds.
 
@@ -100,6 +109,8 @@ def update_obligation_expected_version(
                 expected_version=expected_version,
                 written_at=current.written_at,
                 originating_phase=current.originating_phase,
+                previous_identity_key=current.previous_identity_key,
+                expected_identity_key=expected_identity_key,
             )
             _write(home, updated)
             return updated
@@ -130,6 +141,8 @@ def read_obligation(home: Path) -> PublicationObligation | None:
     expected_version = data.get("expected_version")
     written_at = data.get("written_at")
     originating_phase = data.get("originating_phase")
+    previous_identity_key = data.get("previous_identity_key")
+    expected_identity_key = data.get("expected_identity_key")
     if (
         not isinstance(previous_version, str)
         or not previous_version.strip()
@@ -138,6 +151,8 @@ def read_obligation(home: Path) -> PublicationObligation | None:
         or not written_at.strip()
         or not isinstance(originating_phase, str)
         or not originating_phase.strip()
+        or (previous_identity_key is not None and not isinstance(previous_identity_key, str))
+        or (expected_identity_key is not None and not isinstance(expected_identity_key, str))
     ):
         logger.warning("update_obligation_read_invalid_fields")
         return _degraded_obligation()
@@ -157,6 +172,8 @@ def read_obligation(home: Path) -> PublicationObligation | None:
         expected_version=normalized_expected_version,
         written_at=written_at,
         originating_phase=originating_phase,
+        previous_identity_key=previous_identity_key,
+        expected_identity_key=expected_identity_key,
     )
 
 
@@ -166,6 +183,8 @@ def _degraded_obligation() -> PublicationObligation:
         expected_version=None,
         written_at="unknown",
         originating_phase="unknown",
+        previous_identity_key=None,
+        expected_identity_key=None,
     )
 
 
@@ -198,6 +217,8 @@ def _write(home: Path, record: PublicationObligation) -> None:
             "expected_version": record.expected_version,
             "written_at": record.written_at,
             "originating_phase": record.originating_phase,
+            "previous_identity_key": record.previous_identity_key,
+            "expected_identity_key": record.expected_identity_key,
         },
         schema_version=_OBLIGATION_SCHEMA_VERSION,
         strict_durability=True,

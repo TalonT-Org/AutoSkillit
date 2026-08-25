@@ -7,8 +7,14 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.cli.update._update_checks_fetch import _fetch_with_cache, _read_fetch_cache
-from autoskillit.core import get_logger
+from packaging.version import Version
+
+from autoskillit.cli.update._update_checks_fetch import (
+    _fetch_latest_version,
+    _fetch_with_cache,
+    _read_fetch_cache,
+)
+from autoskillit.core import ReleaseChannel, ReleaseIdentity, get_logger
 
 logger = get_logger(__name__)
 
@@ -111,6 +117,49 @@ def resolve_reference_sha(
 
     except Exception:
         logger.debug("drift check skipped: resolve_reference_sha error", exc_info=True)
+        return None
+
+
+def resolve_target_identity(
+    info: InstallInfo,
+    home: Path,
+    *,
+    network: bool = True,
+) -> ReleaseIdentity | None:
+    """Resolve the identity that ``upgrade_command(info)`` would install.
+
+    Returns ``None`` for working-tree installs and whenever the requested
+    revision's version or commit cannot be resolved.
+    """
+    from autoskillit.cli.install._install_info import release_identity
+
+    try:
+        channel = release_identity(info, version="0").channel
+        if channel is ReleaseChannel.WORKING_TREE:
+            return None
+
+        ref = info.requested_revision
+        if ref is None:
+            return None
+        version = _fetch_latest_version(ref, home)
+        if version is None:
+            return None
+        Version(version)
+
+        if channel is ReleaseChannel.RELEASED:
+            return ReleaseIdentity(ReleaseChannel.RELEASED, version=version)
+
+        commit = resolve_reference_sha(info, home, network=network)
+        if commit is None:
+            return None
+        return ReleaseIdentity(
+            ReleaseChannel.BRANCH,
+            version=version,
+            commit=commit,
+            ref=ref,
+        )
+    except Exception:
+        logger.debug("update check skipped: resolve_target_identity error", exc_info=True)
         return None
 
 

@@ -7,6 +7,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 import regex as re
@@ -35,6 +36,17 @@ _GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/rele
 _GITHUB_DEVELOP_PYPROJECT_URL = (
     "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml?ref=develop"
 )
+
+
+def _github_pyproject_url(ref: str) -> str:
+    """Return the GitHub contents URL for ``pyproject.toml`` at ``ref``."""
+    if ref == "develop":
+        return _GITHUB_DEVELOP_PYPROJECT_URL
+    encoded_ref = quote(ref, safe="")
+    return (
+        "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml"
+        f"?ref={encoded_ref}"
+    )
 
 
 def _read_fetch_cache(home: Path) -> dict[str, Any]:
@@ -160,16 +172,16 @@ def _fetch_with_cache(url: str, *, home: Path, ttl: int | None = None) -> dict[s
 
 
 def _fetch_latest_version(target: str, home: Path) -> str | None:
-    """Fetch the latest available version for the given target branch.
+    """Fetch the latest available version for the given target reference.
 
-    ``target`` is either ``"releases/latest"`` (for stable/main installs) or
-    ``"develop"`` (for develop installs).
+    ``target`` is either ``"releases/latest"`` for the latest published
+    release or a branch, tag, or commit whose ``pyproject.toml`` is read.
 
     Returns ``None`` on any network error or timeout.
     """
     try:
-        if target == "develop":
-            data = _fetch_with_cache(_GITHUB_DEVELOP_PYPROJECT_URL, home=home)
+        if target != "releases/latest":
+            data = _fetch_with_cache(_github_pyproject_url(target), home=home)
             if data is None:
                 return None
             import base64

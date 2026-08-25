@@ -7,8 +7,8 @@ Branch-aware dismissal windows:
 - stable/main/release-tag/UNKNOWN: timedelta(days=7)
 - develop/LOCAL_EDITABLE: timedelta(hours=12)
 
-Dismissal expires on two axes: time window elapsed, or version advanced past
-the dismissed_version recorded at dismiss time.
+Dismissal expires on two axes: time window elapsed, or the installed release
+identity changing from the identity recorded at dismiss time.
 """
 
 from __future__ import annotations
@@ -24,15 +24,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal
 
-from packaging.version import Version
-
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli.install._install_info import (
-    InstallInfo,
     InstallType,
-    comparison_branch,
     detect_install,
     dismissal_window,
+    release_identity,
 )
 from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.cli.update._restart import perform_restart
@@ -43,13 +40,24 @@ from autoskillit.cli.update._transaction import (
     run_update_transaction,
 )
 from autoskillit.cli.update._update_checks_fetch import (
-    _fetch_latest_version,
+    _fetch_latest_version as _fetch_latest_version,
+)
+from autoskillit.cli.update._update_checks_fetch import (
     invalidate_fetch_cache,
 )
 from autoskillit.cli.update._update_checks_source import (
-    resolve_reference_sha,
+    resolve_reference_sha as resolve_reference_sha,
 )
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.cli.update._update_checks_source import (
+    resolve_target_identity,
+)
+from autoskillit.core import (
+    ReleaseIdentity,
+    atomic_write,
+    get_logger,
+    update_available,
+    version_advanced,
+)
 from autoskillit.hook_registry import _count_hook_registry_drift
 
 logger = get_logger(__name__)
@@ -63,6 +71,7 @@ class Signal:
 
     kind: Literal["binary", "hooks", "source_drift", "dual_mcp"]
     message: str
+    target: ReleaseIdentity | None = None
 
 
 def _read_dismiss_state(home: Path) -> dict[str, object]:
@@ -86,19 +95,18 @@ def _write_dismiss_state(home: Path, state: dict[str, object]) -> None:
     atomic_write(state_file, json.dumps(state))
 
 
-def _binary_signal(info: InstallInfo, home: Path, current: str) -> Signal | None:
+def _binary_signal(
+    installed: ReleaseIdentity,
+    target: ReleaseIdentity | None,
+    available: bool,
+) -> Signal | None:
     """Return a Signal if a newer binary release is available, else None."""
-    target = comparison_branch(info)
-    if target is None:
-        return None
-    latest = _fetch_latest_version(target, home)
-    if latest is None:
-        return None
-    try:
-        if Version(latest) > Version(current):
-            return Signal("binary", f"New release: {latest} (you have {current})")
-    except Exception:
-        logger.debug("binary signal version comparison failed", exc_info=True)
+    if available and target is not None and version_advanced(installed, target):
+        return Signal(
+            "binary",
+            f"New release: {target.version} (you have {installed.version})",
+            target,
+        )
     return None
 
 
@@ -125,24 +133,22 @@ def _hooks_signal(settings_path: Path) -> Signal | None:
     return None
 
 
-def _source_drift_signal(info: InstallInfo, home: Path) -> Signal | None:
+def _source_drift_signal(
+    installed: ReleaseIdentity,
+    target: ReleaseIdentity | None,
+    available: bool,
+) -> Signal | None:
     """Return a Signal if the installed commit lags the branch HEAD, else None."""
-    try:
-        ref_sha = resolve_reference_sha(info, home, network=True)
-        if ref_sha is None:
-            return None
-        if ref_sha == info.commit_id:
-            return None
-        rev = info.requested_revision or str(info.install_type)
-        installed_short = (info.commit_id or "unknown")[:8]
-        ref_short = ref_sha[:8]
-        return Signal(
-            "source_drift",
-            f"A newer version is available on the {rev} branch ({installed_short}..{ref_short})",
-        )
-    except Exception:
-        logger.debug("source drift signal check failed", exc_info=True)
-    return None
+    if not available or target is None or target.commit == installed.commit:
+        return None
+    rev = target.ref or installed.ref or str(installed.channel)
+    installed_short = (installed.commit or "unknown")[:8]
+    ref_short = target.commit[:8] if target.commit is not None else "unknown"
+    return Signal(
+        "source_drift",
+        f"A newer version is available on the {rev} branch ({installed_short}..{ref_short})",
+        target,
+    )
 
 
 def _is_dual_mcp_registered(home: Path) -> bool:
@@ -175,7 +181,7 @@ def _is_dismissed(
     state: dict[str, object],
     *,
     window: timedelta,
-    current_version: str,
+    installed_key: str,
     condition: str,
 ) -> bool:
     """Return True iff the ``update_prompt`` entry dismisses ``condition``.
@@ -186,9 +192,8 @@ def _is_dismissed(
        never SHA-keyed — a new upstream commit does NOT break the window).
        Window values: 7 days for stable/main/release-tag/UNKNOWN installs;
        12 hours for develop/LOCAL_EDITABLE installs.
-    2. ``current_version <= dismissed_version`` (version-delta expiry: when the
-       running version advances past what was dismissed, the dismissal expires
-       uniformly for all three conditions).
+    2. The stored identity key is absent (legacy state) or still matches the
+       running install. A changed release identity expires the dismissal.
     3. ``condition in entry["conditions"]`` — a user who dismissed only
        ``"binary"`` still sees a fresh ``"hooks"`` prompt when it newly fires.
 
@@ -205,7 +210,8 @@ def _is_dismissed(
         dismissed_at = datetime.fromisoformat(raw_dismissed)
         if datetime.now(UTC) - dismissed_at >= window:
             return False
-        if Version(current_version) > Version(str(entry.get("dismissed_version", "0.0.0"))):
+        dismissed_key = entry.get("dismissed_identity_key")
+        if dismissed_key is not None and installed_key != dismissed_key:
             return False
         conditions = entry.get("conditions", [])
         if not isinstance(conditions, list):
@@ -260,12 +266,14 @@ def _surface_non_completed_outcome(result: UpdateTransactionResult) -> None:
 def _run_update_sequence(
     home: Path,
     state: dict[str, object],
+    target: ReleaseIdentity | None,
 ) -> None:
     """Present the automatic caller around the shared update transaction."""
     with terminal_guard():
         result = run_update_transaction(
             home=home,
             process_runner=subprocess.run,
+            target_identity=target,
         )
     if result.outcome is not UpdateTransactionOutcome.COMPLETED:
         _surface_non_completed_outcome(result)
@@ -315,12 +323,15 @@ def run_update_checks(home: Path | None = None) -> None:
     _home = home or Path.home()
     window = dismissal_window(info)
     state = _read_dismiss_state(_home)
+    installed = release_identity(info, version=current)
+    target = resolve_target_identity(info, _home)
+    available = target is not None and update_available(installed, target)
 
     # Gather signals (network I/O happens here; status_line deferred until we know output exists)
     raw_signals: list[Signal | None] = [
-        _binary_signal(info, _home, current),
+        _binary_signal(installed, target, available),
         _hooks_signal(_claude_settings_path("user", cwd=Path.cwd())),
-        _source_drift_signal(info, _home),
+        _source_drift_signal(installed, target, available),
         _dual_mcp_signal(_home),
     ]
 
@@ -334,12 +345,22 @@ def run_update_checks(home: Path | None = None) -> None:
     undismissed: list[Signal] = [
         s
         for s in all_fired
-        if not _is_dismissed(state, window=window, current_version=current, condition=s.kind)
+        if not _is_dismissed(
+            state,
+            window=window,
+            installed_key=installed.key(),
+            condition=s.kind,
+        )
     ]
     dismissed: list[Signal] = [
         s
         for s in all_fired
-        if _is_dismissed(state, window=window, current_version=current, condition=s.kind)
+        if _is_dismissed(
+            state,
+            window=window,
+            installed_key=installed.key(),
+            condition=s.kind,
+        )
     ]
 
     if undismissed:
@@ -361,13 +382,14 @@ def run_update_checks(home: Path | None = None) -> None:
             return
 
         if answer.lower() in ("", "y", "yes"):
-            _run_update_sequence(_home, state)
+            _run_update_sequence(_home, state, target)
             return
 
         # N path — write unified dismissal record
         state["update_prompt"] = {
             "dismissed_at": datetime.now(UTC).isoformat(),
             "dismissed_version": current,
+            "dismissed_identity_key": installed.key(),
             "conditions": [s.kind for s in undismissed],
         }
         _write_dismiss_state(_home, state)

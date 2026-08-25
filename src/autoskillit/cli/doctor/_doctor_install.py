@@ -116,16 +116,21 @@ def _check_stale_entry_points() -> DoctorResult:
 def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
     """Network source-drift check.
 
-    Compares the installed commit SHA against the current HEAD of the branch
-    the binary was installed from.  Uses a network request to get the latest
-    SHA (with disk-cache TTL fallback).
+    Compares the installed release identity against the target that the update
+    command would install. Uses network-backed update resolution.
     """
     check_name = "source_version_drift"
     _home = home or Path.home()
 
     try:
-        from autoskillit.cli.install._install_info import InstallType, detect_install
-        from autoskillit.cli.update._update_checks import resolve_reference_sha
+        import autoskillit as _pkg
+        from autoskillit.cli.install._install_info import (
+            InstallType,
+            detect_install,
+            release_identity,
+        )
+        from autoskillit.cli.update._update_checks_source import resolve_target_identity
+        from autoskillit.core import update_available
 
         info = detect_install()
 
@@ -141,20 +146,22 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
                 "Not a source-tracked install — drift check not applicable",
             )
 
-        ref_sha = resolve_reference_sha(info, _home, network=True)
+        target = resolve_target_identity(info, _home, network=True)
 
-        if ref_sha is None:
+        if target is None:
             return DoctorResult(
                 Severity.OK,
                 check_name,
                 "Source drift reference SHA unavailable — check network connectivity",
             )
 
-        if info.commit_id == ref_sha:
+        current = getattr(_pkg, "__version__", "0.0.0")
+        installed = release_identity(info, version=current)
+        if not update_available(installed, target):
             return DoctorResult(Severity.OK, check_name, "No source drift detected")
 
         installed_short = (info.commit_id or "unknown")[:8]
-        ref_short = ref_sha[:8]
+        ref_short = (target.commit or target.version)[:8]
         _cmd_str = _format_upgrade_cmd(info)
         return DoctorResult(
             Severity.WARNING,

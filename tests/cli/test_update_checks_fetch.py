@@ -370,7 +370,10 @@ def test_fetch_fails_fast_offline(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "target,expected_url_fragment",
     [
-        ("develop", "contents/pyproject.toml"),
+        ("develop", "contents/pyproject.toml?ref=develop"),
+        ("main", "contents/pyproject.toml?ref=main"),
+        ("feature/foo", "contents/pyproject.toml?ref=feature%2Ffoo"),
+        ("v0.9.300", "contents/pyproject.toml?ref=v0.9.300"),
         ("releases/latest", "releases/latest"),
     ],
 )

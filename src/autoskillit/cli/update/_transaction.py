@@ -15,8 +15,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, assert_never
 
-from packaging.version import Version
-
 from autoskillit.cli.install._install_contract import (
     MAINTENANCE_EXTRAS,
     InstallFailureKind,
@@ -31,16 +29,23 @@ from autoskillit.cli.install._install_contract import (
 from autoskillit.cli.install._install_info import (
     InstallInfo,
     detect_install,
+    release_identity,
     resolve_autoskillit_entrypoint,
     upgrade_command,
 )
 from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
+from autoskillit.cli.update._update_checks_source import resolve_target_identity
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
+    AdvanceVerdict,
+    DirectUrlInfo,
     InfrastructureFaultError,
+    ReleaseChannel,
+    ReleaseIdentity,
     _installed_plugins_path,
     _InstallLock,
+    advance_verdict,
     build_maintenance_env,
     generation_artifact_root,
     generation_staging_root,
@@ -50,6 +55,7 @@ from autoskillit.core import (
     is_git_worktree,
     managed_home_for,
     new_plugin_artifact_incarnation_id,
+    parse_direct_url,
     write_entrypoint_shim,
 )
 from autoskillit.workspace import (
@@ -76,6 +82,7 @@ logger = get_logger(__name__)
 _ProcessRunner = Callable[..., subprocess.CompletedProcess[Any]]
 _VersionReader = Callable[[str], str]
 _VersionProber = Callable[[InstallInfo, Mapping[str, str], _ProcessRunner], str]
+_StagedIdentityReader = Callable[[Path], DirectUrlInfo | None]
 
 
 def _install_root_entrypoint(root: Path) -> Path:
@@ -225,6 +232,26 @@ def _upgrade_failure(
     )
 
 
+def _advance_failure_message(
+    verdict: AdvanceVerdict,
+    previous: ReleaseIdentity,
+    observed: ReleaseIdentity,
+    target: ReleaseIdentity | None,
+) -> str:
+    """Describe a rejected advancement using the channel's authority."""
+    if previous.channel is ReleaseChannel.BRANCH:
+        target_commit = target.commit if target is not None else None
+        return (
+            f"Upgrade advance verdict {verdict.value} on {previous.channel.value} channel: "
+            f"previous commit {previous.commit}, observed commit {observed.commit}, "
+            f"target commit {target_commit or 'unresolved'}."
+        )
+    return (
+        f"Upgrade advance verdict {verdict.value} on {previous.channel.value} channel: "
+        f"previous version {previous.version}, observed version {observed.version}."
+    )
+
+
 def _process_finding(stage: str, returncode: int) -> str:
     if returncode < 0:
         return f"{stage} was terminated by signal {-returncode}"
@@ -347,6 +374,8 @@ def run_update_transaction(
     base_env: Mapping[str, str] | None = None,
     version_reader: _VersionReader | None = None,
     fresh_version_prober: _VersionProber | None = None,
+    target_identity: ReleaseIdentity | None = None,
+    staged_identity_reader: _StagedIdentityReader | None = None,
 ) -> UpdateTransactionResult:
     """Upgrade, run a fresh maintenance install, and verify every obligation.
 
@@ -418,7 +447,22 @@ def run_update_transaction(
             ),
         )
 
+    previous = release_identity(info, version=current_version)
+    target = target_identity
+    if previous.channel is ReleaseChannel.BRANCH and target is None:
+        target = resolve_target_identity(info, resolved_home)
+    if previous.channel is ReleaseChannel.BRANCH and target is not None:
+        assert target.commit is not None
+        command = upgrade_command(
+            info,
+            install_root_destination=install_root_staging,
+            pin_commit=target.commit,
+        )
+        assert command is not None
+
     progress.enter(UpdateTransactionPhase.MAINTENANCE_CONTEXT_CONSTRUCTION)
+    obligation: PublicationObligation | None = None
+    durably_mutated = command.mutates_shared_root
     try:
         maintenance_env = build_maintenance_env(environment, MAINTENANCE_EXTRAS)
     except (TypeError, ValueError) as exc:
@@ -444,7 +488,6 @@ def run_update_transaction(
                 f"Refusing to run update maintenance inside a git repository: {working_dir}",
             )
         progress.enter(UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE)
-        obligation: PublicationObligation | None = None
         if require_registered_plugin:
             # Written only here — every failure/deferral strictly before this
             # point mutates nothing and must leave no obligation; every
@@ -456,6 +499,7 @@ def run_update_transaction(
                 obligation = write_obligation(
                     resolved_home,
                     previous_version=current_version,
+                    previous_identity_key=previous.key(),
                     originating_phase=UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE.value,
                 )
             except Exception as exc:
@@ -517,11 +561,38 @@ def run_update_transaction(
                 fresh_version_prober=fresh_version_prober,
                 cwd=working_dir,
             )
-            if Version(expected_version) <= Version(current_version):
+            if previous.channel is ReleaseChannel.BRANCH:
+                read_staged_identity = staged_identity_reader or parse_direct_url
+                staged_identity = read_staged_identity(install_root_staging)
+                staged_commit = (
+                    staged_identity["commit_id"] if staged_identity is not None else None
+                )
+                if staged_commit is None:
+                    return _upgrade_failure(
+                        progress,
+                        "Could not read the staged branch commit identity after upgrade.",
+                    )
+                assert info.requested_revision is not None
+                observed = ReleaseIdentity(
+                    ReleaseChannel.BRANCH,
+                    version=expected_version,
+                    commit=staged_commit,
+                    ref=info.requested_revision,
+                )
+            else:
+                observed = ReleaseIdentity(previous.channel, version=expected_version)
+            verdict = advance_verdict(
+                previous=previous,
+                observed=observed,
+                target=target,
+            )
+            if verdict not in (
+                AdvanceVerdict.ADVANCED,
+                AdvanceVerdict.NOT_APPLICABLE,
+            ):
                 return _upgrade_failure(
                     progress,
-                    "Upgrade completed without advancing autoskillit metadata "
-                    f"beyond {current_version}; observed {expected_version}.",
+                    _advance_failure_message(verdict, previous, observed, target),
                 )
         except Exception as exc:
             _report_post_pivot_failure("update_post_upgrade_metadata_failed")
@@ -579,6 +650,7 @@ def run_update_transaction(
                 )
             try:
                 with _InstallLock(managed_home_for(resolved_home)):
+                    durably_mutated = True
                     publish_install_root_generation(
                         home=resolved_home,
                         install_ref=_AUTOSKILLIT_INSTALL_ROOT_KEY,
@@ -616,6 +688,7 @@ def run_update_transaction(
                 resolved_home,
                 expected=obligation,
                 expected_version=expected_version,
+                expected_identity_key=observed.key(),
             )
             if updated_obligation is not None:
                 obligation = updated_obligation
@@ -752,6 +825,8 @@ def run_update_transaction(
             findings=install_result.findings + verification_findings,
         )
     finally:
+        if obligation is not None and not durably_mutated:
+            clear_obligation(resolved_home, expected=obligation)
         shutil.rmtree(working_dir, ignore_errors=True)
         # A leftover here means the disposable probe failed before cleanup.
         shutil.rmtree(install_root_staging, ignore_errors=True)

@@ -9,7 +9,7 @@ import pytest
 
 from tests.conftest import production_interpreter_env
 
-pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_fleet_dispatch_tools_constant_exists() -> None:

@@ -55,8 +55,8 @@ PERSISTED_FORMAT_LEDGER: Mapping[str, PersistedFormatDef] = MappingProxyType(
     {
         "retiring_cache": PersistedFormatDef(
             format_id="retiring_cache",
-            version_constant=("autoskillit.core._plugin_cache._RETIRING_CACHE_SCHEMA_VERSION"),
-            decoder_module="core/_plugin_cache.py",
+            version_constant=("autoskillit.core._retiring_cache._RETIRING_CACHE_SCHEMA_VERSION"),
+            decoder_module="core/_retiring_cache.py",
             enums=(
                 PersistedEnumDef(
                     enum_qualname=(

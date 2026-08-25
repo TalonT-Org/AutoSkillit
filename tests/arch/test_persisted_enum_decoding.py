@@ -15,7 +15,7 @@ from scripts.check_persisted_enum_decoding import (
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-_MODULE = "core/_plugin_cache.py"
+_MODULE = "core/_retiring_cache.py"
 
 
 def _write_decoder(src_root: Path, source: str, module: str = _MODULE) -> None:
@@ -40,7 +40,7 @@ def decode(payload):
     violations = find_bare_enum_constructions(tmp_path)
 
     assert violations == [
-        "core/_plugin_cache.py:2: bare dynamic construction of PluginArtifactKind; "
+        "core/_retiring_cache.py:2: bare dynamic construction of PluginArtifactKind; "
         "use its tolerant constructor or quarantine the containing record"
     ]
 
@@ -122,7 +122,7 @@ def _record_from_json(raw):
 def test_every_registered_decoder_module_exists() -> None:
     assert not find_missing_registered_modules(_SRC_ROOT)
     assert set(PERSISTED_ENUM_DECODERS) == {
-        "core/_plugin_cache.py",
+        "core/_retiring_cache.py",
         "execution/session/_skill_session_contract_codec.py",
         "fleet/state_types.py",
         "hooks/_capture/_ledger.py",

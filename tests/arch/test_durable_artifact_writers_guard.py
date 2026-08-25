@@ -42,6 +42,8 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 #: artifact (hooks.json, settings.json hook entries, config.toml hook
 #: entries) must be added here before its write call sites are enforced.
 _SCOPED_MODULES: tuple[str, ...] = (
+    "core/_retiring_cache.py",
+    "core/_active_kitchens.py",
     "workspace/_projected_artifact/materialization.py",
     "workspace/_projected_artifact/_hook_repair.py",
     "workspace/session_skills.py",

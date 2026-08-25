@@ -13,7 +13,7 @@ _SRC_ROOT = Path(__file__).parents[2] / "src" / "autoskillit"
 _TEST_ROOT = Path(__file__).parents[2] / "tests"
 
 # File that defines any_kitchen_open — not a call site.
-_DEFINITION_FILE = "core/_plugin_cache.py"
+_DEFINITION_FILE = "core/_active_kitchens.py"
 
 
 def _has_project_path_kwarg(call_node: ast.Call) -> bool:

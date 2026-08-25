@@ -16,7 +16,7 @@ from pathlib import Path
 SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 
 PERSISTED_ENUM_DECODERS: Mapping[str, frozenset[str]] = {
-    "core/_plugin_cache.py": frozenset({"PluginArtifactKind"}),
+    "core/_retiring_cache.py": frozenset({"PluginArtifactKind"}),
     "fleet/state_types.py": frozenset({"DispatchStatus"}),
     "hooks/_capture/_ledger.py": frozenset(
         {
@@ -42,12 +42,12 @@ PERSISTED_ENUM_DECODERS: Mapping[str, frozenset[str]] = {
 # record/frame. Keeping this allowlist exact makes each exception reviewable.
 _QUARANTINE_CONSTRUCTOR_ALLOWLIST: Mapping[tuple[str, str, str], str] = {
     (
-        "core/_plugin_cache.py",
+        "core/_retiring_cache.py",
         "_record_from_json",
         "PluginArtifactKind",
     ): "the caller quarantines the complete retiring-cache record",
     (
-        "core/_plugin_cache.py",
+        "core/_retiring_cache.py",
         "_legacy_from_json",
         "PluginArtifactKind",
     ): "the caller quarantines the complete legacy-evidence record",

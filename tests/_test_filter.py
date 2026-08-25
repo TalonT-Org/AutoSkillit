@@ -223,6 +223,20 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_plugin_cache": frozenset(
         {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
     ),
+    # Issue #4741 — Wavefront 1 decomposition of plugin-cache lifecycle. The
+    # three shards carry cohesive concern boundaries and reuse the same
+    # consumer test directories as the parent stem. Sets must be supersets of
+    # AST-import consumers (REQ-GUARD-002); broadest viable scope is the
+    # full Wavefront 1 fan-out.
+    "_retiring_cache": frozenset(
+        {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
+    ),
+    "_plugin_artifact_retirement": frozenset(
+        {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
+    ),
+    "_active_kitchens": frozenset(
+        {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
+    ),
     "_type_persisted_formats": frozenset({"core", "execution", "fleet", "hooks"}),
     "_type_managed_home": frozenset({"cli", "core", "server", "smoke_utils", "workspace"}),
     # write_entrypoint_shim() is called from cli/update/_transaction.py's

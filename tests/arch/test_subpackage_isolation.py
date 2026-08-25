@@ -797,6 +797,11 @@ def test_test_suite_oversized_files_split():
         all using tmp_path isolation and dict[str,str] assertions. No shared state.
         Splitting would scatter the T_* pattern across files, reducing discoverability.
         Exempt at 1348 lines.
+      test_test_filter_core_cascade.py — REQ-CNST-004-E2: Cascade-map guard test
+        whose per-stem expected-set mirroring is a one-line cascade consumers pin
+        into ``expected_stems``. Adding issue #4741's three plugin-cache shards
+        pushed the file to 1003 lines; splitting would scatter a single declared-
+        vs-actual invariant across multiple files. Exempt at 1100 lines.
     """
     tests_root = Path(__file__).parent.parent
     over = [
@@ -804,6 +809,7 @@ def test_test_suite_oversized_files_split():
         for f in tests_root.glob("test_*.py")
         if len(f.read_text().splitlines()) > 1000
         and f.name != "test_smoke_utils.py"  # REQ-CNST-004-E1
+        and f.name != "test_test_filter_core_cascade.py"  # REQ-CNST-004-E2
     ]
     assert not over, f"Oversized test files remain (run groupE): {over}"
 
@@ -1047,7 +1053,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # funnel (rectify: exploration capture immunity part A) — stdlib-only,
         # consumed from core/runtime/kitchen_state.py, so it cannot live under
         # exploration/ (IL-1) or any module with non-stdlib dependencies.
-        "core": 36,
+        "core": 39,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).
@@ -1190,22 +1196,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "are append-only forcing functions per the file's own model comment; splitting them "
         "out of this module would separate them from the frozensets and validation "
         "functions their own docstrings and tests reference by exact module path.",
-    ),
-    "core/_plugin_cache.py": (
-        1400,
-        "REQ-CNST-010-E26: #4689 added try_promote_legacy_evidence beside try_reclaim. "
-        "Both mutate the retiring cache under the install lock and must stay adjacent to "
-        "the append/remove/read primitives they call, for the same reason "
-        "_projected_artifact/AGENTS.md keeps publication beside lease handoff: splitting "
-        "them puts lock ordering across a module boundary, which is how destructive "
-        "repair bypasses the lifecycle lock. tests/infra/test_plugin_source_ratchets.py "
-        "also pins this module's raw-mutation call sites by (file, function, expression), "
-        "so the reclaim path's location is a checked invariant, not an accident. Issue "
-        "#4710 adds per-record quarantine and total mutation results at the same lock-owned "
-        "boundary; splitting those primitives would separate classification from mutation. "
-        "Phase 2 adds the lock-held salvage and durable-sidecar repair at this same authority. "
-        "Phase 3 keeps explicit ManagedHome threading and the classified active-kitchen "
-        "reader/writers at that same lock and persistence boundary.",
     ),
     "execution/evidence_reader.py": (
         1500,

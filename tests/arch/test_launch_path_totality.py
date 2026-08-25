@@ -28,8 +28,8 @@ _LAUNCH_STATE_CALLBACKS = (
         ("autoskillit/core/runtime/session_registry.py", "bind_session_owner"),
         frozenset({"ValueError"}),
     ),
-    (("autoskillit/core/_plugin_cache.py", "register_active_kitchen"), frozenset()),
-    (("autoskillit/core/_plugin_cache.py", "unregister_active_kitchen"), frozenset()),
+    (("autoskillit/core/_active_kitchens.py", "register_active_kitchen"), frozenset()),
+    (("autoskillit/core/_active_kitchens.py", "unregister_active_kitchen"), frozenset()),
 )
 
 

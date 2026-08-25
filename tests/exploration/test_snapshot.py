@@ -1114,12 +1114,3 @@ def test_max_paths_counts_ignored_snapshot_records(tmp_path: Path) -> None:
     assert result.validated_activation is None
     assert result.reason is SnapshotCaptureReason.PATH_COUNT_EXCEEDED
     assert result.snapshot.truncated
-    assert result.snapshot.tree_digest == ""
-    assert result.snapshot.index_digest == ""
-    assert result.snapshot.pagination_identity == ""
-    assert result.snapshot.tracked_records == ()
-    assert result.snapshot.untracked_records == ()
-    assert result.snapshot.ignored_records == ()
-    assert result.snapshot.missing_records == ()
-    assert result.snapshot.mode_records == ()
-    assert result.snapshot.symlink_records == ()

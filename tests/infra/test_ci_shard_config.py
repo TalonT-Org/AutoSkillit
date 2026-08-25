@@ -337,7 +337,7 @@ class TestCIShardConfig:
         for d in ("execution", "contracts", "core", "recipe", "docs", "server"):
             (tests_root / d).mkdir()
             (tests_root / d / f"test_{d}.py").write_text("")
-        (tests_root / "execution" / "test_process_channel_b.py").write_text("")
+        (tests_root.parent / CHANNEL_B_TEST).write_text("")
         (tests_root / "execution" / "nested").mkdir()
         (tests_root / "execution" / "nested" / "test_nested.py").write_text("")
         # Brand-new unassigned top-level directory.

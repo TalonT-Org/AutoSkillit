@@ -321,7 +321,7 @@ def test_source_drift_signal_silent_when_ref_sha_none() -> None:
     installed = ReleaseIdentity(
         ReleaseChannel.BRANCH, version="0.7.77", commit="aaaaaa", ref="develop"
     )
-    assert _source_drift_signal(installed, None, False) is None
+    assert _source_drift_signal(installed, None, True) is None
 
 
 def test_dual_mcp_signal_fires_when_both_registered(

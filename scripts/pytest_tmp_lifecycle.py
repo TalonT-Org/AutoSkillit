@@ -534,10 +534,14 @@ def _setup(args: argparse.Namespace) -> int:
     if bound_unsatisfied(survivors, selected, bound):
         selected_paths = {c.path for c in selected}
         protected_count = sum(1 for c in survivors if c.path not in selected_paths and c.protected)
+        probe_note = ""
         try:
             total_bytes, _used_bytes, free_bytes = default_space_probe(platform_root)
-        except OSError:
+        except OSError as probe_exc:
             total_bytes, free_bytes = 0, 0
+            probe_note = (
+                f"; additionally, the disk-usage probe of {platform_root} failed: {probe_exc}"
+            )
         raise StoreCapacityExhaustedError(
             path=platform_root,
             free_bytes=free_bytes,
@@ -548,7 +552,7 @@ def _setup(args: argparse.Namespace) -> int:
                 f"{protected_count} candidates remain protected by a live owner or a "
                 "revocable reference; investigate leaked processes holding stale "
                 "generations, or raise --max-generations/--max-bytes for legitimate "
-                "concurrency"
+                f"concurrency{probe_note}"
             ),
         )
     try:

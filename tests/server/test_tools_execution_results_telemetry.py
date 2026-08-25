@@ -1,8 +1,9 @@
-"""run_skill telemetry, observability, timing, response typing tests (#4796)."""
+"""run_skill telemetry, observability, timing, response typing tests."""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -121,7 +122,7 @@ class TestGatedToolObservability:
     """Each gated tool binds structlog contextvars and calls ctx.info/ctx.error."""
 
     @pytest.fixture
-    def mock_ctx(self):
+    def mock_ctx(self) -> AsyncMock:
         """AsyncMock ctx for verifying ctx.info/ctx.error calls."""
         ctx = AsyncMock()
         ctx.info = AsyncMock()
@@ -219,6 +220,19 @@ class TestRunSkillTiming:
 class TestRunHeadlessCoreFlushTelemetry:
     """flush_session_log receives telemetry kwargs when step_name is provided."""
 
+    @pytest.fixture
+    def captured_flush_calls(self, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+        """Patch ``flush_session_log`` with a list-collecting stub and return the list."""
+        import autoskillit.execution.session_log as sl_mod
+
+        calls: list[dict[str, Any]] = []
+
+        def mock_flush(**kwargs: Any) -> None:
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        return calls
+
     def _make_ndjson_with_usage(self) -> str:
         asst = json.dumps(
             {
@@ -252,40 +266,27 @@ class TestRunHeadlessCoreFlushTelemetry:
         return asst + "\n" + result
 
     @pytest.mark.anyio
-    async def test_passes_step_telemetry_to_flush(self, tool_ctx_kitchen_open, monkeypatch):
+    async def test_passes_step_telemetry_to_flush(
+        self, tool_ctx_kitchen_open, captured_flush_calls
+    ):
         """flush_session_log is called with step_name, token_usage, and timing_seconds."""
-        import autoskillit.execution.session_log as sl_mod
-
-        calls = []
-
-        def mock_flush(**kwargs):
-            calls.append(kwargs)
-
-        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(
             _make_result(returncode=0, stdout=self._make_ndjson_with_usage())
         )
         await run_skill("/investigate foo", "/tmp", step_name="implement")
-        assert len(calls) == 1
-        assert calls[0]["step_name"] == "implement"
-        assert calls[0]["telemetry"].token_usage is not None
-        assert calls[0]["telemetry"].timing_seconds is not None
+        assert len(captured_flush_calls) == 1
+        assert captured_flush_calls[0]["step_name"] == "implement"
+        assert captured_flush_calls[0]["telemetry"].token_usage is not None
+        assert captured_flush_calls[0]["telemetry"].timing_seconds is not None
 
     @pytest.mark.anyio
     async def test_flush_session_log_session_id_matches_returned_skill_result(
-        self, tool_ctx_kitchen_open, monkeypatch
+        self, tool_ctx_kitchen_open, captured_flush_calls
     ):
         """flush_session_log receives the same session_id as the returned SkillResult."""
-        import autoskillit.execution.session_log as sl_mod
         from autoskillit.core.types import SubprocessResult, TerminationReason
 
-        calls = []
-
-        def mock_flush(**kwargs):
-            calls.append(kwargs)
-
-        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         # Stale result with session_id resolved from Channel B
         stale_result = SubprocessResult(
@@ -300,25 +301,19 @@ class TestRunHeadlessCoreFlushTelemetry:
         result_json = json.loads(
             await run_skill("/investigate foo", "/tmp", step_name="implement")
         )
-        assert len(calls) == 1
+        assert len(captured_flush_calls) == 1
         # flush and returned SkillResult must carry the same session_id
-        assert calls[0]["session_id"] == result_json["session_id"]
+        assert captured_flush_calls[0]["session_id"] == result_json["session_id"]
         assert result_json["session_id"] != ""
 
     @pytest.mark.anyio
-    async def test_flushes_on_success_when_step_name_set(self, tool_ctx_kitchen_open, monkeypatch):
+    async def test_flushes_on_success_when_step_name_set(
+        self, tool_ctx_kitchen_open, captured_flush_calls
+    ):
         """Successful sessions without proc_snapshots still flush when step_name is provided."""
-        import autoskillit.execution.session_log as sl_mod
-
-        calls = []
-
-        def mock_flush(**kwargs):
-            calls.append(kwargs)
-
-        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
         await run_skill("/investigate foo", "/tmp", step_name="plan")
-        assert len(calls) == 1
+        assert len(captured_flush_calls) == 1
 
     @pytest.mark.anyio
     async def test_records_timing_in_timing_log(self, tool_ctx_kitchen_open):
@@ -331,9 +326,10 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert report[0]["total_seconds"] >= 0.0
 
     @pytest.mark.anyio
-    async def test_passes_github_api_log_to_flush(self, tool_ctx_kitchen_open, monkeypatch):
+    async def test_passes_github_api_log_to_flush(
+        self, tool_ctx_kitchen_open, captured_flush_calls
+    ):
         """headless.py drains github_api_log into telemetry.github_api_usage."""
-        import autoskillit.execution.session_log as sl_mod
         from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
 
         log = DefaultGitHubApiLog()
@@ -346,38 +342,29 @@ class TestRunHeadlessCoreFlushTelemetry:
         )
         tool_ctx_kitchen_open.github_api_log = log
 
-        calls = []
-
-        def mock_flush(**kwargs):
-            calls.append(kwargs)
-
-        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
         tool_ctx_kitchen_open.runner.push(
             _make_result(returncode=0, stdout=self._make_ndjson_with_usage())
         )
         await run_skill("/investigate foo", "/tmp", step_name="implement")
-        assert len(calls) == 1
-        assert calls[0]["telemetry"].github_api_usage is not None
-        assert calls[0]["telemetry"].github_api_requests > 0
+        assert len(captured_flush_calls) == 1
+        assert captured_flush_calls[0]["telemetry"].github_api_usage is not None
+        assert captured_flush_calls[0]["telemetry"].github_api_requests > 0
 
     @pytest.mark.anyio
-    async def test_flush_telemetry_kwargs_exhaustive(self, tool_ctx_kitchen_open, monkeypatch):
+    async def test_flush_telemetry_kwargs_exhaustive(
+        self, tool_ctx_kitchen_open, captured_flush_calls
+    ):
         """headless.py passes a SessionTelemetry bundle covering all telemetry fields."""
-        import autoskillit.execution.session_log as sl_mod
         from autoskillit.core.types._type_results_execution import SessionTelemetry
 
-        calls = []
-
-        def mock_flush(**kwargs):
-            calls.append(kwargs)
-
-        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
         tool_ctx_kitchen_open.runner.push(
             _make_result(returncode=0, stdout=self._make_ndjson_with_usage())
         )
         await run_skill("/investigate foo", "/tmp", step_name="implement")
-        assert len(calls) == 1
-        assert "telemetry" in calls[0], "flush_session_log must receive telemetry= kwarg"
-        assert isinstance(calls[0]["telemetry"], SessionTelemetry), (
+        assert len(captured_flush_calls) == 1
+        assert "telemetry" in captured_flush_calls[0], (
+            "flush_session_log must receive telemetry= kwarg"
+        )
+        assert isinstance(captured_flush_calls[0]["telemetry"], SessionTelemetry), (
             "telemetry must be a SessionTelemetry instance"
         )

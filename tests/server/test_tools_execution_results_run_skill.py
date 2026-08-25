@@ -1,4 +1,4 @@
-"""run_skill failure paths, post-serialization validation, cwd validation tests (#4796)."""
+"""run_skill failure paths, post-serialization validation, cwd validation tests."""
 
 from __future__ import annotations
 

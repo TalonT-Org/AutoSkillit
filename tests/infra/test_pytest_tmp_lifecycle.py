@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 from types import ModuleType
 
@@ -420,13 +421,20 @@ def test_evidence_is_classified_by_source(tmp_path: Path) -> None:
     kernel_evidence = harvest_kernel_references(proc_root)
     snapshot_evidence = harvest_snapshot_references(proc_root)
 
-    kernel_by_source = {item.source: item for item in kernel_evidence}
-    assert kernel_by_source[EvidenceSource.PROC_CWD].path == Path("/five/tmp")
-    assert kernel_by_source[EvidenceSource.PROC_CWD].revocability is Revocability.REVOCABLE
-    assert kernel_by_source[EvidenceSource.PROC_FD].path == Path("/six/tmp")
-    assert kernel_by_source[EvidenceSource.PROC_FD].revocability is Revocability.REVOCABLE
-    assert kernel_by_source[EvidenceSource.PROC_MAPS].path == Path("/seven/tmp/mapped.so")
-    assert kernel_by_source[EvidenceSource.PROC_MAPS].revocability is Revocability.REVOCABLE
+    kernel_by_source: dict[EvidenceSource, list[PathEvidence]] = defaultdict(list)
+    for item in kernel_evidence:
+        kernel_by_source[item.source].append(item)
+    for source in (EvidenceSource.PROC_CWD, EvidenceSource.PROC_FD, EvidenceSource.PROC_MAPS):
+        assert len(kernel_by_source[source]) == 1, (
+            f"expected exactly one {source} entry in this fixture, got "
+            f"{len(kernel_by_source[source])}"
+        )
+    assert kernel_by_source[EvidenceSource.PROC_CWD][0].path == Path("/five/tmp")
+    assert kernel_by_source[EvidenceSource.PROC_CWD][0].revocability is Revocability.REVOCABLE
+    assert kernel_by_source[EvidenceSource.PROC_FD][0].path == Path("/six/tmp")
+    assert kernel_by_source[EvidenceSource.PROC_FD][0].revocability is Revocability.REVOCABLE
+    assert kernel_by_source[EvidenceSource.PROC_MAPS][0].path == Path("/seven/tmp/mapped.so")
+    assert kernel_by_source[EvidenceSource.PROC_MAPS][0].revocability is Revocability.REVOCABLE
 
     snapshot_by_source: dict[EvidenceSource, set[Path]] = {}
     for item in snapshot_evidence:

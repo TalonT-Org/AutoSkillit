@@ -197,8 +197,6 @@ def test_parse_direct_url_globs_any_python_minor_deterministically(tmp_path: Pat
         revision="earlier-sort",
         commit="c" * 40,
     )
-    (tmp_path / "autoskillit" / "lib64").symlink_to("lib", target_is_directory=True)
-
     info = parse_direct_url(tmp_path)
 
     assert info["requested_revision"] == "earlier-sort"

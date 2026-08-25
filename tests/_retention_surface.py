@@ -10,37 +10,6 @@ Keys are `"<dotted_path>::L<lineno>"` -- mechanically derivable from the AST (a 
 and not the function's final top-level statement) -- so the scanner does not need to guess a
 human-chosen semantic label. The `justification` on each entry carries the semantic meaning.
 
-**Coverage.** All eleven reclaimers the plan names are covered: the eight in its "Covers:"
-list (`scripts/pytest_tmp_lifecycle.py::_reap`, `workspace/session_skills.py::cleanup_stale`,
-`workspace/clone_registry.py::cleanup_candidates`, `workspace/worktree.py::remove_git_worktree`
-and `::remove_worktree_sidecar`, `execution/session_log.py`'s retention block (now
-`execution/_session_retention.py`),
-`fleet/_dispatch_reaper.py::reap_stale_dispatches`, `hooks/_capture/_sweep.py::sweep_one`),
-`scripts/pytest_tmp_lifecycle.py::_safe_candidates` (named separately in the plan's scanner-
-design section), and the three further reclaimers the plan flags as MUST-include --
-`workspace/_projection_cache.py::prune_stale_projections`, and the
-`PluginArtifactRetirementEngine`/`PluginRetirementCoordinator` implementations of
-`try_reclaim`/`sweep_due` in `core/_plugin_cache.py` and `cli/install/_plugin_artifact.py`
-(`core/_plugin_cache.py` implements only `try_reclaim`; `sweep_due` exists only on
-`cli/install/_plugin_artifact.py`'s `DefaultPluginRetirementCoordinator` -- there is no
-`core/_plugin_cache.py::sweep_due`, so it is not declared below). This closes the exact gap
-commit `0949f8a8f` ("fix: make the plugin generation store actually reclaimable", #4689/#4690)
-found: 47 version directories under `~/.autoskillit/plugin-generations/` silently
-unreclaimable for ~10 days because retention there was unaudited.
-
-**Two functions were retargeted, not deferred, from the plan's literal reading.**
-`clone_registry.py` has both a `CloneRegistry.candidates` *method* (identity/liveness logic,
-several branches) and a module-level `cleanup_candidates` *function* (list-comprehension
-filtering over already-read registry entries, zero continue/break/return branches) -- the
-plan names the latter, which is what is declared here. `execution/session_log.py`'s
-"retention block" was inline code inside the ~600-line `flush_session_log`; auditing that
-whole function would sweep in dozens of branches unrelated to retention, so the block was
-extracted (behavior-preserving) into its own `execution/_session_retention.py::
-apply_session_retention()` -- a dedicated module, not just a dedicated function, so
-`session_log.py` also stays under its 750-line warning-zone budget
-(`tests/arch/test_file_size_budgets.py`) -- precisely so this registry can target the
-retention decision alone.
-
 **Not every continue/break/return is a retention decision.** Per the plan: "classify a branch
 as a retention decision only when its condition references a liveness, evidence, or age
 predicate... Defensive skips are reported separately under a SAFETY shape." Several of the

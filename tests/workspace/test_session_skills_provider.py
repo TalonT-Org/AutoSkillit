@@ -192,12 +192,27 @@ def test_skills_directory_provider_lists_public_skills() -> None:
     assert "sous-chef" not in names
 
 
-def test_provider_gating_is_agent_safe() -> None:
+def test_provider_gating_is_agent_safe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     provider = SkillsDirectoryProvider()
-    skill = provider.resolver.resolve_effective("open-kitchen", Path.cwd())
-    assert skill is not None
+    bundled = provider.resolver.resolve("open-kitchen")
+    assert bundled is not None
+    override = tmp_path / ".autoskillit/skills/open-kitchen/SKILL.md"
+    override.parent.mkdir(parents=True)
+    override.write_text(bundled.canonical_content, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
 
-    content = provider.get_skill_content(skill, cwd=Path.cwd(), gated=True)
+    project_local = provider.resolver.resolve_effective("open-kitchen", tmp_path)
+    assert project_local is not None
+    assert project_local.source is SkillSource.PROJECT_LOCAL
+
+    skill = provider.resolver.resolve("open-kitchen")
+    assert skill is not None
+    assert skill.source is SkillSource.BUNDLED
+
+    content = provider.get_skill_content(skill, cwd=tmp_path, gated=True)
 
     assert _frontmatter(content)["disable-model-invocation"] is True
     _assert_agent_safe(content)

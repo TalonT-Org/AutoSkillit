@@ -12,6 +12,7 @@ from autoskillit.core import (
     BackendConventions,
     ClaudeDirectoryConventions,
     PreLaunchReadiness,
+    SkillSource,
     pkg_root,
 )
 from tests.fakes import adapt_test_skill_semantics
@@ -39,7 +40,7 @@ def _catalog_context(manager, *, backend=None):
     from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
 
-    project_root = Path.cwd()
+    project_root = manager._root
     catalog = DefaultSkillResolver().list_effective(
         project_root,
         SkillExecutionRole.SESSION,
@@ -71,6 +72,27 @@ def _managed(manager, session_id: str, *, backend):
         compile_session_skill_catalog(catalog, backend),
         context,
     )
+
+
+def test_catalog_context_uses_manager_root_when_cwd_has_project_override(
+    make_session_skill_manager,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = make_session_skill_manager()
+    bundled = manager._provider.resolver.resolve("open-kitchen")
+    assert bundled is not None
+    foreign_project = tmp_path / "foreign-project"
+    override = foreign_project / ".autoskillit/skills/open-kitchen/SKILL.md"
+    override.parent.mkdir(parents=True)
+    override.write_text(bundled.canonical_content, encoding="utf-8")
+    monkeypatch.chdir(foreign_project)
+
+    catalog, context = _catalog_context(manager)
+
+    open_kitchen = next(skill for skill in catalog.skills if skill.name == "open-kitchen")
+    assert context.cwd == manager._root.resolve()
+    assert open_kitchen.source is SkillSource.BUNDLED
 
 
 def test_validate_session_exists_true_for_live_session(make_session_skill_manager) -> None:

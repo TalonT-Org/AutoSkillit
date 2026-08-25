@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -635,12 +637,44 @@ class TestRunCheck:
         assert "must return DoctorResult" in result.message
 
 
+def _restrict_doctor_collection(
+    monkeypatch: pytest.MonkeyPatch,
+    doctor_mod: Any,
+    selected_check_names: set[str],
+) -> None:
+    """Run only the named checks through the real collection isolation wrapper."""
+    from autoskillit.cli.doctor._doctor_types import _check_display_name
+    from autoskillit.config import AutomationConfig
+
+    real_run_check = doctor_mod._run_check
+
+    def run_selected(fn: Callable[[], object], *, check_name: str | None = None) -> list[Any]:
+        resolved_name = check_name or _check_display_name(fn)
+        if resolved_name not in selected_check_names:
+            return []
+        return real_run_check(fn, check_name=check_name)
+
+    monkeypatch.setattr(
+        doctor_mod,
+        "_load_config_guarded",
+        lambda _cwd: (AutomationConfig(), []),
+    )
+    monkeypatch.setattr(doctor_mod, "get_backend", lambda _name: None)
+    monkeypatch.setattr(doctor_mod, "_run_check", run_selected)
+
+
 def test_collect_doctor_results_isolates_a_crashing_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One check raising must not prevent a subsequent check from running (see #4768)."""
     from autoskillit.cli import doctor as doctor_mod
     from autoskillit.core import Severity
+
+    _restrict_doctor_collection(
+        monkeypatch,
+        doctor_mod,
+        {"script_version_health", "gitignore_completeness"},
+    )
 
     def _check_script_version_health() -> doctor_mod.DoctorResult:
         raise RuntimeError("simulated check crash")
@@ -669,7 +703,11 @@ def test_collect_doctor_results_isolates_deferred_argument_failure(
     from autoskillit.cli import doctor as doctor_mod
     from autoskillit.core import Severity
 
-    cfg, _initial_results = doctor_mod._load_config_guarded(Path.cwd())
+    _restrict_doctor_collection(
+        monkeypatch,
+        doctor_mod,
+        {"stale_mcp_servers", "mcp_server_registered", "dual_mcp_registration"},
+    )
 
     def raise_home() -> Path:
         raise OSError("home unavailable")
@@ -677,7 +715,6 @@ def test_collect_doctor_results_isolates_deferred_argument_failure(
     def _check_dual_mcp_registration() -> doctor_mod.DoctorResult:
         return doctor_mod.DoctorResult(Severity.OK, "post_home_probe", "ran")
 
-    monkeypatch.setattr(doctor_mod, "_load_config_guarded", lambda _cwd: (cfg, []))
     monkeypatch.setattr(Path, "home", raise_home)
     monkeypatch.setattr(
         doctor_mod,

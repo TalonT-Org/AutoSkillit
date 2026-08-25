@@ -22,6 +22,7 @@ from autoskillit.core import (
     ArtifactLease,
     CodingAgentBackend,
     Severity,
+    SpaceProbe,
     atomic_write,
     default_log_dir,
     default_space_probe,
@@ -676,7 +677,7 @@ def _check_codex_model_alias_staleness() -> DoctorResult:
     )
 
 
-def _check_pytest_temp_capacity() -> DoctorResult:
+def _check_pytest_temp_capacity(*, space_probe: SpaceProbe = default_space_probe) -> DoctorResult:
     """Report pytest-generation temp-root usage and orphaned-generation count.
 
     Read-only diagnostic surface for the resource whose exhaustion halts every fix loop --
@@ -686,7 +687,7 @@ def _check_pytest_temp_capacity() -> DoctorResult:
     check_name = "pytest_temp_capacity"
     platform_root = Path("/dev/shm") if sys.platform == "linux" else Path("/tmp")
     try:
-        total_bytes, _used_bytes, free_bytes = default_space_probe(platform_root)
+        total_bytes, _used_bytes, free_bytes = space_probe(platform_root)
     except OSError as exc:
         return DoctorResult(Severity.WARNING, check_name, f"cannot probe {platform_root}: {exc}")
 

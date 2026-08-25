@@ -20,7 +20,7 @@ from autoskillit.core.types import (
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_skill_result_cancelled_factory():
+def test_skill_result_cancelled_factory() -> None:
     """SkillResult.cancelled() produces a correctly shaped retriable result."""
     from autoskillit.core.types import KillReason
 
@@ -84,13 +84,13 @@ def test_skill_result_cancelled_factory():
     ],
     ids=["succeeded", "retriable", "failed"],
 )
-def test_skill_result_outcome(kwargs, expected_outcome):
+def test_skill_result_outcome(kwargs, expected_outcome) -> None:
     sr = SkillResult(**kwargs)
     assert sr.outcome is expected_outcome
     assert sr.outcome == expected_outcome.value
 
 
-def test_skill_result_to_json_excludes_outcome():
+def test_skill_result_to_json_excludes_outcome() -> None:
     """to_json() must not include 'outcome' — JSON contract is unchanged."""
     sr = SkillResult(
         success=True,
@@ -112,7 +112,7 @@ def test_skill_result_to_json_excludes_outcome():
 # ---------------------------------------------------------------------------
 
 
-def test_skill_result_to_json_includes_worktree_path_when_set():
+def test_skill_result_to_json_includes_worktree_path_when_set() -> None:
     """worktree_path appears as a top-level JSON field when not None."""
     sr = SkillResult(
         success=False,
@@ -130,7 +130,7 @@ def test_skill_result_to_json_includes_worktree_path_when_set():
     assert data["worktree_path"] == "/projects/worktrees/impl-fix-20260307"
 
 
-def test_skill_result_to_json_omits_worktree_path_when_none():
+def test_skill_result_to_json_omits_worktree_path_when_none() -> None:
     """worktree_path key is absent from JSON when the field is None."""
     sr = SkillResult(
         success=True,
@@ -201,7 +201,7 @@ class TestSkillResultCrashedFactory:
         assert result.session_id == ""
         assert result.stderr == ""
 
-    def test_crashed_to_json_produces_valid_envelope(self):
+    def test_crashed_to_json_produces_valid_envelope(self) -> None:
         result = SkillResult.crashed(
             exception=RuntimeError("boom"),
             skill_command="/investigate test",
@@ -212,11 +212,11 @@ class TestSkillResultCrashedFactory:
         assert "subtype" in data
         assert data["subtype"] == "crashed"
 
-    def test_crashed_sets_provider_used_empty_string(self):
+    def test_crashed_sets_provider_used_empty_string(self) -> None:
         result = SkillResult.crashed(exception=RuntimeError("boom"))
         assert result.provider.provider_used == ""
 
-    def test_crashed_sets_provider_fallback_false(self):
+    def test_crashed_sets_provider_fallback_false(self) -> None:
         result = SkillResult.crashed(exception=RuntimeError("boom"))
         assert result.provider.fallback_activated is False
 
@@ -265,15 +265,15 @@ class TestSkillResultProviderFields:
         "stderr": "",
     }
 
-    def test_provider_used_defaults_to_empty_string(self):
+    def test_provider_used_defaults_to_empty_string(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         assert sr.provider.provider_used == ""
 
-    def test_provider_fallback_defaults_to_false(self):
+    def test_provider_fallback_defaults_to_false(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         assert sr.provider.fallback_activated is False
 
-    def test_to_json_includes_provider_used_when_non_empty(self):
+    def test_to_json_includes_provider_used_when_non_empty(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             provider=ProviderOutcome(provider_used="anthropic-vertex", fallback_activated=True),
@@ -282,13 +282,13 @@ class TestSkillResultProviderFields:
         assert data["provider_used"] == "anthropic-vertex"
         assert data["provider_fallback"] is True
 
-    def test_to_json_includes_provider_used_as_empty_string_when_unset(self):
+    def test_to_json_includes_provider_used_as_empty_string_when_unset(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         data = json.loads(sr.to_json())
         assert "provider_used" in data
         assert data["provider_used"] == ""
 
-    def test_to_json_includes_provider_fallback_when_true(self):
+    def test_to_json_includes_provider_fallback_when_true(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             provider=ProviderOutcome(provider_used="", fallback_activated=True),
@@ -297,7 +297,7 @@ class TestSkillResultProviderFields:
         assert "provider_fallback" in data
         assert data["provider_fallback"] is True
 
-    def test_provider_used_round_trips_via_json(self):
+    def test_provider_used_round_trips_via_json(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             provider=ProviderOutcome(provider_used="bedrock-us", fallback_activated=False),
@@ -307,15 +307,15 @@ class TestSkillResultProviderFields:
 
 
 class TestInfraOutcome:
-    def test_default_exit_category_is_empty(self):
+    def test_default_exit_category_is_empty(self) -> None:
         outcome = InfraOutcome()
         assert outcome.exit_category == ""
 
-    def test_custom_exit_category(self):
+    def test_custom_exit_category(self) -> None:
         outcome = InfraOutcome(exit_category="context_exhausted")
         assert outcome.exit_category == "context_exhausted"
 
-    def test_frozen_rejects_mutation(self):
+    def test_frozen_rejects_mutation(self) -> None:
         outcome = InfraOutcome(exit_category="completed")
         from dataclasses import FrozenInstanceError
 
@@ -336,18 +336,18 @@ class TestSkillResultExtensionBundles:
         "stderr": "",
     }
 
-    def test_provider_bundle_defaults_to_none_used(self):
+    def test_provider_bundle_defaults_to_none_used(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         assert sr.provider == ProviderOutcome.none_used()
         assert sr.provider.provider_used == ""
         assert sr.provider.fallback_activated is False
 
-    def test_infra_bundle_defaults_to_empty(self):
+    def test_infra_bundle_defaults_to_empty(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         assert sr.infra == InfraOutcome()
         assert sr.infra.exit_category == ""
 
-    def test_provider_bundle_accepts_custom_value(self):
+    def test_provider_bundle_accepts_custom_value(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             provider=ProviderOutcome(provider_used="anthropic", fallback_activated=True),
@@ -355,23 +355,23 @@ class TestSkillResultExtensionBundles:
         assert sr.provider.provider_used == "anthropic"
         assert sr.provider.fallback_activated is True
 
-    def test_infra_bundle_accepts_custom_value(self):
+    def test_infra_bundle_accepts_custom_value(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             infra=InfraOutcome(exit_category="api_error"),
         )
         assert sr.infra.exit_category == "api_error"
 
-    def test_flat_provider_used_removed(self):
+    def test_flat_provider_used_removed(self) -> None:
         assert "provider_used" not in [f.name for f in dataclasses.fields(SkillResult)]
 
-    def test_flat_provider_fallback_removed(self):
+    def test_flat_provider_fallback_removed(self) -> None:
         assert "provider_fallback" not in [f.name for f in dataclasses.fields(SkillResult)]
 
-    def test_flat_infra_exit_category_removed(self):
+    def test_flat_infra_exit_category_removed(self) -> None:
         assert "infra_exit_category" not in [f.name for f in dataclasses.fields(SkillResult)]
 
-    def test_to_json_emits_flat_provider_used_key(self):
+    def test_to_json_emits_flat_provider_used_key(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             provider=ProviderOutcome(provider_used="vertex", fallback_activated=False),
@@ -379,7 +379,7 @@ class TestSkillResultExtensionBundles:
         data = json.loads(sr.to_json())
         assert data["provider_used"] == "vertex"
 
-    def test_to_json_emits_flat_provider_fallback_key(self):
+    def test_to_json_emits_flat_provider_fallback_key(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             provider=ProviderOutcome(provider_used="anthropic", fallback_activated=True),
@@ -387,7 +387,7 @@ class TestSkillResultExtensionBundles:
         data = json.loads(sr.to_json())
         assert data["provider_fallback"] is True
 
-    def test_to_json_emits_flat_infra_exit_category_key(self):
+    def test_to_json_emits_flat_infra_exit_category_key(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             infra=InfraOutcome(exit_category="context_exhausted"),
@@ -395,14 +395,14 @@ class TestSkillResultExtensionBundles:
         data = json.loads(sr.to_json())
         assert data["infra_exit_category"] == "context_exhausted"
 
-    def test_to_json_provider_empty_defaults(self):
+    def test_to_json_provider_empty_defaults(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         data = json.loads(sr.to_json())
         assert data["provider_used"] == ""
         assert data["provider_fallback"] is False
         assert data["infra_exit_category"] == ""
 
-    def test_infra_outcome_surfaces_cleanup_incomplete_flag(self):
+    def test_infra_outcome_surfaces_cleanup_incomplete_flag(self) -> None:
         sr = SkillResult(
             **self._BASE_KWARGS,
             infra=InfraOutcome(cleanup_incomplete=True),
@@ -410,18 +410,18 @@ class TestSkillResultExtensionBundles:
         data = json.loads(sr.to_json())
         assert data["infra_cleanup_incomplete"] is True
 
-    def test_infra_outcome_cleanup_incomplete_absent_by_default(self):
+    def test_infra_outcome_cleanup_incomplete_absent_by_default(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         data = json.loads(sr.to_json())
         assert data["infra_cleanup_incomplete"] is False
 
-    def test_replace_infra_bundle(self):
+    def test_replace_infra_bundle(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         sr2 = dataclasses.replace(sr, infra=InfraOutcome(exit_category="api_error"))
         assert sr2.infra.exit_category == "api_error"
         assert sr.infra.exit_category == ""
 
-    def test_replace_provider_bundle(self):
+    def test_replace_provider_bundle(self) -> None:
         sr = SkillResult(**self._BASE_KWARGS)
         sr2 = dataclasses.replace(
             sr, provider=ProviderOutcome(provider_used="vertex", fallback_activated=True)

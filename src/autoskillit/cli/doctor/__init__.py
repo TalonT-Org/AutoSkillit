@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path
@@ -84,7 +85,7 @@ from ._doctor_skills import (
     _check_skill_capability_authenticity,
 )
 from ._doctor_types import _NON_PROBLEM as _NON_PROBLEM
-from ._doctor_types import DoctorResult, _print_doctor_results
+from ._doctor_types import DoctorResult, _print_doctor_results, _run_check
 
 logger = get_logger(__name__)
 
@@ -94,7 +95,6 @@ __all__ = ["DoctorResult", "Severity", "run_doctor", "run_doctor_repairs"]
 def _collect_doctor_results() -> list[DoctorResult]:
     """Collect diagnostic results without owning output or performing repairs."""
     cfg, results = _load_config_guarded(Path.cwd())
-
     if cfg.agent_backend.backend:
         try:
             _backend = get_backend(cfg.agent_backend.backend)
@@ -103,161 +103,140 @@ def _collect_doctor_results() -> list[DoctorResult]:
             _backend = None
     else:
         _backend = None
-
-    # Check 1: Stale MCP servers — dead binaries or nonexistent paths
-    results.extend(_check_stale_mcp_servers(Path.home() / ".claude.json", backend=_backend))
-    # Check 2: MCP server registered in ~/.claude.json or via plugin
-    results.append(
-        _check_mcp_server_registered(
-            claude_json_path=Path.home() / ".claude.json", backend=_backend
+    results.extend(
+        _run_check(
+            lambda: _check_stale_mcp_servers(Path.home() / ".claude.json", backend=_backend),
+            check_name="stale_mcp_servers",
         )
     )
-
-    # Check 2b: Dual MCP registration — direct entry and marketplace plugin both present
-    results.append(_check_dual_mcp_registration())
-
-    # Check 2c: Plugin cache directory exists
-    results.append(_check_plugin_cache_exists())
-
-    # Check 2d: Plugin cache hooks.json paths resolve to real files
-    results.append(_check_plugin_cache_integrity())
-
-    # Check 2e: Install artifacts, registry, and derived versions agree
-    results.extend(_check_install_state_consistency())
-
-    # Check 3: autoskillit command on PATH
-    results.append(_check_autoskillit_on_path())
-
-    # Check 4: Config exists
-    results.append(_check_project_config())
-    # Check 4b: Config secrets placement
-    results.append(_check_config_layers_for_secrets())
-    # Check 6: Hook executability — validates deployed scripts for all event types (all scopes)
-    results.extend(_check_hook_health_all_scopes(Path.cwd()))
-    # Check 7: Hook registration in settings.json
-    results.append(_check_hook_registration(_claude_settings_path("user", cwd=Path.cwd())))
-    # Check 7b: Hook registry drift (multi-scope)
-    results.extend(_check_hook_registry_drift_all_scopes(Path.cwd()))
-
-    # Check 7c: Dual registration (plugin active + hooks in settings.json)
-    results.append(_check_dual_registration(_claude_settings_path("user", cwd=Path.cwd())))
-
-    # Check 8: Script version health
-    results.append(_check_script_version_health())
-
-    # Check 9: gitignore completeness
-    results.append(_check_gitignore_completeness(Path.cwd()))
-
-    # Check 10: Secret scanning hook
-    results.append(_check_secret_scanning_hook(Path.cwd()))
-
-    # Check 11: Editable install source directory still exists
-    results.append(_check_editable_install_source_exists())
-    # Check 12: No stale autoskillit entry points outside ~/.local/bin
-    results.append(_check_stale_entry_points())
-    # Check 13: Source version drift (network, with disk-cache TTL fallback)
-    results.append(_check_source_version_drift())
-    # Check 14: Quota cache schema version
-    results.append(_check_quota_cache_schema())
-    # Check 15: claude process state breakdown
-    results.append(_check_claude_process_state_breakdown(backend=_backend))
-    # Check 16: Install classification from direct_url.json
-    results.append(_check_install_classification())
-    # Check 17: Update-prompt dismissal state
-    results.append(_check_update_dismissal_state())
-    # Check 17b: Pending publication obligation (diagnostic only, no auto-fix)
-    results.append(_check_publication_obligation())
-
-    # -- Fleet doctor checks (ambient env + infrastructure health) --
-
-    # Check 18: Ambient SESSION_TYPE=skill leak detection
-    results.append(_check_ambient_session_type_skill())
-
-    # Check 19: Ambient SESSION_TYPE=orchestrator leak detection
-    results.append(_check_ambient_session_type_orchestrator())
-
-    # Check 20: Ambient SESSION_TYPE=fleet leak detection
-    results.append(_check_ambient_session_type_fleet())
-
-    # Check 21: Ambient CAMPAIGN_ID leak detection
-    results.append(_check_ambient_campaign_id())
-
-    # Check 22: Feature dependency consistency
-    results.append(_check_feature_dependencies(cfg.features))
-
-    # Check 23: Feature registry import consistency
-    results.append(_check_feature_registry_consistency())
-
-    # Checks 24–28: Fleet infrastructure — only when fleet feature is enabled
+    results.extend(
+        _run_check(
+            lambda: _check_mcp_server_registered(
+                claude_json_path=Path.home() / ".claude.json",
+                backend=_backend,
+            ),
+            check_name="mcp_server_registered",
+        )
+    )
+    results.extend(_run_check(functools.partial(_check_dual_mcp_registration)))
+    results.extend(_run_check(functools.partial(_check_plugin_cache_exists)))
+    results.extend(_run_check(functools.partial(_check_plugin_cache_integrity)))
+    results.extend(_run_check(functools.partial(_check_install_state_consistency)))
+    results.extend(_run_check(functools.partial(_check_autoskillit_on_path)))
+    results.extend(_run_check(functools.partial(_check_project_config)))
+    results.extend(_run_check(functools.partial(_check_config_layers_for_secrets)))
+    results.extend(
+        _run_check(
+            lambda: _check_hook_health_all_scopes(Path.cwd()),
+            check_name="hook_health_all_scopes",
+        )
+    )
+    results.extend(
+        _run_check(
+            lambda: _check_hook_registration(_claude_settings_path("user", cwd=Path.cwd())),
+            check_name="hook_registration",
+        )
+    )
+    results.extend(
+        _run_check(
+            lambda: _check_hook_registry_drift_all_scopes(Path.cwd()),
+            check_name="hook_registry_drift_all_scopes",
+        )
+    )
+    results.extend(
+        _run_check(
+            lambda: _check_dual_registration(_claude_settings_path("user", cwd=Path.cwd())),
+            check_name="dual_registration",
+        )
+    )
+    results.extend(_run_check(functools.partial(_check_script_version_health)))
+    results.extend(
+        _run_check(
+            lambda: _check_gitignore_completeness(Path.cwd()),
+            check_name="gitignore_completeness",
+        )
+    )
+    results.extend(
+        _run_check(
+            lambda: _check_secret_scanning_hook(Path.cwd()),
+            check_name="secret_scanning_hook",
+        )
+    )
+    results.extend(_run_check(functools.partial(_check_editable_install_source_exists)))
+    results.extend(_run_check(functools.partial(_check_stale_entry_points)))
+    results.extend(_run_check(functools.partial(_check_source_version_drift)))
+    results.extend(_run_check(functools.partial(_check_quota_cache_schema)))
+    results.extend(
+        _run_check(functools.partial(_check_claude_process_state_breakdown, backend=_backend))
+    )
+    results.extend(_run_check(functools.partial(_check_install_classification)))
+    results.extend(_run_check(functools.partial(_check_update_dismissal_state)))
+    results.extend(_run_check(functools.partial(_check_publication_obligation)))
+    results.extend(_run_check(functools.partial(_check_ambient_session_type_skill)))
+    results.extend(_run_check(functools.partial(_check_ambient_session_type_orchestrator)))
+    results.extend(_run_check(functools.partial(_check_ambient_session_type_fleet)))
+    results.extend(_run_check(functools.partial(_check_ambient_campaign_id)))
+    results.extend(
+        _run_check(
+            lambda: _check_feature_dependencies(cfg.features),
+            check_name="feature_dependencies",
+        )
+    )
+    results.extend(_run_check(functools.partial(_check_feature_registry_consistency)))
     if is_feature_enabled("fleet", cfg.features, experimental_enabled=cfg.experimental_enabled):
-        # Check 24: Sous-chef skill directory exists
-        results.append(_check_sous_chef_bundled())
-
-        # Check 25: Fleet dispatch guard registered
-        results.append(_check_fleet_dispatch_guard_registered())
-
-        # Check 26: Stale fleet state (running > 7 days)
-        results.append(_check_stale_fleet_state())
-
-        # Check 27: Campaign onboarding hint
-        results.append(_check_campaign_onboarding_hint())
-
-        # Check 28: Campaign manifest clone destination collisions
-        results.append(_check_campaign_manifest_clone_dests())
-
-        # Check 29: Fleet state schema version drift
-        results.append(_check_fleet_state_schema())
-
-    # Check 30: Codex CLI version gate
-    results.append(_check_backend_version(backend=_backend))
-
-    # Check 31: script(1) PTY binary availability
-    results.append(_check_script_binary())
-
-    # Check 31b: claude CLI binary availability (capability-driven rerouting)
-    results.append(_check_claude_binary())
-
-    # Check 32: Codex MCP tool_timeout_sec coherence
-    results.append(
-        _check_codex_mcp_timeouts(backend=_backend, run_skill=cfg.run_skill, fleet=cfg.fleet)
+        results.extend(_run_check(functools.partial(_check_sous_chef_bundled)))
+        results.extend(_run_check(functools.partial(_check_fleet_dispatch_guard_registered)))
+        results.extend(_run_check(functools.partial(_check_stale_fleet_state)))
+        results.extend(_run_check(functools.partial(_check_campaign_onboarding_hint)))
+        results.extend(_run_check(functools.partial(_check_campaign_manifest_clone_dests)))
+        results.extend(_run_check(functools.partial(_check_fleet_state_schema)))
+    results.extend(_run_check(functools.partial(_check_backend_version, backend=_backend)))
+    results.extend(_run_check(functools.partial(_check_script_binary)))
+    results.extend(_run_check(functools.partial(_check_claude_binary)))
+    results.extend(
+        _run_check(
+            functools.partial(
+                _check_codex_mcp_timeouts,
+                backend=_backend,
+                run_skill=cfg.run_skill,
+                fleet=cfg.fleet,
+            )
+        )
     )
-
-    # Check 32b: Claude MCP timeout coherence (~/.claude.json deployed-vs-configured drift)
-    results.append(
-        _check_claude_mcp_timeouts(backend=_backend, run_skill=cfg.run_skill, fleet=cfg.fleet)
+    results.extend(
+        _run_check(
+            functools.partial(
+                _check_claude_mcp_timeouts,
+                backend=_backend,
+                run_skill=cfg.run_skill,
+                fleet=cfg.fleet,
+            )
+        )
     )
-
-    # Check 33: Codex graduation criteria
-    results.append(_check_codex_graduation(backend=_backend))
-
-    # Check 34: CLI config-acceptance probe
-    results.append(_check_cli_conformance_probes(backend=_backend))
-
-    # Check 35: Codex NDJSON vocabulary drift
-    results.append(_check_codex_ndjson_drift(log_dir=cfg.linux_tracing.log_dir, backend=_backend))
-
-    # Check 36: Codex model-alias staleness
-    results.append(_check_codex_model_alias_staleness())
-    # Check 37: Standing backend pin feasibility
-    results.extend(_check_standing_backend_pins_feasibility())
-    # Check 38: Local recipe validity
-    results.extend(_check_local_recipe_validity())
-    # Check 39: Codex limits version pin freshness
-    results.append(_check_codex_limits_verified(backend=_backend))
-    # Check 40: Bundled skill capability declarations match authentic source evidence
-    results.extend(_check_skill_capability_authenticity())
-    # Check 41: Capture-store ledger/directory statistics (read-only)
-    results.append(_check_capture_store_stats())
-    # Check 42: Project-local skill contracts (excluded/shadowed stale copies)
-    results.extend(_check_project_local_skill_contracts())
-    # Check 43: Retained committed summaries exactly match physical index rows
-    results.append(_check_session_index_projection(log_dir=cfg.linux_tracing.log_dir))
-    # Check 44: Orphaned codex TUI processes (deleted pty)
-    results.extend(_check_orphaned_codex_processes())
-    # Check 45: Registered-stdio AutoSkillit daemons with dead logical owners
-    results.extend(_check_orphaned_autoskillit_daemons())
-    # Check 46: Process tethers whose spawner is dead or ceiling has passed
-    results.extend(_check_orphaned_process_tethers())
+    results.extend(_run_check(functools.partial(_check_codex_graduation, backend=_backend)))
+    results.extend(_run_check(functools.partial(_check_cli_conformance_probes, backend=_backend)))
+    results.extend(
+        _run_check(
+            functools.partial(
+                _check_codex_ndjson_drift, log_dir=cfg.linux_tracing.log_dir, backend=_backend
+            )
+        )
+    )
+    results.extend(_run_check(functools.partial(_check_codex_model_alias_staleness)))
+    results.extend(_run_check(functools.partial(_check_standing_backend_pins_feasibility)))
+    results.extend(_run_check(functools.partial(_check_local_recipe_validity)))
+    results.extend(_run_check(functools.partial(_check_codex_limits_verified, backend=_backend)))
+    results.extend(_run_check(functools.partial(_check_skill_capability_authenticity)))
+    results.extend(_run_check(functools.partial(_check_capture_store_stats)))
+    results.extend(_run_check(functools.partial(_check_project_local_skill_contracts)))
+    results.extend(
+        _run_check(
+            functools.partial(_check_session_index_projection, log_dir=cfg.linux_tracing.log_dir)
+        )
+    )
+    results.extend(_run_check(functools.partial(_check_orphaned_codex_processes)))
+    results.extend(_run_check(functools.partial(_check_orphaned_autoskillit_daemons)))
+    results.extend(_run_check(functools.partial(_check_orphaned_process_tethers)))
     return results
 
 

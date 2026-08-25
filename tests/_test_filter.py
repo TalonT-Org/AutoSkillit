@@ -259,10 +259,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_constants_durable_writers": frozenset(
         {"cli", "core", "execution", "recipe", "server", "workspace"}
     ),
-    # Issue #4756 — the shared enumeration-derived path observation funnel;
-    # consumed by core/paths.py, core/runtime/kitchen_state.py,
-    # exploration/snapshot.py, and server/tools/tools_kitchen/_reload_session.py.
-    "fs_observation": frozenset({"core", "cli", "exploration", "server"}),
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),
@@ -274,6 +270,27 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "cli",
             "config",
             "execution",
+            "fleet",
+            "hook_registry",
+            "migration",
+            "recipe",
+            "report",
+            "server",
+            "smoke_utils",
+            "workspace",
+            "infra/test_generated_file_write_guard.py",
+            "infra/test_generated_files.py",
+        }
+    ),
+    # fs_observation underlies paths.safe_mtime and is also consumed directly by
+    # CLI, exploration, and server enumeration paths.
+    "fs_observation": frozenset(
+        {
+            "core",
+            "cli",
+            "config",
+            "execution",
+            "exploration",
             "fleet",
             "hook_registry",
             "migration",
@@ -439,7 +456,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
     "bash_write_targets": frozenset({"core", "execution", "server"}),
     "_delivery_bounds": frozenset({"core", "execution", "server"}),
-    "_type_audit_cycle": frozenset({"core", "pipeline", "recipe", "server"}),
+    "_type_audit_artifact_ref": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_audit_cycle_authority": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_audit_cycle_disposition": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_binding": frozenset({"core", "pipeline", "recipe", "server"}),

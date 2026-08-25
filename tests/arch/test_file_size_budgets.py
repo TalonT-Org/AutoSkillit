@@ -65,8 +65,8 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "core/types/_type_launch.py": 750,
     "core/types/_type_launch_authority.py": 750,
     # Issue #4736 — Wavefront 1 decomposition of audit-cycle and audit-admission
-    # facade modules into five cohesive ownership shards.
-    "core/types/_type_audit_cycle.py": 750,
+    # modules into cohesive ownership shards.
+    "core/types/_type_audit_artifact_ref.py": 750,
     "core/types/_type_audit_cycle_authority.py": 750,
     "core/types/_type_audit_cycle_disposition.py": 750,
     "core/types/_type_audit_admission.py": 750,

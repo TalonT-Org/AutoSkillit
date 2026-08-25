@@ -23,6 +23,7 @@ from autoskillit.execution import codex_recipe_delivery_calling_contract
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
     from autoskillit.recipe.loader import RecipeInfo
     from autoskillit.workspace import CompiledSessionSkillCatalog
 
@@ -87,7 +88,7 @@ def _build_orchestrator_prompt(
     *,
     skill_compilation: CompiledSessionSkillCatalog,
     project_root: Path,
-    backend: object,
+    backend: CodingAgentBackend,
 ) -> str:
     """Build the --append-system-prompt content for a cook session.
 

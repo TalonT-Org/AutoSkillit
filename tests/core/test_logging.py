@@ -117,13 +117,12 @@ class TestNullHandlerContract:
     @pytest.fixture(autouse=True)
     def _restore_unconfigured_package_logger(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # TestConfigureLogging mutates the global autoskillit package logger
-        # (handlers, level, propagate) without teardown. Under xdist worksteal
-        # the StreamHandler it installs can leak into this class's only test
-        # and defeat the lastResort suppression the NullHandler is meant to
-        # provide. Resetting handlers before each test restores the
-        # import-time NullHandler-only state that __init__.py installs.
+        # without teardown. Same-worker test ordering can otherwise leak its
+        # state into this class and defeat the import-time NullHandler contract.
         package_logger = logging.getLogger("autoskillit")  # noqa: TID251
         monkeypatch.setattr(package_logger, "handlers", [logging.NullHandler()])
+        monkeypatch.setattr(package_logger, "level", logging.NOTSET)
+        monkeypatch.setattr(package_logger, "propagate", True)
 
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
         """NullHandler in autoskillit/__init__.py prevents stdlib lastResort output.

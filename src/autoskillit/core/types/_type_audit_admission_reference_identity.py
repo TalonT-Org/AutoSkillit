@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..closure_hashing import canonical_json_bytes, compute_canonical_hash
 from ._type_audit_admission_validation import _require_nonempty, _typed_tuple
-from ._type_audit_cycle_authority import ArtifactRef
+from ._type_audit_artifact_ref import ArtifactRef
 
 _REFERENCE_IDENTITY_DOMAIN = "autoskillit:audit-admission:ordered-full-reference:v1:sha256"
 _FULL_REFERENCE_FIELDS = (

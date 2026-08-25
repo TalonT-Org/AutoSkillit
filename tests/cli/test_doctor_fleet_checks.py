@@ -244,6 +244,34 @@ class TestGroupMFranchiseDoctorChecks:
         result = _check_stale_fleet_state(project_dir=tmp_path)
         assert result.severity == Severity.OK
 
+    # M15b: campaign dir deleted between iterdir() and the mtime read → skipped, not crashed
+    def test_check_stale_fleet_state_survives_concurrent_deletion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A campaign dir deleted between iterdir() and the mtime read must be
+        skipped like any other vanished entry, not crash the check."""
+        from autoskillit.cli.doctor import _check_stale_fleet_state
+        from autoskillit.cli.doctor import _doctor_fleet as _doctor_fleet_mod
+        from autoskillit.core import Severity
+
+        campaign_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / "camp-1"
+        campaign_dir.mkdir(parents=True)
+        state_file = campaign_dir / "state.json"
+        state_file.write_text('{"dispatches": []}', encoding="utf-8")
+
+        real_safe_mtime = _doctor_fleet_mod.safe_mtime
+
+        def _delete_then_read(path: Path) -> float | None:
+            path.unlink()  # simulate a concurrent sweep racing the check
+            return real_safe_mtime(path)
+
+        monkeypatch.setattr(_doctor_fleet_mod, "safe_mtime", _delete_then_read)
+
+        result = _check_stale_fleet_state(project_dir=tmp_path)
+
+        assert result.severity == Severity.OK
+        assert result.check == "stale_fleet_state"
+
     # M16: No campaigns/ dir → INFO onboarding hint
     def test_check_campaign_onboarding_hint_info_when_empty(self, tmp_path: Path) -> None:
         from autoskillit.cli.doctor import _check_campaign_onboarding_hint

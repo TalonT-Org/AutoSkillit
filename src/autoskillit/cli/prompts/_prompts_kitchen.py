@@ -14,6 +14,7 @@ from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, ROUTING_AUTHORITY_CLAUSE
 from autoskillit.execution import codex_recipe_delivery_calling_contract
 
 if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
     from autoskillit.workspace import CompiledSessionSkillCatalog
 
 __all__ = [
@@ -28,7 +29,7 @@ def _build_open_kitchen_prompt(
     *,
     skill_compilation: CompiledSessionSkillCatalog,
     project_root: Path,
-    backend: object,
+    backend: CodingAgentBackend,
 ) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
     raw = _read_full_sous_chef(
@@ -141,7 +142,7 @@ def _build_fleet_dispatch_prompt(
     *,
     skill_compilation: CompiledSessionSkillCatalog,
     project_root: Path,
-    backend: object,
+    backend: CodingAgentBackend,
 ) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
     raw = _read_full_sous_chef(

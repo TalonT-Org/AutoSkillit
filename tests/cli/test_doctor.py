@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -544,6 +546,209 @@ class TestGroupFDoctor:
         r = DoctorResult(severity=Severity.OK, check="test", message="ok")
         assert r.severity == Severity.OK
         assert r.check == "test"
+
+
+class TestRunCheck:
+    """Unit contract for the hub-level isolation wrapper (see issue #4768)."""
+
+    def test_wraps_single_result_in_a_list(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import DoctorResult, _run_check
+        from autoskillit.core import Severity
+
+        def _check_ok() -> DoctorResult:
+            return DoctorResult(Severity.OK, "ok", "fine")
+
+        assert _run_check(functools.partial(_check_ok)) == [
+            DoctorResult(Severity.OK, "ok", "fine")
+        ]
+
+    def test_passes_through_a_list_result(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import DoctorResult, _run_check
+        from autoskillit.core import Severity
+
+        def _check_many() -> list[DoctorResult]:
+            return [DoctorResult(Severity.OK, "a", "1"), DoctorResult(Severity.WARNING, "b", "2")]
+
+        assert _run_check(functools.partial(_check_many)) == _check_many()
+
+    def test_isolates_a_raising_check_as_a_single_error_result(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import DoctorResult, _run_check
+        from autoskillit.core import Severity
+
+        def _check_boom() -> DoctorResult:
+            raise RuntimeError("simulated")
+
+        [result] = _run_check(functools.partial(_check_boom))
+        assert result.severity == Severity.ERROR
+        assert result.check == "boom"
+
+    def test_explicit_check_name_is_used_for_a_raising_check(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        def _check_boom() -> object:
+            raise RuntimeError("simulated")
+
+        [result] = _run_check(
+            functools.partial(_check_boom),
+            check_name="explicit_name",
+        )
+        assert result.severity == Severity.ERROR
+        assert result.check == "explicit_name"
+
+    def test_non_string_callable_name_cannot_escape_isolation(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        class RaisingCheck:
+            __name__ = 7
+
+            def __call__(self) -> object:
+                raise RuntimeError("simulated")
+
+        [result] = _run_check(functools.partial(RaisingCheck()))
+        assert result.severity == Severity.ERROR
+        assert result.check == "unknown"
+
+    def test_raising_callable_name_lookup_cannot_escape_isolation(self) -> None:
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        class RaisingNameLookup:
+            def __getattribute__(self, name: str) -> object:
+                if name in {"func", "__name__"}:
+                    raise RuntimeError("name unavailable")
+                return super().__getattribute__(name)
+
+            def __call__(self) -> object:
+                raise RuntimeError("simulated")
+
+        [result] = _run_check(RaisingNameLookup())
+        assert result.severity == Severity.ERROR
+        assert result.check == "unknown"
+
+    @pytest.mark.parametrize("malformed", [None, [object()]])
+    def test_malformed_result_is_isolated(self, malformed: object) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        def _check_malformed() -> object:
+            return malformed
+
+        [result] = _run_check(functools.partial(_check_malformed))
+        assert result.severity == Severity.ERROR
+        assert result.check == "malformed"
+        assert "must return DoctorResult" in result.message
+
+
+def _restrict_doctor_collection(
+    monkeypatch: pytest.MonkeyPatch,
+    doctor_mod: Any,
+    selected_check_names: set[str],
+) -> None:
+    """Run only the named checks through the real collection isolation wrapper."""
+    from autoskillit.cli.doctor._doctor_types import _check_display_name
+    from autoskillit.config import AutomationConfig
+
+    real_run_check = doctor_mod._run_check
+
+    def run_selected(fn: Callable[[], object], *, check_name: str | None = None) -> list[Any]:
+        resolved_name = check_name or _check_display_name(fn)
+        if resolved_name not in selected_check_names:
+            return []
+        return real_run_check(fn, check_name=check_name)
+
+    monkeypatch.setattr(
+        doctor_mod,
+        "_load_config_guarded",
+        lambda _cwd: (AutomationConfig(), []),
+    )
+    monkeypatch.setattr(doctor_mod, "get_backend", lambda _name: None)
+    monkeypatch.setattr(doctor_mod, "_run_check", run_selected)
+
+
+def test_collect_doctor_results_isolates_a_crashing_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One check raising must not prevent a subsequent check from running (see #4768)."""
+    from autoskillit.cli import doctor as doctor_mod
+    from autoskillit.core import Severity
+
+    _restrict_doctor_collection(
+        monkeypatch,
+        doctor_mod,
+        {"script_version_health", "gitignore_completeness"},
+    )
+
+    def _check_script_version_health() -> doctor_mod.DoctorResult:
+        raise RuntimeError("simulated check crash")
+
+    def _check_gitignore_completeness(_project_dir: Path) -> doctor_mod.DoctorResult:
+        return doctor_mod.DoctorResult(Severity.OK, "continuation_probe", "ran")
+
+    monkeypatch.setattr(doctor_mod, "_check_script_version_health", _check_script_version_health)
+    monkeypatch.setattr(
+        doctor_mod,
+        "_check_gitignore_completeness",
+        _check_gitignore_completeness,
+    )
+
+    results = doctor_mod._collect_doctor_results()
+
+    crashed = [r for r in results if r.check == "script_version_health"]
+    assert len(crashed) == 1
+    assert crashed[0].severity == Severity.ERROR
+    assert any(result.check == "continuation_probe" for result in results)
+
+
+def test_collect_doctor_results_isolates_deferred_argument_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import doctor as doctor_mod
+    from autoskillit.core import Severity
+
+    _restrict_doctor_collection(
+        monkeypatch,
+        doctor_mod,
+        {"stale_mcp_servers", "mcp_server_registered", "dual_mcp_registration"},
+    )
+
+    def raise_home() -> Path:
+        raise OSError("home unavailable")
+
+    def _check_dual_mcp_registration() -> doctor_mod.DoctorResult:
+        return doctor_mod.DoctorResult(Severity.OK, "post_home_probe", "ran")
+
+    monkeypatch.setattr(Path, "home", raise_home)
+    monkeypatch.setattr(
+        doctor_mod,
+        "_check_dual_mcp_registration",
+        _check_dual_mcp_registration,
+    )
+
+    results = doctor_mod._collect_doctor_results()
+
+    assert any(
+        result.check == "stale_mcp_servers" and result.severity == Severity.ERROR
+        for result in results
+    )
+    assert any(
+        result.check == "mcp_server_registered" and result.severity == Severity.ERROR
+        for result in results
+    )
+    assert any(result.check == "post_home_probe" for result in results)
 
 
 def test_doctor_fix_parameter_does_not_exist():

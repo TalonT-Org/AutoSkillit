@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -16,6 +19,39 @@ class DoctorResult:
     severity: Severity
     check: str
     message: str
+
+
+def _check_display_name(fn: Callable[[], object]) -> str:
+    """Best-effort check name for logging/reporting — must never raise, since
+    it is also used on the exception path inside _run_check."""
+    try:
+        name = getattr(getattr(fn, "func", fn), "__name__", "unknown")
+    except Exception:  # noqa: BLE001 - diagnostic metadata cannot escape isolation
+        logger.exception("doctor_check_name_resolution_failed")
+        return "unknown"
+    return name.removeprefix("_check_") if isinstance(name, str) else "unknown"
+
+
+def _run_check(
+    fn: Callable[[], object],
+    *,
+    check_name: str | None = None,
+) -> list[DoctorResult]:
+    """Invoke one doctor check, isolating any exception as a single ERROR result.
+
+    Crash-path check names come from the callable name unless supplied explicitly.
+    """
+    resolved_check_name = check_name or _check_display_name(fn)
+    try:
+        result = fn()
+        if isinstance(result, DoctorResult):
+            return [result]
+        if isinstance(result, list) and all(isinstance(item, DoctorResult) for item in result):
+            return result
+        raise TypeError("doctor check must return DoctorResult or list[DoctorResult]")
+    except Exception as exc:  # noqa: BLE001 - isolates one check from all others
+        logger.exception("doctor_check_crashed", check=resolved_check_name)
+        return [DoctorResult(Severity.ERROR, resolved_check_name, f"Check crashed: {exc}")]
 
 
 _NON_PROBLEM: frozenset[Severity] = frozenset({Severity.OK, Severity.INFO})

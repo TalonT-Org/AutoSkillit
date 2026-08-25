@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import Severity, get_logger, pkg_root
+from autoskillit.core import Severity, get_logger, pkg_root, safe_mtime
 from autoskillit.hook_registry import canonical_script_basenames
 
 from ._doctor_types import DoctorResult
@@ -114,9 +114,8 @@ def _check_stale_fleet_state(project_dir: Path | None = None) -> DoctorResult:
         if not campaign_dir.is_dir():
             continue
         state_file = campaign_dir / "state.json"
-        if not state_file.is_file():
-            continue
-        if state_file.stat().st_mtime > threshold:
+        mtime = safe_mtime(state_file)
+        if mtime is None or mtime > threshold:
             continue
         try:
             data = json.loads(state_file.read_text(encoding="utf-8"))

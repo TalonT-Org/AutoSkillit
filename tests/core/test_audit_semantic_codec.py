@@ -22,8 +22,8 @@ from autoskillit.core.types._type_audit_admission import (
     AuditSemanticResult,
     StandaloneAuditEvidence,
 )
-from autoskillit.core.types._type_audit_cycle import (
-    ArtifactRef,
+from autoskillit.core.types._type_audit_artifact_ref import ArtifactRef
+from autoskillit.core.types._type_audit_cycle_authority import (
     AuditAssessment,
     AuditAssessmentRow,
     AuditVerdict,

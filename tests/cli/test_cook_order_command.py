@@ -167,7 +167,10 @@ class TestCLIOrderCommand:
         warning_visible_at_launch: list[bool] = []
 
         def launch(*_args: object, **_kwargs: object) -> InteractiveProcessStub:
-            warning_visible_at_launch.append(expected_warning in capsys.readouterr().out)
+            lines = capsys.readouterr().out.splitlines()
+            warning_visible_at_launch.append(
+                any(line.endswith(expected_warning) for line in lines)
+            )
             return process
 
         mock_run.side_effect = launch

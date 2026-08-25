@@ -619,6 +619,7 @@ def test_snapshot_survives_a_real_entry_deleted_during_the_worktree_walk(
     assert result.status is not SnapshotCaptureStatus.FAILED
     assert result.status in (SnapshotCaptureStatus.COMPLETE, SnapshotCaptureStatus.STALE)
     assert result.snapshot is not None
+    assert not any(path == "vanishing.pipe" for path, _ in result.snapshot.untracked_records)
     # COMPLETE is itself the self-consistency proof: capture_repository_snapshot
     # only reaches COMPLETE when the start and end internal captures agree on
     # snapshot_identity (else it publishes STALE), so a COMPLETE result here
@@ -695,6 +696,7 @@ def test_ignore_policy_bump_changes_the_published_digest_for_unchanged_state(
     tests/pipeline/test_exploration_context.py.
     """
     root = _new_repository(tmp_path)
+    assert snapshot_module.DEFAULT_IGNORE_POLICY == "ignored-names-modes-collapsed-v2"
 
     monkeypatch.setattr(
         snapshot_module, "DEFAULT_IGNORE_POLICY", "ignored-names-modes-collapsed-v1"

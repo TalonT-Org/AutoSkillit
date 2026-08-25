@@ -7,6 +7,7 @@ canonical value is.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -217,19 +218,24 @@ def _quota_thresholds_default() -> tuple[float, float]:
 
 
 def _count_doctor_checks() -> int:
-    """Count doctor checks inside ``_collect_doctor_results``.
-
-    Helper functions earlier in the module use the same ``# Check N:`` comment
-    style for their internal sub-steps; we restrict the count to the body of
-    the diagnostic collector so those comments do not double-count.
-    """
+    """Count isolated check invocations inside ``_collect_doctor_results``."""
     text = _read(SRC_DIR / "cli" / "doctor" / "__init__.py")
-    body = re.search(r"def _collect_doctor_results\(.*?\n((?:    .*\n|\n)+)", text, re.DOTALL)
-    assert body, "_collect_doctor_results not found in cli/doctor/__init__.py"
-    body_text = body.group(1)
-    numbered = len(re.findall(r"# Check \d+:", body_text))
-    lettered = len(re.findall(r"# Check \d+[a-z]:", body_text))
-    return numbered + lettered
+    tree = ast.parse(text)
+    collector = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_collect_doctor_results"
+        ),
+        None,
+    )
+    assert collector is not None, "_collect_doctor_results not found in cli/doctor/__init__.py"
+    return sum(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_run_check"
+        for node in ast.walk(collector)
+    )
 
 
 def _bundled_recipes() -> list[str]:

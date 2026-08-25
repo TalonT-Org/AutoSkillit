@@ -160,7 +160,10 @@ def _prepare(
     monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", _info)
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.upgrade_command",
-        lambda _info, **_kw: UpgradeCommand(argv=["uv", "tool", "upgrade", "autoskillit"]),
+        lambda _info, **_kw: UpgradeCommand(
+            argv=["uv", "tool", "upgrade", "autoskillit"],
+            mutates_shared_root=True,
+        ),
     )
     if stub_git_checks:
         monkeypatch.setattr(
@@ -296,7 +299,8 @@ def _info():
 
 t.detect_install = _info
 t.upgrade_command = lambda _info, **_kw: UpgradeCommand(
-    argv=["uv", "tool", "upgrade", "autoskillit"]
+    argv=["uv", "tool", "upgrade", "autoskillit"],
+    mutates_shared_root=True,
 )
 t.is_git_worktree = lambda _p: False
 t.is_git_main_checkout = lambda _p: False
@@ -425,7 +429,8 @@ def _info():
 
 t.detect_install = _info
 t.upgrade_command = lambda _info, **_kw: UpgradeCommand(
-    argv=["uv", "tool", "upgrade", "autoskillit"]
+    argv=["uv", "tool", "upgrade", "autoskillit"],
+    mutates_shared_root=True,
 )
 t.is_git_worktree = lambda _p: False
 t.is_git_main_checkout = lambda _p: False
@@ -524,7 +529,10 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
     )
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.upgrade_command",
-        lambda _info, **_kw: UpgradeCommand(argv=["uv", "tool", "upgrade", "autoskillit"]),
+        lambda _info, **_kw: UpgradeCommand(
+            argv=["uv", "tool", "upgrade", "autoskillit"],
+            mutates_shared_root=True,
+        ),
     )
     monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
     monkeypatch.setattr(

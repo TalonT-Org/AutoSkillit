@@ -1053,7 +1053,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # funnel (rectify: exploration capture immunity part A) — stdlib-only,
         # consumed from core/runtime/kitchen_state.py, so it cannot live under
         # exploration/ (IL-1) or any module with non-stdlib dependencies.
-        "core": 39,
+        "core": 40,  # +_release_identity.py: single release-freshness authority (#4763)
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).

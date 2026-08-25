@@ -37,6 +37,8 @@ if TYPE_CHECKING:
         comparison_branch,
         detect_install,
         dismissal_window,
+        installed_identity_at,
+        release_identity,
         resolve_autoskillit_entrypoint,
         upgrade_command,
     )
@@ -76,6 +78,8 @@ __all__ = [
     "classify_track",
     "comparison_branch",
     "dismissal_window",
+    "release_identity",
+    "installed_identity_at",
     "upgrade_command",
     "InstalledPluginsFile",
     "install",
@@ -135,6 +139,11 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "classify_track": ("autoskillit.cli.install._install_info", "classify_track"),
     "comparison_branch": ("autoskillit.cli.install._install_info", "comparison_branch"),
     "dismissal_window": ("autoskillit.cli.install._install_info", "dismissal_window"),
+    "release_identity": ("autoskillit.cli.install._install_info", "release_identity"),
+    "installed_identity_at": (
+        "autoskillit.cli.install._install_info",
+        "installed_identity_at",
+    ),
     "upgrade_command": ("autoskillit.cli.install._install_info", "upgrade_command"),
     "InstalledPluginsFile": (
         "autoskillit.cli.install._installed_plugins",

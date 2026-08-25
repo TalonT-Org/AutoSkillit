@@ -17,9 +17,12 @@ from autoskillit.cli.install._install_info import (
     comparison_branch,
     detect_install,
     dismissal_window,
+    installed_identity_at,
+    release_identity,
     resolve_autoskillit_entrypoint,
     upgrade_command,
 )
+from autoskillit.core import ReleaseChannel
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -35,6 +38,36 @@ def _fake_dist(direct_url_json: str | None) -> MagicMock:
     dist = MagicMock()
     dist.read_text.return_value = direct_url_json
     return dist
+
+
+def _write_installed_metadata(
+    root: Path,
+    *,
+    commit: str | None,
+    revision: str = "develop",
+    version: str = "1.2.3",
+) -> None:
+    dist_info = (
+        root
+        / "autoskillit"
+        / "lib"
+        / "python3.14"
+        / "site-packages"
+        / f"autoskillit-{version}.dist-info"
+    )
+    dist_info.mkdir(parents=True)
+    vcs_info = {"vcs": "git", "requested_revision": revision}
+    if commit is not None:
+        vcs_info["commit_id"] = commit
+    (dist_info / "direct_url.json").write_text(
+        json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": vcs_info,
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +327,7 @@ def test_upgrade_command_stable_tracks(requested_revision: str) -> None:
     ]
 
 
-def test_upgrade_command_develop() -> None:
+def test_dev_upgrade_command_without_pin_falls_back_to_branch() -> None:
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="abc123",
@@ -313,6 +346,21 @@ def test_upgrade_command_develop() -> None:
         "--python",
         _PYTHON_PIN,
     ]
+
+
+def test_dev_upgrade_command_pins_resolved_commit() -> None:
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="a" * 40,
+        requested_revision="develop",
+        url=None,
+        editable_source=None,
+    )
+
+    result = upgrade_command(info, pin_commit="b" * 40)
+
+    assert result is not None
+    assert "git+https://github.com/TalonT-Org/AutoSkillit.git@" + "b" * 40 in result.argv
 
 
 def test_upgrade_command_targets_a_fresh_versioned_root(tmp_path: Path) -> None:
@@ -357,6 +405,85 @@ def test_upgrade_command_local_editable() -> None:
     result = upgrade_command(info)
     assert result is not None
     assert list(result.argv) == ["uv", "pip", "install", "-e", str(editable_source)]
+
+
+def test_stable_and_editable_ignore_pin_commit() -> None:
+    stable = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="a" * 40,
+        requested_revision="stable",
+        url=None,
+        editable_source=None,
+    )
+    editable = InstallInfo(
+        install_type=InstallType.LOCAL_EDITABLE,
+        commit_id=None,
+        requested_revision=None,
+        url="file:///repo",
+        editable_source=Path("/repo"),
+    )
+
+    stable_command = upgrade_command(stable, pin_commit="b" * 40)
+    editable_command = upgrade_command(editable, pin_commit="b" * 40)
+
+    assert stable_command == upgrade_command(stable)
+    assert editable_command == upgrade_command(editable)
+
+
+def test_upgrade_command_declares_mutates_shared_root(tmp_path: Path) -> None:
+    stable = InstallInfo(InstallType.GIT_VCS, "a" * 40, "stable", None, None)
+    dev = InstallInfo(InstallType.GIT_VCS, "a" * 40, "develop", None, None)
+    editable = InstallInfo(InstallType.LOCAL_EDITABLE, None, None, "file:///repo", Path("/repo"))
+
+    stable_command = upgrade_command(stable)
+    editable_command = upgrade_command(editable)
+    staged_dev_command = upgrade_command(dev, install_root_destination=tmp_path / "staged")
+    shared_dev_command = upgrade_command(dev)
+
+    assert stable_command is not None and stable_command.mutates_shared_root is True
+    assert editable_command is not None and editable_command.mutates_shared_root is True
+    assert staged_dev_command is not None and staged_dev_command.mutates_shared_root is False
+    assert shared_dev_command is not None and shared_dev_command.mutates_shared_root is True
+
+
+@pytest.mark.parametrize(
+    "info,expected_channel",
+    [
+        (
+            InstallInfo(InstallType.GIT_VCS, "a" * 40, "stable", None, None),
+            ReleaseChannel.RELEASED,
+        ),
+        (
+            InstallInfo(InstallType.GIT_VCS, "a" * 40, "develop", None, None),
+            ReleaseChannel.BRANCH,
+        ),
+        (
+            InstallInfo(InstallType.LOCAL_EDITABLE, None, None, None, Path("/repo")),
+            ReleaseChannel.WORKING_TREE,
+        ),
+    ],
+)
+def test_release_identity_maps_install_tracks(
+    info: InstallInfo, expected_channel: ReleaseChannel
+) -> None:
+    assert release_identity(info, version="1.2.3").channel == expected_channel
+
+
+def test_installed_identity_at_reads_branch_metadata(tmp_path: Path) -> None:
+    _write_installed_metadata(tmp_path, commit="b" * 40)
+
+    identity = installed_identity_at(tmp_path, channel=ReleaseChannel.BRANCH)
+
+    assert identity is not None
+    assert identity.version == "1.2.3"
+    assert identity.commit == "b" * 40
+    assert identity.ref == "develop"
+
+
+def test_installed_identity_at_returns_none_without_commit(tmp_path: Path) -> None:
+    _write_installed_metadata(tmp_path, commit=None)
+
+    assert installed_identity_at(tmp_path, channel=ReleaseChannel.BRANCH) is None
 
 
 @pytest.mark.parametrize(

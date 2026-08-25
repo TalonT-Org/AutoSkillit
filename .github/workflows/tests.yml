@@ -97,6 +97,23 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: "0.9.21"
+          enable-cache: false
+
+      - name: Resolve uv cache directory
+        id: uv-cache-dir
+        shell: bash
+        run: |
+          UV_CACHE_DIR="$(uv cache dir)"
+          echo "UV_CACHE_DIR=$UV_CACHE_DIR" >> "$GITHUB_ENV"
+          echo "path=$UV_CACHE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Restore uv cache
+        id: uv-cache-restore
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.uv-cache-dir.outputs.path }}
+          key: uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-${{ needs.cache_metadata.outputs.api_simulator_rev }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-${{ needs.cache_metadata.outputs.api_simulator_rev }}-
 
       - name: Install go-task
         uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2

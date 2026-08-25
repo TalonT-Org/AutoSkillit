@@ -361,7 +361,7 @@ def strict_walk(root: Path) -> Iterator[TreeEntry]:
         for raw_entry in raw_entries:
             try:
                 is_dir = raw_entry.is_dir()
-            except OSError:
+            except (FileNotFoundError, NotADirectoryError):
                 is_dir = False
             (directory_entries if is_dir else file_entries).append(raw_entry)
         directory_entries.sort(key=lambda entry: entry.name)

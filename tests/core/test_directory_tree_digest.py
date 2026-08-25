@@ -419,6 +419,20 @@ class TestDirectoryTreeDigestRaceSafety:
         with pytest.raises(PermissionError):
             directory_tree_digest(tmp_path)
 
+    def test_permission_error_at_entry_type_check_still_propagates_unguarded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class InaccessibleEntry:
+            name = "blocked"
+
+            def is_dir(self) -> bool:
+                raise PermissionError("injected entry type-check failure")
+
+        monkeypatch.setattr(io_module.os, "scandir", lambda _fd: [InaccessibleEntry()])
+
+        with pytest.raises(PermissionError):
+            directory_tree_digest(tmp_path)
+
     def test_golden_digest_unchanged_for_non_racing_tree(self, tmp_path: Path) -> None:
         """Compatibility guard: the digest algorithm's *output* for a
         non-racing tree must be byte-for-byte unchanged by the rewrite —

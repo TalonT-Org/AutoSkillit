@@ -510,6 +510,11 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     }
     assert "github.event" not in run_tests["run"]
     assert "develop" not in run_tests["run"]
+    assert "task test-check 2>&1 | tee .autoskillit/temp/test-check.log" in run_tests["run"]
+    assert 'TEST_CHECK_EXIT="${PIPESTATUS[0]}"' in run_tests["run"]
+    assert '[[ "$AUTOSKILLIT_TEST_FILTER" == "conservative" ]]' in run_tests["run"]
+    assert "rg -q '^PYTEST_EXIT_CODE=5$' .autoskillit/temp/test-check.log" in run_tests["run"]
+    assert 'exit "$TEST_CHECK_EXIT"' in run_tests["run"]
 
     workflow_source = workflow_path.read_text(encoding="utf-8")
     assert "GITHUB_EVENT_NAME:" not in workflow_source

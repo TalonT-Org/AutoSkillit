@@ -183,7 +183,17 @@ jobs:
           AUTOSKILLIT_TEST_BASE_REF: ${{ needs.preflight.outputs.test-base-revision }}
         run: |
           mkdir -p .autoskillit/temp
-          task test-check
+          set +e
+          task test-check 2>&1 | tee .autoskillit/temp/test-check.log
+          TEST_CHECK_EXIT="${PIPESTATUS[0]}"
+          set -e
+          if [[ "$TEST_CHECK_EXIT" -ne 0 ]] \
+            && [[ "$AUTOSKILLIT_TEST_FILTER" == "conservative" ]] \
+            && rg -q '^PYTEST_EXIT_CODE=5$' .autoskillit/temp/test-check.log; then
+            echo "No tests selected for this shard after conservative filtering"
+            exit 0
+          fi
+          exit "$TEST_CHECK_EXIT"
 
       - name: Upload filter stats
         if: always()

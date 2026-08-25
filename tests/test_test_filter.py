@@ -274,7 +274,7 @@ class TestBuildTestScope:
         for d in ["recipe", "arch", "contracts", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
-            "server/test_factory.py",
+            "server/test_factory_context_construction.py",
             "server/test_tools_kitchen_envelope_failure.py",
             "server/test_tools_kitchen_envelope_hook_drift.py",
             "server/test_tools_kitchen_envelope_validation.py",
@@ -309,7 +309,7 @@ class TestBuildTestScope:
         result_names = {p.name for p in result}
         assert "recipe" in result_names, "recipe missing"
         for expected in [
-            "test_factory.py",
+            "test_factory_context_construction.py",
             "test_tools_kitchen_envelope_failure.py",
             "test_tools_kitchen_envelope_hook_drift.py",
             "test_tools_kitchen_envelope_validation.py",

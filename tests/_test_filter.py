@@ -508,7 +508,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "testing": frozenset(
         {
             "execution",
-            "server/test_factory.py",
+            "server/test_factory_context_construction.py",
             "server/test_server_tool_registration.py",
             "contracts/test_protocol_satisfaction.py",
         }
@@ -516,7 +516,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "db": frozenset(
         {
             "execution",
-            "server/test_factory.py",
+            "server/test_factory_context_construction.py",
             "contracts/test_l1_packages.py",
             "contracts/test_protocol_satisfaction.py",
             "contracts/test_package_gateways.py",
@@ -534,7 +534,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "github": frozenset(
         {
             "execution",
-            "server/test_factory.py",
+            "server/test_factory_output_and_token_resolution.py",
             "server/test_tools_status_kitchen.py",
         }
     ),
@@ -747,7 +747,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "repository": frozenset(
         {
             "recipe",
-            "server/test_factory.py",
+            "server/test_factory_context_construction.py",
             "server/test_tools_kitchen_envelope_failure.py",
             "server/test_tools_kitchen_envelope_hook_drift.py",
             "server/test_tools_kitchen_envelope_validation.py",
@@ -787,7 +787,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "_llm_triage",
-            "server/test_factory.py",
+            "server/test_factory_output_and_token_resolution.py",
             "server/test_tools_load_recipe.py",
             "server/test_service_wrappers.py",
             "execution/test_headless_path_validation.py",
@@ -992,7 +992,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Server file-level entries:
             "server/test_audit_admission_projected_plugin_process.py",
             "server/test_explicit_backend_override.py",
-            "server/test_factory.py",
+            "server/test_factory_context_construction.py",
             "server/test_tools_agents.py",
             "server/test_tools_issue_lifecycle_handlers.py",
             "server/test_tools_issue_lifecycle_helpers.py",
@@ -1034,7 +1034,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_attestation_delivery_reachability.py",
             "server/test_tools_status_kitchen.py",
             "server/test_open_kitchen_deferred_recall.py",
-            "server/test_factory.py",
+            "server/test_factory_context_construction.py",
+            "server/test_factory_output_and_token_resolution.py",
             "server/test_tools_dispatch_validation.py",
             "server/test_tools_kitchen_gate_features.py",
             "server/test_tools_load_recipe.py",

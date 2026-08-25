@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -19,8 +20,12 @@ import regex as re
 
 from autoskillit.core import (
     AUTOSKILLIT_PRIVATE_ENV_VARS,
+    MIN_FREE_BYTES_THRESHOLD,
+    SpaceProbe,
+    StoreCapacityExhaustedError,
     TerminationReason,
     TestResult,
+    default_space_probe,
     get_logger,
 )
 
@@ -277,8 +282,17 @@ class DefaultTestRunner:
         self._config = config
         self._runner = runner
 
-    def check_infrastructure(self, cwd: Path) -> str | None:
-        """Return None if test infrastructure exists, or an error description."""
+    def check_infrastructure(
+        self, cwd: Path, *, space_probe: SpaceProbe = default_space_probe
+    ) -> str | None:
+        """Return None if test infrastructure exists, or an error description.
+
+        The capacity check probes the platform temp root (/dev/shm on Linux, /tmp
+        elsewhere -- the same root Taskfile.yml's PYTEST_TMP_ROOT resolves to), not cwd
+        or a specific generation path: capacity is a property of the mount, and the one
+        root this module can legally name (scripts/pytest_tmp_lifecycle.py's user root
+        lives outside every import-layer contract) is the mount itself.
+        """
         import shutil
 
         for cmd in self._config.test_check.effective_commands:
@@ -290,6 +304,32 @@ class DefaultTestRunner:
             else:
                 if shutil.which(cmd[0]) is None:
                     return f"Command '{cmd[0]}' not found in PATH"
+
+        platform_root = Path("/dev/shm") if sys.platform == "linux" else Path("/tmp")
+        try:
+            total_bytes, _used_bytes, free_bytes = space_probe(platform_root)
+        except OSError as exc:
+            logger.warning(
+                "test_check_capacity_probe_failed", path=str(platform_root), error=str(exc)
+            )
+            return None
+        if free_bytes < MIN_FREE_BYTES_THRESHOLD:
+            # The typed exception is the single authority for "what counts as too full"
+            # and for the message text; raise-and-catch keeps check_infrastructure's
+            # existing str | None transport while StoreCapacityExhaustedError stays the
+            # one place this message is composed (also raised, uncaught, by _setup).
+            try:
+                raise StoreCapacityExhaustedError(
+                    path=platform_root,
+                    free_bytes=free_bytes,
+                    total_bytes=total_bytes,
+                    remedy=(
+                        "run `task cleanup-shm` to reclaim stale pytest generations, or "
+                        f"free space on {platform_root} manually"
+                    ),
+                )
+            except StoreCapacityExhaustedError as exc:
+                return str(exc)
         return None
 
     async def run(self, cwd: Path) -> TestResult:

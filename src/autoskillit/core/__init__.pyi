@@ -11,6 +11,9 @@ from ._active_kitchens import (
     sample_kitchen_process_identity as sample_kitchen_process_identity,
 )
 from ._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
+from ._capacity import MIN_FREE_BYTES_THRESHOLD as MIN_FREE_BYTES_THRESHOLD
+from ._capacity import SpaceProbe as SpaceProbe
+from ._capacity import default_space_probe as default_space_probe
 from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
 from ._claude_env import build_maintenance_env as build_maintenance_env
@@ -1185,6 +1188,7 @@ from .types import StageHistoryEvent as StageHistoryEvent
 from .types import StaleGeneratorError as StaleGeneratorError
 from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent
+from .types import StoreCapacityExhaustedError as StoreCapacityExhaustedError
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope
 from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import StreamParser as StreamParser

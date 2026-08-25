@@ -76,6 +76,7 @@ from ._doctor_runtime import (
     _check_orphaned_autoskillit_daemons,
     _check_orphaned_codex_processes,
     _check_orphaned_process_tethers,
+    _check_pytest_temp_capacity,
     _check_quota_cache_schema,
     _check_script_binary,
     _check_session_index_projection,
@@ -237,6 +238,7 @@ def _collect_doctor_results() -> list[DoctorResult]:
     results.extend(_run_check(functools.partial(_check_orphaned_codex_processes)))
     results.extend(_run_check(functools.partial(_check_orphaned_autoskillit_daemons)))
     results.extend(_run_check(functools.partial(_check_orphaned_process_tethers)))
+    results.extend(_run_check(functools.partial(_check_pytest_temp_capacity)))
     return results
 
 

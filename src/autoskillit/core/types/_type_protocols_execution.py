@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from .._capacity import SpaceProbe, default_space_probe
 from ._type_backend import CmdSpec
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_enums import FaultDomain
@@ -240,7 +241,9 @@ class TestRunner(Protocol):
     Returns a TestResult with passed, stdout, and stderr from the test run.
     """
 
-    def check_infrastructure(self, cwd: Path) -> str | None: ...
+    def check_infrastructure(
+        self, cwd: Path, *, space_probe: SpaceProbe = default_space_probe
+    ) -> str | None: ...
 
     async def run(self, cwd: Path) -> TestResult: ...
 

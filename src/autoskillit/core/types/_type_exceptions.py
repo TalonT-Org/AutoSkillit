@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ._type_enums import ExplorationFailureCode
 from ._type_exploration import SnapshotCaptureReason, SnapshotCaptureStatus
 
@@ -23,6 +25,7 @@ __all__ = [
     "RecipeExemptionFitnessError",
     "RecipeNotFoundError",
     "StaleGeneratorError",
+    "StoreCapacityExhaustedError",
 ]
 
 
@@ -86,6 +89,30 @@ class ProcessStaleError(RecipeLoadError, InfrastructureFaultError):
 
 class StaleGeneratorError(InfrastructureFaultError):
     """The generating process's installation is stale or deleted."""
+
+
+class StoreCapacityExhaustedError(RuntimeError, InfrastructureFaultError):
+    """A reclaimable store cannot satisfy a capacity bound by reclamation alone.
+
+    Raised when every over-ceiling candidate is protected -- a live/indeterminate
+    owner or a revocable kernel reference -- so satisfying the bound would require
+    deleting live work. The correct disposition is halt-and-report with a remedy,
+    never claim another generation on top (see ``core.runtime.ReclamationBound``).
+    """
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        free_bytes: int,
+        total_bytes: int,
+        remedy: str,
+    ) -> None:
+        self.path = path
+        self.free_bytes = free_bytes
+        self.total_bytes = total_bytes
+        self.remedy = remedy
+        super().__init__(f"{path}: {free_bytes} bytes free of {total_bytes} total -- {remedy}")
 
 
 class RecipeNotFoundError(RecipeLoadError):

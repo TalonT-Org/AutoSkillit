@@ -48,6 +48,10 @@ def _ensure_autoskillit_importable() -> None:
 
 _ensure_autoskillit_importable()
 
+from autoskillit.core import (  # noqa: E402
+    StoreCapacityExhaustedError,
+    default_space_probe,
+)
 from autoskillit.core.runtime import (  # noqa: E402
     BoundedCandidate,
     EvidenceSource,
@@ -522,12 +526,22 @@ def _setup(args: argparse.Namespace) -> int:
     if bound_unsatisfied(survivors, selected, bound):
         selected_paths = {c.path for c in selected}
         protected_count = sum(1 for c in survivors if c.path not in selected_paths and c.protected)
-        raise LifecycleError(
-            f"pytest temp generation ceiling exceeded (max_generations={bound.max_generations}, "
-            f"max_bytes={bound.max_bytes}) and cannot be satisfied by reclamation: "
-            f"{protected_count} candidates remain protected by a live owner or a revocable "
-            "reference. Remedy: investigate leaked processes holding stale generations, or "
-            "raise --max-generations/--max-bytes to accommodate legitimate concurrency."
+        try:
+            total_bytes, _used_bytes, free_bytes = default_space_probe(platform_root)
+        except OSError:
+            total_bytes, free_bytes = 0, 0
+        raise StoreCapacityExhaustedError(
+            path=platform_root,
+            free_bytes=free_bytes,
+            total_bytes=total_bytes,
+            remedy=(
+                f"generation ceiling exceeded (max_generations={bound.max_generations}, "
+                f"max_bytes={bound.max_bytes}) and cannot be satisfied by reclamation: "
+                f"{protected_count} candidates remain protected by a live owner or a "
+                "revocable reference; investigate leaked processes holding stale "
+                "generations, or raise --max-generations/--max-bytes for legitimate "
+                "concurrency"
+            ),
         )
     try:
         generation.mkdir(mode=0o700)
@@ -595,7 +609,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         return int(args.handler(args))
-    except LifecycleError as exc:
+    except (LifecycleError, StoreCapacityExhaustedError) as exc:
         _log(str(exc))
         return 2
 

@@ -626,7 +626,7 @@ def test_update_transaction_declares_exact_thirteen_phase_pivot_contract() -> No
     assert IRREVERSIBLE_PIVOT_PHASE is UPDATE_TRANSACTION_PHASES[6]
 
 
-def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
+def test_both_dev_installs_use_the_same_pinned_argv(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The real, unmocked ``upgrade_command()`` determines the argv/env that
@@ -681,6 +681,13 @@ def test_dev_track_upgrade_reaches_subprocess_via_real_upgrade_command(
 
     assert result.outcome is UpdateTransactionOutcome.COMPLETED, result.findings
     assert len(calls) == 3
+    dev_install_argv = [cmd for cmd, _kwargs in calls if cmd[:3] == ["uv", "tool", "install"]]
+    assert len(dev_install_argv) == 2
+    assert dev_install_argv[0] == dev_install_argv[1]
+    assert all(
+        f"git+https://github.com/TalonT-Org/AutoSkillit.git@{_TARGET_SHA}" in argv
+        for argv in dev_install_argv
+    )
     python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
     expected_upgrade_argv = [
         "uv",

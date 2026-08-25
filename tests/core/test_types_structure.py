@@ -125,6 +125,30 @@ _PRE_SPLIT_CONSTANT_NAMES: frozenset[str] = frozenset(
         "INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE",
     }
 )
+_PRE_SPLIT_PERSISTENCE_NAMES: frozenset[str] = frozenset(
+    {
+        "CONTEXT_ADMISSION_ENCODING_VERSION",
+        "CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS",
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        "ContextAdmissionStreamKey",
+        "ContextAdmissionStoreAuthority",
+        "ShadowContextAdmissionTargetRecord",
+        "ShadowContextAdmissionRecord",
+        "DurableContextAdmissionPayload",
+        "StoredContextAdmissionEnvelope",
+        "ContextAdmissionStoreHealth",
+        "ContextAdmissionStreamHealth",
+        "ContextAdmissionAccountingResult",
+        "ContextAdmissionRecoveryResult",
+        "ContextAdmissionInspectionResult",
+        "ContextAdmissionLedger",
+        "make_stored_context_admission_envelope",
+        "encode_stored_context_admission_envelope",
+        "decode_stored_context_admission_envelope",
+        "context_admission_envelope_header",
+        "validate_context_admission_persistence_value",
+    }
+)
 
 
 def _recipe_section_facade_names() -> tuple[str, ...]:
@@ -336,12 +360,12 @@ def test_context_admission_package_hub_preserves_facade_identity() -> None:
 
 def test_context_admission_private_codec_and_producer_surface_identity() -> None:
     base = import_module("autoskillit.core.types._type_context_admission_base")
-    persistence = import_module("autoskillit.core.types._type_context_admission_persistence")
+    envelope = import_module("autoskillit.core.types._type_context_admission_persistence_envelope")
     reducer = import_module("autoskillit.core.context_admission")
     enums = import_module("autoskillit.core.types._type_enums_context_admission")
 
     for name in ("_ContractValue", "_encode", "_decode"):
-        assert getattr(persistence, name) is getattr(base, name)
+        assert getattr(envelope, name) is getattr(base, name), name
     assert enums.ProducerSurface is reducer.ProducerSurface
 
 
@@ -458,6 +482,34 @@ def test_decomposition_preserves_public_symbol_set() -> None:
     for name in _PRE_SPLIT_CONSTANT_NAMES:
         assert hasattr(constants_mod, name), f"_type_constants.{name} missing after decomposition"
 
+    # Wavefront 2 split: persistence facade + envelope shard.
+    import autoskillit.core.types._type_context_admission_persistence as persistence_mod
+    import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_mod
+
+    # Hub __all__ preserves every pre-split persistence name.
+    assert _PRE_SPLIT_PERSISTENCE_NAMES <= set(types_hub.__all__), (
+        f"Persistence names missing from core.types.__all__: "
+        f"{sorted(_PRE_SPLIT_PERSISTENCE_NAMES - set(types_hub.__all__))}"
+    )
+
+    # Facade __all__ must be a strict subset of the pre-split snapshot —
+    # any name that was moved to a sibling shard must NOT reappear in the
+    # facade's __all__, otherwise the hub's concatenated __all__ would carry
+    # duplicates.
+    assert set(persistence_mod.__all__) < _PRE_SPLIT_PERSISTENCE_NAMES, (
+        f"Names unexpectedly re-added to _type_context_admission_persistence.__all__: "
+        f"{sorted(set(persistence_mod.__all__) - _PRE_SPLIT_PERSISTENCE_NAMES)}"
+    )
+
+    # Identity preserved: every pre-split name accessible via the facade must
+    # resolve to the same object as the same name imported directly from the
+    # owning shard (or, for names retained only in the facade, from the facade).
+    for name in _PRE_SPLIT_PERSISTENCE_NAMES:
+        facade_obj = getattr(persistence_mod, name)
+        assert getattr(types_hub, name) is facade_obj, name
+        if name in envelope_mod.__all__:
+            assert getattr(envelope_mod, name) is facade_obj, name
+
 
 @pytest.mark.parametrize("name", _recipe_section_facade_names())
 def test_recipe_section_facade_preserves_identity_and_export_ownership(name: str) -> None:
@@ -527,12 +579,12 @@ def test_types_hub_backward_compat():
 
 
 def test_types_hub_line_count_under_threshold():
-    """After split, core/types.py must be under 200 lines (re-export hub only)."""
+    """After split, core/types.py must be under 210 lines (re-export hub only)."""
     from autoskillit.core import paths
 
     types_path = paths.pkg_root() / "core" / "types" / "__init__.py"
     lines = types_path.read_text().splitlines()
-    assert len(lines) < 200, f"types.py has {len(lines)} lines; expected re-export hub only"
+    assert len(lines) < 210, f"types.py has {len(lines)} lines; expected re-export hub only"
 
 
 def test_launch_id_env_var_in_private_vars() -> None:

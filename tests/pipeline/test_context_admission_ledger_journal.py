@@ -14,6 +14,7 @@ from types import MappingProxyType
 import pytest
 
 import autoskillit.core.types._type_context_admission_persistence as persistence_types
+import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
 from autoskillit.core import (
     AuthorityUnavailableEvent,
     ContextAdmissionAccountingStatus,
@@ -320,7 +321,7 @@ def test_recovery_decodes_supported_legacy_encoding_without_rewrite(
     finally:
         connection.close()
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
         MappingProxyType(
             {

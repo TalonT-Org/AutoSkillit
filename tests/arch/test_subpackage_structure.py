@@ -41,6 +41,7 @@ class TestCoreSubpackages:
             "_type_context_admission_events",
             "_type_context_admission_identities",
             "_type_context_admission_persistence",
+            "_type_context_admission_persistence_envelope",
             "_type_context_admission_records",
             "_type_context_admission_states",
             "_type_dimensions",

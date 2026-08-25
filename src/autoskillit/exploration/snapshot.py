@@ -575,6 +575,10 @@ def _capture_once(
             | set(_untracked_special_paths(root, ignored=ignored_prune_set))
         )
     )
+    # max_paths bounds every tracked, untracked, or ignored record eligible for
+    # publication; a Git-collapsed ignored directory contributes one record. This
+    # cardinality budget is independent of published-content byte budgets, which
+    # exempt ignored regular-file content.
     path_count = len(tracked_paths) + len(untracked_paths) + len(ignored_paths)
     if path_count > limits.max_paths:
         raise _CaptureAborted(

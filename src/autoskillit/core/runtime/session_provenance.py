@@ -8,7 +8,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
+from ..logging import get_logger
 from ._reclamation import append_and_trim_jsonl
+
+logger = get_logger(__name__)
 
 #: Oldest-first line bound applied on every write -- this store previously grew without
 #: limit, degrading read_provenance_for_session's linear scan in both time and space.
@@ -60,8 +63,8 @@ def write_provenance_record(record: ProvenanceRecord, project_dir: Path | None =
             _fast_dumps(asdict(record), sort_keys=True),
             max_lines=_MAX_PROVENANCE_RECORDS,
         )
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.warning("session_provenance_write_failed", path=str(path), error=str(exc))
 
 
 def read_provenance_for_session(

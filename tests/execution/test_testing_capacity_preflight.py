@@ -34,7 +34,7 @@ def test_check_infrastructure_reports_capacity_exhaustion(tmp_path: Path) -> Non
     result = runner.check_infrastructure(tmp_path, space_probe=_low_space_probe)
 
     assert result is not None
-    assert "1000" in result or "1,000" in result
+    assert "1000" in result
     assert "21000000000" in result
 
 

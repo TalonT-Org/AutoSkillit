@@ -10,14 +10,57 @@ Every test in this file is a structural guard. They prove that:
 
 from __future__ import annotations
 
+import ast
 import importlib
+import sys
 from collections import Counter
-from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+
+def _bootstrap_tests_on_sys_path() -> str:
+    """Ensure the tests/ root is on sys.path so tests.core imports resolve; return the path."""
+    tests_root = str(Path(__file__).resolve().parents[2] / "tests")
+    if tests_root not in sys.path:
+        sys.path.insert(0, tests_root)
+    return tests_root
+
+
+def _module_defines_name(module: object, name: str) -> bool:
+    """Return True iff ``name`` is defined directly in ``module`` (not just imported into it)."""
+    return name in vars(module)
+
+
+def _source_imports_autoskillit_execution(source: str) -> bool:
+    """AST-detect any import of the ``autoskillit.execution`` subpackage in ``source``."""
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module == "autoskillit.execution" or module.startswith("autoskillit.execution."):
+                return True
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "autoskillit.execution" or alias.name.startswith(
+                    "autoskillit.execution."
+                ):
+                    return True
+    return False
+
+
+def _source_defines_clear_snapshot_cache(source: str) -> bool:
+    """AST-detect shadowing of the conftest _clear_snapshot_cache fixture."""
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "_clear_snapshot_cache"
+        ):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +209,7 @@ _PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_SPLIT_TARGETS: dict[str, str] = {
+_SPLIT_TARGETS: dict[str, str] = {  # noqa: E501 — table-style mapping, one test name per line
     # test_types.py → 4 files
     "test_claude_content_block_type_from_api": "tests.core.test_types_enums",
     "test_retry_reason_values": "tests.core.test_types_enums",
@@ -184,9 +227,9 @@ _SPLIT_TARGETS: dict[str, str] = {
     "test_skill_result_cancelled_factory": "tests.core.test_types_skill_result",
     "test_skill_result_outcome": "tests.core.test_types_skill_result",
     "test_skill_result_to_json_excludes_outcome": "tests.core.test_types_skill_result",
-    "test_skill_result_to_json_includes_worktree_path_when_set": "tests.core.test_types_skill_result",
-    "test_skill_result_to_json_omits_worktree_path_when_none": "tests.core.test_types_skill_result",
-    "test_skill_result_to_json_preserves_nested_execution_identity": "tests.core.test_types_skill_result",
+    "test_skill_result_to_json_includes_worktree_path_when_set": "tests.core.test_types_skill_result",  # noqa: E501
+    "test_skill_result_to_json_omits_worktree_path_when_none": "tests.core.test_types_skill_result",  # noqa: E501
+    "test_skill_result_to_json_preserves_nested_execution_identity": "tests.core.test_types_skill_result",  # noqa: E501
     "test_git_writes_detected_in_has_progress_evidence": "tests.core.test_types_skill_result",
     "test_skill_result_git_writes_detected_in_json": "tests.core.test_types_skill_result",
     "test_skill_result_git_writes_detected_false_included": "tests.core.test_types_skill_result",
@@ -197,53 +240,53 @@ _SPLIT_TARGETS: dict[str, str] = {
     "TestSkillResultProviderFields": "tests.core.test_types_skill_result",
     "TestInfraOutcome": "tests.core.test_types_skill_result",
     "TestSkillResultExtensionBundles": "tests.core.test_types_skill_result",
-    "test_managed_session_home_frozen_slots_exact_fields_and_exports": "tests.core.test_types_protocols",
+    "test_managed_session_home_frozen_slots_exact_fields_and_exports": "tests.core.test_types_protocols",  # noqa: E501
     "test_github_fetcher_protocol_has_label_methods": "tests.core.test_types_protocols",
     "test_subprocess_result_has_elapsed_seconds_field": "tests.core.test_types_protocols",
     "test_subprocess_runner_protocol_pty_mode_default_false": "tests.core.test_types_protocols",
     "test_subprocess_runner_protocol_marker_dir_default_none": "tests.core.test_types_protocols",
     "test_subprocess_runner_protocol_session_id_default_none": "tests.core.test_types_protocols",
-    "test_subprocess_runner_protocol_marker_params_after_max_extension": "tests.core.test_types_protocols",
-    "test_subprocess_runner_protocol_marker_params_are_keyword_only": "tests.core.test_types_protocols",
+    "test_subprocess_runner_protocol_marker_params_after_max_extension": "tests.core.test_types_protocols",  # noqa: E501
+    "test_subprocess_runner_protocol_marker_params_are_keyword_only": "tests.core.test_types_protocols",  # noqa: E501
     "test_ci_run_scope_event_field": "tests.core.test_types_protocols",
     "test_ci_run_scope_event_defaults_to_none": "tests.core.test_types_protocols",
     "test_skill_command_prefix_constant_exists": "tests.core.test_types_infrastructure_faults",
     "test_autoskillit_skill_prefix_constant_exists": "tests.core.test_types_infrastructure_faults",
     "test_write_expected_skills_frozenset_removed": "tests.core.test_types_infrastructure_faults",
     "test_write_behavior_spec_dataclass": "tests.core.test_types_infrastructure_faults",
-    "test_infrastructure_fault_exceptions_share_marker_base": "tests.core.test_types_infrastructure_faults",
+    "test_infrastructure_fault_exceptions_share_marker_base": "tests.core.test_types_infrastructure_faults",  # noqa: E501
     # test_type_constants.py → 9 files
-    "test_response_backstop_exemption_def_namedtuple_fields": "tests.core.test_type_constants_response_backstop",
-    "test_response_backstop_exemption_registry_is_closed_and_pinned": "tests.core.test_type_constants_response_backstop",
-    "test_response_backstop_exemption_registry_digest_is_canonical": "tests.core.test_type_constants_response_backstop",
-    "test_response_backstop_exemption_registry_public_gateways": "tests.core.test_type_constants_response_backstop",
-    "test_recipe_execution_install_site_registry_digest_is_canonical": "tests.core.test_type_constants_response_backstop",
+    "test_response_backstop_exemption_def_namedtuple_fields": "tests.core.test_type_constants_response_backstop",  # noqa: E501
+    "test_response_backstop_exemption_registry_is_closed_and_pinned": "tests.core.test_type_constants_response_backstop",  # noqa: E501
+    "test_response_backstop_exemption_registry_digest_is_canonical": "tests.core.test_type_constants_response_backstop",  # noqa: E501
+    "test_response_backstop_exemption_registry_public_gateways": "tests.core.test_type_constants_response_backstop",  # noqa: E501
+    "test_recipe_execution_install_site_registry_digest_is_canonical": "tests.core.test_type_constants_response_backstop",  # noqa: E501
     "test_core_packs_constant_defined": "tests.core.test_type_constants_pack_registry",
     "test_pack_registry_contains_all_packs": "tests.core.test_type_constants_pack_registry",
-    "test_category_tags_derived_from_pack_registry": "tests.core.test_type_constants_pack_registry",
-    "test_pack_registry_is_superset_of_old_category_tags": "tests.core.test_type_constants_pack_registry",
+    "test_category_tags_derived_from_pack_registry": "tests.core.test_type_constants_pack_registry",  # noqa: E501
+    "test_pack_registry_is_superset_of_old_category_tags": "tests.core.test_type_constants_pack_registry",  # noqa: E501
     "test_pack_def_namedtuple_fields": "tests.core.test_type_constants_pack_registry",
-    "test_pack_registry_new_packs_are_default_disabled": "tests.core.test_type_constants_pack_registry",
+    "test_pack_registry_new_packs_are_default_disabled": "tests.core.test_type_constants_pack_registry",  # noqa: E501
     "test_audit_pipeline_pack_in_registry": "tests.core.test_type_constants_pack_registry",
     "test_pack_registry_importable_from_core": "tests.core.test_type_constants_pack_registry",
     "test_kitchen_core_in_pack_registry": "tests.core.test_type_constants_pack_registry",
-    "test_private_env_vars_includes_franchise_tier_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_private_env_vars_includes_execution_control_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_private_env_vars_include_native_shell_lineage_controls": "tests.core.test_type_constants_private_env_vars",
+    "test_private_env_vars_includes_franchise_tier_vars": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
+    "test_private_env_vars_includes_execution_control_vars": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
+    "test_private_env_vars_include_native_shell_lineage_controls": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
     "test_session_deadline_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_fleet_inspector_model_crosses_only_declared_child_boundaries": "tests.core.test_type_constants_private_env_vars",
-    "test_codex_mcp_receives_launch_registry_join": "tests.core.test_type_constants_private_env_vars",
-    "test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core": "tests.core.test_type_constants_private_env_vars",
+    "test_fleet_inspector_model_crosses_only_declared_child_boundaries": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
+    "test_codex_mcp_receives_launch_registry_join": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
+    "test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
     "test_provider_profile_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_scenario_step_name_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_autoskillit_allowed_write_prefix_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_autoskillit_allowed_write_prefixes_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_max_mcp_output_tokens_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
+    "test_scenario_step_name_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
+    "test_autoskillit_allowed_write_prefix_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
+    "test_autoskillit_allowed_write_prefixes_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
+    "test_max_mcp_output_tokens_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
     "test_autoskillit_cwd_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
-    "test_autoskillit_write_guard_tool_names_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",
+    "test_autoskillit_write_guard_tool_names_in_private_env_vars": "tests.core.test_type_constants_private_env_vars",  # noqa: E501
     "test_recipe_pack_def_namedtuple_fields": "tests.core.test_type_constants_recipe_pack",
     "test_recipe_pack_registry_has_three_entries": "tests.core.test_type_constants_recipe_pack",
-    "test_recipe_pack_registry_implementation_family": "tests.core.test_type_constants_recipe_pack",
+    "test_recipe_pack_registry_implementation_family": "tests.core.test_type_constants_recipe_pack",  # noqa: E501
     "test_recipe_pack_registry_research_family": "tests.core.test_type_constants_recipe_pack",
     "test_recipe_pack_registry_orchestration_family": "tests.core.test_type_constants_recipe_pack",
     "test_recipe_pack_def_importable_from_core": "tests.core.test_type_constants_recipe_pack",
@@ -251,8 +294,8 @@ _SPLIT_TARGETS: dict[str, str] = {
     "test_exclusive_feature_tools_removed": "tests.core.test_type_constants_feature_registry",
     "test_exclusive_feature_tools_not_in_all": "tests.core.test_type_constants_feature_registry",
     "test_fleet_default_enabled_is_false": "tests.core.test_type_constants_feature_registry",
-    "test_exploration_feature_definition_pins_loading_and_visibility_policy": "tests.core.test_type_constants_feature_registry",
-    "test_is_feature_enabled_fleet_defaults_false": "tests.core.test_type_constants_feature_registry",
+    "test_exploration_feature_definition_pins_loading_and_visibility_policy": "tests.core.test_type_constants_feature_registry",  # noqa: E501
+    "test_is_feature_enabled_fleet_defaults_false": "tests.core.test_type_constants_feature_registry",  # noqa: E501
     "test_feature_def_has_no_name_field": "tests.core.test_type_constants_feature_registry",
     "test_fleet_dispatch_tools_constant_exists": "tests.core.test_type_constants_fleet_tools",
     "test_fleet_menu_tools_in_type_constants": "tests.core.test_type_constants_fleet_tools",
@@ -260,9 +303,9 @@ _SPLIT_TARGETS: dict[str, str] = {
     "test_fleet_tools_matches_expected": "tests.core.test_type_constants_fleet_tools",
     "test_skill_tools_matches_expected": "tests.core.test_type_constants_fleet_tools",
     "test_config_authority_keys_constant": "tests.core.test_type_constants_fleet_tools",
-    "test_headless_tools_contains_expected_names": "tests.core.test_type_constants_tool_classification",
-    "test_evidence_reader_tools_are_exact_internal_subset": "tests.core.test_type_constants_tool_classification",
-    "test_free_range_tools_contains_expected_names": "tests.core.test_type_constants_tool_classification",
+    "test_headless_tools_contains_expected_names": "tests.core.test_type_constants_tool_classification",  # noqa: E501
+    "test_evidence_reader_tools_are_exact_internal_subset": "tests.core.test_type_constants_tool_classification",  # noqa: E501
+    "test_free_range_tools_contains_expected_names": "tests.core.test_type_constants_tool_classification",  # noqa: E501
     "test_session_type_cook_order_not_in_core_types": "tests.core.test_type_constants_env",
     "test_codex_schema_version_value": "tests.core.test_type_constants_env",
     "test_codex_schema_version_in_all": "tests.core.test_type_constants_env",
@@ -270,8 +313,8 @@ _SPLIT_TARGETS: dict[str, str] = {
     "test_codex_schema_version_importable_from_core": "tests.core.test_type_constants_env",
     "test_claude_code_mcp_tool_idle_timeout_env_var_value": "tests.core.test_type_constants_env",
     "test_claude_code_mcp_tool_idle_timeout_env_var_in_all": "tests.core.test_type_constants_env",
-    "test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_types": "tests.core.test_type_constants_env",
-    "test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_core": "tests.core.test_type_constants_env",
+    "test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_types": "tests.core.test_type_constants_env",  # noqa: E501
+    "test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_core": "tests.core.test_type_constants_env",  # noqa: E501
     "test_headless_auto_gate_env_var_value": "tests.core.test_type_constants_env",
     "test_headless_auto_gate_env_var_in_all": "tests.core.test_type_constants_env",
     "test_headless_auto_gate_env_var_importable_from_types": "tests.core.test_type_constants_env",
@@ -280,10 +323,10 @@ _SPLIT_TARGETS: dict[str, str] = {
     "test_order_interactive_required_env_value": "tests.core.test_type_constants_env",
     "test_order_interactive_required_env_excludes_headless": "tests.core.test_type_constants_env",
     "test_order_interactive_required_env_in_all": "tests.core.test_type_constants_env",
-    "test_order_interactive_required_env_importable_from_types": "tests.core.test_type_constants_env",
-    "test_order_interactive_required_env_importable_from_core": "tests.core.test_type_constants_env",
-    "test_codex_interactive_required_env_includes_max_mcp_output_tokens": "tests.core.test_type_constants_env",
-    "test_codex_cook_storage_and_environment_constants_are_pinned": "tests.core.test_type_constants_env",
+    "test_order_interactive_required_env_importable_from_types": "tests.core.test_type_constants_env",  # noqa: E501
+    "test_order_interactive_required_env_importable_from_core": "tests.core.test_type_constants_env",  # noqa: E501
+    "test_codex_interactive_required_env_includes_max_mcp_output_tokens": "tests.core.test_type_constants_env",  # noqa: E501
+    "test_codex_cook_storage_and_environment_constants_are_pinned": "tests.core.test_type_constants_env",  # noqa: E501
     "test_quota_trigger_constants_exported": "tests.core.test_type_constants_misc_markers",
     "test_investigation_complete_marker_defined": "tests.core.test_type_constants_misc_markers",
     "test_investigation_complete_marker_in_all": "tests.core.test_type_constants_misc_markers",
@@ -348,11 +391,7 @@ def test_every_split_target_file_exists() -> None:
 
 def test_pre_split_test_name_resolves_to_its_target_file() -> None:
     """For each pre-split test, the target module must import and the attribute must exist."""
-    repo_root = Path(__file__).resolve().parents[2]
-    # Ensure tests/ is on sys.path so tests.core imports resolve.
-    tests_root = str(repo_root / "tests")
-    if tests_root not in __import__("sys").path:
-        __import__("sys").path.insert(0, tests_root)
+    _bootstrap_tests_on_sys_path()
 
     missing: list[str] = []
     for test_name, target_module_path in _SPLIT_TARGETS.items():
@@ -361,14 +400,14 @@ def test_pre_split_test_name_resolves_to_its_target_file() -> None:
         except ImportError as exc:
             missing.append(f"{test_name} → {target_module_path}: ImportError({exc})")
             continue
-        if not hasattr(module, test_name):
+        if not _module_defines_name(module, test_name):
             missing.append(f"{test_name} → {target_module_path}: missing attribute")
     assert not missing, "Pre-split tests missing from target files:\n" + "\n".join(missing)
 
 
 def test_every_pre_split_test_name_appears_in_exactly_one_new_file() -> None:
     """Each pre-split test name must appear in exactly one of the split files (no duplicates)."""
-    all_pre_split: Iterable[str] = (
+    all_pre_split: frozenset[str] = (
         _PRE_SPLIT_TEST_TYPES_NAMES | _PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES
     )
 
@@ -377,11 +416,11 @@ def test_every_pre_split_test_name_appears_in_exactly_one_new_file() -> None:
         module_name = "tests.core." + Path(rel_path).stem
         module = importlib.import_module(module_name)
         for name in all_pre_split:
-            if hasattr(module, name):
+            if _module_defines_name(module, name):
                 counter[name] += 1
 
     duplicates = {name: count for name, count in counter.items() if count != 1}
-    missing = set(all_pre_split) - set(counter)
+    missing = all_pre_split - set(counter)
     problems: list[str] = []
     if duplicates:
         problems.append(f"Pre-split names appearing in !=1 file: {sorted(duplicates.items())}")
@@ -520,10 +559,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
 
 def test_every_split_file_has_layer_core_marker() -> None:
     """Each split file's module-level pytestmark must include pytest.mark.layer('core')."""
-    repo_root = Path(__file__).resolve().parents[2]
-    tests_root = str(repo_root / "tests")
-    if tests_root not in __import__("sys").path:
-        __import__("sys").path.insert(0, tests_root)
+    _bootstrap_tests_on_sys_path()
 
     for rel_path in _SPLIT_TARGET_FILE_PATHS:
         module_name = "tests.core." + Path(rel_path).stem
@@ -542,10 +578,7 @@ def test_every_split_file_has_layer_core_marker() -> None:
 
 def test_every_split_file_has_size_marker() -> None:
     """Each split file must declare a size marker (small or medium)."""
-    repo_root = Path(__file__).resolve().parents[2]
-    tests_root = str(repo_root / "tests")
-    if tests_root not in __import__("sys").path:
-        __import__("sys").path.insert(0, tests_root)
+    _bootstrap_tests_on_sys_path()
 
     for rel_path in _SPLIT_TARGET_FILE_PATHS:
         module_name = "tests.core." + Path(rel_path).stem
@@ -565,22 +598,18 @@ def test_no_split_file_imports_autoskillit_execution() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     for rel_path in _SPLIT_TARGET_FILE_PATHS:
         source = (repo_root / rel_path).read_text(encoding="utf-8")
-        assert "from autoskillit.execution" not in source, (
-            f"{rel_path} still imports autoskillit.execution — "
-            f"remove the import or update _TEST_LAYER_ALLOWLIST"
-        )
-        assert "import autoskillit.execution" not in source, (
+        assert not _source_imports_autoskillit_execution(source), (
             f"{rel_path} still imports autoskillit.execution — "
             f"remove the import or update _TEST_LAYER_ALLOWLIST"
         )
 
 
 def test_split_files_do_not_redeclare_conftest_autouse_fixture() -> None:
-    """tests/core/conftest.py provides _clear_snapshot_cache autouse; no split file may shadow it."""
+    """conftest.py provides _clear_snapshot_cache autouse; no split file may shadow it."""
     repo_root = Path(__file__).resolve().parents[2]
     for rel_path in _SPLIT_TARGET_FILE_PATHS:
         source = (repo_root / rel_path).read_text(encoding="utf-8")
-        assert "_clear_snapshot_cache" not in source, (
+        assert not _source_defines_clear_snapshot_cache(source), (
             f"{rel_path} shadows the conftest-provided _clear_snapshot_cache fixture"
         )
 

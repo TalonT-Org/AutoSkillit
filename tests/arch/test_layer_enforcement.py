@@ -1740,7 +1740,6 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/pipeline/test_gate.py": frozenset({"autoskillit.server"}),
     # core tests — protocol conformance checks require concrete implementations
     "tests/core/test_core_terminal_table.py": frozenset({"autoskillit.cli"}),
-    "tests/core/test_types.py": frozenset({"autoskillit.execution"}),
     # execution tests — clone_guard/headless/commands use sibling layers
     "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),

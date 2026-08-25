@@ -1,21 +1,16 @@
-"""Tests for shared type contracts — enum exhaustiveness."""
+"""Tests for SkillResult dataclass + Outcome / Provider / Infra bundles."""
+
+from __future__ import annotations
 
 import dataclasses
 import json
-from collections.abc import Mapping
-from dataclasses import FrozenInstanceError
 from typing import Any, ClassVar
 
 import pytest
 
 from autoskillit.core.types import (
-    ChannelConfirmation,
-    CIRunScope,
     InfraOutcome,
-    MergeFailedStep,
-    MergeState,
     ProviderOutcome,
-    RestartScope,
     RetryReason,
     SessionOutcome,
     SkillResult,
@@ -23,50 +18,6 @@ from autoskillit.core.types import (
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
-
-
-@pytest.mark.parametrize(
-    ("raw", "expected_value"),
-    [
-        ("text", "text"),
-        ("tool_use", "tool_use"),
-        ("thinking", "thinking"),
-        ("redacted_thinking", "redacted_thinking"),
-        ("future_new_type", "unknown"),
-        ("image", "image"),
-        ("tool_result", "tool_result"),
-    ],
-)
-def test_claude_content_block_type_from_api(raw: str, expected_value: str) -> None:
-    from autoskillit.core.types import ClaudeContentBlockType
-
-    block_type = ClaudeContentBlockType.from_api(raw)
-    assert block_type.value == expected_value
-
-
-def test_retry_reason_values():
-    """RetryReason enum has exactly the expected members."""
-    assert set(RetryReason) == {
-        RetryReason.RESUME,
-        RetryReason.NONE,
-        RetryReason.BUDGET_EXHAUSTED,
-        RetryReason.EARLY_STOP,
-        RetryReason.ZERO_WRITES,
-        RetryReason.EMPTY_OUTPUT,
-        RetryReason.COMPLETED_NO_FLUSH,
-        RetryReason.DRAIN_RACE,
-        RetryReason.PATH_CONTAMINATION,
-        RetryReason.CONTRACT_RECOVERY,
-        RetryReason.STALE,
-        RetryReason.CLONE_CONTAMINATION,
-        RetryReason.THINKING_STALL,
-        RetryReason.IDLE_STALL,
-        RetryReason.RATE_LIMITED,
-        RetryReason.CANCELLED,
-        RetryReason.OUTCOME_INVARIANT,
-        RetryReason.ASYNC_OBLIGATION,
-    }
-    assert RetryReason.NONE.value == "none"
 
 
 def test_skill_result_cancelled_factory():
@@ -83,101 +34,6 @@ def test_skill_result_cancelled_factory():
     assert result.exit_code == -1
     assert result.order_id == "oid-123"
     assert "/test-skill" in result.result
-
-
-def test_merge_failed_step_values():
-    """MergeFailedStep enum covers all failure points."""
-    assert set(MergeFailedStep) == {
-        MergeFailedStep.PATH_VALIDATION,
-        MergeFailedStep.PROTECTED_BRANCH,
-        MergeFailedStep.BRANCH_DETECTION,
-        MergeFailedStep.DIRTY_TREE,
-        MergeFailedStep.DIRTY_MAIN_REPO,
-        MergeFailedStep.TEST_GATE,
-        MergeFailedStep.FETCH,
-        MergeFailedStep.PRE_REBASE_CHECK,
-        MergeFailedStep.MERGE_COMMITS_DETECTED,
-        MergeFailedStep.REBASE,
-        MergeFailedStep.GENERATED_FILE_CLEANUP,
-        MergeFailedStep.POST_REBASE_TEST_GATE,
-        MergeFailedStep.MERGE,
-        MergeFailedStep.EDITABLE_INSTALL_GUARD,
-        MergeFailedStep.EMBEDDED_WORKTREE,
-        MergeFailedStep.REF_COHERENCE,
-    }
-
-
-def test_merge_state_values():
-    """MergeState enum covers all repository states after failure."""
-    assert set(MergeState) == {
-        MergeState.WORKTREE_INTACT,
-        MergeState.WORKTREE_INTACT_REBASE_ABORTED,
-        MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
-        MergeState.WORKTREE_INTACT_MERGE_COMMITS_DETECTED,
-        MergeState.WORKTREE_INTACT_REF_DIVERGED,
-        MergeState.WORKTREE_DIRTY,
-        MergeState.WORKTREE_DIRTY_ABORT_FAILED,
-        MergeState.WORKTREE_DIRTY_MID_OPERATION,
-        MergeState.MAIN_REPO_MERGE_ABORTED,
-        MergeState.MAIN_REPO_DIRTY_ABORT_FAILED,
-        MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
-    }
-
-
-def test_restart_scope_values():
-    """RestartScope enum covers both classification outcomes."""
-    assert set(RestartScope) == {
-        RestartScope.FULL_RESTART,
-        RestartScope.PARTIAL_RESTART,
-    }
-
-
-def test_channel_confirmation_values():
-    """ChannelConfirmation enum has exactly the expected members."""
-    assert set(ChannelConfirmation) == {
-        ChannelConfirmation.CHANNEL_A,
-        ChannelConfirmation.CHANNEL_B,
-        ChannelConfirmation.UNMONITORED,
-        ChannelConfirmation.DIR_MISSING,
-    }
-    assert ChannelConfirmation.CHANNEL_A.value == "channel_a"
-    assert ChannelConfirmation.CHANNEL_B.value == "channel_b"
-    assert ChannelConfirmation.UNMONITORED.value == "unmonitored"
-    assert ChannelConfirmation.DIR_MISSING.value == "dir_missing"
-
-
-def test_skill_command_prefix_constant_exists():
-    """SKILL_COMMAND_PREFIX is the canonical slash prefix for skill invocations."""
-    from autoskillit.core.types import SKILL_COMMAND_PREFIX
-
-    assert SKILL_COMMAND_PREFIX == "/"
-
-
-def test_autoskillit_skill_prefix_constant_exists():
-    """AUTOSKILLIT_SKILL_PREFIX is the canonical prefix for bundled autoskillit skills."""
-    from autoskillit.core.types import AUTOSKILLIT_SKILL_PREFIX
-
-    assert AUTOSKILLIT_SKILL_PREFIX == "/autoskillit:"
-
-
-# ---------------------------------------------------------------------------
-# SessionOutcome enum tests
-# ---------------------------------------------------------------------------
-
-
-def test_session_outcome_is_str_enum_with_expected_values():
-    """SessionOutcome inherits from StrEnum and has exactly three expected members."""
-    from enum import StrEnum
-
-    assert issubclass(SessionOutcome, StrEnum)
-    assert set(SessionOutcome) == {
-        SessionOutcome.SUCCEEDED,
-        SessionOutcome.RETRIABLE,
-        SessionOutcome.FAILED,
-    }
-    assert SessionOutcome.SUCCEEDED == "succeeded"
-    assert SessionOutcome.RETRIABLE == "retriable"
-    assert SessionOutcome.FAILED == "failed"
 
 
 @pytest.mark.parametrize(
@@ -249,141 +105,6 @@ def test_skill_result_to_json_excludes_outcome():
     )
     parsed = json.loads(sr.to_json())
     assert "outcome" not in parsed
-
-
-def test_session_outcome_accessible_from_core():
-    """SessionOutcome is importable via the core package public surface."""
-    from autoskillit.core import SessionOutcome as SO  # must not raise
-
-    assert SO.SUCCEEDED == "succeeded"
-
-
-def test_session_outcome_in_core_all():
-    """SessionOutcome is listed in autoskillit.core.__all__."""
-    import autoskillit.core as core_pkg
-
-    assert "SessionOutcome" in core_pkg.__all__
-
-
-def test_severity_has_ok_member():
-    from autoskillit.core.types import Severity
-
-    assert Severity.OK == "ok"
-    assert Severity.ERROR == "error"
-    assert Severity.WARNING == "warning"
-    assert Severity.INFO == "info"
-    assert set(Severity) == {Severity.OK, Severity.ERROR, Severity.WARNING, Severity.INFO}
-
-
-def test_severity_enum_not_equal_to_uppercase_string():
-    """Regression: StrEnum values are lowercase; uppercase comparison is always False.
-
-    ``f.severity == "ERROR"`` always returns False because Severity.ERROR.value
-    is ``"error"`` (lowercase), not ``"ERROR"``.
-    """
-    from autoskillit.core.types import Severity
-
-    assert Severity.ERROR != "ERROR"
-    assert Severity.ERROR == "error"
-    assert Severity.ERROR == Severity.ERROR
-
-
-def test_hook_trust_policy_values_and_public_exports():
-    from enum import StrEnum
-
-    import autoskillit.core as core
-    from autoskillit.core.types import HookTrustPolicy
-    from autoskillit.core.types._type_enums import __all__ as enum_all
-
-    assert issubclass(HookTrustPolicy, StrEnum)
-    assert set(HookTrustPolicy) == {
-        HookTrustPolicy.AUTOMATED,
-        HookTrustPolicy.REVIEW_EACH_SESSION,
-    }
-    assert HookTrustPolicy.AUTOMATED.value == "automated"
-    assert HookTrustPolicy.REVIEW_EACH_SESSION.value == "review_each_session"
-    assert "HookTrustPolicy" in enum_all
-    assert "HookTrustPolicy" in core.__all__
-    assert core.HookTrustPolicy is HookTrustPolicy
-
-
-def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path):
-    from pathlib import Path
-    from typing import get_type_hints
-
-    import autoskillit.core as core
-    from autoskillit.core import (
-        ManagedSessionHome,
-        SkillUnavailabilityPayload,
-        ValidatedAddDir,
-    )
-    from autoskillit.core.types._type_results import __all__ as results_all
-
-    skills_dir = ValidatedAddDir(tmp_path / "home" / "skills")
-    unavailability_payload: SkillUnavailabilityPayload = {
-        "backend": "codex",
-        "unavailable": (),
-    }
-    handle = ManagedSessionHome(
-        launch_id="launch-1",
-        generated_home=tmp_path / "home",
-        skills_dir=skills_dir,
-        pass_fds=(3, 5),
-        unavailability_payload=unavailability_payload,
-    )
-
-    assert tuple(field.name for field in dataclasses.fields(ManagedSessionHome)) == (
-        "launch_id",
-        "generated_home",
-        "skills_dir",
-        "pass_fds",
-        "unavailability_payload",
-    )
-    assert get_type_hints(ManagedSessionHome) == {
-        "launch_id": str,
-        "generated_home": Path,
-        "skills_dir": ValidatedAddDir,
-        "pass_fds": tuple[int, ...],
-        "unavailability_payload": SkillUnavailabilityPayload,
-    }
-    assert handle.unavailability_payload is unavailability_payload
-    assert set(handle.unavailability_payload) == {"backend", "unavailable"}
-    assert isinstance(handle.unavailability_payload, Mapping)
-    assert not hasattr(handle, "__dict__")
-    assert "ManagedSessionHome" in results_all
-    assert "ManagedSessionHome" in core.__all__
-    assert "SkillUnavailabilityPayload" in results_all
-    assert "SkillUnavailabilityPayload" in core.__all__
-    with pytest.raises(FrozenInstanceError):
-        handle.launch_id = "other"  # type: ignore[misc]
-
-
-def test_github_fetcher_protocol_has_label_methods():
-    import inspect
-
-    from autoskillit.core.types import GitHubFetcher
-
-    members = {name for name, _ in inspect.getmembers(GitHubFetcher)}
-    assert "add_labels" in members
-    assert "remove_label" in members
-    assert "ensure_label" in members
-
-
-def test_subprocess_result_has_elapsed_seconds_field():
-    """SubprocessResult must carry a pre-computed monotonic elapsed_seconds."""
-    from autoskillit.core.types import SubprocessResult, TerminationReason
-
-    result = SubprocessResult(
-        returncode=0,
-        stdout="",
-        stderr="",
-        termination=TerminationReason.COMPLETED,
-        pid=1,
-    )
-    assert hasattr(result, "elapsed_seconds")
-    assert result.elapsed_seconds == 0.0
-    result2 = dataclasses.replace(result, elapsed_seconds=7.3)
-    assert result2.elapsed_seconds == pytest.approx(7.3)
 
 
 # ---------------------------------------------------------------------------
@@ -462,139 +183,6 @@ def test_skill_result_to_json_preserves_nested_execution_identity() -> None:
     )
 
     assert json.loads(result.to_json())["execution_identity"] == identity.to_dict()
-
-
-# ---------------------------------------------------------------------------
-# WriteBehaviorSpec and WriteExpectedResolver
-# ---------------------------------------------------------------------------
-
-
-def test_write_expected_skills_frozenset_removed() -> None:
-    """WRITE_EXPECTED_SKILLS must not exist — replaced by contract-driven gate."""
-    import autoskillit.core.types as types_mod
-
-    assert not hasattr(types_mod, "WRITE_EXPECTED_SKILLS")
-
-
-def test_write_behavior_spec_dataclass() -> None:
-    """WriteBehaviorSpec must be importable with correct defaults."""
-    from autoskillit.core import WriteBehaviorSpec
-
-    default = WriteBehaviorSpec()
-    assert default.mode is None
-    assert default.expected_when == ()
-    always = WriteBehaviorSpec(mode="always")
-    assert always.mode == "always"
-    cond = WriteBehaviorSpec(mode="conditional", expected_when=("pat",))
-    assert cond.expected_when == ("pat",)
-
-
-# ---------------------------------------------------------------------------
-# P10-F1 — SubprocessRunner.pty_mode default
-# ---------------------------------------------------------------------------
-
-
-def test_subprocess_runner_protocol_pty_mode_default_false():
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    assert sig.parameters["pty_mode"].default is False
-
-
-# ---------------------------------------------------------------------------
-# P2-A6 — SubprocessRunner marker_dir and session_id params
-# ---------------------------------------------------------------------------
-
-
-def test_subprocess_runner_protocol_marker_dir_default_none():
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    assert sig.parameters["marker_dir"].default is None
-
-
-def test_subprocess_runner_protocol_session_id_default_none():
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    assert sig.parameters["session_id"].default is None
-
-
-def test_subprocess_runner_protocol_marker_params_after_max_extension():
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    params = list(sig.parameters)
-    max_ext_idx = params.index("max_extension_seconds")
-    marker_idx = params.index("marker_dir")
-    session_idx = params.index("session_id")
-    assert marker_idx == max_ext_idx + 1, (
-        f"marker_dir must immediately follow max_extension_seconds, "
-        f"got indices {max_ext_idx} and {marker_idx}"
-    )
-    assert session_idx == marker_idx + 1, (
-        f"session_id must immediately follow marker_dir, "
-        f"got indices {marker_idx} and {session_idx}"
-    )
-
-
-def test_subprocess_runner_protocol_marker_params_are_keyword_only():
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    for name in ("marker_dir", "session_id"):
-        param = sig.parameters[name]
-        assert param.kind == inspect.Parameter.KEYWORD_ONLY, (
-            f"{name} must be keyword-only, got {param.kind.name}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# CIRunScope event field
-# ---------------------------------------------------------------------------
-
-
-def test_ci_run_scope_event_field():
-    """CIRunScope must accept and store an event field."""
-    scope = CIRunScope(event="push")
-    assert scope.event == "push"
-    assert scope.workflow is None
-    assert scope.head_sha is None
-
-
-def test_ci_run_scope_event_defaults_to_none():
-    """CIRunScope.event defaults to None when not specified."""
-    scope = CIRunScope()
-    assert scope.event is None
-
-
-def test_pr_state_enum_members_are_locked():
-    """PRState enum has exactly the expected members — prevents silent addition/removal."""
-    from autoskillit.core.types import PRState
-
-    assert set(PRState) == {
-        PRState.MERGED,
-        PRState.EJECTED,
-        PRState.EJECTED_CI_FAILURE,
-        PRState.STALLED,
-        PRState.DROPPED_HEALTHY,
-        PRState.DROPPED_MERGE_GROUP_CI,
-        PRState.NOT_ENROLLED,
-        PRState.TIMEOUT,
-        PRState.ERROR,
-    }
-    assert PRState.DROPPED_HEALTHY.value == "dropped_healthy"
-    assert PRState.DROPPED_MERGE_GROUP_CI.value == "dropped_merge_group_ci"
 
 
 class TestSkillResultCrashedFactory:
@@ -729,8 +317,10 @@ class TestInfraOutcome:
 
     def test_frozen_rejects_mutation(self):
         outcome = InfraOutcome(exit_category="completed")
+        from dataclasses import FrozenInstanceError
+
         with pytest.raises(FrozenInstanceError):
-            outcome.exit_category = "api_error"
+            outcome.exit_category = "api_error"  # type: ignore[misc]
 
 
 class TestSkillResultExtensionBundles:
@@ -929,39 +519,6 @@ def test_skill_result_file_changes_count_in_json() -> None:
     data = json.loads(sr.to_json())
     assert "file_changes_count" in data
     assert data["file_changes_count"] == 2
-
-
-def test_infrastructure_fault_exceptions_share_marker_base() -> None:
-    """InfrastructureFaultError is the shared marker base for environment faults.
-
-    Imported from the ``autoskillit.core`` package gateway, not the internal
-    ``_type_exceptions`` module, so this test also proves the gateway re-export
-    is wired up correctly.
-    """
-    from autoskillit.core import (
-        InfrastructureFaultError,
-        PluginArtifactContentionError,
-        PluginArtifactPublicationError,
-        PluginArtifactUnavailableError,
-        PluginArtifactValidationError,
-        ProcessStaleError,
-        StaleGeneratorError,
-    )
-
-    assert issubclass(StaleGeneratorError, InfrastructureFaultError)
-    assert issubclass(ProcessStaleError, InfrastructureFaultError)
-    assert issubclass(PluginArtifactContentionError, InfrastructureFaultError)
-    assert issubclass(PluginArtifactUnavailableError, InfrastructureFaultError)
-
-    # Marker base derives directly from Exception -- never RuntimeError/OSError --
-    # so joining it onto pre-existing hierarchies never widens existing
-    # except-RuntimeError/except-OSError handlers.
-    assert InfrastructureFaultError.__bases__ == (Exception,)
-
-    # Deliberately excluded: artifact-content-corrupt and publish-failure are
-    # not environment faults.
-    assert not issubclass(PluginArtifactValidationError, InfrastructureFaultError)
-    assert not issubclass(PluginArtifactPublicationError, InfrastructureFaultError)
 
 
 def test_skill_result_infrastructure_fault_factory() -> None:

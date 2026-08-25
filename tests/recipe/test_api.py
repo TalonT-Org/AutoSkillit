@@ -870,7 +870,7 @@ def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
 
 
 def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(tmp_path, monkeypatch):
-    """None and empty recipe lists differ semantically; duplicate order does not."""
+    """Omitted and supplied inventories stay distinct and use stable name sets."""
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import RecipeSource
@@ -905,6 +905,12 @@ def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(tmp_pa
     empty = api_mod.load_and_validate(
         "test-campaign-no-steps", tmp_path, recipe_info=campaign, recipe_list=[]
     )
+    missing = api_mod.load_and_validate(
+        "test-campaign-no-steps",
+        tmp_path,
+        recipe_info=campaign,
+        recipe_list=[campaign],
+    )
     listed = api_mod.load_and_validate(
         "test-campaign-no-steps",
         tmp_path,
@@ -924,10 +930,11 @@ def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(tmp_pa
         )
 
     assert not has_missing_dispatch(discovered)
-    assert has_missing_dispatch(empty)
+    assert not has_missing_dispatch(empty)
+    assert has_missing_dispatch(missing)
     assert not has_missing_dispatch(listed)
     assert listed == reordered
-    assert len(cache._store) == 3
+    assert len(cache._store) == 4
 
 
 def test_load_and_validate_bypasses_cache_for_an_explicit_lister(tmp_path, monkeypatch):

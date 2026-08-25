@@ -1,29 +1,25 @@
 """Machine-scoped, content-addressed hardlink store for verbatim plugin assets.
 
-91 separate projections each carried their own ~3 MB copy of the identical
-``mermaid.min.js`` (838 MB total across 94 projections, ~74% of one live generation's
-bytes). ``is_projected_asset`` (``_projection_cache.py``) already defines the shareable
-set exactly -- the ~12 MB of ``assets/``, ``hooks/``, ``recipes/``, ``agents/`` any two
-projections of the same release share byte-for-byte. This module hardlinks that set from
-one shared store instead of copying it per projection; the store's bytes stay live as
-long as any projection still references them, since unlinking a hardlinked name only
-decrements the link count.
+``is_projected_asset`` (``_projection_cache.py``) already defines the shareable set
+exactly -- the static assets any two projections of the same release share
+byte-for-byte. This module hardlinks that set from one shared store instead of
+copying it per projection; the store's bytes stay live as long as any projection
+still references them, since unlinking a hardlinked name only decrements the link
+count.
 
 Two hard requirements on placement, both load-bearing:
 
-- The store must NOT live inside ``projections_root`` --
-  ``prune_stale_projections`` (``_projection_cache.py``) enumerates that root and
-  retires whatever it finds there; commit ``0949f8a8f`` (#4689/#4690) already fixed
-  exactly this mistake once (a plugin-generations store misidentified as a stale
-  projection). Placed outside, disjoint by construction.
+- The store must NOT live inside ``projections_root`` -- ``prune_stale_projections``
+  (``_projection_cache.py``) enumerates that root and retires whatever it finds
+  there. Placed outside, disjoint by construction.
 - The store must be on the SAME DEVICE as ``projections_root`` -- ``os.link()`` raises
   ``EXDEV`` across filesystems, and the projections root's actual device varies (the
-  real ``$HOME`` in production; a `--basetemp`-scoped isolated home in tests, one that
-  the plan explicitly requires the store to survive being materialized under two
-  *different* isolated homes -- see C1). Resolved from ``tempfile.gettempdir()``, not a
-  ``$HOME``-relative literal, with an explicit ``st_dev`` equality check: a mismatch is
-  logged loudly and treated as "no store available" (callers fall back to `copy2`
-  wholesale) rather than attempting and catching `EXDEV` once per file.
+  real ``$HOME`` in production; a `--basetemp`-scoped isolated home in tests, one the
+  store must survive being materialized under two *different* isolated homes across a
+  run). Resolved from ``tempfile.gettempdir()``, not a ``$HOME``-relative literal, with
+  an explicit ``st_dev`` equality check: a mismatch is logged loudly and treated as "no
+  store available" (callers fall back to `copy2` wholesale) rather than attempting and
+  catching `EXDEV` once per file.
 """
 
 from __future__ import annotations

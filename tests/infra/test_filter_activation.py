@@ -103,6 +103,12 @@ def test_source_map_quota_check_path_is_hooks() -> None:
     )
 
 
+def test_backend_gating_root_relocation_is_complete() -> None:
+    """Guard against partial reverts restoring the retired test or its source-map links."""
+    assert not (REPO_ROOT / "tests/test_backend_gating_root.py").is_file()
+    assert (REPO_ROOT / "tests/test_llm_triage.py").is_file()
+
+
 def test_build_test_scope_returns_full_run_reason_for_unmapped():
     from tests._test_filter import FilterMode, FullRunReason, build_test_scope
 

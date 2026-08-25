@@ -247,10 +247,18 @@ def _owner_liveness(owner: dict[str, object], proc_root: Path) -> _OwnerLiveness
 
     os.kill(pid, 0) is the existence probe (matches the original _pid_exists, and works without
     /proc read access -- it distinguishes ESRCH, a genuine ProcessLookupError, from EPERM, a
-    process that exists but cannot be signalled). The IL-0 /proc-reading primitives refine an
-    existence-confirmed pid into alive/dead/indeterminate; on any of their own read failures the
-    result is INDETERMINATE, restoring the fail-CLOSED posture the reaper needs -- a transient
-    /proc read failure must retain the candidate, not reclaim it the moment grace lapses.
+    process that exists but cannot be signalled). EPERM confirms existence just as success does
+    -- os.kill only raises it after the kernel has already resolved the pid -- so it falls
+    through to the same /proc refinement below rather than short-circuiting: /proc reads live in
+    a different permission domain than kill() (world-readable boot_id; starttime needs only
+    /proc/<pid>/stat read access) and routinely succeed exactly when kill() EPERMs, e.g. a pid
+    recycled by the OS to a different-uid process on a long-lived host. The refinement's DEAD
+    determination is gated on a kernel-authoritative boot_id/starttime mismatch, never on how
+    kill() responded, so this cannot turn a genuinely-ALIVE owner into DEAD. The IL-0
+    /proc-reading primitives refine an existence-confirmed pid into alive/dead/indeterminate; on
+    any of their own read failures the result is INDETERMINATE, restoring the fail-CLOSED
+    posture the reaper needs -- a transient /proc read failure must retain the candidate, not
+    reclaim it the moment grace lapses.
     """
     pid = owner["pid"]
     if not isinstance(pid, int) or pid <= 0:
@@ -260,7 +268,7 @@ def _owner_liveness(owner: dict[str, object], proc_root: Path) -> _OwnerLiveness
     except ProcessLookupError:
         return _OwnerLiveness.DEAD
     except OSError:
-        return _OwnerLiveness.INDETERMINATE
+        pass  # EPERM (or other) -- kill() can't tell us; the /proc identity check below can.
 
     if sys.platform == "linux":
         if is_pid_zombie(pid, proc_root=proc_root):

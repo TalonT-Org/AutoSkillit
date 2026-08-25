@@ -457,6 +457,12 @@ def test_pid_probe_fails_closed_on_unexpected_oserror(monkeypatch: pytest.Monkey
     """A probe that cannot determine liveness must report INDETERMINATE, never DEAD -- a
     transient /proc read failure must retain the candidate, not reclaim it. Rewritten against
     _owner_liveness; _pid_exists was deleted in favor of the shared IL-0 primitives.
+
+    os.kill() failing (EPERM or otherwise) now falls through to the /proc refinement rather
+    than short-circuiting -- see test_pid_probe_eperm_refines_via_proc_mismatch for that path.
+    This test covers the case where the /proc refinement *also* fails (no signal), which is
+    the actual fail-closed contract the docstring describes; deterministically forced via
+    monkeypatch rather than relying on pid 12345 not existing on the test machine's real /proc.
     """
     module = _load_lifecycle_module()
 
@@ -464,6 +470,14 @@ def test_pid_probe_fails_closed_on_unexpected_oserror(monkeypatch: pytest.Monkey
         raise OSError("transient probe failure")
 
     monkeypatch.setattr(module.os, "kill", fail_probe)
+    if sys.platform == "linux":
+        monkeypatch.setattr(module, "read_boot_id", lambda *, proc_root: None)
+    else:
+        monkeypatch.setattr(
+            module,
+            "_macos_start_id",
+            lambda pid: (_ for _ in ()).throw(OSError("no such process")),
+        )
 
     owner: dict[str, object] = {
         "pid": 12345,
@@ -472,6 +486,31 @@ def test_pid_probe_fails_closed_on_unexpected_oserror(monkeypatch: pytest.Monkey
         "created_at": time.time(),
     }
     assert module._owner_liveness(owner, Path("/proc")) is module._OwnerLiveness.INDETERMINATE
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux /proc refinement path")
+def test_pid_probe_eperm_refines_via_proc_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EPERM from os.kill() confirms existence, not failure -- it must fall through to the
+    /proc boot_id/starttime refinement rather than short-circuit to INDETERMINATE. A
+    kernel-authoritative mismatch there still correctly resolves to DEAD.
+    """
+    module = _load_lifecycle_module()
+
+    def eperm_probe(pid: int, signal: int) -> None:
+        raise PermissionError("cross-uid pid, cannot signal")
+
+    monkeypatch.setattr(module.os, "kill", eperm_probe)
+    monkeypatch.setattr(module, "is_pid_zombie", lambda pid, *, proc_root: False)
+    monkeypatch.setattr(module, "read_boot_id", lambda *, proc_root: "current-boot")
+    monkeypatch.setattr(module, "read_starttime_ticks", lambda pid, *, proc_root: 999999)
+
+    owner: dict[str, object] = {
+        "pid": 12345,
+        "start_id": "111111",  # mismatches the mocked 999999 -- a different process reused the pid
+        "boot_id": "current-boot",
+        "created_at": time.time(),
+    }
+    assert module._owner_liveness(owner, Path("/proc")) is module._OwnerLiveness.DEAD
 
 
 def test_reference_containment_resolves_symlinked_paths(tmp_path: Path) -> None:

@@ -48,25 +48,18 @@ async def test_prepare_issue_no_executor(tool_ctx_kitchen_open) -> None:
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_session_failure(tool_ctx) -> None:
-    """executor.run → success=False → error response with diagnostic fields.
-
-    Note: uses bare ``tool_ctx`` (gate closed) and therefore short-circuits
-    to a gate_error envelope before the executor mock is touched. The
-    session_id/stderr fields are still asserted to confirm the gate envelope
-    carries them; a sibling test (``test_prepare_issue_empty_output`` below)
-    exercises the executor mock under an open gate.
-    """
+async def test_prepare_issue_session_failure(tool_ctx_kitchen_open) -> None:
+    """executor.run → success=False → error response with diagnostic fields."""
     skill_result = _make_skill_result(
         success=False, subtype="timeout", exit_code=1, stderr="process killed"
     )
-    tool_ctx.executor = AsyncMock()
-    tool_ctx.executor.run = AsyncMock(return_value=skill_result)
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
 
     result = json.loads(await prepare_issue("Title", "Body"))
     assert result["success"] is False
     assert "session_id" in result
-    assert "stderr" in result
+    assert result["stderr"] == "process killed"
 
 
 @pytest.mark.anyio

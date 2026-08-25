@@ -7,14 +7,14 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_skill_command_prefix_constant_exists():
+def test_skill_command_prefix_constant_exists() -> None:
     """SKILL_COMMAND_PREFIX is the canonical slash prefix for skill invocations."""
     from autoskillit.core.types import SKILL_COMMAND_PREFIX
 
     assert SKILL_COMMAND_PREFIX == "/"
 
 
-def test_autoskillit_skill_prefix_constant_exists():
+def test_autoskillit_skill_prefix_constant_exists() -> None:
     """AUTOSKILLIT_SKILL_PREFIX is the canonical prefix for bundled autoskillit skills."""
     from autoskillit.core.types import AUTOSKILLIT_SKILL_PREFIX
 

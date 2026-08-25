@@ -1,4 +1,4 @@
-"""Tests for core protocol contracts — SubprocessRunner, GitHubFetcher, ManagedSessionHome, CIRunScope, WriteBehaviorSpec."""
+"""Tests for core protocol contracts."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from autoskillit.core.types import (
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path):
+def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path) -> None:
     import autoskillit.core as core
     from autoskillit.core import (
         ManagedSessionHome,
@@ -65,7 +65,7 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path):
         handle.launch_id = "other"  # type: ignore[misc]
 
 
-def test_github_fetcher_protocol_has_label_methods():
+def test_github_fetcher_protocol_has_label_methods() -> None:
     import inspect
 
     from autoskillit.core.types import GitHubFetcher
@@ -76,7 +76,7 @@ def test_github_fetcher_protocol_has_label_methods():
     assert "ensure_label" in members
 
 
-def test_subprocess_result_has_elapsed_seconds_field():
+def test_subprocess_result_has_elapsed_seconds_field() -> None:
     """SubprocessResult must carry a pre-computed monotonic elapsed_seconds."""
     from autoskillit.core.types import SubprocessResult, TerminationReason
 
@@ -98,7 +98,7 @@ def test_subprocess_result_has_elapsed_seconds_field():
 # ---------------------------------------------------------------------------
 
 
-def test_subprocess_runner_protocol_pty_mode_default_false():
+def test_subprocess_runner_protocol_pty_mode_default_false() -> None:
     import inspect
 
     from autoskillit.core import SubprocessRunner
@@ -112,7 +112,7 @@ def test_subprocess_runner_protocol_pty_mode_default_false():
 # ---------------------------------------------------------------------------
 
 
-def test_subprocess_runner_protocol_marker_dir_default_none():
+def test_subprocess_runner_protocol_marker_dir_default_none() -> None:
     import inspect
 
     from autoskillit.core import SubprocessRunner
@@ -121,7 +121,7 @@ def test_subprocess_runner_protocol_marker_dir_default_none():
     assert sig.parameters["marker_dir"].default is None
 
 
-def test_subprocess_runner_protocol_session_id_default_none():
+def test_subprocess_runner_protocol_session_id_default_none() -> None:
     import inspect
 
     from autoskillit.core import SubprocessRunner
@@ -130,7 +130,7 @@ def test_subprocess_runner_protocol_session_id_default_none():
     assert sig.parameters["session_id"].default is None
 
 
-def test_subprocess_runner_protocol_marker_params_after_max_extension():
+def test_subprocess_runner_protocol_marker_params_after_max_extension() -> None:
     import inspect
 
     from autoskillit.core import SubprocessRunner
@@ -150,7 +150,7 @@ def test_subprocess_runner_protocol_marker_params_after_max_extension():
     )
 
 
-def test_subprocess_runner_protocol_marker_params_are_keyword_only():
+def test_subprocess_runner_protocol_marker_params_are_keyword_only() -> None:
     import inspect
 
     from autoskillit.core import SubprocessRunner
@@ -168,7 +168,7 @@ def test_subprocess_runner_protocol_marker_params_are_keyword_only():
 # ---------------------------------------------------------------------------
 
 
-def test_ci_run_scope_event_field():
+def test_ci_run_scope_event_field() -> None:
     """CIRunScope must accept and store an event field."""
     scope = CIRunScope(event="push")
     assert scope.event == "push"
@@ -176,7 +176,7 @@ def test_ci_run_scope_event_field():
     assert scope.head_sha is None
 
 
-def test_ci_run_scope_event_defaults_to_none():
+def test_ci_run_scope_event_defaults_to_none() -> None:
     """CIRunScope.event defaults to None when not specified."""
     scope = CIRunScope()
     assert scope.event is None

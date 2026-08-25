@@ -7,7 +7,7 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_headless_tools_contains_expected_names():
+def test_headless_tools_contains_expected_names() -> None:
     from autoskillit.core.types import HEADLESS_TOOLS
 
     assert HEADLESS_TOOLS == {
@@ -54,7 +54,7 @@ def test_evidence_reader_tools_are_exact_internal_subset() -> None:
     assert core_types.EVIDENCE_READER_TOOLS is EVIDENCE_READER_TOOLS
 
 
-def test_free_range_tools_contains_expected_names():
+def test_free_range_tools_contains_expected_names() -> None:
     from autoskillit.core.types import FREE_RANGE_TOOLS
 
     assert FREE_RANGE_TOOLS == {

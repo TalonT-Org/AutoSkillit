@@ -186,7 +186,7 @@ def test_skill_result_to_json_preserves_nested_execution_identity() -> None:
 
 
 class TestSkillResultCrashedFactory:
-    def test_crashed_returns_skill_result_with_correct_fields(self):
+    def test_crashed_returns_skill_result_with_correct_fields(self) -> None:
         result = SkillResult.crashed(
             exception=RuntimeError("boom"),
             skill_command="/investigate test",

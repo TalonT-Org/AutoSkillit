@@ -37,7 +37,7 @@ def test_claude_content_block_type_from_api(raw: str, expected_value: str) -> No
     assert block_type.value == expected_value
 
 
-def test_retry_reason_values():
+def test_retry_reason_values() -> None:
     """RetryReason enum has exactly the expected members."""
     assert set(RetryReason) == {
         RetryReason.RESUME,
@@ -62,7 +62,7 @@ def test_retry_reason_values():
     assert RetryReason.NONE.value == "none"
 
 
-def test_merge_failed_step_values():
+def test_merge_failed_step_values() -> None:
     """MergeFailedStep enum covers all failure points."""
     assert set(MergeFailedStep) == {
         MergeFailedStep.PATH_VALIDATION,
@@ -84,7 +84,7 @@ def test_merge_failed_step_values():
     }
 
 
-def test_merge_state_values():
+def test_merge_state_values() -> None:
     """MergeState enum covers all repository states after failure."""
     assert set(MergeState) == {
         MergeState.WORKTREE_INTACT,
@@ -101,7 +101,7 @@ def test_merge_state_values():
     }
 
 
-def test_restart_scope_values():
+def test_restart_scope_values() -> None:
     """RestartScope enum covers both classification outcomes."""
     assert set(RestartScope) == {
         RestartScope.FULL_RESTART,
@@ -109,7 +109,7 @@ def test_restart_scope_values():
     }
 
 
-def test_channel_confirmation_values():
+def test_channel_confirmation_values() -> None:
     """ChannelConfirmation enum has exactly the expected members."""
     assert set(ChannelConfirmation) == {
         ChannelConfirmation.CHANNEL_A,
@@ -128,7 +128,7 @@ def test_channel_confirmation_values():
 # ---------------------------------------------------------------------------
 
 
-def test_session_outcome_is_str_enum_with_expected_values():
+def test_session_outcome_is_str_enum_with_expected_values() -> None:
     """SessionOutcome inherits from StrEnum and has exactly three expected members."""
 
     assert issubclass(SessionOutcome, StrEnum)
@@ -142,21 +142,21 @@ def test_session_outcome_is_str_enum_with_expected_values():
     assert SessionOutcome.FAILED == "failed"
 
 
-def test_session_outcome_accessible_from_core():
+def test_session_outcome_accessible_from_core() -> None:
     """SessionOutcome is importable via the core package public surface."""
     from autoskillit.core import SessionOutcome as SO  # must not raise
 
     assert SO.SUCCEEDED == "succeeded"
 
 
-def test_session_outcome_in_core_all():
+def test_session_outcome_in_core_all() -> None:
     """SessionOutcome is listed in autoskillit.core.__all__."""
     import autoskillit.core as core_pkg
 
     assert "SessionOutcome" in core_pkg.__all__  # type: ignore[attr-defined]
 
 
-def test_severity_has_ok_member():
+def test_severity_has_ok_member() -> None:
     from autoskillit.core.types import Severity
 
     assert Severity.OK == "ok"
@@ -166,7 +166,7 @@ def test_severity_has_ok_member():
     assert set(Severity) == {Severity.OK, Severity.ERROR, Severity.WARNING, Severity.INFO}
 
 
-def test_severity_enum_not_equal_to_uppercase_string():
+def test_severity_enum_not_equal_to_uppercase_string() -> None:
     """Regression: StrEnum values are lowercase; uppercase comparison is always False.
 
     ``f.severity == "ERROR"`` always returns False because Severity.ERROR.value
@@ -179,7 +179,7 @@ def test_severity_enum_not_equal_to_uppercase_string():
     assert Severity.ERROR == Severity.ERROR
 
 
-def test_hook_trust_policy_values_and_public_exports():
+def test_hook_trust_policy_values_and_public_exports() -> None:
     import autoskillit.core as core
     from autoskillit.core.types import HookTrustPolicy
     from autoskillit.core.types._type_enums import __all__ as enum_all
@@ -196,7 +196,7 @@ def test_hook_trust_policy_values_and_public_exports():
     assert core.HookTrustPolicy is HookTrustPolicy
 
 
-def test_pr_state_enum_members_are_locked():
+def test_pr_state_enum_members_are_locked() -> None:
     """PRState enum has exactly the expected members — prevents silent addition/removal."""
     from autoskillit.core.types import PRState
 

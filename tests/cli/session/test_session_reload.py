@@ -105,6 +105,15 @@ def test_consume_reload_sentinel_reports_cleanup_failure_without_consuming(
     )
 
 
+@pytest.mark.parametrize("payload", [None, 42, "session", ["session"]])
+def test_consume_reload_sentinel_rejects_non_object_json(tmp_path: Path, payload: object) -> None:
+    sentinel_dir = tmp_path / ".autoskillit" / "temp" / "reload_sentinel"
+    sentinel_dir.mkdir(parents=True)
+    (sentinel_dir / "invalid.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert consume_reload_sentinel(tmp_path) is None
+
+
 def test_consume_reload_sentinel_serializes_concurrent_callers(tmp_path: Path) -> None:
     """N threads calling consume_reload_sentinel concurrently against a shared
     directory must never crash or double-consume the same sentinel — the

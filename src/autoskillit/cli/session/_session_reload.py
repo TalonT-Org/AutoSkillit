@@ -57,6 +57,8 @@ def consume_reload_sentinel(project_dir: Path) -> str | None:
         sentinel = candidates[0]
         try:
             data = json.loads(sentinel.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return None
             session_id = data.get("session_id", "")
         except (OSError, json.JSONDecodeError):
             return None

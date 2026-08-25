@@ -696,6 +696,7 @@ def test_ignore_policy_bump_changes_the_published_digest_for_unchanged_state(
     tests/pipeline/test_exploration_context.py.
     """
     root = _new_repository(tmp_path)
+    assert snapshot_module.DEFAULT_IGNORE_POLICY == "ignored-names-modes-collapsed-v2"
 
     monkeypatch.setattr(
         snapshot_module, "DEFAULT_IGNORE_POLICY", "ignored-names-modes-collapsed-v1"

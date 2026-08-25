@@ -281,7 +281,7 @@ class TestBuildTestScope:
             "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",
             "migration/test_api.py",
-            "migration/test_engine.py",
+            "migration/test_engine_recipe.py",
             "hooks/test_recipe_write_advisor.py",
             "hooks/test_recipe_contract_freshness.py",
             "infra/test_pretty_output_recipe.py",

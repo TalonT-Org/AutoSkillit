@@ -1810,7 +1810,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # review loop routing integration imports root-level smoke_utils
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
     # migration tests — migration engine integrates with execution.session
-    "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
+    # (REMOVED after splitting tests/migration/test_engine.py into per-adapter
+    # files; conftest.py is exempt from layer scan and per-adapter files
+    # import only from .conftest, not from autoskillit.execution)
     # fleet e2e test exercises execution + cli layers end-to-end
     "tests/fleet/test_fleet_e2e.py": frozenset({"autoskillit.execution", "autoskillit.cli"}),
     # codex fleet e2e exercises execution layer (backends, headless) end-to-end

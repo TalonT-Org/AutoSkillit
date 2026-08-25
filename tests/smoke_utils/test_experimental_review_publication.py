@@ -1,5 +1,3 @@
-"""Smoke-utils tests relocated from the former monolith."""
-
 from __future__ import annotations
 
 import json

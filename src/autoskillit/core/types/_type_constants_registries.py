@@ -14,6 +14,7 @@ from typing import Literal, NamedTuple
 
 from ._type_enums import ExplorationFailureCode, FleetErrorCode, SkillExecutionRole
 from ._type_exceptions import SkillContractError
+from ._type_exploration import BrokerAuthorityStatus
 
 # Re-export recipe-section types from the canonical shard through this facade.
 # The ``X as X`` alias pattern is intentional: it marks each name as an explicit
@@ -72,6 +73,7 @@ __all__ = [
     "KITCHEN_GATED_TOOLS",
     "FLEET_ERROR_CODES",
     "EXPLORATION_FAILURE_CODES",
+    "BROKER_AUTHORITY_STATUSES",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
     "PackDef",
@@ -231,6 +233,8 @@ FLEET_MENU_TOOLS: tuple[str, ...] = (
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
 
 EXPLORATION_FAILURE_CODES: frozenset[str] = frozenset(ExplorationFailureCode)
+
+BROKER_AUTHORITY_STATUSES: frozenset[str] = frozenset(BrokerAuthorityStatus)
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
     {

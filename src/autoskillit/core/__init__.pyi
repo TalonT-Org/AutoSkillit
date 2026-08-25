@@ -401,6 +401,7 @@ from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
 from .types import AUTOSKILLIT_SKILL_PREFIX as AUTOSKILLIT_SKILL_PREFIX
 from .types import AUTOSKILLIT_STATE_ROOT_ENV_VAR as AUTOSKILLIT_STATE_ROOT_ENV_VAR
 from .types import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES as AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
+from .types import BROKER_AUTHORITY_STATUSES as BROKER_AUTHORITY_STATUSES
 from .types import CALLER_SOVEREIGN_INGREDIENTS as CALLER_SOVEREIGN_INGREDIENTS
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIELDS
@@ -518,7 +519,9 @@ from .types import INVESTIGATION_COMPLETE_MARKER as INVESTIGATION_COMPLETE_MARKE
 from .types import KITCHEN_GATED_TOOLS as KITCHEN_GATED_TOOLS
 from .types import KITCHEN_SESSION_ID_ENV_VAR as KITCHEN_SESSION_ID_ENV_VAR
 from .types import KNOWN_BACKEND_NAMES as KNOWN_BACKEND_NAMES
+from .types import KNOWN_BLOCKED_SKILL_IDS as KNOWN_BLOCKED_SKILL_IDS
 from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
+from .types import KNOWN_DEGRADED_SKILL_IDS as KNOWN_DEGRADED_SKILL_IDS
 from .types import KNOWN_UNAFFECTED_SKILL_IDS as KNOWN_UNAFFECTED_SKILL_IDS
 from .types import LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY
 from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
@@ -1290,6 +1293,12 @@ from .types import (
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles
+from .types._type_exploration import (
+    EXPLORATION_FAILURE_CODE_RESPONSES as EXPLORATION_FAILURE_CODE_RESPONSES,
+)
+from .types._type_exploration import EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES
+from .types._type_exploration import PLUGINLESS_EXPLORER_ROLE as PLUGINLESS_EXPLORER_ROLE
+from .types._type_exploration import BrokerAuthorityStatus as BrokerAuthorityStatus
 from .types._type_exploration import CapabilityResolution as CapabilityResolution
 from .types._type_exploration import CapabilityResolutionStatus as CapabilityResolutionStatus
 from .types._type_exploration import CollectorReport as CollectorReport
@@ -1302,6 +1311,7 @@ from .types._type_exploration import ExplorationApplicability as ExplorationAppl
 from .types._type_exploration import (
     ExplorationContextStoreProtocol as ExplorationContextStoreProtocol,
 )
+from .types._type_exploration import ExplorationFailureResponse as ExplorationFailureResponse
 from .types._type_exploration import ExplorationQuerySpec as ExplorationQuerySpec
 from .types._type_exploration import ExplorationRouterPlan as ExplorationRouterPlan
 from .types._type_exploration import ExplorationTaskSpec as ExplorationTaskSpec

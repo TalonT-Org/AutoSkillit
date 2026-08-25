@@ -603,23 +603,23 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:380": (
+    "execution/backends/codex.py:383": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:522": (
+    "execution/backends/codex.py:525": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:657": (
+    "execution/backends/codex.py:660": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:777": (
+    "execution/backends/codex.py:780": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/codex.py:850": (
+    "execution/backends/codex.py:853": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

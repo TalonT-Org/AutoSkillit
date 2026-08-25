@@ -91,6 +91,41 @@ async def test_enable_exploration_succeeds_for_skill_session(
 
 
 @pytest.mark.asyncio
+async def test_enable_exploration_wire_level_surfaces_store_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_ctx,
+    exploration_snapshot_service: MagicMock,
+) -> None:
+    """A real store failure condition, driven through fastmcp.Client.call_tool, must
+    surface through the MCP wire envelope with the matching registered code — proving
+    the code-to-cause contract survives the MCP layer, not just direct function calls.
+    Uses store_closed: a condition the merged #4756 wire-level happy-path test does not
+    already exercise at this layer."""
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tool_ctx.project_dir,
+        service=exploration_snapshot_service,
+    )
+    store.close()
+    tool_ctx.exploration_context_store = store
+    (tool_ctx.project_dir / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_exploration._resolve_session_type",
+        lambda: SessionType.SKILL,
+    )
+
+    async with Client(mcp) as client:
+        token = write_exploration_request_record(
+            tool_ctx.project_dir, "enable_exploration", "test-session"
+        )
+        wire_result = await client.call_tool(
+            "enable_exploration",
+            {"_autoskillit_exploration_request_token": token},
+        )
+    result = json.loads(wire_result.structured_content["result"])
+    assert result == {"status": "error", "code": "store_closed"}
+
+
+@pytest.mark.asyncio
 async def test_enable_exploration_revokes_authority_when_visibility_enable_is_cancelled(
     monkeypatch: pytest.MonkeyPatch,
     tool_ctx,

@@ -326,11 +326,15 @@ def deny_envelope(
     retriable: bool,
     recovery: str | None = None,
 ) -> dict[str, object]:
-    """Build a canonical pre-flight deny envelope for run_skill guards.
+    """Build the canonical deny envelope for both pre-flight guard refusals and
+    post-hoc handler failures, where ``stage`` names the guard or the operation
+    sub-step that failed.
 
-    All pre-flight guards (ingredient locks, pipeline deps, plan path,
-    ambiguous step, cwd validation) must use this constructor so the
-    ``error`` field is structurally present in every deny response.
+    Pre-flight guards (ingredient locks, pipeline deps, plan path, ambiguous
+    step, cwd validation) and post-hoc handler catch-alls (e.g.
+    ``tools_pipeline_tracker``'s op-failure and marker-failure envelopes) both
+    use this constructor so the ``error`` field is structurally present in
+    every deny response.
     """
     full_error = f"{error}\n\nRecovery: {recovery}" if recovery else error
     return {

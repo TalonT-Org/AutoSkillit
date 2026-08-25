@@ -21,14 +21,24 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import EXPLORATION_FAILURE_CODES, ExplorationFailureCode
+from autoskillit.core import (
+    BROKER_AUTHORITY_STATUSES,
+    EXPLORATION_FAILURE_CODES,
+    ExplorationFailureCode,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC = _REPO_ROOT / "src" / "autoskillit" / "server" / "tools" / "tools_exploration.py"
+_SRC_STATUS = _REPO_ROOT / "src" / "autoskillit" / "server" / "tools" / "tools_status.py"
 _SRC_ROOT = _REPO_ROOT / "src" / "autoskillit"
 _TESTS_ROOT = _REPO_ROOT / "tests"
+
+_FORWARD_SCAN_TARGETS: tuple[tuple[Path, frozenset[str]], ...] = (
+    (_SRC, EXPLORATION_FAILURE_CODES),
+    (_SRC_STATUS, BROKER_AUTHORITY_STATUSES),
+)
 
 
 def _code_dict_literal_values(tree: ast.Module) -> list[ast.expr]:
@@ -64,18 +74,58 @@ def _literal_code_value(expr: ast.expr) -> str | None:
     return None
 
 
+def _subscript_key_assignment_values(tree: ast.Module, key: str) -> list[ast.expr]:
+    """Return the RHS expression of every `<name>[<key>] = <rhs>` assignment.
+
+    A dict-literal or ``_failure(...)`` call is not the only shape a code/status
+    literal can escape the registry through — ``status["broker_authority"] = ...``
+    is a Subscript-assignment the two matchers above cannot see at all.
+    """
+    found: list[ast.expr] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Subscript)
+            and isinstance(node.targets[0].slice, ast.Constant)
+            and node.targets[0].slice.value == key
+        ):
+            found.append(node.value)
+    return found
+
+
 def test_every_code_literal_is_a_registered_exploration_failure_code() -> None:
-    tree = ast.parse(_SRC.read_text(encoding="utf-8"), filename=str(_SRC))
-    candidates = [*_code_dict_literal_values(tree), *_failure_call_args(tree)]
-    violations = [
-        f"line {expr.lineno}: {literal!r} is not a registered ExplorationFailureCode"
-        for expr in candidates
-        if (literal := _literal_code_value(expr)) is not None
-        if literal not in EXPLORATION_FAILURE_CODES
-    ]
+    violations: list[str] = []
+    for path, registry in _FORWARD_SCAN_TARGETS:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        candidates = [
+            *_code_dict_literal_values(tree),
+            *_failure_call_args(tree),
+            *_subscript_key_assignment_values(tree, "broker_authority"),
+        ]
+        violations.extend(
+            f"{path.name}:{expr.lineno}: {literal!r} is not a registered code/status"
+            for expr in candidates
+            if (literal := _literal_code_value(expr)) is not None
+            if literal not in registry
+        )
     assert not violations, (
-        "Unregistered exploration failure code literal(s) in tools_exploration.py — "
-        f"add the code to ExplorationFailureCode in _type_enums.py first: {violations}"
+        "Unregistered exploration failure code or broker authority literal(s) — "
+        f"register it in ExplorationFailureCode or BrokerAuthorityStatus first: {violations}"
+    )
+
+
+def test_broker_authority_assignment_is_scanned() -> None:
+    """Non-vacuousness guard for the subscript matcher above: prove it actually
+    finds tools_status.py's status["broker_authority"] assignment sites rather
+    than silently matching nothing."""
+    tree = ast.parse(_SRC_STATUS.read_text(encoding="utf-8"), filename=str(_SRC_STATUS))
+    candidates = _subscript_key_assignment_values(tree, "broker_authority")
+    assert len(candidates) >= 4, (
+        f'expected at least 4 status["broker_authority"] assignment sites in '
+        f"tools_status.py (one per BrokerAuthorityStatus branch: "
+        f"SESSION_TYPE_INELIGIBLE, STORE_UNAVAILABLE, AVAILABLE, NO_SESSION_BOUND), "
+        f"found {len(candidates)}"
     )
 
 

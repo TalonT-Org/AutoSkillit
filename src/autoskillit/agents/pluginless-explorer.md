@@ -1,6 +1,6 @@
 ---
 name: pluginless-explorer
-description: "Terminal read-only fallback explorer. Used only when enable_exploration returns session_type_ineligible or exploration_store_unavailable, in lieu of autoskillit:semantic-code-navigator or autoskillit:repository-impact-profiler when those agents are unavailable. Read-only tool surface; does not call other subagents, spawn descendants, or modify the repository."
+description: "Terminal read-only fallback explorer. Used only when enable_exploration returns session_type_ineligible, exploration_store_unavailable, no_session_id, service_not_configured, snapshot_truncated, or store_closed, in lieu of autoskillit:semantic-code-navigator or autoskillit:repository-impact-profiler when those agents are unavailable. Reads the local checkout only — never a remote or public copy of the repository. Read-only tool surface; does not call other subagents, spawn descendants, or modify the repository."
 tools: [Read, Grep, Glob]
 model: sonnet
 maxTurns: 80

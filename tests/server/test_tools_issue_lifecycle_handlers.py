@@ -22,13 +22,8 @@ from tests.server._issue_lifecycle_test_helpers import _make_skill_result
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-@pytest.fixture
-def tool_ctx_kitchen_open(tool_ctx):
-    """Open the gate while retaining production backend compatibility metadata."""
-    tool_ctx.gate = DefaultGateState(enabled=True)
-    return tool_ctx
-
-
+# `tool_ctx_kitchen_open` is inherited from tests/conftest.py (parent fixture
+# that also sets `kitchen_id = "test-kitchen"`). No local override needed.
 # ---------------------------------------------------------------------------
 # MCP tool handlers
 # ---------------------------------------------------------------------------
@@ -54,7 +49,14 @@ async def test_prepare_issue_no_executor(tool_ctx_kitchen_open) -> None:
 
 @pytest.mark.anyio
 async def test_prepare_issue_session_failure(tool_ctx) -> None:
-    """executor.run → success=False → error response with diagnostic fields."""
+    """executor.run → success=False → error response with diagnostic fields.
+
+    Note: uses bare ``tool_ctx`` (gate closed) and therefore short-circuits
+    to a gate_error envelope before the executor mock is touched. The
+    session_id/stderr fields are still asserted to confirm the gate envelope
+    carries them; a sibling test (``test_prepare_issue_empty_output`` below)
+    exercises the executor mock under an open gate.
+    """
     skill_result = _make_skill_result(
         success=False, subtype="timeout", exit_code=1, stderr="process killed"
     )
@@ -587,7 +589,7 @@ async def test_release_issue_stages_when_different_branch(
 @pytest.mark.anyio
 async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
-):
+) -> None:
     """executor.run must be called with tool_ctx.project_dir as cwd, not Path.cwd().
 
     Regression test: when project_dir differs from cwd, the headless skill subprocess

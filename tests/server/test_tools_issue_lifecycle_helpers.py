@@ -7,7 +7,6 @@ import json
 import pytest
 
 from autoskillit.core import RetryReason
-from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_issue_headless import (
     _build_headless_error_response,
     _build_prepare_skill_command,
@@ -21,13 +20,8 @@ from tests.server._issue_lifecycle_test_helpers import _make_skill_result
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-@pytest.fixture
-def tool_ctx_kitchen_open(tool_ctx):
-    """Open the gate while retaining production backend compatibility metadata."""
-    tool_ctx.gate = DefaultGateState(enabled=True)
-    return tool_ctx
-
-
+# `tool_ctx_kitchen_open` is inherited from tests/conftest.py (parent fixture
+# that also sets `kitchen_id = "test-kitchen"`). No local override needed.
 # ---------------------------------------------------------------------------
 # Pure helper functions
 # ---------------------------------------------------------------------------

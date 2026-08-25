@@ -7,20 +7,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from autoskillit.server.tools.tools_issue_labels import claim_issue, release_issue
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-@pytest.fixture
-def tool_ctx_kitchen_open(tool_ctx):
-    """Open the gate while retaining production backend compatibility metadata."""
-    tool_ctx.gate = DefaultGateState(enabled=True)
-    return tool_ctx
-
-
+# `tool_ctx_kitchen_open` is inherited from tests/conftest.py (parent fixture
+# that also sets `kitchen_id = "test-kitchen"`). No local override needed.
 # ---------------------------------------------------------------------------
 # State guard tests (1A)
 # ---------------------------------------------------------------------------
@@ -120,10 +114,13 @@ async def test_release_issue_close_issue_with_non_default_branch_stages_issue(
     tool_ctx_kitchen_open,
 ) -> None:
     """close_issue + non-default target_branch → Branch 1 (staging), not close."""
+    # Pin promotion_target to a non-develop branch so the test's premise
+    # (target_branch="develop" is NOT the promotion target) is explicit and
+    # decoupled from the upstream default in config/defaults.yaml.
+    tool_ctx_kitchen_open.config.branching.promotion_target = "main"
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
     tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
-    promotion_target = tool_ctx_kitchen_open.config.branching.promotion_target
 
     result = json.loads(
         await release_issue(
@@ -135,9 +132,6 @@ async def test_release_issue_close_issue_with_non_default_branch_stages_issue(
     assert result["success"] is True
     assert result.get("staged") is True
     tool_ctx_kitchen_open.github_client.close_issue.assert_not_called()
-    assert (
-        promotion_target != "develop"
-    )  # invariant: fixture must use a non-develop promotion target
 
 
 @pytest.mark.anyio

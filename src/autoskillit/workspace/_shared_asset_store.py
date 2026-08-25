@@ -110,7 +110,8 @@ def link_or_copy_asset(source: Path, destination: Path, *, store_root: Path | No
 
     try:
         digest = per_file_asset_digest(source)
-    except OSError:
+    except OSError as exc:
+        logger.warning("shared_asset_store_digest_failed", path=str(source), error=str(exc))
         shutil.copy2(source, destination)
         return
 

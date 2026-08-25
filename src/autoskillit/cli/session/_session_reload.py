@@ -58,7 +58,7 @@ def consume_reload_sentinel(project_dir: Path) -> str | None:
         try:
             data = json.loads(sentinel.read_text(encoding="utf-8"))
             session_id = data.get("session_id", "")
-        except (OSError, json.JSONDecodeError, ValueError):
+        except (OSError, json.JSONDecodeError):
             return None
         try:
             sentinel.unlink(missing_ok=True)

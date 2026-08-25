@@ -813,8 +813,9 @@ def test_smoke_utils_suite_is_split() -> None:
     tests_root = Path(__file__).parent.parent
     smoke_utils_root = tests_root / "smoke_utils"
     shards = sorted(smoke_utils_root.glob("test_*.py"))
+    old_monolith = tests_root / f"test_{smoke_utils_root.name}.py"
 
-    assert not (tests_root / "test_smoke_utils.py").exists()
+    assert not old_monolith.exists()
     assert smoke_utils_root.is_dir()
     assert shards
     oversized = [path.name for path in shards if len(path.read_text().splitlines()) > 1000]

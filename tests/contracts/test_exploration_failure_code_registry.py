@@ -121,7 +121,12 @@ def test_broker_authority_assignment_is_scanned() -> None:
     than silently matching nothing."""
     tree = ast.parse(_SRC_STATUS.read_text(encoding="utf-8"), filename=str(_SRC_STATUS))
     candidates = _subscript_key_assignment_values(tree, "broker_authority")
-    assert candidates, 'expected at least one status["broker_authority"] assignment'
+    assert len(candidates) >= 4, (
+        f'expected at least 4 status["broker_authority"] assignment sites in '
+        f"tools_status.py (one per BrokerAuthorityStatus branch: "
+        f"SESSION_TYPE_INELIGIBLE, STORE_UNAVAILABLE, AVAILABLE, NO_SESSION_BOUND), "
+        f"found {len(candidates)}"
+    )
 
 
 def _codes_referenced(tree: ast.AST, member_value_by_name: dict[str, str]) -> set[str]:

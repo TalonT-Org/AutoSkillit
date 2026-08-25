@@ -85,6 +85,7 @@ _SIZE_DIRS: frozenset[str] = frozenset(
         "server",
         "skills",
         "skills_extended",
+        "smoke_utils",
         "workspace",
     }
 )

@@ -95,6 +95,8 @@ def detect_install() -> InstallInfo:
         entrypoint = resolve_autoskillit_entrypoint()
         url = info["url"] or ""
         if info["install_type"] == "git-vcs":
+            if info["commit_id"] is None or info["requested_revision"] is None:
+                return _unknown
             return InstallInfo(
                 install_type=InstallType.GIT_VCS,
                 commit_id=info["commit_id"],

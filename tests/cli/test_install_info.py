@@ -190,6 +190,31 @@ def test_detect_install_unknown_malformed_json(monkeypatch: pytest.MonkeyPatch) 
     assert info.install_type == InstallType.UNKNOWN
 
 
+@pytest.mark.parametrize("missing_field", ["commit_id", "requested_revision"])
+def test_detect_install_unknown_incomplete_vcs_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    missing_field: str,
+) -> None:
+    vcs_info = {
+        "vcs": "git",
+        "requested_revision": "develop",
+        "commit_id": "abc123def456",
+    }
+    del vcs_info[missing_field]
+    payload = json.dumps(
+        {
+            "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+            "vcs_info": vcs_info,
+        }
+    )
+    monkeypatch.setattr(
+        "importlib.metadata.Distribution.from_name",
+        lambda _name: _fake_dist(payload),
+    )
+
+    assert detect_install().install_type is InstallType.UNKNOWN
+
+
 # ---------------------------------------------------------------------------
 # comparison_branch — policy tests
 # ---------------------------------------------------------------------------

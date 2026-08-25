@@ -275,7 +275,9 @@ class TestBuildTestScope:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
             "server/test_factory.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "cli/test_cli_prompts.py",
             "cli/test_cook_order_picker.py",
             "execution/test_headless_path_validation.py",
@@ -308,7 +310,9 @@ class TestBuildTestScope:
         assert "recipe" in result_names, "recipe missing"
         for expected in [
             "test_factory.py",
-            "test_tools_kitchen_envelope.py",
+            "test_tools_kitchen_envelope_failure.py",
+            "test_tools_kitchen_envelope_hook_drift.py",
+            "test_tools_kitchen_envelope_validation.py",
             "test_cli_prompts.py",
             "test_headless_path_validation.py",
             "test_zero_write_detection.py",

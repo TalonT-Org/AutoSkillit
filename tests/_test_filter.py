@@ -748,7 +748,9 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "server/test_factory.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_service_wrappers.py",
             "contracts/test_protocol_satisfaction.py",
         }
@@ -800,7 +802,9 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "server/test_tools_list_recipes.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_load_recipe.py",
             "server/test_mcp_overrides.py",
             "server/test_service_wrappers.py",
@@ -990,9 +994,13 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_explicit_backend_override.py",
             "server/test_factory.py",
             "server/test_tools_agents.py",
-            "server/test_tools_issue_lifecycle.py",
+            "server/test_tools_issue_lifecycle_handlers.py",
+            "server/test_tools_issue_lifecycle_helpers.py",
+            "server/test_tools_issue_lifecycle_state.py",
             "server/test_tools_report_bug.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_sous_chef.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_persistent_root.py",
@@ -1034,7 +1042,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",
             "server/test_smoke_pipeline.py",
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_cache_poison.py",
             "server/test_service_wrappers.py",
             "server/test_tools_list_recipes.py",
@@ -1164,7 +1174,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
             "execution/test_quota_sleep.py",
             "execution/test_session_log_fields.py",
             # file-level: Codex output-budget config and generated agent contracts
@@ -1184,7 +1194,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # +smoke_utils: _cross_interpreter_upgrade imports PLUGIN_ROOT_TOKEN
             "smoke_utils",
             # server/ narrowed to 4 files
-            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_preflight.py",
             "server/test_preflight_explicit_backend.py",
             "server/test_tools_fleet_dispatch_preflight.py",
@@ -1268,38 +1280,6 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "execution/backends/test_codex_config.py",
         }
     ),
-    "workspace": frozenset(
-        {
-            "recipe/test_api.py",
-            "recipe/test_api_cache_isolation.py",
-            "recipe/test_bem_wrapper_structure.py",
-            "recipe/test_bundled_recipes_dispatch_ready.py",
-            "recipe/test_bundled_recipes_general.py",
-            "recipe/test_callable_contracts.py",
-            "recipe/test_contracts_block_fingerprint.py",
-            "recipe/test_contract_verdict_output_required.py",
-            "recipe/test_deep_staleness.py",
-            "recipe/test_diagnose_ci_subtype_output.py",
-            "recipe/test_hidden_ingredients.py",
-            "recipe/test_io_discovery.py",
-            "recipe/test_issue_url_pipeline.py",
-            "recipe/test_planner_contracts.py",
-            "recipe/test_recipe_temp_substitution.py",
-            "recipe/test_repository.py",
-            "recipe/test_research_campaign.py",
-            "recipe/test_rules_contracts.py",
-            "recipe/test_rules_dataflow_handoff.py",
-            "recipe/test_rules_skill_routing.py",
-            "recipe/test_rules_skills.py",
-            "recipe/test_rules_tools.py",
-            "recipe/test_skill_contract_completeness.py",
-            "recipe/test_skill_emit_consistency.py",
-            "recipe/test_skip_guard_deferral.py",
-            "recipe/test_staleness_cache.py",
-            "recipe/test_sub_recipe_loading.py",
-            "recipe/test_sub_recipe_validation.py",
-        }
-    ),
     "planner": frozenset(
         {
             "recipe/test_rules_contracts.py",
@@ -1317,6 +1297,59 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "server/test_tools_load_recipe.py",
             "server/test_load_recipe_authority.py",
             "server/test_tools_execution_input_gates_contracts.py",
+            # Split files (from PR #4795) reference autoskillit.recipe via
+            # deferred imports inside test bodies (no module-level AST import).
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
+        }
+    ),
+    "workspace": frozenset(
+        {
+            *{
+                # Original exemptions retained for backward compat.
+                "recipe/test_api.py",
+                "recipe/test_api_cache_isolation.py",
+                "recipe/test_bem_wrapper_structure.py",
+                "recipe/test_bundled_recipes_dispatch_ready.py",
+                "recipe/test_bundled_recipes_general.py",
+                "recipe/test_callable_contracts.py",
+                "recipe/test_contracts_block_fingerprint.py",
+                "recipe/test_contract_verdict_output_required.py",
+                "recipe/test_deep_staleness.py",
+                "recipe/test_diagnose_ci_subtype_output.py",
+                "recipe/test_hidden_ingredients.py",
+                "recipe/test_io_discovery.py",
+                "recipe/test_issue_url_pipeline.py",
+                "recipe/test_planner_contracts.py",
+                "recipe/test_recipe_temp_substitution.py",
+                "recipe/test_repository.py",
+                "recipe/test_research_campaign.py",
+                "recipe/test_rules_contracts.py",
+                "recipe/test_rules_dataflow_handoff.py",
+                "recipe/test_rules_skill_routing.py",
+                "recipe/test_rules_skills.py",
+                "recipe/test_rules_tools.py",
+                "recipe/test_skill_contract_completeness.py",
+                "recipe/test_skill_emit_consistency.py",
+                "recipe/test_skip_guard_deferral.py",
+                "recipe/test_staleness_cache.py",
+                "recipe/test_sub_recipe_loading.py",
+                "recipe/test_sub_recipe_validation.py",
+            },
+            # Split files (from PR #4795) reference autoskillit.workspace via
+            # deferred imports inside test bodies (no module-level AST import).
+            "server/test_tools_issue_lifecycle_helpers.py",
+            "server/test_tools_issue_lifecycle_state.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
+        }
+    ),
+    "hook_registry": frozenset(
+        {
+            # Split files (from PR #4795) reference autoskillit.hooks via
+            # deferred imports inside test bodies (no module-level AST import).
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_validation.py",
         }
     ),
 }

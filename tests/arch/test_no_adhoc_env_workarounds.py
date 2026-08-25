@@ -191,7 +191,7 @@ _INTENTIONAL_ENV_INPUT_SITES: dict[str, str] = {
         "tests/server/test_tools_dispatch_halt.py::AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "tests/server/test_tools_dispatch_validation.py::AUTOSKILLIT_HEADLESS",
         "tests/server/test_tools_execution_routing.py::AUTOSKILLIT_DISPATCH_ID",
-        "tests/server/test_tools_kitchen_envelope.py::AUTOSKILLIT_HEADLESS",
+        "tests/server/test_tools_kitchen_envelope_failure.py::AUTOSKILLIT_HEADLESS",
         "tests/server/test_tools_kitchen_gate.py::AUTOSKILLIT_CAMPAIGN_ID",
         "tests/server/test_tools_run_cmd_invariants.py::AUTOSKILLIT_HEADLESS",
         "tests/server/test_tools_run_python_invariants.py::AUTOSKILLIT_HEADLESS",

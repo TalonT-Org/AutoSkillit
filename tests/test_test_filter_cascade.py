@@ -157,7 +157,9 @@ _SERVER_FILE_LEVEL_ENTRIES = [
     "test_smoke_pipeline.py",
     "test_tools_dispatch_validation.py",
     "test_tools_kitchen_gate_features.py",
-    "test_tools_kitchen_envelope.py",
+    "test_tools_kitchen_envelope_failure.py",
+    "test_tools_kitchen_envelope_hook_drift.py",
+    "test_tools_kitchen_envelope_validation.py",
     "test_service_wrappers.py",
     "test_tools_list_recipes.py",
 ]

@@ -21,17 +21,43 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def _bootstrap_tests_on_sys_path() -> str:
-    """Ensure the tests/ root is on sys.path so tests.core imports resolve; return the path."""
+def _bootstrap_tests_on_sys_path() -> None:
+    """Ensure the tests/ root is on sys.path so tests.core imports resolve."""
     tests_root = str(Path(__file__).resolve().parents[2] / "tests")
     if tests_root not in sys.path:
         sys.path.insert(0, tests_root)
-    return tests_root
 
 
 def _module_defines_name(module: object, name: str) -> bool:
-    """Return True iff ``name`` is defined directly in ``module`` (not just imported into it)."""
-    return name in vars(module)
+    """Return True iff ``name`` is defined directly in ``module`` (not just imported into it).
+
+    Implementation: AST-walks the module's source file looking for a top-level
+    ``FunctionDef``/``AsyncFunctionDef``/``ClassDef`` (or a pytest parametrize
+    decorator attached to one) with the matching name. This rejects re-exports
+    via ``from <other_module> import name``, which would otherwise bind ``name``
+    into ``module.__dict__`` and falsely satisfy a plain membership check.
+    """
+    try:
+        module_file = getattr(module, "__file__", None)
+    except Exception:
+        module_file = None
+    if not module_file or not isinstance(module_file, str):
+        return False
+    try:
+        source = Path(module_file).read_text(encoding="utf-8")
+    except OSError:
+        return False
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in tree.body:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and node.name == name
+        ):
+            return True
+    return False
 
 
 def _source_imports_autoskillit_execution(source: str) -> bool:

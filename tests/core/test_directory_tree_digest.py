@@ -263,6 +263,44 @@ class TestDirectoryTreeDigestRaceSafety:
             monkeypatch.undo()
         assert calls == 1
 
+    def test_recursive_failure_closes_queued_sibling_descriptors(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for name in ("a", "b"):
+            subtree = tmp_path / name
+            subtree.mkdir()
+            (subtree / "leaf.txt").write_text(name, encoding="utf-8")
+
+        original_open = os.open
+        original_close = os.close
+        original_scandir = os.scandir
+        opened_subdirs: dict[str, int] = {}
+        closed_fds: set[int] = set()
+
+        def tracking_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+            fd = original_open(path, flags, *args, **kwargs)
+            if path in {"a", "b"} and flags & os.O_DIRECTORY:
+                opened_subdirs[path] = fd
+            return fd
+
+        def fail_first_subtree(fd):  # type: ignore[no-untyped-def]
+            if fd == opened_subdirs.get("a"):
+                raise FileNotFoundError("injected recursive failure")
+            return original_scandir(fd)
+
+        def tracking_close(fd: int) -> None:
+            closed_fds.add(fd)
+            original_close(fd)
+
+        monkeypatch.setattr(io_module.os, "open", tracking_open)
+        monkeypatch.setattr(io_module.os, "scandir", fail_first_subtree)
+        monkeypatch.setattr(io_module.os, "close", tracking_close)
+
+        with pytest.raises(TreeVanishedError):
+            directory_tree_digest(tmp_path)
+
+        assert set(opened_subdirs.values()) <= closed_fds
+
     def test_entry_vanishes_between_list_and_stat_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

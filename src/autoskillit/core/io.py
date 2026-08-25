@@ -368,52 +368,59 @@ def strict_walk(root: Path) -> Iterator[TreeEntry]:
         file_entries.sort(key=lambda entry: entry.name)
 
         pending_subdirs: list[tuple[int, str]] = []
-        for entry in (*directory_entries, *file_entries):
-            relative = f"{relative_prefix}/{entry.name}" if relative_prefix else entry.name
-            try:
-                entry_stat = entry.stat(follow_symlinks=False)
-            except (FileNotFoundError, NotADirectoryError) as exc:
-                raise TreeVanishedError(relative, root) from exc
-            if stat.S_ISLNK(entry_stat.st_mode):
-                kind: Literal["f", "d", "l"] = "l"
-            elif stat.S_ISDIR(entry_stat.st_mode):
-                kind = "d"
-            elif stat.S_ISREG(entry_stat.st_mode):
-                kind = "f"
-            else:
-                raise ValueError(f"artifact contains a special file: {root}/{relative}")
-            yield TreeEntry(
-                relative_path=relative,
-                kind=kind,
-                mode=stat.S_IMODE(entry_stat.st_mode),
-                dir_fd=dir_fd,
-                name=entry.name,
-            )
-            if kind == "d":
+        next_subdir = 0
+        try:
+            for entry in (*directory_entries, *file_entries):
+                relative = f"{relative_prefix}/{entry.name}" if relative_prefix else entry.name
                 try:
-                    sub_fd = os.open(entry.name, descent_flags, dir_fd=dir_fd)
+                    entry_stat = entry.stat(follow_symlinks=False)
                 except (FileNotFoundError, NotADirectoryError) as exc:
                     raise TreeVanishedError(relative, root) from exc
-                except OSError as exc:
-                    if exc.errno == errno.ELOOP:
+                if stat.S_ISLNK(entry_stat.st_mode):
+                    kind: Literal["f", "d", "l"] = "l"
+                elif stat.S_ISDIR(entry_stat.st_mode):
+                    kind = "d"
+                elif stat.S_ISREG(entry_stat.st_mode):
+                    kind = "f"
+                else:
+                    raise ValueError(f"artifact contains a special file: {root}/{relative}")
+                yield TreeEntry(
+                    relative_path=relative,
+                    kind=kind,
+                    mode=stat.S_IMODE(entry_stat.st_mode),
+                    dir_fd=dir_fd,
+                    name=entry.name,
+                )
+                if kind == "d":
+                    try:
+                        sub_fd = os.open(entry.name, descent_flags, dir_fd=dir_fd)
+                    except (FileNotFoundError, NotADirectoryError) as exc:
                         raise TreeVanishedError(relative, root) from exc
-                    raise
-                try:
-                    sub_stat = os.fstat(sub_fd)
-                    if (sub_stat.st_ino, sub_stat.st_dev) != (
-                        entry_stat.st_ino,
-                        entry_stat.st_dev,
-                    ):
-                        raise TreeVanishedError(relative, root)
-                except BaseException:
-                    os.close(sub_fd)
-                    raise
-                pending_subdirs.append((sub_fd, relative))
+                    except OSError as exc:
+                        if exc.errno == errno.ELOOP:
+                            raise TreeVanishedError(relative, root) from exc
+                        raise
+                    try:
+                        sub_stat = os.fstat(sub_fd)
+                        if (sub_stat.st_ino, sub_stat.st_dev) != (
+                            entry_stat.st_ino,
+                            entry_stat.st_dev,
+                        ):
+                            raise TreeVanishedError(relative, root)
+                    except BaseException:
+                        os.close(sub_fd)
+                        raise
+                    pending_subdirs.append((sub_fd, relative))
 
-        for sub_fd, relative in pending_subdirs:
-            try:
-                yield from _walk_level(sub_fd, relative)
-            finally:
+            while next_subdir < len(pending_subdirs):
+                sub_fd, relative = pending_subdirs[next_subdir]
+                next_subdir += 1
+                try:
+                    yield from _walk_level(sub_fd, relative)
+                finally:
+                    os.close(sub_fd)
+        finally:
+            for sub_fd, _relative in pending_subdirs[next_subdir:]:
                 os.close(sub_fd)
 
     try:

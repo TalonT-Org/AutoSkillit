@@ -37,8 +37,12 @@ wheel cache consumed by downstream jobs:
     enable-cache: false   # required for jobs that skip uv sync
 ```
 
-Jobs that run `uv sync --locked` may omit `enable-cache` (defaults to `auto`, enabled on
-GitHub-hosted runners).
+Jobs that run `uv sync --locked` may normally omit `enable-cache` (defaults to `auto`,
+enabled on GitHub-hosted runners). In `.github/workflows/tests.yml`, however, the `test`
+and `cache_prime` jobs deliberately set `enable-cache: false` despite syncing because
+explicit `actions/cache` owns their uv-cache I/O. That workflow's matrix jobs restore only;
+its schedule-or-`main`-push default-branch primer is the sole saver for the uv dependency
+cache. This single-saver rule does not apply to unrelated workflows or non-uv caches.
 
 ## Branch-targeted test policy
 
@@ -59,3 +63,8 @@ that only run `uv lock --check` or similar commands.
 The `preflight` job exists to validate the lockfile early and cheaply. It must NOT install
 the full dependency tree — only `uv lock --check`. Adding `uv sync` to preflight defeats
 the purpose of the job separation.
+
+Changing the `api-simulator.rev` value under `[tool.uv.sources]` in `pyproject.toml`
+requires running `uv lock` and committing the regenerated `uv.lock` in the same change.
+Pre-commit and preflight enforce this consistency with `uv lock --check`, and
+`uv sync --locked --extra dev` cannot proceed with a stale lockfile.

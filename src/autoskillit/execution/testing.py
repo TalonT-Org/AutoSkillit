@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -27,6 +26,7 @@ from autoskillit.core import (
     TestResult,
     default_space_probe,
     get_logger,
+    platform_temp_root,
     resolve_dbus_session_bus_address,
 )
 
@@ -308,7 +308,7 @@ class DefaultTestRunner:
                 if shutil.which(cmd[0]) is None:
                     return f"Command '{cmd[0]}' not found in PATH"
 
-        platform_root = Path("/dev/shm") if sys.platform == "linux" else Path("/tmp")
+        platform_root = platform_temp_root()
         try:
             total_bytes, _used_bytes, free_bytes = space_probe(platform_root)
         except OSError as exc:

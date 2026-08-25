@@ -28,6 +28,7 @@ from autoskillit.core import (
     default_space_probe,
     get_logger,
     is_valid_codex_model_id,
+    platform_temp_root,
     user_generation_root,
 )
 from autoskillit.execution import (
@@ -685,7 +686,7 @@ def _check_pytest_temp_capacity(*, space_probe: SpaceProbe = default_space_probe
     is the diagnostic surface between runs (see core.runtime.ReclamationBound).
     """
     check_name = "pytest_temp_capacity"
-    platform_root = Path("/dev/shm") if sys.platform == "linux" else Path("/tmp")
+    platform_root = platform_temp_root()
     try:
         total_bytes, _used_bytes, free_bytes = space_probe(platform_root)
     except OSError as exc:

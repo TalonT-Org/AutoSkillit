@@ -11,6 +11,7 @@ importing from ``core.runtime`` there would be a circular import.
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -18,6 +19,7 @@ __all__ = [
     "MIN_FREE_BYTES_THRESHOLD",
     "SpaceProbe",
     "default_space_probe",
+    "platform_temp_root",
 ]
 
 
@@ -35,6 +37,15 @@ def default_space_probe(path: Path) -> tuple[int, int, int]:
     """Real `shutil.disk_usage()`-backed SpaceProbe, as a (total, used, free) triple."""
     usage = shutil.disk_usage(path)
     return (usage.total, usage.used, usage.free)
+
+
+def platform_temp_root() -> Path:
+    """The platform temp root a capacity preflight should probe: /dev/shm on Linux, /tmp
+    elsewhere -- the same root Taskfile.yml's PYTEST_TMP_ROOT resolves to. Shared so every
+    capacity-preflight caller (DefaultTestRunner.check_infrastructure, the doctor check)
+    names the identical mount rather than each re-deriving the platform branch.
+    """
+    return Path("/dev/shm") if sys.platform == "linux" else Path("/tmp")
 
 
 #: Below this many free bytes on the mount holding a reclaimable store's platform root, a

@@ -1281,6 +1281,11 @@ from .types import (
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles
+from .types._type_exploration import (
+    EXPLORATION_FAILURE_CODE_RESPONSES as EXPLORATION_FAILURE_CODE_RESPONSES,
+)
+from .types._type_exploration import EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES
+from .types._type_exploration import PLUGINLESS_EXPLORER_ROLE as PLUGINLESS_EXPLORER_ROLE
 from .types._type_exploration import BrokerAuthorityStatus as BrokerAuthorityStatus
 from .types._type_exploration import CapabilityResolution as CapabilityResolution
 from .types._type_exploration import CapabilityResolutionStatus as CapabilityResolutionStatus
@@ -1290,10 +1295,6 @@ from .types._type_exploration import CompletenessReport as CompletenessReport
 from .types._type_exploration import ContinuationCursor as ContinuationCursor
 from .types._type_exploration import EvidencePage as EvidencePage
 from .types._type_exploration import EvidenceRecord as EvidenceRecord
-from .types._type_exploration import (
-    EXPLORATION_FAILURE_CODE_RESPONSES as EXPLORATION_FAILURE_CODE_RESPONSES,
-)
-from .types._type_exploration import EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES
 from .types._type_exploration import ExplorationApplicability as ExplorationApplicability
 from .types._type_exploration import (
     ExplorationContextStoreProtocol as ExplorationContextStoreProtocol,
@@ -1307,7 +1308,6 @@ from .types._type_exploration import GraphEdge as GraphEdge
 from .types._type_exploration import GraphNode as GraphNode
 from .types._type_exploration import MethodProvenance as MethodProvenance
 from .types._type_exploration import NodeKey as NodeKey
-from .types._type_exploration import PLUGINLESS_EXPLORER_ROLE as PLUGINLESS_EXPLORER_ROLE
 from .types._type_exploration import ProfileActivation as ProfileActivation
 from .types._type_exploration import RelationshipKind as RelationshipKind
 from .types._type_exploration import RepositoryIdentity as RepositoryIdentity

@@ -55,13 +55,18 @@ async def test_kitchen_status_reports_store_unavailable_when_store_is_not_owner_
 
 @pytest.mark.anyio
 async def test_kitchen_status_reports_available_with_an_active_session_scoped_binding(
-    tool_ctx_kitchen_open, monkeypatch, tmp_path
+    tool_ctx_kitchen_open, monkeypatch, exploration_snapshot_service, tmp_path
 ):
     """The only state the pre-existing stub could never report: broker actually available."""
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
     from autoskillit.server.tools.tools_status import kitchen_status
 
-    store = tool_ctx_kitchen_open.exploration_context_store
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tool_ctx_kitchen_open.project_dir,
+        service=exploration_snapshot_service,
+    )
+    monkeypatch.setattr(tool_ctx_kitchen_open, "exploration_context_store", store)
     store.bind_session_scoped(
         owner_id="uid:test",
         session_id="test-session",

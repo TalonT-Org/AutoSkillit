@@ -38,7 +38,7 @@ from autoskillit.workspace import (
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.fakes import adapt_test_skill_semantics
-from tests.workspace._helpers import _CODEX_CAPABILITIES
+from tests.workspace._helpers import _CODEX_CAPABILITIES, _write_project_skill_override
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -192,12 +192,31 @@ def test_skills_directory_provider_lists_public_skills() -> None:
     assert "sous-chef" not in names
 
 
-def test_provider_gating_is_agent_safe() -> None:
+def test_provider_direct_resolution_remains_bundled_with_project_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     provider = SkillsDirectoryProvider()
-    skill = provider.resolver.resolve_effective("open-kitchen", Path.cwd())
+    bundled = provider.resolver.resolve("open-kitchen")
+    assert bundled is not None
+    _write_project_skill_override(tmp_path, "open-kitchen", bundled.canonical_content)
+    monkeypatch.chdir(tmp_path)
+
+    project_local = provider.resolver.resolve_effective("open-kitchen", tmp_path)
+    assert project_local is not None
+    assert project_local.source is SkillSource.PROJECT_LOCAL
+
+    skill = provider.resolver.resolve("open-kitchen")
+    assert skill is not None
+    assert skill.source is SkillSource.BUNDLED
+
+
+def test_provider_gating_is_agent_safe(tmp_path: Path) -> None:
+    provider = SkillsDirectoryProvider()
+    skill = provider.resolver.resolve("open-kitchen")
     assert skill is not None
 
-    content = provider.get_skill_content(skill, cwd=Path.cwd(), gated=True)
+    content = provider.get_skill_content(skill, cwd=tmp_path, gated=True)
 
     assert _frontmatter(content)["disable-model-invocation"] is True
     _assert_agent_safe(content)

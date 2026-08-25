@@ -1740,7 +1740,6 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/pipeline/test_gate.py": frozenset({"autoskillit.server"}),
     # core tests — protocol conformance checks require concrete implementations
     "tests/core/test_core_terminal_table.py": frozenset({"autoskillit.cli"}),
-    "tests/core/test_types.py": frozenset({"autoskillit.execution"}),
     # execution tests — clone_guard/headless/commands use sibling layers
     "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),
@@ -1809,8 +1808,6 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     # review loop routing integration imports root-level smoke_utils
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
-    # migration tests — migration engine integrates with execution.session
-    "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
     # fleet e2e test exercises execution + cli layers end-to-end
     "tests/fleet/test_fleet_e2e.py": frozenset({"autoskillit.execution", "autoskillit.cli"}),
     # codex fleet e2e exercises execution layer (backends, headless) end-to-end

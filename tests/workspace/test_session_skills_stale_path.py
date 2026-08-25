@@ -12,10 +12,11 @@ from autoskillit.core import (
     BackendConventions,
     ClaudeDirectoryConventions,
     PreLaunchReadiness,
+    SkillSource,
     pkg_root,
 )
 from tests.fakes import adapt_test_skill_semantics
-from tests.workspace._helpers import _CODEX_CAPABILITIES
+from tests.workspace._helpers import _CODEX_CAPABILITIES, _write_project_skill_override
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -39,7 +40,7 @@ def _catalog_context(manager, *, backend=None):
     from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
 
-    project_root = Path.cwd()
+    project_root = manager.ephemeral_root
     catalog = DefaultSkillResolver().list_effective(
         project_root,
         SkillExecutionRole.SESSION,
@@ -73,6 +74,29 @@ def _managed(manager, session_id: str, *, backend):
     )
 
 
+def test_catalog_context_uses_manager_root_when_cwd_has_project_override(
+    make_session_skill_manager,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = make_session_skill_manager()
+    bundled = manager._provider.resolver.resolve("open-kitchen")
+    assert bundled is not None
+    foreign_project = tmp_path / "foreign-project"
+    _write_project_skill_override(
+        foreign_project,
+        "open-kitchen",
+        bundled.canonical_content,
+    )
+    monkeypatch.chdir(foreign_project)
+
+    catalog, context = _catalog_context(manager)
+
+    open_kitchen = next(skill for skill in catalog.skills if skill.name == "open-kitchen")
+    assert context.cwd == manager.ephemeral_root.resolve()
+    assert open_kitchen.source is SkillSource.BUNDLED
+
+
 def test_validate_session_exists_true_for_live_session(make_session_skill_manager) -> None:
     """validate_session_exists returns True for a freshly created session."""
     mgr = make_session_skill_manager()
@@ -101,7 +125,7 @@ def test_cleanup_stale_emits_log_event(make_session_skill_manager, monkeypatch) 
     import autoskillit.workspace.session_skills as skills_mod
 
     mgr = make_session_skill_manager()
-    session_dir = mgr._root / "sess-stale"  # type: ignore[attr-defined]
+    session_dir = mgr.ephemeral_root / "sess-stale"
     session_dir.mkdir(parents=True)
     (session_dir / "orphaned-session-marker").touch()
 

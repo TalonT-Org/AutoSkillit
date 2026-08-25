@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
     from autoskillit.pipeline.timings import DefaultTimingLog
 
+from autoskillit.pipeline.gate import DefaultGateState
+
 
 @pytest.fixture(autouse=True)
 def _reset_server_state():
@@ -355,7 +357,6 @@ def build_ctx(tmp_path):
 @pytest.fixture
 def build_ctx_open(build_ctx):
     """build_ctx variant with gate open — returns a factory callable like build_ctx."""
-    from autoskillit.pipeline.gate import DefaultGateState
 
     def _factory(**overrides):
         ctx = build_ctx(**overrides)
@@ -427,6 +428,22 @@ class ReadyRecipeContext:
     @property
     def with_args(self) -> dict[str, Any]:
         return self.step_body["with"]
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx: ToolContext) -> ToolContext:
+    """Open the gate while retaining production backend compatibility metadata.
+
+    Mirrors the parent fixture in tests/conftest.py so tests under tests/server/
+    that read ``tool_ctx.kitchen_id`` (e.g. tracker-bound tests) get the same
+    ``"test-kitchen"`` sentinel the parent provides, instead of the silent
+    ``None`` a gate-only override would yield.
+    """
+    assert tool_ctx is not None
+    assert hasattr(tool_ctx, "gate"), "tool_ctx must expose a `gate` attribute"
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    tool_ctx.kitchen_id = "test-kitchen"
+    return tool_ctx
 
 
 @pytest.fixture

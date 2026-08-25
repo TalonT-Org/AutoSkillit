@@ -129,7 +129,13 @@ async def test_open_kitchen_fails_on_semantic_errors_only(tmp_path, monkeypatch)
 
 
 def test_recipe_validation_error_response_handles_malformed_suggestions():
-    """_recipe_validation_error_response must not crash on suggestions missing rule/message."""
+    """_recipe_validation_error_response must not crash on suggestions missing rule/message.
+
+    Regression contract: a suggestion dict that omits `rule` and `message` must
+    still produce a structured error response (success=False) that surfaces the
+    severity-tagged fallback (`[unknown-rule]`) rather than a generic
+    "unknown structural error" placeholder or a crash.
+    """
     from autoskillit.server.tools.tools_kitchen import _recipe_validation_error_response
 
     result = {
@@ -142,6 +148,10 @@ def test_recipe_validation_error_response_handles_malformed_suggestions():
     response = json.loads(_recipe_validation_error_response("demo", result))
     assert "unknown structural error" not in response["user_visible_message"]
     assert response["success"] is False
+    # Fallback contract: the unknown-rule placeholder is emitted in place of the
+    # missing rule/message so the user-visible message still names the failing
+    # suggestion rather than collapsing to a generic error.
+    assert "[unknown-rule]" in response["user_visible_message"]
 
 
 # ---------------------------------------------------------------------------

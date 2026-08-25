@@ -430,6 +430,15 @@ class ReadyRecipeContext:
 
 
 @pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """Open the gate while retaining production backend compatibility metadata."""
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
+
+
+@pytest.fixture
 async def tool_ctx_ready_recipe(
     request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,

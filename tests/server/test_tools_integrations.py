@@ -10,7 +10,6 @@ import pytest
 import autoskillit.server.tools.tools_issue_labels as tools_issue_labels
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_issue_headless import (
     _PREPARE_RESULT_END,
     _PREPARE_RESULT_START,
@@ -30,13 +29,6 @@ from tests.server._recipe_segment_test_helpers import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 _CLAIM_HELPERS = "autoskillit.fleet"
-
-
-@pytest.fixture
-def tool_ctx_kitchen_open(tool_ctx):
-    """Open the gate while retaining production backend compatibility metadata."""
-    tool_ctx.gate = DefaultGateState(enabled=True)
-    return tool_ctx
 
 
 # ---------------------------------------------------------------------------

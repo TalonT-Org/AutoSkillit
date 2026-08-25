@@ -11,12 +11,12 @@ failed mid-walk (issue #4770).
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 
 from autoskillit.cli._install_snapshot._snapshot import _InstallSnapshot
+from tests._helpers import inject_vanishing_subtree_on_descent
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -68,10 +68,6 @@ class TestMatchesStagedStateRaceSafety:
     def test_subtree_vanishes_before_its_own_descent_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import shutil
-
-        import autoskillit.core.io as io_module
-
         current, backup = _seed_mirrored_dirs(tmp_path)
         vanishing = current / "vanishing"
         vanishing.mkdir()
@@ -79,14 +75,7 @@ class TestMatchesStagedStateRaceSafety:
         (backup / "vanishing").mkdir()
         (backup / "vanishing" / "leaf.txt").write_text("leaf", encoding="utf-8")
 
-        original_open = os.open
-
-        def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if path == "vanishing" and (flags & os.O_DIRECTORY):
-                shutil.rmtree(vanishing)
-            return original_open(path, flags, *args, **kwargs)
-
-        monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
+        inject_vanishing_subtree_on_descent(monkeypatch, vanishing)
 
         from autoskillit.core.io import TreeVanishedError
 

@@ -32,6 +32,7 @@ from autoskillit.execution.backends._codex_session_storage import (
     CodexInteractiveSessionLease,
     CodexSessionStore,
 )
+from tests._helpers import inject_vanishing_subtree_on_descent
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -1335,10 +1336,6 @@ def test_validate_pre_spawn_view_raises_when_subtree_vanishes_mid_walk(
     *security validation* walk must raise, not silently under-report
     ``found`` — a shrunk ``found`` set biases the equality check toward a
     false negative (unexpected/tampered content hidden from detection)."""
-    import shutil
-
-    import autoskillit.core.io as io_module
-
     store = CodexSessionStore(log_dir=tmp_path / "log-root")
     home, _ = _generated_home(tmp_path)
     lease = store.prepare_attempt(
@@ -1354,14 +1351,7 @@ def test_validate_pre_spawn_view_raises_when_subtree_vanishes_mid_walk(
     vanishing.mkdir()
     (vanishing / "hidden.jsonl").write_bytes(b"{}\n")
 
-    original_open = os.open
-
-    def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if path == "vanishing" and (flags & os.O_DIRECTORY):
-            shutil.rmtree(vanishing)
-        return original_open(path, flags, *args, **kwargs)
-
-    monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
+    inject_vanishing_subtree_on_descent(monkeypatch, vanishing)
 
     from autoskillit.core.io import TreeVanishedError
 

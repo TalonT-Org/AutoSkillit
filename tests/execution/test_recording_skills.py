@@ -16,6 +16,7 @@ from autoskillit.execution._recording_skills import (
     snapshot_skill_dir,
     validate_skill_snapshot_members,
 )
+from tests._helpers import inject_vanishing_subtree_on_descent
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -313,25 +314,13 @@ def test_assert_agent_safe_skill_tree_raises_when_subtree_vanishes_mid_walk(
     authority-elevation guard (its own docstring: "Reject snapshots that
     could restore machine-only authority to an agent"). A subtree deleted
     mid-walk must raise, not silently omit content from the symlink check."""
-    import os
-    import shutil
-
-    import autoskillit.core.io as io_module
-
     skills_dir = tmp_path / "skills"
     other_skill = _make_skill(skills_dir, "other-skill")
     vanishing_skill = skills_dir / "vanishing-skill"
     vanishing_skill.mkdir()
     (vanishing_skill / "SKILL.md").write_text("# vanishing\n", encoding="utf-8")
 
-    original_open = os.open
-
-    def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if path == "vanishing-skill" and (flags & os.O_DIRECTORY):
-            shutil.rmtree(vanishing_skill)
-        return original_open(path, flags, *args, **kwargs)
-
-    monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
+    inject_vanishing_subtree_on_descent(monkeypatch, vanishing_skill)
     with pytest.raises(ValueError):
         _assert_agent_safe_skill_tree(skills_dir)
     assert other_skill.exists()

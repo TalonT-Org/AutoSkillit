@@ -12,6 +12,7 @@ from typing import cast
 import pytest
 
 from autoskillit.core import SKILL_PROJECTION_VERSION, SkillExecutionRole
+from tests._helpers import inject_vanishing_subtree_on_descent
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -629,10 +630,6 @@ def test_store_raises_not_silently_omits_when_snapshot_subtree_vanishes_mid_walk
     set-equality completeness check must raise, not silently produce a
     shrunk ``actual_files`` set that could spuriously match ``declared_files``
     (defeating the tamper check)."""
-    import os
-    import shutil
-
-    import autoskillit.core.io as io_module
     from autoskillit.execution.session import DefaultSkillSessionContractStore
 
     root = tmp_path / "contracts"
@@ -649,14 +646,7 @@ def test_store_raises_not_silently_omits_when_snapshot_subtree_vanishes_mid_walk
     extra_dir.mkdir()
     (extra_dir / "leaf.txt").write_text("leaf", encoding="utf-8")
 
-    original_open = os.open
-
-    def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if path == "extra_subtree" and (flags & os.O_DIRECTORY):
-            shutil.rmtree(extra_dir)
-        return original_open(path, flags, *args, **kwargs)
-
-    monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
+    inject_vanishing_subtree_on_descent(monkeypatch, extra_dir)
     with pytest.raises(ValueError) as excinfo:
         store.load("resumable")
     assert "file set mismatch" not in str(excinfo.value)

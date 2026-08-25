@@ -13,6 +13,7 @@ import pytest
 
 import autoskillit
 from autoskillit.core.io import load_yaml
+from tests._helpers import inject_vanishing_subtree_on_descent
 from tests.cli._upgrade_fixtures import (
     CONTAINED_STATES,
     LEGACY_HOME_STATES,
@@ -144,9 +145,6 @@ def test_validate_sanitized_plugin_artifact_appends_finding_string_on_race(
     preserve its non-raising ``tuple[str, ...]`` contract when the migrated
     ``strict_walk`` scan races — two of its three callers depend on that
     contract completely, with no surrounding try/except of their own."""
-    import shutil
-
-    import autoskillit.core.io as io_module
     from autoskillit.core.io import write_versioned_json
     from autoskillit.workspace import validate_sanitized_plugin_artifact
 
@@ -163,16 +161,7 @@ def test_validate_sanitized_plugin_artifact_appends_finding_string_on_race(
         schema_version=1,
     )
 
-    import os
-
-    original_open = os.open
-
-    def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if path == "vanishing" and (flags & os.O_DIRECTORY):
-            shutil.rmtree(vanishing)
-        return original_open(path, flags, *args, **kwargs)
-
-    monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
+    inject_vanishing_subtree_on_descent(monkeypatch, vanishing)
 
     errors = validate_sanitized_plugin_artifact(
         tmp_path,

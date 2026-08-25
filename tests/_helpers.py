@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import ast
 import importlib
+import os
 import re
+import shutil
 import sys
 from pathlib import Path
+
+import pytest
 
 from autoskillit.core import (
     InstructionExtractionMode,
@@ -21,6 +25,23 @@ from autoskillit.core import (
 _RUN_SKILL_WINDOW = 400
 _PROSE_TRIGGER_WINDOW = 60
 _PROSE_TRIGGER_WORDS = ("parameter", "pass", "forward")
+
+
+def inject_vanishing_subtree_on_descent(
+    monkeypatch: pytest.MonkeyPatch,
+    subtree: Path,
+) -> None:
+    """Delete *subtree* when ``strict_walk`` opens it for descent."""
+    import autoskillit.core.io as io_module
+
+    original_open = os.open
+
+    def vanish_before_descent(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if path == subtree.name and flags & os.O_DIRECTORY:
+            shutil.rmtree(subtree)
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
 
 
 def execution_tuning_param_names() -> tuple[str, ...]:

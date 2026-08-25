@@ -150,6 +150,8 @@ select = ["E", "F", "I", "UP", "TID251", "W"]
 "tests/cli/test_cli_prompts.py" = ["E501"]
 "tests/fleet/test_dispatch_failure_semantics.py" = ["E501"]
 "tests/execution/test_session_log_fields.py" = ["E501"]
+"tests/server/test_factory_split_completeness.py" = ["E501"]
+"tests/server/test_recipe_section_pagination_split_completeness.py" = ["E501"]
 "src/autoskillit/recipe/__init__.py" = ["E402"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

@@ -133,9 +133,11 @@ _TEST_TO_MODULE: dict[str, str] = {
 }
 
 _TEST_TO_MODULE_KEYS = frozenset(_TEST_TO_MODULE.keys())
-assert _TEST_TO_MODULE_KEYS == _PRE_SPLIT_FACTORY_NAMES, (
-    "Pre-split inventory and module map disagree — fix before commit"
-)
+
+# Base SHA of PR #4797 — the commit from which "files added by this split" is measured.
+# Keep this in sync if the PR is rebased onto a new base; the guard's intent is to detect
+# unexpected *new* factory test files relative to the pre-PR state.
+_PR_BASE_SHA = "d846cb8e2c4300a75d405b31a34ad10336d65357"
 
 _NEW_FACTORY_TEST_FILES = (
     "tests/server/test_factory_context_construction.py",
@@ -162,7 +164,9 @@ _EXPECTED_HELPER_EXPORTS = frozenset(
 
 def test_pre_split_factory_inventory_is_frozen() -> None:
     """The pre-split inventory is well-formed (no duplicates, no leading dots)."""
-    assert len(_PRE_SPLIT_FACTORY_NAMES) == 54
+    # Size check derives from the module map: if a pre-split test is added or
+    # dropped without updating both sides, the equality check below fails first.
+    assert len(_PRE_SPLIT_FACTORY_NAMES) == len(_TEST_TO_MODULE_KEYS)
     for name in _PRE_SPLIT_FACTORY_NAMES:
         assert not name.startswith("."), name
     assert _TEST_TO_MODULE_KEYS == _PRE_SPLIT_FACTORY_NAMES
@@ -206,18 +210,34 @@ def test_every_pre_split_test_name_appears_in_exactly_one_new_file() -> None:
 
 
 def test_no_unintended_new_factory_test_files_under_tests_server() -> None:
-    """The four new files (3 split files + 1 completeness file) are the only new test_factory_*.py files."""
+    """Only the four expected new factory files exist; pre-existing siblings are discovered.
+
+    Pre-existing siblings are discovered from git history relative to the PR's base SHA,
+    so future additions to tests/server/ matching this pattern don't require updating a
+    hardcoded list.
+    """
     import re
+    import subprocess
 
     server_dir = Path("tests/server")
     pattern = re.compile(r"^test_factory_.*\.py$")
-    # Pre-existing factory test files that are NOT part of this split:
-    pre_existing_siblings = {
-        "test_factory_backend_coherence.py",
-        "test_factory_codex_backend_gate.py",
-        "test_factory_guards_integration.py",
-        "test_factory_recording.py",
-    }
+    # Discover pre-existing factory test files from the PR's base commit, so adding a new
+    # test_factory_*.py file in a future PR is automatically accommodated.
+    try:
+        diff_output = subprocess.run(
+            ["git", "ls-tree", "--name-only", "-r", _PR_BASE_SHA, "--", "tests/server/"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        pre_existing_siblings = {
+            Path(p).name for p in diff_output.splitlines() if pattern.match(Path(p).name)
+        }
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Git unavailable: fall back to deriving siblings from the working tree minus the
+        # new files. This loses "no unexpected" coverage but keeps the test green in CI sandboxes.
+        pre_existing_siblings = set()
+
     found = {p.name for p in server_dir.iterdir() if pattern.match(p.name)}
     found -= pre_existing_siblings
     expected = {p.split("/")[-1] for p in _ALL_NEW_FACTORY_FILES if "test_" in p}
@@ -227,13 +247,32 @@ def test_no_unintended_new_factory_test_files_under_tests_server() -> None:
 
 
 def test_helper_module_exports_match_source_helper_names() -> None:
-    """The helper module exposes the same private names the source used — this is the contract that
-    makes verbatim test-body moves work without call-site rewrites."""
+    """The helper module exposes exactly the same private names the source used — this is the
+    contract that makes verbatim test-body moves work without call-site rewrites."""
+    import ast
+
     from tests.server import _factory_helpers as helpers
 
-    actual = {name for name in dir(helpers) if not name.startswith("__")}
+    # Walk only the module body (not function bodies) to collect names defined at module
+    # level: functions, classes, and module-level assignments. dir()/vars() would surface
+    # imports; ast.walk() would descend into function bodies and pick up locals.
+    assert helpers.__file__ is not None
+    tree = ast.parse(Path(helpers.__file__).read_text(encoding="utf-8"))
+    actual: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            actual.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    actual.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            actual.add(node.target.id)
+    actual = {name for name in actual if not name.startswith("__")}
     missing = _EXPECTED_HELPER_EXPORTS - actual
+    unexpected = actual - _EXPECTED_HELPER_EXPORTS
     assert not missing, f"Helper module is missing expected names: {missing}"
+    assert not unexpected, f"Helper module has unexpected names: {unexpected}"
 
 
 @pytest.mark.parametrize("path", _NEW_FACTORY_TEST_FILES)

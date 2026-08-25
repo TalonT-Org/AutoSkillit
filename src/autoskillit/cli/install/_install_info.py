@@ -18,12 +18,21 @@ from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
+from typing import assert_never
 
-from autoskillit.core import _is_stable_track, get_logger, parse_direct_url
+from autoskillit.core import (
+    ReleaseChannel,
+    ReleaseIdentity,
+    _is_stable_track,
+    distribution_version_at,
+    get_logger,
+    parse_direct_url,
+)
 
 logger = get_logger(__name__)
 
-_INSTALL_FROM_DEVELOP = "git+https://github.com/TalonT-Org/AutoSkillit.git@develop"
+_INSTALL_REPOSITORY = "git+https://github.com/TalonT-Org/AutoSkillit.git"
+_INSTALL_FROM_DEVELOP = f"{_INSTALL_REPOSITORY}@develop"
 _STABLE_DISMISS_WINDOW = timedelta(days=7)
 _DEV_DISMISS_WINDOW = timedelta(hours=12)
 
@@ -86,6 +95,8 @@ def detect_install() -> InstallInfo:
         entrypoint = resolve_autoskillit_entrypoint()
         url = info["url"] or ""
         if info["install_type"] == "git-vcs":
+            if info["commit_id"] is None or info["requested_revision"] is None:
+                return _unknown
             return InstallInfo(
                 install_type=InstallType.GIT_VCS,
                 commit_id=info["commit_id"],
@@ -127,6 +138,50 @@ def classify_track(info: InstallInfo) -> InstallTrack:
     if _is_stable_track(rev):
         return InstallTrack.STABLE
     return InstallTrack.DEV
+
+
+def release_identity(info: InstallInfo, *, version: str) -> ReleaseIdentity:
+    """Construct the running install's identity from explicit version metadata."""
+    track = classify_track(info)
+    match track:
+        case InstallTrack.STABLE:
+            return ReleaseIdentity(ReleaseChannel.RELEASED, version=version)
+        case InstallTrack.DEV:
+            return ReleaseIdentity(
+                ReleaseChannel.BRANCH,
+                version=version,
+                commit=info.commit_id,
+                ref=info.requested_revision,
+            )
+        case InstallTrack.LOCAL:
+            return ReleaseIdentity(ReleaseChannel.WORKING_TREE, version=version)
+        case unhandled:
+            assert_never(unhandled)
+
+
+def installed_identity_at(
+    root: Path,
+    *,
+    channel: ReleaseChannel,
+) -> ReleaseIdentity | None:
+    """Read a release identity from an installed uv tool root."""
+    version = distribution_version_at(root)
+    if version is None:
+        return None
+    match channel:
+        case ReleaseChannel.RELEASED:
+            return ReleaseIdentity(channel, version=version)
+        case ReleaseChannel.BRANCH:
+            direct_url = parse_direct_url(root)
+            commit = direct_url["commit_id"]
+            ref = direct_url["requested_revision"]
+            if commit is None or ref is None:
+                return None
+            return ReleaseIdentity(channel, version=version, commit=commit, ref=ref)
+        case ReleaseChannel.WORKING_TREE:
+            return ReleaseIdentity(channel, version=version)
+        case unhandled:
+            assert_never(unhandled)
 
 
 def comparison_branch(info: InstallInfo) -> str | None:
@@ -172,6 +227,7 @@ class UpgradeCommand:
     """
 
     argv: Sequence[str]
+    mutates_shared_root: bool
     env: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -179,10 +235,15 @@ class UpgradeCommand:
         object.__setattr__(self, "env", MappingProxyType(dict(self.env)))
 
 
+def _install_from_commit(commit: str) -> str:
+    return f"{_INSTALL_REPOSITORY}@{commit}"
+
+
 def upgrade_command(
     info: InstallInfo,
     *,
     install_root_destination: Path | None = None,
+    pin_commit: str | None = None,
 ) -> UpgradeCommand | None:
     """Build the track-aware upgrade command, pinned to this Python minor.
 
@@ -195,21 +256,27 @@ def upgrade_command(
     every other branch — the STABLE and LOCAL_EDITABLE tracks are unchanged.
     """
     if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
-        return UpgradeCommand(argv=["uv", "pip", "install", "-e", str(info.editable_source)])
+        return UpgradeCommand(
+            argv=["uv", "pip", "install", "-e", str(info.editable_source)],
+            mutates_shared_root=True,
+        )
     if info.install_type != InstallType.GIT_VCS:
         return None
     python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
     track = classify_track(info)
     if track != InstallTrack.DEV:
         return UpgradeCommand(
-            argv=["uv", "tool", "upgrade", "autoskillit", "--python", python_pin]
+            argv=["uv", "tool", "upgrade", "autoskillit", "--python", python_pin],
+            mutates_shared_root=True,
         )
-    argv = ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP, "--python", python_pin]
+    requirement = _install_from_commit(pin_commit) if pin_commit else _INSTALL_FROM_DEVELOP
+    argv = ["uv", "tool", "install", "--force", requirement, "--python", python_pin]
     if install_root_destination is None:
-        return UpgradeCommand(argv=argv)
+        return UpgradeCommand(argv=argv, mutates_shared_root=True)
     bin_dir = install_root_destination.parent / f".{install_root_destination.name}-bin"
     return UpgradeCommand(
         argv=argv,
+        mutates_shared_root=False,
         env=MappingProxyType(
             {
                 "UV_TOOL_DIR": str(install_root_destination),

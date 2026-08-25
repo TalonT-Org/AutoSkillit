@@ -24,6 +24,7 @@ from packaging.version import InvalidVersion, Version
 
 from autoskillit.cli.install._install_contract import MaintenanceSubprocessInvocation
 from autoskillit.core import (
+    _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
     get_logger,
     installed_plugin_cache_dir,
@@ -39,6 +40,37 @@ __all__ = ["ObligationRepairOutcome", "ObligationRepairResult", "attempt_obligat
 logger = get_logger(__name__)
 
 _ProcessRunner = Callable[..., "subprocess.CompletedProcess[Any]"]
+
+
+def _installed_branch_identity_key(home: Path, version: str) -> str | None:
+    """Read the published install-root generation's branch identity."""
+    from autoskillit.core import (
+        ReleaseChannel,
+        ReleaseIdentity,
+        parse_direct_url,
+        resolve_current_generation,
+    )
+
+    # This must use the Python install-root store, not the disjoint projected-
+    # plugin store verified later: only the install root contains direct_url.json.
+    generation_root = resolve_current_generation(
+        home,
+        _AUTOSKILLIT_INSTALL_ROOT_KEY,
+        version,
+    )
+    if generation_root is None:
+        return None
+    direct_url = parse_direct_url(generation_root)
+    commit = direct_url["commit_id"]
+    ref = direct_url["requested_revision"]
+    if commit is None or ref is None:
+        return None
+    return ReleaseIdentity(
+        ReleaseChannel.BRANCH,
+        version=version,
+        commit=commit,
+        ref=ref,
+    ).key()
 
 
 def _resolve_repair_entrypoint(environment: Mapping[str, str]) -> Path | None:
@@ -188,13 +220,30 @@ def attempt_obligation_repair(
                 findings=(f"obligation_repair_probe_unparseable: {probed_version!r}",),
             )
 
-        # A stale persisted version would be rejected by the install child.
+        # Prefer the exact branch identity when schema v2 and the published
+        # install-root metadata make it available. Degraded records retain the
+        # existing exact-version fallback used by the install child.
         persisted_version = _valid_version_or_unknown(obligation.expected_version)
-        if persisted_version is not None and persisted_version != probed_version:
+        expected_identity_key = obligation.expected_identity_key
+        observed_identity_key = (
+            _installed_branch_identity_key(home, probed_version)
+            if expected_identity_key is not None
+            else None
+        )
+        expected_staleness_value = expected_identity_key
+        observed_staleness_value = observed_identity_key
+        if observed_staleness_value is None:
+            expected_staleness_value = persisted_version
+            observed_staleness_value = probed_version
+        if (
+            expected_staleness_value is not None
+            and expected_staleness_value != observed_staleness_value
+        ):
             return ObligationRepairResult(
                 outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
                 findings=(
-                    f"obligation_stale: expected {persisted_version}, observed {probed_version}",
+                    "obligation_stale: expected "
+                    f"{expected_staleness_value}, observed {observed_staleness_value}",
                 ),
             )
 

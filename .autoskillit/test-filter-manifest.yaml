@@ -217,6 +217,9 @@ tests/config/golden_configs/*.yaml:
 tests/contracts/config_key_ledger.txt:
   - contracts/
 
+tests/arch/release_comparison_ledger.txt:
+  - arch/
+
 # Local .autoskillit/ config and state files
 .autoskillit/test-source-map.json:
   - infra/

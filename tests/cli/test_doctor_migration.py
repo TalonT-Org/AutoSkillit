@@ -211,7 +211,7 @@ class TestDoctorSourceVersionDriftUsesNetwork:
     def test_doctor_source_version_drift_uses_network_true(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """_check_source_version_drift must call resolve_reference_sha with network=True."""
+        """_check_source_version_drift must resolve the target with network=True."""
         from unittest.mock import MagicMock
 
         from autoskillit.cli.doctor import _check_source_version_drift
@@ -235,19 +235,19 @@ class TestDoctorSourceVersionDriftUsesNetwork:
 
         network_args: list[bool] = []
         monkeypatch.setattr(
-            "autoskillit.cli.update._update_checks.resolve_reference_sha",
+            "autoskillit.cli.update._update_checks_source.resolve_target_identity",
             lambda info, home, **kw: network_args.append(kw.get("network", True)) or None,
         )
 
         _check_source_version_drift(home=tmp_path)
         assert any(n is True for n in network_args), (
-            "_check_source_version_drift must call resolve_reference_sha with network=True"
+            "_check_source_version_drift must resolve the target with network=True"
         )
 
     def test_check_source_version_drift_returns_ok_when_network_unavailable(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """Network error (resolve_reference_sha returns None) → OK, not hard failure."""
+        """Network error (target resolution returns None) → OK, not hard failure."""
         from unittest.mock import MagicMock
 
         from autoskillit.cli.doctor import _check_source_version_drift
@@ -269,7 +269,7 @@ class TestDoctorSourceVersionDriftUsesNetwork:
             lambda _name: fake_dist,
         )
         monkeypatch.setattr(
-            "autoskillit.cli.update._update_checks.resolve_reference_sha",
+            "autoskillit.cli.update._update_checks_source.resolve_target_identity",
             lambda info, home, **kw: None,
         )
 
@@ -326,7 +326,7 @@ def test_source_version_drift_remediation_contains_upgrade_command(
     """_check_source_version_drift WARNING message contains the install-type-specific command."""
     from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli.install._install_info import InstallInfo, InstallType
-    from autoskillit.core import Severity
+    from autoskillit.core import ReleaseChannel, ReleaseIdentity, Severity
 
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
@@ -337,8 +337,8 @@ def test_source_version_drift_remediation_contains_upgrade_command(
     )
     monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha",
-        lambda *a, **kw: "bbbb2222cccc",
+        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        lambda *a, **kw: ReleaseIdentity(ReleaseChannel.RELEASED, version="999.0.0"),
     )
     result = _check_source_version_drift(home=tmp_path)
     assert result.severity == Severity.WARNING

@@ -26,6 +26,7 @@ def test_update_checks_source_importable():
     from autoskillit.cli.update._update_checks_source import (  # noqa: F401
         find_source_repo,
         resolve_reference_sha,
+        resolve_target_identity,
     )
 
 

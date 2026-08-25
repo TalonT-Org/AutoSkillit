@@ -21,11 +21,7 @@ from autoskillit.cli.update._update_checks_fetch import (
     _fetch_with_cache,
 )
 
-from ._update_checks_helpers import (
-    _make_develop_info,
-    _make_mock_client,
-    _make_stable_info,
-)
+from ._update_checks_helpers import _make_develop_info
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -166,21 +162,28 @@ def test_run_update_sequence_invalidates_fetch_cache(
         UpdateTransactionResult,
     )
     from autoskillit.cli.update._update_checks import _run_update_sequence
+    from autoskillit.core import ReleaseChannel, ReleaseIdentity
 
     cache_file = tmp_path / ".autoskillit" / "github_fetch_cache.json"
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text('{"some": "data"}', encoding="utf-8")
 
+    captured: list[dict[str, object]] = []
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.run_update_transaction",
-        lambda **kwargs: UpdateTransactionResult(
-            outcome=UpdateTransactionOutcome.COMPLETED,
-            expected_version="0.9.1",
+        lambda **kwargs: (
+            captured.append(kwargs)
+            or UpdateTransactionResult(
+                outcome=UpdateTransactionOutcome.COMPLETED,
+                expected_version="0.9.1",
+            )
         ),
     )
     monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
-    _run_update_sequence(tmp_path, {})
+    target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.1")
+    _run_update_sequence(tmp_path, {}, target)
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update"
+    assert captured[0]["target_identity"] == target
 
 
 def test_run_update_command_invalidates_fetch_cache(
@@ -444,7 +447,11 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
     import time
 
     from autoskillit.cli.update._update_checks import _binary_signal, invalidate_fetch_cache
-    from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
+    from autoskillit.core import (
+        AUTOSKILLIT_INSTALLED_VERSION,
+        ReleaseChannel,
+        ReleaseIdentity,
+    )
 
     stale_version = "0.0.0-stale"
     newer_version = "99.99.99"
@@ -471,14 +478,12 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
     invalidate_fetch_cache(tmp_path)
     assert not cache_file.exists(), "invalidate must remove cache file"
 
-    mock_client = _make_mock_client(
-        status_code=200,
-        json_body={"tag_name": f"v{newer_version}"},
-        etag='"new-etag"',
+    installed = ReleaseIdentity(
+        ReleaseChannel.RELEASED,
+        version=AUTOSKILLIT_INSTALLED_VERSION,
     )
-    info = _make_stable_info()
-    with patch("httpx.Client", return_value=mock_client):
-        signal = _binary_signal(info, tmp_path, AUTOSKILLIT_INSTALLED_VERSION)
+    target = ReleaseIdentity(ReleaseChannel.RELEASED, version=newer_version)
+    signal = _binary_signal(installed, target, True)
 
     assert signal is not None, "Binary signal must fire after cache invalidation"
     assert newer_version in signal.message
@@ -613,7 +618,7 @@ def test_run_update_sequence_has_no_completed_only_effects_for_every_noncomplete
         "binary_snoozed": True,
         "preserved": "value",
     }
-    _run_update_sequence(tmp_path, state)
+    _run_update_sequence(tmp_path, state, None)
     assert state == {
         "update_prompt": {"conditions": ["binary"]},
         "binary_snoozed": True,
@@ -676,7 +681,7 @@ def test_non_completed_outcome_is_surfaced(
     )
 
     with structlog.testing.capture_logs() as cap_logs:
-        _run_update_sequence(tmp_path, {})
+        _run_update_sequence(tmp_path, {}, None)
 
     warning_events = [e for e in cap_logs if e.get("log_level") == "warning"]
     assert len(warning_events) == 1, f"Expected exactly one warning log, got {warning_events}"
@@ -717,12 +722,16 @@ def test_run_update_sequence_passes_home_and_fresh_process_runner(
         )
 
     monkeypatch.setattr(_update_checks, "run_update_transaction", transaction)
-    _update_checks._run_update_sequence(tmp_path, {})
+    from autoskillit.core import ReleaseChannel, ReleaseIdentity
+
+    target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.1")
+    _update_checks._run_update_sequence(tmp_path, {}, target)
 
     assert captured == [
         {
             "home": tmp_path,
             "process_runner": _update_checks.subprocess.run,
+            "target_identity": target,
         }
     ]
 
@@ -771,7 +780,7 @@ def test_run_update_sequence_restarts_on_success(
         "binary_snoozed": True,
         "preserved": "value",
     }
-    _run_update_sequence(tmp_path, state)
+    _run_update_sequence(tmp_path, state, None)
     assert state == {"preserved": "value"}
     assert written_states == [{"preserved": "value"}]
     assert effects == ["write", "invalidate", "restart"]

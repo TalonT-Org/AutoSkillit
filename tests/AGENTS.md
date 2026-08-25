@@ -296,7 +296,8 @@ registered entity must update its retirement registry in the SAME commit:
   `test_no_retired_skill_name_has_a_live_directory` fails otherwise.
 - **Install artifact shapes** (`~/.autoskillit/`, `~/.claude/plugins/`): changing an
   artifact's *shape* (symlink → real directory, file → directory, …) must add an entry
-  to `RETIRED_INSTALL_ARTIFACT_SHAPES` in `_type_constants.py`. `~/.autoskillit/`
+  to `RETIRED_INSTALL_ARTIFACT_SHAPES` in
+  `src/autoskillit/core/types/_type_constants_retirements.py`. `~/.autoskillit/`
   persists across years of releases while every contract test builds it fresh in
   `tmp_path` — a shape change with no registry entry strands every pre-existing
   install and no test notices. `test_no_retired_artifact_shape_is_unhandled` and

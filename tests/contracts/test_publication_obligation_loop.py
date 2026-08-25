@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -146,6 +147,8 @@ def test_malformed_persisted_obligation_degrades_to_pending_unknown(
         expected_version=None,
         written_at="unknown",
         originating_phase="unknown",
+        previous_identity_key=None,
+        expected_identity_key=None,
     )
 
 
@@ -162,7 +165,222 @@ def test_dangling_obligation_symlink_degrades_to_pending_unknown(tmp_path: Path)
         expected_version=None,
         written_at="unknown",
         originating_phase="unknown",
+        previous_identity_key=None,
+        expected_identity_key=None,
     )
+
+
+def test_obligation_schema_v1_file_degrades_without_crashing(tmp_path: Path) -> None:
+    from autoskillit.workspace import read_obligation
+
+    path = tmp_path / ".autoskillit" / "update_obligation.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "previous_version": "1.0.0",
+                "expected_version": "1.1.0",
+                "written_at": "now",
+                "originating_phase": "upgrade-subprocess-gate",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    obligation = read_obligation(tmp_path)
+    assert obligation is not None
+    assert obligation.previous_version == "unknown"
+    assert obligation.previous_identity_key is None
+    assert obligation.expected_identity_key is None
+
+
+def test_identity_keys_survive_a_disk_round_trip(tmp_path: Path) -> None:
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        previous_identity_key="1.0.0+develop.gaaaaaaaaaaaa",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    updated = update_obligation_expected_version(
+        tmp_path,
+        expected=obligation,
+        expected_version="1.0.0",
+        expected_identity_key="1.0.0+develop.gbbbbbbbbbbbb",
+    )
+
+    assert updated is not None
+    persisted = read_obligation(tmp_path)
+    assert persisted is not None
+    assert persisted.previous_identity_key == "1.0.0+develop.gaaaaaaaaaaaa"
+    assert persisted.expected_identity_key == "1.0.0+develop.gbbbbbbbbbbbb"
+
+
+def _prepare_obligation_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+    home: Path,
+    *,
+    branch: bool,
+) -> None:
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
+
+    registry = home / ".claude" / "plugins" / "installed_plugins.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "plugins": {
+                    "autoskillit@autoskillit-local": [
+                        {"installPath": str(home / "registered-plugin")}
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    info = InstallInfo(
+        InstallType.GIT_VCS,
+        "a" * 40,
+        "develop" if branch else "stable",
+        "https://github.com/TalonT-Org/AutoSkillit.git",
+        None,
+    )
+    monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
+    )
+
+
+def _branch_target(commit: str) -> Any:
+    from autoskillit.core import ReleaseChannel, ReleaseIdentity
+
+    return ReleaseIdentity(
+        ReleaseChannel.BRANCH,
+        version="1.0.0",
+        commit=commit,
+        ref="develop",
+    )
+
+
+def _staged_branch(commit: str) -> Any:
+    return {
+        "install_type": "git-vcs",
+        "requested_revision": "develop",
+        "commit_id": commit,
+        "editable": False,
+        "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+    }
+
+
+def test_post_pivot_failure_on_staged_track_clears_obligation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.update._transaction import (
+        UpdateTransactionOutcome,
+        run_update_transaction,
+    )
+    from autoskillit.workspace import read_obligation
+
+    _prepare_obligation_transaction(monkeypatch, tmp_path, branch=True)
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.0.0",
+        target_identity=_branch_target("b" * 40),
+        staged_identity_reader=lambda _root: _staged_branch("c" * 40),
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
+    assert read_obligation(tmp_path) is None
+
+
+def test_post_pivot_failure_on_in_place_track_retains_obligation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.update._transaction import (
+        UpdateTransactionOutcome,
+        run_update_transaction,
+    )
+    from autoskillit.workspace import read_obligation
+
+    _prepare_obligation_transaction(monkeypatch, tmp_path, branch=False)
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.0.0",
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
+    assert read_obligation(tmp_path) is not None
+
+
+def _run_branch_publication_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    error: Exception,
+) -> Any:
+    from autoskillit.cli.update._transaction import run_update_transaction
+
+    _prepare_obligation_transaction(monkeypatch, tmp_path, branch=True)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.publish_install_root_generation",
+        lambda **_kwargs: (_ for _ in ()).throw(error),
+    )
+    return run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.0.0",
+        target_identity=_branch_target("b" * 40),
+        staged_identity_reader=lambda _root: _staged_branch("b" * 40),
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+    )
+
+
+def test_publication_failure_after_selector_flip_retains_obligation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.update._transaction import UpdateTransactionOutcome
+    from autoskillit.workspace import read_obligation
+
+    result = _run_branch_publication_failure(
+        monkeypatch,
+        tmp_path,
+        OSError("publication failed"),
+    )
+    assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
+    assert read_obligation(tmp_path) is not None
+
+
+def test_infrastructure_fault_during_publication_retains_obligation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import InfrastructureFaultError
+    from autoskillit.workspace import read_obligation
+
+    with pytest.raises(InfrastructureFaultError, match="infrastructure fault"):
+        _run_branch_publication_failure(
+            monkeypatch,
+            tmp_path,
+            InfrastructureFaultError("publication infrastructure fault"),
+        )
+    assert read_obligation(tmp_path) is not None
 
 
 def test_obligation_clear_maps_non_oserror_to_false(
@@ -953,6 +1171,91 @@ def test_stale_obligation_probe_mismatch_returns_missing_expected_version(
     # Probe was called; install was NOT called.
     assert calls == [[str(Path("autoskillit")), "--version"]]
     assert read_obligation(tmp_path) is not None
+
+
+def test_repair_staleness_distinguishes_same_version_different_commits(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.core import (
+        _AUTOSKILLIT_INSTALL_ROOT_KEY,
+        generation_artifact_root,
+        generation_selector_path,
+    )
+    from autoskillit.workspace import (
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    previous = _branch_target("a" * 40)
+    expected = _branch_target("b" * 40)
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        previous_identity_key=previous.key(),
+        originating_phase="upgrade-subprocess-gate",
+    )
+    update_obligation_expected_version(
+        tmp_path,
+        expected=obligation,
+        expected_version="1.0.0",
+        expected_identity_key=expected.key(),
+    )
+
+    generation_root = generation_artifact_root(
+        tmp_path,
+        _AUTOSKILLIT_INSTALL_ROOT_KEY,
+        "1.0.0",
+        "c" * 32,
+    )
+    direct_url_path = (
+        generation_root
+        / "autoskillit"
+        / "lib"
+        / "python3.13"
+        / "site-packages"
+        / "autoskillit-1.0.0.dist-info"
+        / "direct_url.json"
+    )
+    direct_url_path.parent.mkdir(parents=True)
+    direct_url_path.write_text(
+        json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": "develop",
+                    "commit_id": "c" * 40,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    selector = generation_selector_path(
+        tmp_path,
+        _AUTOSKILLIT_INSTALL_ROOT_KEY,
+        "1.0.0",
+    )
+    selector.symlink_to(generation_root.name, target_is_directory=True)
+
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0, stdout="1.0.0\n")
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.MISSING_EXPECTED_VERSION
+    assert result.findings == (
+        f"obligation_stale: expected {expected.key()}, observed 1.0.0+develop.gcccccccccccc",
+    )
+    assert calls == [[str(Path("autoskillit")), "--version"]]
 
 
 def test_valid_obligation_probe_first_then_install_clears(

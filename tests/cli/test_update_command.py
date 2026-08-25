@@ -14,6 +14,7 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionResult,
     process_status_for_update_outcome,
 )
+from autoskillit.core import ReleaseChannel, ReleaseIdentity
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -234,13 +235,25 @@ def test_explicit_update_runs_the_transaction_exactly_once(
     monkeypatch.setattr(_update_checks, "detect_install", lambda: _make_stable_info())
     monkeypatch.setattr(
         _update_checks,
+        "resolve_target_identity",
+        lambda info, home: ReleaseIdentity(
+            ReleaseChannel.RELEASED,
+            version="9.9.9",
+        ),
+    )
+    monkeypatch.setattr(
+        _update_checks,
         "_binary_signal",
-        lambda info, home, current: _update_checks.Signal(
+        lambda installed, target, available: _update_checks.Signal(
             "binary", "New release: 9.9.9 (you have 0.0.0)"
         ),
     )
     monkeypatch.setattr(_update_checks, "_hooks_signal", lambda settings_path: None)
-    monkeypatch.setattr(_update_checks, "_source_drift_signal", lambda info, home: None)
+    monkeypatch.setattr(
+        _update_checks,
+        "_source_drift_signal",
+        lambda installed, target, available: None,
+    )
     monkeypatch.setattr(
         _update_checks,
         "_claude_settings_path",

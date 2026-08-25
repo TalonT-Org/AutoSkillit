@@ -117,6 +117,7 @@ class TestModuleCascadeCore:
             "_type_protocols_backend",
             "_type_skill_semantics",
             "_install_detect",
+            "_release_identity",
             "_linux_proc",
             "executable_binding",
             "_type_plugin_source",

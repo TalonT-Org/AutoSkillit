@@ -12,6 +12,7 @@ import pytest
 
 from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.cli.update._update_checks import run_update_checks
+from autoskillit.core import ReleaseChannel, ReleaseIdentity
 
 from ._update_checks_helpers import _make_develop_info, _make_stable_info
 
@@ -131,77 +132,113 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
 # ---------------------------------------------------------------------------
 
 
-def test_binary_signal_fires_when_newer_version_available(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_binary_signal_fires_when_newer_version_available() -> None:
     from autoskillit.cli.update._update_checks import _binary_signal
 
-    info = _make_stable_info()
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version",
-        lambda target, home: "0.9.0",
-    )
-    sig = _binary_signal(info, tmp_path, "0.7.77")
+    installed = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.7.77")
+    target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.0")
+    sig = _binary_signal(installed, target, True)
     assert sig is not None
     assert sig.kind == "binary"
     assert "0.9.0" in sig.message
     assert "0.7.77" in sig.message
+    assert sig.target == target
 
 
-def test_binary_signal_silent_when_same_version(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_binary_signal_silent_when_same_version() -> None:
     from autoskillit.cli.update._update_checks import _binary_signal
 
-    info = _make_stable_info()
+    installed = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.7.77")
+    target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.7.77")
+    assert _binary_signal(installed, target, False) is None
+
+
+def test_binary_signal_silent_when_target_unresolved() -> None:
+    from autoskillit.cli.update._update_checks import _binary_signal
+
+    installed = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.7.77")
+    assert _binary_signal(installed, None, True) is None
+
+
+@pytest.mark.parametrize("revision", ["main", "v0.9.0"])
+def test_released_target_resolver_reads_requested_revision(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    revision: str,
+) -> None:
+    from autoskillit.cli.update._update_checks_source import resolve_target_identity
+
+    info = _make_stable_info(revision=revision)
+    refs: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version",
-        lambda target, home: "0.7.77",
+        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        lambda ref, home: refs.append(ref) or "0.9.0",
     )
-    assert _binary_signal(info, tmp_path, "0.7.77") is None
+    target = resolve_target_identity(info, tmp_path)
+
+    assert refs == [revision]
+    assert target == ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.0")
 
 
-def test_binary_signal_silent_when_fetch_returns_none(
+def test_branch_target_resolver_reads_requested_branch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli.update._update_checks import _binary_signal
-
-    info = _make_stable_info()
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version",
-        lambda target, home: None,
-    )
-    assert _binary_signal(info, tmp_path, "0.7.77") is None
-
-
-def test_binary_signal_uses_releases_url_for_stable(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.cli.update._update_checks import _binary_signal
-
-    info = _make_stable_info()
-    targets: list[str] = []
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version",
-        lambda target, home: targets.append(target) or "0.9.0",
-    )
-    _binary_signal(info, tmp_path, "0.7.77")
-    assert targets == ["releases/latest"]
-
-
-def test_binary_signal_uses_develop_url_for_develop(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.cli.update._update_checks import _binary_signal
+    from autoskillit.cli.update._update_checks_source import resolve_target_identity
 
     info = _make_develop_info()
-    targets: list[str] = []
+    refs: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version",
-        lambda target, home: targets.append(target) or "0.9.0",
+        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        lambda ref, home: refs.append(ref) or "0.9.0",
     )
-    _binary_signal(info, tmp_path, "0.7.77")
-    assert targets == ["develop"]
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks_source.resolve_reference_sha",
+        lambda info, home, *, network: "bbbbbb",
+    )
+    target = resolve_target_identity(info, tmp_path)
+
+    assert refs == ["develop"]
+    assert target == ReleaseIdentity(
+        ReleaseChannel.BRANCH,
+        version="0.9.0",
+        commit="bbbbbb",
+        ref="develop",
+    )
+
+
+def test_local_target_resolver_returns_none_without_fetch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.cli.update._update_checks_source import resolve_target_identity
+
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_EDITABLE,
+        commit_id=None,
+        requested_revision=None,
+        url=tmp_path.as_uri(),
+        editable_source=tmp_path,
+    )
+    fetched: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        lambda ref, home: fetched.append(ref) or "0.9.0",
+    )
+
+    assert resolve_target_identity(info, tmp_path) is None
+    assert fetched == []
+
+
+def test_target_resolver_fails_open_on_invalid_version(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.cli.update._update_checks_source import resolve_target_identity
+
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        lambda ref, home: "not-a-version",
+    )
+
+    assert resolve_target_identity(_make_stable_info(), tmp_path) is None
 
 
 def test_hooks_signal_fires_on_missing_hooks(
@@ -249,47 +286,42 @@ def test_hooks_signal_silent_when_no_drift(
     assert _hooks_signal(tmp_path / "settings.json") is None
 
 
-def test_source_drift_signal_fires_when_commit_lags_ref(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_source_drift_signal_fires_when_commit_lags_ref() -> None:
     from autoskillit.cli.update._update_checks import _source_drift_signal
 
-    info = _make_stable_info(commit_id="aaaaaa")
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha",
-        lambda info, home, **kw: "bbbbbb",
+    installed = ReleaseIdentity(
+        ReleaseChannel.BRANCH, version="0.7.77", commit="aaaaaa", ref="develop"
     )
-    sig = _source_drift_signal(info, tmp_path)
+    target = ReleaseIdentity(
+        ReleaseChannel.BRANCH, version="0.7.77", commit="bbbbbb", ref="develop"
+    )
+    sig = _source_drift_signal(installed, target, True)
     assert sig is not None
     assert sig.kind == "source_drift"
+    assert sig.target == target
     # "source drift" must NOT appear in user-visible text (per plan verification item 11)
     assert "source drift" not in sig.message.lower()
 
 
-def test_source_drift_signal_silent_when_sha_matches(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_source_drift_signal_silent_when_sha_matches() -> None:
     from autoskillit.cli.update._update_checks import _source_drift_signal
 
-    info = _make_stable_info(commit_id="aaaaaa")
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha",
-        lambda info, home, **kw: "aaaaaa",
+    installed = ReleaseIdentity(
+        ReleaseChannel.BRANCH, version="0.7.77", commit="aaaaaa", ref="develop"
     )
-    assert _source_drift_signal(info, tmp_path) is None
+    target = ReleaseIdentity(
+        ReleaseChannel.BRANCH, version="0.9.0", commit="aaaaaa", ref="develop"
+    )
+    assert _source_drift_signal(installed, target, False) is None
 
 
-def test_source_drift_signal_silent_when_ref_sha_none(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_source_drift_signal_silent_when_ref_sha_none() -> None:
     from autoskillit.cli.update._update_checks import _source_drift_signal
 
-    info = _make_stable_info(commit_id="aaaaaa")
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha",
-        lambda info, home, **kw: None,
+    installed = ReleaseIdentity(
+        ReleaseChannel.BRANCH, version="0.7.77", commit="aaaaaa", ref="develop"
     )
-    assert _source_drift_signal(info, tmp_path) is None
+    assert _source_drift_signal(installed, None, True) is None
 
 
 def test_dual_mcp_signal_fires_when_both_registered(

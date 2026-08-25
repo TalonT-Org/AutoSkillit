@@ -41,6 +41,7 @@ from ._install_binding import resolve_install_binding as resolve_install_binding
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag
 from ._install_detect import _is_stable_track as _is_stable_track
+from ._install_detect import distribution_version_at as distribution_version_at
 from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
@@ -111,6 +112,12 @@ from ._plugin_ids import parse_installed_plugin_semantic_key as parse_installed_
 from ._plugin_ids import project_agent_tool_name as project_agent_tool_name
 from ._plugin_ids import registered_install_paths as registered_install_paths
 from ._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
+from ._release_identity import AdvanceVerdict as AdvanceVerdict
+from ._release_identity import ReleaseChannel as ReleaseChannel
+from ._release_identity import ReleaseIdentity as ReleaseIdentity
+from ._release_identity import advance_verdict as advance_verdict
+from ._release_identity import update_available as update_available
+from ._release_identity import version_advanced as version_advanced
 from ._retiring_cache import _InstallLock as _InstallLock
 from ._retiring_cache import append_retiring_record as append_retiring_record
 from ._retiring_cache import due_retiring_records as due_retiring_records

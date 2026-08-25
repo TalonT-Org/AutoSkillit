@@ -143,9 +143,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/install/_installed_plugins.py", 81),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/update/_update_checks.py", 86),
+    ("src/autoskillit/cli/update/_update_checks.py", 95),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
-    ("src/autoskillit/cli/update/_update_checks_fetch.py", 55),
+    ("src/autoskillit/cli/update/_update_checks_fetch.py", 67),
     # smoke_utils/_review_design.py — enriched handoff and manifest
     ("src/autoskillit/smoke_utils/_review_design.py", 283),
     ("src/autoskillit/smoke_utils/_review_design.py", 384),

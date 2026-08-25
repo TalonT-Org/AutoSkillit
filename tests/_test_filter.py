@@ -346,6 +346,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "core", "execution", "fleet", "pipeline", "server"}
     ),
     "_install_detect": frozenset({"core", "cli", "config"}),
+    "_release_identity": frozenset({"core", "cli"}),
     "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
     "_type_plugin_source": frozenset(
         {"core", "execution", "pipeline", "server", "cli", "workspace", "smoke_utils"}

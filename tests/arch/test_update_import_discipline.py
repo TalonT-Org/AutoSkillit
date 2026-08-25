@@ -1,4 +1,4 @@
-"""Require update modules to import third-party dependencies before pivots."""
+"""Require post-pivot code to import third-party dependencies before pivots."""
 
 from __future__ import annotations
 
@@ -13,7 +13,11 @@ from tests.arch._helpers import _function_local_imports
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _STDLIB = frozenset(sys.stdlib_module_names) | frozenset(sys.builtin_module_names)
-_UPDATE_PKG = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "cli" / "update"
+_SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+_POST_PIVOT_IMPORT_SURFACES = (
+    _SOURCE_ROOT / "cli" / "update",
+    _SOURCE_ROOT / "core" / "_release_identity.py",
+)
 
 
 def _top_level_module(dotted: str) -> str:
@@ -38,14 +42,24 @@ def _function_local_third_party_imports(path: Path) -> list[str]:
     return violations
 
 
-def test_no_function_local_third_party_imports_in_update_package() -> None:
-    """Every third-party import in cli/update/*.py must be at module top."""
+def _scanned_files() -> tuple[Path, ...]:
+    files: list[Path] = []
+    for surface in _POST_PIVOT_IMPORT_SURFACES:
+        if surface.suffix == ".py":
+            files.append(surface)
+        else:
+            files.extend(sorted(surface.glob("*.py")))
+    return tuple(files)
+
+
+def test_no_function_local_third_party_imports_in_post_pivot_surface() -> None:
+    """Every third-party import reachable after a pivot must be at module top."""
     violations: list[str] = []
-    for path in sorted(_UPDATE_PKG.glob("*.py")):
+    for path in _scanned_files():
         violations.extend(_function_local_third_party_imports(path))
     assert not violations, (
-        "Function-local third-party imports found in cli/update/ — hoist to "
-        "module top so the failure path's imports are complete before the "
+        "Function-local third-party imports found post-pivot — hoist to module "
+        "top so the failure path's imports are complete before the "
         "pivot:\n" + "\n".join(violations)
     )
 

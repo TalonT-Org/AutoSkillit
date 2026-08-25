@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from ..io import atomic_write
+
 __all__ = [
     "BoundedCandidate",
     "EvidenceSource",
@@ -377,10 +379,9 @@ def append_and_trim_jsonl(path: Path, line: str, *, max_lines: int) -> None:
     also plain appends without file locking); an interleaved concurrent append from another
     process could be dropped by the trim. Acceptable for best-effort operational event logs.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
     existing: list[str] = []
     if path.exists():
         existing = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
     existing.append(line)
     trimmed = trim_jsonl_lines(existing, max_lines=max_lines)
-    path.write_text("\n".join(trimmed) + ("\n" if trimmed else ""), encoding="utf-8")
+    atomic_write(path, "\n".join(trimmed) + ("\n" if trimmed else ""))

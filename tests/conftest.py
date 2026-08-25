@@ -31,6 +31,13 @@ from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_ca
 
 _AMBIENT_ENV_AT_STARTUP: Mapping[str, str] = MappingProxyType(dict(os.environ))
 
+#: Captured at collection time, before any test can monkeypatch shutil.rmtree
+#: (e.g. via monkeypatch.setattr("some.module.shutil.rmtree", ...), which patches
+#: the one shared shutil module object every importer sees). Test-infrastructure
+#: cleanup (_isolated_home's finalizer) must not be at the mercy of what a test
+#: body mocks out during its own run.
+_real_rmtree = shutil.rmtree
+
 
 def pytest_report_header(config: pytest.Config) -> list[str] | None:
     from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
@@ -305,7 +312,7 @@ def _isolated_home(monkeypatch, tmp_path_factory, request):
     xdist worker), not the cumulative count of every test the worker has ever run.
     """
     isolated_home = tmp_path_factory.mktemp("isolated-home")
-    request.addfinalizer(lambda: shutil.rmtree(isolated_home, ignore_errors=True))
+    request.addfinalizer(lambda: _real_rmtree(isolated_home, ignore_errors=True))
     monkeypatch.setattr("pathlib.Path.home", lambda: isolated_home)
     monkeypatch.setenv("HOME", str(isolated_home))
     monkeypatch.setenv("XDG_CACHE_HOME", str(isolated_home / ".cache"))

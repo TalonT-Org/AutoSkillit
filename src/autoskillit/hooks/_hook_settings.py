@@ -423,7 +423,7 @@ def _append_and_trim_jsonl_line(path: Path, line: str, *, max_lines: int) -> Non
     existing.append(line)
     if max_lines > 0 and len(existing) > max_lines:
         existing = existing[-max_lines:]
-    path.write_text("\n".join(existing) + "\n", encoding="utf-8")
+    _atomic_write_marker(path, "\n".join(existing) + "\n")
 
 
 def write_quota_log_event(event: dict, log_dir: Path | None, *, caller: str = "") -> None:

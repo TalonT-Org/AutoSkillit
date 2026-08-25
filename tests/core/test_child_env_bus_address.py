@@ -11,6 +11,8 @@ DBUS_SESSION_BUS_ADDRESS" on their output would be vacuous.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from autoskillit.core import build_agent_env, build_maintenance_env
@@ -21,12 +23,24 @@ from autoskillit.hooks._capture_process import _scrubbed_user_environment
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
+def _base(**extra: str) -> dict[str, str]:
+    """A synthetic base_env carrying only `extra` plus the real host's current
+    DBUS_SESSION_BUS_ADDRESS, if any -- build_agent_env/build_maintenance_env/
+    CodexEnvPolicy.build_env all take base_env as an explicit dependency-injection
+    seam and read it (not os.environ) for forwarding, so a host-value forwarding
+    test must carry the (possibly monkeypatched) host value through this dict."""
+    base = dict(extra)
+    if "DBUS_SESSION_BUS_ADDRESS" in os.environ:
+        base["DBUS_SESSION_BUS_ADDRESS"] = os.environ["DBUS_SESSION_BUS_ADDRESS"]
+    return base
+
+
 def _build_agent_env_result() -> str | None:
-    return dict(build_agent_env(base={"PATH": "/bin"})).get("DBUS_SESSION_BUS_ADDRESS")
+    return dict(build_agent_env(base=_base(PATH="/bin"))).get("DBUS_SESSION_BUS_ADDRESS")
 
 
 def _build_maintenance_env_result() -> str | None:
-    return dict(build_maintenance_env({"HOME": "/home/x"})).get("DBUS_SESSION_BUS_ADDRESS")
+    return dict(build_maintenance_env(_base(HOME="/home/x"))).get("DBUS_SESSION_BUS_ADDRESS")
 
 
 def _build_sanitized_env_result() -> str | None:
@@ -34,7 +48,7 @@ def _build_sanitized_env_result() -> str | None:
 
 
 def _codex_env_policy_result() -> str | None:
-    return CodexEnvPolicy().build_env({"PATH": "/bin"}).get("DBUS_SESSION_BUS_ADDRESS")
+    return CodexEnvPolicy().build_env(_base(PATH="/bin")).get("DBUS_SESSION_BUS_ADDRESS")
 
 
 def _scrubbed_user_environment_result() -> str | None:

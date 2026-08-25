@@ -577,9 +577,9 @@ def _make_state_file(project_dir, campaign_id, status):
 
 def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
     """Sessions belonging to an active campaign survive retention even when expired."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution._session_retention as retention_module
 
-    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -666,9 +666,9 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
 
 def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
     """Sessions whose campaign is in a terminal state are eligible for deletion."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution._session_retention as retention_module
 
-    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -727,9 +727,9 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
 
 def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
     """Protected sessions' entries survive the sessions.jsonl rewrite."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution._session_retention as retention_module
 
-    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -782,9 +782,9 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
 
 def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
     """Session dirs without meta.json are not protected (normal deletion)."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution._session_retention as retention_module
 
-    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -829,9 +829,9 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
 
 def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
     """No franchise state files → normal retention behavior (no crash)."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution._session_retention as retention_module
 
-    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -880,12 +880,12 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
 
 def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
     """Malformed meta.json → session not protected (graceful degradation)."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution._session_retention as retention_module
 
-    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
     warning_events: list[str] = []
     monkeypatch.setattr(
-        sl_module.logger,
+        retention_module.logger,
         "warning",
         lambda event, **_kwargs: warning_events.append(event),
     )
@@ -951,9 +951,9 @@ def test_session_log_removed_terminal_statuses_constant() -> None:
 
 def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypatch) -> None:
     """SL_CB_6: build_protected_campaign_ids=None with active campaign → no protection applied."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution._session_retention as retention_module
 
-    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -1025,7 +1025,7 @@ def test_flush_uses_campaign_protector_during_transaction(tmp_path: Path) -> Non
 
 def test_max_sessions_constant_is_2000():
     """T5: _MAX_SESSIONS equals 2000."""
-    from autoskillit.execution.session_log import _MAX_SESSIONS
+    from autoskillit.execution._session_retention import _MAX_SESSIONS
 
     assert _MAX_SESSIONS == 2000
 

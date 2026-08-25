@@ -99,6 +99,12 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 Shared recipe-delivery budgets used by contract matrices live in
 `tests/contracts/_delivery_constants.py`.
 
+Workspace-layer mechanisms (clone lifecycle, plugin projection, the shared asset store)
+belong in `tests/workspace/`, not `tests/contracts/`, even when they touch plugin artifacts
+-- `tests/contracts/` is reserved for SKILL.md content validation, not workspace-layer
+plumbing. `tests/workspace/test_shared_asset_store.py` (S3-1's content-addressed hardlink
+store) is placed here intentionally for this reason.
+
 ## Environment Parity
 
 The test harness sets env vars (via Taskfile `env:` blocks) that diverge from

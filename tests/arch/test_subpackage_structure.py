@@ -146,6 +146,7 @@ class TestCoreSubpackages:
             "session_provenance",
             "session_registry",
             "_linux_proc",
+            "_reclamation",
         }
         actual = {p.stem for p in (SRC / "core" / "runtime").glob("*.py") if p.stem != "__init__"}
         assert actual == expected

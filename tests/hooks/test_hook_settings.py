@@ -377,10 +377,12 @@ def test_write_quota_log_event_silent_when_no_caller(tmp_path, capsys):
 
 # T-HS-22
 def test_write_quota_log_event_prints_stderr_with_caller(tmp_path, capsys):
-    """open raises; write_quota_log_event(..., caller="test_hook") prints to stderr."""
+    """Temp-file creation raises (disk full); write_quota_log_event(..., caller="test_hook")
+    prints to stderr. The write path is _atomic_write_marker's tempfile.mkstemp +
+    os.fdopen + os.replace, not Path.write_text/builtins.open."""
     from autoskillit.hooks._hook_settings import write_quota_log_event
 
-    with patch("builtins.open", side_effect=OSError("disk full")):
+    with patch("tempfile.mkstemp", side_effect=OSError("disk full")):
         write_quota_log_event({}, tmp_path, caller="test_hook")
     captured = capsys.readouterr()
     assert "test_hook" in captured.err

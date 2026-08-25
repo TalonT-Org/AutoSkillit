@@ -10,25 +10,47 @@ Keys are `"<dotted_path>::L<lineno>"` -- mechanically derivable from the AST (a 
 and not the function's final top-level statement) -- so the scanner does not need to guess a
 human-chosen semantic label. The `justification` on each entry carries the semantic meaning.
 
-**Scope, stated honestly.** The plan names eight reclaimers for this audit. Four of them --
-`workspace/clone_registry.py::CloneRegistry.candidates`, `cli/_workspace.py`'s worktree-age
-filter, `workspace/_projection_cache.py::prune_stale_projections`'s `active_key` comprehension
-filter, `hooks/_capture/_sweep.py::sweep_one` (whose `CarrierLeaseLive` predicate is raised in
-a *different* function than the one that catches it), and `core/_plugin_cache.py`'s
-`PluginArtifactRetirementEngine.try_reclaim` (whose many early-return SKIP outcomes are mixed
-with several early-return SUCCESS outcomes -- RECLAIMED, RECORD_REMOVED -- inside deeply
-nested `try`/`finally` blocks, so a syntax-only "every return is a skip" rule would
-misclassify its own successful-completion paths) -- route their retention decision through a
-shape a continue/break/return walk cannot audit without either a materially more complex
-classifier (cross-function dataflow tracing, semantic understanding of which enum members
-are "success") or a refactor whose blast radius does not belong in this pass.
+**Coverage.** All eleven reclaimers the plan names are covered: the eight in its "Covers:"
+list (`scripts/pytest_tmp_lifecycle.py::_reap`, `workspace/session_skills.py::cleanup_stale`,
+`workspace/clone_registry.py::cleanup_candidates`, `workspace/worktree.py::remove_git_worktree`
+and `::remove_worktree_sidecar`, `execution/session_log.py`'s retention block (now
+`execution/_session_retention.py`),
+`fleet/_dispatch_reaper.py::reap_stale_dispatches`, `hooks/_capture/_sweep.py::sweep_one`),
+`scripts/pytest_tmp_lifecycle.py::_safe_candidates` (named separately in the plan's scanner-
+design section), and the three further reclaimers the plan flags as MUST-include --
+`workspace/_projection_cache.py::prune_stale_projections`, and the
+`PluginArtifactRetirementEngine`/`PluginRetirementCoordinator` implementations of
+`try_reclaim`/`sweep_due` in `core/_plugin_cache.py` and `cli/install/_plugin_artifact.py`
+(`core/_plugin_cache.py` implements only `try_reclaim`; `sweep_due` exists only on
+`cli/install/_plugin_artifact.py`'s `DefaultPluginRetirementCoordinator` -- there is no
+`core/_plugin_cache.py::sweep_due`, so it is not declared below). This closes the exact gap
+commit `0949f8a8f` ("fix: make the plugin generation store actually reclaimable", #4689/#4690)
+found: 47 version directories under `~/.autoskillit/plugin-generations/` silently
+unreclaimable for ~10 days because retention there was unaudited.
 
-This registry therefore covers the three reclaimers whose retention logic already has the
-continue/break/skip-all-return shape the scanner can verify mechanically:
-`scripts/pytest_tmp_lifecycle.py::_reap`, `scripts/pytest_tmp_lifecycle.py::_safe_candidates`,
-and `fleet/_dispatch_reaper.py::reap_stale_dispatches`. Extending coverage to the deferred
-reclaimers is follow-up work, not silently dropped: each is named above with its file and
-function so a future pass can pick it up directly.
+**Two functions were retargeted, not deferred, from the plan's literal reading.**
+`clone_registry.py` has both a `CloneRegistry.candidates` *method* (identity/liveness logic,
+several branches) and a module-level `cleanup_candidates` *function* (list-comprehension
+filtering over already-read registry entries, zero continue/break/return branches) -- the
+plan names the latter, which is what is declared here. `execution/session_log.py`'s
+"retention block" was inline code inside the ~600-line `flush_session_log`; auditing that
+whole function would sweep in dozens of branches unrelated to retention, so the block was
+extracted (behavior-preserving) into its own `execution/_session_retention.py::
+apply_session_retention()` -- a dedicated module, not just a dedicated function, so
+`session_log.py` also stays under its 750-line warning-zone budget
+(`tests/arch/test_file_size_budgets.py`) -- precisely so this registry can target the
+retention decision alone.
+
+**Not every continue/break/return is a retention decision.** Per the plan: "classify a branch
+as a retention decision only when its condition references a liveness, evidence, or age
+predicate... Defensive skips are reported separately under a SAFETY shape." Several of the
+newly-covered reclaimers return early on a successful completion (e.g. the true "reclaimed"
+path in `try_reclaim`, or a "not registered with git" / "already deleted" report) purely
+because that return sits inside a `try`/`with` block rather than being the function's
+outermost statement -- the scanner's syntax-only walk cannot distinguish "reports success" from
+"skips reclaiming", so those are registered as `SafetyDecision`s that say so explicitly, the
+same treatment `fleet._dispatch_reaper::reap_stale_dispatches`'s existing entries already give
+a `continue` that follows a reclaim action rather than preceding one.
 """
 
 from __future__ import annotations
@@ -61,8 +83,8 @@ class RetentionDecision:
 @dataclass(frozen=True, slots=True)
 class SafetyDecision:
     """A branch that skips reclamation for a reason other than liveness/evidence/age --
-    an inspection failure, a type/ownership guard, or (dispatch reaper) a `continue` that
-    fires *after* the reclaim action already happened this iteration, not before it.
+    an inspection failure, a type/ownership guard, or a `continue`/`return` that fires
+    *after* the reclaim action (or an equivalent completion) already happened, not before it.
     """
 
     justification: str
@@ -83,12 +105,60 @@ RECLAIMER_TARGETS: dict[str, tuple[Path, str]] = {
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",
         "reap_stale_dispatches",
     ),
+    "workspace.session_skills::cleanup_stale": (
+        SRC_ROOT / "workspace" / "session_skills.py",
+        "cleanup_stale",
+    ),
+    "workspace.clone_registry::cleanup_candidates": (
+        SRC_ROOT / "workspace" / "clone_registry.py",
+        "cleanup_candidates",
+    ),
+    "workspace.worktree::remove_git_worktree": (
+        SRC_ROOT / "workspace" / "worktree.py",
+        "remove_git_worktree",
+    ),
+    "workspace.worktree::remove_worktree_sidecar": (
+        SRC_ROOT / "workspace" / "worktree.py",
+        "remove_worktree_sidecar",
+    ),
+    "execution._session_retention::apply_session_retention": (
+        SRC_ROOT / "execution" / "_session_retention.py",
+        "apply_session_retention",
+    ),
+    "hooks._capture._sweep::sweep_one": (
+        SRC_ROOT / "hooks" / "_capture" / "_sweep.py",
+        "sweep_one",
+    ),
+    "workspace._projection_cache::prune_stale_projections": (
+        SRC_ROOT / "workspace" / "_projection_cache.py",
+        "prune_stale_projections",
+    ),
+    "core._plugin_cache::try_reclaim": (
+        SRC_ROOT / "core" / "_plugin_cache.py",
+        "try_reclaim",
+    ),
+    "cli.install._plugin_artifact::try_reclaim": (
+        SRC_ROOT / "cli" / "install" / "_plugin_artifact.py",
+        "try_reclaim",
+    ),
+    "cli.install._plugin_artifact::sweep_due": (
+        SRC_ROOT / "cli" / "install" / "_plugin_artifact.py",
+        "sweep_due",
+    ),
 }
 
 
 _R = "scripts.pytest_tmp_lifecycle::_reap"
 _S = "scripts.pytest_tmp_lifecycle::_safe_candidates"
 _D = "fleet._dispatch_reaper::reap_stale_dispatches"
+_CS = "workspace.session_skills::cleanup_stale"
+_WGW = "workspace.worktree::remove_git_worktree"
+_WWS = "workspace.worktree::remove_worktree_sidecar"
+_SL = "execution._session_retention::apply_session_retention"
+_SW = "hooks._capture._sweep::sweep_one"
+_PP = "workspace._projection_cache::prune_stale_projections"
+_PC = "core._plugin_cache::try_reclaim"
+_CT = "cli.install._plugin_artifact::sweep_due"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # -- scripts.pytest_tmp_lifecycle::_reap --
@@ -211,5 +281,233 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "Survivors reported by kill_process_tree's cleanup_result mean the process may "
         "still be alive -- the dispatch record is deliberately left RUNNING for a retry, "
         "an observed-liveness result standing in for a direct /proc reference check.",
+    ),
+    # -- workspace.session_skills::cleanup_stale --
+    f"{_CS}::L1347": SafetyDecision(
+        "The candidate root directory does not exist; nothing here to scan or reclaim."
+    ),
+    f"{_CS}::L1351": SafetyDecision(
+        "The session-leases bookkeeping subdirectory itself is not a session; a structural "
+        "exclusion, not an eligibility decision."
+    ),
+    f"{_CS}::L1353": SafetyDecision(
+        "A non-directory entry under the candidate root is a type guard, never a session "
+        "directory this function reclaims."
+    ),
+    f"{_CS}::L1357": RetentionDecision(
+        Revocability.REVOCABLE,
+        "An entry with an in-process session lease held by this process is retained -- "
+        "self-held-lease evidence overrides the age threshold, the domain equivalent of a "
+        "live owner reference.",
+    ),
+    f"{_CS}::L1363": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Failure to acquire the non-blocking lease means another process currently holds "
+        "a live lock on this entry, a directly observed live-owner reference.",
+    ),
+    f"{_CS}::L1382": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Removal did not occur because the re-checked mtime under lease is fresh again or "
+        "the entry already vanished -- the mtime re-check under lease is the reclamation-"
+        "defining age/liveness re-verification for this candidate.",
+    ),
+    # -- workspace.worktree::remove_git_worktree --
+    f"{_WGW}::L73": SafetyDecision(
+        "The worktree path does not exist on disk at all; nothing here to reclaim."
+    ),
+    f"{_WGW}::L82": SafetyDecision(
+        "The git worktree remove call already succeeded; this reports a completed removal, "
+        "not a retention skip."
+    ),
+    # -- workspace.worktree::remove_worktree_sidecar --
+    f"{_WWS}::L114": SafetyDecision(
+        "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
+    ),
+    # -- execution._session_retention::apply_session_retention --
+    f"{_SL}::L51": SafetyDecision(
+        "The just-recommitted crash-recovery directory for this same dir_name is protected "
+        "from being counted as expired in the same flush that created it, the session-log "
+        "equivalent of a reaper excluding the generation it is currently claiming."
+    ),
+    f"{_SL}::L67": RetentionDecision(
+        Revocability.REVOCABLE,
+        "A caller-declared protected campaign id is honoured unconditionally, retaining "
+        "the session directory regardless of its age, the same self-exclusion family as "
+        "the dispatch reaper's protected-id set.",
+    ),
+    # -- hooks._capture._sweep::sweep_one --
+    f"{_SW}::L616": RetentionDecision(
+        Revocability.REVOCABLE,
+        "The record is absent, already deleted, or its next_attempt_at is still in the "
+        "future -- the schedule/age gate retains anything not yet eligible for its next "
+        "sweep attempt.",
+    ),
+    f"{_SW}::L627": RetentionDecision(
+        Revocability.REVOCABLE,
+        "An issued or published capture reference has not yet reached its recorded expiry; "
+        "retained until the reference-expiry deadline passes.",
+    ),
+    f"{_SW}::L652": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Re-verified under the second lock: the record vanished, changed identity since "
+        "the first check, or is still not due -- the same due-date gate re-applied after "
+        "the lease acquisition race window.",
+    ),
+    f"{_SW}::L675": SafetyDecision(
+        "Abandoned-record normalization determined the record is already DELETED; this "
+        "reports that terminal outcome, not a retention gate."
+    ),
+    f"{_SW}::L715": SafetyDecision(
+        "The successful-deletion completion path; not a retention skip, this line reports "
+        "that reclamation succeeded."
+    ),
+    f"{_SW}::L717": RetentionDecision(
+        Revocability.REVOCABLE,
+        "A CarrierLeaseLive exception means an active lease currently holds this capture; "
+        "retained until the lease is released, a directly observed live reference.",
+    ),
+    f"{_SW}::L739": RetentionDecision(
+        Revocability.REVOCABLE,
+        "A tampered record is retained for a fixed forensic hold window recorded via "
+        "next_attempt_at, evidence preserved for investigation before re-eligibility.",
+    ),
+    f"{_SW}::L753": SafetyDecision(
+        "A lifecycle or OSError during the delete attempt is an execution failure, not "
+        "evidence about the candidate's liveness; retried up to max_retry_seconds."
+    ),
+    # -- workspace._projection_cache::prune_stale_projections --
+    f"{_PP}::L501": SafetyDecision(
+        "The projections root does not exist; there is nothing here to prune."
+    ),
+    f"{_PP}::L520": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Lease contention means another process currently holds an exclusive lock on this "
+        "candidate, a directly observed live reference.",
+    ),
+    f"{_PP}::L531": SafetyDecision(
+        "Manifest validation failed while resolving the candidate's identity; an inspection "
+        "failure, not evidence the candidate is still live."
+    ),
+    f"{_PP}::L538": SafetyDecision(
+        "Identity resolution was unavailable for this candidate; an inspection failure, "
+        "not evidence of liveness."
+    ),
+    f"{_PP}::L545": SafetyDecision(
+        "The retirement queue could not be read to record this candidate; an infrastructure "
+        "failure, not liveness evidence."
+    ),
+    # -- core._plugin_cache::try_reclaim (PluginArtifactRetirementEngine) --
+    f"{_PC}::L816": SafetyDecision(
+        "The record's artifact_kind does not match this coordinator's own kind; a type/"
+        "ownership guard, not a liveness decision."
+    ),
+    f"{_PC}::L818": RetentionDecision(
+        Revocability.REVOCABLE,
+        "The record's scheduled not_before time has not yet passed; retained until the "
+        "grace/backoff window elapses.",
+    ),
+    f"{_PC}::L820": SafetyDecision(
+        "This coordinator no longer claims ownership of the managed path; an ownership "
+        "guard, not liveness evidence."
+    ),
+    f"{_PC}::L827": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Lease contention means another process currently holds an exclusive lock on this "
+        "artifact, a directly observed live reference.",
+    ),
+    f"{_PC}::L833": SafetyDecision(
+        "Lease acquisition failed with an OSError or RuntimeError; an infrastructure "
+        "failure, not evidence about the record's liveness."
+    ),
+    f"{_PC}::L842": SafetyDecision(
+        "The retiring cache record is already absent, removed by a concurrent sweep; "
+        "reports an already-completed outcome, not a retention gate."
+    ),
+    f"{_PC}::L844": SafetyDecision(
+        "The retiring cache is not in the expected exact-v2 state; an infrastructure/"
+        "consistency guard, not liveness evidence."
+    ),
+    f"{_PC}::L858": SafetyDecision(
+        "The record is no longer present in the retiring queue, removed concurrently; "
+        "reports an already-completed outcome, not a retention gate."
+    ),
+    f"{_PC}::L860": SafetyDecision(
+        "The freshly re-read queued record no longer matches the caller's exact identity; "
+        "a consistency guard against acting on stale data."
+    ),
+    f"{_PC}::L865": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Re-verified under lock: the record's not_before time has not yet passed; retained "
+        "until due.",
+    ),
+    f"{_PC}::L867": RetentionDecision(
+        Revocability.REVOCABLE,
+        "The managed path is the actively selected generation right now; retained because "
+        "it is currently live and in use, an observed liveness reference.",
+    ),
+    f"{_PC}::L880": SafetyDecision(
+        "Updating the retiring-cache record failed due to an unsafe cache state; an "
+        "infrastructure failure, not liveness evidence."
+    ),
+    f"{_PC}::L885": SafetyDecision(
+        "None of the managed, manifest, or staging paths exist on disk; the artifact is "
+        "already gone, reporting completion rather than a retention gate."
+    ),
+    f"{_PC}::L888": SafetyDecision(
+        "The staging path is in an ambiguous or unsafe state relative to the managed path; "
+        "a consistency guard, not liveness evidence."
+    ),
+    f"{_PC}::L897": SafetyDecision(
+        "Resolving the current on-disk identity failed as unavailable; an inspection "
+        "failure, not evidence of liveness."
+    ),
+    f"{_PC}::L904": SafetyDecision(
+        "Updating the retiring-cache record failed while rejecting an invalid identity; an "
+        "infrastructure failure, not liveness evidence."
+    ),
+    f"{_PC}::L909": SafetyDecision(
+        "On-disk identity validation failed for the current generation; a validation guard, "
+        "not a liveness or age decision."
+    ),
+    f"{_PC}::L916": SafetyDecision(
+        "Updating the retiring-cache record failed while rejecting a mismatched identity; "
+        "an infrastructure failure, not liveness evidence."
+    ),
+    f"{_PC}::L921": SafetyDecision(
+        "The current on-disk identity no longer matches the record's recorded identity; a "
+        "consistency guard against reclaiming the wrong artifact."
+    ),
+    f"{_PC}::L928": SafetyDecision(
+        "Renaming the managed path into staging failed with an OSError; an execution "
+        "failure, not liveness evidence."
+    ),
+    f"{_PC}::L942": SafetyDecision(
+        "The artifact was already removed from disk; updating the retiring-cache record "
+        "afterward failed due to an unsafe cache state, an infrastructure failure."
+    ),
+    f"{_PC}::L948": SafetyDecision(
+        "Removing the manifest or staging directory failed with an OSError; an execution "
+        "failure during the delete attempt, not liveness evidence."
+    ),
+    f"{_PC}::L953": SafetyDecision(
+        "The successful-reclaim completion path; not a retention skip, this line reports "
+        "that reclamation succeeded."
+    ),
+    # -- cli.install._plugin_artifact::sweep_due --
+    f"{_CT}::L528": SafetyDecision(
+        "The retiring cache is not in a safe exact-v2 state, corrupt or future-versioned; "
+        "an infrastructure guard, not a liveness decision."
+    ),
+    f"{_CT}::L536": SafetyDecision(
+        "No registered owner claims this legacy evidence's artifact kind; a routing guard, "
+        "not liveness evidence."
+    ),
+    f"{_CT}::L541": SafetyDecision(
+        "Reading due retiring records failed under an unsafe cache state; an infrastructure "
+        "failure, not evidence about any record's liveness."
+    ),
+    f"{_CT}::L546": SafetyDecision(
+        "No registered owner claims this record's artifact kind; a routing guard, not "
+        "liveness evidence."
     ),
 }

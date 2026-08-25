@@ -460,10 +460,12 @@ def test_resolve_quota_log_dir_prints_to_stderr_on_exception(
 def test_write_quota_log_event_prints_to_stderr_on_write_failure(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """write_quota_log_event() must print to stderr when caller= is provided."""
+    """write_quota_log_event() must print to stderr when caller= is provided. The write path
+    is _atomic_write_marker's tempfile.mkstemp + os.fdopen + os.replace, not
+    Path.write_text/builtins.open."""
     from autoskillit.hooks._hook_settings import write_quota_log_event
 
-    with patch("builtins.open", side_effect=OSError("disk full")):
+    with patch("tempfile.mkstemp", side_effect=OSError("disk full")):
         write_quota_log_event({}, tmp_path, caller="quota_post_hook")
 
     captured = capsys.readouterr()

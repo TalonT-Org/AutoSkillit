@@ -119,6 +119,8 @@ class TestModuleCascadeCore:
             "_install_detect",
             "_release_identity",
             "_linux_proc",
+            "_reclamation",
+            "_capacity",  # S1-1, S2-3
             "executable_binding",
             "_type_plugin_source",
             "_type_persisted_formats",
@@ -156,7 +158,6 @@ class TestModuleCascadeCore:
             "_type_context_admission_states",
             "_type_context_admission_coverage",
             "_type_context_admission_persistence",
-            "_type_enums_context_admission",
             "_type_github_review",
             "_type_dispatch_identity",
             "_type_figure_spec",
@@ -170,13 +171,9 @@ class TestModuleCascadeCore:
             "_type_phoropter",
             "_type_token",
             "_type_tradition_manifest",
-            "_type_enums_context_admission",
             "_type_constants_env",
             "_type_constants_features",
             "_type_constants_registries",
-            "_type_constants_retirements",
-            "_type_constants_skill_contract",
-            "_type_constants_durable_writers",
             "_type_exceptions",
             "_type_skill_contract",
             "_step_context",
@@ -206,10 +203,6 @@ class TestModuleCascadeCore:
             "closure_verifier",
             "context_admission",
             "_delivery_bounds",
-            "_type_enums_context_admission",
-            "_type_constants_skill_contract",
-            "_type_constants_durable_writers",
-            "_type_constants_retirements",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

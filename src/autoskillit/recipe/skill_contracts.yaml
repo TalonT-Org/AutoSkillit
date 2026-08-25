@@ -132,6 +132,15 @@ skills:
         - already_green
         - flake_suspected
         - ci_only_failure
+        # no_test_infrastructure is a deliberate, documented reuse: test_check also
+        # emits it when StoreCapacityExhaustedError fires (execution/testing.py
+        # check_infrastructure), i.e. the temp/tmpfs filesystem is out of capacity,
+        # not merely missing a Taskfile/command. Escalation is still the correct
+        # terminal behaviour -- a coding agent cannot fix a full filesystem by
+        # editing code -- but the `error` string (not the verdict label) is the
+        # differentiator between "infrastructure absent" and "infrastructure full".
+        # Do not add a new verdict member for capacity without also updating all
+        # six routing recipes and tests/recipe/test_resolve_ci_routing_invariant.py.
         - no_test_infrastructure
     - name: fixes_applied
       type: integer

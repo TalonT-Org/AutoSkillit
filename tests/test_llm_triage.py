@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.backends import ClaudeCodeBackend
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.recipe.contracts import StaleItem
 
 pytestmark = [pytest.mark.medium]
@@ -810,3 +810,143 @@ async def test_triage_staleness_does_not_use_pty(
     assert pty_mode is False, (
         f"triage_staleness must call run_managed_async with pty_mode=False, got {pty_mode!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Agent backend gating
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_triage_batch_non_claude_backend_returns_all_meaningful(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Non-claude-code backend returns meaningful=True without spawning a subprocess."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import _triage_batch
+
+    skill_md_content = "# dummy\nContent."
+    cache = {"my-skill": skill_md_content}
+    items = [
+        StaleItem(
+            skill="my-skill",
+            reason="hash_mismatch",
+            stored_value="aaa",
+            current_value="bbb",
+        ),
+    ]
+
+    mock_run = AsyncMock()
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    results = await _triage_batch(items, cache, cwd=tmp_path, backend=CodexBackend())
+
+    assert len(results) == 1
+    assert results[0]["meaningful"] is True
+    assert "Skipped LLM triage" in results[0]["summary"]
+    mock_run.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """triage_staleness with non-claude-code backend skips subprocess and returns meaningful."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+
+    skill_dir = tmp_path / ".claude" / "skills" / "my-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: my-skill\ndescription: Triage fixture.\nuses_capabilities: []\n---\n"
+        "# dummy\nContent."
+    )
+
+    mock_run = AsyncMock()
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    items = [
+        StaleItem(
+            skill="my-skill",
+            reason="hash_mismatch",
+            stored_value="aaa",
+            current_value="bbb",
+        ),
+    ]
+
+    results = await triage_staleness(
+        items,
+        project_root=tmp_path,
+        backend=CodexBackend(),
+    )
+
+    assert len(results) == 1
+    assert results[0]["meaningful"] is True
+    assert "Skipped LLM triage" in results[0]["summary"]
+    mock_run.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_triage_batch_claude_code_backend_does_call_subprocess(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """claude-code backend reaches the subprocess call."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import _triage_batch
+    from autoskillit.execution.process import SubprocessResult, TerminationReason
+
+    skill_md_content = "# dummy\nContent."
+    cache = {"my-skill": skill_md_content}
+    items = [
+        StaleItem(
+            skill="my-skill",
+            reason="hash_mismatch",
+            stored_value="aaa",
+            current_value="bbb",
+        ),
+    ]
+
+    ndjson = "\n".join(
+        [
+            json.dumps({"type": "assistant", "message": {"content": []}}),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": json.dumps(
+                        [
+                            {
+                                "index": 1,
+                                "skill": "my-skill",
+                                "meaningful_change": False,
+                                "summary": "no change",
+                            }
+                        ]
+                    ),
+                    "session_id": "test-session",
+                    "is_error": False,
+                }
+            ),
+        ]
+    )
+    fake_result = SubprocessResult(
+        returncode=0,
+        stdout=ndjson,
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=0,
+    )
+    mock_run = AsyncMock(return_value=fake_result)
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    results = await _triage_batch(items, cache, cwd=tmp_path, backend=ClaudeCodeBackend())
+
+    mock_run.assert_called_once()
+    assert len(results) == 1
+    assert results[0]["meaningful"] is False
+    assert results[0]["summary"] == "no change"

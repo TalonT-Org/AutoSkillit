@@ -693,18 +693,25 @@ def _check_pytest_temp_capacity(*, space_probe: SpaceProbe = default_space_probe
         return DoctorResult(Severity.WARNING, check_name, f"cannot probe {platform_root}: {exc}")
 
     user_root = user_generation_root(platform_root)
+    generation_note = ""
     try:
         generation_count = sum(
             1
             for entry in user_root.iterdir()
             if entry.name.startswith("pytest-") and entry.is_dir()
         )
-    except OSError:
+    except OSError as exc:
+        logger.warning(
+            "pytest_temp_capacity_generation_count_unavailable",
+            path=str(user_root),
+            error=str(exc),
+        )
         generation_count = 0
+        generation_note = f" (count unavailable: {exc})"
 
     detail = (
         f"{platform_root}: {free_bytes} bytes free of {total_bytes} total; "
-        f"{generation_count} pytest generations under {user_root}"
+        f"{generation_count} pytest generations under {user_root}{generation_note}"
     )
     if free_bytes < MIN_FREE_BYTES_THRESHOLD:
         return DoctorResult(

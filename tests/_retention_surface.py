@@ -131,66 +131,66 @@ _CT = "cli.install._plugin_artifact::sweep_due"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # -- scripts.pytest_tmp_lifecycle::_reap --
-    f"{_R}::L434": SafetyDecision(
+    f"{_R}::L469": SafetyDecision(
         "Scan-level failure retains every candidate rather than treating an empty result "
         "as absence of evidence; the fail-closed contract tests/AGENTS.md documents."
     ),
-    f"{_R}::L441": SafetyDecision(
+    f"{_R}::L476": SafetyDecision(
         "The generation _setup is currently claiming is excluded from its own reap pass."
     ),
-    f"{_R}::L445": SafetyDecision(
+    f"{_R}::L480": SafetyDecision(
         "FileNotFoundError on lstat means the candidate is already gone; nothing to reclaim."
     ),
-    f"{_R}::L448": SafetyDecision(
+    f"{_R}::L483": SafetyDecision(
         "An OSError inspecting the candidate is an inspection failure, not eligibility evidence."
     ),
-    f"{_R}::L451": SafetyDecision(
+    f"{_R}::L486": SafetyDecision(
         "A symlink or non-directory entry under the platform root is a safety exclusion, "
         "never a reclamation candidate regardless of any evidence."
     ),
-    f"{_R}::L454": SafetyDecision(
+    f"{_R}::L489": SafetyDecision(
         "A candidate owned by a different uid is out of this reaper's authority to touch."
     ),
-    f"{_R}::L464": RetentionDecision(
+    f"{_R}::L499": RetentionDecision(
         Revocability.REVOCABLE,
         "A live or indeterminate owner is retained unconditionally; only provably dead may "
         "ever be reclaimed, per the three-outcome liveness contract.",
     ),
-    f"{_R}::L467": RetentionDecision(
+    f"{_R}::L502": RetentionDecision(
         Revocability.REVOCABLE,
         "A dead-owner generation still holding a revocable kernel reference (cwd/fd/maps) "
         "is retained -- proof of present use overrides a dead owner marker.",
     ),
-    f"{_R}::L473": RetentionDecision(
+    f"{_R}::L508": RetentionDecision(
         Revocability.REVOCABLE,
         "A dead owner within the grace window is retained by the normal reap pass, but is "
         "eligible for early reclamation under capacity pressure.",
         bounded_by="ReclamationBound (select_overflow eligibility)",
     ),
-    f"{_R}::L480": RetentionDecision(
+    f"{_R}::L515": RetentionDecision(
         Revocability.REVOCABLE,
         "A corrupt marker treated as valid-dead is still retained under a revocable "
         "reference, exactly like a parseable marker would be.",
     ),
-    f"{_R}::L483": RetentionDecision(
+    f"{_R}::L518": RetentionDecision(
         Revocability.REVOCABLE,
         "A corrupt marker is grace-gated on its own mtime, never demoted to the weaker "
         "markerless/legacy-age path, matching a valid dead marker within grace.",
         bounded_by="ReclamationBound (select_overflow eligibility)",
     ),
-    f"{_R}::L487": RetentionDecision(
+    f"{_R}::L522": RetentionDecision(
         Revocability.MONOTONIC,
         "A markerless candidate is retained by either a revocable reference or a monotonic "
         "snapshot reference -- the only branch where monotonic evidence may protect, since "
         "there is no owner marker to supply a sound liveness proof instead.",
         bounded_by="never bound-reclaimable (no owner to prove provably dead)",
     ),
-    f"{_R}::L493": SafetyDecision(
+    f"{_R}::L528": SafetyDecision(
         "A markerless candidate younger than legacy_age_minutes might be another "
         "concurrent _setup mid-creation; never touched by the bound, only by this age gate."
     ),
     # -- scripts.pytest_tmp_lifecycle::_safe_candidates --
-    f"{_S}::L362": SafetyDecision(
+    f"{_S}::L397": SafetyDecision(
         "Cannot normalize private-root permissions; the whole private-root scan is skipped "
         "rather than risk enumerating an untrusted-mode directory."
     ),
@@ -252,29 +252,29 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
     # -- workspace.session_skills::cleanup_stale --
-    f"{_CS}::L1347": SafetyDecision(
+    f"{_CS}::L1352": SafetyDecision(
         "The candidate root directory does not exist; nothing here to scan or reclaim."
     ),
-    f"{_CS}::L1351": SafetyDecision(
+    f"{_CS}::L1356": SafetyDecision(
         "The session-leases bookkeeping subdirectory itself is not a session; a structural "
         "exclusion, not an eligibility decision."
     ),
-    f"{_CS}::L1353": SafetyDecision(
+    f"{_CS}::L1358": SafetyDecision(
         "A non-directory entry under the candidate root is a type guard, never a session "
         "directory this function reclaims."
     ),
-    f"{_CS}::L1357": RetentionDecision(
+    f"{_CS}::L1362": RetentionDecision(
         Revocability.REVOCABLE,
         "An entry with an in-process session lease held by this process is retained -- "
         "self-held-lease evidence overrides the age threshold, the domain equivalent of a "
         "live owner reference.",
     ),
-    f"{_CS}::L1363": RetentionDecision(
+    f"{_CS}::L1368": RetentionDecision(
         Revocability.REVOCABLE,
         "Failure to acquire the non-blocking lease means another process currently holds "
         "a live lock on this entry, a directly observed live-owner reference.",
     ),
-    f"{_CS}::L1382": RetentionDecision(
+    f"{_CS}::L1387": RetentionDecision(
         Revocability.REVOCABLE,
         "Removal did not occur because the re-checked mtime under lease is fresh again or "
         "the entry already vanished -- the mtime re-check under lease is the reclamation-"
@@ -345,23 +345,23 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._projection_cache::prune_stale_projections --
-    f"{_PP}::L501": SafetyDecision(
+    f"{_PP}::L496": SafetyDecision(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L520": RetentionDecision(
+    f"{_PP}::L515": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PP}::L531": SafetyDecision(
+    f"{_PP}::L526": SafetyDecision(
         "Manifest validation failed while resolving the candidate's identity; an inspection "
         "failure, not evidence the candidate is still live."
     ),
-    f"{_PP}::L538": SafetyDecision(
+    f"{_PP}::L533": SafetyDecision(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PP}::L545": SafetyDecision(
+    f"{_PP}::L540": SafetyDecision(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
     ),

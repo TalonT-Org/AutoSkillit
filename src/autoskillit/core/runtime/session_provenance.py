@@ -8,6 +8,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
+from ..logging import get_logger
+from ._reclamation import append_and_trim_jsonl
+
+logger = get_logger(__name__)
+
+#: Oldest-first line bound applied on every write -- this store previously grew without
+#: limit, degrading read_provenance_for_session's linear scan in both time and space.
+_MAX_PROVENANCE_RECORDS = 5000
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,17 +52,19 @@ def provenance_path(project_dir: Path | None = None) -> Path:
 
 
 def write_provenance_record(record: ProvenanceRecord, project_dir: Path | None = None) -> None:
-    """Append one JSON line to the provenance file.
+    """Append one JSON line to the provenance file, bounded to _MAX_PROVENANCE_RECORDS.
 
     Creates parent directories if needed. Silently swallows OSError — never raises.
     """
     path = provenance_path(project_dir)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(_fast_dumps(asdict(record), sort_keys=True) + "\n")
-    except OSError:
-        pass
+        append_and_trim_jsonl(
+            path,
+            _fast_dumps(asdict(record), sort_keys=True),
+            max_lines=_MAX_PROVENANCE_RECORDS,
+        )
+    except OSError as exc:
+        logger.warning("session_provenance_write_failed", path=str(path), error=str(exc))
 
 
 def read_provenance_for_session(

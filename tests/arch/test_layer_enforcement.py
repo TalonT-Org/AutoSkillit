@@ -1740,6 +1740,16 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/pipeline/test_gate.py": frozenset({"autoskillit.server"}),
     # core tests — protocol conformance checks require concrete implementations
     "tests/core/test_core_terminal_table.py": frozenset({"autoskillit.cli"}),
+    # append_and_trim_jsonl (core.runtime._reclamation, S1-1) is exercised end-to-end
+    # against its real hooks-diagnostic and server-quota-log consumers.
+    "tests/core/test_append_only_store_bounds.py": frozenset(
+        {"autoskillit.hooks", "autoskillit.server"}
+    ),
+    # DBUS_SESSION_BUS_ADDRESS forwarding (S3-2) is verified across every child-env
+    # builder, most of which live outside core/.
+    "tests/core/test_child_env_bus_address.py": frozenset(
+        {"autoskillit.execution", "autoskillit.hooks"}
+    ),
     # execution tests — clone_guard/headless/commands use sibling layers
     "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),

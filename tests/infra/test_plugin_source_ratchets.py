@@ -78,9 +78,9 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "an active review loop is detected and preserved.",
     ),
     ("execution/session_log.py", "flush_session_log", "shutil.rmtree"): (
-        2,
-        "The exclusive session-index transaction removes only abandoned summary-less "
-        "session directories and expired committed directories selected by retention.",
+        1,
+        "The exclusive session-index transaction removes only an abandoned summary-less "
+        "recovery directory for the same dir_name being committed.",
     ),
     ("core/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
         1,
@@ -140,6 +140,16 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a directory tree.",
+    ),
+    ("workspace/_shared_asset_store.py", "_populate_store_entry", "os.replace"): (
+        1,
+        "The bounded per-entry lease is held while publishing a freshly hardlinked "
+        "staging path to its final content-addressed store entry name (S3-1).",
+    ),
+    ("workspace/_shared_asset_store.py", "_populate_store_entry", "staging.unlink"): (
+        1,
+        "The bounded per-entry lease is held while removing this call's own private "
+        "staging hardlink after a failed populate attempt (S3-1).",
     ),
     (
         "workspace/_update_obligation.py",

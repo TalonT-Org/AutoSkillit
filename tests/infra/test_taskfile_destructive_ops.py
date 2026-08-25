@@ -12,12 +12,15 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 TASKFILE = Path(__file__).resolve().parents[2] / "Taskfile.yml"
 
 AUDITED_DESTRUCTIVE_TASKFILE_OPS: dict[str, str] = {
-    "cleanup-shm::headless-*": (
-        "Age-gated cleanup for session artifacts owned by the #3214 session lifecycle."
-    ),
     "cleanup-shm::pytest_tmp_lifecycle.py reap": (
-        "Liveness-verified pytest reaper; macOS ps environment visibility is narrower, "
-        "and scan failures prevent deletion."
+        "Liveness-verified pytest reaper; only a revocable kernel reference (cwd/fd/maps) or "
+        "a live/indeterminate owner vetoes reclamation, a monotonic environ/cmdline token "
+        "never does, and scan failures prevent deletion."
+    ),
+    "cleanup-shm::pytest_tmp_lifecycle.py sweep-sessions": (
+        "Age-gated headless session cleanup, st_mtime-gated against the single "
+        "SESSION_STALE_SECONDS constant workspace.session_skills.cleanup_stale also uses "
+        "for the same root, owned by the #3214 session lifecycle."
     ),
     "install-worktree::uv venv --clear": (
         "Per-worktree environment rebuild with an accepted same-worktree concurrency residual."
@@ -38,6 +41,8 @@ def _destructive_operations() -> set[str]:
                     findings.add(f"{task_name}::uv venv --clear")
                 if "pytest_tmp_lifecycle.py reap" in line:
                     findings.add(f"{task_name}::pytest_tmp_lifecycle.py reap")
+                if "pytest_tmp_lifecycle.py sweep-sessions" in line:
+                    findings.add(f"{task_name}::pytest_tmp_lifecycle.py sweep-sessions")
                 if _FIND_EXEC_RM.search(line) or _RECURSIVE_RM.search(line):
                     marker = "headless-*" if "headless-*" in line else line.strip()
                     findings.add(f"{task_name}::{marker}")

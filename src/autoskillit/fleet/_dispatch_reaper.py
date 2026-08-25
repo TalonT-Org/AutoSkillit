@@ -10,13 +10,16 @@ from typing import TYPE_CHECKING
 
 import psutil
 
-from autoskillit.core import default_log_dir, get_logger
+from autoskillit.core import append_and_trim_jsonl, default_log_dir, get_logger
 from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
 
 if TYPE_CHECKING:
     from autoskillit.fleet import CampaignStateMutator, DispatchRecord
 
 logger = get_logger(__name__)
+
+#: Oldest-first line bound applied on every write -- this store previously grew without limit.
+_MAX_REAPER_EVENTS = 5000
 
 
 def _append_reaper_event(dispatch: DispatchRecord, reason: str, reaper_dispatch_id: str) -> None:
@@ -31,9 +34,7 @@ def _append_reaper_event(dispatch: DispatchRecord, reason: str, reaper_dispatch_
         "campaign_id": dispatch.campaign_id,
     }
     try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(event) + "\n")
+        append_and_trim_jsonl(log_path, json.dumps(event), max_lines=_MAX_REAPER_EVENTS)
     except OSError:
         logger.warning("reaper: failed to append reaper event", exc_info=True)
 

@@ -356,6 +356,14 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "session_provenance": frozenset({"core", "execution"}),
     "readiness": frozenset({"core", "server"}),
     "session_registry": frozenset({"core"}),
+    # core/runtime/_reclamation.py (S1-1): Revocability/EvidenceSource/ReclamationBound/
+    # user_generation_root/harvest_snapshot_references consumed by doctor, execution.testing
+    # (S2-3 capacity preflight), fleet's dispatch reaper, hooks' capture lifecycle, and
+    # core.runtime.session_provenance itself.
+    "_reclamation": frozenset({"cli", "core", "execution", "fleet", "hooks", "server"}),
+    # core/_capacity.py (S2-3): SpaceProbe/default_space_probe/StoreCapacityExhaustedError
+    # consumed by execution.testing's check_infrastructure and cli.doctor's capacity check.
+    "_capacity": frozenset({"cli", "core", "execution"}),
     "tool_sequence_analysis": frozenset({"core", "execution", "server", "cli"}),
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
     "_type_results": _TYPE_RESULTS_CASCADE,

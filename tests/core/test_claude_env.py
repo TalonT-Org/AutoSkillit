@@ -300,7 +300,11 @@ def test_build_maintenance_env_preserves_only_named_base_values(
 
     result = build_maintenance_env(base, maintenance_flags)
 
-    assert dict(result) == {**allowed, **maintenance_flags}
+    assert dict(result) == {
+        **allowed,
+        **maintenance_flags,
+        "DBUS_SESSION_BUS_ADDRESS": "disabled:",
+    }
     assert isinstance(result, MappingProxyType)
 
 
@@ -314,10 +318,10 @@ def test_build_maintenance_env_adds_windows_process_values_only_on_windows(
         "PATHEXT": ".COM;.EXE;.BAT",
     }
     monkeypatch.setattr(claude_env.os, "name", "posix")
-    assert dict(build_maintenance_env(base)) == {}
+    assert dict(build_maintenance_env(base)) == {"DBUS_SESSION_BUS_ADDRESS": "disabled:"}
 
     monkeypatch.setattr(claude_env.os, "name", "nt")
-    assert dict(build_maintenance_env(base)) == base
+    assert dict(build_maintenance_env(base)) == {**base, "DBUS_SESSION_BUS_ADDRESS": "disabled:"}
 
 
 def test_build_maintenance_env_accepts_only_declared_skip_flags() -> None:
@@ -335,6 +339,7 @@ def test_build_maintenance_env_accepts_only_declared_skip_flags() -> None:
     assert dict(result) == {
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+        "DBUS_SESSION_BUS_ADDRESS": "disabled:",
     }
 
 

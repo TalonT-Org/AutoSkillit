@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from autoskillit.core import SpaceProbe, default_space_probe
 from autoskillit.core.types import (
     BackendAuthority,
     CIRunScope,
@@ -967,13 +968,21 @@ class InMemoryTestRunner(TestRunner):
     ``TestResult`` when the deque is exhausted.
     """
 
-    def __init__(self, results: list[TestResult] | None = None) -> None:
+    def __init__(
+        self,
+        results: list[TestResult] | None = None,
+        *,
+        check_infrastructure_result: str | None = None,
+    ) -> None:
         self._results: deque[TestResult] = deque(results or [])
         self._call_count = 0
         self.calls: list[Path] = []
+        self._check_infrastructure_result = check_infrastructure_result
 
-    def check_infrastructure(self, cwd: Path) -> str | None:
-        return None
+    def check_infrastructure(
+        self, cwd: Path, *, space_probe: SpaceProbe = default_space_probe
+    ) -> str | None:
+        return self._check_infrastructure_result
 
     async def run(self, cwd: Path) -> TestResult:
         self._call_count += 1

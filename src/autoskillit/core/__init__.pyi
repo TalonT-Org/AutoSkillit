@@ -11,9 +11,14 @@ from ._active_kitchens import (
     sample_kitchen_process_identity as sample_kitchen_process_identity,
 )
 from ._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
+from ._capacity import MIN_FREE_BYTES_THRESHOLD as MIN_FREE_BYTES_THRESHOLD
+from ._capacity import SpaceProbe as SpaceProbe
+from ._capacity import default_space_probe as default_space_probe
+from ._capacity import platform_temp_root as platform_temp_root
 from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
 from ._claude_env import build_maintenance_env as build_maintenance_env
+from ._claude_env import resolve_dbus_session_bus_address as resolve_dbus_session_bus_address
 from ._cmd_runner import CmdRunner as CmdRunner
 from ._cmd_runner import default_cmd_runner as default_cmd_runner
 from ._cmd_runner import run_gh as run_gh
@@ -292,6 +297,23 @@ from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_pid_namespace_inode as read_pid_namespace_inode
 from .runtime._linux_proc import read_process_state as read_process_state
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
+from .runtime._reclamation import PYTEST_GENERATION_NAME_RE as PYTEST_GENERATION_NAME_RE
+from .runtime._reclamation import SESSION_STALE_SECONDS as SESSION_STALE_SECONDS
+from .runtime._reclamation import BoundedCandidate as BoundedCandidate
+from .runtime._reclamation import EvidenceSource as EvidenceSource
+from .runtime._reclamation import LivenessScanUnavailable as LivenessScanUnavailable
+from .runtime._reclamation import PathEvidence as PathEvidence
+from .runtime._reclamation import ReclamationBound as ReclamationBound
+from .runtime._reclamation import Revocability as Revocability
+from .runtime._reclamation import append_and_trim_jsonl as append_and_trim_jsonl
+from .runtime._reclamation import bound_unsatisfied as bound_unsatisfied
+from .runtime._reclamation import harvest_kernel_references as harvest_kernel_references
+from .runtime._reclamation import harvest_snapshot_references as harvest_snapshot_references
+from .runtime._reclamation import select_overflow as select_overflow
+from .runtime._reclamation import snapshot_referenced as snapshot_referenced
+from .runtime._reclamation import trim_jsonl_lines as trim_jsonl_lines
+from .runtime._reclamation import user_generation_root as user_generation_root
+from .runtime._reclamation import veto_paths as veto_paths
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
 from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
@@ -1172,6 +1194,7 @@ from .types import StageHistoryEvent as StageHistoryEvent
 from .types import StaleGeneratorError as StaleGeneratorError
 from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent
+from .types import StoreCapacityExhaustedError as StoreCapacityExhaustedError
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope
 from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import StreamParser as StreamParser

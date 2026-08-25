@@ -12,6 +12,7 @@ import ast
 import sys
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TypeGuard
 
 SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 
@@ -41,7 +42,7 @@ def _enclosing_function(node: ast.AST, parents: Mapping[ast.AST, ast.AST]) -> st
     return None
 
 
-def _is_path_home_call(node: ast.AST) -> bool:
+def _is_path_home_call(node: ast.AST) -> TypeGuard[ast.Call]:
     return (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)

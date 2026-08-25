@@ -41,6 +41,7 @@ from autoskillit.core import (
     SessionSummary,
     default_log_dir,
     get_logger,
+    resolve_dbus_session_bus_address,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
@@ -326,6 +327,7 @@ class CodexEnvPolicy:
             and k not in AUTOSKILLIT_PRIVATE_ENV_VARS
             and not any(k.startswith(p) for p in self.denylist_prefixes)
         }
+        out["DBUS_SESSION_BUS_ADDRESS"] = resolve_dbus_session_bus_address(base_env)
         if extras is not None:
             filtered_extras = _filter_protected_native_shell_env(extras)
             filtered_extras.setdefault("AUTOSKILLIT_SKILL_NAME", "")

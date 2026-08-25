@@ -155,6 +155,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_capture_lifecycle",
         # join ledger alphabet/filename constants resolved once at import time.
         "_join_ledger",  # hooks/_join_ledger.py: _BATCH_ID_ALPHABET, LEDGER_FILENAME
+        # _UNCLASSIFIED_EVIDENCE_SOURCES = sorted(...) at import time -- the completeness-
+        # vs-enum self-check that every EvidenceSource has a _REVOCABILITY entry (S1-1).
+        "_reclamation",  # core/runtime/_reclamation.py
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -193,6 +196,9 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
             "src/autoskillit/server/tools/tools_kitchen/_open_kitchen_transition.py",
             "_OPEN_KITCHEN_REQUEST_CTX",
         ),
+        # A bare Path("/proc") constant, no I/O -- the default proc_root every
+        # function below defaults its keyword-only proc_root parameter to (S1-1).
+        ("src/autoskillit/core/runtime/_linux_proc.py", "_DEFAULT_PROC"),
     }
 )
 
@@ -1040,7 +1046,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
         # +otlp_sink run-scoped loopback diagnostics receiver (#4628)
-        "execution": 22,  # +session_index strict byte-bounded retained-index reads (#4514)
+        "execution": 23,  # +session_index strict byte-bounded retained-index reads (#4514)
+        # +_session_retention.py (S2-2): apply_session_retention() split out of
+        # session_log.py so tests/_retention_surface.py's registry can target it, and so
+        # session_log.py stays under its own 750-line warning-zone budget.
         # +evidence_reader sterile reader lifecycle (#4585)
         # +agent_definition native-role authority (#4443).
         # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
@@ -1061,7 +1070,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # funnel (rectify: exploration capture immunity part A) — stdlib-only,
         # consumed from core/runtime/kitchen_state.py, so it cannot live under
         # exploration/ (IL-1) or any module with non-stdlib dependencies.
-        "core": 40,  # +_release_identity.py: single release-freshness authority (#4763)
+        # +_release_identity.py: single release-freshness authority (#4763).
+        # +_capacity.py: SpaceProbe/default_space_probe/threshold (S2-3) — a defaulted-
+        # parameter injection point for execution.testing's capacity preflight, kept
+        # separate from core/runtime/_reclamation.py since core/runtime already imports
+        # core.types and _capacity is consumed there too (avoids a circular import).
+        "core": 41,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).
@@ -1091,7 +1105,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         # +_doctor_repair isolated opt-in mutation spoke (#4710)
-        "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
+        "workspace": 17,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
@@ -1099,6 +1113,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # by cli/update/ and readable by server/_lifespan/_startup_checks.py without a
         # server->cli edge, so it lives at this IL-1 layer rather than splitting further —
         # its 176 lines are one cohesive read/write/clear API with no internal seam to extract)
+        # +_shared_asset_store.py (S3-1): the machine-scoped content-addressed hardlink
+        # store for verbatim plugin assets, kept separate from _projection_cache.py since
+        # it must be resolvable and safe to import even when no store root is available.
         "hooks": 25,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,

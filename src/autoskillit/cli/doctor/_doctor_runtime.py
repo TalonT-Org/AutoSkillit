@@ -18,13 +18,19 @@ import regex as re
 from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_MODEL_ALIASES_LAST_VERIFIED,
+    MIN_FREE_BYTES_THRESHOLD,
+    PYTEST_GENERATION_NAME_RE,
     ArtifactLease,
     CodingAgentBackend,
     Severity,
+    SpaceProbe,
     atomic_write,
     default_log_dir,
+    default_space_probe,
     get_logger,
     is_valid_codex_model_id,
+    platform_temp_root,
+    user_generation_root,
 )
 from autoskillit.execution import (
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
@@ -671,3 +677,47 @@ def _check_codex_model_alias_staleness() -> DoctorResult:
         check_name,
         f"CODEX_MODEL_ALIASES verified {age_days}d ago; all alias values valid",
     )
+
+
+def _check_pytest_temp_capacity(*, space_probe: SpaceProbe = default_space_probe) -> DoctorResult:
+    """Report pytest-generation temp-root usage and orphaned-generation count.
+
+    Read-only diagnostic surface for the resource whose exhaustion halts every fix loop --
+    the automatic reclamation wired into `task _tmpdir-setup` is the primary defense; this
+    is the diagnostic surface between runs (see core.runtime.ReclamationBound).
+    """
+    check_name = "pytest_temp_capacity"
+    platform_root = platform_temp_root()
+    try:
+        total_bytes, _used_bytes, free_bytes = space_probe(platform_root)
+    except OSError as exc:
+        return DoctorResult(Severity.WARNING, check_name, f"cannot probe {platform_root}: {exc}")
+
+    user_root = user_generation_root(platform_root)
+    generation_note = ""
+    try:
+        generation_count = sum(
+            1
+            for entry in user_root.iterdir()
+            if PYTEST_GENERATION_NAME_RE.fullmatch(entry.name) and entry.is_dir()
+        )
+    except OSError as exc:
+        logger.warning(
+            "pytest_temp_capacity_generation_count_unavailable",
+            path=str(user_root),
+            error=str(exc),
+        )
+        generation_count = 0
+        generation_note = f" (count unavailable: {exc})"
+
+    detail = (
+        f"{platform_root}: {free_bytes} bytes free of {total_bytes} total; "
+        f"{generation_count} pytest generations under {user_root}{generation_note}"
+    )
+    if free_bytes < MIN_FREE_BYTES_THRESHOLD:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"{detail} (below {MIN_FREE_BYTES_THRESHOLD}-byte threshold); run: task cleanup-shm",
+        )
+    return DoctorResult(Severity.OK, check_name, detail)

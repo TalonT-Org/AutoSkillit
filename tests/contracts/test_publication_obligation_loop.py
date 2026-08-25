@@ -702,6 +702,7 @@ def test_expected_version_present_uses_full_verification(
         "HOME": str(home),
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+        "DBUS_SESSION_BUS_ADDRESS": "disabled:",
     }
     probe_cwd = captured_kwargs[0]["cwd"]
     assert probe_cwd == captured_kwargs[1]["cwd"]

@@ -1282,6 +1282,7 @@ def test_success_from_real_worktree_seals_env_and_uses_home_maintenance_cwd(
         **approved_base_env,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+        "DBUS_SESSION_BUS_ADDRESS": "disabled:",
     }
     versions = iter(["1.0.0", "1.1.0"])
     calls: list[tuple[list[str], dict[str, Any]]] = []

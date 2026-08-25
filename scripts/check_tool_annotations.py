@@ -52,16 +52,18 @@ def check() -> list[str]:
                 ):
                     continue
                 ann_kw = None
+                ann_dict: ast.Dict | None = None
                 for kw in dec.keywords:
                     if kw.arg == "annotations" and isinstance(kw.value, ast.Dict):
                         ann_kw = kw
+                        ann_dict = kw.value
                         break
-                if ann_kw is None:
+                if ann_kw is None or ann_dict is None:
                     violations.append(
                         f"{path.name}:{dec.lineno}: {node.name} missing annotations= keyword"
                     )
                     continue
-                key_names = [k.value for k in ann_kw.value.keys if isinstance(k, ast.Constant)]
+                key_names = [k.value for k in ann_dict.keys if isinstance(k, ast.Constant)]
                 if "readOnlyHint" not in key_names:
                     violations.append(
                         f"{path.name}:{dec.lineno}: {node.name} "
@@ -69,7 +71,7 @@ def check() -> list[str]:
                     )
                     continue
                 expected = READ_ONLY_EXCEPTIONS.get(node.name, True)
-                for key, val in zip(ann_kw.value.keys, ann_kw.value.values, strict=True):
+                for key, val in zip(ann_dict.keys, ann_dict.values, strict=True):
                     if isinstance(key, ast.Constant) and key.value == "readOnlyHint":
                         actual = val.value if isinstance(val, ast.Constant) else None
                         if actual is expected:

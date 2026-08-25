@@ -52,6 +52,10 @@ from autoskillit.core import (
 )
 from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.workspace._projection_cache import is_projected_asset
+from autoskillit.workspace._shared_asset_store import (
+    link_or_copy_asset,
+    resolve_shared_asset_store_root,
+)
 from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import (
     SkillInfo,
@@ -572,7 +576,18 @@ def _copy_non_skill_plugin_assets(
     destination: Path,
     *,
     top_level: bool = True,
+    _store_root: Path | None = None,
 ) -> None:
+    """Copy the verbatim (non-skill) plugin asset tree, sharing bytes via a hardlink
+    store where possible (S3-1).
+
+    `_store_root` is resolved automatically on the top-level call (from
+    `destination.parent`, which is `projections_root` at that point -- see
+    `_stage_projected_plugin_artifact`) and threaded through recursive calls
+    unchanged; callers never pass it explicitly.
+    """
+    if top_level:
+        _store_root = resolve_shared_asset_store_root(destination.parent)
     for entry in source_root.iterdir():
         if not is_projected_asset(entry, top_level=top_level):
             continue
@@ -581,9 +596,9 @@ def _copy_non_skill_plugin_assets(
         target = destination / entry.name
         if entry.is_dir():
             target.mkdir()
-            _copy_non_skill_plugin_assets(entry, target, top_level=False)
+            _copy_non_skill_plugin_assets(entry, target, top_level=False, _store_root=_store_root)
         elif entry.is_file():
-            shutil.copy2(entry, target)
+            link_or_copy_asset(entry, target, store_root=_store_root)
         else:
             raise SkillContractError(f"plugin asset must be a regular file or directory: {entry}")
 

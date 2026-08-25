@@ -409,8 +409,26 @@ def resolve_quota_log_dir(*, caller: str = "") -> Path | None:
         return None
 
 
+#: Oldest-first line bound applied on every write to either JSONL sink in this module.
+#: Duplicated (not imported) from core.runtime._reclamation.append_and_trim_jsonl's shape --
+#: this module is stdlib-only with no autoskillit.* imports by design (see module docstring),
+#: same boundary that already duplicates HOOK_CONFIG_PATH_COMPONENTS instead of sharing it.
+_MAX_HOOK_LOG_LINES = 5000
+
+
+def _append_and_trim_jsonl_line(path: Path, line: str, *, max_lines: int) -> None:
+    existing: list[str] = []
+    if path.exists():
+        existing = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    existing.append(line)
+    if max_lines > 0 and len(existing) > max_lines:
+        existing = existing[-max_lines:]
+    _atomic_write_marker(path, "\n".join(existing) + "\n")
+
+
 def write_quota_log_event(event: dict, log_dir: Path | None, *, caller: str = "") -> None:
-    """Append a quota event to quota_events.jsonl at the log root.
+    """Append a quota event to quota_events.jsonl at the log root, bounded to
+    _MAX_HOOK_LOG_LINES.
 
     No-ops when ``log_dir`` is None. On write failure, prints to stderr when
     ``caller`` is provided; otherwise silently returns.
@@ -419,9 +437,9 @@ def write_quota_log_event(event: dict, log_dir: Path | None, *, caller: str = ""
         return
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event) + "\n"
-        with open(log_dir / "quota_events.jsonl", "a", encoding="utf-8") as f:
-            f.write(line)
+        _append_and_trim_jsonl_line(
+            log_dir / "quota_events.jsonl", json.dumps(event), max_lines=_MAX_HOOK_LOG_LINES
+        )
     except Exception as exc:
         if caller:
             print(f"{caller}: failed to write quota log event: {exc}", file=sys.stderr)
@@ -471,9 +489,11 @@ def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
         return
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(bounded, sort_keys=True) + "\n"
-        with open(log_dir / "join_diagnostics.jsonl", "a", encoding="utf-8") as f:
-            f.write(line)
+        _append_and_trim_jsonl_line(
+            log_dir / "join_diagnostics.jsonl",
+            json.dumps(bounded, sort_keys=True),
+            max_lines=_MAX_HOOK_LOG_LINES,
+        )
     except Exception as exc:
         if caller:
             print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)

@@ -1082,9 +1082,10 @@ _ENUMERATION_STAT_ALLOWLIST: dict[Path, TrackedDeferral] = {
         "directory, not a live shared one",
         added_date=date(2026, 8, 25),
     ),
-    SRC_ROOT / "execution" / "session_log.py": TrackedDeferral(
+    SRC_ROOT / "execution" / "_session_retention.py": TrackedDeferral(
         issue=4771,
-        rationale="unguarded stat in an iterdir()-then-sort key= over committed session dirs",
+        rationale="unguarded stat in an iterdir()-then-sort key= over committed session dirs; "
+        "moved out of session_log.py by the retention-block extraction",
         added_date=date(2026, 8, 24),
     ),
     SRC_ROOT / "hooks" / "session_start_hook.py": TrackedDeferral(

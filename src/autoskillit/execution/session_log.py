@@ -8,7 +8,6 @@ quick scanning across retained committed sessions.
 
 from __future__ import annotations
 
-import json
 import shutil
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -36,6 +35,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.core import fast_dumps as _fast_dumps
+from autoskillit.execution._session_retention import apply_session_retention
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,
@@ -45,8 +45,6 @@ from autoskillit.execution.anomaly_detection import (
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
 
 logger = get_logger(__name__)
-
-_MAX_SESSIONS = 2000
 
 
 def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
@@ -183,8 +181,8 @@ def flush_session_log(
 
     Writes proc_trace.jsonl, summary.json, anomalies.jsonl (if any),
     and transactionally projects the session into sessions.jsonl. Applies retention
-    to keep at most ``_MAX_SESSIONS`` session directories (default 2000,
-    configurable via ``linux_tracing.max_sessions``).
+    to keep at most ``max_sessions`` session directories (default 2000, see
+    ``_session_retention.py``, configurable via ``linux_tracing.max_sessions``).
 
     When step_name is provided, also writes token_usage.json, step_timing.json,
     and (if telemetry.audit_record is set) audit_log.json to the session directory
@@ -666,47 +664,18 @@ def flush_session_log(
         ]
         index_rows.append(index_entry)
 
-        committed_dirs = sorted(
-            (
-                candidate
-                for candidate in sessions_dir.iterdir()
-                if candidate.is_dir() and (candidate / "summary.json").is_file()
-            ),
-            key=lambda candidate: candidate.stat().st_mtime,
-        )
-        effective_max_sessions = max_sessions if max_sessions is not None else _MAX_SESSIONS
-        expired = committed_dirs[: max(0, len(committed_dirs) - effective_max_sessions)]
-        surviving_names = {candidate.name for candidate in committed_dirs[len(expired) :]}
         protected_ids = (
             build_protected_campaign_ids(Path(project_dir))
             if project_dir and build_protected_campaign_ids is not None
             else frozenset()
         )
-        for candidate in expired:
-            if reuse_committed_recovery and candidate.name == dir_name:
-                surviving_names.add(candidate.name)
-                continue
-            if protected_ids:
-                try:
-                    meta = json.loads((candidate / "meta.json").read_text(encoding="utf-8"))
-                except FileNotFoundError:
-                    meta = {}
-                except (json.JSONDecodeError, OSError) as exc:
-                    logger.warning(
-                        "session_retention_meta_read_failed",
-                        path=candidate,
-                        error=str(exc),
-                        exc_info=True,
-                    )
-                    meta = {}
-                if meta.get("campaign_id") in protected_ids:
-                    surviving_names.add(candidate.name)
-                    continue
-            try:
-                shutil.rmtree(candidate)
-            except OSError:
-                logger.warning("session_retention_delete_failed", path=candidate, exc_info=True)
-                surviving_names.add(candidate.name)
+        surviving_names = apply_session_retention(
+            sessions_dir,
+            max_sessions=max_sessions,
+            dir_name=dir_name,
+            reuse_committed_recovery=reuse_committed_recovery,
+            protected_ids=protected_ids,
+        )
 
         retained_rows = [row for row in index_rows if row.get("dir_name") in surviving_names]
         atomic_write(

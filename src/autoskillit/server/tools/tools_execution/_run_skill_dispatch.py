@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 
 import anyio
@@ -21,6 +22,8 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
+    append_and_trim_jsonl,
+    default_log_dir,
     extract_skill_name,
     get_logger,
     read_tracker_authority,
@@ -57,6 +60,32 @@ from autoskillit.server.tools.tools_pipeline_tracker import (
 )
 
 logger = get_logger(__name__)
+
+#: Oldest-first line bound applied on every write -- see core.runtime.append_and_trim_jsonl.
+_MAX_CLEANUP_FAILURE_RECORDS = 5000
+
+
+def _record_cleanup_failure(session_id: str, path: str | None, exc: BaseException) -> None:
+    """Durable, queryable record of a failed session-teardown cleanup.
+
+    `run_skill`'s `finally` block cannot amend its already-serialized response with this
+    failure (every exit path serializes before `finally` runs), and re-raising here would
+    mask whatever exception is already in flight. This is the sink instead: the failure
+    becomes a fact a later audit or doctor check can find, rather than only a log line the
+    original `logger.warning(..., exc_info=True)` calls already emit.
+    """
+    log_path = default_log_dir() / "cleanup_failures.jsonl"
+    record = {
+        "ts": time.time(),
+        "session_id": session_id,
+        "path": path,
+        "exception_type": type(exc).__name__,
+        "message": str(exc),
+    }
+    try:
+        append_and_trim_jsonl(log_path, json.dumps(record), max_lines=_MAX_CLEANUP_FAILURE_RECORDS)
+    except OSError:
+        logger.warning("cleanup_failure_record_write_failed", session_id=session_id, exc_info=True)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -470,23 +499,25 @@ async def run_skill(
                 if state._ssm is not None:
                     try:
                         state._ssm.cleanup_session(state._sid)
-                    except Exception:
+                    except Exception as exc:
                         logger.warning(
                             "session_skill_cleanup_failed",
                             session_id=state._sid,
                             exc_info=True,
                         )
+                        _record_cleanup_failure(state._sid, None, exc)
                 elif state.tool_ctx.ephemeral_root is not None:
                     state._cleanup_dir = state.tool_ctx.ephemeral_root / state._sid
                     if state._cleanup_dir.is_dir():
                         try:
                             shutil.rmtree(state._cleanup_dir)
-                        except Exception:
+                        except Exception as exc:
                             logger.warning(
                                 "session_dir_rmtree_failed",
                                 path=str(state._cleanup_dir),
                                 exc_info=True,
                             )
+                            _record_cleanup_failure(state._sid, str(state._cleanup_dir), exc)
                     else:
                         state._codex_fallback = (
                             state.tool_ctx.temp_dir / CODEX_SESSIONS_SUBDIR / state._sid
@@ -494,9 +525,12 @@ async def run_skill(
                         if state._codex_fallback.is_dir():
                             try:
                                 shutil.rmtree(state._codex_fallback)
-                            except Exception:
+                            except Exception as exc:
                                 logger.warning(
                                     "session_dir_rmtree_failed",
                                     path=str(state._codex_fallback),
                                     exc_info=True,
+                                )
+                                _record_cleanup_failure(
+                                    state._sid, str(state._codex_fallback), exc
                                 )

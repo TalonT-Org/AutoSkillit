@@ -1,4 +1,4 @@
-"""Tests for run_skill gate enforcement (headless and tier-aware, split from test_tools_execution_results.py per issue #4796)."""
+"""run_skill gate enforcement tests: headless and tier-aware (#4796)."""
 
 from __future__ import annotations
 

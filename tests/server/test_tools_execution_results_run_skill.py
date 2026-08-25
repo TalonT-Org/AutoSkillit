@@ -1,4 +1,4 @@
-"""Tests for run_skill failure paths, post-serialization validation, and cwd validation (split from test_tools_execution_results.py per issue #4796)."""
+"""run_skill failure paths, post-serialization validation, cwd validation tests (#4796)."""
 
 from __future__ import annotations
 

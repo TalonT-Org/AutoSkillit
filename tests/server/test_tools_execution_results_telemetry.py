@@ -1,4 +1,4 @@
-"""Tests for run_skill telemetry, observability, timing, and response typing (split from test_tools_execution_results.py per issue #4796)."""
+"""run_skill telemetry, observability, timing, response typing tests (#4796)."""
 
 from __future__ import annotations
 

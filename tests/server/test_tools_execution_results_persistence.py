@@ -1,4 +1,4 @@
-"""Tests for persisted audit/skill contract validation and gate-error schema normalization (split from test_tools_execution_results.py per issue #4796)."""
+"""Persisted audit/skill contract validation and gate-error schema tests (#4796)."""
 
 from __future__ import annotations
 

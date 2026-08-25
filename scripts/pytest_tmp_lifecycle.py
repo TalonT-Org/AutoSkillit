@@ -53,6 +53,7 @@ from autoskillit.core import (  # noqa: E402
     default_space_probe,
 )
 from autoskillit.core.runtime import (  # noqa: E402
+    SESSION_STALE_SECONDS,
     BoundedCandidate,
     EvidenceSource,
     LivenessScanUnavailable,
@@ -79,6 +80,12 @@ _LEGACY_PREFIXES = (
     "pytest-cache",
     "test-basetemp",
     "reader-live-diagnostic",
+    # CI scratch roots (S2-8) -- conformance-probes.yml, coverage-oracle.yml,
+    # test-filter-audit.yml each mkdir their own fixed-name root outside the generation
+    # scheme; widening the prefix match is what makes `reap` reach them at all.
+    "pytest-probes",
+    "pytest-coverage",
+    "pytest-audit",
 )
 
 
@@ -577,6 +584,40 @@ def _reap_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sweep_sessions(args: argparse.Namespace) -> int:
+    """Reap stale headless-* session dirs under <root>/autoskillit-sessions.
+
+    st_mtime-gated against SESSION_STALE_SECONDS -- the same TTL and stat field
+    workspace.session_skills.cleanup_stale uses for the same root (see S2-7 /
+    core/runtime/_reclamation.py's SESSION_STALE_SECONDS docstring). The Taskfile's
+    cleanup-shm task invokes this instead of a bare `find ... -exec rm -rf`, so the two
+    reclaimers can no longer disagree on staleness.
+    """
+    sessions_root = _absolute(args.root) / "autoskillit-sessions"
+    try:
+        entries = list(sessions_root.iterdir())
+    except OSError:
+        return 0
+    now = time.time()
+    removed = 0
+    for entry in entries:
+        if not entry.name.startswith("headless-"):
+            continue
+        try:
+            entry_stat = entry.lstat()
+        except OSError:
+            continue
+        if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISDIR(entry_stat.st_mode):
+            continue
+        if now - entry_stat.st_mtime <= SESSION_STALE_SECONDS:
+            continue
+        _remove_candidate(entry)
+        removed += 1
+    if removed:
+        _log(f"removed {removed} stale headless session dirs under {sessions_root}")
+    return 0
+
+
 def _add_reap_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--grace-minutes", type=float, default=5)
@@ -602,6 +643,9 @@ def _parser() -> argparse.ArgumentParser:
     reap_parser = subparsers.add_parser("reap")
     _add_reap_options(reap_parser)
     reap_parser.set_defaults(handler=_reap_command)
+    sweep_sessions_parser = subparsers.add_parser("sweep-sessions")
+    sweep_sessions_parser.add_argument("--root", type=Path, required=True)
+    sweep_sessions_parser.set_defaults(handler=_sweep_sessions)
     return parser
 
 

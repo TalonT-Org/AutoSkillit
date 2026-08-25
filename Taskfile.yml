@@ -861,16 +861,13 @@ tasks:
     cmds:
       - |
         echo "Cleaning stale /dev/shm directories..."
-        python3 scripts/pytest_tmp_lifecycle.py reap --root /dev/shm
+        python3 scripts/pytest_tmp_lifecycle.py reap --root {{.PYTEST_TMP_ROOT}}
 
-        # headless session dirs older than 4 hours
-        HEADLESS_COUNT=$(find /dev/shm/autoskillit-sessions -maxdepth 1 -name 'headless-*' -mmin +240 -type d 2>/dev/null | wc -l)
-        if [ "$HEADLESS_COUNT" -gt 0 ]; then
-          find /dev/shm/autoskillit-sessions -maxdepth 1 -name 'headless-*' -mmin +240 -type d -exec rm -rf {} +
-          echo "  Removed $HEADLESS_COUNT stale headless session dirs (>4h old)"
-        else
-          echo "  No stale headless session dirs found"
-        fi
+        # Headless session dirs, liveness-verified evidence, one shared TTL with
+        # workspace.session_skills.cleanup_stale (SESSION_STALE_SECONDS) -- a bare `find`
+        # cannot express that shared constant or resolve_ephemeral_root()'s fallback, so
+        # this routes through the lifecycle script instead.
+        python3 scripts/pytest_tmp_lifecycle.py sweep-sessions --root {{.PYTEST_TMP_ROOT}}
 
         echo "Done."
 

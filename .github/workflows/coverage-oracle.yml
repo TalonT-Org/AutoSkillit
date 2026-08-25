@@ -45,6 +45,7 @@ jobs:
 
       - name: Set up environment
         run: |
+          python3 scripts/pytest_tmp_lifecycle.py reap --root "$(dirname "$TMPDIR")"
           mkdir -p "$TMPDIR"
           uv sync --locked --extra dev
 

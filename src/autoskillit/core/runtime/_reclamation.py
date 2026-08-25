@@ -37,14 +37,25 @@ __all__ = [
     "PathEvidence",
     "ReclamationBound",
     "Revocability",
+    "SESSION_STALE_SECONDS",
+    "append_and_trim_jsonl",
     "bound_unsatisfied",
     "harvest_kernel_references",
     "harvest_snapshot_references",
     "select_overflow",
     "snapshot_referenced",
+    "trim_jsonl_lines",
     "user_generation_root",
     "veto_paths",
 ]
+
+#: Single TTL, single stat field (st_mtime), shared by workspace.session_skills.cleanup_stale
+#: and scripts/pytest_tmp_lifecycle.py's sweep-sessions subcommand (invoked by Taskfile.yml's
+#: cleanup-shm task) -- both govern the same autoskillit-sessions root. Previously two
+#: independent values on two different time axes: 240 min (Taskfile find -mmin, st_mtime) vs
+#: 86400 s (cleanup_stale's default, st_atime). /dev/shm is mounted noatime on this host, so
+#: the st_atime gate was already inert (frozen at creation) -- st_mtime is the live predicate.
+SESSION_STALE_SECONDS = 86400
 
 
 class LivenessScanUnavailable(Exception):
@@ -340,3 +351,36 @@ def bound_unsatisfied(
     if bound.max_bytes is not None and sum(c.size_bytes for c in remaining) > bound.max_bytes:
         return True
     return False
+
+
+def trim_jsonl_lines(lines: Sequence[str], *, max_lines: int) -> list[str]:
+    """Oldest-first line trimming for an append-only JSONL store.
+
+    An append-only event-log line has no "protected" concept the way a BoundedCandidate
+    directory does -- nothing owns a past event record the way a live process owns a
+    generation -- so this is a plain oldest-first slice, not select_overflow's
+    protection-aware selection.
+    """
+    if max_lines <= 0:
+        return []
+    if len(lines) <= max_lines:
+        return list(lines)
+    return list(lines[-max_lines:])
+
+
+def append_and_trim_jsonl(path: Path, line: str, *, max_lines: int) -> None:
+    """Append one JSON line to `path`, then trim to at most `max_lines`, oldest-first.
+
+    Mirrors execution/session_log.py's count-bound retention model, applied to a flat JSONL
+    file instead of a directory tree. Not atomic across the read-modify-write (matches the
+    existing writers' posture -- reaper_events.jsonl, session_provenance.jsonl -- which are
+    also plain appends without file locking); an interleaved concurrent append from another
+    process could be dropped by the trim. Acceptable for best-effort operational event logs.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing: list[str] = []
+    if path.exists():
+        existing = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    existing.append(line)
+    trimmed = trim_jsonl_lines(existing, max_lines=max_lines)
+    path.write_text("\n".join(trimmed) + ("\n" if trimmed else ""), encoding="utf-8")

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, NotRequired, TypeAlias, TypedDict, cast
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
+    SESSION_STALE_SECONDS,
     ArtifactLease,
     ArtifactLeaseContention,
     ClaudeDirectoryConventions,
@@ -1332,8 +1333,15 @@ class DefaultSessionSkillManager:
                     return False
         return False
 
-    def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
-        """Remove session dirs not accessed within max_age_seconds.
+    def cleanup_stale(self, max_age_seconds: int = SESSION_STALE_SECONDS) -> int:
+        """Remove session dirs not modified within max_age_seconds.
+
+        Gates on st_mtime, not st_atime -- /dev/shm is commonly mounted noatime, which
+        leaves an atime gate frozen at creation and non-functional. max_age_seconds
+        defaults to SESSION_STALE_SECONDS, the same constant and stat field
+        scripts/pytest_tmp_lifecycle.py's sweep-sessions subcommand uses for the same root
+        via the Taskfile, so the two no longer disagree on when this root's entries are
+        stale (see core/runtime/_reclamation.py).
 
         Returns count of removed directories.
         """
@@ -1348,8 +1356,8 @@ class DefaultSessionSkillManager:
                     continue
                 if not entry.is_dir():
                     continue
-                last_access = entry.stat().st_atime
-                if now - last_access > max_age_seconds:
+                last_modified = entry.stat().st_mtime
+                if now - last_modified > max_age_seconds:
                     if entry.name in self._session_leases:
                         continue
                     lease = _SessionLease.acquire(
@@ -1361,8 +1369,8 @@ class DefaultSessionSkillManager:
                     failures: list[BaseException] = []
                     did_remove = False
                     try:
-                        current_access = entry.stat().st_atime
-                        if now - current_access > max_age_seconds:
+                        current_mtime = entry.stat().st_mtime
+                        if now - current_mtime > max_age_seconds:
                             did_remove = _remove_and_verify(entry)
                     except FileNotFoundError:
                         pass
@@ -1380,7 +1388,7 @@ class DefaultSessionSkillManager:
                     logger.warning(
                         "cleanup_stale_removed",
                         path=str(entry),
-                        age_seconds=round(now - last_access),
+                        age_seconds=round(now - last_modified),
                     )
                     removed += 1
         return removed

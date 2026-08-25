@@ -136,8 +136,9 @@ _EXPECTED_HELPER_EXPORTS = frozenset(
 
 def test_pre_split_pagination_inventory_is_frozen() -> None:
     """The pre-split inventory is well-formed (no duplicates, no leading dots)."""
-    # Size check derives from the module map: if a pre-split test is added or
-    # dropped without updating both sides, the equality check below fails first.
+    # Size check derives from the module map; if a pre-split test is added or
+    # dropped without updating both sides, this size check fires first with a
+    # clear "drift" signal before the equality check below can run.
     assert len(_PRE_SPLIT_PAGINATION_NAMES) == len(_TEST_TO_MODULE_KEYS)
     for name in _PRE_SPLIT_PAGINATION_NAMES:
         assert not name.startswith("."), name

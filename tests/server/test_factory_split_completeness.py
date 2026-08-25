@@ -164,8 +164,9 @@ _EXPECTED_HELPER_EXPORTS = frozenset(
 
 def test_pre_split_factory_inventory_is_frozen() -> None:
     """The pre-split inventory is well-formed (no duplicates, no leading dots)."""
-    # Size check derives from the module map: if a pre-split test is added or
-    # dropped without updating both sides, the equality check below fails first.
+    # Size check derives from the module map; if a pre-split test is added or
+    # dropped without updating both sides, this size check fires first with a
+    # clear "drift" signal before the equality check below can run.
     assert len(_PRE_SPLIT_FACTORY_NAMES) == len(_TEST_TO_MODULE_KEYS)
     for name in _PRE_SPLIT_FACTORY_NAMES:
         assert not name.startswith("."), name
@@ -233,9 +234,11 @@ def test_no_unintended_new_factory_test_files_under_tests_server() -> None:
         pre_existing_siblings = {
             Path(p).name for p in diff_output.splitlines() if pattern.match(Path(p).name)
         }
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        # Git unavailable: fall back to deriving siblings from the working tree minus the
-        # new files. This loses "no unexpected" coverage but keeps the test green in CI sandboxes.
+    except OSError:
+        # Git unavailable (FileNotFoundError / PermissionError) or the SHA is unreachable
+        # (CalledProcessError): fall back to no exclusions. The test then reduces to
+        # "expected new files exist" and loses the "no unexpected files" coverage, but
+        # still passes rather than masking a true positive as a hard error.
         pre_existing_siblings = set()
 
     found = {p.name for p in server_dir.iterdir() if pattern.match(p.name)}

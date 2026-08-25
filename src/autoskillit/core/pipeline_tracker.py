@@ -18,7 +18,7 @@ from typing import Any, Literal
 
 import psutil
 
-from ._plugin_cache import (
+from ._active_kitchens import (
     ActiveKitchensState,
     kitchen_entry_alive,
     read_active_kitchens_registry,

@@ -25,27 +25,20 @@ whether any for_each fan-out over exploration vectors is actively wired.
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
 from autoskillit.core import KNOWN_UNAFFECTED_SKILL_IDS, pkg_root
+from tests.contracts._skill_discovery import MARKER_RE, iter_skill_md_files
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-_MARKER_RE = re.compile(r'<!--\s*autoskillit:exploration-vector\s+id="')
-
 
 def _discover_unaffected_skills() -> frozenset[str]:
-    roots = [pkg_root() / "skills", pkg_root() / "skills_extended"]
     unaffected: set[str] = set()
-    for root in roots:
-        if not root.exists():
-            continue
-        for skill_md in sorted(root.glob("*/SKILL.md")):
-            text = skill_md.read_text(encoding="utf-8")
-            if not _MARKER_RE.search(text):
-                unaffected.add(skill_md.parent.name)
+    for skill_md in iter_skill_md_files():
+        text = skill_md.read_text(encoding="utf-8")
+        if not MARKER_RE.search(text):
+            unaffected.add(skill_md.parent.name)
     return frozenset(unaffected)
 
 

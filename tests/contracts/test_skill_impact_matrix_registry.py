@@ -11,8 +11,6 @@ roots exactly, so the three buckets partition the same population.
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
 from autoskillit.core import (
@@ -21,31 +19,25 @@ from autoskillit.core import (
     KNOWN_UNAFFECTED_SKILL_IDS,
     pkg_root,
 )
+from tests.contracts._skill_discovery import FOR_EACH_RE, MARKER_RE, iter_skill_md_files
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
-
-_MARKER_RE = re.compile(r'<!--\s*autoskillit:exploration-vector\s+id="')
-_FOR_EACH_RE = re.compile(r"for_each:\s*exploration_vectors")
 
 
 def _discover_skill_impact_buckets() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
     """Return (blocked, degraded, unaffected) discovered live over skills/ + skills_extended/."""
-    roots = [pkg_root() / "skills", pkg_root() / "skills_extended"]
     blocked: set[str] = set()
     degraded: set[str] = set()
     unaffected: set[str] = set()
-    for root in roots:
-        if not root.exists():
-            continue
-        for skill_md in sorted(root.glob("*/SKILL.md")):
-            text = skill_md.read_text(encoding="utf-8")
-            name = skill_md.parent.name
-            if not _MARKER_RE.search(text):
-                unaffected.add(name)
-            elif _FOR_EACH_RE.search(text):
-                blocked.add(name)
-            else:
-                degraded.add(name)
+    for skill_md in iter_skill_md_files():
+        text = skill_md.read_text(encoding="utf-8")
+        name = skill_md.parent.name
+        if not MARKER_RE.search(text):
+            unaffected.add(name)
+        elif FOR_EACH_RE.search(text):
+            blocked.add(name)
+        else:
+            degraded.add(name)
     return frozenset(blocked), frozenset(degraded), frozenset(unaffected)
 
 
@@ -128,7 +120,7 @@ def test_discovery_predicate_matches_a_known_blocked_and_degraded_skill() -> Non
 @pytest.mark.parametrize("skill_id", sorted(KNOWN_BLOCKED_SKILL_IDS | KNOWN_DEGRADED_SKILL_IDS))
 def test_registry_entry_still_carries_the_exploration_vector_marker(skill_id: str) -> None:
     text = _read_skill_md(skill_id)
-    assert _MARKER_RE.search(text), (
+    assert MARKER_RE.search(text), (
         f"{skill_id} lost its exploration-vector marker; it should move to "
         "KNOWN_UNAFFECTED_SKILL_IDS via a tracking issue."
     )

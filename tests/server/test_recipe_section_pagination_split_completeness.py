@@ -83,22 +83,23 @@ _TEST_TO_MODULE: dict[str, str] = {
     "test_exact_fit_succeeds_and_one_byte_under_replans_without_oversize": "tests.server.test_recipe_section_pagination_reconstruction",
     "test_production_like_ten_thousand_byte_bound_is_honored": "tests.server.test_recipe_section_pagination_reconstruction",
     "test_page_and_fragment_indices_cross_two_digit_boundaries": "tests.server.test_recipe_section_pagination_reconstruction",
-    # cache_and_concurrency
-    "test_candidate_sizing_uses_binary_search_scale_oracle_calls": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_final_digest_injection_revalidates_descriptor_boundaries": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_final_verifier_rejects_fragment_descriptor_and_content_corruption": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_repeat_builds_and_fresh_cache_are_deterministic": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_cached_plans_are_reused_and_cache_clear_forces_a_rebuild": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_concurrent_same_key_requests_share_one_page_plan_build": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_retirement_during_build_prevents_stale_cache_admission": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_every_cache_key_dimension_prevents_aliasing": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_cache_entry_limit_evicts_oldest_plan": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_cache_rejects_a_single_plan_over_its_byte_limit": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_cache_byte_limit_evicts_oldest_plan": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_cache_replacement_subtracts_the_previous_plan_weight": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_cache_kitchen_eviction_subtracts_every_matching_plan_weight": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
-    "test_cross_process_plan_and_rendering_are_deterministic": "tests.server.test_recipe_section_pagination_cache_and_concurrency",
+    # cache (PagePlanCache mechanics + concurrent build races)
+    "test_cached_plans_are_reused_and_cache_clear_forces_a_rebuild": "tests.server.test_recipe_section_pagination_cache",
+    "test_concurrent_same_key_requests_share_one_page_plan_build": "tests.server.test_recipe_section_pagination_cache",
+    "test_retirement_during_build_prevents_stale_cache_admission": "tests.server.test_recipe_section_pagination_cache",
+    "test_every_cache_key_dimension_prevents_aliasing": "tests.server.test_recipe_section_pagination_cache",
+    "test_cache_entry_limit_evicts_oldest_plan": "tests.server.test_recipe_section_pagination_cache",
+    "test_cache_rejects_a_single_plan_over_its_byte_limit": "tests.server.test_recipe_section_pagination_cache",
+    "test_cache_byte_limit_evicts_oldest_plan": "tests.server.test_recipe_section_pagination_cache",
+    "test_cache_replacement_subtracts_the_previous_plan_weight": "tests.server.test_recipe_section_pagination_cache",
+    "test_cache_kitchen_eviction_subtracts_every_matching_plan_weight": "tests.server.test_recipe_section_pagination_cache",
+    # invariants (sizing, descriptor integrity, manifest, determinism)
+    "test_candidate_sizing_uses_binary_search_scale_oracle_calls": "tests.server.test_recipe_section_pagination_invariants",
+    "test_final_digest_injection_revalidates_descriptor_boundaries": "tests.server.test_recipe_section_pagination_invariants",
+    "test_final_verifier_rejects_fragment_descriptor_and_content_corruption": "tests.server.test_recipe_section_pagination_invariants",
+    "test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential": "tests.server.test_recipe_section_pagination_invariants",
+    "test_repeat_builds_and_fresh_cache_are_deterministic": "tests.server.test_recipe_section_pagination_invariants",
+    "test_cross_process_plan_and_rendering_are_deterministic": "tests.server.test_recipe_section_pagination_invariants",
 }
 
 _TEST_TO_MODULE_KEYS = frozenset(_TEST_TO_MODULE.keys())
@@ -106,11 +107,12 @@ _TEST_TO_MODULE_KEYS = frozenset(_TEST_TO_MODULE.keys())
 _NEW_PAGINATION_TEST_FILES = (
     "tests/server/test_recipe_section_pagination_planning.py",
     "tests/server/test_recipe_section_pagination_reconstruction.py",
-    "tests/server/test_recipe_section_pagination_cache_and_concurrency.py",
+    "tests/server/test_recipe_section_pagination_cache.py",
+    "tests/server/test_recipe_section_pagination_invariants.py",
 )
 
 _ALL_NEW_PAGINATION_FILES = (
-    "tests/server/_recipe_section_pagination_helpers.py",
+    "tests/server/_recipe_section_pagination_test_helpers.py",
     *_NEW_PAGINATION_TEST_FILES,
     "tests/server/test_recipe_section_pagination_split_completeness.py",
 )
@@ -189,7 +191,11 @@ def test_no_unintended_new_pagination_test_files_under_tests_server() -> None:
     server_dir = Path("tests/server")
     pattern = re.compile(r"^test_recipe_section_pagination.*\.py$")
     found = sorted(p.name for p in server_dir.iterdir() if pattern.match(p.name))
-    expected = sorted(p.split("/")[-1] for p in _ALL_NEW_PAGINATION_FILES if "test_" in p)
+    # Filter helper files (private modules start with `_`) — the prior `if "test_" in p`
+    # heuristic broke once helpers were renamed to `_recipe_section_pagination_test_helpers.py`.
+    expected = sorted(
+        p.split("/")[-1] for p in _ALL_NEW_PAGINATION_FILES if not p.split("/")[-1].startswith("_")
+    )
     assert found == expected, (
         f"Unexpected new pagination test files: {set(found) - set(expected)}; "
         f"missing: {set(expected) - set(found)}"
@@ -201,7 +207,7 @@ def test_helper_module_exports_match_source_helper_names() -> None:
     contract that makes verbatim test-body moves work without call-site rewrites."""
     import ast
 
-    from tests.server import _recipe_section_pagination_helpers as helpers
+    from tests.server import _recipe_section_pagination_test_helpers as helpers
 
     # Walk only the module body (not function bodies) to collect names defined at module
     # level: functions, classes, and module-level assignments. dir()/vars() would surface

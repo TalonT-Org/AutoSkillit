@@ -11,7 +11,7 @@ from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
     render_recipe_section_page,
 )
-from tests.server._recipe_section_pagination_helpers import (
+from tests.server._recipe_section_pagination_test_helpers import (
     _PAGE_TEST_BOUND,
     _build,
     _decoded_pages,

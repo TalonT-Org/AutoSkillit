@@ -12,7 +12,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.server._factory import _gh_cli_token, _LazyTokenFactory, make_context
-from tests.server._factory_helpers import _runner
+from tests.server._factory_test_helpers import _runner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

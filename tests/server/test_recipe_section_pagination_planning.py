@@ -25,7 +25,7 @@ from autoskillit.server._recipe_section_pagination import (
     render_recipe_section_failure,
     select_recipe_section,
 )
-from tests.server._recipe_section_pagination_helpers import (
+from tests.server._recipe_section_pagination_test_helpers import (
     _PAGE_TEST_BOUND,
     _build,
     _generation,

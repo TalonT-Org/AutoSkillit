@@ -146,7 +146,7 @@ _NEW_FACTORY_TEST_FILES = (
 )
 
 _ALL_NEW_FACTORY_FILES = (
-    "tests/server/_factory_helpers.py",
+    "tests/server/_factory_test_helpers.py",
     *_NEW_FACTORY_TEST_FILES,
     "tests/server/test_factory_split_completeness.py",
 )
@@ -243,7 +243,11 @@ def test_no_unintended_new_factory_test_files_under_tests_server() -> None:
 
     found = {p.name for p in server_dir.iterdir() if pattern.match(p.name)}
     found -= pre_existing_siblings
-    expected = {p.split("/")[-1] for p in _ALL_NEW_FACTORY_FILES if "test_" in p}
+    # Filter helper files (private modules start with `_`) — the prior `if "test_" in p`
+    # heuristic broke once helpers were renamed to `_factory_test_helpers.py` etc.
+    expected = {
+        p.split("/")[-1] for p in _ALL_NEW_FACTORY_FILES if not p.split("/")[-1].startswith("_")
+    }
     assert found == expected, (
         f"Unexpected new factory test files: {found - expected}; missing: {expected - found}"
     )
@@ -254,7 +258,7 @@ def test_helper_module_exports_match_source_helper_names() -> None:
     contract that makes verbatim test-body moves work without call-site rewrites."""
     import ast
 
-    from tests.server import _factory_helpers as helpers
+    from tests.server import _factory_test_helpers as helpers
 
     # Walk only the module body (not function bodies) to collect names defined at module
     # level: functions, classes, and module-level assignments. dir()/vars() would surface

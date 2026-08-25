@@ -144,7 +144,6 @@ def test_make_context_skips_replay_runner_for_non_claude_backend(
 ):
     monkeypatch.setenv("REPLAY_SCENARIO", "1")
     monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(tmp_path))
-    monkeypatch.delenv("RECORD_SCENARIO", raising=False)
 
     mock_build = Mock()
     monkeypatch.setattr("autoskillit.server._factory.build_replay_runner", mock_build)
@@ -161,7 +160,6 @@ def test_make_context_skips_record_runner_for_non_claude_backend(
 ):
     monkeypatch.setenv("RECORD_SCENARIO", "1")
     monkeypatch.setenv("RECORD_SCENARIO_DIR", str(tmp_path))
-    monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path), project_dir=tmp_path)

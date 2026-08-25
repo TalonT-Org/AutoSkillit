@@ -170,8 +170,6 @@ _INTENTIONAL_ENV_INPUT_SITES: dict[str, str] = {
         "tests/server/test_factory_context_construction.py::AUTOSKILLIT_HEADLESS",
         "tests/server/test_factory_context_construction.py::AUTOSKILLIT_PROVIDER_PROFILE",
         "tests/server/test_factory_output_and_token_resolution.py::GITHUB_TOKEN",
-        "tests/server/test_factory_project_dir_backend_roots.py::RECORD_SCENARIO",
-        "tests/server/test_factory_project_dir_backend_roots.py::REPLAY_SCENARIO",
         "tests/server/test_factory_recording.py::RECORD_SCENARIO",
         "tests/server/test_factory_recording.py::REPLAY_SCENARIO",
         "tests/server/test_helpers_tier_guards.py::AUTOSKILLIT_HEADLESS",

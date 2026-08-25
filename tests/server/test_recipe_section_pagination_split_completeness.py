@@ -57,49 +57,75 @@ _PRE_SPLIT_PAGINATION_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_TEST_TO_MODULE: dict[str, str] = {
+_PAGINATION_SPLIT_TARGETS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # planning
-    "test_request_state_rejects_non_integer_and_below_floor_bounds": "tests.server.test_recipe_section_pagination_planning",
-    "test_page_descriptor_rejects_unknown_incomplete_and_mixed_range_families": "tests.server.test_recipe_section_pagination_planning",
-    "test_page_descriptor_rejects_malformed_raw_range_values": "tests.server.test_recipe_section_pagination_planning",
-    "test_page_descriptor_rejects_malformed_fragment_values": "tests.server.test_recipe_section_pagination_planning",
-    "test_scalar_planning_never_serializes_the_whole_oversized_remainder": "tests.server.test_recipe_section_pagination_planning",
-    "test_terminal_initialization_page_carries_progress_and_completion_receipt": "tests.server.test_recipe_section_pagination_planning",
-    "test_char_ceiling_accepts_a_page_within_it": "tests.server.test_recipe_section_pagination_planning",
-    "test_char_ceiling_rejects_a_page_that_exceeds_it": "tests.server.test_recipe_section_pagination_planning",
-    "test_select_recipe_section_loads_only_recognized_dynamic_content": "tests.server.test_recipe_section_pagination_planning",
-    "test_select_recipe_section_rejects_empty_dynamic_content": "tests.server.test_recipe_section_pagination_planning",
-    "test_failure_floor_is_derived_from_the_registered_renderer": "tests.server.test_recipe_section_pagination_planning",
-    "test_string_scalar_strategy_rejects_non_string_values": "tests.server.test_recipe_section_pagination_planning",
-    "test_convergence_ceiling_is_derived_from_artifact_policy": "tests.server.test_recipe_section_pagination_planning",
+    (
+        "tests.server.test_recipe_section_pagination_planning",
+        (
+            "test_request_state_rejects_non_integer_and_below_floor_bounds",
+            "test_page_descriptor_rejects_unknown_incomplete_and_mixed_range_families",
+            "test_page_descriptor_rejects_malformed_raw_range_values",
+            "test_page_descriptor_rejects_malformed_fragment_values",
+            "test_scalar_planning_never_serializes_the_whole_oversized_remainder",
+            "test_terminal_initialization_page_carries_progress_and_completion_receipt",
+            "test_char_ceiling_accepts_a_page_within_it",
+            "test_char_ceiling_rejects_a_page_that_exceeds_it",
+            "test_select_recipe_section_loads_only_recognized_dynamic_content",
+            "test_select_recipe_section_rejects_empty_dynamic_content",
+            "test_failure_floor_is_derived_from_the_registered_renderer",
+            "test_string_scalar_strategy_rejects_non_string_values",
+            "test_convergence_ceiling_is_derived_from_artifact_policy",
+        ),
+    ),
     # reconstruction
-    "test_extract_recipe_step_bodies_preserves_requested_order": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_raw_pages_preserve_text_and_exact_utf8_bounds": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_json_scalar_pages_are_independently_valid_and_reconstruct_markdown": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_ordered_array_pages_are_complete_json_documents": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_oversized_array_elements_fragment_in_first_middle_and_final_positions": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_array_plan_can_interleave_ordinary_and_fragment_pages": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_raw_recipe_and_named_step_yaml_use_unchanged_raw_reconstruction": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_exact_fit_succeeds_and_one_byte_under_replans_without_oversize": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_production_like_ten_thousand_byte_bound_is_honored": "tests.server.test_recipe_section_pagination_reconstruction",
-    "test_page_and_fragment_indices_cross_two_digit_boundaries": "tests.server.test_recipe_section_pagination_reconstruction",
+    (
+        "tests.server.test_recipe_section_pagination_reconstruction",
+        (
+            "test_extract_recipe_step_bodies_preserves_requested_order",
+            "test_raw_pages_preserve_text_and_exact_utf8_bounds",
+            "test_json_scalar_pages_are_independently_valid_and_reconstruct_markdown",
+            "test_ordered_array_pages_are_complete_json_documents",
+            "test_oversized_array_elements_fragment_in_first_middle_and_final_positions",
+            "test_array_plan_can_interleave_ordinary_and_fragment_pages",
+            "test_raw_recipe_and_named_step_yaml_use_unchanged_raw_reconstruction",
+            "test_exact_fit_succeeds_and_one_byte_under_replans_without_oversize",
+            "test_production_like_ten_thousand_byte_bound_is_honored",
+            "test_page_and_fragment_indices_cross_two_digit_boundaries",
+        ),
+    ),
     # cache (PagePlanCache mechanics + concurrent build races)
-    "test_cached_plans_are_reused_and_cache_clear_forces_a_rebuild": "tests.server.test_recipe_section_pagination_cache",
-    "test_concurrent_same_key_requests_share_one_page_plan_build": "tests.server.test_recipe_section_pagination_cache",
-    "test_retirement_during_build_prevents_stale_cache_admission": "tests.server.test_recipe_section_pagination_cache",
-    "test_every_cache_key_dimension_prevents_aliasing": "tests.server.test_recipe_section_pagination_cache",
-    "test_cache_entry_limit_evicts_oldest_plan": "tests.server.test_recipe_section_pagination_cache",
-    "test_cache_rejects_a_single_plan_over_its_byte_limit": "tests.server.test_recipe_section_pagination_cache",
-    "test_cache_byte_limit_evicts_oldest_plan": "tests.server.test_recipe_section_pagination_cache",
-    "test_cache_replacement_subtracts_the_previous_plan_weight": "tests.server.test_recipe_section_pagination_cache",
-    "test_cache_kitchen_eviction_subtracts_every_matching_plan_weight": "tests.server.test_recipe_section_pagination_cache",
+    (
+        "tests.server.test_recipe_section_pagination_cache",
+        (
+            "test_cached_plans_are_reused_and_cache_clear_forces_a_rebuild",
+            "test_concurrent_same_key_requests_share_one_page_plan_build",
+            "test_retirement_during_build_prevents_stale_cache_admission",
+            "test_every_cache_key_dimension_prevents_aliasing",
+            "test_cache_entry_limit_evicts_oldest_plan",
+            "test_cache_rejects_a_single_plan_over_its_byte_limit",
+            "test_cache_byte_limit_evicts_oldest_plan",
+            "test_cache_replacement_subtracts_the_previous_plan_weight",
+            "test_cache_kitchen_eviction_subtracts_every_matching_plan_weight",
+        ),
+    ),
     # invariants (sizing, descriptor integrity, manifest, determinism)
-    "test_candidate_sizing_uses_binary_search_scale_oracle_calls": "tests.server.test_recipe_section_pagination_invariants",
-    "test_final_digest_injection_revalidates_descriptor_boundaries": "tests.server.test_recipe_section_pagination_invariants",
-    "test_final_verifier_rejects_fragment_descriptor_and_content_corruption": "tests.server.test_recipe_section_pagination_invariants",
-    "test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential": "tests.server.test_recipe_section_pagination_invariants",
-    "test_repeat_builds_and_fresh_cache_are_deterministic": "tests.server.test_recipe_section_pagination_invariants",
-    "test_cross_process_plan_and_rendering_are_deterministic": "tests.server.test_recipe_section_pagination_invariants",
+    (
+        "tests.server.test_recipe_section_pagination_invariants",
+        (
+            "test_candidate_sizing_uses_binary_search_scale_oracle_calls",
+            "test_final_digest_injection_revalidates_descriptor_boundaries",
+            "test_final_verifier_rejects_fragment_descriptor_and_content_corruption",
+            "test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential",
+            "test_repeat_builds_and_fresh_cache_are_deterministic",
+            "test_cross_process_plan_and_rendering_are_deterministic",
+        ),
+    ),
+)
+
+_TEST_TO_MODULE: dict[str, str] = {
+    test_name: target_module
+    for target_module, test_names in _PAGINATION_SPLIT_TARGETS
+    for test_name in test_names
 }
 
 _TEST_TO_MODULE_KEYS = frozenset(_TEST_TO_MODULE.keys())

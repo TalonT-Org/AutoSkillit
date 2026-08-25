@@ -1,4 +1,4 @@
-"""Persisted audit/skill contract validation and gate-error schema tests (#4796)."""
+"""Persisted audit/skill contract validation tests."""
 
 from __future__ import annotations
 
@@ -181,35 +181,3 @@ def test_persisted_skill_contract_preserves_falsey_absence_value(
     restored_default = restored.inputs[0].absence_value
     assert restored_default == value
     assert type(restored_default) is type(value)
-
-
-class TestGateErrorSchemaNormalization:
-    """Gate errors use the standard 9-field response schema."""
-
-    def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
-        """Gate errors must use the same schema as normal responses."""
-        from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._guards import _require_enabled
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        gate_result = _require_enabled()
-        assert gate_result is not None
-        response = json.loads(gate_result)
-        assert response["success"] is False
-        assert response["is_error"] is True
-        assert response["needs_retry"] is False
-        assert "result" in response
-
-    def test_dry_walkthrough_gate_returns_standard_schema(self, tool_ctx, tmp_path):
-        """Dry-walkthrough gate errors must use the standard response schema."""
-        from autoskillit.server._guards import _check_dry_walkthrough
-
-        plan = tmp_path / "plan.md"
-        plan.write_text("No marker here")
-        skill_cmd = f"/implement-worktree {plan}"
-        result = _check_dry_walkthrough(skill_cmd, str(tmp_path))
-        assert result is not None
-        response = json.loads(result)
-        assert response["success"] is False
-        assert response["is_error"] is True
-        assert response["subtype"] == "gate_error"

@@ -1,4 +1,4 @@
-"""run_skill gate enforcement tests: headless and tier-aware (#4796)."""
+"""run_skill gate enforcement tests: headless and tier-aware."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class TestHeadlessGateEnforcement:
     """
 
     @pytest.fixture(autouse=True)
-    def _set_headless_env(self, monkeypatch):
+    def _set_headless_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
 
@@ -84,3 +84,35 @@ class TestTierAwareGateEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         result = json.loads(await close_kitchen())
         assert result["subtype"] == "headless_error"
+
+
+class TestGateErrorSchemaNormalization:
+    """Gate errors use the standard 9-field response schema."""
+
+    def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
+        """Gate errors must use the same schema as normal responses."""
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._guards import _require_enabled
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        gate_result = _require_enabled()
+        assert gate_result is not None
+        response = json.loads(gate_result)
+        assert response["success"] is False
+        assert response["is_error"] is True
+        assert response["needs_retry"] is False
+        assert "result" in response
+
+    def test_dry_walkthrough_gate_returns_standard_schema(self, tool_ctx, tmp_path):
+        """Dry-walkthrough gate errors must use the standard response schema."""
+        from autoskillit.server._guards import _check_dry_walkthrough
+
+        plan = tmp_path / "plan.md"
+        plan.write_text("No marker here")
+        skill_cmd = f"/implement-worktree {plan}"
+        result = _check_dry_walkthrough(skill_cmd, str(tmp_path))
+        assert result is not None
+        response = json.loads(result)
+        assert response["success"] is False
+        assert response["is_error"] is True
+        assert response["subtype"] == "gate_error"

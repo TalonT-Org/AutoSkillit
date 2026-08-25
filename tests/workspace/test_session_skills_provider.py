@@ -38,7 +38,7 @@ from autoskillit.workspace import (
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.fakes import adapt_test_skill_semantics
-from tests.workspace._helpers import _CODEX_CAPABILITIES
+from tests.workspace._helpers import _CODEX_CAPABILITIES, _write_project_skill_override
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -199,9 +199,7 @@ def test_provider_gating_is_agent_safe(
     provider = SkillsDirectoryProvider()
     bundled = provider.resolver.resolve("open-kitchen")
     assert bundled is not None
-    override = tmp_path / ".autoskillit/skills/open-kitchen/SKILL.md"
-    override.parent.mkdir(parents=True)
-    override.write_text(bundled.canonical_content, encoding="utf-8")
+    _write_project_skill_override(tmp_path, "open-kitchen", bundled.canonical_content)
     monkeypatch.chdir(tmp_path)
 
     project_local = provider.resolver.resolve_effective("open-kitchen", tmp_path)

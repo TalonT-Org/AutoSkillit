@@ -22,6 +22,17 @@ def _document(name: str, body: str) -> str:
     return f"---\nname: {name}\ndescription: Cache fixture.\n---\n{body}\n"
 
 
+def _write_project_skill_override(
+    project_root: Path,
+    name: str,
+    canonical_content: str,
+) -> Path:
+    override = project_root / ".autoskillit" / "skills" / name / "SKILL.md"
+    override.parent.mkdir(parents=True, exist_ok=True)
+    override.write_text(canonical_content, encoding="utf-8")
+    return override
+
+
 def _write_effective_skill(
     root: Path,
     name: str,

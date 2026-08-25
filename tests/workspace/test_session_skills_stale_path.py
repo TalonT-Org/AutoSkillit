@@ -16,7 +16,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from tests.fakes import adapt_test_skill_semantics
-from tests.workspace._helpers import _CODEX_CAPABILITIES
+from tests.workspace._helpers import _CODEX_CAPABILITIES, _write_project_skill_override
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -83,9 +83,11 @@ def test_catalog_context_uses_manager_root_when_cwd_has_project_override(
     bundled = manager._provider.resolver.resolve("open-kitchen")
     assert bundled is not None
     foreign_project = tmp_path / "foreign-project"
-    override = foreign_project / ".autoskillit/skills/open-kitchen/SKILL.md"
-    override.parent.mkdir(parents=True)
-    override.write_text(bundled.canonical_content, encoding="utf-8")
+    _write_project_skill_override(
+        foreign_project,
+        "open-kitchen",
+        bundled.canonical_content,
+    )
     monkeypatch.chdir(foreign_project)
 
     catalog, context = _catalog_context(manager)

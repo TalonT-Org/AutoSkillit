@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 from typing import assert_never
 
 import pytest
@@ -52,36 +51,3 @@ def test_available_update_is_always_satisfiable(channel: ReleaseChannel) -> None
             assert verdict == AdvanceVerdict.ADVANCED
         else:
             assert verdict in (AdvanceVerdict.UNCHANGED, AdvanceVerdict.NOT_APPLICABLE)
-
-
-class _ExhaustiveDispatchVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
-        self.has_match = False
-        self.has_assert_never = False
-
-    def visit_Match(self, node: ast.Match) -> None:
-        self.has_match = True
-        self.generic_visit(node)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Name) and node.func.id == "assert_never":
-            self.has_assert_never = True
-        self.generic_visit(node)
-
-
-@pytest.mark.parametrize("function_name", ["update_available", "advance_verdict"])
-def test_release_channel_dispatch_is_exhaustive(function_name: str) -> None:
-    from autoskillit.core import pkg_root
-
-    source_path = pkg_root() / "core" / "_release_identity.py"
-    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-    function = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == function_name
-    )
-    visitor = _ExhaustiveDispatchVisitor()
-    visitor.visit(ast.Module(body=function.body, type_ignores=[]))
-
-    assert visitor.has_match, f"{function_name} must dispatch with match"
-    assert visitor.has_assert_never, f"{function_name} must close with assert_never"

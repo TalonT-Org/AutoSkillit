@@ -91,10 +91,8 @@ EXPLORATION_FALLBACK_CODES: frozenset[ExplorationFailureCode] = frozenset(
 class BrokerAuthorityStatus(StrEnum):
     """Exhaustive, truthful states for ``kitchen_status()``'s broker_authority field.
 
-    Total by construction: session_type() is fail-closed over a closed
-    SessionType enum, EXPLORER_INELIGIBLE_SESSION_TYPES is a closed frozenset,
-    the store-type check is a boolean isinstance, and the binding probe
-    returns bool — every path lands on exactly one of these four states.
+    One member per branch of ``kitchen_status()``'s broker_authority assignment
+    (see tools_status.py) — the four members are exhaustive by construction.
     """
 
     AVAILABLE = "available"

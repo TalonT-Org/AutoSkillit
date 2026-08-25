@@ -25,14 +25,11 @@ harvests gets a loud, greppable failure instead of a quietly-wrong veto set.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-
-import regex as re
-
-from ..io import atomic_write
 
 __all__ = [
     "BoundedCandidate",
@@ -391,6 +388,11 @@ def append_and_trim_jsonl(path: Path, line: str, *, max_lines: int) -> None:
     also plain appends without file locking); an interleaved concurrent append from another
     process could be dropped by the trim. Acceptable for best-effort operational event logs.
     """
+    # Keep this module importable by the lifecycle script's bare-interpreter
+    # fallback. The JSONL writers run inside the installed package and can load
+    # the heavier core.io module only when they actually need it.
+    from ..io import atomic_write
+
     existing: list[str] = []
     if path.exists():
         existing = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]

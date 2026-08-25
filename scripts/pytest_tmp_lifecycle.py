@@ -11,6 +11,7 @@ rationale (REVOCABLE vs MONOTONIC) this reaper's retention logic depends on.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import shlex
@@ -22,55 +23,75 @@ import time
 from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING
 
 
-def _ensure_autoskillit_importable() -> None:
-    """Idempotent, conditional sys.path insert -- safe under repeated in-process module loads.
-
-    tests/infra/test_pytest_tmp_lifecycle.py loads this script in-process via
-    importlib.util.spec_from_file_location() from multiple test functions in the same xdist
-    worker. An unguarded module-level sys.path.insert would mutate that worker's interpreter
-    state on every load -- exactly the bare module-level global mutation
-    tests/AGENTS.md's xdist Compatibility section forbids. Only insert when autoskillit is not
-    already importable, and only when the resolved src/ is not already on sys.path.
-    """
-    try:
-        import autoskillit  # noqa: F401
-    except ImportError:
-        pass
-    else:
-        return
-    src_root = str(Path(__file__).resolve().parent.parent / "src")
-    if src_root not in sys.path:
-        sys.path.insert(0, src_root)
+def _load_standalone_module(name: str, path: Path) -> ModuleType:
+    """Load one stdlib-only IL-0 leaf without executing package initializers."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load standalone module {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
-_ensure_autoskillit_importable()
+if TYPE_CHECKING:
+    from autoskillit.core import StoreCapacityExhaustedError, default_space_probe
+    from autoskillit.core.runtime import (
+        PYTEST_GENERATION_NAME_RE,
+        SESSION_STALE_SECONDS,
+        BoundedCandidate,
+        EvidenceSource,
+        LivenessScanUnavailable,
+        PathEvidence,
+        ReclamationBound,
+        Revocability,
+        bound_unsatisfied,
+        harvest_kernel_references,
+        harvest_snapshot_references,
+        is_pid_zombie,
+        read_boot_id,
+        read_starttime_ticks,
+        select_overflow,
+        snapshot_referenced,
+        user_generation_root,
+        veto_paths,
+    )
+else:
+    core_root = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "core"
+    capacity = _load_standalone_module("_autoskillit_capacity", core_root / "_capacity.py")
+    linux_proc = _load_standalone_module(
+        "_autoskillit_linux_proc", core_root / "runtime" / "_linux_proc.py"
+    )
+    reclamation = _load_standalone_module(
+        "_autoskillit_reclamation", core_root / "runtime" / "_reclamation.py"
+    )
 
-from autoskillit.core import (  # noqa: E402
-    StoreCapacityExhaustedError,
-    default_space_probe,
-)
-from autoskillit.core.runtime import (  # noqa: E402
-    PYTEST_GENERATION_NAME_RE,
-    SESSION_STALE_SECONDS,
-    BoundedCandidate,
-    EvidenceSource,
-    LivenessScanUnavailable,
-    PathEvidence,
-    ReclamationBound,
-    Revocability,
-    bound_unsatisfied,
-    harvest_kernel_references,
-    harvest_snapshot_references,
-    is_pid_zombie,
-    read_boot_id,
-    read_starttime_ticks,
-    select_overflow,
-    snapshot_referenced,
-    user_generation_root,
-    veto_paths,
-)
+    class StoreCapacityExhaustedError(RuntimeError):
+        """Standalone capacity fault used before the project environment exists."""
+
+    default_space_probe = capacity.default_space_probe
+    PYTEST_GENERATION_NAME_RE = reclamation.PYTEST_GENERATION_NAME_RE
+    SESSION_STALE_SECONDS = reclamation.SESSION_STALE_SECONDS
+    BoundedCandidate = reclamation.BoundedCandidate
+    EvidenceSource = reclamation.EvidenceSource
+    LivenessScanUnavailable = reclamation.LivenessScanUnavailable
+    PathEvidence = reclamation.PathEvidence
+    ReclamationBound = reclamation.ReclamationBound
+    Revocability = reclamation.Revocability
+    bound_unsatisfied = reclamation.bound_unsatisfied
+    harvest_kernel_references = reclamation.harvest_kernel_references
+    harvest_snapshot_references = reclamation.harvest_snapshot_references
+    is_pid_zombie = linux_proc.is_pid_zombie
+    read_boot_id = linux_proc.read_boot_id
+    read_starttime_ticks = linux_proc.read_starttime_ticks
+    select_overflow = reclamation.select_overflow
+    snapshot_referenced = reclamation.snapshot_referenced
+    user_generation_root = reclamation.user_generation_root
+    veto_paths = reclamation.veto_paths
 
 _LEGACY_PREFIXES = (
     "pytest-tmp-",

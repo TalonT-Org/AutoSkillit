@@ -268,6 +268,14 @@ def test_minimal_ctx_provides_isolated_gate(minimal_ctx):
     assert minimal_ctx.gate.enabled is False
 
 
+def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open):
+    """tool_ctx_kitchen_open must start with gate explicitly open (the only diff from tool_ctx)."""
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    assert isinstance(tool_ctx_kitchen_open.gate, DefaultGateState)
+    assert tool_ctx_kitchen_open.gate.enabled is True
+
+
 def test_is_test_feature_enabled_reads_project_config(monkeypatch):
     """When AUTOSKILLIT_TEST_FEATURES is unset, fleet resolves True via experimental_enabled."""
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)

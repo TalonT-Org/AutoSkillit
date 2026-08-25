@@ -138,24 +138,6 @@ def test_resolve_project_dir_cwd_fallback(monkeypatch):
     assert resolve_project_dir() == Path.cwd()
 
 
-def test_tool_ctx_fixture_gate_starts_closed(tool_ctx) -> None:
-    """tool_ctx must start with gate closed to match production."""
-    assert tool_ctx.gate.enabled is False, (
-        "tool_ctx must start with gate closed to match production. "
-        "Use tool_ctx_kitchen_open for tests that need an open gate."
-    )
-
-
-def test_minimal_ctx_fixture_gate_starts_closed(minimal_ctx) -> None:
-    """minimal_ctx must start with gate closed to match production."""
-    assert minimal_ctx.gate.enabled is False
-
-
-def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open) -> None:
-    """tool_ctx_kitchen_open must start with gate open."""
-    assert tool_ctx_kitchen_open.gate.enabled is True
-
-
 def test_make_context_skips_replay_runner_for_non_claude_backend(
     monkeypatch, tmp_path, _register_aider_backend
 ):

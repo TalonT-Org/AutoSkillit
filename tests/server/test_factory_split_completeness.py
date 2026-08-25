@@ -59,9 +59,6 @@ _PRE_SPLIT_FACTORY_NAMES: frozenset[str] = frozenset(
         "test_resolve_project_dir_cwd_fallback",
         "test_make_context_ignores_ambient_provider_profile",
         "test_make_context_no_env_profile_preserves_config_default",
-        "test_tool_ctx_fixture_gate_starts_closed",
-        "test_minimal_ctx_fixture_gate_starts_closed",
-        "test_tool_ctx_kitchen_open_fixture_gate_starts_open",
         "test_make_context_skips_replay_runner_for_non_claude_backend",
         "test_make_context_skips_record_runner_for_non_claude_backend",
         "test_make_context_backend_is_coding_agent_backend",
@@ -112,24 +109,21 @@ _TEST_TO_MODULE: dict[str, str] = {
     "test_token_factory_resolves_lazily": "tests.server.test_factory_output_and_token_resolution",
     "test_token_factory_caches_none": "tests.server.test_factory_output_and_token_resolution",
     "test_gh_cli_token_not_called_during_make_context": "tests.server.test_factory_output_and_token_resolution",
-    # project_dir_backend_roots
-    "test_make_context_uses_explicit_project_dir": "tests.server.test_factory_project_dir_backend_roots",
-    "test_serve_passes_project_dir_env_to_make_context": "tests.server.test_factory_project_dir_backend_roots",
-    "test_serve_normalizes_empty_audit_authority_before_context_construction": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_project_dir_git_root_fallback": "tests.server.test_factory_project_dir_backend_roots",
-    "test_resolve_project_dir_git_root": "tests.server.test_factory_project_dir_backend_roots",
-    "test_resolve_project_dir_ignores_a_toplevel_that_is_not_a_directory": "tests.server.test_factory_project_dir_backend_roots",
-    "test_resolve_project_dir_cwd_fallback": "tests.server.test_factory_project_dir_backend_roots",
-    "test_tool_ctx_fixture_gate_starts_closed": "tests.server.test_factory_project_dir_backend_roots",
-    "test_minimal_ctx_fixture_gate_starts_closed": "tests.server.test_factory_project_dir_backend_roots",
-    "test_tool_ctx_kitchen_open_fixture_gate_starts_open": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_skips_replay_runner_for_non_claude_backend": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_skips_record_runner_for_non_claude_backend": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_backend_is_coding_agent_backend": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_default_backend_is_claude_code": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_unknown_backend_raises_value_error": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_codex_backend_not_none_plain_config": "tests.server.test_factory_project_dir_backend_roots",
-    "test_make_context_builds_persistent_roots_over_all_registered_backends": "tests.server.test_factory_project_dir_backend_roots",
+    # project_dir_and_backend_selection
+    "test_make_context_uses_explicit_project_dir": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_serve_passes_project_dir_env_to_make_context": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_serve_normalizes_empty_audit_authority_before_context_construction": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_project_dir_git_root_fallback": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_resolve_project_dir_git_root": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_resolve_project_dir_ignores_a_toplevel_that_is_not_a_directory": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_resolve_project_dir_cwd_fallback": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_skips_replay_runner_for_non_claude_backend": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_skips_record_runner_for_non_claude_backend": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_backend_is_coding_agent_backend": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_default_backend_is_claude_code": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_unknown_backend_raises_value_error": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_codex_backend_not_none_plain_config": "tests.server.test_factory_project_dir_and_backend_selection",
+    "test_make_context_builds_persistent_roots_over_all_registered_backends": "tests.server.test_factory_project_dir_and_backend_selection",
 }
 
 _TEST_TO_MODULE_KEYS = frozenset(_TEST_TO_MODULE.keys())
@@ -142,7 +136,7 @@ _PR_BASE_SHA = "d846cb8e2c4300a75d405b31a34ad10336d65357"
 _NEW_FACTORY_TEST_FILES = (
     "tests/server/test_factory_context_construction.py",
     "tests/server/test_factory_output_and_token_resolution.py",
-    "tests/server/test_factory_project_dir_backend_roots.py",
+    "tests/server/test_factory_project_dir_and_backend_selection.py",
 )
 
 _ALL_NEW_FACTORY_FILES = (

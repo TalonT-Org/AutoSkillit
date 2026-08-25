@@ -28,6 +28,7 @@ _FORBIDDEN = {
     "organization.id": "private-organization-id",
     "user.account_id": "private-account-id",
     "user.account_uuid": "private-account-uuid",
+    "user.id": "private-user-id",
 }
 
 
@@ -184,6 +185,15 @@ def test_accepts_all_signals_and_redacts_nested_otlp_attributes(
     for key, value in _FORBIDDEN.items():
         assert key not in serialized
         assert value not in serialized
+
+
+def test_sink_env_suppresses_account_uuid_without_enabling_content_capture(
+    local_sink: Any,
+) -> None:
+    assert local_sink.env.get("OTEL_METRICS_INCLUDE_ACCOUNT_UUID") == "false"
+    assert "OTEL_LOG_USER_PROMPTS" not in local_sink.env
+    assert "OTEL_LOG_ASSISTANT_RESPONSES" not in local_sink.env
+    assert "OTEL_LOG_RAW_API_BODIES" not in local_sink.env
 
 
 def test_accepts_bounded_gzip_json_and_sanitizes_it(local_sink: Any, tmp_path: Path) -> None:

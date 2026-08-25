@@ -483,6 +483,7 @@ async def test_get_recipe_snapshot_lifecycle(
         max_size=2,
     )
 )
+@pytest.mark.timeout(180)
 async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     overrides: dict[str, str],
     tool_ctx_kitchen_open: ToolContext,

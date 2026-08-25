@@ -588,6 +588,22 @@ class TestRunCheck:
         assert result.severity == Severity.ERROR
         assert result.check == "boom"
 
+    def test_explicit_check_name_is_used_for_a_raising_check(self) -> None:
+        import functools
+
+        from autoskillit.cli.doctor._doctor_types import _run_check
+        from autoskillit.core import Severity
+
+        def _check_boom() -> object:
+            raise RuntimeError("simulated")
+
+        [result] = _run_check(
+            functools.partial(_check_boom),
+            check_name="explicit_name",
+        )
+        assert result.severity == Severity.ERROR
+        assert result.check == "explicit_name"
+
     def test_non_string_callable_name_cannot_escape_isolation(self) -> None:
         import functools
 

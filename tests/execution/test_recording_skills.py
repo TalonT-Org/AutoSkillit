@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution._recording_skills import (
+    _assert_agent_safe_skill_tree,
     _extract_ephemeral_add_dir,
     build_skills_manifest,
     restore_skill_snapshot,
@@ -15,6 +16,7 @@ from autoskillit.execution._recording_skills import (
     snapshot_skill_dir,
     validate_skill_snapshot_members,
 )
+from tests._helpers import inject_vanishing_subtree_on_descent
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -303,3 +305,22 @@ def test_scan_skill_snapshots_empty_returns_empty_dict(tmp_path: Path) -> None:
     result = scan_skill_snapshots(scenario_dir)
 
     assert result == {}
+
+
+def test_assert_agent_safe_skill_tree_raises_when_subtree_vanishes_mid_walk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #4770 Registry Trace Finding 1: this is a genuine
+    authority-elevation guard (its own docstring: "Reject snapshots that
+    could restore machine-only authority to an agent"). A subtree deleted
+    mid-walk must raise, not silently omit content from the symlink check."""
+    skills_dir = tmp_path / "skills"
+    other_skill = _make_skill(skills_dir, "other-skill")
+    vanishing_skill = skills_dir / "vanishing-skill"
+    vanishing_skill.mkdir()
+    (vanishing_skill / "SKILL.md").write_text("# vanishing\n", encoding="utf-8")
+
+    inject_vanishing_subtree_on_descent(monkeypatch, vanishing_skill)
+    with pytest.raises(ValueError):
+        _assert_agent_safe_skill_tree(skills_dir)
+    assert other_skill.exists()

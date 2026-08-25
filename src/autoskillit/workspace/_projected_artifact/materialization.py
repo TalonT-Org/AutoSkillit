@@ -35,6 +35,7 @@ from autoskillit.core import (
     SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceIdentity,
+    TreeVanishedError,
     atomic_write,
     destination_location,
     dump_yaml_str,
@@ -42,6 +43,7 @@ from autoskillit.core import (
     normalize_parent_sandbox_mode,
     project_agent_tool_name,
     read_versioned_json,
+    strict_walk,
     temp_dir_display_str,
     validate_agent_tool_canonical,
     write_versioned_json,
@@ -830,9 +832,17 @@ def validate_sanitized_plugin_artifact(
     if (public_root / "skills_extended").exists():
         errors.append("public plugin must not contain a canonical skills_extended tree")
     if public_root.is_dir():
-        for entry in public_root.rglob("*"):
-            if entry.is_symlink():
-                errors.append(f"public plugin asset is a symlink: {entry}")
+        try:
+            for tree_entry in strict_walk(public_root):
+                if tree_entry.kind == "l":
+                    errors.append(
+                        "public plugin asset is a symlink: "
+                        f"{public_root / tree_entry.relative_path}"
+                    )
+        except TreeVanishedError as exc:
+            errors.append(f"public plugin tree enumeration raced with a mutation: {exc}")
+        except OSError as exc:
+            errors.append(f"public plugin tree cannot be read during validation: {exc}")
     if not public_skills.is_dir() or public_skills.is_symlink():
         errors.append("public plugin skills root is missing or is a symlink")
     else:

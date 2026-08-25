@@ -13,9 +13,17 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.io import directory_tree_digest
+import autoskillit.core.io as io_module
+from autoskillit.core._plugin_artifact_identity import classify_directory_tree_digest_error
+from autoskillit.core.io import TreeVanishedError, directory_tree_digest, strict_walk
+from autoskillit.core.types import PluginArtifactUnavailableError, PluginArtifactValidationError
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+_REQUIRES_DIR_FD = pytest.mark.skipif(
+    os.name == "nt" or os.scandir not in os.supports_fd,
+    reason="requires POSIX directory descriptors",
+)
 
 
 def _seed_tree(root: Path) -> None:
@@ -185,3 +193,320 @@ class TestDirectoryTreeDigestIgnoreBytecode:
         (tmp_path / "a.py").write_text("changed")
         d2 = directory_tree_digest(tmp_path, ignore_bytecode=True)
         assert d1 != d2
+
+
+@_REQUIRES_DIR_FD
+class TestDirectoryTreeDigestRaceSafety:
+    """Issue #4770: ``directory_tree_digest`` must fail loudly on any entry that
+    vanishes or is substituted mid-walk, never silently omit it from the digest.
+
+    ``strict_walk`` is POSIX-only by construction (``os.O_DIRECTORY``/
+    ``os.O_NOFOLLOW``/``dir_fd``) — skipped, not failed, on platforms lacking
+    directory-descriptor support, mirroring
+    ``tests/exploration/test_bounded_collectors.py``'s own guard for its
+    dir_fd-based race test.
+    """
+
+    def test_root_vanishes_before_walk_raises(self, tmp_path: Path) -> None:
+        missing = tmp_path / "gone"
+        with pytest.raises(TreeVanishedError) as excinfo:
+            directory_tree_digest(missing)
+        assert excinfo.value.relative_path == ""
+        assert excinfo.value.root == missing
+
+    def test_root_exists_but_is_not_a_directory_still_raises_plain_value_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Companion regression: a genuine precondition violation (root was
+        never a directory) must still raise plain ``ValueError`` — proving
+        the vanish/precondition split above does not widen
+        ``TreeVanishedError`` to also cover this case."""
+        plain_file = tmp_path / "not_a_dir.txt"
+        plain_file.write_text("data")
+        with pytest.raises(ValueError, match="not a regular directory") as excinfo:
+            directory_tree_digest(plain_file)
+        assert not isinstance(excinfo.value, TreeVanishedError)
+
+    def test_subtree_vanishes_during_walk_raises_not_silently_omits(self, tmp_path: Path) -> None:
+        """A queued subdirectory deleted before its own descent-open still
+        yields ``TreeVanishedError`` — and critically, no digest is ever
+        returned (the current bug's defining symptom: a 64-char hex digest
+        silently omitting the vanished subtree)."""
+        (tmp_path / "a.py").write_text("hello")
+        sub1 = tmp_path / "sub1"
+        sub1.mkdir()
+        (sub1 / "x.py").write_text("x")
+        sub2 = tmp_path / "sub2"
+        sub2.mkdir()
+        (sub2 / "y.py").write_text("y")
+
+        original_open = os.open
+        calls = 0
+
+        def vanish_sub2_before_its_descent_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal calls
+            if path == "sub2" and (flags & os.O_DIRECTORY):
+                calls += 1
+                if calls == 1:
+                    import shutil
+
+                    shutil.rmtree(sub2)
+            return original_open(path, flags, *args, **kwargs)
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(io_module.os, "open", vanish_sub2_before_its_descent_open)
+        try:
+            with pytest.raises(TreeVanishedError) as excinfo:
+                directory_tree_digest(tmp_path)
+            assert excinfo.value.relative_path == "sub2"
+        finally:
+            monkeypatch.undo()
+        assert calls == 1
+
+    def test_recursive_failure_closes_queued_sibling_descriptors(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for name in ("a", "b"):
+            subtree = tmp_path / name
+            subtree.mkdir()
+            (subtree / "leaf.txt").write_text(name, encoding="utf-8")
+
+        original_open = os.open
+        original_close = os.close
+        original_scandir = os.scandir
+        opened_subdirs: dict[str, int] = {}
+        closed_fds: set[int] = set()
+
+        def tracking_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+            fd = original_open(path, flags, *args, **kwargs)
+            if path in {"a", "b"} and flags & os.O_DIRECTORY:
+                opened_subdirs[path] = fd
+            return fd
+
+        def fail_first_subtree(fd):  # type: ignore[no-untyped-def]
+            if fd == opened_subdirs.get("a"):
+                raise FileNotFoundError("injected recursive failure")
+            return original_scandir(fd)
+
+        def tracking_close(fd: int) -> None:
+            closed_fds.add(fd)
+            original_close(fd)
+
+        monkeypatch.setattr(io_module.os, "open", tracking_open)
+        monkeypatch.setattr(io_module.os, "scandir", fail_first_subtree)
+        monkeypatch.setattr(io_module.os, "close", tracking_close)
+
+        with pytest.raises(TreeVanishedError):
+            directory_tree_digest(tmp_path)
+
+        assert set(opened_subdirs.values()) <= closed_fds
+
+    def test_entry_vanishes_between_list_and_stat_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "a.py").write_text("a")
+        (tmp_path / "b.py").write_text("b")
+        original_stat = os.DirEntry.stat
+        calls = 0
+
+        def counted_stat(self: os.DirEntry, *args: object, **kwargs: object) -> os.stat_result:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                (tmp_path / self.name).unlink()
+            return original_stat(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(os.DirEntry, "stat", counted_stat)
+        with pytest.raises(TreeVanishedError):
+            directory_tree_digest(tmp_path)
+        assert calls == 2
+
+    def test_file_vanishes_between_stat_and_open_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        target = tmp_path / "a.py"
+        target.write_text("content")
+        original_open = os.open
+
+        def vanish_before_file_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if path == "a.py" and not (flags & os.O_DIRECTORY):
+                target.unlink()
+            return original_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(io_module.os, "open", vanish_before_file_open)
+        with pytest.raises(TreeVanishedError) as excinfo:
+            directory_tree_digest(tmp_path)
+        assert excinfo.value.relative_path == "a.py"
+
+    def test_symlink_vanishes_between_stat_and_readlink_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        real = tmp_path / "real.py"
+        real.write_text("data")
+        link = tmp_path / "link.py"
+        link.symlink_to(real)
+        original_readlink = os.readlink
+
+        def vanish_before_readlink(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if path == "link.py":
+                link.unlink()
+            return original_readlink(path, *args, **kwargs)
+
+        monkeypatch.setattr(io_module.os, "readlink", vanish_before_readlink)
+        with pytest.raises(TreeVanishedError) as excinfo:
+            directory_tree_digest(tmp_path, allow_symlinks=True)
+        assert excinfo.value.relative_path == "link.py"
+
+    def test_parent_directory_substitution_between_levels_is_rejected(
+        self,
+        tmp_path: Path,
+        tmp_path_factory: pytest.TempPathFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The exact reproduction that falsified an ``os.fwalk``-based draft
+        of ``strict_walk`` during review: ``os.fwalk``'s internal
+        ``samestat()`` guard detects this race but silently declines to
+        descend rather than raising. ``strict_walk`` must raise instead."""
+        queued = tmp_path / "queued"
+        queued.mkdir()
+        (queued / "safe.txt").write_text("safe")
+        outside = tmp_path_factory.mktemp("substitution-target")
+        (outside / "secret.txt").write_text("secret")
+        detached = tmp_path / "detached"
+
+        original_open = os.open
+        replaced = False
+
+        def racing_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal replaced
+            if path == "queued" and not replaced and (flags & os.O_DIRECTORY):
+                replaced = True
+                queued.rename(detached)
+                queued.symlink_to(outside, target_is_directory=True)
+            return original_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(io_module.os, "open", racing_open)
+        with pytest.raises(TreeVanishedError) as excinfo:
+            directory_tree_digest(tmp_path)
+        assert excinfo.value.relative_path == "queued"
+        assert replaced
+
+    def test_permission_error_still_propagates_unguarded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression proving the fix is narrowly scoped: a ``PermissionError``
+        (not ``FileNotFoundError``/``NotADirectoryError``) must propagate
+        unchanged, both at the walk/scandir boundary and the per-entry
+        stat/open boundary."""
+        (tmp_path / "a.py").write_text("hello")
+
+        def failing_scandir(_fd: int) -> object:
+            raise PermissionError("injected diagnostic permission failure")
+
+        monkeypatch.setattr(io_module.os, "scandir", failing_scandir)
+        with pytest.raises(PermissionError):
+            directory_tree_digest(tmp_path)
+
+    def test_permission_error_at_entry_stat_still_propagates_unguarded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "a.py").write_text("hello")
+
+        def failing_stat(_self: os.DirEntry, *_args: object, **_kwargs: object) -> os.stat_result:
+            raise PermissionError("injected diagnostic permission failure")
+
+        monkeypatch.setattr(os.DirEntry, "stat", failing_stat)
+        with pytest.raises(PermissionError):
+            directory_tree_digest(tmp_path)
+
+    def test_permission_error_at_entry_type_check_still_propagates_unguarded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class InaccessibleEntry:
+            name = "blocked"
+
+            def is_dir(self) -> bool:
+                raise PermissionError("injected entry type-check failure")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(io_module.os, "scandir", lambda _fd: [InaccessibleEntry()])
+            with pytest.raises(PermissionError):
+                directory_tree_digest(tmp_path)
+
+    def test_golden_digest_unchanged_for_non_racing_tree(self, tmp_path: Path) -> None:
+        """Compatibility guard: the digest algorithm's *output* for a
+        non-racing tree must be byte-for-byte unchanged by the rewrite —
+        only its race behavior changes. Pinned hex values were captured
+        from the pre-fix, ``os.walk``-based implementation against a fixed,
+        deterministic multi-sibling-directory fixture (order-sensitivity —
+        the two-pass recursion redesign only manifests a bug when a
+        directory has a later sibling at the same level)."""
+
+        def build_multi_sibling_tree(root: Path) -> None:
+            (root / "aaa.py").write_text("first file")
+            bbb_dir = root / "bbb_dir"
+            bbb_dir.mkdir()
+            (bbb_dir / "inner.py").write_text("inside bbb")
+            (bbb_dir / "zzz_nested.py").write_text("nested sibling")
+            (root / "ccc.py").write_text("third file")
+            mmm_dir = root / "mmm_dir"
+            mmm_dir.mkdir()
+            (mmm_dir / "deep").mkdir()
+            (mmm_dir / "deep" / "leaf.py").write_text("deep leaf")
+            (mmm_dir / "aaa_first.py").write_text("mmm sibling a")
+            zzz_dir = root / "zzz_dir"
+            zzz_dir.mkdir()
+            (zzz_dir / "inner2.py").write_text("inside zzz")
+
+        build_multi_sibling_tree(tmp_path)
+        assert directory_tree_digest(tmp_path) == (
+            "df53a7221e47379fe8ecc8b7b2a4c298cf87a6770e7313e46ffeada2858fcb91"
+        )
+        assert directory_tree_digest(tmp_path, ignore_bytecode=True) == (
+            "df53a7221e47379fe8ecc8b7b2a4c298cf87a6770e7313e46ffeada2858fcb91"
+        )
+
+        symlink_root = tmp_path.parent / f"{tmp_path.name}_symlink"
+        symlink_root.mkdir()
+        build_multi_sibling_tree(symlink_root)
+        os.symlink("../aaa.py", symlink_root / "bbb_dir" / "aaa_link.py")
+        assert directory_tree_digest(symlink_root, allow_symlinks=True) == (
+            "b5bd3a2910b549db23554256c9209f285a49b937d1b479be2007e88387e0c0e0"
+        )
+
+    def test_tree_vanished_error_classifies_as_unavailable(self) -> None:
+        """A race-induced vanish is transient, not tamper evidence: routed to
+        the Unavailable outcome, never the durable/invalid outcome — and
+        checked *before* the generic ``ValueError`` branch, since
+        ``TreeVanishedError`` is itself a ``ValueError`` subclass."""
+        exc = TreeVanishedError("sub/missing.py", Path("/tmp/artifact"))
+        classified = classify_directory_tree_digest_error(exc)
+        assert isinstance(classified, PluginArtifactUnavailableError)
+        assert not isinstance(classified, PluginArtifactValidationError)
+
+    def test_plain_value_error_classifies_as_validation(self) -> None:
+        classified = classify_directory_tree_digest_error(
+            ValueError("artifact contains a symlink")
+        )
+        assert isinstance(classified, PluginArtifactValidationError)
+
+    def test_os_error_classifies_as_unavailable(self) -> None:
+        classified = classify_directory_tree_digest_error(PermissionError("denied"))
+        assert isinstance(classified, PluginArtifactUnavailableError)
+
+    def test_strict_walk_raises_clear_error_when_posix_dir_fd_unavailable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Platform-capability guard, not a race test — runs everywhere."""
+        monkeypatch.delattr(io_module.os, "O_NOFOLLOW", raising=False)
+        with pytest.raises(NotImplementedError, match="O_DIRECTORY"):
+            directory_tree_digest(tmp_path)
+
+    def test_strict_walk_is_directly_reusable_by_non_digest_callers(self, tmp_path: Path) -> None:
+        """``strict_walk`` is a shared primitive, not digest-private —
+        Phase C consumers call it directly for their own tamper checks."""
+        (tmp_path / "a.py").write_text("hello")
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "sub" / "b.py").write_text("world")
+        entries = {entry.relative_path: entry.kind for entry in strict_walk(tmp_path)}
+        assert entries == {"a.py": "f", "sub": "d", "sub/b.py": "f"}

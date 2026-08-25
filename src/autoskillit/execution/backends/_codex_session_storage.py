@@ -38,6 +38,7 @@ from autoskillit.core import (
     read_boot_id,
     read_pid_namespace_inode,
     read_starttime_ticks,
+    strict_walk,
 )
 from autoskillit.execution.backends._codex_fs_atomic import (
     _atomic_json,
@@ -546,21 +547,19 @@ class CodexSessionStore:
         for public_name in _INERT_NAMES:
             root = view_path / public_name
             _require_real_directory(root, label="attempt rollout root")
-            for directory, directory_names, file_names in os.walk(root, followlinks=False):
-                parent = Path(directory)
-                if any((parent / name).is_symlink() for name in directory_names):
-                    raise RuntimeError("Never-running Codex view contains a symlink directory")
-                for name in file_names:
-                    path = parent / name
-                    if path.is_symlink():
-                        raise RuntimeError("Never-running Codex view contains a symlink file")
-                    relative = _safe_relative(path, root).as_posix()
-                    key = (public_name, relative)
-                    if key not in allowed:
-                        raise RuntimeError(
-                            f"Never-running Codex view contains unexpected file: {path}"
-                        )
-                    found.add(key)
+            for entry in strict_walk(root):
+                path = root / entry.relative_path
+                if entry.kind == "l":
+                    raise RuntimeError(f"Never-running Codex view contains a symlink: {path}")
+                if entry.kind != "f":
+                    continue
+                _safe_relative_value(entry.relative_path)
+                key = (public_name, entry.relative_path)
+                if key not in allowed:
+                    raise RuntimeError(
+                        f"Never-running Codex view contains unexpected file: {path}"
+                    )
+                found.add(key)
         if not allow_missing_resume and found != allowed:
             raise RuntimeError("Never-running Codex view is missing its resume hard link")
         for public_name, relative_value in found:
@@ -576,9 +575,14 @@ class CodexSessionStore:
         _require_real_directory(view_path, label="completed Codex attempt view")
         for public_name in _INERT_NAMES:
             root = view_path / public_name
-            for path in root.rglob("*"):
-                if path.is_symlink() or path.is_file():
-                    raise RuntimeError(f"Completed Codex view retains unexpected data: {path}")
+            if not root.is_dir():
+                continue
+            for entry in strict_walk(root):
+                if entry.kind in ("l", "f"):
+                    raise RuntimeError(
+                        "Completed Codex view retains unexpected data: "
+                        f"{root / entry.relative_path}"
+                    )
 
     def _promote_view(self, lease: CodexInteractiveSessionLease) -> list[dict[str, Any]]:
         candidates: list[tuple[str, Path, Path, str]] = []

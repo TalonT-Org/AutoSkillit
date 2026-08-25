@@ -12,6 +12,7 @@ from typing import cast
 import pytest
 
 from autoskillit.core import SKILL_PROJECTION_VERSION, SkillExecutionRole
+from tests._helpers import inject_vanishing_subtree_on_descent
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -593,3 +594,59 @@ def test_store_load_classifies_future_outer_schema(tmp_path: Path) -> None:
     assert exc_info.value.reason == "unsupported_future"  # type: ignore[attr-defined]
     assert exc_info.value.observed_version == 3  # type: ignore[attr-defined]
     assert exc_info.value.current_version == 2  # type: ignore[attr-defined]
+
+
+def test_store_rejects_symlink_planted_in_projected_snapshot(tmp_path: Path) -> None:
+    """Issue #4770 Registry Trace: the pre-fix ``snapshot_root.rglob("*")`` /
+    ``path.is_file()`` completeness check silently followed a planted
+    symlink pointing at a file, either miscounting it into ``actual_files``
+    or (for a symlinked directory) omitting its contents entirely — in
+    neither case did it explicitly reject the symlink itself. The migrated
+    ``strict_walk``-based check now rejects any symlink outright."""
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+
+    root = tmp_path / "contracts"
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=root)
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    store.finalize(correlation_key, "resumable")
+    stored = store.load("resumable")
+
+    decoy_target = tmp_path / "decoy.txt"
+    decoy_target.write_text("planted", encoding="utf-8")
+    (stored.snapshot_dir / "planted_link").symlink_to(decoy_target)
+
+    with pytest.raises(ValueError, match="symlink"):
+        store.load("resumable")
+
+
+def test_store_raises_not_silently_omits_when_snapshot_subtree_vanishes_mid_walk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #4770 test 11: a subdirectory deleted mid-enumeration during the
+    set-equality completeness check must raise, not silently produce a
+    shrunk ``actual_files`` set that could spuriously match ``declared_files``
+    (defeating the tamper check)."""
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+
+    root = tmp_path / "contracts"
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=root)
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    store.finalize(correlation_key, "resumable")
+    stored = store.load("resumable")
+
+    extra_dir = stored.snapshot_dir / "extra_subtree"
+    extra_dir.mkdir()
+    (extra_dir / "leaf.txt").write_text("leaf", encoding="utf-8")
+
+    inject_vanishing_subtree_on_descent(monkeypatch, extra_dir)
+    with pytest.raises(ValueError) as excinfo:
+        store.load("resumable")
+    assert "file set mismatch" not in str(excinfo.value)

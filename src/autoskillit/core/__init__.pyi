@@ -39,6 +39,9 @@ from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
 )
 from ._plugin_artifact_identity import (
+    classify_directory_tree_digest_error as classify_directory_tree_digest_error,
+)
+from ._plugin_artifact_identity import (
     generation_artifact_root as generation_artifact_root,
 )
 from ._plugin_artifact_identity import (
@@ -211,6 +214,8 @@ from .github_url import parse_github_repo as parse_github_repo
 from .io import _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES
 from .io import _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN
 from .io import ReadResult as ReadResult
+from .io import TreeEntry as TreeEntry
+from .io import TreeVanishedError as TreeVanishedError
 from .io import YAMLError as YAMLError
 from .io import atomic_write as atomic_write
 from .io import compose_yaml as compose_yaml
@@ -227,6 +232,7 @@ from .io import resolve_skill_temp_dir as resolve_skill_temp_dir
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import safe_upsert_section as safe_upsert_section
 from .io import spill_output as spill_output
+from .io import strict_walk as strict_walk
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_canonical_versioned_json as write_canonical_versioned_json
 from .io import write_versioned_json as write_versioned_json

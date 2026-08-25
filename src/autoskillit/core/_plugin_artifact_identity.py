@@ -6,7 +6,12 @@ import stat
 from pathlib import Path
 
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR
-from .io import directory_tree_digest, is_python_bytecode_path, read_versioned_json
+from .io import (
+    TreeVanishedError,
+    directory_tree_digest,
+    is_python_bytecode_path,
+    read_versioned_json,
+)
 from .types import (
     PluginArtifactIdentity,
     PluginArtifactKind,
@@ -165,6 +170,30 @@ def installed_plugin_artifact_manifest_payload(
     }
 
 
+def classify_directory_tree_digest_error(
+    exc: OSError | ValueError,
+) -> PluginArtifactUnavailableError | PluginArtifactValidationError:
+    """Route a ``directory_tree_digest`` failure to the correct outcome bucket.
+
+    ``TreeVanishedError`` (a ``ValueError`` subclass) is checked *before* the
+    generic ``ValueError`` branch: a race-induced vanish is transient, not
+    tamper evidence, and must never reach the durable/invalid outcome that
+    triggers permanent retirement-record removal
+    (``core/_plugin_cache.py``'s ``PluginArtifactValidationError`` branch) or
+    an unwarranted rebuild (``_projected_artifact/authority.py``'s ``None``
+    branch). Every ``directory_tree_digest`` call site is routed through this
+    one classifier so ``TreeVanishedError`` is treated identically everywhere
+    (issue #4770).
+    """
+    if isinstance(exc, TreeVanishedError):
+        return PluginArtifactUnavailableError(
+            f"plugin artifact tree enumeration raced with a concurrent mutation: {exc}"
+        )
+    if isinstance(exc, OSError):
+        return PluginArtifactUnavailableError(f"plugin artifact cannot be read for digest: {exc}")
+    return PluginArtifactValidationError(f"plugin artifact cannot be digested: {exc}")
+
+
 def _classify_bytecode_contamination(root: Path) -> str:
     """Scan an artifact tree for bytecode contamination.
 
@@ -314,14 +343,8 @@ def read_installed_plugin_artifact_identity(
         observed_digest = directory_tree_digest(
             canonical_root, allow_symlinks=allow_symlinks, ignore_bytecode=ignore_bytecode
         )
-    except OSError as exc:
-        raise PluginArtifactUnavailableError(
-            f"installed plugin artifact cannot be read for digest: {canonical_root}"
-        ) from exc
-    except ValueError as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin artifact cannot be digested: {canonical_root}"
-        ) from exc
+    except (OSError, ValueError) as exc:
+        raise classify_directory_tree_digest_error(exc) from exc
     if raw["artifact_digest"] != observed_digest:
         contamination = _classify_bytecode_contamination(canonical_root)
         if contamination:

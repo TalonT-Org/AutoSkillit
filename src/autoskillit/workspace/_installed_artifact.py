@@ -21,6 +21,7 @@ from autoskillit.core import (
     PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     Severity,
+    classify_directory_tree_digest_error,
     directory_tree_digest,
     get_logger,
     installed_plugin_artifact_lease_path,
@@ -114,9 +115,7 @@ def _complete_tree_digest(
             root, allow_symlinks=allow_symlinks, ignore_bytecode=ignore_bytecode
         )
     except (OSError, ValueError) as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin artifact cannot be digested: {root}"
-        ) from exc
+        raise classify_directory_tree_digest_error(exc) from exc
 
 
 class InstallStateLeaseMode(StrEnum):

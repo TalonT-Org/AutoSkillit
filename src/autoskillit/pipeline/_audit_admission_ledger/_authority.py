@@ -1,21 +1,10 @@
 """Authority commit & preflight helpers for the audit admission ledger.
 
-Single function consumed by the facade's ``commit_authority`` method:
-
-- ``_commit_authority_locked(connection, request)`` — runs the
-  in-transaction SELECT/INSERT/UPDATE sequence that advances an attempt
-  from ``PREPARED`` to ``PUBLISHED_PENDING_FINALIZATION`` by writing
-  the new head_claim and preflight_projections rows.
-
 The shard preserves the pre-split implementation's reachability check:
 when ``current_head is not None and current_head.verdict is
 AuditVerdict.GO``, the function returns ``terminal_head`` and does NOT
 write. This guard is load-bearing — a terminal head cannot be advanced,
 and this is the only enforcement point (Interface Mapper F2 / Decision 4).
-
-The idempotency path (``lifecycle in {PUBLISHED_PENDING_FINALIZATION,
-RESPONSE_COMMITTED}`` returning ``committed=True`` without writes) is
-also preserved verbatim.
 
 The facade owns the ``BEGIN IMMEDIATE`` / ``COMMIT`` / ``ROLLBACK``
 boundary.
@@ -33,12 +22,11 @@ from autoskillit.core import (
     RecipeExecutionId,
 )
 from autoskillit.pipeline._audit_admission_ledger._encoders import (
-    _head_from_dict,
     _head_to_dict,
     _json_dumps,
-    _json_loads,
 )
 from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row
+from autoskillit.pipeline._audit_admission_ledger._reads import _head_by_key_read
 
 __all__ = ["_commit_authority_locked"]
 
@@ -59,7 +47,7 @@ def _commit_authority_locked(
             attempt_id=request.attempt_id,
             conflict_detail="unknown_attempt",
         )
-    lifecycle, recipe_execution_id, installation_version, head_key = row
+    lifecycle_value, recipe_execution_id, installation_version, head_key = row
     if installation_version != request.installation_version.value:
         return AuditFinalCommitOutcome(
             committed=False,
@@ -72,30 +60,27 @@ def _commit_authority_locked(
     )
     if (
         installation_row is None
-        or installation_row[0] != request.installation_version.value
-        or installation_row[1]
+        or installation_row.installation_version != request.installation_version.value
+        or installation_row.retired
     ):
         return AuditFinalCommitOutcome(
             committed=False,
             attempt_id=request.attempt_id,
             conflict_detail="installation_stale",
         )
-    if lifecycle in {
-        AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION.value,
-        AuditAttemptLifecycle.RESPONSE_COMMITTED.value,
-    }:
+    lifecycle = AuditAttemptLifecycle(lifecycle_value)
+    if (
+        lifecycle is AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION
+        or lifecycle is AuditAttemptLifecycle.RESPONSE_COMMITTED
+    ):
         return AuditFinalCommitOutcome(committed=True, attempt_id=request.attempt_id)
-    if lifecycle != AuditAttemptLifecycle.PREPARED.value:
+    if lifecycle is not AuditAttemptLifecycle.PREPARED:
         return AuditFinalCommitOutcome(
             committed=False,
             attempt_id=request.attempt_id,
-            conflict_detail=f"attempt_{lifecycle.lower()}",
+            conflict_detail=f"attempt_{lifecycle.value.lower()}",
         )
-    head_row = connection.execute(
-        "SELECT head_json FROM head_claims WHERE head_key = ?",
-        (head_key,),
-    ).fetchone()
-    current_head = _head_from_dict(_json_loads(head_row[0])) if head_row is not None else None
+    current_head = _head_by_key_read(connection, head_key)
     current_digest = current_head.current_authority_digest if current_head else None
     if current_digest != request.expected_head_digest:
         return AuditFinalCommitOutcome(
@@ -115,7 +100,7 @@ def _commit_authority_locked(
         "ON CONFLICT(head_key) DO UPDATE SET head_json = excluded.head_json",
         (
             head_key,
-            request.new_head.execution_generation,
+            recipe_execution_id,
             request.new_head.cycle_id,
             request.new_head.scope_id,
             request.new_head.part_id,

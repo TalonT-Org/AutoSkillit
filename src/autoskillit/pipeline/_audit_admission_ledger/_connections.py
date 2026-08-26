@@ -1,29 +1,16 @@
 """SQLite connection plumbing for the audit admission ledger.
 
-This module owns:
-- ``open(authority, busy_timeout_ms)`` — opens a connection, applies the
-  canonical boot sequence (``executescript(_SCHEMA_SQL)`` →
-  ``_validate_metadata`` → ``_backfill_installation_occurrences`` →
-  ``_validate_response_commit_integrity`` → identity re-check).
-- ``_validate_database_target(authority)`` — security-sensitive path/owner
-  validation that runs BEFORE we open the connection.
-- ``_database_identity(authority)`` — returns ``(st_dev, st_ino)`` so the
-  facade can verify the file wasn't swapped mid-connect.
-- ``_validate_metadata(connection)`` — schema-version insert/validate.
-- ``_backfill_installation_occurrences(connection)`` — backfill missing
-  occurrence rows from the active ``installations`` table.
-- ``_validate_response_commit_integrity(connection)`` — verifies the four
-  durable projections on every RESPONSE_COMMITTED attempt plus effect-set
-  completeness.
-- ``commit(connection)`` / ``rollback(connection)`` — the explicit
-  COMMIT/ROLLBACK primitives. ``rollback`` swallows ``sqlite3.Error``
-  (fail-open on rollback failure); this discipline is load-bearing and
-  must not be relaxed.
+``open(authority, busy_timeout_ms)`` opens a connection and runs the
+canonical boot sequence (``executescript(_SCHEMA_SQL)`` →
+``_validate_metadata`` → ``_backfill_installation_occurrences`` →
+``_validate_response_commit_integrity`` → identity re-check).
+``commit`` / ``rollback`` are the explicit COMMIT/ROLLBACK primitives;
+``rollback`` swallows ``sqlite3.Error`` (fail-open on rollback failure)
+and this discipline is load-bearing — must not be relaxed.
 
-The facade (``audit_admission_ledger.py``) owns the per-instance fence
-and the recovery state; this module is purely connection plumbing and
-does not know about the facade. Every helper is a free function taking
-``authority`` or ``connection`` as the first argument.
+The facade owns the per-instance fence and the recovery state; this
+module does not know about the facade. Every helper is a free function
+taking ``authority`` or ``connection`` as the first argument.
 """
 
 from __future__ import annotations
@@ -67,11 +54,7 @@ def open(
     authority: AuditAdmissionStoreAuthority,
     busy_timeout_ms: int,
 ) -> sqlite3.Connection:
-    """Open a connection, run the canonical boot sequence, and return it.
-
-    The facade's call site replaces the pre-split ``_connect`` instance method:
-    ``_connections.open(self._authority, self._busy_timeout_ms)``.
-    """
+    """Open a connection and run the canonical boot sequence."""
     path = authority.database_path
     _validate_database_target(authority)
     before = _database_identity(authority)
@@ -94,7 +77,7 @@ def open(
                 AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
                 "audit-admission-store-identity-changed",
             )
-    except Exception:
+    except BaseException:
         connection.close()
         raise
     return connection

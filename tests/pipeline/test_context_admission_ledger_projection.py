@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 
 import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
-import autoskillit.pipeline.context_admission_ledger as ledger_module
+import autoskillit.pipeline._context_admission_ledger._projection as _projection_module
+import autoskillit.pipeline._context_admission_ledger._state_queries as _state_queries_module
 from autoskillit.core import (
     ActiveContextAdmissionState,
     AdmissionDecisionKind,
@@ -127,7 +128,7 @@ def test_recovery_enforces_metadata_and_preflight_row_budgets(
         DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
         is ContextAdmissionAccountingStatus.RECORDED
     )
-    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", row_limit)
+    monkeypatch.setattr(_projection_module, "_MAX_RECOVERY_ROWS", row_limit)
 
     row_bounded = DefaultContextAdmissionLedger(authority)
     recovered = row_bounded.recover_all()
@@ -148,7 +149,7 @@ def test_recovery_enforces_sqlite_value_and_aggregate_byte_budgets(
         is ContextAdmissionAccountingStatus.RECORDED
     )
 
-    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_BYTES", 1)
+    monkeypatch.setattr(_projection_module, "_MAX_RECOVERY_BYTES", 1)
     byte_bounded = DefaultContextAdmissionLedger(authority)
 
     byte_result = byte_bounded.recover_all()
@@ -167,7 +168,7 @@ def test_inspection_enforces_aggregate_read_budget(
     ledger = DefaultContextAdmissionLedger(_authority(tmp_path))
     key = stream_key()
     assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
-    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", 1)
+    monkeypatch.setattr(_projection_module, "_MAX_RECOVERY_ROWS", 1)
 
     inspection = ledger.inspect_stream(key)
 
@@ -371,7 +372,7 @@ def test_expired_event_exact_replay_revalidates_stored_decision(
         connection.commit()
     finally:
         connection.close()
-    monkeypatch.setattr(ledger_module, "_state_retains_event", lambda *_args: False)
+    monkeypatch.setattr(_state_queries_module, "_state_retains_event", lambda *_args: False)
 
     replayed = ledger.apply(key, event)
 

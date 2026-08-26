@@ -5,6 +5,7 @@ Part of the test split for issue #4606.
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import stat
@@ -19,8 +20,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import autoskillit.pipeline._context_admission_storage as storage_module
-import autoskillit.pipeline.context_admission_ledger as ledger_module
+import autoskillit.pipeline._context_admission_ledger._apply as _apply_module
+import autoskillit.pipeline._context_admission_ledger._codec as codec_module
+import autoskillit.pipeline._context_admission_ledger._inspection as _inspection_module
+import autoskillit.pipeline._context_admission_ledger._shadow as _shadow_module
+import autoskillit.pipeline._context_admission_ledger._storage as storage_module
 from autoskillit.core import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
@@ -115,7 +119,7 @@ def test_independent_ledgers_race_first_publication_at_shared_path(
     collision_count = 0
     collision_lock = threading.Lock()
     collision_seen = threading.Event()
-    original_link = ledger_module.os.link
+    original_link = os.link
 
     def racing_link(
         source: Path,
@@ -139,7 +143,7 @@ def test_independent_ledgers_race_first_publication_at_shared_path(
         assert collision_seen.wait(timeout=5)
         time.sleep(0.1)
 
-    monkeypatch.setattr(ledger_module.os, "link", racing_link)
+    monkeypatch.setattr(os, "link", racing_link)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = tuple(executor.map(lambda ledger: ledger.recover_all(), ledgers))
@@ -258,29 +262,29 @@ def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> N
 def test_stream_key_decoder_enforces_byte_and_nesting_bounds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    encoded = ledger_module._stream_key_bytes(stream_key())
-    monkeypatch.setattr(ledger_module, "_MAX_STREAM_KEY_BYTES", len(encoded) - 1)
+    encoded = codec_module._stream_key_bytes(stream_key())
+    monkeypatch.setattr(codec_module, "_MAX_STREAM_KEY_BYTES", len(encoded) - 1)
     with pytest.raises(RuntimeError, match="invalid-stream-key"):
-        ledger_module._decode_stream_key(encoded)
+        codec_module._decode_stream_key(encoded)
 
-    monkeypatch.setattr(ledger_module, "_MAX_STREAM_KEY_BYTES", 16 * 1024)
+    monkeypatch.setattr(codec_module, "_MAX_STREAM_KEY_BYTES", 16 * 1024)
     deeply_nested = b'{"nested":' + (b"[" * 17) + b"null" + (b"]" * 17) + b"}"
     with pytest.raises(RuntimeError, match="invalid-stream-key"):
-        ledger_module._decode_stream_key(deeply_nested)
+        codec_module._decode_stream_key(deeply_nested)
 
 
 def test_stream_key_decoder_normalizes_recursive_json_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    encoded = ledger_module._stream_key_bytes(stream_key())
+    encoded = codec_module._stream_key_bytes(stream_key())
 
     def raise_recursion(_value: str) -> object:
         raise RecursionError
 
-    monkeypatch.setattr(ledger_module.json, "loads", raise_recursion)
+    monkeypatch.setattr(json, "loads", raise_recursion)
 
     with pytest.raises(RuntimeError, match="invalid-stream-key"):
-        ledger_module._decode_stream_key(encoded)
+        codec_module._decode_stream_key(encoded)
 
 
 def test_store_path_uri_metacharacters_are_percent_encoded(tmp_path: Path) -> None:
@@ -561,7 +565,7 @@ def test_recovery_uses_registered_stream_replay(
         DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
         is ContextAdmissionAccountingStatus.RECORDED
     )
-    original_selector = ledger_module.context_admission_reducer_for_protocol
+    original_selector = _apply_module.context_admission_reducer_for_protocol
     replay_calls = 0
 
     def select_reducer(protocol_version: int) -> object:
@@ -575,7 +579,7 @@ def test_recovery_uses_registered_stream_replay(
         return replace(reducer, replay_stream=replay_stream)
 
     monkeypatch.setattr(
-        ledger_module,
+        _apply_module,
         "context_admission_reducer_for_protocol",
         select_reducer,
     )
@@ -596,10 +600,10 @@ def test_recovery_uses_versioned_shadow_projector(
         DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
         is ContextAdmissionAccountingStatus.RECORDED
     )
-    projector = MagicMock(side_effect=ledger_module._shadow_record_protocol_v1)
+    projector = MagicMock(side_effect=_shadow_module._shadow_record_protocol_v1)
     registry = MappingProxyType({1: projector})
     monkeypatch.setattr(
-        ledger_module,
+        _shadow_module,
         "_CONTEXT_ADMISSION_SHADOW_PROJECTORS",
         registry,
     )
@@ -609,7 +613,7 @@ def test_recovery_uses_versioned_shadow_projector(
     assert recovered.recovered_streams == (key,)
     projector.assert_called_once()
     assert tuple(registry) == (1,)
-    assert registry.keys() == ledger_module.CONTEXT_ADMISSION_REDUCER_REGISTRY.keys()
+    assert registry.keys() == _shadow_module.CONTEXT_ADMISSION_REDUCER_REGISTRY.keys()
     with pytest.raises(TypeError, match="does not support item assignment"):
         registry[2] = projector  # type: ignore[index]
 
@@ -659,7 +663,7 @@ def test_recover_filters_healthy_failed_unresolved_unknown_and_store_failure(
     try:
         connection.execute(
             "DELETE FROM shadow_decisions WHERE stream_id = ?",
-            (ledger_module._stream_key_bytes(failed_key),),
+            (codec_module._stream_key_bytes(failed_key),),
         )
         connection.commit()
     finally:
@@ -715,7 +719,7 @@ def test_sqlite_recovery_preserves_failure_discovered_during_inspection(
     monkeypatch.setattr(
         ledger,
         "inspect_stream",
-        lambda _key: ledger_module._empty_inspection(key, failure),
+        lambda _key: _inspection_module._empty_inspection(key, failure),
     )
     connection = ledger._connect()
 

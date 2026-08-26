@@ -190,9 +190,9 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
     {
         ("src/autoskillit/core/types/_type_dimensions.py", "ASCII_YAML_POLICY"),
         ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
-        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
-        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
-        ("src/autoskillit/pipeline/context_admission_ledger.py", "_STATE_TYPES"),
+        ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EVENT_TYPES"),
+        ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EFFECT_TYPES"),
+        ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_STATE_TYPES"),
         (
             "src/autoskillit/server/tools/tools_kitchen/_open_kitchen_transition.py",
             "_OPEN_KITCHEN_REQUEST_CTX",
@@ -362,8 +362,38 @@ def test_context_admission_ledger_singletons_are_assignment_scoped() -> None:
     assert {
         target
         for path, target in _SINGLETON_SAFE_ASSIGNMENTS
-        if path == "src/autoskillit/pipeline/context_admission_ledger.py"
+        if path == "src/autoskillit/pipeline/_context_admission_ledger/_codec.py"
     } == {"_EVENT_TYPES", "_EFFECT_TYPES", "_STATE_TYPES"}
+
+
+def test_pipeline_shard_size_ceiling() -> None:
+    """REQ-CNST-010-Wavefront1: each shard in _context_admission_ledger is ≤750 lines."""
+    subpackage_root = SRC_ROOT / "autoskillit" / "pipeline" / "_context_admission_ledger"
+    assert subpackage_root.is_dir(), (
+        f"expected private subpackage at {subpackage_root}; Wavefront 1 of #4667"
+    )
+    offenders: list[str] = []
+    for py_file in sorted(subpackage_root.rglob("*.py")):
+        line_count = len(py_file.read_text(encoding="utf-8").splitlines())
+        if line_count > 750:
+            offenders.append(f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (max 750)")
+    assert not offenders, "Pipeline shards exceed the 750-line ceiling:\n  " + "\n  ".join(
+        offenders
+    )
+
+
+def test_pipeline_facade_reexports_subpackage_symbols() -> None:
+    """Wavefront 1 of #4667: top-level facade must re-export DefaultContextAdmissionLedger."""
+    import autoskillit.pipeline._context_admission_ledger as subpackage
+    import autoskillit.pipeline.context_admission_ledger as facade
+
+    assert facade.DefaultContextAdmissionLedger is subpackage.DefaultContextAdmissionLedger, (
+        "Facade's DefaultContextAdmissionLedger must be the same class object as "
+        "the subpackage's, so the public import path stays stable."
+    )
+    assert facade.__all__ == ["DefaultContextAdmissionLedger"], (
+        f"Facade __all__ must list only DefaultContextAdmissionLedger; got {facade.__all__}"
+    )
 
 
 def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -> None:
@@ -1505,13 +1535,30 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
         "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
-    "pipeline/context_admission_ledger.py": (
+"rules_skill_content.py": (
+        1200,
+        "REQ-CNST-010-E11: SKILL.md content validation rules registry — accumulating "
+        "semantic rules (undefined-bash-placeholder, hardcoded-origin-remote, "
+        "blind-git-add, no-interpreter-mediated-writes, no-autoskillit-import, "
+        "no-posix-char-class, no-grep-bre-alternation, output-section-no-markdown-directive, "
+        "no-gh-issue-comment, transition-boundary-anti-confirmation, "
+        "executable-field-content-validity, reviews-post-requires-input-flag, "
+        "source-attribution-directive, graphql-query-requires-shell-invocation, "
+        "inline-content-in-subagent-prompt) co-located to keep SKILL.md validation "
+        "discovery a single import; splitting into sub-modules per rule would fragment "
+        "the @semantic_rule registration surface and break the test filter cascade."
+        "; inline-content-in-subagent-prompt rule (#4289 manifestation, #3636 architectural): "
+        "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
+        "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
+        "and the tests/skills/ contract linters (+~60 net lines)",
+    ),
+    "pipeline/audit_admission_ledger.py": (
         2300,
-        "REQ-CNST-010-E15: #4334 keeps the crash-safe SQLite transaction boundary, "
-        "journal replay verification, sticky health fencing, and exhaustive shadow "
-        "projection in one IL-1 authority; consistent recovery snapshots and shared "
-        "row/byte budgets remain beside replay validation so storage and reducer "
-        "publication invariants cannot drift across independently mutable modules.",
+        "REQ-CNST-010-E17: #4419 keeps installation fencing, reservation and attempt "
+        "transitions, trusted head/preflight publication, disposition CAS, and recovery "
+        "inside one crash-safe SQLite authority. Splitting the transactional state machine "
+        "would let independently mutable storage paths drift from its atomic publication "
+        "and fail-closed health invariants.",
     ),
     "exploration/snapshot.py": (
         1250,

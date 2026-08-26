@@ -33,7 +33,6 @@ from ._observational import (
     collect_autoskillit_toml,
     collect_coverage_observation,
     collect_generated_artifact,
-    collect_observational_artifact,
     collect_python_stub,
     collect_test_map_observation,
     collect_unsupported,

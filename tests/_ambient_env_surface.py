@@ -631,7 +631,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes AUTOSKILLIT_PRIVATE_ENV_VARS before handing the sanitized env to a user-code"
         "`pytest` subprocess spawned by test_check."
     ),
-    "exploration/snapshot.py:274": (
+    "exploration/snapshot/_capture.py:100": (
         "Unfiltered dict(os.environ) base for a local read-only `git` subprocess (snapshot"
         "diffing); only GIT_OPTIONAL_LOCKS is added on top."
     ),

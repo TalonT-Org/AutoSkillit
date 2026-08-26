@@ -181,7 +181,21 @@ def scan_editable_installs_for_worktree(
     findings: list[str] = []
 
     for site_dir in site_packages_dirs:
-        if not site_dir.is_dir():
+        try:
+            site_dir_exists = site_dir.is_dir()
+        except OSError as exc:
+            reason = (
+                f"site-packages directory probe failed: {site_dir} ({type(exc).__name__}: {exc})"
+            )
+            logger.debug(
+                "editable_guard_site_directory_probe_failed",
+                path=str(site_dir),
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            unverified.append(reason)
+            continue
+        if not site_dir_exists:
             reason = f"site-packages directory vanished: {site_dir}"
             logger.debug("editable_guard_site_directory_missing", path=str(site_dir))
             unverified.append(reason)

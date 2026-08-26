@@ -156,6 +156,26 @@ class TestScanEditableInstalls:
         result = scan_editable_installs_for_worktree(worktree, [site_a, site_b])
         assert len(result.findings) == 1
 
+    def test_site_directory_probe_failure_is_recorded_unverified(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        worktree = tmp_path / "worktree"
+        site = tmp_path / "site-packages"
+        original_is_dir = Path.is_dir
+
+        def unavailable(path: Path) -> bool:
+            if path == site:
+                raise PermissionError("denied")
+            return original_is_dir(path)
+
+        monkeypatch.setattr(Path, "is_dir", unavailable)
+        result = scan_editable_installs_for_worktree(worktree, [site])
+
+        assert result.findings == ()
+        assert len(result.unverified) == 1
+        assert str(site) in result.unverified[0]
+        assert "PermissionError" in result.unverified[0]
+
     def test_enumeration_read_race_is_skipped_and_recorded_unverified(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:

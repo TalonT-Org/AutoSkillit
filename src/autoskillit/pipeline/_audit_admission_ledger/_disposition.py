@@ -16,7 +16,7 @@ from autoskillit.core import (
 from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _head_key,
 )
-from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row
+from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row_read
 from autoskillit.pipeline._audit_admission_ledger._reads import _head_by_key_read
 
 __all__ = ["_commit_disposition_locked", "_resolve_disposition_read"]
@@ -45,7 +45,7 @@ def _commit_disposition_locked(
                 conflict_detail="disposition_projection_mismatch",
             )
         return AuditDispositionCommitOutcome(committed=True, generated_at=existing[4])
-    installation = _installation_row(connection, request.recipe_execution_id)
+    installation = _installation_row_read(connection, request.recipe_execution_id)
     if (
         installation is None
         or installation.installation_version != request.installation_version.value

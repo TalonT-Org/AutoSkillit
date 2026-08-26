@@ -22,7 +22,7 @@ __all__ = [
     "InstallationRow",
     "_create_or_get_installation_locked",
     "_retire_installation_locked",
-    "_installation_row",
+    "_installation_row_read",
 ]
 
 
@@ -102,7 +102,7 @@ def _retire_installation_locked(
     )
 
 
-def _installation_row(
+def _installation_row_read(
     connection: sqlite3.Connection,
     recipe_execution_id: RecipeExecutionId,
 ) -> InstallationRow | None:

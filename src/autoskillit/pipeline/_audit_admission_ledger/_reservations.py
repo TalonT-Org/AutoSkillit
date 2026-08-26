@@ -39,7 +39,7 @@ from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _reservation_to_dict,
     _slot_key_to_dict,
 )
-from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row
+from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row_read
 from autoskillit.pipeline._audit_admission_ledger._reads import _head_by_key_read
 
 __all__ = [
@@ -60,7 +60,7 @@ def _reserve_locked(
     *,
     authority_id: str,
 ) -> AuditReservationOutcome:
-    installation_row = _installation_row(connection, request.recipe_execution_id)
+    installation_row = _installation_row_read(connection, request.recipe_execution_id)
     if (
         installation_row is None
         or installation_row.installation_version != request.installation_version.value

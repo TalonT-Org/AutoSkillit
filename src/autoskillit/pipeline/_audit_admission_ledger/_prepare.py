@@ -27,7 +27,7 @@ from autoskillit.core import (
     AuditPrepareRequest,
     RecipeExecutionId,
 )
-from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row
+from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row_read
 
 __all__ = ["_prepare_locked"]
 
@@ -52,7 +52,7 @@ def _prepare_locked(
     lifecycle = AuditAttemptLifecycle(row[0])
     recipe_execution_id = RecipeExecutionId(row[2])
     installation_version = row[3]
-    installation_row = _installation_row(connection, recipe_execution_id)
+    installation_row = _installation_row_read(connection, recipe_execution_id)
     if (
         installation_version != request.installation_version.value
         or installation_row is None

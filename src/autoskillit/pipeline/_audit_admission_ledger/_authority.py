@@ -25,7 +25,7 @@ from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _head_to_dict,
     _json_dumps,
 )
-from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row
+from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row_read
 from autoskillit.pipeline._audit_admission_ledger._reads import _head_by_key_read
 
 __all__ = ["_commit_authority_locked"]
@@ -54,7 +54,7 @@ def _commit_authority_locked(
             attempt_id=request.attempt_id,
             conflict_detail="installation_stale",
         )
-    installation_row = _installation_row(
+    installation_row = _installation_row_read(
         connection,
         RecipeExecutionId(recipe_execution_id),
     )

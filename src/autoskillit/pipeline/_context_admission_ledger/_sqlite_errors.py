@@ -20,7 +20,7 @@ from typing import Final
 
 from autoskillit.core import get_logger
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 _SQLITE_PRIMARY_MASK: Final = 0xFF
 _SQLITE_BUSY_CODES: Final = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
@@ -44,9 +44,7 @@ def _rollback(connection: sqlite3.Connection) -> None:
     try:
         connection.execute("ROLLBACK")
     except sqlite3.Error as exc:
-        # Best-effort: rollback failure is itself a store-health signal. Surface
-        # the cause via debug logging without changing the swallow behavior.
-        _logger.debug("context-admission rollback failed: %s", exc)
+        logger.debug("context-admission rollback failed: %s", exc)
 
 
 def _sqlite_primary_code(error: sqlite3.Error) -> int | None:

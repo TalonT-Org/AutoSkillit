@@ -31,7 +31,6 @@ from autoskillit.core import (
 )
 
 from ._codec import _zero_state
-from ._sqlite_errors import _LedgerContended  # noqa: F401  (re-exported for rebind)
 
 
 class _LedgerFaultPoint(StrEnum):
@@ -111,7 +110,6 @@ def _set_store_failure(
 
 __all__ = [
     "_LedgerFaultPoint",
-    "_LedgerContended",
     "_ignore_fault",
     "_accounting_status",
     "_uninitialized_stream_result",

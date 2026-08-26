@@ -25,14 +25,17 @@ from autoskillit.core import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
+    get_logger,
 )
 
 from ._sqlite_errors import (
     _SQLITE_BUSY_CODES,
     _LedgerContended,
+    _rollback,
     _sqlite_primary_code,
 )
 from ._storage import (
+    SCHEMA_SQL,
     _LedgerOpenError,
     fsync_directory,
     fsync_file,
@@ -41,6 +44,8 @@ from ._storage import (
     unlink_initialization_artifact,
     validate_sidecars,
 )
+
+logger = get_logger(__name__)
 
 _SCHEMA_VERSION: Final = 1
 _DATABASE_MODE: Final = 0o600
@@ -81,8 +86,6 @@ def _ensure_store(self) -> None:
         allow_regular=False,
     )
     temporary_path = self._path.parent / (f".{self._path.name}.{secrets.token_hex(12)}.tmp")
-    from ._storage import SCHEMA_SQL  # local import avoids cycle with codec/status
-
     try:
         descriptor = os.open(
             temporary_path,
@@ -108,8 +111,6 @@ def _ensure_store(self) -> None:
             )
             connection.execute("COMMIT")
         except BaseException:
-            from ._sqlite_errors import _rollback
-
             _rollback(connection)
             raise
         finally:
@@ -157,7 +158,8 @@ def _recover_initialization_link(self) -> None:
             ):
                 fsync_directory(self._path.parent)
             return
-    except (FileNotFoundError, NotADirectoryError):
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.debug("context-admission link recovery no-op: %s", exc)
         return
     except OSError as exc:
         raise _LedgerOpenError(

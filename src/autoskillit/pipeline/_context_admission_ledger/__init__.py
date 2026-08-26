@@ -36,13 +36,11 @@ from autoskillit.core import (
     ContextAdmissionEvent,
     ContextAdmissionInspectionResult,
     ContextAdmissionRecoveryResult,
-    ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     ContextAdmissionStoreAuthority,
     ContextAdmissionStoreHealth,
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
-    ContextAdmissionValidationError,
     ReconcileGenerationEvent,
     ReleaseNonAdmissionEvent,
     ReserveRequestEvent,
@@ -53,35 +51,13 @@ from autoskillit.core import (
 )
 
 # Internal cross-shard re-exports used by the class body below.
-from ._codec import (  # noqa: F401  (used by `recover_all`, `_recovery_result`)
-    _decode_stream_key,
-    _stream_key_bytes,
-)
-from ._projection import (  # noqa: F401  (rebound by `_recover`)
-    _recover_stream_projection,
-    _stored_stream_health,
-)
-from ._sqlite_errors import (  # noqa: E402, F401
-    _SQLITE_BUSY_CODES,
-    _LedgerContended,
-    _rollback,
-    _sqlite_primary_code,
-)
-from ._state_queries import _state_has_unresolved_work  # noqa: F401  (rebound by `_recover`)
+from ._codec import _stream_key_bytes  # used by `_recovery_result`
 from ._status import _ignore_fault, _LedgerFaultPoint, _set_store_failure
 
 # Re-exports for cross-package consumers that import from the public surface.
 from ._storage import (
     SCHEMA_SQL,
     _LedgerOpenError,
-    _LedgerReadBudget,
-    _preflight_storage_routes,
-    _read_bounded_rows,
-    fsync_directory,  # noqa: F401  (re-exported via package import path)
-    fsync_file,  # noqa: F401  (re-exported via package import path)
-    reconcile_initialization_links,  # noqa: F401  (re-exported via package import path)
-    require_private_file_identity,  # noqa: F401  (re-exported via package import path)
-    unlink_initialization_artifact,  # noqa: F401  (re-exported via package import path)
 )
 
 # __all__ lists the stable public surface. The two import blocks above are
@@ -113,6 +89,8 @@ class DefaultContextAdmissionLedger:
             raise ValueError("invalid_context_admission_busy_timeout")
         if not callable(connection_factory):
             raise TypeError("invalid_context_admission_connection_factory")
+        if fault_callback is not None and not callable(fault_callback):
+            raise TypeError("invalid_context_admission_fault_callback")
         self._authority = authority
         self._path = authority.database_path
         self._busy_timeout_ms = busy_timeout_ms
@@ -151,9 +129,7 @@ class DefaultContextAdmissionLedger:
                 ),
             )
 
-    # ── Protocol-required method declarations ───────────────────────────────
-    # Stubs declared for mypy Protocol conformance; rebound from sibling shards
-    # at module bottom before any instance is constructed.
+    # ── Protocol-required method declarations (rebound from sibling shards) ──
 
     def apply(
         self,
@@ -193,6 +169,9 @@ class DefaultContextAdmissionLedger:
         stream_key: ContextAdmissionStreamKey,
     ) -> ContextAdmissionInspectionResult:
         raise NotImplementedError  # rebound from ._inspection at module load
+
+    def recover_all(self) -> ContextAdmissionRecoveryResult:
+        raise NotImplementedError  # rebound from ._recover at module load
 
     def recover(
         self,
@@ -335,9 +314,3 @@ setattr(
     "_recover_sqlite_result",
     _recover_sqlite_result_method,
 )
-
-
-# ── Recovery rebinds ───────────────────────────────────────────────────────
-# `recover_all` lives in `_recover` and references the `_MAX_RECOVERY_BYTES`
-# / `_MAX_RECOVERY_ROWS` rebinds at module top; the `_INT` suffix is no longer
-# needed here since the consumer is in a different shard.

@@ -415,14 +415,14 @@ def apply(
                 failure_reason=exc.reason,
                 reason_code=exc.reason_code,
             )
-        except ContextAdmissionValidationError:
+        except ContextAdmissionValidationError as exc:
             if connection is not None:
                 _rollback(connection)
             return ContextAdmissionAccountingResult(
                 status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
                 stream_key=stream_key,
                 failure_reason=ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
-                reason_code="protocol-validation-failed",
+                reason_code=f"protocol-validation-failed:{exc}",
             )
         except sqlite3.Error as exc:
             primary_code = _sqlite_primary_code(exc)

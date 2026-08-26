@@ -9,7 +9,7 @@ The ``recover_all`` body uses rebind-via-setattr methods (``_ensure_store``,
 ``_connect``, ``_validate_integrity``, ``_validate_metadata``,
 ``_persist_stream_failure``, ``_set_store_failure``); the rebind happens in
 ``__init__.py``. Until the Wavefront 1 stub-then-rebind pattern is replaced
-(see ticket), these call sites need ``# type: ignore[attr-defined]``
+(see #4667 follow-ups), these call sites need ``# type: ignore[attr-defined]``
 suppressions.
 
 Wavefront 1 of #4667.

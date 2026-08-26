@@ -24,7 +24,6 @@ from autoskillit.core import (
     ContextAdmissionValidationError,
     ContextLineage,
     DurableContextAdmissionPayload,
-    ShadowContextAdmissionRecord,
     UninitializedContextAdmissionState,
     decode_stored_context_admission_envelope,
     encode_stored_context_admission_envelope,
@@ -95,20 +94,6 @@ def _decode_decision(value: bytes) -> AdmissionDecision:
     return payload
 
 
-def _decode_effect(value: bytes) -> AdmissionEffect:
-    payload = decode_stored_context_admission_envelope(value).payload
-    if not isinstance(payload, _EFFECT_TYPES):
-        raise ContextAdmissionValidationError("stored_effect_type_mismatch")
-    return cast(AdmissionEffect, payload)
-
-
-def _decode_shadow(value: bytes) -> ShadowContextAdmissionRecord:
-    payload = decode_stored_context_admission_envelope(value).payload
-    if not isinstance(payload, ShadowContextAdmissionRecord):
-        raise ContextAdmissionValidationError("stored_shadow_type_mismatch")
-    return payload
-
-
 def _decode_state(value: bytes) -> ContextAdmissionState:
     payload = decode_stored_context_admission_envelope(value).payload
     if not isinstance(payload, _STATE_TYPES):
@@ -120,11 +105,11 @@ def _decode_stream_key(value: bytes) -> ContextAdmissionStreamKey:
     _validate_stream_key_json_bounds(value)
     try:
         raw = json.loads(value.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
             "invalid-stream-key",
-        ) from None
+        ) from exc
     if not isinstance(raw, dict):
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,

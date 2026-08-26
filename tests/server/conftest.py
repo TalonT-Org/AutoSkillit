@@ -489,6 +489,16 @@ async def tool_ctx_ready_recipe(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
+    if recipe_name == "smoke-test":
+        import shutil
+
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True, exist_ok=True)
+        source = (
+            Path(__file__).resolve().parents[2] / ".autoskillit" / "recipes" / "smoke-test.yaml"
+        )
+        shutil.copy2(source, recipes_dir / "smoke-test.yaml")
+
     envelope = await _open_kitchen_patched(recipe_name, ingredient_overrides, monkeypatch)
     assert envelope["success"] is True
     # Delivery shape depends on compiled recipe size, not on this fixture:

@@ -9,6 +9,7 @@ completeness without hardcoded file lists.
 from __future__ import annotations
 
 import ast
+import functools
 from pathlib import Path
 
 TESTS_ROOT = Path(__file__).parent
@@ -23,7 +24,8 @@ ARCH_CONSTRAINT_PREFIXES: tuple[str, ...] = (
 )
 
 
-def discover_constraint_tests() -> dict[str, Path]:
+@functools.lru_cache(maxsize=1)
+def _discover_constraint_tests_cached() -> tuple[tuple[str, Path], ...]:
     """Return {filename: path} for all test files whose module docstring
     starts with a recognized constraint prefix.
 
@@ -47,4 +49,8 @@ def discover_constraint_tests() -> dict[str, Path]:
                     f"{test_file.relative_to(TESTS_ROOT)}"
                 )
             results[name] = test_file
-    return results
+    return tuple(results.items())
+
+
+def discover_constraint_tests() -> dict[str, Path]:
+    return dict(_discover_constraint_tests_cached())

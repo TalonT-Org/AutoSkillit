@@ -79,26 +79,31 @@ def test_bundled_recipe_content_has_no_residual_skip_signals(recipe_name: str) -
         f"Server-side evaluation may be broken."
     )
 
-    # Truthy path: verify optional: true and skip_when_false are stripped from steps
-    # resolved as mandatory. Tests ALL ingredients (not just hidden) independently so
-    # that other falsy-guarded steps (stripped from content entirely) do not interfere.
-    all_ing_names = set(recipe_obj.ingredients.keys())
-    for ing_name in all_ing_names:
+    # Sweep all guarded ingredients (not just hidden ones) together, verifying the
+    # LLM-visible served content after truthy mandatory resolution.
+    guarded_steps_by_ingredient = {}
+    for ing_name in recipe_obj.ingredients:
         guarded_steps = [
             step_name
             for step_name, step in recipe_obj.steps.items()
             if step.skip_when_false == f"inputs.{ing_name}"
         ]
-        if not guarded_steps:
-            continue
+        if guarded_steps:
+            guarded_steps_by_ingredient[ing_name] = guarded_steps
+
+    if guarded_steps_by_ingredient:
+        # This single all-truthy load is a content-only sweep; do not treat it as an
+        # equivalent substitute for configuration-specific assertions about validation
+        # results or findings, because pruning changes the recipe semantic validation
+        # sees (#4188).
         truthy_result = load_and_validate(
             recipe_name,
-            ingredient_overrides={ing_name: "true"},
+            ingredient_overrides={name: "true" for name in guarded_steps_by_ingredient},
         )
         truthy_content = truthy_result["content"]
-        assert truthy_content, (
-            f"Truthy content must be non-empty for recipe '{recipe_name}' ingredient '{ing_name}'"
-        )
+        assert truthy_content, f"All-truthy content must be non-empty for recipe '{recipe_name}'"
+
+    for ing_name, guarded_steps in guarded_steps_by_ingredient.items():
         residual_optional = []
         residual_skip = []
         for step_name in guarded_steps:
@@ -106,8 +111,10 @@ def test_bundled_recipe_content_has_no_residual_skip_signals(recipe_name: str) -
                 rf"(?m){_step_block_pattern(re.escape(step_name))}",
                 truthy_content,
             )
-            if block_match is None:
-                continue  # step removed (falsy default) — skip
+            assert block_match is not None, (
+                f"Recipe '{recipe_name}': guarded step '{step_name}' for ingredient "
+                f"'{ing_name}' is absent from all-truthy served content."
+            )
             step_block = block_match.group(0)
             if re.search(r"^\s+optional:\s+true\s*$", step_block, re.MULTILINE | re.IGNORECASE):
                 residual_optional.append(step_name)

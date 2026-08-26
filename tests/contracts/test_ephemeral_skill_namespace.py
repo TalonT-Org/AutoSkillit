@@ -103,7 +103,11 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
         if info is not None and info.source is SkillSource.BUNDLED_EXTENDED
     )
     assert add_dir_targets
-    manager = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path / "sessions")
+    manager = DefaultSessionSkillManager(
+        provider,
+        ephemeral_root=tmp_path / "sessions",
+        persistent_roots={"codex": tmp_path / "persistent" / "codex-sessions"},
+    )
     catalog = provider.resolver.list_effective(
         tmp_path,
         SkillExecutionRole.SESSION,

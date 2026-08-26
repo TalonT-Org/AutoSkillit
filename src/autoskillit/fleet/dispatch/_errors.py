@@ -9,6 +9,7 @@ helper lets the per-phase shards (`_lineage.py`, `_execution.py`) hand back a
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     FleetErrorCode,
@@ -25,7 +26,9 @@ from autoskillit.fleet.state_types import (
     DispatchResult,
     DispatchStatus,
 )
-from autoskillit.pipeline.context import ToolContext
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline.context import ToolContext
 
 _logger = get_logger(__name__)
 

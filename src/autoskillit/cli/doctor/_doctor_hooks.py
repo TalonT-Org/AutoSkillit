@@ -16,10 +16,20 @@ from ._doctor_types import DoctorResult
 logger = get_logger(__name__)
 
 
-def _check_hook_registration(settings_path: Path) -> DoctorResult:
+def _resolve_plugin_installed(plugin_installed: bool | None) -> bool:
+    if plugin_installed is not None:
+        return plugin_installed
+
     from autoskillit.cli._init_helpers import _is_plugin_installed
 
-    if _is_plugin_installed():
+    return _is_plugin_installed()
+
+
+def _check_hook_registration(
+    settings_path: Path, plugin_installed: bool | None = None
+) -> DoctorResult:
+    plugin_installed = _resolve_plugin_installed(plugin_installed)
+    if plugin_installed:
         return DoctorResult(
             severity=Severity.OK,
             check="hook_registration",
@@ -57,7 +67,9 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
 
 
 def _check_hook_registry_drift(
-    settings_path: Path, scope_label: str | None = None
+    settings_path: Path,
+    scope_label: str | None = None,
+    plugin_installed: bool | None = None,
 ) -> DoctorResult:
     """Compare generate_hooks_json() with what is deployed in settings.json."""
     result = _count_hook_registry_drift(settings_path)
@@ -73,9 +85,8 @@ def _check_hook_registry_drift(
             msg = f"[{scope_label}] {msg}"
         return DoctorResult(Severity.ERROR, "hook_registry_drift", msg)
     if result.missing > 0:
-        from autoskillit.cli._init_helpers import _is_plugin_installed
-
-        if _is_plugin_installed():
+        plugin_installed = _resolve_plugin_installed(plugin_installed)
+        if plugin_installed:
             msg = "Hooks delivered via plugin cache — settings.json drift is expected."
             if scope_label:
                 msg = f"[{scope_label}] {msg}"
@@ -117,13 +128,22 @@ def _check_hook_health(settings_path: Path) -> DoctorResult:
     return DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible")
 
 
-def _check_hook_registry_drift_all_scopes(project_root: Path | None = None) -> list[DoctorResult]:
+def _check_hook_registry_drift_all_scopes(
+    project_root: Path | None = None,
+    plugin_installed: bool | None = None,
+) -> list[DoctorResult]:
     """Check hook registry drift across ALL scopes."""
     from autoskillit.hook_registry import iter_all_scope_paths
 
     results: list[DoctorResult] = []
     for scope_label, settings_path in iter_all_scope_paths(project_root):
-        results.append(_check_hook_registry_drift(settings_path, scope_label=scope_label))
+        results.append(
+            _check_hook_registry_drift(
+                settings_path,
+                scope_label=scope_label,
+                plugin_installed=plugin_installed,
+            )
+        )
     return results
 
 
@@ -149,12 +169,14 @@ def _check_hook_health_all_scopes(project_root: Path | None = None) -> list[Doct
     return results
 
 
-def _check_dual_registration(settings_path: Path) -> DoctorResult:
+def _check_dual_registration(
+    settings_path: Path, plugin_installed: bool | None = None
+) -> DoctorResult:
     """Detect dual hook registration (plugin active + hooks in settings.json)."""
     from autoskillit.cli._hooks import _load_settings_data
-    from autoskillit.cli._init_helpers import _is_plugin_installed
 
-    if not _is_plugin_installed():
+    plugin_installed = _resolve_plugin_installed(plugin_installed)
+    if not plugin_installed:
         return DoctorResult(
             severity=Severity.OK,
             check="dual_registration",

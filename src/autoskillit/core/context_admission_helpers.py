@@ -1,8 +1,38 @@
 """Cross-category helpers for the context-admission reducer.
 
-Holds every predicate, witness validation, and state mutator that more than
+Holds every predicate, effect builder, and state transition that more than
 one dispatch-category shard needs; importing directly from this module keeps
 sibling shards from reaching into each other for cross-category concerns.
+
+Helpers are organised in three layers:
+
+- **Layer 0 — pure predicates** (`_reservation_for`, `_batch_record`,
+  `_generation_record`, `_highest_dispatch_sequence`,
+  `_required_release_witness_kind`, `_closed_batch_location`,
+  `_closed_generation_location`, `_append_witness_ids`,
+  `_validate_witness`, `_validate_witness_for_snapshot`,
+  `_effect_coordinates`): read state, return facts. No I/O, no allocation
+  beyond small tuple returns, no category-local reasoning.
+
+- **Effect builders** (`_occurrence_effects`, `_acceptance_effects`,
+  `_accepted_effects`): pure constructors that take state + event +
+  previous/next admission state and return the tuple of admission effects
+  to publish on a transition. Layer 0 with respect to side effects but
+  Layer 1 with respect to argument shape.
+
+- **Layer 1 — state mutators** (`_replace_batch_record`,
+  `_set_occurrence_state`, `_replace_closed_audit`,
+  `_reconcile_deducted_closed_charge`, `_accepted_state`,
+  `_quarantined_acceptance_state`, `_capacity`): return a new immutable
+  state via `dataclasses.replace`-style transitions.
+
+- **Decision publishers** (`_reject`, `_publish`, `_decision`): the single
+  path through which a dispatch shard returns an `AdmissionTransition` with
+  a full `AdmissionDecision` + observed-effects tuple. All other helpers
+  return values that flow into one of these three.
+
+All dispatch-category shards depend on this module rather than each other
+where the helper is cross-category.
 """
 
 from __future__ import annotations

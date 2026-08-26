@@ -2,10 +2,9 @@
 
 The hash input is the JSON serialization produced by
 ``_canonical_registry_payload``; the JSON shape is the single authority for
-"what counts as the canonical registry" for every publisher (marketplace,
-self-heal, projection staging, startup drift check). Adding or removing a
-field here changes the committed ``registry.sha256`` and must be paired
-with a ``task sync-hooks-hash`` re-run.
+"what counts as the canonical registry" for every publisher. Adding or
+removing a field here changes the committed ``registry.sha256`` and must
+be paired with a ``task sync-hooks-hash`` re-run.
 """
 
 from __future__ import annotations
@@ -41,7 +40,11 @@ def _canonical_registry_payload(
             }
             for h in registry
         ],
-        key=lambda row: (row["event_type"], row["matcher"], tuple(row["scripts"])),  # type: ignore[arg-type]
+        key=lambda row: (
+            row["event_type"],
+            row["matcher"],
+            tuple(row["scripts"]),  # type: ignore[arg-type]
+        ),
     )
     lifecycle_rows = sorted(
         [

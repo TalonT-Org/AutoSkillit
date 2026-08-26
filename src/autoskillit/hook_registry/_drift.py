@@ -1,14 +1,4 @@
-"""Drift detection + broken-script detection across deployed hook configs.
-
-These utilities are used by both ``cli/`` and ``server/`` (both IL-3); they
-live here (package root, IL-0-accessible) so neither side has to import
-from the other. ``_is_own_hook`` and ``_extract_script_basenames`` use the
-canonical ``RETIRED_SCRIPT_BASENAMES`` set to recognize retired script
-basenames as autoskillit-owned (the test
-``test_is_own_hook_recognizes_retired_basename_orphan`` pins this
-behavior). The orphan-script recognition is load-bearing for ``find_broken_hook_scripts``
-to flag retired hooks still referenced by deployed settings.json.
-"""
+"""Drift detection + broken-script detection across deployed hook configs."""
 
 from __future__ import annotations
 
@@ -25,8 +15,17 @@ def _load_settings_data(settings_path: Path) -> dict:
     if settings_path.exists():
         try:
             return json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
+        except (OSError, json.JSONDecodeError) as exc:
+            # A corrupt or unreadable settings.json is indistinguishable from
+            # a missing/empty one at the drift-counting layer; surface the
+            # reason in a comment rather than silently passing.
+            import sys as _sys
+
+            print(
+                f"_load_settings_data: {settings_path} unreadable ({exc!r}); treating as empty",
+                file=_sys.stderr,
+            )
+            return {}
     return {}
 
 
@@ -114,8 +113,8 @@ def find_broken_hook_scripts(
                     continue
                 try:
                     parts = shlex.split(cmd)
-                except ValueError:
-                    broken.append(cmd)
+                except ValueError as exc:
+                    broken.append(f"{cmd}  # shlex parse error: {exc}")
                     continue
                 has_dispatcher = any(part.endswith("_dispatch.py") for part in parts)
                 if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):

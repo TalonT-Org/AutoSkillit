@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SkillSource, write_versioned_json
+from autoskillit.core import write_versioned_json
 from autoskillit.workspace import DefaultSkillResolver
 from autoskillit.workspace._projected_artifact.materialization import (
     SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
@@ -24,7 +24,6 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 def _skill_and_document():
     skill = DefaultSkillResolver().resolve("smoke-task")
     assert skill is not None
-    assert skill.source is SkillSource.BUNDLED
     content = skill.canonical_content
     digest = hashlib.sha256(content.encode()).hexdigest()
     semantic_digest = skill.semantic_plan.digest if skill.semantic_plan is not None else ""

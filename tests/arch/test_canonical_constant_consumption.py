@@ -11,6 +11,7 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _ENV_CANONICAL_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*(?:_ENV_FORWARD_VARS|_REQUIRED_ENV)$")
+ProductionImporters = dict[str, set[Path]]
 
 
 def _find_env_set_constants(constants_file: Path) -> list[str]:
@@ -28,9 +29,9 @@ def _find_env_set_constants(constants_file: Path) -> list[str]:
     return names
 
 
-def _build_production_importers(src_root: Path) -> dict[str, set[Path]]:
+def _build_production_importers(src_root: Path) -> ProductionImporters:
     """Index imported names by the production files that import them."""
-    importers: dict[str, set[Path]] = {}
+    importers: ProductionImporters = {}
     for py_file in src_root.rglob("*.py"):
         if py_file.name.startswith("test_"):
             continue
@@ -51,7 +52,7 @@ def _build_production_importers(src_root: Path) -> dict[str, set[Path]]:
 
 
 def _has_production_import(
-    importers: dict[str, set[Path]],
+    importers: ProductionImporters,
     constant_name: str,
     definition_file: Path,
     *,
@@ -62,7 +63,7 @@ def _has_production_import(
 
 
 @pytest.fixture(scope="module")
-def production_importers() -> dict[str, set[Path]]:
+def production_importers() -> ProductionImporters:
     """Build the production importer index once per test module per worker process."""
     from autoskillit.core import paths
 
@@ -156,7 +157,7 @@ if TYPE_CHECKING:
 
 
 def test_env_forward_constants_have_production_consumer(
-    production_importers: dict[str, set[Path]],
+    production_importers: ProductionImporters,
 ) -> None:
     """Every env-var-set constant must be imported by at least one production module."""
     from autoskillit.core import paths
@@ -227,7 +228,7 @@ def _find_registry_constants(constants_file: Path) -> list[str]:
 
 
 def test_registry_constants_have_production_consumer(
-    production_importers: dict[str, set[Path]],
+    production_importers: ProductionImporters,
 ) -> None:
     """Every registry/tools/tags/names constant must be imported by production code or exempted."""
     from autoskillit.core import paths

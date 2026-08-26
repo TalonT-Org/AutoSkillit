@@ -60,121 +60,10 @@ from autoskillit.core import (
     compute_bytes_hash,
     compute_canonical_hash,
 )
-from autoskillit.pipeline._audit_admission_ledger import _connections
+from autoskillit.pipeline._audit_admission_ledger import _connections, _recovery
 
 __all__ = ["DefaultAuditAdmissionLedger"]
 
-_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS metadata (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS installations (
-    recipe_execution_id TEXT PRIMARY KEY,
-    installation_version TEXT NOT NULL,
-    snapshot_digest TEXT NOT NULL,
-    retired INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS installation_occurrences (
-    recipe_execution_id TEXT NOT NULL,
-    installation_version TEXT NOT NULL,
-    snapshot_digest TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    retired_at TEXT,
-    PRIMARY KEY (recipe_execution_id, installation_version)
-) STRICT;
-CREATE TABLE IF NOT EXISTS slots (
-    slot_id TEXT PRIMARY KEY,
-    recipe_execution_id TEXT NOT NULL,
-    installation_version TEXT NOT NULL,
-    step_name TEXT NOT NULL,
-    head_key TEXT NOT NULL,
-    slot_key_json TEXT NOT NULL,
-    current_attempt_id TEXT NOT NULL,
-    created_at TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS attempts (
-    attempt_id TEXT PRIMARY KEY,
-    slot_id TEXT NOT NULL,
-    lifecycle TEXT NOT NULL,
-    semantic_digest TEXT,
-    correction_predecessor TEXT,
-    handle_digest TEXT UNIQUE,
-    reservation_json TEXT NOT NULL,
-    committed_outcome_json TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (slot_id) REFERENCES slots(slot_id)
-) STRICT;
-CREATE TABLE IF NOT EXISTS prepared_effects (
-    attempt_id TEXT NOT NULL,
-    path TEXT NOT NULL,
-    artifact_kind TEXT NOT NULL,
-    content_digest TEXT NOT NULL,
-    canonical_bytes BLOB NOT NULL,
-    delivery_status TEXT NOT NULL,
-    canonicalization_profile TEXT NOT NULL,
-    semantic_fingerprint TEXT NOT NULL,
-    PRIMARY KEY (attempt_id, path),
-    FOREIGN KEY (attempt_id) REFERENCES attempts(attempt_id)
-) STRICT;
-CREATE TABLE IF NOT EXISTS finalization_effects (
-    attempt_id TEXT NOT NULL,
-    effect_name TEXT NOT NULL,
-    result_json TEXT NOT NULL,
-    acknowledged_at TEXT NOT NULL,
-    PRIMARY KEY (attempt_id, effect_name),
-    FOREIGN KEY (attempt_id) REFERENCES attempts(attempt_id)
-) STRICT;
-CREATE TABLE IF NOT EXISTS response_commits (
-    attempt_id TEXT PRIMARY KEY,
-    required_effect_names_json TEXT NOT NULL,
-    outcome_json TEXT NOT NULL,
-    replay_projection_json TEXT NOT NULL,
-    committed_at TEXT NOT NULL,
-    FOREIGN KEY (attempt_id) REFERENCES attempts(attempt_id)
-) STRICT;
-CREATE TRIGGER IF NOT EXISTS reject_late_finalization_effect
-BEFORE INSERT ON finalization_effects
-WHEN (
-    SELECT lifecycle FROM attempts WHERE attempt_id = NEW.attempt_id
-) = 'RESPONSE_COMMITTED'
-BEGIN
-    SELECT RAISE(ABORT, 'finalization-effect-after-response-commit');
-END;
-CREATE TABLE IF NOT EXISTS head_claims (
-    head_key TEXT PRIMARY KEY,
-    recipe_execution_id TEXT NOT NULL,
-    cycle_id TEXT NOT NULL,
-    scope_id TEXT NOT NULL,
-    part_id TEXT NOT NULL,
-    head_json TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS preflight_projections (
-    recipe_execution_id TEXT NOT NULL,
-    installation_version TEXT NOT NULL,
-    step_name TEXT NOT NULL,
-    plan_set_id TEXT NOT NULL,
-    scope_id TEXT NOT NULL,
-    part_id TEXT NOT NULL,
-    PRIMARY KEY (recipe_execution_id, installation_version, step_name)
-) STRICT;
-CREATE TABLE IF NOT EXISTS disposition_projections (
-    installation_version TEXT NOT NULL,
-    authority_digest TEXT NOT NULL,
-    plan_digest TEXT NOT NULL,
-    report_digest TEXT NOT NULL,
-    report_path TEXT NOT NULL,
-    association_digest TEXT NOT NULL,
-    association_path TEXT NOT NULL,
-    generated_at TEXT NOT NULL,
-    PRIMARY KEY (installation_version, authority_digest, plan_digest)
-) STRICT;
-"""
-
-_METADATA_SCHEMA_VERSION = "1"
-_DATABASE_MODE = 0o600
-_DIRECTORY_MODE = 0o700
 _HEAD_KEY_DOMAIN = "autoskillit:audit-admission:head-key:v1:sha256"
 _HANDLE_DIGEST_DOMAIN = "autoskillit:audit-admission:reservation-handle:v1:sha256"
 _HANDLE_PREFIX = "adr1"
@@ -392,25 +281,12 @@ class DefaultAuditAdmissionLedger:
             connection: sqlite3.Connection | None = None
             try:
                 connection = _connections.open(self._authority, self._busy_timeout_ms)
-                installations = tuple(
-                    RecipeExecutionId(row[0])
-                    for row in connection.execute(
-                        "SELECT recipe_execution_id FROM installations WHERE retired = 0"
-                    )
-                )
-                attempts = tuple(
-                    AuditAttemptId(row[0])
-                    for row in connection.execute(
-                        "SELECT attempt_id FROM attempts",
-                    )
-                )
+                installations, attempts = _recovery._read_installations_and_attempts(connection)
             except AuditAdmissionStorageError as exc:
                 return self._fail_closed_recovery(exc.reason, exc.reason_code)
             except (OSError, sqlite3.Error) as exc:
-                return self._fail_closed_recovery(
-                    AuditAdmissionStorageFailureReason.IO,
-                    f"audit-admission-recovery-failed:{type(exc).__name__}",
-                )
+                reason, reason_code = _recovery._classify_io_failure(exc)
+                return self._fail_closed_recovery(reason, reason_code)
             finally:
                 if connection is not None:
                     connection.close()
@@ -1526,13 +1402,6 @@ def _normalize_required_effect_names(
 
 def _required_effect_names_to_json(required_effect_names: tuple[str, ...]) -> str:
     return _json_dumps({"effect_names": list(required_effect_names)})
-
-
-def _required_effect_names_from_json(payload_json: str) -> tuple[str, ...]:
-    payload = _json_loads(payload_json)
-    if set(payload) != {"effect_names"} or not isinstance(payload["effect_names"], list):
-        raise ValueError("invalid durable required_effect_names projection")
-    return _normalize_required_effect_names(tuple(payload["effect_names"]))
 
 
 def _validate_replay_projection(outcome: AuditOutcome) -> str:

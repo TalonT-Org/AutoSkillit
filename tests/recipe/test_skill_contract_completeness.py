@@ -45,10 +45,12 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
                 continue
             skill_command = str(step.with_args.get("skill_command", ""))
             skill_name = resolve_skill_name(skill_command)
-            assert skill_name is not None, (
-                f"{recipe_path.name}:{step_name} has an unparseable skill command: "
-                f"{skill_command!r}"
-            )
+            if skill_name is None:
+                assert "{" in skill_command and "}" in skill_command, (
+                    f"{recipe_path.name}:{step_name} has an unparseable static skill command: "
+                    f"{skill_command!r}"
+                )
+                continue
             targets.add(skill_name)
 
     assert targets, "Bundled recipes must declare at least one run_skill target"

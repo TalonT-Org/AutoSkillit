@@ -3,6 +3,7 @@ name: audit-impl
 categories:
 - audit
 uses_capabilities:
+- test_check
 - write_audit_semantic_result
 - write_standalone_audit_evidence
 description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates
@@ -564,13 +565,10 @@ For each accepted deviation:
 ## Verification
 
 After remediation:
-- Run:
-  ```bash
-  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD) && \
-  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
-  AUTOSKILLIT_TEST_BASE_REF=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch" 2>/dev/null || echo "") \
-  task test-all
-  ```
+- Call the `test_check` MCP tool with `worktree_path` set to the remediated worktree. The
+  server-owned gate applies project configuration and captures output; do not run the configured
+  command in the shell. `AUTOSKILLIT_TEST_FILTER` and `AUTOSKILLIT_TEST_BASE_REF` remain
+  server-managed filter inputs, not shell exports in this skill.
 - Re-run `/autoskillit:audit-impl` to confirm GO
 ```
 

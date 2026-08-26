@@ -538,7 +538,10 @@ MODULE_CASCADE_PIPELINE: dict[str, frozenset[str]] = {
     "_shadow": frozenset({"pipeline", "server"}),
     "_state_queries": frozenset({"pipeline", "server"}),
     "_store": frozenset({"pipeline", "server"}),
+    "_storage": frozenset({"pipeline", "server"}),
+    "_sqlite_errors": frozenset({"pipeline", "server"}),
     "_apply": frozenset({"pipeline", "server"}),
+    "_recover": frozenset({"pipeline", "server"}),
     "_inspection": frozenset({"pipeline", "server"}),
     "_status": frozenset({"pipeline", "server"}),
     "context": frozenset(

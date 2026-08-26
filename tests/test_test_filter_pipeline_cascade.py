@@ -49,7 +49,10 @@ def test_pipeline_module_cascade_has_exact_context_keys() -> None:
             "_shadow",
             "_state_queries",
             "_store",
+            "_storage",
+            "_sqlite_errors",
             "_apply",
+            "_recover",
             "_inspection",
             "_status",
         }

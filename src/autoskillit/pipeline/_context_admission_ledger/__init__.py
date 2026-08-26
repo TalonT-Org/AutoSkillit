@@ -73,6 +73,9 @@ from ._storage import (
     unlink_initialization_artifact,  # noqa: F401  (re-exported via package import path)
 )
 
+# __all__ lists the stable public surface. The broader import block above is
+# cross-shard glue used by the rebind block and `recover_all` body below; those
+# symbols are internal and not re-exported.
 __all__ = [
     "DefaultContextAdmissionLedger",
     "SCHEMA_SQL",
@@ -97,6 +100,8 @@ class DefaultContextAdmissionLedger:
             or not 0 <= busy_timeout_ms <= 5_000
         ):
             raise ValueError("invalid_context_admission_busy_timeout")
+        if not callable(connection_factory):
+            raise TypeError("invalid_context_admission_connection_factory")
         self._authority = authority
         self._path = authority.database_path
         self._busy_timeout_ms = busy_timeout_ms
@@ -136,13 +141,8 @@ class DefaultContextAdmissionLedger:
             )
 
     # ── Protocol-required method declarations ───────────────────────────────
-    # These stubs declare the public surface required by
-    # :class:`autoskillit.core.types._type_context_admission_persistence.ContextAdmissionLedger`
-    # at class-definition time so mypy can verify structural conformance.
-    # The actual implementations are rebound onto the class from sibling
-    # shards at module bottom (Wavefront 1 of #4667). At runtime, these
-    # stubs are overwritten before any instance is constructed; the Protocol
-    # check sees the rebound implementations.
+    # Stubs declared for mypy Protocol conformance; rebound from sibling shards
+    # at module bottom before any instance is constructed.
 
     def apply(
         self,
@@ -416,10 +416,7 @@ class DefaultContextAdmissionLedger:
 
 
 # ── Method rebind block ─────────────────────────────────────────────────────
-# The class declaration above is intentionally lean. Transaction-boundary,
-# store-side, status-side, and inspection methods live in sibling shards
-# and are bound onto the class below. This is the ONLY place methods are
-# rebound (Wavefront 1 of #4667 — Foundation Finding 1 + Interface Finding 3).
+# Methods live in sibling shards; bound onto the class below (Wavefront 1 of #4667).
 
 from ._apply import (  # noqa: E402
     _commit_with_busy_retry as _commit_with_busy_retry_method,

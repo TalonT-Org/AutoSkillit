@@ -71,10 +71,8 @@ def _rollback(connection: sqlite3.Connection) -> None:
     try:
         connection.execute("ROLLBACK")
     except sqlite3.Error as exc:
-        # Best-effort rollback: a failure here is itself a store-health signal,
-        # but suppressing it preserves the existing cleanup semantics. Surface
-        # the cause via debug logging so it remains observable for diagnostics
-        # without changing the swallow behavior.
+        # Best-effort: rollback failure is itself a store-health signal. Surface
+        # the cause via debug logging without changing the swallow behavior.
         _logger.debug("context-admission rollback failed: %s", exc)
 
 

@@ -25,6 +25,7 @@ from autoskillit.core import (
     ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
+    ContextAdmissionStoreHealth,
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
@@ -466,11 +467,6 @@ def _recover_sqlite_result(
     _rollback(connection)
     connection.close()
     self._recovered = False
-    from autoskillit.core import (
-        ContextAdmissionStorageHealthStatus,
-        ContextAdmissionStoreHealth,
-    )
-
     self._store_health = ContextAdmissionStoreHealth(
         ContextAdmissionStorageHealthStatus.UNINITIALIZED
     )

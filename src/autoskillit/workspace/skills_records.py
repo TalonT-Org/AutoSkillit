@@ -1,11 +1,10 @@
-"""Skill records: record types, diagnostic helpers, and the transitive-closure BFS.
+"""Immutable skill record types and diagnostic helpers.
 
-Owns the immutable record types (``SkillInfo``, ``SkillCatalogEntry``,
-``SkillExclusion``, ``EffectiveSkillCatalog``, ``EffectiveSkillInvocation``) plus the
-diagnostic helpers and the transitive-closure BFS over a captured catalog. These are
-the pure-data shapes that flow through the rest of the package.
-``SkillInfo.__post_init__`` lazily parses frontmatter via ``skill_format`` so the
-data shape still embeds the canonical parsed contract.
+Defines ``SkillInfo``, ``SkillCatalogEntry``, ``SkillExclusion``,
+``EffectiveSkillCatalog``, ``EffectiveSkillInvocation``, the diagnostic helpers
+(``invalidity_hints``, ``render_skill_invalidities``), and the transitive-closure
+BFS over a captured catalog. ``SkillInfo.__post_init__`` parses frontmatter via
+``skill_format`` so each record still embeds the canonical parsed contract.
 """
 
 from __future__ import annotations

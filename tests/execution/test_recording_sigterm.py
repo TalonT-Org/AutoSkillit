@@ -77,7 +77,6 @@ def test_sigterm_writes_scenario_json(tmp_path):
             # SIGTERM is the exact signal Claude Code sends on /exit. Close stdin so
             # the stdio transport detects EOF and the event loop can fully unwind.
             proc.stdin.close()
-            proc.stdin = None
             proc.send_signal(signal.SIGTERM)
             try:
                 proc.wait(timeout=10)
@@ -85,6 +84,8 @@ def test_sigterm_writes_scenario_json(tmp_path):
                 proc.kill()
                 proc.wait()
         except BaseException:
+            if proc.stdin is not None and not proc.stdin.closed:
+                proc.stdin.close()
             if proc.poll() is None:
                 proc.kill()
                 proc.wait()

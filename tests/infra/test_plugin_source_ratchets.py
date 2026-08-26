@@ -433,6 +433,10 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "The recording helper forwards ownership to its FD-aware physical runner.",
     ),
+    ("execution/testing.py", "run", "lease.inherited_fds"): (
+        1,
+        "The test gate forwards its exclusive worktree lease to the managed process tree.",
+    ),
     ("workspace/session_skills.py", "managed_session", "(lease_fd,)"): (
         1,
         "The generated-home helper forwards its independent session-storage lease.",

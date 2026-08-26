@@ -9,6 +9,7 @@ and I/O so it can be tested as a pure decision table) — and
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 from typing import assert_never
 
@@ -158,9 +159,12 @@ async def execute_termination_action(
             kill_reason = KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
-    returncode, cleanup = await anyio.to_thread.run_sync(
-        owner.settle_evidence, abandon_on_cancel=False
+    settle = (
+        owner.settle_evidence
+        if action is TerminationAction.NO_KILL
+        else partial(owner.settle_evidence, escalate=True)
     )
+    returncode, cleanup = await anyio.to_thread.run_sync(settle, abandon_on_cancel=False)
     return kill_reason, returncode, cleanup
 
 

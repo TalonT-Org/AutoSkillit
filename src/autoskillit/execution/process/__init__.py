@@ -722,7 +722,7 @@ async def run_managed_async(
                     tracing_handle.stop()
                 if "owner" in locals():
                     await anyio.to_thread.run_sync(
-                        functools.partial(owner.settle_preserving, exc),
+                        functools.partial(owner.settle_preserving, exc, escalate=True),
                         abandon_on_cancel=False,
                     )
             raise

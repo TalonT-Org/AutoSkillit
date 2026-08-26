@@ -865,6 +865,8 @@ steps:
       route: check_merge_fix_loop
     - when: result.failed_step == 'test_gate'
       route: check_merge_fix_loop
+    - when: result.failed_step == 'test_gate_contention'
+      route: check_merge_fix_loop
     - when: result.failed_step == 'post_rebase_test_gate'
       route: check_merge_fix_loop
     - when: result.failed_step == 'rebase'

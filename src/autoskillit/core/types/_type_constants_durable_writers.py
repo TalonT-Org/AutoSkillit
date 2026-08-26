@@ -203,6 +203,25 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
+        writer="autoskillit.core.runtime.artifact_lease:ArtifactLease._acquire",
+        artifact=(
+            "persistent *.lock sidecars created with mode 0600 for POSIX flock "
+            "coordination; file contents carry no host-specific state"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
+        writer=("autoskillit.core.runtime.worktree_gate_lease:_write_gate_holder_manifest"),
+        artifact=(
+            "gate-leases/*.json under default_log_dir() — diagnostic acquisition "
+            "identity for worktree test-gate contention; the adjacent flock descriptor "
+            "is the sole admission authority"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer="autoskillit.execution.otlp_sink:LocalOtlpSink._persist_line",
         artifact=(
             "otlp.jsonl and otlp.jsonl.1 host-local diagnostic stream under the "

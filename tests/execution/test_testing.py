@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import os
+import sys
 from pathlib import Path
 
+import anyio
+import psutil
 import pytest
 
 from autoskillit.core.types import (
@@ -27,6 +32,16 @@ from tests._helpers import make_test_check_config, make_test_config
 from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def _terminate_process_if_identity_matches(pid: int, create_time: float) -> None:
+    """Best-effort cleanup that cannot signal a process after PID reuse."""
+    try:
+        process = psutil.Process(pid)
+        if process.create_time() == create_time:
+            process.kill()
+    except psutil.NoSuchProcess:
+        pass
 
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
@@ -83,6 +98,83 @@ async def test_default_test_runner_strips_private_env_vars_from_subprocess(monke
         assert var not in passed_env, (
             f"{var} must not appear in the env passed to the subprocess runner"
         )
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(sys.platform != "linux", reason="requires /proc fd inspection")
+async def test_default_test_runner_keeps_gate_lease_fd_in_direct_child(
+    tmp_path: Path,
+    record_property,
+) -> None:
+    """The gate's direct subprocess inherits its lease without running the repository gate."""
+    from autoskillit.execution.process import DefaultSubprocessRunner
+
+    script = tmp_path / "gate_child.py"
+    info_path = tmp_path / "processes.json"
+    release_path = tmp_path / "release"
+    script.write_text(
+        "import json, os, sys, time\n"
+        "info_path = sys.argv[1]\n"
+        "release_path = sys.argv[2]\n"
+        "leaf_pid = os.fork()\n"
+        "if leaf_pid == 0:\n"
+        "    while not os.path.exists(release_path):\n"
+        "        time.sleep(0.01)\n"
+        "    os._exit(0)\n"
+        "with open(info_path, 'w') as info_file:\n"
+        "    json.dump({'direct_pid': os.getpid(), 'leaf_pid': leaf_pid}, info_file)\n"
+        "while not os.path.exists(release_path):\n"
+        "    time.sleep(0.01)\n"
+        "os.waitpid(leaf_pid, 0)\n"
+    )
+    command = [sys.executable, "-B", str(script), str(info_path), str(release_path)]
+    config = make_test_config(test_check=make_test_check_config(command=command, timeout=10))
+    assert config.test_check.command == command
+    tester = DefaultTestRunner(config=config, runner=DefaultSubprocessRunner())
+    results = []
+    process_identities: list[tuple[int, float]] = []
+
+    async def run_gate() -> None:
+        results.append(await tester.run(tmp_path))
+
+    try:
+        async with anyio.create_task_group() as task_group:
+            task_group.start_soon(run_gate)
+            try:
+                with anyio.move_on_after(5) as cancel_scope:
+                    while not info_path.exists():
+                        await anyio.sleep(0.01)
+                assert not cancel_scope.cancel_called, (
+                    "controlled direct child did not publish its PID"
+                )
+                process_info = json.loads(info_path.read_text())
+                process_identities = [
+                    (pid, psutil.Process(pid).create_time())
+                    for pid in (process_info["direct_pid"], process_info["leaf_pid"])
+                ]
+                direct_fd_targets = [
+                    os.path.realpath(fd_path)
+                    for fd_path in (
+                        Path("/proc") / str(process_info["direct_pid"]) / "fd"
+                    ).iterdir()
+                ]
+                assert any("gate-leases" in target for target in direct_fd_targets)
+
+                leaf_fd_targets = [
+                    os.path.realpath(fd_path)
+                    for fd_path in (Path("/proc") / str(process_info["leaf_pid"]) / "fd").iterdir()
+                ]
+                record_property(
+                    "gate_lease_fd_reaches_leaf",
+                    any("gate-leases" in target for target in leaf_fd_targets),
+                )
+            finally:
+                release_path.touch()
+    finally:
+        for pid, create_time in reversed(process_identities):
+            _terminate_process_if_identity_matches(pid, create_time)
+
+    assert results[0].passed is True
 
 
 class TestParsePytestSummary:
@@ -738,7 +830,7 @@ async def test_default_test_runner_passes_default_base_branch(
     """AC5: DefaultTestRunner.run() passes branching.default_base_branch to _resolve_base_ref."""
     captured_kwargs: dict = {}
 
-    async def capturing_runner(cmd, *, cwd, timeout, env):
+    async def capturing_runner(cmd, *, cwd, timeout, env, **kwargs):
         captured_kwargs["env"] = env
         return SubprocessResult(
             returncode=0,

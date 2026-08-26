@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import regex as re
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, contains_test_gate_command, load_yaml
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
@@ -1155,4 +1155,71 @@ def _check_inline_content_in_subagent_prompt(ctx: ValidationContext) -> list[Rul
                         ),
                     )
                 )
+    return findings
+
+
+def _configured_test_gate_commands(ctx: ValidationContext) -> frozenset[tuple[str, ...]]:
+    commands: set[tuple[str, ...]] = set()
+    if ctx.project_dir is None:
+        return frozenset(commands)
+    config_path = ctx.project_dir / ".autoskillit" / "config.yaml"
+    if not config_path.is_file():
+        return frozenset(commands)
+    try:
+        raw = load_yaml(config_path)
+    except (OSError, ValueError):
+        return frozenset(commands)
+    test_check = raw.get("test_check") if isinstance(raw, dict) else None
+    if not isinstance(test_check, dict):
+        return frozenset(commands)
+    candidates = test_check.get("commands")
+    if not isinstance(candidates, list):
+        candidates = [test_check.get("command")]
+    for candidate in candidates:
+        if isinstance(candidate, list) and all(isinstance(token, str) for token in candidate):
+            commands.add(tuple(candidate))
+    return frozenset(commands)
+
+
+@semantic_rule(
+    name="no-raw-shell-test-gate",
+    description=(
+        "A called SKILL.md executes a configured test gate directly in a shell block. "
+        "Long-running test gates must use the test_check tool so ownership, timeout, and "
+        "result routing remain server-managed."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_no_raw_shell_test_gate(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    gate_commands = _configured_test_gate_commands(ctx)
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_name = resolve_skill_name(step.with_args.get("skill_command", ""))
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if any(
+            contains_test_gate_command(block, gate_commands)
+            for block in extract_bash_blocks(content)
+        ):
+            findings.append(
+                make_finding(
+                    rule_name="no-raw-shell-test-gate",
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' executes a test gate in a shell block. "
+                        "Use the test_check MCP tool instead."
+                    ),
+                )
+            )
     return findings

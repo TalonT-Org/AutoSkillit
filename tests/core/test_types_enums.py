@@ -71,6 +71,7 @@ def test_merge_failed_step_values() -> None:
         MergeFailedStep.DIRTY_TREE,
         MergeFailedStep.DIRTY_MAIN_REPO,
         MergeFailedStep.TEST_GATE,
+        MergeFailedStep.TEST_GATE_CONTENTION,
         MergeFailedStep.FETCH,
         MergeFailedStep.PRE_REBASE_CHECK,
         MergeFailedStep.MERGE_COMMITS_DETECTED,

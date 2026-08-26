@@ -1100,6 +1100,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_context_admission_persistence_envelope: #4743 persistence split moved
         # envelope pipeline to a sibling shard (75 + 1 = 76).
         "core/types": 76,
+        "core/runtime": 11,  # +worktree_gate_lease process-tree-lived test exclusion
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1510,7 +1511,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
     "rules_skill_content.py": (
-        1200,
+        1300,
         "REQ-CNST-010-E11: SKILL.md content validation rules registry — accumulating "
         "semantic rules (undefined-bash-placeholder, hardcoded-origin-remote, "
         "blind-git-add, no-interpreter-mediated-writes, no-autoskillit-import, "
@@ -1518,7 +1519,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "no-gh-issue-comment, transition-boundary-anti-confirmation, "
         "executable-field-content-validity, reviews-post-requires-input-flag, "
         "source-attribution-directive, graphql-query-requires-shell-invocation, "
-        "inline-content-in-subagent-prompt) co-located to keep SKILL.md validation "
+        "inline-content-in-subagent-prompt, no-raw-shell-test-gate) co-located to keep "
+        "SKILL.md validation "
         "discovery a single import; splitting into sub-modules per rule would fragment "
         "the @semantic_rule registration surface and break the test filter cascade."
         "; inline-content-in-subagent-prompt rule (#4289 manifestation, #3636 architectural): "

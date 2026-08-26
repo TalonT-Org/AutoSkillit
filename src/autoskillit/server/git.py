@@ -23,6 +23,7 @@ from autoskillit.core import (
     MergeState,
     SpillSpec,
     SubprocessRunner,
+    WorktreeGateContention,
     get_logger,
     is_generated_path,
     is_protected_branch,
@@ -373,7 +374,15 @@ async def perform_merge(
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
             }
-        test_result = await tester.run(Path(worktree_path))
+        try:
+            test_result = await tester.run(Path(worktree_path))
+        except WorktreeGateContention as exc:
+            return {
+                "error": str(exc),
+                "failed_step": MergeFailedStep.TEST_GATE_CONTENTION,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
         if _merge_test_gate_failed(test_result):
             return {
                 "error": (
@@ -476,7 +485,15 @@ async def perform_merge(
 
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:
-        test_result = await tester.run(Path(worktree_path))
+        try:
+            test_result = await tester.run(Path(worktree_path))
+        except WorktreeGateContention as exc:
+            return {
+                "error": str(exc),
+                "failed_step": MergeFailedStep.TEST_GATE_CONTENTION,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
         if _merge_test_gate_failed(test_result):
             return {
                 "error": (

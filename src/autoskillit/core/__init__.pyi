@@ -176,6 +176,7 @@ from .audit_semantic_codec import (
 from .audit_semantic_codec import (
     load_standalone_audit_evidence as load_standalone_audit_evidence,
 )
+from .bash_write_targets import contains_test_gate_command as contains_test_gate_command
 from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
@@ -365,6 +366,8 @@ from .runtime.session_registry import bridge_claude_session_id as bridge_claude_
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path
 from .runtime.session_registry import write_registry_entry as write_registry_entry
+from .runtime.worktree_gate_lease import WorktreeGateContention as WorktreeGateContention
+from .runtime.worktree_gate_lease import WorktreeGateLease as WorktreeGateLease
 from .tool_registry import (
     EXECUTION_TUNING_EXTERNALLY_RESOLVED as EXECUTION_TUNING_EXTERNALLY_RESOLVED,
 )

@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -22,6 +23,7 @@ import psutil
 import pytest
 
 from autoskillit.core.types import TerminationReason
+from autoskillit.execution import TetherSpec
 from autoskillit.execution.process import (
     async_kill_process_tree,
     kill_process_tree,
@@ -32,6 +34,7 @@ from tests.execution import _process_group_helpers
 from tests.execution._process_group_helpers import (
     _cleanup_owned_process_group,
     _cleanup_process_identities,
+    _live_identities,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -99,6 +102,75 @@ NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT = textwrap.dedent("""\
     print(json.dumps({"type": "task_started", "task_id": "owned-exit"}), flush=True)
     print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
 """)
+
+GROUP_ESCAPING_DESCENDANTS_SCRIPT = textwrap.dedent("""\
+    import json, os, signal, sys, time
+    from pathlib import Path
+
+    import psutil
+
+    ready_path = Path(sys.argv[1])
+    child_count = int(sys.argv[2])
+    exit_after_ready = sys.argv[3] == "exit"
+    read_fds = []
+    for _ in range(child_count):
+        read_fd, write_fd = os.pipe()
+        child = os.fork()
+        if child == 0:
+            os.close(read_fd)
+            os.setsid()
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            record = json.dumps({
+                "pid": os.getpid(),
+                "create_time": psutil.Process().create_time(),
+            }).encode()
+            os.write(write_fd, record)
+            os.close(write_fd)
+            time.sleep(60)
+            raise SystemExit(0)
+        os.close(write_fd)
+        read_fds.append(read_fd)
+
+    records = []
+    for read_fd in read_fds:
+        records.append(json.loads(os.read(read_fd, 4096)))
+        os.close(read_fd)
+    temporary_path = ready_path.with_name(f"{ready_path.name}.tmp")
+    temporary_path.write_text(json.dumps(records))
+    temporary_path.replace(ready_path)
+    if exit_after_ready:
+        raise SystemExit(0)
+    time.sleep(60)
+""")
+
+
+async def _wait_for_escaping_identities(ready_path: Path) -> dict[int, float]:
+    """Read the atomically-published identity records for escaped descendants."""
+    with anyio.fail_after(5):
+        while not ready_path.is_file():
+            await anyio.sleep(0.02)
+    records = json.loads(ready_path.read_text())
+    return {int(record["pid"]): float(record["create_time"]) for record in records}
+
+
+def _spawn_group_escaping_owner(
+    tmp_path: Path,
+    ready_path: Path,
+    *,
+    child_count: int,
+) -> Any:
+    """Spawn a directly owned leader whose descendants escape its process group."""
+    from autoskillit.execution.process import _process_kill
+
+    script = tmp_path / "group_escaping_descendants.py"
+    script.write_text(GROUP_ESCAPING_DESCENDANTS_SCRIPT)
+    return _process_kill.spawn_owned_process(
+        [sys.executable, str(script), str(ready_path), str(child_count), "hold"],
+        cwd=tmp_path,
+        env=production_interpreter_env(),
+        start_new_session=True,
+        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
+    )
 
 
 class TestProcessTreeKill:
@@ -424,6 +496,88 @@ class TestCancellationKillsProcess:
         children_after = set(c.pid for c in parent.children(recursive=True))
         leaked = children_after - children_before
         assert not leaked, f"Child processes not cleaned up after cancellation: {leaked}"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+class TestGroupEscapingDescendantCleanup:
+    """Settlement must account for descendants that call ``setsid()``."""
+
+    @pytest.mark.anyio
+    async def test_cancellation_reaps_group_escaping_descendant(self, tmp_path: Path) -> None:
+        """Cancellation reaches a still-ppid-descended child outside the original PGID."""
+        script = tmp_path / "group_escaping_descendants.py"
+        ready_path = tmp_path / "escaping-identities.json"
+        script.write_text(GROUP_ESCAPING_DESCENDANTS_SCRIPT)
+        identities: dict[int, float] = {}
+
+        try:
+            async with anyio.create_task_group() as tg:
+
+                async def _run() -> None:
+                    await run_managed_async(
+                        [sys.executable, str(script), str(ready_path), "1", "hold"],
+                        cwd=tmp_path,
+                        timeout=60,
+                    )
+
+                tg.start_soon(_run)
+                identities = await _wait_for_escaping_identities(ready_path)
+                tg.cancel_scope.cancel()
+
+            assert _live_identities(identities) == set()
+        finally:
+            _cleanup_process_identities(identities)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("escalate", [False, True], ids=["disabled", "enabled"])
+    async def test_cleanup_escalation_changes_group_escaping_survivor_result(
+        self,
+        tmp_path: Path,
+        escalate: bool,
+    ) -> None:
+        """Only abort-style escalation removes an escapee from final evidence."""
+        ready_path = tmp_path / "escaping-identities.json"
+        owner = _spawn_group_escaping_owner(tmp_path, ready_path, child_count=1)
+        identities: dict[int, float] = {}
+
+        try:
+            identities = await _wait_for_escaping_identities(ready_path)
+            _, result = await anyio.to_thread.run_sync(
+                lambda: owner.cleanup(0.1, escalate=escalate)
+            )
+
+            if escalate:
+                assert _live_identities(identities) == set()
+                assert result.survivor_pids == ()
+                assert result.complete is True
+            else:
+                assert result.complete is False
+                assert set(identities).issubset(result.survivor_pids)
+                assert _live_identities(identities) == set(identities)
+        finally:
+            _cleanup_process_identities(identities)
+
+    @pytest.mark.anyio
+    async def test_natural_exit_settlement_does_not_escalate_group_escapee(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Routine natural-exit settlement leaves a busy escaped child alone."""
+        ready_path = tmp_path / "escaping-identities.json"
+        owner = _spawn_group_escaping_owner(tmp_path, ready_path, child_count=1)
+        identities: dict[int, float] = {}
+
+        try:
+            identities = await _wait_for_escaping_identities(ready_path)
+            await anyio.to_thread.run_sync(owner.capture_snapshot)
+            owner.process.terminate()
+            await anyio.to_thread.run_sync(owner.process.wait)
+            _, cleanup = await anyio.to_thread.run_sync(owner.settle_evidence)
+
+            assert _live_identities(identities) == set(identities)
+            assert set(identities).issubset(cleanup.survivor_pids)
+        finally:
+            _cleanup_process_identities(identities)
 
 
 class TestAsyncKillDoesNotBlockLoop:

@@ -12,6 +12,7 @@ import json
 import os
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,6 +25,7 @@ from autoskillit.core import (
     StoreCapacityExhaustedError,
     TerminationReason,
     TestResult,
+    WorktreeGateLease,
     default_space_probe,
     get_logger,
     platform_temp_root,
@@ -369,8 +371,13 @@ class DefaultTestRunner:
         stat_full_run_reason: str | None = None
         start = time.monotonic()
         deadline = start + timeout
+        lease: WorktreeGateLease | None = None
 
         try:
+            lease = WorktreeGateLease.acquire(
+                cwd,
+                invocation_id=uuid.uuid4().hex,
+            )
             for idx, command in enumerate(effective_commands, 1):
                 remaining = deadline - time.monotonic()
                 if remaining < 0.01:
@@ -380,7 +387,15 @@ class DefaultTestRunner:
                         f"could run (configured budget: {timeout:.1f}s)"
                     )
                     break
-                result = await self._runner(command, cwd=cwd, timeout=remaining, env=env)
+                result = await self._runner(
+                    command,
+                    cwd=cwd,
+                    timeout=remaining,
+                    env=env,
+                    pass_fds=lease.inherited_fds,
+                    pty_mode=False,
+                    systemd_scope_enabled=False,
+                )
                 last_result = result
                 stderr_parts.append(result.stderr)
                 if total > 1:
@@ -413,6 +428,8 @@ class DefaultTestRunner:
                 except (json.JSONDecodeError, OSError) as exc:
                     logger.debug("filter stats sidecar read error: %s", exc)
         finally:
+            if lease is not None:
+                lease.close()
             Path(sidecar_path).unlink(missing_ok=True)
 
         combined_stdout = "\n".join(stdout_parts)

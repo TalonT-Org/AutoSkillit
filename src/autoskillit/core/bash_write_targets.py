@@ -14,8 +14,16 @@ from __future__ import annotations
 import os
 import re
 import shlex
+from collections.abc import Iterable, Sequence
 
 _SPLIT_TOKENS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+_CANONICAL_TEST_GATE_COMMANDS: frozenset[tuple[str, ...]] = frozenset(
+    {
+        ("task", "test-check"),
+        ("task", "test-all"),
+        ("task", "test-filtered"),
+    }
+)
 
 _HEREDOC_BODY_RE = re.compile(
     r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
@@ -161,6 +169,35 @@ def _tokenize_command_segments(command: str) -> list[list[str]]:
     if current:
         segments.append(current)
     return segments
+
+
+def contains_test_gate_command(
+    command: str,
+    configured_commands: Iterable[Sequence[str]] = (),
+) -> bool:
+    """Return whether a Bash command invokes a managed test gate."""
+    gate_commands = _CANONICAL_TEST_GATE_COMMANDS | {
+        tuple(candidate) for candidate in configured_commands if candidate
+    }
+    for segment in _tokenize_command_segments(command):
+        normalized = tuple(segment)
+        while normalized and "=" in normalized[0] and not normalized[0].startswith(("/", "./")):
+            normalized = normalized[1:]
+        if any(normalized[: len(gate)] == gate for gate in gate_commands):
+            return True
+        if normalized[:2] == ("uv", "run"):
+            normalized = normalized[2:]
+        if any(normalized[: len(gate)] == gate for gate in gate_commands):
+            return True
+        if normalized[:1] == ("pytest",):
+            return True
+        if (
+            len(normalized) >= 3
+            and normalized[0].startswith("python")
+            and normalized[1:3] == ("-m", "pytest")
+        ):
+            return True
+    return False
 
 
 def _extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:

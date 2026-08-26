@@ -1,13 +1,15 @@
 """Tests for server/git.py perform_merge()."""
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import anyio
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import CleanupResult
+from autoskillit.core import CleanupResult, WorktreeGateLease
 from autoskillit.core.types import (
     MergeFailedStep,
     MergeState,
@@ -41,6 +43,43 @@ def _assert_raw_test_output_artifact(
     artifact = Path(str(result["raw_output_artifact_path"]))
     assert artifact.is_file()
     assert json.loads(artifact.read_text()) == {"stdout": stdout, "stderr": stderr}
+
+
+class _FirstCallBlockingRunner:
+    """Hold the first test gate open while a second entry point contends."""
+
+    def __init__(self) -> None:
+        self.entered = anyio.Event()
+        self.release = anyio.Event()
+        self.call_count = 0
+
+    async def __call__(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        **kwargs: object,
+    ) -> SubprocessResult:
+        self.call_count += 1
+        if self.call_count == 1:
+            self.entered.set()
+            await self.release.wait()
+        return _make_result(0, "= 1 passed =\n", "")
+
+
+class _PostRebaseGateContentionTester:
+    """Pass pre-rebase, then acquire the same lease to produce real contention."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def run(self, cwd: Path) -> TestResult:
+        self.call_count += 1
+        if self.call_count == 1:
+            return TestResult(True, "= 1 passed =", "")
+        WorktreeGateLease.acquire(cwd, invocation_id="post-rebase-contender")
+        raise AssertionError("the externally held gate lease should have contended")
 
 
 @pytest.fixture
@@ -172,6 +211,52 @@ async def test_perform_merge_blocks_on_failing_tests(
 
 
 @pytest.mark.anyio
+async def test_perform_merge_contends_with_test_check_for_equivalent_worktree_path(
+    make_tool_ctx,
+    tmp_path: Path,
+):
+    """Merge and test_check share the owner-level lease despite path spelling differences."""
+    from autoskillit.server.git import perform_merge
+    from autoskillit.server.tools.tools_workspace import test_check
+
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    (worktree / "Taskfile.yml").write_text("version: '3'\n")
+    gate_runner = _FirstCallBlockingRunner()
+    tool_ctx = make_tool_ctx(runner=gate_runner)
+    git_runner = MockSubprocessRunner()
+    git_runner.push(_make_result(0, f"{worktree}/.git/worktrees/wt", ""))
+    git_runner.push(_make_result(0, "feature-branch\n", ""))
+    git_runner.push(_make_result(0, "", ""))
+    git_runner.push(_make_result(0, "", ""))
+    held_gate_results: list[str] = []
+
+    async def hold_test_check() -> None:
+        held_gate_results.append(await test_check(worktree_path=str(worktree)))
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(hold_test_check)
+        await gate_runner.entered.wait()
+        try:
+            result = await perform_merge(
+                f"{worktree}{os.sep}",
+                "dev",
+                config=tool_ctx.config,
+                runner=git_runner,
+                tester=tool_ctx.tester,
+            )
+        finally:
+            gate_runner.release.set()
+
+    assert gate_runner.call_count == 1
+    assert json.loads(held_gate_results[0])["passed"] is True
+    assert set(result) == {"error", "failed_step", "state", "worktree_path"}
+    assert result["failed_step"] == MergeFailedStep.TEST_GATE_CONTENTION
+    assert result["state"] == MergeState.WORKTREE_INTACT
+    assert result["worktree_path"] == f"{worktree}{os.sep}"
+
+
+@pytest.mark.anyio
 async def test_perform_merge_blocks_on_pre_rebase_timed_out_tests(
     default_config, conftest_mock_runner, tmp_path
 ):
@@ -219,6 +304,48 @@ async def test_perform_merge_blocks_on_pre_rebase_timed_out_tests(
     commands = [call[0] for call in conftest_mock_runner.call_args_list]
     assert not any(command[:2] == ["git", "fetch"] for command in commands)
     assert not any(command[:2] == ["git", "rebase"] for command in commands)
+
+
+@pytest.mark.anyio
+async def test_perform_merge_returns_post_rebase_gate_contention_envelope(
+    default_config,
+    conftest_mock_runner,
+    tmp_path: Path,
+) -> None:
+    """Typed gate contention after rebase preserves the established merge refusal shape."""
+    from autoskillit.server.git import perform_merge
+
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    holder = WorktreeGateLease.acquire(worktree, invocation_id="post-rebase-holder")
+    tester = _PostRebaseGateContentionTester()
+    conftest_mock_runner.push(_make_result(0, f"{worktree}/.git/worktrees/wt", ""))
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+
+    try:
+        result = await perform_merge(
+            str(worktree),
+            "dev",
+            config=default_config,
+            runner=conftest_mock_runner,
+            tester=tester,
+        )
+    finally:
+        diagnostic_path = holder.diagnostic_path
+        holder.close()
+        diagnostic_path.unlink(missing_ok=True)
+
+    assert tester.call_count == 2
+    assert set(result) == {"error", "failed_step", "state", "worktree_path"}
+    assert result["failed_step"] == MergeFailedStep.TEST_GATE_CONTENTION
+    assert result["state"] == MergeState.WORKTREE_INTACT
+    assert result["worktree_path"] == str(worktree)
 
 
 @pytest.mark.anyio

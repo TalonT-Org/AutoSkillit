@@ -510,9 +510,11 @@ def make_tool_ctx(monkeypatch, tmp_path):
 
     Pass config to build a context from a specific AutomationConfig (e.g. to
     pin agent_backend.recipe_overrides before context creation); omit it for
-    the default AutomationConfig(features={"fleet": True}).
+    the default AutomationConfig(features={"fleet": True}). Pass runner only
+    when a test needs a controlled or real subprocess implementation.
     """
     from autoskillit.config import AutomationConfig
+    from autoskillit.core.types import SubprocessRunner
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
     from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
@@ -520,13 +522,17 @@ def make_tool_ctx(monkeypatch, tmp_path):
     created_authorities: list[FakePluginArtifactAuthority] = []
     created_contexts = []
 
-    def _factory(config: AutomationConfig | None = None):
-        mock_runner = MockSubprocessRunner()
+    def _factory(
+        config: AutomationConfig | None = None,
+        *,
+        runner: SubprocessRunner | None = None,
+    ):
+        subprocess_runner = runner if runner is not None else MockSubprocessRunner()
         plugin_authority = FakePluginArtifactAuthority(tmp_path)
         created_authorities.append(plugin_authority)
         ctx = make_context(
             config if config is not None else AutomationConfig(features={"fleet": True}),
-            runner=mock_runner,
+            runner=subprocess_runner,
             plugin_authority=plugin_authority,
             project_dir=tmp_path,
         )

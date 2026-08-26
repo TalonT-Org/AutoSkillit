@@ -79,10 +79,13 @@ from .session_registry import (
     registry_path,
     write_registry_entry,
 )
+from .worktree_gate_lease import WorktreeGateContention, WorktreeGateLease
 
 __all__ = [
     "ArtifactLease",
     "ArtifactLeaseContention",
+    "WorktreeGateContention",
+    "WorktreeGateLease",
     "PYTEST_GENERATION_NAME_RE",
     "SESSION_STALE_SECONDS",
     "BoundedCandidate",

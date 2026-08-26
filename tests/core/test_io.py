@@ -481,6 +481,14 @@ class TestReadVersionedJson:
         result = read_versioned_json(target, expected_version=1)
         assert result is None
 
+    def test_read_versioned_json_returns_none_on_invalid_utf8(self, tmp_path: Path) -> None:
+        target = tmp_path / "invalid-utf8.json"
+        target.write_bytes(b"\xff")
+
+        result = read_versioned_json(target, expected_version=1)
+
+        assert result is None
+
     def test_read_versioned_json_returns_none_on_non_dict(self, tmp_path: Path) -> None:
 
         target = tmp_path / "array.json"

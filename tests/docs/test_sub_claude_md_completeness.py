@@ -292,6 +292,16 @@ def test_channel_b_defined_in_process_agents_md() -> None:
         assert marker in content, f"Channel B contract must retain {marker!r}"
 
 
+def test_managed_abort_cleanup_route_defined_in_process_agents_md() -> None:
+    process_md = SRC_ROOT / "execution" / "process" / "AGENTS.md"
+    assert process_md.is_file(), "execution/process/AGENTS.md does not exist"
+    content = process_md.read_text(encoding="utf-8")
+    assert (
+        "managed abort settlement reaches `kill_process_tree` through "
+        "`OwnedProcessGroup.cleanup()`"
+    ) in content
+
+
 @pytest.mark.parametrize(
     ("guide", "markers"),
     [

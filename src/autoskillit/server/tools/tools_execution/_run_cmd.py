@@ -12,8 +12,9 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import TerminationReason, get_logger
+from autoskillit.core import TerminationReason, contains_test_gate_command, get_logger
 from autoskillit.execution import CaptureSetupError, build_sanitized_env
+from autoskillit.pipeline import ReadyRecipe, gate_error_result
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_recipe_read_prohibition,
@@ -37,6 +38,7 @@ from autoskillit.server.tools._execution_helpers import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
     from autoskillit.server._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 
 logger = get_logger(__name__)
@@ -45,6 +47,21 @@ _PURE_SLEEP_RE = re.compile(
     r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
     r"|sleep\s+(?P<sh_secs>\d+(?:\.\d+)?))$"
 )
+
+
+def _trusted_smoke_gate_provenance(
+    tool_ctx: ToolContext,
+    step_name: str,
+) -> bool:
+    if step_name != "run_tests":
+        return False
+    with tool_ctx.recipe_execution_lock:
+        state = tool_ctx.recipe_initialization_state
+    return (
+        isinstance(state, ReadyRecipe)
+        and state.recipe_name == "smoke-test"
+        and step_name in state.finalized_projection.ordered_step_names
+    )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -80,6 +97,17 @@ async def run_cmd(
     try:
         prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
+            from autoskillit.server import _get_ctx  # circular-break
+
+            tool_ctx = _get_ctx()
+            prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
+            configured_commands = tuple(tool_ctx.config.test_check.effective_commands)
+            if contains_test_gate_command(cmd, configured_commands) and not (
+                _trusted_smoke_gate_provenance(tool_ctx, step_name)
+            ):
+                return gate_error_result(
+                    "run_cmd refuses test-gate commands; use the test_check MCP tool instead"
+                )
             if not _derive_run_cmd_write_prefixes():
                 logger.debug(
                     "run_cmd: no write prefixes configured — write boundary guard inactive"
@@ -89,10 +117,6 @@ async def run_cmd(
                 ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}
             )
 
-            from autoskillit.server import _get_ctx  # circular-break
-
-            tool_ctx = _get_ctx()
-            prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
             _start = time.monotonic()
             try:
                 m = _PURE_SLEEP_RE.match(cmd.strip())

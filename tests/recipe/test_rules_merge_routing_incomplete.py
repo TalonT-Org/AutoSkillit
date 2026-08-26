@@ -66,6 +66,7 @@ class TestMergeRoutingIncompleteRule:
             [
                 {"when": "result.failed_step == 'dirty_tree'", "route": "recover"},
                 {"when": "result.failed_step == 'test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'test_gate_contention'", "route": "recover"},
                 {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
                 {"when": "result.error", "route": "escalate"},
                 {"route": "done"},
@@ -82,6 +83,7 @@ class TestMergeRoutingIncompleteRule:
             [
                 {"when": "result.failed_step == 'dirty_tree'", "route": "recover"},
                 {"when": "result.failed_step == 'test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'test_gate_contention'", "route": "recover"},
                 {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
                 {"when": "result.failed_step == 'rebase'", "route": "recover"},
                 {"when": "result.failed_step == 'dirty_main_repo'", "route": "recover"},

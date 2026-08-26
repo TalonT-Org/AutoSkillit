@@ -36,6 +36,7 @@ _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
     {
         MergeFailedStep.DIRTY_TREE,
         MergeFailedStep.TEST_GATE,
+        MergeFailedStep.TEST_GATE_CONTENTION,
         MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.REBASE,
         MergeFailedStep.DIRTY_MAIN_REPO,
@@ -61,6 +62,7 @@ _TERMINAL_FAILED_STEPS: frozenset[str] = frozenset(
 _MERGE_FAILURE_DOMAINS: dict[str, str] = {
     MergeFailedStep.DIRTY_TREE: "code",
     MergeFailedStep.TEST_GATE: "code",
+    MergeFailedStep.TEST_GATE_CONTENTION: "code",
     MergeFailedStep.POST_REBASE_TEST_GATE: "code",
     MergeFailedStep.REBASE: "git_conflict",
     MergeFailedStep.REF_COHERENCE: "push_recovery",
@@ -168,7 +170,7 @@ def _predicate_variant(condition_when: str | None, failed_step_value: str) -> st
 
 
 # Exact site pair exemption for the bundled remediation recipe: the
-# pre_remediation_merge and merge steps intentionally diverge for these four
+# pre_remediation_merge and merge steps intentionally diverge for these five
 # failed_step values because pre_remediation_merge runs before remediation
 # starts and merge runs after. ref_coherence must still match across sites.
 _CROSS_SITE_SITE_PAIR_EXEMPTIONS: dict[tuple[str, str], frozenset[str]] = {
@@ -176,6 +178,7 @@ _CROSS_SITE_SITE_PAIR_EXEMPTIONS: dict[tuple[str, str], frozenset[str]] = {
         {
             MergeFailedStep.DIRTY_TREE,
             MergeFailedStep.TEST_GATE,
+            MergeFailedStep.TEST_GATE_CONTENTION,
             MergeFailedStep.POST_REBASE_TEST_GATE,
             MergeFailedStep.REBASE,
         }

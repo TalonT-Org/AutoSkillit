@@ -12,7 +12,14 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import SpillSpec, get_logger, resolve_temp_dir, spill_output, truncate_text
+from autoskillit.core import (
+    SpillSpec,
+    WorktreeGateContention,
+    get_logger,
+    resolve_temp_dir,
+    spill_output,
+    truncate_text,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import condense_test_output
@@ -195,6 +202,14 @@ async def test_check(
                         response,
                         prepared_segment,
                         success=effective_passed,
+                    )
+                )
+            except WorktreeGateContention as exc:
+                return json.dumps(
+                    attach_recipe_segment(
+                        {"passed": False, "error": str(exc)},
+                        prepared_segment,
+                        success=False,
                     )
                 )
             finally:

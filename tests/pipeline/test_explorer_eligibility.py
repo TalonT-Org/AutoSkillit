@@ -17,6 +17,7 @@ from autoskillit.core import (
 from autoskillit.pipeline.exploration_context import (
     ExplorationContext,
     OwnerBoundExplorationContextStore,
+    exploration_auto_provision_eligible,
     is_explorer_binding_eligible,
 )
 
@@ -99,6 +100,26 @@ class TestExplorerBindingEligibility:
             terminal_explorer_capable=False,
             session_scoped_explorer_capable=False,
             parent_sandbox_mode="read-only",
+        )
+
+
+class TestAutoProvisionEligibility:
+    """T48: exploration_auto_provision_eligible pure predicate boundary cases."""
+
+    def test_eligible_when_flag_true_and_skill_session(self) -> None:
+        assert exploration_auto_provision_eligible(
+            auto_provision=True, session_type=SessionType.SKILL
+        )
+
+    @pytest.mark.parametrize("session_type", [SessionType.ORCHESTRATOR, SessionType.FLEET])
+    def test_ineligible_session_blocks_even_with_flag(self, session_type: SessionType) -> None:
+        assert not exploration_auto_provision_eligible(
+            auto_provision=True, session_type=session_type
+        )
+
+    def test_flag_false_blocks_regardless_of_session_type(self) -> None:
+        assert not exploration_auto_provision_eligible(
+            auto_provision=False, session_type=SessionType.SKILL
         )
 
 

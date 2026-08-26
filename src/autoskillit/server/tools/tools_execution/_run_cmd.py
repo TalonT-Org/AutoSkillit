@@ -93,13 +93,17 @@ def _is_test_gate_command(cmd: str, configured: tuple[list[str], ...]) -> bool:
 
 def _trusted_smoke_gate_provenance(
     tool_ctx: ToolContext,
-    prepared_segment: PreparedRecipeSegmentDelivery | None,
+    step_name: str,
 ) -> bool:
-    if prepared_segment is None or prepared_segment.step_name != "run_tests":
+    if step_name != "run_tests":
         return False
     with tool_ctx.recipe_execution_lock:
         state = tool_ctx.recipe_initialization_state
-    return isinstance(state, ReadyRecipe) and state.recipe_name == "smoke-test"
+    return (
+        isinstance(state, ReadyRecipe)
+        and state.recipe_name == "smoke-test"
+        and step_name in state.finalized_projection.ordered_step_names
+    )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -141,7 +145,7 @@ async def run_cmd(
             prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
             configured_commands = tuple(tool_ctx.config.test_check.effective_commands)
             if _is_test_gate_command(cmd, configured_commands) and not (
-                _trusted_smoke_gate_provenance(tool_ctx, prepared_segment)
+                _trusted_smoke_gate_provenance(tool_ctx, step_name)
             ):
                 return gate_error_result(
                     "run_cmd refuses test-gate commands; use the test_check MCP tool instead"

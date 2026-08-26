@@ -17,7 +17,13 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ClaudeDirectoryConventions, SkillExecutionRole, SkillSource, pkg_root
+from autoskillit.core import (
+    ClaudeDirectoryConventions,
+    RepositoryProfileId,
+    SkillExecutionRole,
+    SkillSource,
+    pkg_root,
+)
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.workspace.session_skills import (
@@ -26,7 +32,7 @@ from autoskillit.workspace.session_skills import (
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
 from tests.contracts._projection_helpers import non_exploration_catalog
-from tests.workspace._helpers import _catalog_context, _make_codex_backend
+from tests.workspace.test_session_skills_provider import _codex_backend
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -87,10 +93,18 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
     assert targets
     provider = SkillsDirectoryProvider()
     manager = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path / "sessions")
-    catalog, projection_context = _catalog_context(
-        manager,
-        backend=_make_codex_backend(),
-        names=frozenset(targets),
+    catalog = provider.resolver.list_effective(
+        tmp_path,
+        SkillExecutionRole.SESSION,
+        cook_session=True,
+        allow_only=frozenset(targets),
+    )
+    projection_context = provider.catalog_projection_context(
+        catalog,
+        tmp_path,
+        backend=_codex_backend(),
+        durable_scripts_root=pkg_root(),
+        resolved_exploration_profile=RepositoryProfileId.AUTOSKILLIT,
     )
     assert {skill.name for skill in catalog.skills} == targets
     generated_home = manager.init_session(

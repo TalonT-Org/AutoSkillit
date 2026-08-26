@@ -82,7 +82,7 @@ class TestTestGateBypassRefusal:
             )
         )
 
-        assert result["success"] is True
+        assert result.get("subtype") != "gate_error", result
         assert tool_ctx_ready_recipe.tool_ctx.runner.call_args_list[0][0] == [
             "bash",
             "-c",

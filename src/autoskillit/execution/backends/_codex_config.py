@@ -369,14 +369,7 @@ def _format_toml_value(v: Any) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, str):
-        escaped = (
-            v.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        )
-        return f'"{escaped}"'
+        return json.dumps(v, ensure_ascii=False)
     if isinstance(v, int):
         return str(v)
     if isinstance(v, float):

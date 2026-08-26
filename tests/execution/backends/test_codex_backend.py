@@ -292,6 +292,23 @@ class TestCodexBackendCommands:
         assert _OTLP_OVERRIDES[0] in overrides
         assert _OTLP_OVERRIDES[1] in overrides
 
+    def test_otlp_overrides_escape_toml_control_characters(self) -> None:
+        extras = {
+            **_OTLP_EXTRAS,
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/\b/v1/logs",
+        }
+        spec = CodexBackend().build_headless_cmd("do stuff", env_extras=extras)
+        exporter_override = next(
+            value for value in _config_overrides(spec) if value.startswith("otel.exporter=")
+        )
+
+        parsed = tomllib.loads(exporter_override)
+
+        assert (
+            parsed["otel"]["exporter"]["otlp-http"]["endpoint"]
+            == extras["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]
+        )
+
     def test_otlp_overrides_require_both_endpoints(self) -> None:
         spec = CodexBackend().build_headless_cmd(
             "do stuff",

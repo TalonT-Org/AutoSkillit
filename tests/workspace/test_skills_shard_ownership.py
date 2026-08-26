@@ -10,6 +10,33 @@ Symbols defined *inside* one of the facade modules themselves (``skills``,
 ``skill_capabilities``) are tracked separately as facade-retained ownership
 rows; they are not sharded and the per-shard declaration/re-export tests are
 scoped to the real shards only.
+
+Import convention for shards that need to reach a symbol defined in another
+shard (so ``monkeypatch.setattr`` on the producer's facade takes effect):
+
+1. **Canonical** — import the producer's facade at module scope under a
+   ``_X_facade`` alias (e.g. ``import autoskillit.workspace.skill_capabilities
+   as _capabilities_facade`` in ``skill_capability_authenticity.py`` L13;
+   ``import autoskillit.workspace.skills as _skills_facade`` in
+   ``skills_frontmatter.py`` L20). The alias preserves identity-equal
+   re-export with the facade's ``__all__`` so patches propagate without
+   rebinding.
+
+2. **Exception — function-local deferred import** (only
+   ``skills_frontmatter.py`` L91, L189-191 with ``# noqa: PLC0415``). Use
+   when the call site is inside a hot loop and the facade symbol cannot be
+   imported at module scope without a cycle. The inline ``# noqa`` rationale
+   is mandatory. Reach for this only when (1) is structurally impossible.
+
+3. **Facade-retained symbols** whose authoritative definition lives inside
+   the facade module itself (``classify_skill_capability_evidence`` in the
+   capabilities facade; ``DefaultSkillResolver``, the bundled-skill path
+   helpers, the cache singletons in the skills facade) are listed in
+   ``_FACADE_RETAINED_OWNERS`` and are exempt from the shard passthrough
+   tests.
+
+Pick (1) by default; reach for (2) only when (1) is structurally impossible.
+Never mix the two in the same shard without an inline justification.
 """
 
 from __future__ import annotations

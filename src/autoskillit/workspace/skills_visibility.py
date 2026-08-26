@@ -1,8 +1,10 @@
-"""Skill visibility policy: subset / pack / feature filtering of effective sources.
+"""Internal skill-visibility helpers consumed by the skills facade.
 
-Owns ``_effective_disabled_categories``, ``_skill_is_visible``, and
-``_visibility_policy``. These are the pure-Python helpers that translate a
-``SkillVisibilitySpec`` into the four-tuple that drives the resolver.
+Defines ``_effective_disabled_categories``, ``_skill_is_visible``, and
+``_visibility_policy`` — pure-Python functions that translate a
+``SkillVisibilitySpec`` into the four-tuple driving the resolver. Exposes
+no public surface (``__all__`` is empty); callers reach the helpers through
+``autoskillit.workspace.skills``.
 """
 
 from __future__ import annotations

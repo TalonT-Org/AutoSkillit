@@ -1,9 +1,11 @@
-"""Single frontmatter parse entry point for skill resolution.
+"""Internal frontmatter orchestrator consumed by the skills facade.
 
-Owns ``_skill_info_from_frontmatter`` — the function that orchestrates the
-fail-closed frontmatter / sidecar / marker / semantic-plan / authenticity
-pipeline. It is the one function in the codebase that crosses all the seams;
-isolating it in its own module makes the parse boundary visible.
+Defines ``_skill_info_from_frontmatter`` — the function that orchestrates
+the fail-closed frontmatter / sidecar / marker / semantic-plan /
+authenticity pipeline. It is the one function in the codebase that
+crosses all the seams; isolating it in its own module makes the parse
+boundary visible. Exposes no public surface (``__all__`` is empty);
+callers reach the function through ``autoskillit.workspace.skills``.
 
 Reaches ``_load_exploration_sidecar``, ``_parse_exploration_sidecar``, and
 ``_bind_exploration_vector_markers`` through ``autoskillit.workspace.skills``'s

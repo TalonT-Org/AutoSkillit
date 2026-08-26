@@ -92,12 +92,21 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
 
     assert targets
     provider = SkillsDirectoryProvider()
+    resolved = {name: provider.resolver.resolve(name) for name in targets}
+    unresolved = sorted(name for name, info in resolved.items() if info is None)
+    assert not unresolved, f"Static bundled recipe targets missing from resolver: {unresolved}"
+    add_dir_targets = frozenset(
+        name
+        for name, info in resolved.items()
+        if info is not None and info.source is SkillSource.BUNDLED_EXTENDED
+    )
+    assert add_dir_targets
     manager = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path / "sessions")
     catalog = provider.resolver.list_effective(
         tmp_path,
         SkillExecutionRole.SESSION,
         cook_session=True,
-        allow_only=frozenset(targets),
+        allow_only=add_dir_targets,
     )
     projection_context = provider.catalog_projection_context(
         catalog,
@@ -106,12 +115,14 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
         durable_scripts_root=pkg_root(),
         resolved_exploration_profile=RepositoryProfileId.AUTOSKILLIT,
     )
-    assert {skill.name for skill in catalog.skills} == targets
+    assert {skill.name for skill in catalog.skills} == add_dir_targets
     generated_home = manager.init_session(
         "bundled-recipe-targets",
         catalog,
         projection_context,
     )
     skills_dir = generated_home / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-    missing = sorted(name for name in targets if not (skills_dir / name / "SKILL.md").is_file())
-    assert not missing, f"Static bundled recipe targets missing from add-dir: {missing}"
+    missing = sorted(
+        name for name in add_dir_targets if not (skills_dir / name / "SKILL.md").is_file()
+    )
+    assert not missing, f"Extended recipe targets missing from add-dir: {missing}"

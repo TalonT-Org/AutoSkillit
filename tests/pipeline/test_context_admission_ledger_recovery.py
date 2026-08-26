@@ -5,7 +5,6 @@ Part of the test split for issue #4606.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 import stat
@@ -25,6 +24,7 @@ import autoskillit.pipeline._context_admission_ledger._inspection as _inspection
 import autoskillit.pipeline._context_admission_ledger._projection as _projection_module
 import autoskillit.pipeline._context_admission_ledger._shadow as _shadow_module
 import autoskillit.pipeline._context_admission_ledger._storage as storage_module
+import autoskillit.pipeline._context_admission_ledger._store as _store_module
 from autoskillit.core import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
@@ -143,7 +143,7 @@ def test_independent_ledgers_race_first_publication_at_shared_path(
         assert collision_seen.wait(timeout=5)
         time.sleep(0.1)
 
-    monkeypatch.setattr(os, "link", racing_link)
+    monkeypatch.setattr(_store_module.os, "link", racing_link)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = tuple(executor.map(lambda ledger: ledger.recover_all(), ledgers))
@@ -281,7 +281,7 @@ def test_stream_key_decoder_normalizes_recursive_json_failure(
     def raise_recursion(_value: str) -> object:
         raise RecursionError
 
-    monkeypatch.setattr(json, "loads", raise_recursion)
+    monkeypatch.setattr(codec_module.json, "loads", raise_recursion)
 
     with pytest.raises(RuntimeError, match="invalid-stream-key"):
         codec_module._decode_stream_key(encoded)

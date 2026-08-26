@@ -1049,6 +1049,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_sub_recipe_validation.py",
             # Server file-level entries:
             "server/test_audit_admission_projected_plugin_process.py",
+            "server/test_declare_join_batch_handler.py",
             "server/test_explicit_backend_override.py",
             "server/test_factory_context_construction.py",
             "server/test_tools_agents.py",
@@ -1230,6 +1231,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_kitchen_gate_hook_config.py",
             "server/test_enable_exploration.py",
             "server/test_enable_exploration_failure_codes.py",
+            "server/test_declare_join_batch.py",
+            "server/test_declare_join_batch_handler.py",
             "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4

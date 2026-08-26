@@ -7,11 +7,7 @@ Single function consumed by the facade's ``prepare`` method:
   either ``PREPARED`` or ``SEMANTIC_REJECTED`` (idempotent re-delivery of
   an already-``PREPARED`` attempt is also handled).
 
-The early-return branches (``unknown_attempt``, ``installation_stale``,
-the OPEN-reject path, the OPEN-accept path with its prepared_effects
-INSERT loop, the PREPARED-idempotent path with its existing-effects
-SELECT, and the terminal-lifecycle rejection) are load-bearing for
-state-machine correctness.
+The early-return branches are load-bearing for state-machine correctness.
 
 The facade owns the ``BEGIN IMMEDIATE`` / ``COMMIT`` / ``ROLLBACK``
 boundary.
@@ -56,7 +52,7 @@ def _prepare_locked(
     if (
         installation_version != request.installation_version.value
         or installation_row is None
-        or installation_row.installation_version != request.installation_version.value
+        or installation_row.installation_version != request.installation_version
         or installation_row.retired
     ):
         return AuditPrepareOutcome(

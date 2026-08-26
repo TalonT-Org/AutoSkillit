@@ -146,4 +146,6 @@ def _visibility_policy(
     return disabled, custom_tags, features, experimental_enabled
 
 
-__all__: list[str] = []  # Internal shard — no public symbols; facade re-exports if needed.
+__all__: list[
+    str
+] = []  # Internal shard — visibility policy helpers reached via the skills facade.

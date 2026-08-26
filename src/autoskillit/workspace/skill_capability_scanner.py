@@ -3,7 +3,7 @@
 Owns the regex catalog (``_STATIC_PATTERNS``, ``_SELF_INITIATED_TOOLS``,
 the compiled regexes), the source-line / logical-line classification
 pipeline (``_source_lines``, ``_logical_lines``, ``_classify_context``,
-``_evidence``), and the uncovered ``_scan_skill_capability_evidence_uncached``
+``_evidence``), and the uncached ``_scan_skill_capability_evidence_uncached``
 entry point that the facade wraps with caching. The
 ``_CLASSIFIED_CAPABILITIES != frozenset(SKILL_CAPABILITY_REGISTRY)``
 registry cross-check at the bottom of the module enforces the scanner's

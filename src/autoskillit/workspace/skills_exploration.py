@@ -110,20 +110,34 @@ def _parse_exploration_sidecar(
             task_id = f"{skill_name}-{vector_id}"
             frontier_item_id = f"{task_id}-frontier"
             profile = _VECTOR_DEFAULT_PROFILE
-            vector = ExplorationVectorDef(
-                id=vector_id,
-                disposition=ExplorationVectorDisposition.MIGRATED,
-                rationale=item["rationale"],
-                applicability=ExplorationVectorApplicabilityId(applicability_raw),
-                role=item["role"],
-                profile=profile,
-                relationship_classes=tuple(
+            try:
+                applicability = ExplorationVectorApplicabilityId(applicability_raw)
+            except ValueError as exc:
+                raise SkillContractError(
+                    f"exploration sidecar vectors[{index}].applicability={applicability_raw!r} "
+                    f"is not a valid applicability id"
+                ) from exc
+            try:
+                relationship_classes = tuple(
                     RelationshipKind(relationship)
                     for relationship in _string_tuple(
                         item["relationship_classes"],
                         "relationship_classes",
                     )
-                ),
+                )
+            except ValueError as exc:
+                raise SkillContractError(
+                    f"exploration sidecar vectors[{index}].relationship_classes contains an "
+                    f"invalid entry: {exc}"
+                ) from exc
+            vector = ExplorationVectorDef(
+                id=vector_id,
+                disposition=ExplorationVectorDisposition.MIGRATED,
+                rationale=item["rationale"],
+                applicability=applicability,
+                role=item["role"],
+                profile=profile,
+                relationship_classes=relationship_classes,
                 task=ExplorationTaskSpec(
                     task_id=task_id,
                     frontier_item_id=frontier_item_id,
@@ -254,7 +268,7 @@ def replace_exploration_vector_bodies(
         extra = sorted(supplied_ids - expected)
         raise SkillContractError(
             "exploration vector replacements must exactly match migrated marker ids: "
-            f"missing={missing!r}, extra={extra!r}"
+            f"missing ({len(missing)})={missing!r}, extra ({len(extra)})={extra!r}"
         )
     normalized: dict[str, str] = {}
     for marker_id, replacement_body in replacements.items():

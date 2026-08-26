@@ -147,7 +147,8 @@ class _SkillCapabilityEvidenceCache:
             result = state.result
             if result is None:
                 raise RuntimeError(
-                    f"Capability evidence build completed without a result for key {key!r}"
+                    "Capability evidence build completed without a result for skill "
+                    f"{key[1]!r} (content bytes={len(key[0])})"
                 )
             entry = self._entries.get(key)
             if entry is not None and entry.evidence is result:

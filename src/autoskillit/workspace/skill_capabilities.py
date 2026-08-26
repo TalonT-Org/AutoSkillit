@@ -1,22 +1,15 @@
 """Skill capability evidence classification facade.
 
-Decomposed into the following sibling shards behind this stable facade:
+Stable import surface for the capability-evidence classifier. Composes the
+process-local weighted LRU cache, the regex scanner, the
+declaration-vs-evidence authenticity check, and the semantic-plan parser
+behind one entry point; readers should import from this module rather than
+from the individual shards.
 
-- ``skill_capability_cache`` — process-local weighted LRU cache
-- ``skill_capability_scanner`` — regex catalog and source-line classification
-- ``skill_capability_authenticity`` — declaration-vs-evidence mismatch diagnostics
-- ``skill_semantic_plan`` — semantic-plan parser
-
-The facade retains the three Literal type aliases and the
-``SkillCapabilityEvidence`` dataclass (primary return type of the scanner and
-primary parameter types of the public entry points). ``classify_skill_capability_evidence``
-is the largest wrapper, composing the cache singleton, the scanner, and the
-semantic-plan name normalizer.
-
-Every wrapper that internally references a private shard-owned symbol reads
-it via this facade's module globals at call time, not via local names bound
-at import time, so monkeypatch.setattr on the facade attribute takes effect
-during tests.
+Wrappers reference private shard-owned symbols through this module's globals
+at call time (not via local names bound at import time) so monkeypatch.setattr
+on the facade attributes takes effect during tests
+(``tests/workspace/conftest.py``).
 """
 
 from __future__ import annotations

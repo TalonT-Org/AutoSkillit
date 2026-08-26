@@ -57,14 +57,11 @@ from autoskillit.execution.backends.codex import (
     refresh_explorer_binding_env,
 )
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
+from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_OTLP_EXTRAS = {
-    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
-    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:4318/v1/metrics",
-}
 _OTLP_OVERRIDES = (
     'otel.exporter={otlp-http={endpoint="http://127.0.0.1:4318/v1/logs",protocol="json"}}',
     'otel.metrics_exporter={otlp-http={endpoint="http://127.0.0.1:4318/v1/metrics",protocol="json"}}',
@@ -287,14 +284,14 @@ class TestCodexBackendCommands:
         assert spec.env.get("FOO") == "bar"
 
     def test_headless_otlp_overrides_use_exact_inline_tables(self) -> None:
-        spec = CodexBackend().build_headless_cmd("do stuff", env_extras=_OTLP_EXTRAS)
+        spec = CodexBackend().build_headless_cmd("do stuff", env_extras=OTLP_EXTRAS)
         overrides = _config_overrides(spec)
         assert _OTLP_OVERRIDES[0] in overrides
         assert _OTLP_OVERRIDES[1] in overrides
 
     def test_otlp_overrides_escape_toml_control_characters(self) -> None:
         extras = {
-            **_OTLP_EXTRAS,
+            **OTLP_EXTRAS,
             "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/\b/v1/logs",
         }
         spec = CodexBackend().build_headless_cmd("do stuff", env_extras=extras)
@@ -313,9 +310,7 @@ class TestCodexBackendCommands:
         spec = CodexBackend().build_headless_cmd(
             "do stuff",
             env_extras={
-                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": _OTLP_EXTRAS[
-                    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
-                ]
+                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": OTLP_EXTRAS["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]
             },
         )
         assert not any(value.startswith("otel.exporter=") for value in spec.cmd)
@@ -326,7 +321,7 @@ class TestCodexBackendCommands:
             "/autoskillit:investigate",
             "/repo",
             completion_marker="DONE",
-            provider_extras=_OTLP_EXTRAS,
+            provider_extras=OTLP_EXTRAS,
             network_access=True,
         )
         food_truck = CodexBackend().build_food_truck_cmd(
@@ -334,7 +329,7 @@ class TestCodexBackendCommands:
             plugin_binding=None,
             cwd="/repo",
             completion_marker="DONE",
-            env_extras=_OTLP_EXTRAS,
+            env_extras=OTLP_EXTRAS,
         )
         assert _config_overrides(skill)[:3] == [
             "sandbox_workspace_write.network_access=true",
@@ -343,7 +338,7 @@ class TestCodexBackendCommands:
         assert _config_overrides(food_truck)[:3] == ["web_search=disabled", *_OTLP_OVERRIDES]
 
     def test_interactive_cmd_does_not_gain_run_scoped_otlp_overrides(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(env_extras=_OTLP_EXTRAS)
+        spec = CodexBackend().build_interactive_cmd(env_extras=OTLP_EXTRAS)
         assert not any(value.startswith("otel.exporter=") for value in spec.cmd)
         assert not any(value.startswith("otel.metrics_exporter=") for value in spec.cmd)
 

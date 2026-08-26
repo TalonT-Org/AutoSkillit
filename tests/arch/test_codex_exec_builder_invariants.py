@@ -14,18 +14,14 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.codex import _IMAGE_GENERATION_DISABLED, CodexBackend
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_OTLP_EXTRAS = {
-    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
-    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:4318/v1/metrics",
-}
-
 
 def _build_headless():
-    return CodexBackend().build_headless_cmd("test prompt", env_extras=_OTLP_EXTRAS)
+    return CodexBackend().build_headless_cmd("test prompt", env_extras=OTLP_EXTRAS)
 
 
 def _build_skill_session():
@@ -36,7 +32,7 @@ def _build_skill_session():
         model=None,
         plugin_binding=None,
         output_format=OutputFormat.JSON,
-        provider_extras=_OTLP_EXTRAS,
+        provider_extras=OTLP_EXTRAS,
     )
 
 
@@ -47,13 +43,13 @@ def _build_food_truck():
             plugin_binding=binding,
             cwd="/work",
             completion_marker="%%DONE%%",
-            env_extras=_OTLP_EXTRAS,
+            env_extras=OTLP_EXTRAS,
         )
 
 
 def _build_resume():
     return CodexBackend().build_resume_cmd(
-        resume_session_id="sess-abc", prompt="continue", env_extras=_OTLP_EXTRAS
+        resume_session_id="sess-abc", prompt="continue", env_extras=OTLP_EXTRAS
     )
 
 

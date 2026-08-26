@@ -200,7 +200,19 @@ def scan_editable_installs_for_worktree(
             logger.debug("editable_guard_site_directory_missing", path=str(site_dir))
             unverified.append(reason)
             continue
-        for direct_url_file in site_dir.glob("*.dist-info/direct_url.json"):
+        try:
+            direct_url_files = tuple(site_dir.glob("*.dist-info/direct_url.json"))
+        except OSError as exc:
+            reason = f"metadata enumeration failed: {site_dir} ({type(exc).__name__}: {exc})"
+            logger.debug(
+                "editable_guard_metadata_enumeration_failed",
+                path=str(site_dir),
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            unverified.append(reason)
+            continue
+        for direct_url_file in direct_url_files:
             try:
                 data = json.loads(direct_url_file.read_text())
             except OSError as exc:

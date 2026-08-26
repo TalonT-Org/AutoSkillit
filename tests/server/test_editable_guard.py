@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -169,6 +170,27 @@ class TestScanEditableInstalls:
             return original_is_dir(path)
 
         monkeypatch.setattr(Path, "is_dir", unavailable)
+        result = scan_editable_installs_for_worktree(worktree, [site])
+
+        assert result.findings == ()
+        assert len(result.unverified) == 1
+        assert str(site) in result.unverified[0]
+        assert "PermissionError" in result.unverified[0]
+
+    def test_metadata_enumeration_failure_is_recorded_unverified(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        worktree = tmp_path / "worktree"
+        site = tmp_path / "site-packages"
+        site.mkdir()
+        original_glob = Path.glob
+
+        def unavailable(path: Path, pattern: str) -> Iterator[Path]:
+            if path == site:
+                raise PermissionError("denied")
+            return original_glob(path, pattern)
+
+        monkeypatch.setattr(Path, "glob", unavailable)
         result = scan_editable_installs_for_worktree(worktree, [site])
 
         assert result.findings == ()

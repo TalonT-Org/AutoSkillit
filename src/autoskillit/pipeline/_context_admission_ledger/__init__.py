@@ -57,7 +57,7 @@ from ._projection import (  # noqa: F401  (used by `recover_all`)
     _stored_stream_health,
 )
 from ._state_queries import _state_has_unresolved_work  # noqa: F401  (used by `recover_all`)
-from ._status import _ignore_fault, _LedgerFaultPoint, _set_store_failure  # noqa: F401
+from ._status import _ignore_fault, _LedgerFaultPoint, _set_store_failure
 
 # Re-exports for cross-package consumers that import from the public surface.
 from ._storage import (

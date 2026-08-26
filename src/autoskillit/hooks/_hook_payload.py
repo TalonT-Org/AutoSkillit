@@ -57,6 +57,12 @@ def _absolute_string_or_blank(value: Any) -> tuple[str, PayloadAnomaly | None]:
     return ("", PayloadAnomaly.RELATIVE_CWD)
 
 
+def normalize_payload_cwd(value: Any) -> str:
+    """Return an absolute payload cwd, or blank for missing or malformed values."""
+    cwd, _ = _absolute_string_or_blank(value)
+    return cwd
+
+
 def parse_hook_command(data: dict[str, Any]) -> ParsedHookCommand:
     """Extract command/cwd facts from a Bash- or run_cmd-shaped PreToolUse payload.
 

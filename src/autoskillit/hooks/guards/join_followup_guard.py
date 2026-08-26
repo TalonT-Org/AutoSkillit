@@ -25,11 +25,14 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    normalize_payload_cwd,
+    resolve_state_root,
+)
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
     write_join_diagnostic,
 )
-from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     active_batch,
     resolve_flag_dir,
@@ -111,7 +114,8 @@ def main() -> None:
         sys.exit(2)
 
     top_level_parent = "top_level"
-    flag_dir = resolve_flag_dir(find_project_root())
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     batch = active_batch(
         flag_dir,
         session_id=session_id,

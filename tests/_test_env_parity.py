@@ -53,9 +53,10 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         justification=(
             "Enables experimental features so test coverage includes "
             "feature-gated code paths that would otherwise be invisible "
-            "to the test suite."
+            "to the test suite. production_feature_env() is the parity "
+            "escape hatch for production-default subprocess behavior."
         ),
-        parity_fixture=None,
+        parity_fixture="production_feature_env",
     ),
     "AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE": HarnessEnvOverride(
         var="AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE",

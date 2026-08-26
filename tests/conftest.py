@@ -1193,6 +1193,13 @@ def production_interpreter_env() -> dict[str, str]:
     return env
 
 
+def production_feature_env() -> dict[str, str]:
+    """Build an environment with the production experimental-feature default."""
+    env = production_interpreter_env()
+    env.pop("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", None)
+    return env
+
+
 def pytest_terminal_summary(terminalreporter, config: pytest.Config) -> None:
     """Emit a single ``Feature scope:`` line so the test run's effective feature
     gate state is visible regardless of ``--disable-warnings``.

@@ -42,9 +42,14 @@ def _declare_join_batch_handler(
     if not isinstance(binding, dict):
         binding = {}
 
-    # Fail-closed validation: a join-bearing session binding, a loaded skill
-    # entry, and the backend's fixed-set-join capability must all line up
-    # before we open a wave.
+    # Fail-closed validation: a valid, join-bearing session binding, a loaded
+    # skill entry, and the backend's fixed-set-join capability must all line
+    # up before we open a wave.
+    if binding.get("binding_valid") is not True:
+        return {
+            "success": False,
+            "error": "declare_join_batch requires a valid session binding",
+        }
     if not bool(binding.get("join_required", False)):
         return {
             "success": False,

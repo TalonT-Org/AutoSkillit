@@ -2004,12 +2004,6 @@ _TREE_ENUMERATION_ALLOWLIST: list[tuple[Path, str]] = [
         "isn't migrated this run and the operation is safe to rerun per its own "
         "docstring — not an identity/tamper check",
     ),
-    (
-        SRC_ROOT / "hooks" / "skill_load_post_hook.py",
-        "_resolve_manifest_path only locates a manifest sidecar for later "
-        "validation elsewhere in the pipeline; it does not itself compute or "
-        "compare an identity/tamper value",
-    ),
 ]
 
 _TREE_ENUMERATION_TARGETS = {("os", "walk"), ("os", "fwalk")}

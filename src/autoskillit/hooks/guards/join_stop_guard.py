@@ -29,11 +29,14 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    normalize_payload_cwd,
+    resolve_state_root,
+)
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     read_session_binding,
     write_join_diagnostic,
 )
-from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     can_release_stop,
     resolve_flag_dir,
@@ -42,9 +45,11 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
 
 def main() -> None:
     try:
-        sys.stdin.read()  # Stop hook payload is informational; we read & discard.
-    except OSError:
-        pass
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, ValueError, OSError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
 
     binding = read_session_binding()
     if not binding or not binding.get("join_required"):
@@ -82,7 +87,8 @@ def main() -> None:
         sys.exit(2)
 
     top_level_parent = os.environ.get("AUTOSKILLIT_JOIN_PARENT", "top_level").strip()
-    flag_dir = resolve_flag_dir(find_project_root())
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     allow_stop, reason = can_release_stop(
         flag_dir,
         session_id=sid,

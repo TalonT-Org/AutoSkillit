@@ -25,7 +25,10 @@ _HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "
 if _HOOKS_SRC not in sys.path:
     sys.path.insert(0, _HOOKS_SRC)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    normalize_payload_cwd,
+    resolve_state_root,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -36,6 +39,15 @@ _STATE_ROUTING_ENV_VARS = frozenset(
         "AUTOSKILLIT_STATE_ROOT",
     }
 )
+
+
+@pytest.mark.parametrize("value", (None, 7, True, "relative/path"))
+def test_normalize_payload_cwd_rejects_non_absolute_values(value: object) -> None:
+    assert normalize_payload_cwd(value) == ""
+
+
+def test_normalize_payload_cwd_preserves_absolute_values(tmp_path: Path) -> None:
+    assert normalize_payload_cwd(str(tmp_path)) == str(tmp_path)
 
 
 # ---------------------------------------------------------------------------

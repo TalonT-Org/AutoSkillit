@@ -144,6 +144,12 @@ def test_parity_fixtures_exist() -> None:
         )
 
 
+def test_experimental_feature_override_declares_a_production_parity_fixture() -> None:
+    """Production-default feature-gate tests must be able to lift the harness override."""
+    override = TEST_HARNESS_ENV_OVERRIDES["AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED"]
+    assert override.parity_fixture is not None
+
+
 def test_justifications_are_substantive() -> None:
     """Every justification must be at least 40 characters."""
     short = {

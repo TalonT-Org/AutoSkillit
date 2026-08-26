@@ -1,10 +1,8 @@
-"""PostToolUse hook: write skill-loaded flag for non-Anthropic providers.
+"""PostToolUse hook: write the session binding after a Skill call.
 
-Fires on ``Skill`` tool calls.  When ``AUTOSKILLIT_PROVIDER_PROFILE`` is
-non-empty, writes ``.autoskillit/temp/skill_guard_{session_id}.flag``
-containing the loaded skill name.  The companion PreToolUse guard
-(``guards/skill_load_guard.py``) checks this flag before allowing native
-tool calls.
+Fires on ``Skill`` tool calls and writes the shared session-binding artifact.
+The companion PreToolUse guard (``guards/skill_load_guard.py``) checks this
+artifact before allowing native tool calls.
 
 Stdlib-only — no autoskillit imports.
 """
@@ -14,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,163 +20,24 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_payload import normalize_payload_cwd  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import (  # noqa: E402
     resolve_quota_log_dir,
     write_quota_log_event,
 )
-from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
-
-
-def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-
-
-def _read_existing_flag(path: Path) -> dict[str, object] | None:
-    """Return the existing flag content as a parsed JSON dict, or None if absent/invalid."""
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except (FileNotFoundError, OSError):
-        return None
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    return parsed
-
-
-def _merge_existing_entry(
-    existing: dict[str, object],
-    new_entry: dict[str, object],
-) -> dict[str, object]:
-    """OR-accumulate the join bit across loaded skills and append the new entry.
-
-    Loaded-skill entries are immutable; the ``join_required`` boolean in the
-    flag is the OR of every loaded skill's ``join_required`` value. A later
-    join-false load does NOT downgrade an established required-join binding.
-    """
-    loaded_obj = existing.get("loaded_skills", [])
-    loaded: list[dict[str, object]] = list(loaded_obj) if isinstance(loaded_obj, list) else []
-    loaded.append(new_entry)
-    existing_join = bool(existing.get("join_required", False))
-    new_join = bool(new_entry.get("join_required", False))
-    result = dict(existing)
-    result["loaded_skills"] = loaded
-    result["join_required"] = existing_join or new_join
-    return result
-
-
-def _resolve_manifest_path(project_root: Path) -> Path | None:
-    """Locate the projection manifest sidecar for the active plugin install.
-
-    Resolution order:
-      1. ``AUTOSKILLIT_PROJECTION_MANIFEST_PATH`` env var (explicit override).
-      2. Sibling ``.{plugin_dir}.autoskillit-projection.json`` files under the
-         project's ``.claude/plugins/installed/`` and ``.claude/`` trees, plus
-         the project root itself.
-    """
-    explicit = os.environ.get("AUTOSKILLIT_PROJECTION_MANIFEST_PATH", "").strip()
-    if explicit:
-        candidate = Path(explicit)
-        if candidate.exists():
-            return candidate
-    candidates: list[Path] = []
-    for base in (
-        project_root / ".claude",
-        project_root / ".autoskillit" / "plugins",
-    ):
-        if not base.exists():
-            continue
-        for installed in base.rglob("*"):
-            if not installed.is_dir():
-                continue
-            manifest = installed.parent / f".{installed.name}.autoskillit-projection.json"
-            if manifest.exists():
-                candidates.append(manifest)
-        manifest = base / f".{base.name}.autoskillit-projection.json"
-        if manifest.exists():
-            candidates.append(manifest)
-    return candidates[0] if candidates else None
-
-
-def _read_manifest_entry(
-    manifest_path: Path,
-    skill_name: str,
-) -> dict[str, object] | None:
-    """Return the manifest entry for ``skill_name`` or ``None`` when absent/invalid."""
-    try:
-        raw = manifest_path.read_text(encoding="utf-8")
-    except (FileNotFoundError, OSError):
-        return None
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    skills = parsed.get("skills")
-    if not isinstance(skills, dict):
-        return None
-    entry = skills.get(skill_name)
-    return entry if isinstance(entry, dict) else None
-
-
-def _build_entry_from_manifest(
-    skill_name: str,
-    manifest_entry: dict[str, object] | None,
-    ts: str,
-) -> dict[str, object]:
-    """Build one loaded-skill entry from the projection manifest.
-
-    When the manifest entry is present, every documented field is sourced
-    from it verbatim. When absent, all semantic/identity fields are forced
-    to ``join_required: true`` and the binding is marked invalid so
-    downstream guards fail closed.
-    """
-    if manifest_entry is None:
-        return {
-            "skill_name": skill_name,
-            "ts": ts,
-            "join_required": True,
-            "child_spawn_cardinality": {},
-            "semantic_digest": "",
-            "adaptation_digest": "",
-            "artifact_digest": "",
-            "artifact_incarnation": "",
-            "binding_valid": False,
-            "binding_error": "manifest entry not found",
-        }
-    cardinality_raw = manifest_entry.get("child_spawn_cardinality", {})
-    cardinality: dict[str, object] = (
-        dict(cardinality_raw) if isinstance(cardinality_raw, dict) else {}
-    )
-    return {
-        "skill_name": skill_name,
-        "ts": ts,
-        "join_required": bool(manifest_entry.get("join_required", False)),
-        "child_spawn_cardinality": cardinality,
-        "semantic_digest": str(manifest_entry.get("semantic_digest", "")),
-        "adaptation_digest": str(manifest_entry.get("adaptation_digest", "")),
-        "projected_digest": str(manifest_entry.get("projected_digest", "")),
-        "canonical_digest": str(manifest_entry.get("canonical_digest", "")),
-        "artifact_digest": str(manifest_entry.get("artifact_digest", "")),
-        "artifact_incarnation": str(manifest_entry.get("artifact_incarnation", "")),
-        "binding_valid": True,
-    }
+from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+    SESSION_BINDING_SCHEMA_VERSION,
+    SessionBinding,
+    SessionBindingError,
+    loaded_skill_from_manifest,
+    merge_binding,
+    read_binding,
+    read_manifest,
+    resolve_binding_path,
+    resolve_projection_manifest_path,
+    unresolved_loaded_skill,
+    write_binding,
+)
 
 
 def main() -> None:
@@ -204,9 +63,6 @@ def main() -> None:
         )
         sys.exit(0)
 
-    if not os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip():
-        sys.exit(0)
-
     if data.get("tool_name") != "Skill":
         sys.exit(0)
 
@@ -217,34 +73,64 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    project_root = find_project_root()
-    flag_path = project_root / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    flag_path = resolve_binding_path(payload_cwd, session_id)
 
-    existing = _read_existing_flag(flag_path)
+    try:
+        existing = read_binding(flag_path)
+    except SessionBindingError as exc:
+        sys.stderr.write(
+            f"skill_load_post_hook: failed to read existing flag {flag_path}: {exc}\n"
+        )
+        existing = SessionBinding(
+            schema_version=SESSION_BINDING_SCHEMA_VERSION,
+            session_id=session_id,
+            join_required=True,
+            binding_valid=False,
+            artifact_digest="",
+            loaded_skills=(),
+        )
 
     ts = datetime.now(UTC).isoformat()
-    manifest_path = _resolve_manifest_path(project_root)
-    if manifest_path is not None:
-        manifest_entry = _read_manifest_entry(manifest_path, skill_name)
-    else:
-        manifest_entry = None
-    new_entry = _build_entry_from_manifest(skill_name, manifest_entry, ts)
+    artifact_digest = ""
+    binding_error: str | None = None
+    try:
+        manifest_path = resolve_projection_manifest_path(Path(__file__))
+        if manifest_path is None:
+            raise SessionBindingError("projection manifest not found")
+        manifest = read_manifest(manifest_path)
+        new_entry = loaded_skill_from_manifest(manifest, skill_name, ts)
+        artifact_digest = str(manifest["artifact_digest"])
+    except SessionBindingError as exc:
+        binding_error = str(exc)
+        new_entry = unresolved_loaded_skill(skill_name, ts, binding_error)
 
-    merged = (
-        _merge_existing_entry(existing or {}, new_entry)
-        if existing
-        else {
-            "schema_version": 1,
-            "session_id": session_id,
-            "join_required": bool(new_entry.get("join_required", False)),
-            "binding_valid": bool(new_entry.get("binding_valid", False)),
-            "loaded_skills": [new_entry],
-        }
+    merged = merge_binding(
+        existing,
+        session_id=session_id,
+        new_entry=new_entry,
+        artifact_digest=artifact_digest,
     )
     try:
-        _atomic_write(flag_path, json.dumps(merged, sort_keys=True))
-    except Exception as exc:
-        sys.stderr.write(f"skill_load_post_hook: failed to write flag {flag_path}: {exc}\n")
+        write_binding(flag_path, merged)
+    except Exception:
+        sys.stderr.write(
+            f"skill_load_post_hook: failed to write flag {flag_path}:\n{traceback.format_exc()}"
+        )
+
+    if binding_error is not None:
+        log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")
+        write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "skill_load_binding_unresolved",
+                "session_id": session_id,
+                "skill_name": skill_name,
+                "binding_error": binding_error,
+            },
+            log_dir,
+            caller="skill_load_post_hook",
+        )
 
     marker = os.environ.get("AUTOSKILLIT_COMPLETION_MARKER", "").strip()
     if marker:

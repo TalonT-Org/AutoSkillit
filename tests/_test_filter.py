@@ -197,6 +197,7 @@ _CONTEXT_ADMISSION_SHARDS: tuple[str, ...] = (
     "_type_context_admission_states",
     "_type_context_admission_coverage",
     "_type_context_admission_persistence",
+    "_type_context_admission_persistence_envelope",
 )
 _CONTEXT_ADMISSION_SHARD_CASCADE: frozenset[str] = frozenset({"core", "pipeline", "server"})
 
@@ -398,6 +399,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_context_admission_states": _CONTEXT_ADMISSION_SHARD_CASCADE,
     "_type_context_admission_coverage": _CONTEXT_ADMISSION_SHARD_CASCADE,
     "_type_context_admission_persistence": _CONTEXT_ADMISSION_SHARD_CASCADE,
+    "_type_context_admission_persistence_envelope": _CONTEXT_ADMISSION_SHARD_CASCADE,
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_audit_admission_validation": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_audit_admission_artifact_ownership": frozenset(

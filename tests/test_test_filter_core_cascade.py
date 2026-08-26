@@ -158,6 +158,7 @@ class TestModuleCascadeCore:
             "_type_context_admission_states",
             "_type_context_admission_coverage",
             "_type_context_admission_persistence",
+            "_type_context_admission_persistence_envelope",
             "_type_github_review",
             "_type_dispatch_identity",
             "_type_figure_spec",

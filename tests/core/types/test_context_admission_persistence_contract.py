@@ -12,7 +12,7 @@ from typing import cast, get_args
 
 import pytest
 
-import autoskillit.core.types._type_context_admission_persistence as persistence_types
+import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
 from autoskillit.core import (
     CONTEXT_ADMISSION_ENCODING_VERSION,
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
@@ -241,7 +241,7 @@ def test_envelope_encoder_rejects_output_above_decoder_limit(
 ) -> None:
     envelope = make_stored_context_admission_envelope(_authority_event())
     encoded = encode_stored_context_admission_envelope(envelope)
-    monkeypatch.setattr(persistence_types, "_MAX_ENVELOPE_BYTES", len(encoded) - 1)
+    monkeypatch.setattr(envelope_types, "_MAX_ENVELOPE_BYTES", len(encoded) - 1)
 
     with pytest.raises(
         ContextAdmissionValidationError, match="invalid_context_admission_envelope"
@@ -436,7 +436,7 @@ def test_shadow_versions_must_match_envelope_versions(
         targets=(),
     )
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENCODING_VERSION",
         CONTEXT_ADMISSION_ENCODING_VERSION + 1,
     )
@@ -611,7 +611,7 @@ def test_envelope_decoder_consumes_deterministic_upcaster_route(
     legacy = encoded.replace(b'"encoding_version":1', b'"encoding_version":0', 1)
 
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
         MappingProxyType(
             {
@@ -653,7 +653,7 @@ def test_envelope_decoder_normalizes_expected_upcaster_failures(
         raise error
 
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
         MappingProxyType({(0, 1): raise_malformed_input}),
     )
@@ -682,7 +682,7 @@ def test_envelope_decoder_rejects_missing_or_ambiguous_upcaster_routes(
     routes: dict[tuple[int, int], Callable[[bytes], bytes]],
 ) -> None:
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
         MappingProxyType(routes),
     )
@@ -697,7 +697,7 @@ def test_envelope_decoder_rejects_invalid_upcaster_targets(
     target_version: int,
 ) -> None:
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
         MappingProxyType({(0, target_version): lambda value: value}),
     )
@@ -711,7 +711,7 @@ def test_envelope_decoder_rejects_nonbytes_upcaster_result(
 ) -> None:
     invalid_upcaster = cast(Callable[[bytes], bytes], lambda _value: "not-bytes")
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
         MappingProxyType({(0, 1): invalid_upcaster}),
     )
@@ -739,7 +739,7 @@ def test_envelope_decoder_rejects_upcaster_header_changes(
         return json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode()
 
     monkeypatch.setattr(
-        persistence_types,
+        envelope_types,
         "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
         MappingProxyType({(0, 1): alter_header}),
     )

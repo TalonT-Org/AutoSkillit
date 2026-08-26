@@ -1094,7 +1094,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +1 to a 67 baseline) and the seven context-admission shards (+7) added
         # by this PR (67 + 1 + 7 = 75), so the cap must move to 75 to
         # accommodate the actual on-disk count of 75 files).
-        "core/types": 75,
+        # +_type_context_admission_persistence_envelope: #4743 persistence split moved
+        # envelope pipeline to a sibling shard (75 + 1 = 76).
+        "core/types": 76,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1765,6 +1767,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
         "core/types/_type_context_admission_persistence.py",
+        "core/types/_type_context_admission_persistence_envelope.py",
         "core/types/_type_native_shell_capture.py",
         "core/types/_type_exploration.py",
     ):

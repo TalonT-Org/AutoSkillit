@@ -1,11 +1,8 @@
 """Launch-environment adaptation helpers — pure functions of the store.
 
-The three helpers in this shard convert the original
-``OwnerBoundExplorationContextStore`` classmethods/instance method into
-module-level pure functions that take a store reference and return
-either a value (``verified_repository_root_from_launch_environment``,
-``_shared_source_identity``) or mutate the store's state under its
-private lock (``reopen_launch_environment``).
+Three helpers — ``verified_repository_root_from_launch_environment``,
+``_shared_source_identity``, ``reopen_launch_environment`` — either
+return a value or mutate the store's state under its private lock.
 
 File I/O via ``load_from_environment()`` runs BEFORE ``store._lock`` is
 acquired; the lock covers state mutation only.
@@ -17,7 +14,7 @@ import hashlib
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.core import canonical_json_bytes, get_logger
 from autoskillit.pipeline.exploration_context_durable import (
@@ -28,6 +25,9 @@ from autoskillit.pipeline.exploration_context_durable import (
 
 from ._constants import _SHARED_SOURCE_IDENTITY_DOMAIN
 from ._types import _CapabilityLease
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline.exploration_context._store import OwnerBoundExplorationContextStore
 
 logger = get_logger(__name__)
 
@@ -60,7 +60,7 @@ def _shared_source_identity(source_identities: Mapping[str, str]) -> str:
 
 
 def reopen_launch_environment(
-    store: OwnerBoundExplorationContextStore,  # type: ignore[name-defined]  # noqa: F821
+    store: OwnerBoundExplorationContextStore,
     *,
     max_ttl_seconds: float,
     clock: Callable[[], float],

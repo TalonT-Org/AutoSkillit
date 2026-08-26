@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
-from autoskillit.core import BindingFailureCode, BoundValue, BoundValueOrigin
+from autoskillit.core import BindingFailureCode, BoundValue, BoundValueOrigin, BoundValueState
 from autoskillit.recipe._binding_input import (
     _bound_value,
     _inline_skill_inputs,
@@ -16,6 +18,9 @@ from autoskillit.recipe._binding_input import (
     _tokenize_skill_command,
     _unquote,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.recipe._contracts_types import SkillContract
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -113,7 +118,7 @@ def test_split_handles_underscore_prefix() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _contract() -> object:
+def _contract() -> SkillContract | None:
     """Build a minimal single-input SkillContract via get_skill_contract."""
     from autoskillit.recipe._contracts_manifest import get_skill_contract
 
@@ -157,7 +162,7 @@ def test_inline_records_unknown_input_failure() -> None:
     )
     assert any(failure.code == BindingFailureCode.UNKNOWN_SKILL_INPUT for failure in failures)
     assert len(bound) == 1
-    assert bound[0].state.name == "ABSENT"
+    assert bound[0].state is BoundValueState.ABSENT
 
 
 def test_inline_records_missing_required_input_failure() -> None:
@@ -171,7 +176,7 @@ def test_inline_records_missing_required_input_failure() -> None:
     )
     assert any(failure.code == BindingFailureCode.MISSING_SKILL_INPUT for failure in failures)
     assert len(bound) == 1
-    assert bound[0].state.name == "ABSENT"
+    assert bound[0].state is BoundValueState.ABSENT
 
 
 def test_inline_handles_slash_command_free_form_tail() -> None:
@@ -189,11 +194,11 @@ def test_inline_handles_slash_command_free_form_tail() -> None:
     assert bound[0].effective_value == "the quick brown fox"
 
 
-def test_inline_records_invalid_skill_input_type_failure() -> None:
-    """Wrong-typed value should produce an INVALID_SKILL_INPUT_TYPE failure."""
+def _integer_contract() -> SkillContract | None:
+    """Build a SkillContract with a single strict-typed integer input."""
     from autoskillit.recipe._contracts_manifest import get_skill_contract
 
-    contract = get_skill_contract(
+    return get_skill_contract(
         "strict-typed",
         {
             "skills": {
@@ -205,6 +210,11 @@ def test_inline_records_invalid_skill_input_type_failure() -> None:
             }
         },
     )
+
+
+def test_inline_records_invalid_skill_input_type_failure() -> None:
+    """Wrong-typed value should produce an INVALID_SKILL_INPUT_TYPE failure."""
+    contract = _integer_contract()
     assert contract is not None
     # Pass a non-integer string for an integer-typed input.
     bound, failures = _inline_skill_inputs(
@@ -217,12 +227,104 @@ def test_inline_records_invalid_skill_input_type_failure() -> None:
     assert len(bound) == 1
 
 
+def _multi_input_inline_contract() -> SkillContract | None:
+    """Build a multi-input SkillContract suitable for inline parsing tests."""
+    from autoskillit.recipe._contracts_manifest import get_skill_contract
+
+    return get_skill_contract(
+        "dry-walkthrough",
+        {
+            "skills": {
+                "dry-walkthrough": {
+                    "inputs": [
+                        {"name": "plan_path", "type": "file_path", "required": True},
+                        {"name": "issue_url", "type": "string", "required": True},
+                    ]
+                }
+            }
+        },
+    )
+
+
+def test_inline_records_dead_skill_input_for_excess_positional() -> None:
+    """Excess positional args (more than declared inputs) emit DEAD_SKILL_INPUT."""
+    contract = _multi_input_inline_contract()
+    assert contract is not None
+    bound, failures = _inline_skill_inputs(
+        step_name="verify",
+        declared_command="/autoskillit:dry-walkthrough /tmp/a https://x /extra",
+        effective_command="/autoskillit:dry-walkthrough /tmp/a https://x /extra",
+        contract=contract,
+    )
+    dead_failures = [
+        failure for failure in failures if failure.code == BindingFailureCode.DEAD_SKILL_INPUT
+    ]
+    assert len(dead_failures) == 1
+    assert dead_failures[0].name == "arg2"
+    assert len(bound) == 2
+
+
+def test_inline_records_ambiguous_skill_input_for_duplicate_name() -> None:
+    """Same input supplied twice (positional then named) emits AMBIGUOUS_SKILL_INPUT."""
+    contract = _multi_input_inline_contract()
+    assert contract is not None
+    bound, failures = _inline_skill_inputs(
+        step_name="verify",
+        declared_command="/autoskillit:dry-walkthrough /tmp/plan.md plan_path=/tmp/other.md",
+        effective_command="/autoskillit:dry-walkthrough /tmp/plan.md plan_path=/tmp/other.md",
+        contract=contract,
+    )
+    ambiguous_failures = [
+        failure for failure in failures if failure.code == BindingFailureCode.AMBIGUOUS_SKILL_INPUT
+    ]
+    assert len(ambiguous_failures) == 1
+    assert ambiguous_failures[0].name == "plan_path"
+    plan_bound = next(value for value in bound if value.name == "plan_path")
+    assert plan_bound.effective_value == "/tmp/plan.md"
+
+
+def test_inline_records_invalid_skill_command_for_arg_count_mismatch() -> None:
+    """Declared and effective commands with different arg counts emit INVALID_SKILL_COMMAND."""
+    contract = _multi_input_inline_contract()
+    assert contract is not None
+    bound, failures = _inline_skill_inputs(
+        step_name="verify",
+        declared_command="/autoskillit:dry-walkthrough /tmp/plan.md https://x",
+        effective_command="/autoskillit:dry-walkthrough /tmp/plan.md",
+        contract=contract,
+    )
+    invalid_command_failures = [
+        failure for failure in failures if failure.code == BindingFailureCode.INVALID_SKILL_COMMAND
+    ]
+    assert len(invalid_command_failures) == 1
+    assert invalid_command_failures[0].name == "skill_command"
+    assert bound == ()
+
+
+def test_inline_records_invalid_skill_command_for_named_token_misalignment() -> None:
+    """Declared/effective named tokens with different names emit INVALID_SKILL_COMMAND."""
+    contract = _multi_input_inline_contract()
+    assert contract is not None
+    bound, failures = _inline_skill_inputs(
+        step_name="verify",
+        declared_command="/autoskillit:dry-walkthrough plan_path=/tmp/plan.md",
+        effective_command="/autoskillit:dry-walkthrough plan_path=/tmp/plan.md issue_url=foo",
+        contract=contract,
+    )
+    invalid_command_failures = [
+        failure for failure in failures if failure.code == BindingFailureCode.INVALID_SKILL_COMMAND
+    ]
+    assert len(invalid_command_failures) == 1
+    assert invalid_command_failures[0].name == "skill_command"
+    assert bound == ()
+
+
 # ---------------------------------------------------------------------------
 # Structured skill-input parsing
 # ---------------------------------------------------------------------------
 
 
-def _multi_input_contract() -> object:
+def _multi_input_contract() -> SkillContract | None:
     """Build a SkillContract with multiple typed inputs."""
     from autoskillit.recipe._contracts_manifest import get_skill_contract
 
@@ -317,7 +419,7 @@ def test_structured_records_missing_required_input_failure() -> None:
     ]
     assert any(failure.name == "plan_path" for failure in missing_failures)
     plan_bound = next(value for value in bound if value.name == "plan_path")
-    assert plan_bound.state.name == "ABSENT"
+    assert plan_bound.state is BoundValueState.ABSENT
 
 
 def test_structured_records_invalid_skill_input_type_failure() -> None:
@@ -339,9 +441,74 @@ def test_structured_records_invalid_skill_input_type_failure() -> None:
         for failure in failures
         if failure.code == BindingFailureCode.INVALID_SKILL_INPUT_TYPE
     ]
-    assert type_failures
+    assert len(type_failures) == 1
+    assert type_failures[0].name == "plan_path"
     plan_bound = next(value for value in bound if value.name == "plan_path")
-    assert plan_bound.state.name == "ABSENT"
+    assert plan_bound.state is BoundValueState.ABSENT
+
+
+def _optional_context_contract() -> SkillContract | None:
+    """Build a contract with an optional string input declaring an absence_value."""
+    from autoskillit.recipe._contracts_manifest import get_skill_contract
+
+    return get_skill_contract(
+        "context-optional",
+        {
+            "skills": {
+                "context-optional": {
+                    "inputs": [
+                        {
+                            "name": "worktree_label",
+                            "type": "string",
+                            "required": False,
+                            "absence_value": "(default)",
+                        },
+                    ]
+                }
+            }
+        },
+    )
+
+
+def test_structured_resolves_exact_context_ref_via_absence_value() -> None:
+    """An exact ${{ context.X }} ref matched by optional_context_refs resolves to absence_value."""
+    contract = _optional_context_contract()
+    assert contract is not None
+    declared = {"worktree_label": "${{ context.worktree_path }}"}
+    bound, failures = _structured_skill_inputs(
+        step_name="verify",
+        declared_values=declared,
+        effective_values=declared,
+        contract=contract,
+        hidden_inputs=frozenset(),
+        ingredient_values={},
+        optional_context_refs=frozenset({"worktree_path"}),
+    )
+    assert failures == ()
+    label_bound = next(value for value in bound if value.name == "worktree_label")
+    assert label_bound.declared_value == "${{ context.worktree_path }}"
+    assert label_bound.effective_value == "(default)"
+    assert label_bound.absence_value == "(default)"
+
+
+def test_structured_records_replaced_absence_value_for_optional_context_dep() -> None:
+    """Non-required context-dependent value retains input absence_value via replace."""
+    contract = _optional_context_contract()
+    assert contract is not None
+    declared = {"worktree_label": "prefix ${{ context.branch }} suffix"}
+    bound, failures = _structured_skill_inputs(
+        step_name="verify",
+        declared_values=declared,
+        effective_values=declared,
+        contract=contract,
+        hidden_inputs=frozenset(),
+        ingredient_values={},
+        optional_context_refs=frozenset({"branch"}),
+    )
+    assert failures == ()
+    label_bound = next(value for value in bound if value.name == "worktree_label")
+    assert label_bound.absence_value == "(default)"
+    assert label_bound.effective_value == "prefix ${{ context.branch }} suffix"
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +543,24 @@ def test_origin_for_classifies_literal_context_input_template() -> None:
     assert inp_inp == ("branch",)
 
 
+def test_origin_for_classifies_template_when_ref_embedded_in_text() -> None:
+    """Mixed values containing ${{ or {{AUTOSKILLIT_ but not exact refs yield TEMPLATE."""
+    origin_mixed, ctx_mixed, inp_mixed, tmpl_mixed = _origin_for(
+        "prefix ${{ context.branch }} suffix"
+    )
+    assert origin_mixed is BoundValueOrigin.TEMPLATE
+    assert ctx_mixed == ("branch",)
+    assert inp_mixed == ()
+    assert tmpl_mixed == ()
+
+    origin_autoskillit, _, _, tmpl_autoskillit = _origin_for("{{AUTOSKILLIT_X}}")
+    assert origin_autoskillit is BoundValueOrigin.TEMPLATE
+    assert tmpl_autoskillit == ("AUTOSKILLIT_X",)
+
+    origin_dollar, _, _, _ = _origin_for("value with ${{ stray")
+    assert origin_dollar is BoundValueOrigin.TEMPLATE
+
+
 def test_bound_value_propagates_origin() -> None:
     value = _bound_value("plan_path", "/tmp/plan.md", "/tmp/plan.md")
     assert isinstance(value, BoundValue)
@@ -383,6 +568,15 @@ def test_bound_value_propagates_origin() -> None:
     assert value.declared_value == "/tmp/plan.md"
     assert value.effective_value == "/tmp/plan.md"
     assert value.origin is BoundValueOrigin.LITERAL
+
+
+def test_bound_value_propagates_template_origin_with_dependencies() -> None:
+    """_bound_value propagates TEMPLATE origin when declared embeds refs in surrounding text."""
+    value = _bound_value("plan_path", "prefix ${{ context.branch }} suffix", "prefix main suffix")
+    assert value.origin is BoundValueOrigin.TEMPLATE
+    assert value.context_dependencies == ("branch",)
+    assert value.declared_value == "prefix ${{ context.branch }} suffix"
+    assert value.effective_value == "prefix main suffix"
 
 
 def test_resolve_hidden_value_substitutes_matching_ref() -> None:

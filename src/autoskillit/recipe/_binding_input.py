@@ -5,7 +5,7 @@ Extracted from ``recipe/_binding.py`` so the input-parsing cluster
 (``bind_step_invocation``, ``bind_recipe``) and runtime attestation admission
 (``bind_runtime_skill_invocation``).
 
-Public functions consumed by ``_binding.py``:
+Exported helpers consumed by ``_binding.py``:
     - ``_tokenize_skill_command`` — inline-only detection in ``bind_step_invocation``
     - ``_inline_skill_inputs`` — inline command parsing in ``bind_step_invocation``
     - ``_structured_skill_inputs`` — structured mapping parsing in ``bind_step_invocation``
@@ -37,7 +37,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._contracts_types import SkillContract, SkillInput
 
-# === Module-level regex constants (moved from _binding.py lines 49-53) ===
+# === Module-level regex constants ===
 
 _CONTEXT_REF_RE: Final = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 _INPUT_REF_RE: Final = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
@@ -45,12 +45,12 @@ _AUTOSKILLIT_TEMPLATE_RE: Final = re.compile(r"\{\{(AUTOSKILLIT_[A-Z0-9_]+)\}\}"
 _EXACT_CONTEXT_REF_RE: Final = re.compile(r"^\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}$")
 _EXACT_INPUT_REF_RE: Final = re.compile(r"^\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}$")
 
-# === Scalar tuple constant (moved from _binding.py line 54) ===
+# === Scalar tuple constant ===
 
 _SCALAR_TYPES = (str, int, bool)
 
 
-# === Provenance helpers (moved from _binding.py lines 79-80, 83-109, 112-128) ===
+# === Provenance helpers ===
 
 
 def _is_scalar(value: object) -> TypeGuard[BoundScalar]:
@@ -105,7 +105,7 @@ def _bound_value(name: str, declared: BoundScalar, effective: BoundScalar) -> Bo
     )
 
 
-# === Failure-recording helper (moved from _binding.py lines 194-200) ===
+# === Failure-recording helper ===
 
 
 def _failure(
@@ -117,14 +117,14 @@ def _failure(
     return BindingFailure(code=code, step_name=step_name, name=name, message=message)
 
 
-# === Skill-input type validation (moved from _binding.py lines 221-222) ===
+# === Skill-input type validation ===
 
 
 def _skill_value_is_valid(value: BoundScalar, input_def: SkillInput) -> bool:
     return input_def.accepts(value)
 
 
-# === Hidden-ingredient substitution (moved from _binding.py lines 225-248) ===
+# === Hidden-ingredient substitution ===
 
 
 def _resolve_hidden_value(
@@ -153,7 +153,7 @@ def _resolve_hidden_value(
     return _INPUT_REF_RE.sub(replace, effective)
 
 
-# === Command tokenization (moved from _binding.py lines 251-311) ===
+# === Command tokenization ===
 
 
 def _tokenize_skill_command(command: str) -> tuple[str, ...]:
@@ -219,7 +219,7 @@ def _split_named_token(token: str) -> tuple[str, str] | None:
     return name, _unquote(value)
 
 
-# === Skill-input parsers (moved from _binding.py lines 314-534) ===
+# === Skill-input parsers ===
 
 
 def _inline_skill_inputs(
@@ -423,7 +423,10 @@ def _structured_skill_inputs(
             and input_def.has_absence_value
         ):
             absence_value = input_def.absence_value
-            assert isinstance(absence_value, (str, int, bool))
+            if not _is_scalar(absence_value):
+                raise TypeError(
+                    f"skill input {input_def.name!r} absence_value is not a strict scalar"
+                )
             resolved = absence_value
         value = _bound_value(input_def.name, declared, resolved)
         if (

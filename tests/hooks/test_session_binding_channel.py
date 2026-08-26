@@ -349,6 +349,22 @@ def test_binding_path_rejects_an_empty_session_id(tmp_path: Path) -> None:
         resolve_binding_path(str(tmp_path), "")
 
 
+def test_binding_path_ignores_a_relative_payload_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Relative payload paths cannot become process-CWD-relative channel anchors."""
+    from autoskillit.hooks._session_binding import resolve_binding_path  # noqa: PLC0415
+
+    process_cwd = tmp_path / "process-cwd"
+    process_cwd.mkdir()
+    monkeypatch.delenv("AUTOSKILLIT_STATE_ROOT", raising=False)
+    monkeypatch.chdir(process_cwd)
+
+    assert resolve_binding_path("relative/worktree", "session-1").parent == (
+        process_cwd / ".autoskillit" / "temp"
+    )
+
+
 def test_write_binding_closes_descriptor_when_fdopen_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

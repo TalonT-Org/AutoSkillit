@@ -32,7 +32,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    normalize_payload_cwd,
+    resolve_state_root,
+)
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
     write_join_diagnostic,
@@ -122,8 +125,7 @@ def main() -> None:
         )
         sys.exit(0)
 
-    raw_cwd = data.get("cwd", "")
-    payload_cwd = raw_cwd if isinstance(raw_cwd, str) and Path(raw_cwd).is_absolute() else ""
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     top_level_parent = "top_level"
     batch = None

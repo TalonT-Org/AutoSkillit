@@ -37,7 +37,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    normalize_payload_cwd,
+    resolve_state_root,
+)
 from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_binding_path,
     resolve_channel_dir,
@@ -148,8 +151,7 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    raw_cwd = data.get("cwd", "")
-    payload_cwd = raw_cwd if isinstance(raw_cwd, str) and Path(raw_cwd).is_absolute() else ""
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
     temp_dir = resolve_channel_dir(resolve_state_root(payload_cwd))
     flag_path = resolve_binding_path(payload_cwd, session_id)
     if flag_path.exists():

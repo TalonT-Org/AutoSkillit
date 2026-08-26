@@ -15,11 +15,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 if __package__:
-    from ._hook_payload import resolve_state_root as _resolve_state_root
+    from . import _hook_payload as _hook_payload_module
 else:
-    from _hook_payload import (  # type: ignore[import-not-found,no-redef]
-        resolve_state_root as _resolve_state_root,
-    )
+    import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
 
 
 SESSION_BINDING_SCHEMA_VERSION: int = 2
@@ -198,7 +196,9 @@ def resolve_channel_dir(anchor: Path) -> Path:
 def resolve_binding_path(payload_cwd: str, session_id: str) -> Path:
     if not session_id:
         raise SessionBindingError("session_id must be a non-empty string")
-    state_root = _resolve_state_root(payload_cwd)
+    state_root = _hook_payload_module.resolve_state_root(
+        _hook_payload_module.normalize_payload_cwd(payload_cwd)
+    )
     return resolve_channel_dir(state_root) / f"skill_guard_{session_id}.flag"
 
 

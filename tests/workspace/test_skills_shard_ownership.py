@@ -5,6 +5,11 @@ Every public symbol defined in either of the two facades
 must be owned by exactly one shard module, and the facade must re-export it
 identity-equal. This enforces the single-source-of-truth invariant so future
 contributors cannot silently duplicate a name across two shards.
+
+Symbols defined *inside* one of the facade modules themselves (``skills``,
+``skill_capabilities``) are tracked separately as facade-retained ownership
+rows; they are not sharded and the per-shard declaration/re-export tests are
+scoped to the real shards only.
 """
 
 from __future__ import annotations
@@ -15,6 +20,31 @@ import pytest
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
+
+# Symbols whose authoritative definition lives in the facade module itself
+# rather than in any sharded submodule. These rows are only consulted by
+# ``test_shard_ownership_is_well_formed``; the per-shard subset/passthrough
+# tests below iterate over _SKILLS_SHARD_OWNERS + _SKILL_CAPABILITY_SHARD_OWNERS
+# exclusively, never over these facade-retained rows.
+_FACADE_RETAINED_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "skills",
+        (
+            "DefaultSkillResolver",
+            "_INTERNAL_SKILLS",
+            "_LIST_ALL_CACHE",
+            "_LIST_ALL_CACHE_KEY",
+            "_scan_directory",
+            "bundled_skills_dir",
+            "bundled_skills_extended_dir",
+            "validate_skill_tier_roles",
+        ),
+    ),
+    (
+        "skill_capabilities",
+        ("classify_skill_capability_evidence",),
+    ),
+)
 
 _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -28,7 +58,6 @@ _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "SkillInvalidity",
             "compute_skill_closure",
             "invalidity_hints",
-            "logger",
             "render_skill_invalidities",
         ),
     ),
@@ -53,15 +82,11 @@ _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "skills_visibility",
-        (
-            "_effective_disabled_categories",
-            "_skill_is_visible",
-            "_visibility_policy",
-        ),
+        (),
     ),
     (
         "skills_frontmatter",
-        ("_skill_info_from_frontmatter",),
+        (),
     ),
 )
 
@@ -120,7 +145,9 @@ def _facade_public_surface() -> tuple[str, ...]:
 def test_shard_ownership_is_well_formed() -> None:
     all_owned = [
         name
-        for _, names in _SKILLS_SHARD_OWNERS + _SKILL_CAPABILITY_SHARD_OWNERS
+        for _, names in _SKILLS_SHARD_OWNERS
+        + _SKILL_CAPABILITY_SHARD_OWNERS
+        + _FACADE_RETAINED_OWNERS
         for name in names
     ]
     assert len(all_owned) == len(set(all_owned)), (

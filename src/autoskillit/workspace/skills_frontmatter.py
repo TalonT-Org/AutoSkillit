@@ -207,4 +207,4 @@ def _skill_info_from_frontmatter(
     return info
 
 
-__all__ = ["_skill_info_from_frontmatter"]
+__all__: list[str] = []  # Internal shard — frontmatter orchestrator reached via the skills facade.

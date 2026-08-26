@@ -366,10 +366,7 @@ __all__ = [
     "SkillExclusion",
     "SkillInfo",
     "SkillInvalidity",
-    "_build_pack_index",
-    "_compute_skill_closure",
     "compute_skill_closure",
     "invalidity_hints",
-    "logger",
     "render_skill_invalidities",
 ]

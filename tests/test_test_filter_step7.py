@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -16,7 +17,63 @@ from tests._test_filter import (
 pytestmark = [pytest.mark.medium]
 
 
+def _write_successful_source_map(path: Path, source_map: dict[str, list[str]]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "provenance": {"pytest_exit_code": 0},
+                "map": source_map,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 class TestBuildTestScopeStep7:
+    def test_step7_narrowing_requires_successful_provenance(self, tmp_path: Path) -> None:
+        """Only a successful producer status authorizes map-based test narrowing."""
+        tests_root = tmp_path / "tests"
+        (tests_root / "core").mkdir(parents=True)
+        (tests_root / "arch").mkdir()
+        (tests_root / "contracts").mkdir()
+        specific_test = tests_root / "core" / "test_io.py"
+        specific_test.write_text("")
+
+        source_map = {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}
+        success_map = tmp_path / "success-source-map.json"
+        failed_map = tmp_path / "failed-source-map.json"
+        for path, pytest_exit_code in ((success_map, 0), (failed_map, 1)):
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "provenance": {"pytest_exit_code": pytest_exit_code},
+                        "map": source_map,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        narrowed = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+            coverage_map_path=success_map,
+        )
+        fallback = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+            coverage_map_path=failed_map,
+        )
+
+        assert narrowed is not None
+        assert fallback is not None
+        assert specific_test in narrowed
+        assert not any(path.is_dir() and path.name == "core" for path in narrowed)
+        assert any(path.is_dir() and path.name == "core" for path in fallback)
+
     def test_step7_file_level_substitution_single_file(self, tmp_path: Path) -> None:
         """Coverage map entry replaces the cascade directory with specific test files."""
         tests_root = tmp_path / "tests"
@@ -28,9 +85,9 @@ class TestBuildTestScopeStep7:
         specific_test.write_text("")
 
         map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
-            encoding="utf-8",
+        _write_successful_source_map(
+            map_file,
+            {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]},
         )
 
         result = build_test_scope(
@@ -54,9 +111,9 @@ class TestBuildTestScopeStep7:
         (tests_root / "contracts").mkdir()
 
         map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/execution/headless.py": ["tests/execution/test_headless.py"]}',
-            encoding="utf-8",
+        _write_successful_source_map(
+            map_file,
+            {"src/autoskillit/execution/headless.py": ["tests/execution/test_headless.py"]},
         )
 
         result = build_test_scope(
@@ -94,9 +151,9 @@ class TestBuildTestScopeStep7:
         (tests_root / "contracts").mkdir()
 
         map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
-            encoding="utf-8",
+        _write_successful_source_map(
+            map_file,
+            {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]},
         )
         old_mtime = time.time() - (31 * 24 * 3600)
         os.utime(map_file, (old_mtime, old_mtime))
@@ -138,9 +195,9 @@ class TestBuildTestScopeStep7:
         specific_test.write_text("")
 
         map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
-            encoding="utf-8",
+        _write_successful_source_map(
+            map_file,
+            {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]},
         )
 
         result = build_test_scope(
@@ -233,9 +290,9 @@ class TestBuildTestScopeStep7:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
 
         map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
-            encoding="utf-8",
+        _write_successful_source_map(
+            map_file,
+            {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]},
         )
         old_mtime = time.time() - (31 * 24 * 3600)
         os.utime(map_file, (old_mtime, old_mtime))
@@ -269,9 +326,9 @@ class TestBuildTestScopeStep7:
         (tests_root / "contracts").mkdir()
 
         map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
-            encoding="utf-8",
+        _write_successful_source_map(
+            map_file,
+            {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]},
         )
 
         result = build_test_scope(
@@ -294,10 +351,12 @@ class TestBuildTestScopeStep7:
         (tests_root / "core" / "test_logging.py").write_text("")
 
         map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"],'
-            ' "src/autoskillit/core/logging.py": ["tests/core/test_logging.py"]}',
-            encoding="utf-8",
+        _write_successful_source_map(
+            map_file,
+            {
+                "src/autoskillit/core/io.py": ["tests/core/test_io.py"],
+                "src/autoskillit/core/logging.py": ["tests/core/test_logging.py"],
+            },
         )
 
         result = build_test_scope(

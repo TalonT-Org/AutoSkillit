@@ -50,7 +50,61 @@ for _key, _gates in CAPACITY_REASON_GATES.items():
         raise AssertionError(f"CAPACITY_REASON_GATES[{_key!r}] has empty gate set")
 
 Record = _ledger.CaptureLifecycleRecord
-CompactedFrameSizeCache = dict[str, tuple[Record, int, int]]
+
+
+class CompactedFrameSizer:
+    """Memoize compacted ledger frame sizes for one materialized ledger view."""
+
+    def __init__(self) -> None:
+        self._frame_sizes: dict[str, tuple[Record, int, int]] = {}
+
+    def reset(self) -> None:
+        self._frame_sizes.clear()
+
+    def retain_records(self, records: Mapping[str, Record]) -> None:
+        for capture_id in tuple(self._frame_sizes):
+            if capture_id not in records:
+                del self._frame_sizes[capture_id]
+
+    def hydrate(
+        self,
+        records: Mapping[str, Record],
+        compaction_epoch: int,
+        frame_sizes: Mapping[str, int],
+    ) -> None:
+        for capture_id, size in frame_sizes.items():
+            record = records.get(capture_id)
+            if record is not None:
+                self._frame_sizes[capture_id] = (record, compaction_epoch, size)
+
+    def total_bytes(
+        self,
+        records: Mapping[str, Record],
+        compaction_epoch: int,
+        spec: CaptureCapacitySpec,
+    ) -> int:
+        compacted = compacted_records(records, spec)
+        retained_ids = {record.capture_id for record in compacted}
+        for capture_id in tuple(self._frame_sizes):
+            if capture_id not in retained_ids:
+                del self._frame_sizes[capture_id]
+
+        total = 0
+        for record in compacted:
+            cached = self._frame_sizes.get(record.capture_id)
+            if cached is not None and cached[:2] == (record, compaction_epoch):
+                total += cached[2]
+                continue
+            size = len(
+                _ledger.encode_frame(
+                    _ledger.record_to_dict(record),
+                    compaction_epoch=compaction_epoch,
+                )
+            )
+            self._frame_sizes[record.capture_id] = (record, compaction_epoch, size)
+            total += size
+        return total
+
 
 _REASON_DETAILS = {
     CaptureCapacityReason.ACTIVE_CAPACITY: "active lifecycle record bound reached",
@@ -113,38 +167,6 @@ def compacted_records(
     return sorted(live + tombstones, key=lambda record: record.capture_id)
 
 
-def compacted_bytes(
-    records: Mapping[str, Record],
-    compaction_epoch: int,
-    spec: CaptureCapacitySpec,
-    *,
-    frame_size_cache: CompactedFrameSizeCache | None = None,
-) -> int:
-    compacted = compacted_records(records, spec)
-    if frame_size_cache is not None:
-        retained_ids = {record.capture_id for record in compacted}
-        for capture_id in tuple(frame_size_cache):
-            if capture_id not in retained_ids:
-                del frame_size_cache[capture_id]
-
-    total = 0
-    for record in compacted:
-        cached = frame_size_cache.get(record.capture_id) if frame_size_cache is not None else None
-        if cached is not None and cached[:2] == (record, compaction_epoch):
-            total += cached[2]
-            continue
-        size = len(
-            _ledger.encode_frame(
-                _ledger.record_to_dict(record),
-                compaction_epoch=compaction_epoch,
-            )
-        )
-        if frame_size_cache is not None:
-            frame_size_cache[record.capture_id] = (record, compaction_epoch, size)
-        total += size
-    return total
-
-
 def _projected(
     records: Mapping[str, Record],
     candidate: Record,
@@ -161,7 +183,7 @@ def admission_reason(
     compaction_epoch: int,
     spec: CaptureCapacitySpec,
     active_limit: int,
-    frame_size_cache: CompactedFrameSizeCache | None = None,
+    sizer: CompactedFrameSizer,
 ) -> CaptureCapacityReason | None:
     projected = _projected(records, candidate)
     operational = sum(
@@ -180,12 +202,7 @@ def admission_reason(
         return CaptureCapacityReason.RETENTION_CAPACITY
     if operational + forensic > spec.max_evidence_records:
         return CaptureCapacityReason.EVIDENCE_CAPACITY
-    encoded = compacted_bytes(
-        projected,
-        compaction_epoch,
-        spec,
-        frame_size_cache=frame_size_cache,
-    )
+    encoded = sizer.total_bytes(projected, compaction_epoch, spec)
     if encoded + spec.recovery_headroom_bytes > spec.hard_ledger_bytes:
         return CaptureCapacityReason.HARD_LEDGER_CAPACITY
     if encoded > spec.compaction_low_bytes:
@@ -199,15 +216,10 @@ def transition_reason(
     *,
     compaction_epoch: int,
     spec: CaptureCapacitySpec,
-    frame_size_cache: CompactedFrameSizeCache | None = None,
+    sizer: CompactedFrameSizer,
 ) -> CaptureCapacityReason | None:
     projected = _projected(records, candidate)
-    encoded = compacted_bytes(
-        projected,
-        compaction_epoch,
-        spec,
-        frame_size_cache=frame_size_cache,
-    )
+    encoded = sizer.total_bytes(projected, compaction_epoch, spec)
     recovery_state = transition_compaction_bound(candidate, spec) == spec.hard_ledger_bytes
     if encoded > transition_compaction_bound(candidate, spec):
         return CaptureCapacityReason.HARD_LEDGER_CAPACITY

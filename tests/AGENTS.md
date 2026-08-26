@@ -189,10 +189,10 @@ rule: unannotated tests default to `large` and are deselected.
 
 ## Coverage Audit
 
-A quarterly coverage audit validates that the test suite covers all production functions
+A weekly coverage audit validates that the test suite covers all production functions
 and that the test filter cascade maps are not hiding blind spots.
 
-**Schedule:** Run `task coverage-audit` quarterly (January, April, July, October) or
+**Schedule:** The coverage-oracle workflow runs `task coverage-audit` weekly. Run it locally
 after significant architectural changes (new subpackages, major refactors).
 
 **Workflow:**
@@ -213,7 +213,7 @@ after significant architectural changes (new subpackages, major refactors).
 is older than 30 days. When this happens, Step 7 silently falls back
 to directory-level cascade — no error is raised. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
-- Run at least once per calendar month if using the coverage oracle in CI (conservative or aggressive mode).
+- The scheduled weekly refresh keeps the coverage oracle current in CI (conservative or aggressive mode).
 
 ```
 tests/

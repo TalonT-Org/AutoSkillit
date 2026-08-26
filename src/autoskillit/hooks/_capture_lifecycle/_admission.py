@@ -145,7 +145,7 @@ def _admission_reason(
         compaction_epoch=compaction_epoch,
         spec=store._capacity,
         active_limit=min(MAX_ACTIVE_RECORDS, store._capacity.max_operational_records),
-        frame_size_cache=store._capacity_frame_sizes,
+        sizer=store._ledger_view.sizer,
     )
 
 

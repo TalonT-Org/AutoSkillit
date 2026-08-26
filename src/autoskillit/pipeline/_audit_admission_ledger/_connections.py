@@ -5,12 +5,10 @@ canonical boot sequence (``executescript(_SCHEMA_SQL)`` →
 ``_validate_metadata`` → ``_backfill_installation_occurrences`` →
 ``_validate_response_commit_integrity`` → identity re-check).
 ``commit`` / ``rollback`` are the explicit COMMIT/ROLLBACK primitives;
-``rollback`` swallows ``sqlite3.Error`` (fail-open on rollback failure)
-and this discipline is load-bearing — must not be relaxed.
+see ``rollback`` for the load-bearing swallow discipline.
 
-The facade owns the per-instance fence and the recovery state; this
-module does not know about the facade. Every helper is a free function
-taking ``authority`` or ``connection`` as the first argument.
+Every helper is a free function taking ``authority`` or ``connection``
+as the first argument.
 """
 
 from __future__ import annotations

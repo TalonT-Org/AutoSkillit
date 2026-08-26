@@ -65,6 +65,7 @@ def _finalization_effect_result_read(
     *,
     allowed_lifecycles: frozenset[AuditAttemptLifecycle],
 ) -> dict[str, Any] | None:
+    """Raises ``ValueError`` if the attempt's lifecycle is not in ``allowed_lifecycles``."""
     _require_finalization_effect_lifecycle(
         connection,
         attempt_id,

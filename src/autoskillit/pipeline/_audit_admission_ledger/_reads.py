@@ -1,19 +1,18 @@
 """Read-only helpers for the audit admission ledger.
 
-Three free functions:
+Two facade-facing readers run under ``try/finally`` only (no
+``BEGIN IMMEDIATE``, no ``ROLLBACK``):
 
 - ``_current_head_read(connection, *, recipe_execution_id, cycle_id,
   scope_id, part_id)`` — returns the current ``AuditCycleHead`` for the
   given (cycle, scope, part) tuple, or ``None``.
-- ``_head_by_key_read(connection, head_key)`` — same, keyed by an
-  already-computed head key. Used by the write shards to re-read the
-  current head inside their ``BEGIN IMMEDIATE`` block.
 - ``_preflight_projection_read(connection, *, recipe_execution_id,
   installation_version, step_name)`` — returns the preflight projection
   for the given (recipe, installation, step), or ``None``.
 
-All run under ``try/finally`` only (no ``BEGIN IMMEDIATE``, no
-``ROLLBACK``).
+``_head_by_key_read(connection, head_key)`` delegates the same SELECT
+but is called by the write shards inside their own ``BEGIN IMMEDIATE``
+block — the call site owns the transaction boundary, not this helper.
 """
 
 from __future__ import annotations

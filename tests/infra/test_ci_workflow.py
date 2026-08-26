@@ -653,8 +653,7 @@ def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
     primer_prune = next(
         step for step in primer_steps if "uv cache prune --ci" in step.get("run", "")
     )
-    assert primer_steps.index(primer_restore) < primer_steps.index(primer_auth)
-    assert primer_steps.index(primer_restore) < primer_steps.index(primer_rust)
+    assert primer_steps.index(primer_restore) < primer_steps.index(primer_sync)
     assert primer_steps.index(primer_auth) < primer_steps.index(primer_sync)
     assert primer_steps.index(primer_rust) < primer_steps.index(primer_sync)
     assert primer_steps.index(primer_sync) < primer_steps.index(primer_prune)

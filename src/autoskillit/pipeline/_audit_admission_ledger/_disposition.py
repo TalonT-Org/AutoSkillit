@@ -1,21 +1,5 @@
 """Disposition CAS helpers for the audit admission ledger.
 
-Two free functions:
-
-- ``_commit_disposition_locked(connection, request)`` — runs the
-  in-transaction SELECT/INSERT sequence that performs a CAS-style
-  disposition commit. The PK is the
-  ``(installation_version, authority_digest, plan_digest)`` triple; the
-  CAS compares the 4-tuple ``(report_digest, report_path,
-  association_digest, association_path)``. Returns either
-  ``committed=True`` (idempotent re-delivery or fresh INSERT),
-  ``conflict_detail="disposition_projection_mismatch"`` (same PK, different
-  4-tuple), ``conflict_detail="installation_stale"`` (no live installation),
-  or ``conflict_detail="stale_authority"`` (head authority mismatch).
-- ``_resolve_disposition_read(connection, *, authority_digest, plan_digest)``
-  — read-only lookup of the most recent ``report_path`` for the given
-  (authority, plan) tuple, or ``None``.
-
 The CAS gate is the Python-level comparison on the 4-tuple (the SQL
 PK uniqueness is a separate concern).
 """
@@ -30,11 +14,10 @@ from autoskillit.core import (
     AuditDispositionCommitRequest,
 )
 from autoskillit.pipeline._audit_admission_ledger._encoders import (
-    _head_from_dict,
     _head_key,
-    _json_loads,
 )
 from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row
+from autoskillit.pipeline._audit_admission_ledger._reads import _head_by_key_read
 
 __all__ = ["_commit_disposition_locked", "_resolve_disposition_read"]
 
@@ -65,8 +48,8 @@ def _commit_disposition_locked(
     installation = _installation_row(connection, request.recipe_execution_id)
     if (
         installation is None
-        or installation[0] != request.installation_version.value
-        or installation[1]
+        or installation.installation_version != request.installation_version.value
+        or installation.retired
     ):
         return AuditDispositionCommitOutcome(
             committed=False,
@@ -79,11 +62,7 @@ def _commit_disposition_locked(
         request.scope_id,
         request.part_id,
     )
-    head_row = connection.execute(
-        "SELECT head_json FROM head_claims WHERE head_key = ?",
-        (head_key,),
-    ).fetchone()
-    current_head = _head_from_dict(_json_loads(head_row[0])) if head_row is not None else None
+    current_head = _head_by_key_read(connection, head_key)
     if current_head is None or current_head.current_authority_digest != request.authority_digest:
         return AuditDispositionCommitOutcome(
             committed=False,

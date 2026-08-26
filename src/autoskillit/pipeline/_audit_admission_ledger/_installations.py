@@ -1,21 +1,5 @@
 """Installation lifecycle helpers for the audit admission ledger.
 
-Three free functions consumed by the facade's ``create_or_get_installation``,
-``retire_installation``, and any shard that needs to look up the active
-installation row for a recipe execution id:
-
-- ``_create_or_get_installation_locked(connection, *, recipe_execution_id,
-  snapshot_digest)`` — idempotent: returns the existing active
-  ``InstallationVersion`` if the snapshot matches, or issues a new
-  ``InstallationVersion`` and INSERTs it. Raises ``REPLAY_MISMATCH`` on
-  snapshot divergence.
-- ``_retire_installation_locked(connection, *, recipe_execution_id,
-  installation_version)`` — marks the installation retired and stamps
-  ``installation_occurrences.retired_at``.
-- ``_installation_row(connection, recipe_execution_id)`` — returns
-  ``(installation_version, retired)`` or ``None``. Used by every other
-  shard that needs to verify installation liveness.
-
 Each ``_locked`` helper does only the in-transaction work; the facade
 owns the ``BEGIN IMMEDIATE`` / ``COMMIT`` / ``ROLLBACK`` boundary.
 """
@@ -24,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
+from typing import NamedTuple
 
 from autoskillit.core import (
     AuditAdmissionStorageError,
@@ -34,10 +19,16 @@ from autoskillit.core import (
 from autoskillit.pipeline._audit_admission_ledger._encoders import _now_iso
 
 __all__ = [
+    "InstallationRow",
     "_create_or_get_installation_locked",
     "_retire_installation_locked",
     "_installation_row",
 ]
+
+
+class InstallationRow(NamedTuple):
+    installation_version: str
+    retired: bool
 
 
 def _create_or_get_installation_locked(
@@ -114,11 +105,11 @@ def _retire_installation_locked(
 def _installation_row(
     connection: sqlite3.Connection,
     recipe_execution_id: RecipeExecutionId,
-) -> tuple[str, bool] | None:
+) -> InstallationRow | None:
     row = connection.execute(
         "SELECT installation_version, retired FROM installations WHERE recipe_execution_id = ?",
         (recipe_execution_id.value,),
     ).fetchone()
     if row is None:
         return None
-    return row[0], bool(row[1])
+    return InstallationRow(row[0], bool(row[1]))

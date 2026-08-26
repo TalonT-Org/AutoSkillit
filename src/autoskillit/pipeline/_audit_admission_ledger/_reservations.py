@@ -1,31 +1,9 @@
 """Reservation & dispatch helpers for the audit admission ledger.
 
-This shard owns the per-transition SQL for the ``reserve`` and
-``resolve_reservation_handle`` public methods:
-
-- ``_reserve_locked(connection, request, *, authority_id)`` — top-level
-  reservation logic. Reads the live head, derives the slot key, and
-  dispatches to one of ``_dispatch_new_slot``, ``_dispatch_correction``,
-  ``_redispatch_open``, or returns a lifecycle-derived outcome. The
-  caller supplies ``authority_id`` so the shard can embed it in
-  freshly-issued reservation handles without depending on the facade.
-- ``_conflict_outcome`` — pure helper that returns a ``CONFLICT`` outcome
-  for a given request and conflict detail string.
-- ``_dispatch_new_slot`` — INSERTs a fresh slot + attempt and issues a
-  handle.
-- ``_dispatch_correction`` — INSERTs a correction attempt on top of an
-  existing ``SEMANTIC_REJECTED`` attempt and issues a handle.
-- ``_redispatch_open`` — re-issues a handle for an ``OPEN`` attempt.
-- ``_issue_handle(connection, attempt_id, authority_id)`` — generates a
-  secret, stores its digest, and returns the formatted handle.
-- ``_build_reservation`` — pure helper that materializes an
-  ``AuditIdentityReservation`` from the request and slot parameters.
-- ``_resolve_reservation_handle_read(connection, handle_digest)`` —
-  read-only handle verification (``try/finally`` only, no
-  ``BEGIN IMMEDIATE``). The facade has already parsed the handle and
-  matched the authority id; this helper just runs the SQL lookup and
-  returns ``None`` when the handle is unknown or the attempt is no
-  longer ``OPEN``.
+The shard owns the per-transition SQL for the ``reserve`` and
+``resolve_reservation_handle`` public methods. ``_resolve_reservation_handle_read``
+runs under ``try/finally`` only (no ``BEGIN IMMEDIATE``); the facade has
+already parsed the handle and matched the authority id.
 """
 
 from __future__ import annotations
@@ -52,7 +30,6 @@ from autoskillit.core import (
 from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _HANDLE_DIGEST_DOMAIN,
     _HANDLE_PREFIX,
-    _head_from_dict,
     _head_key,
     _json_dumps,
     _json_loads,
@@ -63,6 +40,7 @@ from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _slot_key_to_dict,
 )
 from autoskillit.pipeline._audit_admission_ledger._installations import _installation_row
+from autoskillit.pipeline._audit_admission_ledger._reads import _head_by_key_read
 
 __all__ = [
     "_reserve_locked",
@@ -83,11 +61,14 @@ def _reserve_locked(
     authority_id: str,
 ) -> AuditReservationOutcome:
     installation_row = _installation_row(connection, request.recipe_execution_id)
-    if installation_row is None or installation_row[0] != request.installation_version.value:
+    if (
+        installation_row is None
+        or installation_row.installation_version != request.installation_version.value
+    ):
         raise ValueError(
             "reserve() requires a matching installation created via create_or_get_installation()"
         )
-    if installation_row[1]:
+    if installation_row.retired:
         return _conflict_outcome(request, "installation_retired")
 
     head_key = _head_key(
@@ -96,11 +77,7 @@ def _reserve_locked(
         request.scope_id,
         request.part_id,
     )
-    head_row = connection.execute(
-        "SELECT head_json FROM head_claims WHERE head_key = ?",
-        (head_key,),
-    ).fetchone()
-    live_head = _head_from_dict(_json_loads(head_row[0])) if head_row is not None else None
+    live_head = _head_by_key_read(connection, head_key)
     # Slot identity is derived from the caller's EXPLICIT attested prior-authority
     # reference (request.parent_authority_digest), never from the ledger's current
     # live head: an exact redelivery of the same runtime binding must resolve to the
@@ -405,11 +382,10 @@ def _resolve_reservation_handle_read(
     *,
     handle_digest: str,
 ) -> AuditIdentityReservation | None:
-    """Read-only handle verification - facade has parsed & matched authority.
+    """Read-only handle verification keyed by ``handle_digest``.
 
-    Runs the SQL lookup keyed by the precomputed ``handle_digest`` (which
-    carries the ``_HANDLE_DIGEST_DOMAIN`` namespace). Returns ``None``
-    when the handle is unknown or the attempt is no longer ``OPEN``.
+    Returns ``None`` when the handle is unknown or the attempt is no
+    longer ``OPEN``.
     """
     row = connection.execute(
         "SELECT reservation_json, lifecycle FROM attempts WHERE handle_digest = ?",

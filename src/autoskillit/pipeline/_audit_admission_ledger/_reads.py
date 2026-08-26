@@ -1,18 +1,19 @@
 """Read-only helpers for the audit admission ledger.
 
-Two free functions:
+Three free functions:
 
 - ``_current_head_read(connection, *, recipe_execution_id, cycle_id,
   scope_id, part_id)`` — returns the current ``AuditCycleHead`` for the
   given (cycle, scope, part) tuple, or ``None``.
+- ``_head_by_key_read(connection, head_key)`` — same, keyed by an
+  already-computed head key. Used by the write shards to re-read the
+  current head inside their ``BEGIN IMMEDIATE`` block.
 - ``_preflight_projection_read(connection, *, recipe_execution_id,
   installation_version, step_name)`` — returns the preflight projection
   for the given (recipe, installation, step), or ``None``.
 
-Both run under ``try/finally`` only (no ``BEGIN IMMEDIATE``, no
-``ROLLBACK``). They share the canonical read-method template with
-``_resolve_reservation_handle_read`` and ``_finalization_effect_result_read``:
-open connection, execute SELECT, close in ``finally``.
+All run under ``try/finally`` only (no ``BEGIN IMMEDIATE``, no
+``ROLLBACK``).
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _json_loads,
 )
 
-__all__ = ["_current_head_read", "_preflight_projection_read"]
+__all__ = ["_current_head_read", "_head_by_key_read", "_preflight_projection_read"]
 
 
 def _current_head_read(
@@ -43,6 +44,13 @@ def _current_head_read(
     part_id: str,
 ) -> AuditCycleHead | None:
     head_key = _head_key(recipe_execution_id, cycle_id, scope_id, part_id)
+    return _head_by_key_read(connection, head_key)
+
+
+def _head_by_key_read(
+    connection: sqlite3.Connection,
+    head_key: str,
+) -> AuditCycleHead | None:
     row = connection.execute(
         "SELECT head_json FROM head_claims WHERE head_key = ?",
         (head_key,),

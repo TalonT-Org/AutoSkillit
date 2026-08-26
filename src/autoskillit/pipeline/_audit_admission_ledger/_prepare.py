@@ -56,8 +56,8 @@ def _prepare_locked(
     if (
         installation_version != request.installation_version.value
         or installation_row is None
-        or installation_row[0] != request.installation_version.value
-        or installation_row[1]
+        or installation_row.installation_version != request.installation_version.value
+        or installation_row.retired
     ):
         return AuditPrepareOutcome(
             accepted=False,

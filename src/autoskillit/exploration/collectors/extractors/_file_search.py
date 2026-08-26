@@ -28,10 +28,10 @@ from ._evidence import (
 )
 
 # Capture the facade module so ``collect_search`` looks up ``run_bounded_rg``
-# through the package attribute. ``test_bounded_collectors.py`` monkeypatches
-# ``extractors_module.run_bounded_rg`` (lines 408, 655) and expects the patch
-# to propagate; without late-binding through the facade, a local import in
-# this shard would capture a separate binding the patch cannot reach.
+# through the package attribute; the test suite monkeypatches that name on the
+# facade and expects the patch to propagate. Without late-binding through the
+# facade, a local import in this shard would capture a separate binding the
+# patch cannot reach.
 _extractors_facade = sys.modules[__package__ or "autoskillit.exploration.collectors.extractors"]
 
 __all__ = [

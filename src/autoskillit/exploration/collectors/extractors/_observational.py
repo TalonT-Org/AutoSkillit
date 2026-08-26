@@ -1,13 +1,8 @@
 """Observational collectors — relabel existing reports under typed subject namespaces.
 
-Decomposed from the original ``collectors/extractors.py`` per #4836. Public
-surface: ``collect_unsupported``, ``collect_autoskillit_toml``,
-``collect_observational_artifact``, ``collect_autoskillit_registry``,
-``collect_architecture``, ``collect_python_stub``,
-``collect_generated_artifact``, ``collect_coverage_observation``,
-``collect_test_map_observation``. The six ``collect_*`` wrappers all delegate
-to ``_relabel``, which restamps a captured report's evidence IDs and (when
-applicable) subject namespace.
+Decomposed from the original ``collectors/extractors.py`` per #4836. Each
+``collect_*`` wrapper delegates to ``_relabel``, which restamps a captured
+report's evidence IDs and (when applicable) subject namespace.
 """
 
 from __future__ import annotations

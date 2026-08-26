@@ -1,11 +1,8 @@
 """Dataclasses and version constant for the collector registry.
 
-Decomposed from the original ``collectors/extractors.py`` per #4836. ``_COLLECTOR_VERSION``
-lives here (not in ``_evidence``) so that ``CollectorProfile.version`` — a
-runtime dataclass default — does not create a ``_records.py`` ↔ ``_evidence.py``
-import cycle: ``CollectorProfile`` is defined here and uses ``_COLLECTOR_VERSION``
-as its default value, so this module must load the constant before defining the
-dataclass.
+Decomposed from the original ``collectors/extractors.py`` per #4836. Owns
+``_COLLECTOR_VERSION`` as a runtime dataclass default for ``CollectorProfile``;
+this is the dependency-free core of the registry.
 """
 
 from __future__ import annotations

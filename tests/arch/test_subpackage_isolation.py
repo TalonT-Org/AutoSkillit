@@ -2601,11 +2601,16 @@ def test_snapshot_facade_all_resolves() -> None:
         "read_stable_contained_file",
         "DEFAULT_IGNORE_POLICY",
     }
+    expected_modules = {"subprocess", "time"}
     for name in facade_names:
         assert hasattr(snapshot_module, name), (
             f"snapshot facade missing {name} — test_snapshot.py monkeypatch sites "
             f"rely on this re-export"
         )
+        if name in expected_modules:
+            assert getattr(snapshot_module, name) is __import__(name), (
+                f"snapshot facade {name} must re-export the stdlib module"
+            )
 
 
 def test_collectors_extractors_facade_all_resolves() -> None:

@@ -6,17 +6,10 @@ Decomposed from the original ``exploration/snapshot.py`` per #4836. The capture
 pipeline is preserved as one cohesive unit (per the #4756 capture-immunity
 rectify that introduced the deadline thread, the two-byte-accounting split, and
 the ``_CaptureAborted`` dispatch): splitting ``_capture_once`` from its direct
-helpers (``_check_deadline``, ``_git``, ``_decode_path``, ``_nul_paths``,
-``_index_records``, ``_hash_file``, ``_path_state``, ``_state_payload``,
-``_identity_state_payload``, ``_untracked_special_paths``) would separate the
-budget plumbing from the single loop it threads through. ``resolve_repository_path``
-moves here from the original artifact section because it is a worktree-path
-safety primitive colocated with ``_path_state``.
+helpers would separate the budget plumbing from the single loop it threads
+through.
 
 Public surface: ``capture_repository_snapshot``, ``resolve_repository_path``.
-Monkeyspatch helpers (re-exported through the facade): ``_capture_once``,
-``activate_repository_profiles``, ``observe_path_mode``,
-``resolve_repository_identity``.
 """
 
 from __future__ import annotations
@@ -72,13 +65,12 @@ __all__ = [
 ]
 
 # Capture the facade module so ``capture_repository_snapshot`` looks up
-# ``_capture_once`` through the package attribute. ``test_snapshot.py``
-# monkeypatches ``snapshot_module._capture_once`` (lines 426, 898) and expects
-# the patch to propagate; without late-binding through the facade, a local
-# import in this shard would capture a separate binding the patch cannot reach.
-# The cycle resolves via ``sys.modules``: the facade module entry exists by the
-# time ``_capture.py`` is loaded because the facade's ``from ._capture import``
-# runs first.
+# ``_capture_once`` through the package attribute; the test suite monkeypatches
+# that name on the facade and expects the patch to propagate. Without
+# late-binding through the facade, a local import in this shard would capture a
+# separate binding the patch cannot reach. The cycle resolves via
+# ``sys.modules``: the facade module entry exists by the time ``_capture.py`` is
+# loaded because the facade's ``from ._capture import`` runs first.
 _snapshot_facade = sys.modules[__package__ or "autoskillit.exploration.snapshot"]
 
 
@@ -615,10 +607,8 @@ def capture_repository_snapshot(
     deadline = time.monotonic() + active_limits.capture_deadline_seconds
     identity_start = None
     activation_start = None
-    # Resolve monkeypatch helpers through the facade module so
-    # ``test_snapshot.py`` ``monkeypatch.setattr(snapshot_module, ...)`` patches
-    # propagate. The facade re-exports these helpers but a local binding would
-    # capture a separate reference that the patch cannot reach.
+    # Resolve monkeypatch helpers through the facade so test-suite patches
+    # propagated via ``monkeypatch.setattr(snapshot_module, ...)`` reach here.
     resolve_identity = _snapshot_facade.resolve_repository_identity
     activate_profiles = _snapshot_facade.activate_repository_profiles
     try:

@@ -6,13 +6,6 @@ the only helpers that operate ABOVE ``_capture_once`` and do not participate
 in deadline propagation, so they can move to a sibling shard without
 separating the budget plumbing from the single capture loop it threads
 through.
-
-Contains:
-- ``_classify_capture_once_failure`` — exception-class dispatch.
-- ``_stage`` — one identity/activation operation wrapper.
-- ``_capture_stage`` — wraps ``_capture_once`` with classification, looking
-  up ``_capture_once`` through the facade module so monkeypatch sites
-  (``test_snapshot.py:426, 898``) propagate.
 """
 
 from __future__ import annotations
@@ -39,9 +32,9 @@ _StageResult = TypeVar("_StageResult")
 
 # Capture the facade module so ``_capture_stage`` looks up ``_capture_once``
 # through the package attribute. Same late-binding rationale as in
-# ``_capture.py`` and ``_artifact.py``: ``test_snapshot.py`` monkeypatches
-# ``snapshot_module._capture_once`` (lines 426, 898) and expects the patch to
-# propagate. The cycle resolves via ``sys.modules``.
+# ``_capture.py`` and ``_artifact.py``: the test suite monkeypatches that name
+# on the facade and expects the patch to propagate. The cycle resolves via
+# ``sys.modules``.
 _snapshot_facade = sys.modules[__package__ or "autoskillit.exploration.snapshot"]
 
 

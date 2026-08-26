@@ -6,11 +6,10 @@ guarantees the public surface (``autoskillit.exploration.snapshot.X``) survives
 future shard reorganisation.
 
 This facade re-exports not only the public capture API but also the helpers
-that ``tests/exploration/test_snapshot.py`` monkeypatches through the module
-(``subprocess``, ``time``, ``_capture_once``, ``activate_repository_profiles``,
-``observe_path_mode``, ``resolve_repository_identity``). Removing any of these
-re-exports breaks the existing test suite — the facade IS the test module's
-view of snapshot.
+the test suite monkeypatches through the module (``subprocess``, ``time``,
+``_capture_once``, ``activate_repository_profiles``, ``observe_path_mode``,
+``resolve_repository_identity``). Removing any of these re-exports breaks the
+existing test suite.
 """
 
 from __future__ import annotations
@@ -25,10 +24,10 @@ import time  # noqa: F401
 from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 
 # ``read_stable_contained_file`` is imported from ``_artifact`` for the same
-# reason the other helpers are re-exported here: ``test_snapshot.py``
-# monkeypatches ``snapshot_module.read_stable_contained_file`` at line 349 to
-# simulate post-open mutation. The plan's Test #3 facade table omits this
-# name, but the live test exists and the helper must resolve.
+# reason the other helpers are re-exported here: the test suite monkeypatches
+# this name on the facade to simulate post-open mutation. The plan's Test #3
+# facade table omits this name, but the live test exists and the helper must
+# resolve.
 from ._artifact import (
     capture_stable_artifact,
     read_stable_contained_file,  # noqa: F401
@@ -43,7 +42,7 @@ from ._capture import (  # noqa: F401
     resolve_repository_path,
 )
 from ._records import (
-    DEFAULT_IGNORE_POLICY,  # noqa: F401  tests patch via facade (line 699)
+    DEFAULT_IGNORE_POLICY,  # noqa: F401  tests patch via facade
     ArtifactCaptureError,
     ArtifactCaptureStatus,
     SnapshotCaptureLimits,

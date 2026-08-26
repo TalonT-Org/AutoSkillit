@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -77,7 +78,10 @@ def main() -> None:
 
     try:
         existing = read_binding(flag_path)
-    except SessionBindingError:
+    except SessionBindingError as exc:
+        sys.stderr.write(
+            f"skill_load_post_hook: failed to read existing flag {flag_path}: {exc}\n"
+        )
         existing = SessionBinding(
             schema_version=SESSION_BINDING_SCHEMA_VERSION,
             session_id=session_id,
@@ -109,8 +113,10 @@ def main() -> None:
     )
     try:
         write_binding(flag_path, merged)
-    except Exception as exc:
-        sys.stderr.write(f"skill_load_post_hook: failed to write flag {flag_path}: {exc}\n")
+    except Exception:
+        sys.stderr.write(
+            f"skill_load_post_hook: failed to write flag {flag_path}:\n{traceback.format_exc()}"
+        )
 
     if binding_error is not None:
         log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")

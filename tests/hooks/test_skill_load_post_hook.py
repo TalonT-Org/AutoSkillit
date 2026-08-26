@@ -208,6 +208,45 @@ def test_survives_malformed_stdin(tmp_path: Path) -> None:
     assert exit_code == 0
 
 
+def test_reports_existing_binding_read_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A corrupt prior binding remains fail-closed and observable."""
+    flag = tmp_path / _FLAG_RELPATH
+    flag.parent.mkdir(parents=True)
+    flag.write_text("not-json", encoding="utf-8")
+
+    _run_hook(
+        stdin_data=_make_skill_event(),
+        tmp_dir=tmp_path,
+    )
+
+    assert "failed to read existing flag" in capsys.readouterr().err
+
+
+def test_reports_write_failure_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Atomic-write failures retain their exception type and traceback."""
+    from autoskillit.hooks import skill_load_post_hook as hook_module  # noqa: PLC0415
+
+    def fail_write(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("write exploded")
+
+    monkeypatch.setattr(hook_module, "write_binding", fail_write)
+    _run_hook(
+        stdin_data=_make_skill_event(),
+        tmp_dir=tmp_path,
+    )
+
+    stderr = capsys.readouterr().err
+    assert "failed to write flag" in stderr
+    assert "Traceback (most recent call last)" in stderr
+    assert "RuntimeError: write exploded" in stderr
+
+
 def test_skips_when_session_id_absent(tmp_path: Path) -> None:
     """T1-5: No flag file when session_id is missing."""
     event = {

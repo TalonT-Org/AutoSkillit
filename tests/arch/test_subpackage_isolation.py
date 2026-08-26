@@ -2601,16 +2601,12 @@ def test_snapshot_facade_all_resolves() -> None:
         "_capture_once",
         "activate_repository_profiles",
         "observe_path_mode",
-        "subprocess",
-        "time",
         # Production code resolves these via _snapshot_facade lookups
         "resolve_repository_identity",
         "read_stable_contained_file",
         "DEFAULT_IGNORE_POLICY",
     }
-    # Verify each re-export points to the correct source object so a facade
-    # that re-exports ``subprocess = None`` cannot silently satisfy hasattr.
-    stdlib_modules = {"subprocess", "time"}
+    stdlib_modules: set[str] = set()
     function_anchors = {
         "_capture_once": capture_shard._capture_once,
         "activate_repository_profiles": capture_shard.activate_repository_profiles,

@@ -568,6 +568,12 @@ def test_claude_required_join_emits_keep_batch_first_directive() -> None:
     # The Claude join adaptation must require the declared-batch step
     # before spawning, and require unnamed foreground calls.
     assert "declare_join_batch" in text or "join_batch" in text
+    assert "normalized bare skill name" in text
+    assert "exact session_id" in text
+    assert "Skill PostToolUse additionalContext" in text
+    assert "context is absent" in text
+    assert "report the missing join authority and stop" in text
+    assert "do not invent an ID or scan binding files" in text
     # No named/team/teammate dispatch is permitted.
     assert "name=" not in text and "name@" not in text
     assert "team_name" not in text

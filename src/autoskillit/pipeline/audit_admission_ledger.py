@@ -14,10 +14,8 @@ attempts, heads, preflight projections, and committed dispositions.
 from __future__ import annotations
 
 import json
-import os
 import secrets
 import sqlite3
-import stat
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,6 +60,7 @@ from autoskillit.core import (
     compute_bytes_hash,
     compute_canonical_hash,
 )
+from autoskillit.pipeline._audit_admission_ledger import _connections
 
 __all__ = ["DefaultAuditAdmissionLedger"]
 
@@ -377,251 +376,10 @@ class DefaultAuditAdmissionLedger:
         return self._authority
 
     # -- connection/schema -------------------------------------------------
-
-    def _connect(self) -> sqlite3.Connection:
-        path = self._authority.database_path
-        self._ensure_database_target()
-        before = self._database_identity()
-        connection = sqlite3.connect(
-            f"{path.as_uri()}?mode=rw",
-            uri=True,
-            isolation_level=None,
-        )
-        try:
-            connection.execute(f"PRAGMA busy_timeout = {int(self._busy_timeout_ms)}")
-            connection.execute("PRAGMA journal_mode = DELETE")
-            connection.execute("PRAGMA synchronous = EXTRA")
-            connection.execute("PRAGMA foreign_keys = ON")
-            connection.executescript(_SCHEMA_SQL)
-            self._validate_metadata(connection)
-            self._backfill_installation_occurrences(connection)
-            self._validate_response_commit_integrity(connection)
-            if before != self._database_identity():
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                    "audit-admission-store-identity-changed",
-                )
-        except Exception:
-            connection.close()
-            raise
-        return connection
-
-    def _ensure_database_target(self) -> None:
-        path = self._authority.database_path
-        parent = path.parent
-        try:
-            resolved_path = path.resolve(strict=False)
-        except (OSError, RuntimeError) as exc:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                "audit-admission-insecure-store-path",
-            ) from exc
-        if resolved_path != path:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                "audit-admission-store-path-traverses-symlink",
-            )
-        try:
-            parent.mkdir(parents=True, mode=_DIRECTORY_MODE, exist_ok=True)
-            parent_stat = parent.lstat()
-        except OSError as exc:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.IO,
-                "audit-admission-store-parent-unavailable",
-            ) from exc
-        if (
-            not stat.S_ISDIR(parent_stat.st_mode)
-            or parent_stat.st_uid != self._authority.expected_owner_id
-            or parent_stat.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
-        ):
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                "audit-admission-insecure-store-parent",
-            )
-
-        try:
-            path.lstat()
-        except FileNotFoundError:
-            try:
-                descriptor = os.open(
-                    path,
-                    os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                    _DATABASE_MODE,
-                )
-            except FileExistsError:
-                pass
-            except OSError as exc:
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.IO,
-                    "audit-admission-store-create-failed",
-                ) from exc
-            else:
-                os.close(descriptor)
-        except OSError as exc:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.IO,
-                "audit-admission-store-target-unavailable",
-            ) from exc
-        try:
-            if path.resolve(strict=True) != path:
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                    "audit-admission-store-path-traverses-symlink",
-                )
-        except OSError as exc:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                "audit-admission-insecure-store-file",
-            ) from exc
-        self._database_identity()
-
-    def _database_identity(self) -> tuple[int, int]:
-        path = self._authority.database_path
-        try:
-            path_stat = path.lstat()
-            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-            try:
-                descriptor_stat = os.fstat(descriptor)
-            finally:
-                os.close(descriptor)
-        except OSError as exc:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                "audit-admission-insecure-store-file",
-            ) from exc
-        if (
-            not stat.S_ISREG(path_stat.st_mode)
-            or path_stat.st_uid != self._authority.expected_owner_id
-            or path_stat.st_nlink != 1
-            or path_stat.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
-            or (path_stat.st_dev, path_stat.st_ino)
-            != (descriptor_stat.st_dev, descriptor_stat.st_ino)
-        ):
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                "audit-admission-insecure-store-file",
-            )
-        return path_stat.st_dev, path_stat.st_ino
-
-    def _validate_metadata(self, connection: sqlite3.Connection) -> None:
-        row = connection.execute(
-            "SELECT value FROM metadata WHERE key = 'schema_version'"
-        ).fetchone()
-        if row is None:
-            connection.execute(
-                "INSERT INTO metadata(key, value) VALUES ('schema_version', ?)",
-                (_METADATA_SCHEMA_VERSION,),
-            )
-            return
-        if row[0] != _METADATA_SCHEMA_VERSION:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.UNSUPPORTED_SCHEMA,
-                "audit-admission-schema-mismatch",
-            )
-
-    @staticmethod
-    def _backfill_installation_occurrences(connection: sqlite3.Connection) -> None:
-        mismatch = connection.execute(
-            "SELECT 1 FROM installations AS active "
-            "JOIN installation_occurrences AS occurrence "
-            "ON occurrence.recipe_execution_id = active.recipe_execution_id "
-            "AND occurrence.installation_version = active.installation_version "
-            "WHERE occurrence.snapshot_digest != active.snapshot_digest "
-            "OR occurrence.created_at != active.created_at LIMIT 1"
-        ).fetchone()
-        if mismatch is not None:
-            raise AuditAdmissionStorageError(
-                AuditAdmissionStorageFailureReason.INTEGRITY,
-                "audit-admission-installation-history-mismatch",
-            )
-        connection.execute(
-            "INSERT OR IGNORE INTO installation_occurrences("
-            "recipe_execution_id, installation_version, snapshot_digest, created_at, retired_at"
-            ") SELECT recipe_execution_id, installation_version, snapshot_digest, created_at, "
-            "CASE WHEN retired = 1 THEN created_at ELSE NULL END FROM installations"
-        )
-
-    @staticmethod
-    def _validate_response_commit_integrity(connection: sqlite3.Connection) -> None:
-        rows = connection.execute(
-            "SELECT attempts.attempt_id, attempts.lifecycle, "
-            "attempts.committed_outcome_json, "
-            "response_commits.required_effect_names_json, "
-            "response_commits.outcome_json, response_commits.replay_projection_json "
-            "FROM attempts LEFT JOIN response_commits "
-            "ON response_commits.attempt_id = attempts.attempt_id"
-        ).fetchall()
-        for (
-            attempt_id,
-            lifecycle_value,
-            committed_outcome_json,
-            required_effect_names_json,
-            response_outcome_json,
-            replay_projection_json,
-        ) in rows:
-            try:
-                lifecycle = AuditAttemptLifecycle(lifecycle_value)
-            except ValueError as exc:
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.INTEGRITY,
-                    "response-commit-invalid-attempt-lifecycle",
-                ) from exc
-            if lifecycle is not AuditAttemptLifecycle.RESPONSE_COMMITTED:
-                if required_effect_names_json is not None:
-                    raise AuditAdmissionStorageError(
-                        AuditAdmissionStorageFailureReason.INTEGRITY,
-                        "response-commit-before-terminal-lifecycle",
-                    )
-                continue
-            if (
-                committed_outcome_json is None
-                or required_effect_names_json is None
-                or response_outcome_json is None
-                or replay_projection_json is None
-                or committed_outcome_json != response_outcome_json
-            ):
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.INTEGRITY,
-                    "response-commit-projection-mismatch",
-                )
-            try:
-                required_effect_names = _required_effect_names_from_json(
-                    required_effect_names_json
-                )
-                outcome = _outcome_from_dict(_json_loads(committed_outcome_json))
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.INTEGRITY,
-                    "response-commit-invalid-durable-projection",
-                ) from exc
-            if outcome.replay_response_json != replay_projection_json:
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.INTEGRITY,
-                    "response-commit-replay-projection-mismatch",
-                )
-            acknowledged_effects = {
-                row[0]
-                for row in connection.execute(
-                    "SELECT effect_name FROM finalization_effects WHERE attempt_id = ?",
-                    (attempt_id,),
-                )
-            }
-            if not set(required_effect_names).issubset(acknowledged_effects):
-                raise AuditAdmissionStorageError(
-                    AuditAdmissionStorageFailureReason.INTEGRITY,
-                    "response-commit-finalization-effects-incomplete",
-                )
-
-    @staticmethod
-    def _commit(connection: sqlite3.Connection) -> None:
-        connection.execute("COMMIT")
-
-    @staticmethod
-    def _rollback(connection: sqlite3.Connection) -> None:
-        try:
-            connection.execute("ROLLBACK")
-        except sqlite3.Error:
-            pass
+    # Connection plumbing lives in ``_audit_admission_ledger._connections``.
+    # The facade delegates to ``_connections.open(...)``, ``commit(...)``, and
+    # ``rollback(...)``; it does not own connection-open validation, identity
+    # checks, or the explicit COMMIT/ROLLBACK primitives.
 
     # -- health/recovery -----------------------------------------------------
 
@@ -633,7 +391,7 @@ class DefaultAuditAdmissionLedger:
         with self._fence:
             connection: sqlite3.Connection | None = None
             try:
-                connection = self._connect()
+                connection = _connections.open(self._authority, self._busy_timeout_ms)
                 installations = tuple(
                     RecipeExecutionId(row[0])
                     for row in connection.execute(
@@ -691,7 +449,7 @@ class DefaultAuditAdmissionLedger:
                 self._store_health.failure_reason or AuditAdmissionStorageFailureReason.IO,
                 self._store_health.reason_code or "audit-admission-unrecovered",
             )
-        return self._connect()
+        return _connections.open(self._authority, self._busy_timeout_ms)
 
     # -- installations ---------------------------------------------------
 
@@ -717,7 +475,7 @@ class DefaultAuditAdmissionLedger:
                             "active-installation-snapshot-mismatch",
                         )
                     version = InstallationVersion(row[0])
-                    self._commit(connection)
+                    _connections.commit(connection)
                     return version
                 version = InstallationVersion(secrets.token_hex(32))
                 created_at = _now_iso()
@@ -747,10 +505,10 @@ class DefaultAuditAdmissionLedger:
                         created_at,
                     ),
                 )
-                self._commit(connection)
+                _connections.commit(connection)
                 return version
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()
@@ -779,9 +537,9 @@ class DefaultAuditAdmissionLedger:
                         installation_version.value,
                     ),
                 )
-                self._commit(connection)
+                _connections.commit(connection)
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()
@@ -808,10 +566,10 @@ class DefaultAuditAdmissionLedger:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 outcome = self._reserve_locked(connection, request)
-                self._commit(connection)
+                _connections.commit(connection)
                 return outcome
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()
@@ -1176,10 +934,10 @@ class DefaultAuditAdmissionLedger:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 outcome = self._prepare_locked(connection, request)
-                self._commit(connection)
+                _connections.commit(connection)
                 return outcome
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()
@@ -1289,10 +1047,10 @@ class DefaultAuditAdmissionLedger:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 outcome = self._commit_authority_locked(connection, request)
-                self._commit(connection)
+                _connections.commit(connection)
                 return outcome
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()
@@ -1444,7 +1202,7 @@ class DefaultAuditAdmissionLedger:
                             AuditAdmissionStorageFailureReason.INTEGRITY,
                             "finalize-response-commit-mismatch",
                         )
-                    self._commit(connection)
+                    _connections.commit(connection)
                     return
                 if lifecycle is not AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION:
                     raise ValueError(
@@ -1486,9 +1244,9 @@ class DefaultAuditAdmissionLedger:
                         attempt_id.value,
                     ),
                 )
-                self._commit(connection)
+                _connections.commit(connection)
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()
@@ -1548,7 +1306,7 @@ class DefaultAuditAdmissionLedger:
                             AuditAdmissionStorageFailureReason.INTEGRITY,
                             "finalization-effect-result-mismatch",
                         )
-                    self._commit(connection)
+                    _connections.commit(connection)
                     return
                 connection.execute(
                     "INSERT INTO finalization_effects("
@@ -1556,9 +1314,9 @@ class DefaultAuditAdmissionLedger:
                     ") VALUES (?, ?, ?, ?)",
                     (attempt_id.value, effect_name, result_json, _now_iso()),
                 )
-                self._commit(connection)
+                _connections.commit(connection)
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()
@@ -1647,10 +1405,10 @@ class DefaultAuditAdmissionLedger:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 outcome = self._commit_disposition_locked(connection, request)
-                self._commit(connection)
+                _connections.commit(connection)
                 return outcome
             except BaseException:
-                self._rollback(connection)
+                _connections.rollback(connection)
                 raise
             finally:
                 connection.close()

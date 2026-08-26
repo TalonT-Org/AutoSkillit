@@ -201,6 +201,19 @@ _CONTEXT_ADMISSION_SHARDS: tuple[str, ...] = (
 )
 _CONTEXT_ADMISSION_SHARD_CASCADE: frozenset[str] = frozenset({"core", "pipeline", "server"})
 
+# Context-admission reducer shards (Issue #4742): helpers + six
+# dispatch-category co-located siblings grouped by handler concern.
+_CONTEXT_ADMISSION_REDUCER_SHARDS: tuple[str, ...] = (
+    "context_admission_helpers",
+    "context_admission_propose_reserve",
+    "context_admission_prepare_stage_dispatch",
+    "context_admission_accept_release",
+    "context_admission_indeterminate",
+    "context_admission_generation",
+    "context_admission_expiry_rollover",
+)
+_CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE: frozenset[str] = frozenset({"core", "pipeline"})
+
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
@@ -474,6 +487,13 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_recipe_execution": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_closure_report": frozenset({"core"}),
     "context_admission": frozenset({"core", "pipeline"}),
+    "context_admission_helpers": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
+    "context_admission_propose_reserve": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
+    "context_admission_prepare_stage_dispatch": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
+    "context_admission_accept_release": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
+    "context_admission_indeterminate": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
+    "context_admission_generation": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
+    "context_admission_expiry_rollover": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
     "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
     "audit_semantic_codec": frozenset({"core", "server"}),
     "tool_registry": frozenset({"core", "recipe", "server"}),

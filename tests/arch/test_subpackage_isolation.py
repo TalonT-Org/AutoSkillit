@@ -1075,7 +1075,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # parameter injection point for execution.testing's capacity preflight, kept
         # separate from core/runtime/_reclamation.py since core/runtime already imports
         # core.types and _capacity is consumed there too (avoids a circular import).
-        "core": 41,
+        # +context_admission_helpers + 6 dispatch-category shards (Issue #4742): the
+        # context-admission reducer is split into helpers plus per-category co-located
+        # siblings. Cap moves from 41 to 48 to absorb the 7 new files.
+        "core": 48,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).
@@ -1517,15 +1520,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
-    ),
-    "core/context_admission.py": (
-        3050,
-        "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "
-        "surface. Keeping all closed event transitions together makes atomic batch, "
-        "idempotency, protected-pool, reconciliation, rollover, and declarative effect "
-        "semantics, released-version dispatch, and configuration-aware coverage resolution "
-        "reviewable as one state machine; splitting dispatch branches would fragment "
-        "exhaustiveness.",
     ),
     "pipeline/context_admission_ledger.py": (
         2300,

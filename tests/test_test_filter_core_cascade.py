@@ -9,6 +9,8 @@ import pytest
 from autoskillit._test_filter import apply_manifest as manifest_apply_manifest
 from autoskillit._test_filter import load_manifest as manifest_load_manifest
 from tests._test_filter import (
+    _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
+    _CONTEXT_ADMISSION_REDUCER_SHARDS,
     _CONTEXT_ADMISSION_SHARD_CASCADE,
     _CONTEXT_ADMISSION_SHARDS,
     _CORE_UNIVERSAL_MODULES,
@@ -203,6 +205,13 @@ class TestModuleCascadeCore:
             "path_containment",
             "closure_verifier",
             "context_admission",
+            "context_admission_helpers",
+            "context_admission_propose_reserve",
+            "context_admission_prepare_stage_dispatch",
+            "context_admission_accept_release",
+            "context_admission_indeterminate",
+            "context_admission_generation",
+            "context_admission_expiry_rollover",
             "_delivery_bounds",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
@@ -296,6 +305,10 @@ class TestModuleCascadeCore:
     @pytest.mark.parametrize("shard_stem", _CONTEXT_ADMISSION_SHARDS)
     def test_context_admission_split_shard_cascades(self, shard_stem: str) -> None:
         assert MODULE_CASCADE_CORE[shard_stem] == _CONTEXT_ADMISSION_SHARD_CASCADE
+
+    @pytest.mark.parametrize("shard_stem", _CONTEXT_ADMISSION_REDUCER_SHARDS)
+    def test_context_admission_reducer_shard_cascades(self, shard_stem: str) -> None:
+        assert MODULE_CASCADE_CORE[shard_stem] == _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE
 
     def test_type_dispatch_identity_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_dispatch_identity"] == frozenset(

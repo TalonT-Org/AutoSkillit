@@ -230,6 +230,7 @@ def test_native_log_id_joins_authoritative_session_record(
     event_name: str,
     channel_b_capable: bool,
 ) -> None:
+    """Verify emitted native log IDs are the direct sessions.jsonl join key."""
     native_id = f"{backend}-native-session"
     _flush(
         tmp_path,

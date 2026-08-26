@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import production_feature_env, production_interpreter_env
+from tests.conftest import production_feature_env
 
 pytestmark = [pytest.mark.medium]
 
@@ -51,12 +51,10 @@ def _run_hook(
     cwd: Path,
     env: dict[str, str],
 ) -> subprocess.CompletedProcess[str]:
-    run_env = production_interpreter_env()
-    run_env.update(env)
     return subprocess.run(
         [sys.executable, str(hook_path)],
         cwd=cwd,
-        env=run_env,
+        env=dict(env),
         input=json.dumps(payload),
         text=True,
         capture_output=True,
@@ -123,9 +121,7 @@ def _binding_path(state_root: Path, session_id: str) -> Path:
 def test_flag_is_written_when_provider_profile_is_absent(tmp_path: Path) -> None:
     """The production-default child environment still receives a binding flag."""
     state_root = _state_root(tmp_path)
-    interpreter_env = production_interpreter_env()
     feature_env = production_feature_env()
-    assert interpreter_env
     assert "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED" not in feature_env
 
     result = _run_hook(
@@ -501,3 +497,26 @@ def test_skill_load_guard_finds_a_flag_written_from_a_worktree_cwd(tmp_path: Pat
     assert hook_result.returncode == 0, hook_result.stderr
     assert guard_result.returncode == 0, guard_result.stderr
     assert "SKILL LOADING REQUIRED" not in guard_result.stdout
+
+
+def test_skill_load_guard_denies_without_a_matching_binding(tmp_path: Path) -> None:
+    """The state-root channel remains the gate when no writer created a binding."""
+    state_root = _state_root(tmp_path)
+    other_cwd = tmp_path / "other-cwd"
+    other_cwd.mkdir()
+
+    guard_result = _run_hook(
+        _HOOKS_DIR / "guards" / "skill_load_guard.py",
+        _skill_event(cwd=state_root, session_id="missing-session"),
+        cwd=other_cwd,
+        env=_hook_env(
+            state_root,
+            AUTOSKILLIT_PROVIDER_PROFILE="minimax",
+            AUTOSKILLIT_HEADLESS="1",
+            AUTOSKILLIT_SESSION_TYPE="skill",
+            AUTOSKILLIT_APPLICABLE_GUARDS="skill_load_guard",
+        ),
+    )
+
+    assert guard_result.returncode == 0, guard_result.stderr
+    assert "SKILL LOADING REQUIRED" in guard_result.stdout

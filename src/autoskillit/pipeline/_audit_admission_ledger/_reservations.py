@@ -405,7 +405,7 @@ def _resolve_reservation_handle_read(
     *,
     handle_digest: str,
 ) -> AuditIdentityReservation | None:
-    """Read-only handle verification — used after the facade has parsed the handle and matched authority id.
+    """Read-only handle verification - facade has parsed & matched authority.
 
     Runs the SQL lookup keyed by the precomputed ``handle_digest`` (which
     carries the ``_HANDLE_DIGEST_DOMAIN`` namespace). Returns ``None``

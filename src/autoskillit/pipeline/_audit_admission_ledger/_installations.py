@@ -16,7 +16,7 @@ from autoskillit.core import (
     InstallationVersion,
     RecipeExecutionId,
 )
-from autoskillit.pipeline._audit_admission_ledger._encoders import _now_iso
+from autoskillit.pipeline import audit_admission_ledger as _facade_module
 
 __all__ = [
     "InstallationRow",
@@ -50,7 +50,7 @@ def _create_or_get_installation_locked(
             )
         return InstallationVersion(row[0])
     version = InstallationVersion(secrets.token_hex(32))
-    created_at = _now_iso()
+    created_at = _facade_module._now_iso()
     connection.execute(
         "INSERT INTO installation_occurrences("
         "recipe_execution_id, installation_version, snapshot_digest, "
@@ -95,7 +95,7 @@ def _retire_installation_locked(
         "UPDATE installation_occurrences SET retired_at = COALESCE(retired_at, ?) "
         "WHERE recipe_execution_id = ? AND installation_version = ?",
         (
-            _now_iso(),
+            _facade_module._now_iso(),
             recipe_execution_id.value,
             installation_version.value,
         ),

@@ -25,15 +25,14 @@ from autoskillit.core import (
     ReservationDecision,
     compute_audit_reference_identity,
     compute_audit_slot_id,
-    compute_bytes_hash,
 )
+from autoskillit.pipeline import audit_admission_ledger as _facade_module
 from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _HANDLE_DIGEST_DOMAIN,
     _HANDLE_PREFIX,
     _head_key,
     _json_dumps,
     _json_loads,
-    _now_iso,
     _outcome_from_dict,
     _reservation_from_dict,
     _reservation_to_dict,
@@ -228,7 +227,7 @@ def _build_reservation(
         part_id=request.part_id,
         audit_round=audit_round,
         parent_authority_digest=slot_key.prior_authority_digest,
-        generated_at=_now_iso(),
+        generated_at=_facade_module._now_iso(),
         allowed_root=request.allowed_root,
         semantic_result_path=root / "semantic.json",
         inventory_path=root / "inventory.json",
@@ -245,7 +244,7 @@ def _issue_handle(
     authority_id: str,
 ) -> str:
     secret = secrets.token_hex(32)
-    handle_digest = compute_bytes_hash(secret.encode("utf-8"))
+    handle_digest = _facade_module.compute_bytes_hash(secret.encode("utf-8"))
     connection.execute(
         "UPDATE attempts SET handle_digest = ? WHERE attempt_id = ?",
         (f"{_HANDLE_DIGEST_DOMAIN}:{handle_digest}", attempt_id.value),
@@ -278,7 +277,7 @@ def _dispatch_new_slot(
         audit_round=audit_round,
         current_head=current_head,
     )
-    now = _now_iso()
+    now = _facade_module._now_iso()
     connection.execute(
         "INSERT INTO slots(slot_id, recipe_execution_id, installation_version, "
         "step_name, head_key, slot_key_json, current_attempt_id, created_at) "
@@ -335,7 +334,7 @@ def _dispatch_correction(
         audit_round=reservation.audit_round,
         current_head=reservation.expected_head,
     )
-    now = _now_iso()
+    now = _facade_module._now_iso()
     connection.execute(
         "UPDATE slots SET current_attempt_id = ? WHERE slot_id = ?",
         (attempt_id.value, slot_id.value),

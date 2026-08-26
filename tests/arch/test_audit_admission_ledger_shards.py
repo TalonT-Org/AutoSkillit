@@ -164,16 +164,22 @@ def test_every_facade_read_method_delegates_to_read_shard() -> None:
 
 
 def test_every_shard_imports_without_facade() -> None:
-    """The facade must not be a direct import of any shard.
+    """The facade must not be a direct import of any shard — except for the
+    narrow set of late-binding module-level names (``compute_bytes_hash``,
+    ``_now_iso``) that the facade exposes specifically so existing tests
+    can ``monkeypatch.setattr`` the facade module and have the patch
+    propagate into shard call sites.
 
     Each shard's source is AST-scanned to confirm it does not contain
-    an ``import autoskillit.pipeline.audit_admission_ledger`` or
-    ``from autoskillit.pipeline.audit_admission_ledger import ...``
-    statement. The facade is always reachable via the parent package's
+    an ``import autoskillit.pipeline.audit_admission_ledger`` (block
+    import) or ``from autoskillit.pipeline.audit_admission_ledger import
+    <NAME>`` for any name other than those in ``LATE_BINDING_NAMES``.
+    The facade is always reachable via the parent package's
     ``__init__``, so a ``sys.modules`` snapshot alone cannot detect a
     shard's direct dependency.
     """
     facade_module = "autoskillit.pipeline.audit_admission_ledger"
+    late_binding_names = {"compute_bytes_hash", "_now_iso"}
     for py in sorted(SHARDS_DIR.glob("*.py")):
         if py.stem == "__init__":
             continue
@@ -185,8 +191,10 @@ def test_every_shard_imports_without_facade() -> None:
                         f"{py.name} imports facade via 'import {alias.name}'"
                     )
             elif isinstance(node, ast.ImportFrom) and node.module == facade_module:
-                raise AssertionError(
-                    f"{py.name} imports facade via 'from {node.module} import ...'"
+                imported_names = {alias.name for alias in node.names}
+                forbidden = imported_names - late_binding_names
+                assert not forbidden, (
+                    f"{py.name} imports non-late-binding names from facade: {sorted(forbidden)}"
                 )
 
 

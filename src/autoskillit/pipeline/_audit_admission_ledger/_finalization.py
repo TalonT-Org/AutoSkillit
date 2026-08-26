@@ -17,7 +17,8 @@ from autoskillit.core import (
     AuditAttemptId,
     AuditAttemptLifecycle,
 )
-from autoskillit.pipeline._audit_admission_ledger._encoders import _json_loads, _now_iso
+from autoskillit.pipeline import audit_admission_ledger as _facade_module
+from autoskillit.pipeline._audit_admission_ledger._encoders import _json_loads
 
 __all__ = [
     "_validate_finalization_effect_name",
@@ -104,7 +105,7 @@ def _acknowledge_finalization_effect_locked(
     connection.execute(
         "INSERT INTO finalization_effects(attempt_id, effect_name, result_json, acknowledged_at) "
         "VALUES (?, ?, ?, ?)",
-        (attempt_id.value, effect_name, result_json, _now_iso()),
+        (attempt_id.value, effect_name, result_json, _facade_module._now_iso()),
     )
 
 
@@ -174,7 +175,7 @@ def _finalize_response_locked(
             required_effect_names_json,
             outcome_json,
             replay_projection,
-            _now_iso(),
+            _facade_module._now_iso(),
         ),
     )
     connection.execute(

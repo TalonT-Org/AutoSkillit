@@ -61,12 +61,13 @@ from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _HANDLE_PREFIX,
     _json_dumps,
     _normalize_required_effect_names,
+    _now_iso,
     _outcome_to_dict,
     _required_effect_names_to_json,
     _validate_replay_projection,
 )
 
-__all__ = ["DefaultAuditAdmissionLedger"]
+__all__ = ["DefaultAuditAdmissionLedger", "_now_iso"]
 
 _FINALIZATION_EFFECT_READ_LIFECYCLES = frozenset(
     {
@@ -117,7 +118,7 @@ class DefaultAuditAdmissionLedger:
         with self._fence:
             connection: sqlite3.Connection | None = None
             try:
-                connection = _connections.open(self._authority, self._busy_timeout_ms)
+                connection = self._connect()
                 installations, attempts = _recovery._installations_and_attempts_read(connection)
             except AuditAdmissionStorageError as exc:
                 return self._fail_closed_recovery(exc.reason, exc.reason_code)
@@ -138,6 +139,15 @@ class DefaultAuditAdmissionLedger:
                 recovered_installations=installations,
                 recovered_attempts=attempts,
             )
+
+    def _connect(self) -> sqlite3.Connection:
+        """Open a fresh connection to the authority's database.
+
+        Retained as an instance method so existing tests that monkeypatch
+        ``ledger._connect`` to inject a recovery fault continue to work
+        after the connection primitive moved into ``_connections``.
+        """
+        return _connections.open(self._authority, self._busy_timeout_ms)
 
     def _fail_closed_recovery(
         self,
@@ -164,7 +174,7 @@ class DefaultAuditAdmissionLedger:
                 self._store_health.failure_reason or AuditAdmissionStorageFailureReason.IO,
                 self._store_health.reason_code or "audit-admission-unrecovered",
             )
-        return _connections.open(self._authority, self._busy_timeout_ms)
+        return self._connect()
 
     # -- installations ---------------------------------------------------
 

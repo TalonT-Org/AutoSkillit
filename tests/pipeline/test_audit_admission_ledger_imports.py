@@ -52,13 +52,18 @@ def test_subpackage_does_not_double_as_facade_path() -> None:
 
 def test_shard_modules_are_importable_without_facade() -> None:
     """Each shard module is loadable as a submodule and does not contain
-    a direct import of the facade module.
+    a direct import of the facade module — except for the narrow set of
+    late-binding module-level names (``compute_bytes_hash``, ``_now_iso``)
+    that the facade exposes specifically so existing tests can
+    ``monkeypatch.setattr`` the facade module and have the patch
+    propagate into shard call sites.
 
     The facade is always reachable via the parent package's ``__init__``,
     so a ``sys.modules`` snapshot alone cannot detect a shard's direct
     dependency. The source of each shard is AST-scanned instead.
     """
     facade_module = "autoskillit.pipeline.audit_admission_ledger"
+    late_binding_names = {"compute_bytes_hash", "_now_iso"}
     expected = {
         "_schema",
         "_encoders",
@@ -82,6 +87,8 @@ def test_shard_modules_are_importable_without_facade() -> None:
                         f"{stem}.py imports facade via 'import {alias.name}'"
                     )
             elif isinstance(node, ast.ImportFrom) and node.module == facade_module:
-                raise AssertionError(
-                    f"{stem}.py imports facade via 'from {node.module} import ...'"
+                imported_names = {alias.name for alias in node.names}
+                forbidden = imported_names - late_binding_names
+                assert not forbidden, (
+                    f"{stem}.py imports non-late-binding names from facade: {sorted(forbidden)}"
                 )

@@ -95,6 +95,7 @@ class TestModuleCascadeCore:
             "_json",
             "agent_definition",
             "artifact_lease",
+            "worktree_gate_lease",
             "private_file",
             "feature_flags",
             "branch_guard",

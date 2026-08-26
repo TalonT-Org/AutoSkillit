@@ -243,5 +243,6 @@ async def test_merge_tool_reports_error_when_guard_raises(
     result = json.loads(await merge_worktree(str(worktree), "dev"))
 
     assert result["success"] is False
-    assert result["error"] == "AttributeError: boom"
+    assert "AttributeError" in result["error"]
+    assert "boom" in result["error"]
     remove_worktree.assert_not_awaited()

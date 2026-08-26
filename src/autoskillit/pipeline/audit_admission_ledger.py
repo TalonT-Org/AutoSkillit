@@ -60,7 +60,7 @@ from autoskillit.core import (
     compute_bytes_hash,
     compute_canonical_hash,
 )
-from autoskillit.pipeline._audit_admission_ledger import _connections, _recovery
+from autoskillit.pipeline._audit_admission_ledger import _connections, _installations, _recovery
 
 __all__ = ["DefaultAuditAdmissionLedger"]
 
@@ -339,47 +339,10 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                row = connection.execute(
-                    "SELECT installation_version, snapshot_digest, retired "
-                    "FROM installations WHERE recipe_execution_id = ?",
-                    (recipe_execution_id.value,),
-                ).fetchone()
-                if row is not None and not row[2]:
-                    if row[1] != snapshot_digest:
-                        raise AuditAdmissionStorageError(
-                            AuditAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                            "active-installation-snapshot-mismatch",
-                        )
-                    version = InstallationVersion(row[0])
-                    _connections.commit(connection)
-                    return version
-                version = InstallationVersion(secrets.token_hex(32))
-                created_at = _now_iso()
-                connection.execute(
-                    "INSERT INTO installation_occurrences("
-                    "recipe_execution_id, installation_version, snapshot_digest, "
-                    "created_at, retired_at) VALUES (?, ?, ?, ?, NULL)",
-                    (
-                        recipe_execution_id.value,
-                        version.value,
-                        snapshot_digest,
-                        created_at,
-                    ),
-                )
-                connection.execute(
-                    "INSERT INTO installations"
-                    "(recipe_execution_id, installation_version, snapshot_digest, "
-                    "retired, created_at) VALUES (?, ?, ?, 0, ?) "
-                    "ON CONFLICT(recipe_execution_id) DO UPDATE SET "
-                    "installation_version = excluded.installation_version, "
-                    "snapshot_digest = excluded.snapshot_digest, "
-                    "retired = 0, created_at = excluded.created_at",
-                    (
-                        recipe_execution_id.value,
-                        version.value,
-                        snapshot_digest,
-                        created_at,
-                    ),
+                version = _installations._create_or_get_installation_locked(
+                    connection,
+                    recipe_execution_id=recipe_execution_id,
+                    snapshot_digest=snapshot_digest,
                 )
                 _connections.commit(connection)
                 return version
@@ -399,19 +362,10 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                connection.execute(
-                    "UPDATE installations SET retired = 1 "
-                    "WHERE recipe_execution_id = ? AND installation_version = ?",
-                    (recipe_execution_id.value, installation_version.value),
-                )
-                connection.execute(
-                    "UPDATE installation_occurrences SET retired_at = COALESCE(retired_at, ?) "
-                    "WHERE recipe_execution_id = ? AND installation_version = ?",
-                    (
-                        _now_iso(),
-                        recipe_execution_id.value,
-                        installation_version.value,
-                    ),
+                _installations._retire_installation_locked(
+                    connection,
+                    recipe_execution_id=recipe_execution_id,
+                    installation_version=installation_version,
                 )
                 _connections.commit(connection)
             except BaseException:
@@ -419,20 +373,6 @@ class DefaultAuditAdmissionLedger:
                 raise
             finally:
                 connection.close()
-
-    def _installation_row(
-        self,
-        connection: sqlite3.Connection,
-        recipe_execution_id: RecipeExecutionId,
-    ) -> tuple[str, bool] | None:
-        row = connection.execute(
-            "SELECT installation_version, retired FROM installations "
-            "WHERE recipe_execution_id = ?",
-            (recipe_execution_id.value,),
-        ).fetchone()
-        if row is None:
-            return None
-        return row[0], bool(row[1])
 
     # -- reservation -------------------------------------------------------
 
@@ -455,7 +395,9 @@ class DefaultAuditAdmissionLedger:
         connection: sqlite3.Connection,
         request: AuditReservationRequest,
     ) -> AuditReservationOutcome:
-        installation_row = self._installation_row(connection, request.recipe_execution_id)
+        installation_row = _installations._installation_row(
+            connection, request.recipe_execution_id
+        )
         if installation_row is None or installation_row[0] != request.installation_version.value:
             raise ValueError(
                 "reserve() requires a matching installation created via "
@@ -839,7 +781,7 @@ class DefaultAuditAdmissionLedger:
         lifecycle = AuditAttemptLifecycle(row[0])
         recipe_execution_id = RecipeExecutionId(row[2])
         installation_version = row[3]
-        installation_row = self._installation_row(connection, recipe_execution_id)
+        installation_row = _installations._installation_row(connection, recipe_execution_id)
         if (
             installation_version != request.installation_version.value
             or installation_row is None
@@ -956,7 +898,7 @@ class DefaultAuditAdmissionLedger:
                 attempt_id=request.attempt_id,
                 conflict_detail="installation_stale",
             )
-        installation_row = self._installation_row(
+        installation_row = _installations._installation_row(
             connection,
             RecipeExecutionId(recipe_execution_id),
         )
@@ -1313,7 +1255,7 @@ class DefaultAuditAdmissionLedger:
                     conflict_detail="disposition_projection_mismatch",
                 )
             return AuditDispositionCommitOutcome(committed=True, generated_at=existing[4])
-        installation = self._installation_row(connection, request.recipe_execution_id)
+        installation = _installations._installation_row(connection, request.recipe_execution_id)
         if (
             installation is None
             or installation[0] != request.installation_version.value

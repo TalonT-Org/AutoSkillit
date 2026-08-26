@@ -75,8 +75,10 @@ def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -
 def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) -> None:
     """Every static recipe skill target survives resolver and generated-home projection."""
     targets: set[str] = set()
+    required_packs: set[str] = set()
     for recipe_path in sorted(builtin_recipes_dir().glob("*.yaml")):
         recipe = load_recipe(recipe_path)
+        required_packs.update(recipe.requires_packs)
         for step_name, step in recipe.steps.items():
             if step.tool != "run_skill":
                 continue
@@ -106,6 +108,7 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
         tmp_path,
         SkillExecutionRole.SESSION,
         cook_session=True,
+        recipe_packs=frozenset(required_packs),
         allow_only=add_dir_targets,
     )
     projection_context = provider.catalog_projection_context(

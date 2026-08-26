@@ -726,10 +726,10 @@ def test_ignore_policy_bump_rebind_against_v2_capture_fails_closed(
     above: that test proves the two policies compute distinct digests for identical
     repository state; this test proves OwnerBoundExplorationContextStore actually acts
     on that divergence — submit_for_capability degrades to the store's existing
-    fail-closed ValueError (pipeline/exploration_context.py) rather than accepting a
-    stale v1-era lease against a live v2 capture. A thin real-capture service adapter
-    is used (not a mock) so the digest comparison exercises this module's own
-    capture_repository_snapshot on both sides of the bump.
+    fail-closed ValueError (pipeline/exploration_context/_store.py) rather than
+    accepting a stale v1-era lease against a live v2 capture. A thin real-capture
+    service adapter is used (not a mock) so the digest comparison exercises this
+    module's own capture_repository_snapshot on both sides of the bump.
     """
     root = _new_repository(tmp_path)
 

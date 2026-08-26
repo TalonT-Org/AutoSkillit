@@ -30,6 +30,7 @@ from autoskillit.pipeline.exploration_context import (
     OwnerBoundExplorationContextStore,
     resolve_exploration_store_failure_code,
 )
+from autoskillit.pipeline.exploration_context import _store as _store_module  # noqa: PLC0415
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -584,7 +585,7 @@ def test_submit_failure_is_fail_closed_and_logs_only_bounded_safe_diagnostics(
     )
     service.collect.side_effect = ValueError(failure_reason)
     logger = MagicMock()
-    monkeypatch.setattr(exploration_context_module, "logger", logger)
+    monkeypatch.setattr(_store_module, "logger", logger)
 
     status, page = store.submit_from_launch_environment(
         query=ExplorationQuerySpec("needle"),

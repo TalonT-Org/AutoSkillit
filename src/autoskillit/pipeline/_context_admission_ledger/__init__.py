@@ -177,7 +177,7 @@ class DefaultContextAdmissionLedger:
         self,
         stream_key: ContextAdmissionStreamKey,
     ) -> ContextAdmissionRecoveryResult:
-        result = self.recover_all()  # type: ignore[attr-defined]
+        result = self.recover_all()
         if result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
             return result
         with self._fence:
@@ -205,7 +205,7 @@ class DefaultContextAdmissionLedger:
         self,
         stream_key: ContextAdmissionStreamKey,
     ) -> ContextAdmissionInspectionResult:
-        return self.inspect_stream(stream_key)  # type: ignore[attr-defined]
+        return self.inspect_stream(stream_key)
 
     def _recovery_result(self) -> ContextAdmissionRecoveryResult:
         healths = tuple(

@@ -8,9 +8,10 @@ cross-shard orchestration in a single shard.
 The ``recover_all`` body uses rebind-via-setattr methods (``_ensure_store``,
 ``_connect``, ``_validate_integrity``, ``_validate_metadata``,
 ``_persist_stream_failure``, ``_set_store_failure``); the rebind happens in
-``__init__.py``. Until the Wavefront 1 stub-then-rebind pattern is replaced
-(see #4667 follow-ups), these call sites need ``# type: ignore[attr-defined]``
-suppressions.
+``__init__.py``. Module-level helpers take ``self`` implicitly typed as
+``Any``, so mypy does not require ``# type: ignore[attr-defined]`` for
+these calls. The Wavefront 1 stub-then-rebind pattern itself is being
+addressed in the #4667 follow-ups.
 
 Wavefront 1 of #4667.
 """
@@ -30,6 +31,7 @@ from autoskillit.core import (
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
+    get_logger,
 )
 
 from ._codec import _decode_stream_key, _stream_key_bytes
@@ -53,6 +55,8 @@ from ._storage import (
     _read_bounded_rows,
 )
 
+logger = get_logger(__name__)
+
 
 def recover_all(self) -> ContextAdmissionRecoveryResult:
     with self._fence:
@@ -68,27 +72,7 @@ def recover_all(self) -> ContextAdmissionRecoveryResult:
             ]
         ] = []
         try:
-            self._ensure_store()  # type: ignore[attr-defined]
-            connection = self._connect()  # type: ignore[attr-defined]
-            connection.execute("BEGIN")
-            connection.setlimit(
-                sqlite3.SQLITE_LIMIT_LENGTH,
-                max(1, _MAX_RECOVERY_BYTES),
-            )
-            read_budget = _LedgerReadBudget(
-                "recovery-read-limit-exceeded",
-                max_rows=_MAX_RECOVERY_ROWS,
-                max_bytes=_MAX_RECOVERY_BYTES,
-            )
-            self._validate_integrity(connection)  # type: ignore[attr-defined]
-            metadata = dict(
-                _read_bounded_rows(
-                    connection.execute("SELECT key, value FROM metadata"),
-                    read_budget,
-                )
-            )
-            self._validate_metadata(metadata)  # type: ignore[attr-defined]
-            _preflight_storage_routes(connection, read_budget)
+            connection, read_budget = _prepare_recovery_state(self)
             self._stream_health.clear()
             self._unresolved_streams.clear()
             stream_rows = _read_bounded_rows(
@@ -165,28 +149,9 @@ def recover_all(self) -> ContextAdmissionRecoveryResult:
                 )
                 if _state_has_unresolved_work(recovered_state):
                     self._unresolved_streams.add(stream_key)
-            connection.execute("COMMIT")
-            for stream_id, stream_key, reason, reason_code in pending_stream_failures:
-                persisted = self._persist_stream_failure(  # type: ignore[attr-defined]
-                    connection,
-                    stream_id,
-                    stream_key,
-                    reason,
-                    reason_code,
-                )
-                if not persisted:
-                    if (
-                        self._store_health.status
-                        is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
-                    ):
-                        raise _LedgerContended
-                    break
-            if self._store_health.status is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-                self._store_health = ContextAdmissionStoreHealth(
-                    ContextAdmissionStorageHealthStatus.HEALTHY
-                )
-            self._recovered = True
-        except _LedgerContended:
+            _commit_recovery(self, connection, pending_stream_failures)
+        except _LedgerContended as exc:
+            logger.debug("context-admission recovery contended: %s", exc)
             self._stream_health.clear()
             self._unresolved_streams.clear()
             return ContextAdmissionRecoveryResult(
@@ -197,7 +162,7 @@ def recover_all(self) -> ContextAdmissionRecoveryResult:
                 unresolved_streams=(),
             )
         except _LedgerOpenError as exc:
-            self._set_store_failure(exc.reason, exc.reason_code)  # type: ignore[attr-defined]
+            self._set_store_failure(exc.reason, exc.reason_code)
         except sqlite3.Error as exc:
             primary_code = _sqlite_primary_code(exc)
             if primary_code in _SQLITE_BUSY_CODES:
@@ -213,7 +178,7 @@ def recover_all(self) -> ContextAdmissionRecoveryResult:
                     unresolved_streams=(),
                 )
             if primary_code == sqlite3.SQLITE_TOOBIG:
-                self._set_store_failure(  # type: ignore[attr-defined]
+                self._set_store_failure(
                     ContextAdmissionStorageFailureReason.INTEGRITY,
                     "recovery-read-limit-exceeded",
                 )
@@ -223,11 +188,78 @@ def recover_all(self) -> ContextAdmissionRecoveryResult:
                 if primary_code == sqlite3.SQLITE_CORRUPT
                 else ContextAdmissionStorageFailureReason.IO
             )
-            self._set_store_failure(reason, "sqlite-recovery-failed")  # type: ignore[attr-defined]
+            self._set_store_failure(reason, "sqlite-recovery-failed")
         finally:
             if connection is not None:
                 connection.close()
         return self._recovery_result()
+
+
+def _prepare_recovery_state(
+    self,
+) -> tuple[sqlite3.Connection, _LedgerReadBudget]:
+    """Open the store, begin the recovery transaction, validate schema/metadata.
+
+    Returns ``(connection, read_budget)`` for the per-stream walk that
+    follows. The store-init, BEGIN, setlimit, integrity check, metadata
+    read+validate, and preflight are localized here so the per-stream
+    walk in :func:`recover_all` reads straight to the data.
+    """
+    self._ensure_store()
+    connection = self._connect()
+    connection.execute("BEGIN")
+    connection.setlimit(
+        sqlite3.SQLITE_LIMIT_LENGTH,
+        max(1, _MAX_RECOVERY_BYTES),
+    )
+    read_budget = _LedgerReadBudget(
+        "recovery-read-limit-exceeded",
+        max_rows=_MAX_RECOVERY_ROWS,
+        max_bytes=_MAX_RECOVERY_BYTES,
+    )
+    self._validate_integrity(connection)
+    metadata = dict(
+        _read_bounded_rows(
+            connection.execute("SELECT key, value FROM metadata"),
+            read_budget,
+        )
+    )
+    self._validate_metadata(metadata)
+    _preflight_storage_routes(connection, read_budget)
+    return connection, read_budget
+
+
+def _commit_recovery(
+    self,
+    connection: sqlite3.Connection,
+    pending_stream_failures: list[
+        tuple[
+            bytes,
+            ContextAdmissionStreamKey,
+            ContextAdmissionStorageFailureReason,
+            str,
+        ]
+    ],
+) -> None:
+    """Persist pending failure records and flip the ledger to HEALTHY."""
+    connection.execute("COMMIT")
+    for stream_id, stream_key, reason, reason_code in pending_stream_failures:
+        persisted = self._persist_stream_failure(
+            connection,
+            stream_id,
+            stream_key,
+            reason,
+            reason_code,
+        )
+        if not persisted:
+            if self._store_health.status is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+                raise _LedgerContended
+            break
+    if self._store_health.status is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+        self._store_health = ContextAdmissionStoreHealth(
+            ContextAdmissionStorageHealthStatus.HEALTHY
+        )
+    self._recovered = True
 
 
 def _recover_sqlite_result(

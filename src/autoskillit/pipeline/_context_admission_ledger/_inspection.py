@@ -17,6 +17,7 @@ from autoskillit.core import (
     ContextAdmissionInspectionResult,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
+    ContextAdmissionStoreHealth,
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
@@ -73,6 +74,22 @@ def _contended_inspection(
     )
 
 
+def _fail_closed_inspection(
+    stream_key: ContextAdmissionStreamKey,
+    store_health: ContextAdmissionStoreHealth,
+) -> ContextAdmissionInspectionResult:
+    """Build a fail-closed inspection whose health mirrors ``store_health``."""
+    return _empty_inspection(
+        stream_key,
+        ContextAdmissionStreamHealth(
+            stream_key,
+            ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+            failure_reason=store_health.failure_reason,
+            reason_code=store_health.reason_code,
+        ),
+    )
+
+
 def _inspect_stream(
     self,
     stream_key: ContextAdmissionStreamKey,
@@ -83,13 +100,7 @@ def _inspect_stream(
         if not self._recovered:
             return _contended_inspection(stream_key)
         if self._store_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-            health = ContextAdmissionStreamHealth(
-                stream_key,
-                ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
-                failure_reason=self._store_health.failure_reason,
-                reason_code=self._store_health.reason_code,
-            )
-            return _empty_inspection(stream_key, health)
+            return _fail_closed_inspection(stream_key, self._store_health)
         connection = None
         stream_id = _stream_key_bytes(stream_key)
         try:
@@ -215,30 +226,14 @@ def _map_sqlite_inspection_failure(
             ContextAdmissionStorageFailureReason.INTEGRITY,
             "inspection-read-limit-exceeded",
         )
-        return _empty_inspection(
-            stream_key,
-            ContextAdmissionStreamHealth(
-                stream_key,
-                ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
-                failure_reason=self._store_health.failure_reason,
-                reason_code=self._store_health.reason_code,
-            ),
-        )
+        return _fail_closed_inspection(stream_key, self._store_health)
     reason = (
         ContextAdmissionStorageFailureReason.INTEGRITY
         if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
         else ContextAdmissionStorageFailureReason.IO
     )
     self._set_store_failure(reason, "sqlite-inspection-failed")
-    return _empty_inspection(
-        stream_key,
-        ContextAdmissionStreamHealth(
-            stream_key,
-            ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
-            failure_reason=self._store_health.failure_reason,
-            reason_code=self._store_health.reason_code,
-        ),
-    )
+    return _fail_closed_inspection(stream_key, self._store_health)
 
 
 def _map_persistent_inspection_failure(
@@ -270,15 +265,7 @@ def _map_persistent_inspection_failure(
     )
     if not persisted:
         if self._store_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-            return _empty_inspection(
-                stream_key,
-                ContextAdmissionStreamHealth(
-                    stream_key,
-                    ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
-                    failure_reason=self._store_health.failure_reason,
-                    reason_code=self._store_health.reason_code,
-                ),
-            )
+            return _fail_closed_inspection(stream_key, self._store_health)
         return _contended_inspection(stream_key)
     return _empty_inspection(
         stream_key,

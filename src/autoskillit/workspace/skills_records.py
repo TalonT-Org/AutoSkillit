@@ -83,6 +83,7 @@ class SkillInfo:
     invalidities: tuple[SkillInvalidity, ...] = ()
 
     def __post_init__(self) -> None:
+        invalidities: list[SkillInvalidity] = []
         if self.source_ref is None:
             object.__setattr__(
                 self, "source_ref", SkillSourceRef(self.source, self.name, self.path)
@@ -108,6 +109,18 @@ class SkillInfo:
                     path=str(self.path),
                     exc_info=True,
                 )
+                invalidities.append(
+                    SkillInvalidity(
+                        SkillInvalidityKind.FRONTMATTER_PARSE,
+                        f"could not read canonical content from {self.path}",
+                    )
+                )
+        if invalidities:
+            object.__setattr__(
+                self,
+                "invalidities",
+                tuple(self.invalidities) + tuple(invalidities),
+            )
         if self.canonical_content and not self.canonical_digest:
             object.__setattr__(
                 self,

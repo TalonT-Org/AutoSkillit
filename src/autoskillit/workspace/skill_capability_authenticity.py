@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 import autoskillit.workspace.skill_capabilities as _capabilities_facade
-from autoskillit.core import SkillInvalidityKind
+from autoskillit.core import SkillContractError, SkillInvalidityKind
 from autoskillit.workspace.skill_capability_scanner import SkillCapabilityEvidence
 
 if TYPE_CHECKING:
@@ -84,10 +84,18 @@ def validate_skill_capability_authenticity(skill_info: SkillInfo) -> _Authentici
     diagnostics: list[SkillCapabilityAuthenticityDiagnostic] = []
     for capability in sorted(validation.missing):
         genuine = next(
-            item
-            for item in validation.evidence
-            if item.capability == capability and item.is_genuine
+            (
+                item
+                for item in validation.evidence
+                if item.capability == capability and item.is_genuine
+            ),
+            None,
         )
+        if genuine is None:
+            raise SkillContractError(
+                f"{skill_info.name}: capability {capability!r} reported missing but no genuine "
+                "evidence matches in classify_skill_capability_evidence output"
+            )
         detail = (
             f"{skill_info.name}: missing declaration for {capability!r}; "
             f"lines {genuine.source_span[0]}-{genuine.source_span[1]}: "

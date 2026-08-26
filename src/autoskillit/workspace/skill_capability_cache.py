@@ -133,17 +133,15 @@ class _SkillCapabilityEvidenceCache:
     ) -> tuple[SkillCapabilityEvidence, ...]:
         try:
             state.event.wait()
-        except BaseException:
+        finally:
             with self._lock:
                 self._inflight_waiters -= 1
-            raise
 
+        if state.error is not None:
+            raise RuntimeError(
+                "Capability evidence build failed in another thread"
+            ) from state.error
         with self._lock:
-            self._inflight_waiters -= 1
-            if state.error is not None:
-                raise RuntimeError(
-                    "Capability evidence build failed in another thread"
-                ) from state.error
             result = state.result
             if result is None:
                 raise RuntimeError(

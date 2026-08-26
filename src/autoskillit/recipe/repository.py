@@ -101,7 +101,7 @@ class DefaultRecipeRepository:
         backend_origin_map: dict[str, str] | None = None,
         include_finalized_projection: bool = False,
     ) -> dict[str, Any]:
-        project_dir = Path(project_dir)
+        project_dir = Path(project_dir).absolute()
         result = self._get_list(project_dir)
         recipe_info = next((r for r in result.items if r.name == name), None)
         return cast(

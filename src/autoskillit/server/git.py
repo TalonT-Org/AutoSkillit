@@ -370,7 +370,7 @@ async def perform_merge(
         if tester is None:
             return {
                 "error": "Test gate required but no tester configured",
-                "failed_step": MergeFailedStep.TEST_GATE_CONTENTION,
+                "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
             }
@@ -379,7 +379,7 @@ async def perform_merge(
         except WorktreeGateContention as exc:
             return {
                 "error": str(exc),
-                "failed_step": MergeFailedStep.TEST_GATE,
+                "failed_step": MergeFailedStep.TEST_GATE_CONTENTION,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
             }

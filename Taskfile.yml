@@ -41,7 +41,7 @@ tasks:
     cmds:
       - |
         mkdir -p temp
-        TEST_OUTPUT="temp/test-$(date +%Y-%m-%d_%H%M%S).txt"
+        TEST_OUTPUT="temp/test-{{.PYTEST_RUN_ID}}.txt"
         echo "Running all tests with -n 4"
         echo "Output: $TEST_OUTPUT"
 
@@ -77,7 +77,7 @@ tasks:
     cmds:
       - |
         mkdir -p temp
-        TEST_OUTPUT="temp/test-$(date +%Y-%m-%d_%H%M%S).txt"
+        TEST_OUTPUT="temp/test-{{.PYTEST_RUN_ID}}.txt"
 
         if [[ -d ".venv" ]]; then
           PYTEST_CMD=".venv/bin/python -m pytest"

@@ -251,7 +251,7 @@ async def test_perform_merge_contends_with_test_check_for_equivalent_worktree_pa
     assert gate_runner.call_count == 1
     assert json.loads(held_gate_results[0])["passed"] is True
     assert set(result) == {"error", "failed_step", "state", "worktree_path"}
-    assert result["failed_step"] == MergeFailedStep.TEST_GATE
+    assert result["failed_step"] == MergeFailedStep.TEST_GATE_CONTENTION
     assert result["state"] == MergeState.WORKTREE_INTACT
     assert result["worktree_path"] == f"{worktree}{os.sep}"
 

@@ -53,6 +53,13 @@ class TestTaskfile:
         assert variables["PYTEST_RUN_ID"]["sh"]
         assert variables["AUTOSKILLIT_UID"]["sh"] == "id -u"
 
+    def test_test_logs_use_run_unique_generation_identity(self) -> None:
+        tasks = self._load()["tasks"]
+        for task_name in ("test-all", "test-check"):
+            commands = "\n".join(str(command) for command in tasks[task_name]["cmds"])
+            assert 'TEST_OUTPUT="temp/test-{{.PYTEST_RUN_ID}}.txt"' in commands
+            assert "date +%Y-%m-%d_%H%M%S" not in commands
+
     def test_cleanup_shm_delegates_pytest_reaping(self) -> None:
         task = self._load()["tasks"]["cleanup-shm"]
         commands = "\n".join(str(command) for command in task["cmds"])

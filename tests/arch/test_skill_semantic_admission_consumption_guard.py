@@ -51,6 +51,7 @@ _EXPECTED_CALLERS = Counter(
 _COMPILATION_CONSUMERS = frozenset(
     {
         "CompiledSessionSkillCatalog",
+        "_compile_reachable_profile_skill_catalog",
         "_launch_cook_session",
         "append_skill_unavailability",
         "managed_session",

@@ -568,6 +568,7 @@ def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
         cwd=_repo_root(),
         capture_output=True,
         text=True,
+        env=production_interpreter_env(),
         check=False,
     )
     assert metadata_result.returncode == 0, metadata_result.stderr

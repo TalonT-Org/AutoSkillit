@@ -285,6 +285,103 @@ def test_binding_envelope_round_trips_through_one_shared_type() -> None:
     assert legacy.loaded_skills[0].binding_error == "legacy session-binding schema 1 is unresolved"
 
 
+@pytest.mark.parametrize(
+    "field",
+    (
+        "skill_name",
+        "ts",
+        "semantic_digest",
+        "adaptation_digest",
+        "projected_digest",
+        "canonical_digest",
+        "artifact_incarnation",
+    ),
+)
+def test_loaded_skill_rejects_non_string_schema_fields(field: str) -> None:
+    """Persisted string fields are validated instead of silently coerced."""
+    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+        LoadedSkillEntry,
+        SessionBindingError,
+    )
+
+    payload: dict[str, object] = {
+        "skill_name": "join-bearing",
+        "ts": "2026-08-26T00:00:00+00:00",
+        "join_required": True,
+        "child_spawn_cardinality": {"explicit_slots": 1},
+        "semantic_digest": "semantic",
+        "adaptation_digest": "adaptation",
+        "projected_digest": "projected",
+        "canonical_digest": "canonical",
+        "artifact_incarnation": "",
+        "binding_valid": True,
+        "binding_error": None,
+    }
+    payload[field] = 1
+
+    with pytest.raises(SessionBindingError, match=rf"^{field} must be a string$"):
+        LoadedSkillEntry.from_json(payload)
+
+
+def test_loaded_skill_rejects_boolean_cardinality() -> None:
+    """Boolean values are not admitted as integer cardinalities."""
+    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+        LoadedSkillEntry,
+        SessionBindingError,
+    )
+
+    with pytest.raises(SessionBindingError, match="child_spawn_cardinality"):
+        LoadedSkillEntry.from_json(
+            {
+                "child_spawn_cardinality": {"explicit_slots": True},
+            }
+        )
+
+
+def test_binding_path_rejects_an_empty_session_id(tmp_path: Path) -> None:
+    """The authority never constructs the ambiguous skill_guard_.flag path."""
+    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+        SessionBindingError,
+        resolve_binding_path,
+    )
+
+    with pytest.raises(SessionBindingError, match="session_id must be a non-empty string"):
+        resolve_binding_path(str(tmp_path), "")
+
+
+def test_write_binding_closes_descriptor_when_fdopen_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The atomic writer retains no descriptor when ownership transfer fails."""
+    from autoskillit.hooks import _session_binding as binding_module  # noqa: PLC0415
+
+    fd, temporary_path = binding_module.tempfile.mkstemp(dir=tmp_path)
+    monkeypatch.setattr(
+        binding_module.tempfile,
+        "mkstemp",
+        lambda **_kwargs: (fd, temporary_path),
+    )
+
+    def fail_fdopen(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("fdopen failed")
+
+    monkeypatch.setattr(binding_module.os, "fdopen", fail_fdopen)
+    binding = binding_module.SessionBinding(
+        schema_version=2,
+        session_id="session-1",
+        join_required=False,
+        binding_valid=True,
+        artifact_digest="artifact",
+        loaded_skills=(),
+    )
+
+    with pytest.raises(RuntimeError, match="fdopen failed"):
+        binding_module.write_binding(tmp_path / "binding.json", binding)
+    with pytest.raises(OSError):
+        os.fstat(fd)
+    assert not Path(temporary_path).exists()
+
+
 def test_writer_and_every_hook_side_reader_resolve_the_same_channel_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

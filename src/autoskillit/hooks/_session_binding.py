@@ -49,12 +49,19 @@ def _cardinality(value: object) -> dict[str, int | str]:
         raise SessionBindingError("child_spawn_cardinality must be an object")
     result: dict[str, int | str] = {}
     for key, item in value.items():
-        if not isinstance(key, str) or not isinstance(item, (int, str)):
+        if not isinstance(key, str) or isinstance(item, bool) or not isinstance(item, (int, str)):
             raise SessionBindingError(
                 "child_spawn_cardinality must map strings to integers or strings"
             )
         result[key] = item
     return result
+
+
+def _string_field(value: dict[str, object], field: str) -> str:
+    item = value.get(field, "")
+    if not isinstance(item, str):
+        raise SessionBindingError(f"{field} must be a string")
+    return item
 
 
 class LoadedSkillEntry(NamedTuple):
@@ -105,15 +112,15 @@ def _loaded_skill_from_mapping(
     if error is not None and not isinstance(error, str):
         raise SessionBindingError("binding_error must be a string or null")
     return LoadedSkillEntry(
-        skill_name=str(value.get("skill_name", "")),
-        ts=str(value.get("ts", "")),
+        skill_name=_string_field(value, "skill_name"),
+        ts=_string_field(value, "ts"),
         join_required=bool(value.get("join_required", False)),
         child_spawn_cardinality=_cardinality(value.get("child_spawn_cardinality", {})),
-        semantic_digest=str(value.get("semantic_digest", "")),
-        adaptation_digest=str(value.get("adaptation_digest", "")),
-        projected_digest=str(value.get("projected_digest", "")),
-        canonical_digest=str(value.get("canonical_digest", "")),
-        artifact_incarnation=str(value.get("artifact_incarnation", "")),
+        semantic_digest=_string_field(value, "semantic_digest"),
+        adaptation_digest=_string_field(value, "adaptation_digest"),
+        projected_digest=_string_field(value, "projected_digest"),
+        canonical_digest=_string_field(value, "canonical_digest"),
+        artifact_incarnation=_string_field(value, "artifact_incarnation"),
         binding_valid=False if legacy else bool(value.get("binding_valid", False)),
         binding_error=_LEGACY_BINDING_ERROR if legacy else error,
     )
@@ -189,6 +196,8 @@ def resolve_channel_dir(anchor: Path) -> Path:
 
 
 def resolve_binding_path(payload_cwd: str, session_id: str) -> Path:
+    if not session_id:
+        raise SessionBindingError("session_id must be a non-empty string")
     state_root = _resolve_state_root(payload_cwd)
     return resolve_channel_dir(state_root) / f"skill_guard_{session_id}.flag"
 
@@ -302,13 +311,20 @@ def read_binding(path: Path) -> SessionBinding | None:
 def write_binding(path: Path, binding: SessionBinding) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    handle = None
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle = os.fdopen(fd, "w", encoding="utf-8")
+        with handle:
             handle.write(binding.to_json())
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp, path)
     except Exception:
+        if handle is None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         try:
             os.unlink(tmp)
         except OSError:

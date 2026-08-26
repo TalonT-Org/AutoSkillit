@@ -15,6 +15,7 @@ import os
 import secrets
 import sqlite3
 import stat
+from pathlib import Path
 from typing import Final
 
 from autoskillit.core import (
@@ -212,7 +213,7 @@ def _validate_database_file(self) -> tuple[int, int]:
     )
 
 
-def _connect(self):
+def _connect(self) -> sqlite3.Connection:
     before = self._validate_database_file()
     validate_sidecars(
         self._path,
@@ -234,7 +235,7 @@ def _connect(self):
         raise
 
 
-def _configure_connection(self, path):
+def _configure_connection(self, path: Path) -> sqlite3.Connection:
     from ._status import (
         _SQLITE_BUSY_CODES,
         _LedgerContended,

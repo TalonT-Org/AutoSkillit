@@ -95,7 +95,13 @@ def test_type_ignore_count_budget() -> None:
     # suppressions on the standalone guard scripts' `from _hook_constants import`
     # lines (Pyright cannot resolve the standalone-context import through the
     # package-qualified path the runtime uses).
-    budget = 144
+    # The Wavefront 1 decomposition (#4667) adds 5 site-bounded # type: ignore
+    # comments inside DefaultContextAdmissionLedger.recover_all / .replay for
+    # # type: ignore[attr-defined] on rebound methods (apply, reserve, _connect,
+    # _validate_integrity, _set_store_failure, _persist_stream_failure,
+    # inspect_stream); setattr-based rebind makes mypy unable to see the methods
+    # on the class, so the suppression is structural to the rebind pattern.
+    budget = 149
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

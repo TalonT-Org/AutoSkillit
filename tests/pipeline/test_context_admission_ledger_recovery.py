@@ -20,9 +20,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import autoskillit.pipeline._context_admission_ledger._apply as _apply_module
 import autoskillit.pipeline._context_admission_ledger._codec as codec_module
 import autoskillit.pipeline._context_admission_ledger._inspection as _inspection_module
+import autoskillit.pipeline._context_admission_ledger._projection as _projection_module
 import autoskillit.pipeline._context_admission_ledger._shadow as _shadow_module
 import autoskillit.pipeline._context_admission_ledger._storage as storage_module
 from autoskillit.core import (
@@ -565,7 +565,7 @@ def test_recovery_uses_registered_stream_replay(
         DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
         is ContextAdmissionAccountingStatus.RECORDED
     )
-    original_selector = _apply_module.context_admission_reducer_for_protocol
+    original_selector = _projection_module.context_admission_reducer_for_protocol
     replay_calls = 0
 
     def select_reducer(protocol_version: int) -> object:
@@ -579,7 +579,7 @@ def test_recovery_uses_registered_stream_replay(
         return replace(reducer, replay_stream=replay_stream)
 
     monkeypatch.setattr(
-        _apply_module,
+        _projection_module,
         "context_admission_reducer_for_protocol",
         select_reducer,
     )

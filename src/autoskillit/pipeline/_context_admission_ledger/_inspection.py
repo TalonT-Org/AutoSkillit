@@ -34,7 +34,6 @@ from ._status import (
     _SQLITE_BUSY_CODES,
     _LedgerContended,
     _rollback,
-    _set_store_failure,
     _sqlite_primary_code,
 )
 from ._storage import _LedgerOpenError
@@ -165,8 +164,7 @@ def _inspect_stream(
             if primary_code in _SQLITE_BUSY_CODES:
                 return _contended_inspection(stream_key)
             if primary_code == sqlite3.SQLITE_TOOBIG:
-                _set_store_failure(
-                    self,
+                self._set_store_failure(
                     ContextAdmissionStorageFailureReason.INTEGRITY,
                     "inspection-read-limit-exceeded",
                 )
@@ -184,7 +182,7 @@ def _inspect_stream(
                 if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
                 else ContextAdmissionStorageFailureReason.IO
             )
-            _set_store_failure(self, reason, "sqlite-inspection-failed")
+            self._set_store_failure(reason, "sqlite-inspection-failed")
             return _empty_inspection(
                 stream_key,
                 ContextAdmissionStreamHealth(
@@ -206,7 +204,7 @@ def _inspect_stream(
                 else "inspection-decode-failed"
             )
             if connection is None and isinstance(exc, _LedgerOpenError):
-                _set_store_failure(self, reason, reason_code)
+                self._set_store_failure(reason, reason_code)
             if connection is not None:
                 _rollback(connection)
             persisted = connection is not None and self._persist_stream_failure(

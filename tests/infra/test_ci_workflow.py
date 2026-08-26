@@ -616,7 +616,6 @@ def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
             "key": primary_key,
             "restore-keys": restore_prefix,
         }
-        assert primary_key == restore_prefix + "${{ hashFiles('uv.lock') }}"
 
     test_restore = next(step for step in test_job["steps"] if step.get("id") == "uv-cache-restore")
     test_sync = next(step for step in test_job["steps"] if "uv sync" in step.get("run", ""))

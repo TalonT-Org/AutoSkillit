@@ -87,6 +87,23 @@ def _line_count(path: Path) -> int:
     return sum(1 for _ in path.read_text().splitlines())
 
 
+def _facade_method_body(method_name: str, src: str) -> str:
+    """Return the source of ``method_name`` on the facade class, or ``""``.
+
+    Used by architectural-guard tests to verify each facade method delegates
+    to the expected shard helper rather than inlining SQL.
+    """
+    import ast
+
+    tree = ast.parse(src)
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name == method_name:
+                    return ast.get_source_segment(src, item) or ""
+    return ""
+
+
 def test_every_required_shard_exists() -> None:
     actual = {p.name for p in SHARDS_DIR.iterdir() if p.suffix == ".py"}
     assert REQUIRED_SHARDS.issubset(actual), (
@@ -137,14 +154,17 @@ def test_every_facade_write_method_delegates_to_locked_shard() -> None:
 
 
 def test_every_facade_read_method_delegates_to_read_shard() -> None:
-    """Read public methods must exist on the facade; the SQL block
-    they delegate to lives in a ``_xxx_read`` shard function. The
-    facade body wraps the call in ``try/finally`` (no BEGIN IMMEDIATE,
-    no _commit, no _rollback).
+    """Read public methods must exist on the facade and delegate to a
+    ``_<method>_read`` shard function. A regression that inlined read
+    SQL back into the facade body would break the delegation check.
     """
     facade_src = _read(FACADE_PATH)
     for method in sorted(READ_METHODS):
         assert f"def {method}(" in facade_src, f"missing facade method {method}"
+        body = _facade_method_body(method, facade_src)
+        assert f"_{method}_read(" in body, (
+            f"facade read method {method} must delegate to _{method}_read shard"
+        )
 
 
 def test_every_shard_imports_without_facade() -> None:

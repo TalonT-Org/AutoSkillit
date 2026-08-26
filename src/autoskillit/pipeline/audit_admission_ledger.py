@@ -58,9 +58,11 @@ from autoskillit.core import (
 from autoskillit.pipeline._audit_admission_ledger import (
     _authority,
     _connections,
+    _disposition,
     _finalization,
     _installations,
     _prepare,
+    _reads,
     _recovery,
     _reservations,
 )
@@ -557,12 +559,13 @@ class DefaultAuditAdmissionLedger:
         with self._fence:
             connection = self._ensure_recovered()
             try:
-                head_key = _head_key(recipe_execution_id, cycle_id, scope_id, part_id)
-                row = connection.execute(
-                    "SELECT head_json FROM head_claims WHERE head_key = ?",
-                    (head_key,),
-                ).fetchone()
-                return _head_from_dict(_json_loads(row[0])) if row is not None else None
+                return _reads._current_head_read(
+                    connection,
+                    recipe_execution_id=recipe_execution_id,
+                    cycle_id=cycle_id,
+                    scope_id=scope_id,
+                    part_id=part_id,
+                )
             finally:
                 connection.close()
 
@@ -576,16 +579,11 @@ class DefaultAuditAdmissionLedger:
         with self._fence:
             connection = self._ensure_recovered()
             try:
-                row = connection.execute(
-                    "SELECT plan_set_id, scope_id, part_id FROM preflight_projections "
-                    "WHERE recipe_execution_id = ? AND installation_version = ? "
-                    "AND step_name = ?",
-                    (recipe_execution_id.value, installation_version.value, step_name),
-                ).fetchone()
-                if row is None:
-                    return None
-                return AuditPreflightProjection(
-                    plan_set_id=row[0], scope_id=row[1], part_id=row[2]
+                return _reads._preflight_projection_read(
+                    connection,
+                    recipe_execution_id=recipe_execution_id,
+                    installation_version=installation_version,
+                    step_name=step_name,
                 )
             finally:
                 connection.close()
@@ -600,7 +598,7 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                outcome = self._commit_disposition_locked(connection, request)
+                outcome = _disposition._commit_disposition_locked(connection, request)
                 _connections.commit(connection)
                 return outcome
             except BaseException:
@@ -608,78 +606,6 @@ class DefaultAuditAdmissionLedger:
                 raise
             finally:
                 connection.close()
-
-    def _commit_disposition_locked(
-        self,
-        connection: sqlite3.Connection,
-        request: AuditDispositionCommitRequest,
-    ) -> AuditDispositionCommitOutcome:
-        existing = connection.execute(
-            "SELECT report_digest, report_path, association_digest, association_path, "
-            "generated_at FROM disposition_projections "
-            "WHERE installation_version = ? AND authority_digest = ? AND plan_digest = ?",
-            (request.installation_version.value, request.authority_digest, request.plan_digest),
-        ).fetchone()
-        if existing is not None:
-            if existing[:4] != (
-                request.report_digest,
-                str(request.report_path),
-                request.association_digest,
-                str(request.association_path),
-            ):
-                return AuditDispositionCommitOutcome(
-                    committed=False,
-                    generated_at=existing[4],
-                    conflict_detail="disposition_projection_mismatch",
-                )
-            return AuditDispositionCommitOutcome(committed=True, generated_at=existing[4])
-        installation = _installations._installation_row(connection, request.recipe_execution_id)
-        if (
-            installation is None
-            or installation[0] != request.installation_version.value
-            or installation[1]
-        ):
-            return AuditDispositionCommitOutcome(
-                committed=False,
-                generated_at=request.generated_at,
-                conflict_detail="installation_stale",
-            )
-        head_key = _head_key(
-            request.recipe_execution_id,
-            request.cycle_id,
-            request.scope_id,
-            request.part_id,
-        )
-        head_row = connection.execute(
-            "SELECT head_json FROM head_claims WHERE head_key = ?",
-            (head_key,),
-        ).fetchone()
-        current_head = _head_from_dict(_json_loads(head_row[0])) if head_row is not None else None
-        if (
-            current_head is None
-            or current_head.current_authority_digest != request.authority_digest
-        ):
-            return AuditDispositionCommitOutcome(
-                committed=False,
-                generated_at=request.generated_at,
-                conflict_detail="stale_authority",
-            )
-        connection.execute(
-            "INSERT INTO disposition_projections(installation_version, authority_digest, "
-            "plan_digest, report_digest, report_path, association_digest, "
-            "association_path, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                request.installation_version.value,
-                request.authority_digest,
-                request.plan_digest,
-                request.report_digest,
-                str(request.report_path),
-                request.association_digest,
-                str(request.association_path),
-                request.generated_at,
-            ),
-        )
-        return AuditDispositionCommitOutcome(committed=True, generated_at=request.generated_at)
 
     def resolve_disposition(
         self,
@@ -690,13 +616,11 @@ class DefaultAuditAdmissionLedger:
         with self._fence:
             connection = self._ensure_recovered()
             try:
-                row = connection.execute(
-                    "SELECT report_path FROM disposition_projections "
-                    "WHERE authority_digest = ? AND plan_digest = ? "
-                    "ORDER BY generated_at DESC LIMIT 1",
-                    (authority_digest, plan_digest),
-                ).fetchone()
-                return Path(row[0]) if row is not None else None
+                return _disposition._resolve_disposition_read(
+                    connection,
+                    authority_digest=authority_digest,
+                    plan_digest=plan_digest,
+                )
             finally:
                 connection.close()
 

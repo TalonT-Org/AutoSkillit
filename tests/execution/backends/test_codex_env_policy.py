@@ -49,6 +49,24 @@ class TestCodexEnvPolicy:
         assert "CLAUDE_CODE_AUTO_CONNECT_IDE" not in result
         assert result["HOME"] == "/home/user"
 
+    @pytest.mark.parametrize("source", ["base", "extras"])
+    def test_claude_activation_and_exporter_selectors_are_always_stripped(
+        self, source: str
+    ) -> None:
+        denied = {
+            "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+            "OTEL_LOGS_EXPORTER": "otlp",
+            "OTEL_METRICS_EXPORTER": "otlp",
+            "OTEL_METRICS_INCLUDE_SESSION_ID": "true",
+        }
+        kwargs = {"extras": denied} if source == "extras" else {}
+        base = {"PATH": "/usr/bin", **(denied if source == "base" else {})}
+
+        result = CodexEnvPolicy().build_env(base, **kwargs)
+
+        assert denied.keys().isdisjoint(result)
+        assert result["PATH"] == "/usr/bin"
+
     def test_autoskillit_private_vars_stripped(self) -> None:
         policy = CodexEnvPolicy()
         base: dict[str, str] = {var: "sentinel" for var in AUTOSKILLIT_PRIVATE_ENV_VARS}

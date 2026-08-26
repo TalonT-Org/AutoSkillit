@@ -101,13 +101,24 @@ NON_VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset(
 )
 
 
-CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
+_CODEX_ENV_CLAUDE_TELEMETRY_DENYLIST: frozenset[str] = frozenset(
     {
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_BASE_URL",
-        "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_METRICS_EXPORTER",
+        "OTEL_METRICS_INCLUDE_SESSION_ID",
     }
+)
+
+CODEX_ENV_DENYLIST: frozenset[str] = (
+    frozenset(
+        {
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
+        }
+    )
+    | _CODEX_ENV_CLAUDE_TELEMETRY_DENYLIST
 )
 
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
@@ -335,6 +346,8 @@ class CodexEnvPolicy:
                 (key, value)
                 for key, value in filtered_extras.items()
                 if key != CODEX_STARTUP_TRACE_ENV_VAR
+                and key not in _CODEX_ENV_CLAUDE_TELEMETRY_DENYLIST
+                and not any(key.startswith(p) for p in self.denylist_prefixes)
             )
         out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")  # Outer-cook control only.
         out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)

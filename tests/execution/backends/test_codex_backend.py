@@ -61,6 +61,19 @@ from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_OTLP_EXTRAS = {
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:4318/v1/metrics",
+}
+_OTLP_OVERRIDES = (
+    'otel.exporter={otlp-http={endpoint="http://127.0.0.1:4318/v1/logs",protocol="json"}}',
+    'otel.metrics_exporter={otlp-http={endpoint="http://127.0.0.1:4318/v1/metrics",protocol="json"}}',
+)
+
+
+def _config_overrides(spec: CmdSpec) -> list[str]:
+    return [value for flag, value in zip(spec.cmd, spec.cmd[1:]) if flag == "-c"]
+
 
 class TestCodexFlags:
     def test_is_str_enum(self) -> None:
@@ -272,6 +285,50 @@ class TestCodexBackendCommands:
     def test_build_headless_cmd_with_env_extras(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff", env_extras={"FOO": "bar"})
         assert spec.env.get("FOO") == "bar"
+
+    def test_headless_otlp_overrides_use_exact_inline_tables(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff", env_extras=_OTLP_EXTRAS)
+        overrides = _config_overrides(spec)
+        assert _OTLP_OVERRIDES[0] in overrides
+        assert _OTLP_OVERRIDES[1] in overrides
+
+    def test_otlp_overrides_require_both_endpoints(self) -> None:
+        spec = CodexBackend().build_headless_cmd(
+            "do stuff",
+            env_extras={
+                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": _OTLP_EXTRAS[
+                    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
+                ]
+            },
+        )
+        assert not any(value.startswith("otel.exporter=") for value in spec.cmd)
+        assert not any(value.startswith("otel.metrics_exporter=") for value in spec.cmd)
+
+    def test_otlp_overrides_compose_with_existing_headless_overrides(self) -> None:
+        skill = CodexBackend().build_skill_session_cmd(
+            "/autoskillit:investigate",
+            "/repo",
+            completion_marker="DONE",
+            provider_extras=_OTLP_EXTRAS,
+            network_access=True,
+        )
+        food_truck = CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="dispatch",
+            plugin_binding=None,
+            cwd="/repo",
+            completion_marker="DONE",
+            env_extras=_OTLP_EXTRAS,
+        )
+        assert _config_overrides(skill)[:3] == [
+            "sandbox_workspace_write.network_access=true",
+            *_OTLP_OVERRIDES,
+        ]
+        assert _config_overrides(food_truck)[:3] == ["web_search=disabled", *_OTLP_OVERRIDES]
+
+    def test_interactive_cmd_does_not_gain_run_scoped_otlp_overrides(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(env_extras=_OTLP_EXTRAS)
+        assert not any(value.startswith("otel.exporter=") for value in spec.cmd)
+        assert not any(value.startswith("otel.metrics_exporter=") for value in spec.cmd)
 
     def test_build_cmd_delegates_to_headless(self) -> None:
         backend = CodexBackend()

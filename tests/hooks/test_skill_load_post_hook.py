@@ -161,7 +161,9 @@ def test_reports_existing_binding_read_error(
 
     projection_root = tmp_path / "projection"
     projection_root.mkdir()
-    manifest_path = write_projection_manifest(projection_root)
+    manifest_path = write_projection_manifest(
+        projection_root, skill_name="implement-worktree-no-merge"
+    )
     monkeypatch.setattr(
         hook_module,
         "resolve_projection_manifest_path",

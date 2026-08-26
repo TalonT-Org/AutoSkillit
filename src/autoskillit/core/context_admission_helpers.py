@@ -4,9 +4,9 @@ Holds every predicate, effect builder, and state transition that more than
 one dispatch-category shard needs; importing directly from this module keeps
 sibling shards from reaching into each other for cross-category concerns.
 
-Helpers are organised in three layers:
+Helpers are organised in three internal tiers:
 
-- **Layer 0 — pure predicates** (`_reservation_for`, `_batch_record`,
+- **Pure predicates** (`_reservation_for`, `_batch_record`,
   `_generation_record`, `_highest_dispatch_sequence`,
   `_required_release_witness_kind`, `_closed_batch_location`,
   `_closed_generation_location`, `_append_witness_ids`,
@@ -17,10 +17,10 @@ Helpers are organised in three layers:
 - **Effect builders** (`_occurrence_effects`, `_acceptance_effects`,
   `_accepted_effects`): pure constructors that take state + event +
   previous/next admission state and return the tuple of admission effects
-  to publish on a transition. Layer 0 with respect to side effects but
-  Layer 1 with respect to argument shape.
+  to publish on a transition. Side-effect-free with respect to publishing
+  but constructed-call-site for downstream argument shaping.
 
-- **Layer 1 — state mutators** (`_replace_batch_record`,
+- **State mutators** (`_replace_batch_record`,
   `_set_occurrence_state`, `_replace_closed_audit`,
   `_reconcile_deducted_closed_charge`, `_accepted_state`,
   `_quarantined_acceptance_state`, `_capacity`): return a new immutable

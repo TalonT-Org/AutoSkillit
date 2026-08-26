@@ -2,7 +2,9 @@
 
 Pure byte-to-dataclass and dataclass-to-byte functions with no SQLite or
 transaction concerns. Owns the protocol-v1 envelope codec plus stream-key
-serialization and the type-tuple constants used to validate stored payloads.
+serialization and the type-tuple constants used to validate stored payloads,
+plus the recursive dataclass walker used to extract lineage identity from
+decoded events.
 
 Wavefront 1 of #4667.
 """

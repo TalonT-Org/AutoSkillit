@@ -73,7 +73,7 @@ from ._storage import (
     unlink_initialization_artifact,  # noqa: F401  (re-exported via package import path)
 )
 
-# __all__ lists the stable public surface. The broader import block above is
+# __all__ lists the stable public surface. The two import blocks above are
 # cross-shard glue used by the rebind block and `recover_all` body below; those
 # symbols are internal and not re-exported.
 __all__ = [

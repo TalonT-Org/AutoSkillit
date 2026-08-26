@@ -3,8 +3,10 @@
 Owns the sidecar/parent/file-init concern: ``_ensure_store``,
 ``_recover_initialization_link``, ``_has_initialization_link``,
 ``_ensure_private_parent``, ``_validate_database_file``, ``_connect``, and
-``_configure_connection``. These are module-level helpers rebound onto
-:class:`DefaultContextAdmissionLedger` from ``__init__.py``.
+``_configure_connection``. Also owns the persisted-state validators
+``_validate_integrity`` and ``_validate_metadata``. These are module-level
+helpers rebound onto :class:`DefaultContextAdmissionLedger` from
+``__init__.py``.
 
 Wavefront 1 of #4667.
 """

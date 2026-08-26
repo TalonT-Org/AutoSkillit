@@ -5,20 +5,13 @@ Importing shard symbols directly is fine; importing them through this facade
 guarantees the public surface (``autoskillit.exploration.snapshot.X``) survives
 future shard reorganisation.
 
-The ``# noqa: F401`` re-exports below are test-monkeypatch anchors: the test
-suite reaches into this module via ``snapshot_module.NAME`` to swap helpers
-for test fixtures. Sibling shards import directly from each other rather than
-going through this facade.
+The ``# noqa: F401`` re-exports keep helpers reachable as facade attributes so
+production code that resolves them via ``_snapshot_facade.NAME`` (for test
+late-binding) and tests that monkeypatch through ``snapshot_module.NAME`` both
+work without an explicit re-export.
 """
 
 from __future__ import annotations
-
-# Imports below are intentionally marked ``# noqa: F401`` because the test
-# suite monkeypatches these through the facade (``monkeypatch.setattr(
-# snapshot_module, "_capture_once", ...)``); they must remain reachable as
-# module attributes even though the facade itself does not reference them.
-import subprocess  # noqa: F401
-import time  # noqa: F401
 
 from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 
@@ -36,7 +29,7 @@ from ._capture import (  # noqa: F401
     resolve_repository_path,
 )
 from ._records import (
-    DEFAULT_IGNORE_POLICY,  # noqa: F401  tests patch via facade
+    DEFAULT_IGNORE_POLICY,  # noqa: F401  production uses _snapshot_facade lookup
     ArtifactCaptureError,
     ArtifactCaptureStatus,
     SnapshotCaptureLimits,

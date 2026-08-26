@@ -882,7 +882,7 @@ def _trip_git_timeout_seconds(
     def raise_timeout(*args: object, **kwargs: object) -> None:
         raise subprocess.TimeoutExpired(cmd="git", timeout=kwargs.get("timeout", 1))  # type: ignore[arg-type]
 
-    monkeypatch.setattr(snapshot_module.subprocess, "run", raise_timeout)
+    monkeypatch.setattr(subprocess, "run", raise_timeout)
     return SnapshotCaptureLimits(git_timeout_seconds=1)
 
 
@@ -892,7 +892,7 @@ def _force_capture_deadline_overrun(monkeypatch: pytest.MonkeyPatch) -> None:
     def jump_then_delegate(
         root_arg: Path, limits: SnapshotCaptureLimits, *, deadline: float
     ) -> snapshot_module.CapturedRepositoryState:
-        monkeypatch.setattr(snapshot_module.time, "monotonic", lambda: deadline + 1)
+        monkeypatch.setattr(time, "monotonic", lambda: deadline + 1)
         return real_capture_once(root_arg, limits, deadline=deadline)
 
     monkeypatch.setattr(snapshot_module, "_capture_once", jump_then_delegate)
@@ -1019,9 +1019,7 @@ class _FailedGitProcess:
 
 def _setup_git_command_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = _new_repository(tmp_path, name="git-command-failure")
-    monkeypatch.setattr(
-        snapshot_module.subprocess, "run", lambda *args, **kwargs: _FailedGitProcess()
-    )
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _FailedGitProcess())
     return root
 
 
@@ -1031,7 +1029,7 @@ def _setup_git_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     def raise_timeout(*args: object, **kwargs: object) -> None:
         raise subprocess.TimeoutExpired(cmd="git", timeout=kwargs.get("timeout", 1))  # type: ignore[arg-type]
 
-    monkeypatch.setattr(snapshot_module.subprocess, "run", raise_timeout)
+    monkeypatch.setattr(subprocess, "run", raise_timeout)
     return root
 
 

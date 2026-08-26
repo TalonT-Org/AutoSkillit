@@ -331,11 +331,16 @@ class TestCodexBackendCommands:
             completion_marker="DONE",
             env_extras=OTLP_EXTRAS,
         )
-        assert _config_overrides(skill)[:3] == [
-            "sandbox_workspace_write.network_access=true",
-            *_OTLP_OVERRIDES,
-        ]
-        assert _config_overrides(food_truck)[:3] == ["web_search=disabled", *_OTLP_OVERRIDES]
+        skill_overrides = _config_overrides(skill)
+        food_truck_overrides = _config_overrides(food_truck)
+        assert "sandbox_workspace_write.network_access=true" in skill_overrides
+        assert "web_search=disabled" in food_truck_overrides
+        assert tuple(value for value in skill_overrides if value.startswith("otel.")) == (
+            _OTLP_OVERRIDES
+        )
+        assert tuple(value for value in food_truck_overrides if value.startswith("otel.")) == (
+            _OTLP_OVERRIDES
+        )
 
     def test_interactive_cmd_does_not_gain_run_scoped_otlp_overrides(self) -> None:
         spec = CodexBackend().build_interactive_cmd(env_extras=OTLP_EXTRAS)

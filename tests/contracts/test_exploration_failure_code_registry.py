@@ -171,7 +171,8 @@ def test_every_exploration_failure_code_has_a_test_reference() -> None:
     Catches drift the forward-direction scan cannot: an enum member with an
     emitter but zero test coverage — exactly the ``INVALID_SOURCE_IDENTITY``
     gap #4756 found, live and unreferenced by any test despite being raised
-    at ``exploration_context.py:437`` and mapped at ``tools_exploration.py``.
+    at ``pipeline/exploration_context/_store.py`` (originally at line 437 of
+    the pre-#4835 monolithic module) and mapped at ``tools_exploration.py``.
     Scoped to the whole file rather than to individual ``assert`` statements:
     several tests in ``test_enable_exploration_failure_codes.py`` share one
     ``_bind_raising(..., expected_code=...)`` helper that performs the actual

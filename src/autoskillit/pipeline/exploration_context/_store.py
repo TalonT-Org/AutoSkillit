@@ -1,201 +1,70 @@
-"""Private lifecycle primitives for brokered repository exploration.
+"""``OwnerBoundExplorationContextStore`` — sole production aggregate lease-state owner.
 
-The public request and response contracts intentionally live in ``core.types``.
-This module only owns the process-local capability lifecycle used by the server
-composition root: capabilities are opaque, short lived, and bound to one
-caller identity.
+This shard owns every mutator of in-process lease state.  The
+:mod:`._launch_adapter` shard contains pure helpers called only from
+inside the store's own locked sections.
+
+**Inner-exception-class immutability invariant.**  ``EXPLORATION_STORE_FAILURE_CODES``
+(in :mod:`._failure_codes`) is built once at module load, capturing the
+current inner exception classes as dict keys by class identity.  Inner
+exception classes are immutable after module load.
+
+**Runtime import direction is one-way.**  This shard runtime-imports
+from :mod:`autoskillit.pipeline.exploration_context_durable`; the durable
+module's only references to ``_store.py`` are inside a
+``TYPE_CHECKING`` block.  Both source files use
+``from __future__ import annotations``, so the durable module's
+``bind_session_scoped_durable`` signature annotations are strings,
+never evaluated at import time.
 """
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import secrets
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from pathlib import Path
-from typing import (
-    Generic,
-    Literal,
-    NoReturn,
-    Protocol,
-    TypeVar,
-    assert_never,
-    cast,
-    runtime_checkable,
-)
+from typing import Generic, Literal, NoReturn, TypeVar, assert_never, cast
 
 from autoskillit.core import (
-    BUNDLED_EXPLORER_ROLES,
     CapabilityResolution,
     CapabilityResolutionStatus,
-    CompletenessReport,
     ContinuationCursor,
     EvidencePage,
-    EvidenceRecord,
-    ExplorationContextStoreProtocol,
-    ExplorationFailureCode,
     ExplorationQuerySpec,
-    RepositorySnapshot,
-    SessionType,
     SnapshotCaptureReason,
     SnapshotCaptureStatus,
     SnapshotUnavailable,
-    canonical_json_bytes,
     get_logger,
 )
 from autoskillit.pipeline.exploration_context_durable import (
-    EXPLORATION_AUTHORITY_PATH_ENV,
-    EXPLORATION_CAPABILITY_ENV,
     EXPLORATION_PRINCIPAL_ROLE,
-    EXPLORATION_ROLE_ENV,
-    EXPLORATION_SESSION_ENV,
     _ExplorationLaunchAuthorityStore,
     _ReopenedLaunchAuthority,
     _safe_submit_failure_reason,
 )
 
-__all__ = [
-    "CapabilityResolution",
-    "CapabilityResolutionStatus",
-    "EXPLORATION_STORE_FAILURE_CODES",
-    "EXPLORER_ROLE_NAMES",
-    "EXPLORER_INELIGIBLE_SESSION_TYPES",
-    "EXPLORATION_AUTHORITY_PATH_ENV",
-    "EXPLORATION_CAPABILITY_ENV",
-    "EXPLORATION_PRINCIPAL_ROLE",
-    "EXPLORATION_ROLE_ENV",
-    "EXPLORATION_SESSION_ENV",
-    "ExplorationLaunchBinding",
-    "ExplorationContext",
-    "ExplorationContextStoreProtocol",
-    "ExplorationServiceProtocol",
-    "OwnerBoundExplorationContextStore",
-    "exploration_auto_provision_eligible",
-    "is_explorer_binding_eligible",
-    "resolve_exploration_store_failure_code",
-]
-
+from . import _launch_adapter as launch_adapter
+from ._constants import (
+    _MAX_ACTIVE_LEASES,
+    _MAX_CAPABILITY_LENGTH,
+    _MAX_SOURCE_IDENTITY_LENGTH,
+    _MAX_TTL_SECONDS,
+    EXPLORER_ROLE_NAMES,
+)
+from ._types import (
+    ExplorationContext,
+    ExplorationLaunchBinding,
+    ExplorationServiceProtocol,
+    _CapabilityLease,
+)
 
 _T = TypeVar("_T")
-_MAX_CAPABILITY_LENGTH = 128
-_MAX_TTL_SECONDS = 300.0
-_MAX_ACTIVE_LEASES = 256
-_MAX_SOURCE_IDENTITY_LENGTH = 1_024
-_SHARED_SOURCE_IDENTITY_DOMAIN = b"autoskillit.exploration.shared-source.v1\x00"
+
 
 logger = get_logger(__name__)
-
-# These names are an intentionally narrow launch adapter contract.  Codex may
-# preserve them while materializing an explorer child, but never mint or alter
-# their authority.
-EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
-EXPLORER_INELIGIBLE_SESSION_TYPES = frozenset({SessionType.ORCHESTRATOR, SessionType.FLEET})
-
-
-def is_explorer_binding_eligible(
-    *,
-    has_identity: bool,
-    has_backend: bool,
-    terminal_explorer_capable: bool,
-    session_scoped_explorer_capable: bool,
-    parent_sandbox_mode: str,
-    session_type: SessionType | None = None,
-) -> bool:
-    """Pure eligibility predicate for explorer binding mint.
-
-    Used by the server corridor in ``_explorer_projection.py``.  The server
-    wrapper adds store presence and invocation-identity resolution; this
-    function owns only the structural gates.
-    """
-    if not has_identity or not has_backend:
-        return False
-    if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
-        return False
-    if terminal_explorer_capable or session_scoped_explorer_capable:
-        return parent_sandbox_mode == "read-only"
-    return False
-
-
-def exploration_auto_provision_eligible(
-    *, auto_provision: bool, session_type: SessionType
-) -> bool:
-    """Pure eligibility predicate for exploration tag auto-provisioning at boot.
-
-    Shared by both boot entry points (pre_reveal_kitchen and open_kitchen) so
-    the "is auto-provisioning eligible for this session" rule is defined once.
-    Visibility-only — the per-call HMAC capability lease minted by
-    enable_exploration remains the authorization boundary regardless of tag
-    visibility.
-    """
-    return auto_provision and session_type not in EXPLORER_INELIGIBLE_SESSION_TYPES
-
-
-@dataclass(frozen=True, slots=True)
-class ExplorationLaunchBinding:
-    """Server-issued material for one explorer child launch.
-
-    The capability is opaque; role and session are trusted launch metadata, not
-    authority accepted back from a child MCP call.
-    """
-
-    capability: str
-    role: str
-    session_id: str
-    authority_path: Path
-
-    def provider_extras(self) -> dict[str, str]:
-        return {
-            EXPLORATION_CAPABILITY_ENV: self.capability,
-            EXPLORATION_ROLE_ENV: self.role,
-            EXPLORATION_SESSION_ENV: self.session_id,
-            EXPLORATION_AUTHORITY_PATH_ENV: str(self.authority_path),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class _CapabilityLease(Generic[_T]):
-    """In-memory owner-bound capability over a typed value and snapshot scope."""
-
-    owner_id: str
-    role: str
-    session_id: str
-    expires_at: float
-    value: _T
-    origin: Literal["session", "launch"]
-    cwd: Path | None = None
-    repository_root: Path | None = None
-    source_identity: str = ""
-    snapshot_digest: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class ExplorationContext:
-    """One server-owned immutable evidence generation for a broker capability."""
-
-    query: ExplorationQuerySpec
-    snapshot: RepositorySnapshot
-    evidence: tuple[EvidenceRecord, ...]
-    completeness: CompletenessReport
-
-
-@runtime_checkable
-class ExplorationServiceProtocol(Protocol):
-    """Injectable deterministic collector gateway; handlers never call collectors."""
-
-    def capture_snapshot(self, root: Path) -> RepositorySnapshot: ...
-
-    def collect(self, query: ExplorationQuerySpec, *, root: Path) -> ExplorationContext: ...
-
-    def page(
-        self,
-        context: ExplorationContext,
-        *,
-        page_size: int,
-        cursor: ContinuationCursor | None = None,
-    ) -> EvidencePage: ...
 
 
 class OwnerBoundExplorationContextStore(Generic[_T]):
@@ -250,12 +119,11 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     def _raise_for_snapshot_unavailable(self, exc: SnapshotUnavailable) -> NoReturn:
         """Translate a capture-layer failure into the one matching store exception.
 
-        Both bind paths (``bind_session_scoped`` and ``_bind_launches``) share
-        this dispatch so a stale or truncated snapshot always raises the same
-        typed exception regardless of which path observed it. Exhaustive over
-        every :class:`SnapshotCaptureStatus` member so a future status added
-        without a translation here is a mypy failure at ``assert_never``, not a
-        silently-swallowed case.
+        Shared by ``bind_session_scoped`` and ``_bind_launches`` so a stale
+        or truncated snapshot always raises the same typed exception.
+        Exhaustive over every :class:`SnapshotCaptureStatus` member; a
+        future status without a translation is a mypy ``assert_never``
+        failure, not a silent swallow.
         """
         reason = exc.reason
         assert reason is not None, "a non-COMPLETE SnapshotUnavailable must carry a reason"
@@ -305,12 +173,12 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
 
     @classmethod
     def verified_repository_root_from_launch_environment(cls) -> Path | None:
-        """Recover only the HMAC-verified root needed to bootstrap an explorer store."""
-        reopened = _ExplorationLaunchAuthorityStore().load_from_environment()
-        if reopened is None:
-            return None
-        _capability, authority = reopened
-        return authority.repository_root
+        """Recover only the HMAC-verified root needed to bootstrap an explorer store.
+
+        One-line delegate to the launch adapter; the durable store is
+        fully static, so no ``self``/``cls`` argument is needed.
+        """
+        return launch_adapter.verified_repository_root_from_launch_environment()
 
     def __enter__(self) -> OwnerBoundExplorationContextStore[_T]:
         return self
@@ -358,13 +226,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         source_identity: str,
         authority_home: Path,
     ) -> ExplorationLaunchBinding:
-        """Atomically replace a session's capability with trusted launch material.
-
-        ``repository_root`` and ``source_identity`` are supplied by the
-        server's already-validated skill invocation, never by an explorer.
-        Only ``cwd`` is later used for collection, preserving the canonical
-        post-backend-binding projection path.
-        """
+        """Atomically replace a session's capability with trusted launch material."""
         self._validate_binding(owner_id=owner_id, role=role, session_id=session_id)
         if role not in EXPLORER_ROLE_NAMES:
             raise ValueError("role is not an explorer role")
@@ -441,7 +303,8 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         except SnapshotUnavailable as exc:
             self._raise_for_snapshot_unavailable(exc)
         snapshot_digest = issuance_snapshot.digest
-        shared_source_identity = self._shared_source_identity(source_identities)
+        # Direct module call (bypasses class attribute dispatch frame).
+        shared_source_identity = launch_adapter._shared_source_identity(source_identities)
         with self._lock:
             if self._closed:
                 raise RuntimeError("exploration context store is closed")
@@ -495,9 +358,8 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     ) -> str:
         """Mint session-scoped in-process authority without env/sidecar round-trip.
 
-        Used by the Claude-native exploration path where subagents share the
-        parent process and per-child env binding is structurally impossible.
-        Returns the capability string for per-call verification.
+        Claude-native path: subagents share the parent process; per-child
+        env binding is structurally impossible.
         """
         self._validate_binding(owner_id=owner_id, role="server", session_id=session_id)
         if not source_identity or len(source_identity) > _MAX_SOURCE_IDENTITY_LENGTH:
@@ -551,12 +413,8 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     def has_session_scoped_binding(self) -> bool:
         """Return whether any live session-origin lease is currently bound.
 
-        Parameterless and store-wide: ``kitchen_status()`` never receives a
-        session id (the one-shot request token is issued only to
-        ``enable_exploration``), so this scans every live lease rather than
-        resolving one session's capability. Counts only ``origin == "session"``
-        leases — a launch-mode (Codex per-child) binding must not be reported
-        as an available session-scoped broker.
+        Counts only ``origin == "session"`` leases — a launch-mode binding
+        must not be reported as an available session-scoped broker.
         """
         now = self._clock()
         with self._lock:
@@ -568,10 +426,8 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     def lease_for_capability(self, capability: str) -> _CapabilityLease[_T] | None:
         """Return the active lease for an already-minted capability, else None.
 
-        Used by exploration_context_durable.bind_session_scoped_durable to
-        read back the snapshot_digest/expires_at bind_session_scoped just
-        minted, so the durable authority file records the same values as
-        the in-memory lease rather than independently recomputed ones.
+        Used by ``bind_session_scoped_durable`` so the durable authority
+        file records the same values as the in-memory lease.
         """
         with self._lock:
             lease = self._leases.get(capability)
@@ -918,75 +774,15 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     def _reopen_launch_environment(
         self,
     ) -> tuple[str, _ReopenedLaunchAuthority] | None:
-        """Reopen only a current, verifier-matched durable child authority."""
-        reopened = self._launch_authorities.load_from_environment()
-        if reopened is None:
-            return None
-        capability, authority = reopened
-        with self._lock:
-            if self._closed or authority.repository_root != self._trusted_root:
-                return None
-            current = self._resolve_capability_locked(capability)
-            expected = (
-                authority.session_id,
-                authority.cwd,
-                authority.repository_root,
-                authority.source_identity,
-                authority.snapshot_digest,
-            )
-            if (
-                current is not None
-                and (
-                    current.session_id,
-                    current.cwd,
-                    current.repository_root,
-                    current.source_identity,
-                    current.snapshot_digest,
-                )
-                == expected
-                and current.role == EXPLORATION_PRINCIPAL_ROLE
-            ):
-                return reopened
-            if current is not None:
-                self._discard_locked(capability)
-            if len(self._leases) >= self._max_active_leases:
-                self._cleanup_expired_locked()
-            if len(self._leases) >= self._max_active_leases:
-                return None
-            self._leases[capability] = _CapabilityLease(
-                owner_id="launch-authority",
-                role=EXPLORATION_PRINCIPAL_ROLE,
-                session_id=authority.session_id,
-                expires_at=self._clock()
-                + min(
-                    self._max_ttl_seconds,
-                    max(0.0, authority.expires_at - time.time()),
-                ),
-                value=cast(_T, None),
-                origin="launch",
-                cwd=authority.cwd,
-                repository_root=self._trusted_root,
-                source_identity=authority.source_identity,
-                snapshot_digest=authority.snapshot_digest,
-            )
-            self._session_capabilities.setdefault(authority.session_id, set()).add(capability)
-            return reopened
-
-    @staticmethod
-    def _shared_source_identity(source_identities: Mapping[str, str]) -> str:
-        """Bind one principal to the complete current explorer definition set."""
-        records = [
-            {"role": role, "source_identity": source_identities[role]}
-            for role in sorted(source_identities)
-        ]
-        digest = hashlib.sha256(
-            _SHARED_SOURCE_IDENTITY_DOMAIN + canonical_json_bytes(records)
-        ).hexdigest()
-        return f"sha256:{digest}"
+        """One-line delegate to :func:`._launch_adapter.reopen_launch_environment`."""
+        return launch_adapter.reopen_launch_environment(
+            self,
+            max_ttl_seconds=self._max_ttl_seconds,
+            clock=self._clock,
+        )
 
     def _new_capability_locked(self) -> str:
-        # Cryptographic collision is implausible; the loop preserves the
-        # dictionary's single-source-of-truth invariant.
+        # Collision is implausible; the loop preserves the dict's single-source invariant.
         while True:
             capability = f"explore_{secrets.token_urlsafe(32)}"
             if capability not in self._leases:
@@ -1011,51 +807,3 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             and value.startswith("explore_")
             and len(value) <= _MAX_CAPABILITY_LENGTH
         )
-
-
-EXPLORATION_STORE_FAILURE_CODES: Mapping[type[BaseException], ExplorationFailureCode] = {
-    OwnerBoundExplorationContextStore.TrustedRootMismatch: (
-        ExplorationFailureCode.TRUSTED_ROOT_MISMATCH
-    ),
-    # InvalidSourceIdentity is unreachable from enable_exploration's own call
-    # site (it always passes a well-formed interactive:<session_id> string) —
-    # the store is the contract boundary this row proves, not that call site.
-    OwnerBoundExplorationContextStore.InvalidSourceIdentity: (
-        ExplorationFailureCode.INVALID_SOURCE_IDENTITY
-    ),
-    OwnerBoundExplorationContextStore.InvalidSessionBinding: (
-        ExplorationFailureCode.SESSION_ID_INVALID
-    ),
-    OwnerBoundExplorationContextStore.ServiceNotConfigured: (
-        ExplorationFailureCode.SERVICE_NOT_CONFIGURED
-    ),
-    OwnerBoundExplorationContextStore.SnapshotStale: ExplorationFailureCode.SNAPSHOT_STALE,
-    OwnerBoundExplorationContextStore.SnapshotTruncated: (
-        ExplorationFailureCode.SNAPSHOT_TRUNCATED
-    ),
-    OwnerBoundExplorationContextStore.SnapshotCaptureFailed: (
-        ExplorationFailureCode.SNAPSHOT_CAPTURE_FAILED
-    ),
-    OwnerBoundExplorationContextStore.StoreClosed: ExplorationFailureCode.STORE_CLOSED,
-    OwnerBoundExplorationContextStore.CapacityExceeded: ExplorationFailureCode.CAPACITY_EXCEEDED,
-}
-
-
-def resolve_exploration_store_failure_code(exc: BaseException) -> ExplorationFailureCode:
-    """Resolve the nearest mapped ancestor's code by walking the MRO.
-
-    ``except tuple(EXPLORATION_STORE_FAILURE_CODES)`` matches by
-    ``isinstance``, so a subclass of a mapped store exception is caught even
-    though it is not an exact key of the mapping. Walking the MRO instead of
-    doing an exact-type lookup preserves the subclass-resolves-to-its-
-    nearest-ancestor property without risking a ``KeyError`` from inside a
-    caller's exception handler — which would escape a "Never raises" contract
-    rather than being converted to a structured failure envelope.
-    """
-    for klass in type(exc).__mro__:
-        if klass in EXPLORATION_STORE_FAILURE_CODES:
-            return EXPLORATION_STORE_FAILURE_CODES[klass]
-    raise AssertionError(
-        f"{type(exc)!r} matched the exploration store-exception allowlist but has no "
-        "mapped ancestor in EXPLORATION_STORE_FAILURE_CODES"
-    )

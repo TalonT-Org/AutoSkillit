@@ -1,4 +1,4 @@
-"""Durable (disk-persisted) exploration authority — split from exploration_context.py.
+"""Durable (disk-persisted) exploration authority — split from exploration_context.
 
 Extracted per #4684 Fix E (capability-tied visibility): the session-scoped
 Claude-native authority path (``bind_session_scoped``) is in-process-memory
@@ -9,13 +9,19 @@ owns the durable-record read/write primitives (``_ExplorationLaunchAuthorityStor
 those two paths share.
 
 Split into a sibling module — not a new method on
-``OwnerBoundExplorationContextStore`` — because that class's file sits at
-its 1100-line REQ-CNST-010-E22 exemption ceiling with zero headroom (see
-open issue #4667, which tracks the file's further decomposition). This
-module has zero *runtime* imports from ``exploration_context`` (the only
-import is a ``TYPE_CHECKING``-only annotation import below, erased before
-execution) so there is no runtime import cycle: exploration_context.py
-imports ``_ExplorationLaunchAuthorityStore``, ``_ReopenedLaunchAuthority``,
+``OwnerBoundExplorationContextStore`` — because durable authority
+persistence and in-process lease management are different lifecycles
+that benefit from a sibling-module boundary. The class now lives in
+``pipeline/exploration_context/_store.py`` (the sole aggregate
+lease-state owner) and this module's ``TYPE_CHECKING``-only annotation
+imports point at that package path plus the ``_types`` shard,
+preserving the one-way runtime direction (this module finishes loading
+before ``_store.py`` triggers any re-import of it). This module has
+zero *runtime* imports from ``exploration_context`` (the only
+imports are ``TYPE_CHECKING``-only annotation imports below, erased
+before execution) so there is no runtime import cycle:
+``pipeline/exploration_context/_store.py`` imports
+``_ExplorationLaunchAuthorityStore``, ``_ReopenedLaunchAuthority``,
 and ``_safe_submit_failure_reason`` from here, not the reverse.
 """
 
@@ -39,10 +45,10 @@ from autoskillit.core import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.pipeline.exploration_context import (
+    from autoskillit.pipeline.exploration_context._store import (
         OwnerBoundExplorationContextStore,
-        _CapabilityLease,
     )
+    from autoskillit.pipeline.exploration_context._types import _CapabilityLease
 
 __all__ = [
     "EXPLORATION_AUTHORITY_PATH_ENV",
@@ -305,11 +311,11 @@ def bind_session_scoped_durable(
 ) -> _CapabilityLease:
     """Mint session-scoped authority AND write its 0600 HMAC-signed record.
 
-    Symmetric to ``bind_launch`` (``exploration_context.py:466-503``), which
-    always writes a durable record; ``bind_session_scoped`` alone does not
-    (in-process memory only — lost on server restart within the lease TTL).
-    A free function taking ``store`` explicitly, not a method, per this
-    module's docstring on why the split lives here.
+    Symmetric to ``bind_launch`` (``pipeline/exploration_context/_store.py``),
+    which always writes a durable record; ``bind_session_scoped`` alone does
+    not (in-process memory only — lost on server restart within the lease
+    TTL).  A free function taking ``store`` explicitly, not a method, per
+    this module's docstring on why the split lives here.
 
     ``authority_home`` is caller-supplied — for the session-scoped path it
     is computed by the caller (currently only

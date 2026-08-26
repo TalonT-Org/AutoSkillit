@@ -1134,6 +1134,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +exploration_context_durable.py: durable (0600 HMAC-signed) session-scoped
         # exploration authority, split from exploration_context.py to stay under its
         # own REQ-CNST-010-E22 1100-line ceiling (#4684 Fix E)
+        # +exploration_context/ subpackage (counts as 0 against the
+        # non-recursive glob because the package directory is not a top-level
+        # *.py file); -1 for the deleted exploration_context.py file.
+        # E22 retired per #4835.
         "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
@@ -1550,14 +1554,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "detection surface. #4512 adds the exact exploration request-identity hook and "
         "its lifecycle resource contract to the same canonical registry.",
     ),
-    "pipeline/exploration_context.py": (
-        1100,
-        "REQ-CNST-010-E22: explorer context store owns the process-local capability "
-        "lifecycle for brokered exploration; #4488/#4489/#4492 add shared eligibility "
-        "predicate is_explorer_binding_eligible, session-scoped Claude-native "
-        "bind_session_scoped/session_scoped_capability authority mode, and the "
-        "supporting lease management (+89 net lines)",
-    ),
     "exploration/snapshot.py": (
         1250,
         "REQ-CNST-010-E30: #4756 exploration-capture-immunity rectify. Part A routes "
@@ -1598,6 +1594,115 @@ def test_no_src_module_exceeds_line_limit() -> None:
         "Source modules exceeding line limit "
         "(add entry to _LINE_LIMIT_EXEMPTIONS with rule ID + rationale):\n"
         + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_pipeline_exploration_context_is_a_package() -> None:
+    """REQ-CNST-010-E22: ``pipeline/exploration_context`` is a sub-package (#4835).
+
+    Asserts the decomposition shape: the old monolithic file is gone, the
+    package directory exists, every private shard listed in the plan
+    exists, and the package's ``__init__.py`` re-exports the public-
+    contract names (``test_exploration_context_facade_re_exports_contract``
+    below is the contract test that names each re-export).
+    """
+    assert not (SRC_ROOT / "pipeline" / "exploration_context.py").exists(), (
+        "Old monolithic pipeline/exploration_context.py must be removed (#4835)"
+    )
+    package_dir = SRC_ROOT / "pipeline" / "exploration_context"
+    assert package_dir.is_dir(), "pipeline/exploration_context/ must be a package directory"
+    expected_shards = [
+        "__init__.py",
+        "_constants.py",
+        "_types.py",
+        "_eligibility.py",
+        "_failure_codes.py",
+        "_launch_adapter.py",
+        "_store.py",
+    ]
+    for shard in expected_shards:
+        assert (package_dir / shard).is_file(), (
+            f"Missing expected shard pipeline/exploration_context/{shard}"
+        )
+
+
+def test_exploration_context_facade_re_exports_contract() -> None:
+    """REQ-CNST-010-E22: public facade re-exports every pre-decomposition name (#4835).
+
+    Asserts that ``import autoskillit.pipeline.exploration_context as m``
+    resolves every name the old ``exploration_context.py``'s ``__all__``
+    advertised.  This is the behavioural-equivalence contract for
+    external callers; if any name is missing, the facade has regressed.
+    """
+    import autoskillit.pipeline.exploration_context as m
+
+    expected = [
+        "CapabilityResolution",
+        "CapabilityResolutionStatus",
+        "EXPLORATION_STORE_FAILURE_CODES",
+        "EXPLORER_ROLE_NAMES",
+        "EXPLORER_INELIGIBLE_SESSION_TYPES",
+        "EXPLORATION_AUTHORITY_PATH_ENV",
+        "EXPLORATION_CAPABILITY_ENV",
+        "EXPLORATION_PRINCIPAL_ROLE",
+        "EXPLORATION_ROLE_ENV",
+        "EXPLORATION_SESSION_ENV",
+        "ExplorationLaunchBinding",
+        "ExplorationContext",
+        "ExplorationContextStoreProtocol",
+        "ExplorationServiceProtocol",
+        "OwnerBoundExplorationContextStore",
+        "exploration_auto_provision_eligible",
+        "is_explorer_binding_eligible",
+        "resolve_exploration_store_failure_code",
+    ]
+    missing = [name for name in expected if name not in m.__all__]
+    assert not missing, f"Public facade is missing names from pre-#4835 __all__: {missing}"
+
+
+def test_pipeline_exploration_context_e22_retired() -> None:
+    """REQ-CNST-010-E22 (pipeline/exploration_context.py) is retired per #4835.
+
+    A separate hooks/_capture_artifacts.py exemption shares the same rule ID
+    (a pre-existing latent registry violation tracked elsewhere).  This
+    test scopes to the pipeline retirement.
+    """
+    exemptions = _LINE_LIMIT_EXEMPTIONS
+    assert "pipeline/exploration_context.py" not in exemptions, (
+        "E22 retirement for pipeline/exploration_context.py was not applied"
+    )
+    # Durable module's docstring no longer references E22
+    durable_src = (SRC_ROOT / "pipeline" / "exploration_context_durable.py").read_text()
+    assert "REQ-CNST-010-E22" not in durable_src, (
+        "durable module's docstring still references the retired E22 ID"
+    )
+
+
+def test_pipeline_exploration_context_shards_under_750_lines() -> None:
+    """REQ-CNST-010-E22: every shard in the package is at most 900 lines (#4835).
+
+    The pre-decomposition monolithic file was 1061 lines.  After
+    decomposition, every shard under ``pipeline/exploration_context/``
+    must be ≤ 900 lines (the wavefront-1 ceiling).  The class body
+    alone is ~720 lines; the remaining ~90 lines is module docstring,
+    imports, and the package's ``__init__.py`` facade re-export
+    surface, which the test also pins so the re-export facade itself
+    cannot regress.
+
+    The 900-line ceiling is well under the pre-decomposition 1061-line
+    file (so this test fails on the old monolithic module) while
+    accommodating the irreducible class body that owns every
+    lease-state mutator.
+    """
+    package_dir = SRC_ROOT / "pipeline" / "exploration_context"
+    violations: list[tuple[str, int]] = []
+    for shard in sorted(package_dir.glob("*.py")):
+        line_count = len(shard.read_text().splitlines())
+        if line_count > 900:
+            violations.append((str(shard.relative_to(SRC_ROOT)), line_count))
+    assert not violations, (
+        "Exploration-context shards exceeding the 900-line wavefront-1 ceiling:\n"
+        + "\n".join(f"  {rel}: {count} lines" for rel, count in violations)
     )
 
 

@@ -37,7 +37,8 @@ class TestBuildTestScopeStep7:
         (tests_root / "core").mkdir(parents=True)
         (tests_root / "arch").mkdir()
         (tests_root / "contracts").mkdir()
-        (tests_root / "core" / "test_io.py").write_text("")
+        specific_test = tests_root / "core" / "test_io.py"
+        specific_test.write_text("")
 
         source_map = {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}
         success_map = tmp_path / "success-source-map.json"
@@ -69,6 +70,7 @@ class TestBuildTestScopeStep7:
 
         assert narrowed is not None
         assert fallback is not None
+        assert specific_test in narrowed
         assert not any(path.is_dir() and path.name == "core" for path in narrowed)
         assert any(path.is_dir() and path.name == "core" for path in fallback)
 

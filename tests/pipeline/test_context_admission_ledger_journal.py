@@ -13,7 +13,6 @@ from types import MappingProxyType
 
 import pytest
 
-import autoskillit.core.types._type_context_admission_persistence as persistence_types
 import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
 from autoskillit.core import (
     AuthorityUnavailableEvent,
@@ -125,14 +124,14 @@ def test_inspection_replays_validly_encoded_publications_after_recovery(
         encoded = bytes(
             connection.execute("SELECT decision_envelope FROM journal_events").fetchone()[0]
         )
-        envelope = persistence_types.decode_stored_context_admission_envelope(encoded)
-        assert isinstance(envelope.payload, persistence_types.AdmissionDecision)
+        envelope = envelope_types.decode_stored_context_admission_envelope(encoded)
+        assert isinstance(envelope.payload, envelope_types.AdmissionDecision)
         tampered = replace(envelope.payload, reason_code="validly-encoded-tamper")
         connection.execute(
             "UPDATE journal_events SET decision_envelope = ?",
             (
-                persistence_types.encode_stored_context_admission_envelope(
-                    persistence_types.make_stored_context_admission_envelope(tampered)
+                envelope_types.encode_stored_context_admission_envelope(
+                    envelope_types.make_stored_context_admission_envelope(tampered)
                 ),
             ),
         )

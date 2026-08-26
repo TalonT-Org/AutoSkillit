@@ -1,11 +1,9 @@
 """Process-local control surface for context-admission persistence.
 
-This shard defines the in-process service surface that calls interact with:
-store authority, operation-result dataclasses, health projections, and the
-durable reducer Protocol.  The durable boundary types (envelope encoding,
-stream-partition identity, shadow publication records, and the privacy
-validator) live in ``_type_context_admission_persistence_envelope`` (the
-envelope shard).
+Defines the store authority, health projections, operation-result
+dataclasses, and the ``ContextAdmissionLedger`` Protocol.  The durable
+envelope boundary types live in
+``_type_context_admission_persistence_envelope``.
 """
 
 from __future__ import annotations
@@ -288,12 +286,6 @@ class ContextAdmissionLedger(Protocol):
         stream_key: ContextAdmissionStreamKey,
     ) -> ContextAdmissionInspectionResult: ...
 
-
-# Late-bound star-import of the envelope shard exposes the durable-boundary
-# public surface to consumers of this facade without re-defining it. Placed
-# AFTER the retained class definitions so the facade's mid-load state never
-# influences the shard's module evaluation.
-from ._type_context_admission_persistence_envelope import *  # noqa: E402, F401, F403
 
 __all__ = [
     "ContextAdmissionAccountingResult",

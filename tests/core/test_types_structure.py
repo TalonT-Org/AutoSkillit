@@ -493,22 +493,16 @@ def test_decomposition_preserves_public_symbol_set() -> None:
     )
 
     # Facade __all__ must be a strict subset of the pre-split snapshot —
-    # any name that was moved to a sibling shard must NOT reappear in the
-    # facade's __all__, otherwise the hub's concatenated __all__ would carry
-    # duplicates.
+    # moved names belong only to the sibling shard.
     assert set(persistence_mod.__all__) < _PRE_SPLIT_PERSISTENCE_NAMES, (
         f"Names unexpectedly re-added to _type_context_admission_persistence.__all__: "
         f"{sorted(set(persistence_mod.__all__) - _PRE_SPLIT_PERSISTENCE_NAMES)}"
     )
 
-    # Identity preserved: every pre-split name accessible via the facade must
-    # resolve to the same object as the same name imported directly from the
-    # owning shard (or, for names retained only in the facade, from the facade).
+    # Identity preserved: each pre-split name resolves through its owning shard.
     for name in _PRE_SPLIT_PERSISTENCE_NAMES:
-        facade_obj = getattr(persistence_mod, name)
-        assert getattr(types_hub, name) is facade_obj, name
-        if name in envelope_mod.__all__:
-            assert getattr(envelope_mod, name) is facade_obj, name
+        owner = envelope_mod if name in envelope_mod.__all__ else persistence_mod
+        assert getattr(types_hub, name) is getattr(owner, name), name
 
 
 @pytest.mark.parametrize("name", _recipe_section_facade_names())
@@ -579,12 +573,12 @@ def test_types_hub_backward_compat():
 
 
 def test_types_hub_line_count_under_threshold():
-    """After split, core/types.py must be under 210 lines (re-export hub only)."""
+    """After split, core/types.py must be under 205 lines (re-export hub only)."""
     from autoskillit.core import paths
 
     types_path = paths.pkg_root() / "core" / "types" / "__init__.py"
     lines = types_path.read_text().splitlines()
-    assert len(lines) < 210, f"types.py has {len(lines)} lines; expected re-export hub only"
+    assert len(lines) < 205, f"types.py has {len(lines)} lines; expected re-export hub only"
 
 
 def test_launch_id_env_var_in_private_vars() -> None:

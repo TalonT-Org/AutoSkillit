@@ -12,6 +12,7 @@ import json
 import os
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -375,7 +376,7 @@ class DefaultTestRunner:
         try:
             lease = WorktreeGateLease.acquire(
                 cwd,
-                invocation_id=f"{os.getpid()}-{time.time_ns()}",
+                invocation_id=uuid.uuid4().hex,
             )
             for idx, command in enumerate(effective_commands, 1):
                 remaining = deadline - time.monotonic()

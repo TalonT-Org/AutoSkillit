@@ -830,7 +830,7 @@ async def test_default_test_runner_passes_default_base_branch(
     """AC5: DefaultTestRunner.run() passes branching.default_base_branch to _resolve_base_ref."""
     captured_kwargs: dict = {}
 
-    async def capturing_runner(cmd, *, cwd, timeout, env):
+    async def capturing_runner(cmd, *, cwd, timeout, env, **kwargs):
         captured_kwargs["env"] = env
         return SubprocessResult(
             returncode=0,

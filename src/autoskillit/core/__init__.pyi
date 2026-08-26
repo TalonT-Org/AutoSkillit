@@ -321,8 +321,6 @@ from .runtime._reclamation import veto_paths as veto_paths
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
 from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
-from .runtime.worktree_gate_lease import WorktreeGateContention as WorktreeGateContention
-from .runtime.worktree_gate_lease import WorktreeGateLease as WorktreeGateLease
 from .runtime.executable_binding import (
     executable_binding_matches_current_file as executable_binding_matches_current_file,
 )
@@ -367,6 +365,8 @@ from .runtime.session_registry import bridge_claude_session_id as bridge_claude_
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path
 from .runtime.session_registry import write_registry_entry as write_registry_entry
+from .runtime.worktree_gate_lease import WorktreeGateContention as WorktreeGateContention
+from .runtime.worktree_gate_lease import WorktreeGateLease as WorktreeGateLease
 from .tool_registry import (
     EXECUTION_TUNING_EXTERNALLY_RESOLVED as EXECUTION_TUNING_EXTERNALLY_RESOLVED,
 )

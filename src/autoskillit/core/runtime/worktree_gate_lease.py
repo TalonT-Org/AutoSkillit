@@ -12,7 +12,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..io import atomic_write
+from ..io import write_versioned_json
 from ..paths import default_log_dir
 from ._linux_proc import read_boot_id, read_starttime_ticks
 from .artifact_lease import ArtifactLease, ArtifactLeaseContention
@@ -21,7 +21,7 @@ __all__ = ["WorktreeGateContention", "WorktreeGateLease"]
 
 
 def _write_gate_holder_manifest(path: Path, holder: dict[str, object]) -> None:
-    atomic_write(path, json.dumps(holder, sort_keys=True, separators=(",", ":")) + "\n")
+    write_versioned_json(path, holder, schema_version=1)
 
 
 def _read_holder_diagnostic(path: Path) -> str:

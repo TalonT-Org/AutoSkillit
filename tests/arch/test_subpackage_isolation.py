@@ -1100,6 +1100,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_context_admission_persistence_envelope: #4743 persistence split moved
         # envelope pipeline to a sibling shard (75 + 1 = 76).
         "core/types": 76,
+        "core/runtime": 11,  # +worktree_gate_lease process-tree-lived test exclusion
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,

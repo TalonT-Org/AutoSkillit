@@ -244,6 +244,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "agent_definition": frozenset({"core", "execution", "pipeline", "server", "workspace"}),
     "artifact_lease": frozenset({"core", "workspace"}),
+    "worktree_gate_lease": frozenset({"core", "execution", "server", "workspace"}),
     "executable_binding": frozenset({"cli", "core", "execution"}),
     "private_file": frozenset({"core", "execution", "pipeline"}),
     "feature_flags": frozenset(

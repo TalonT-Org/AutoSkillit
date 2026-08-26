@@ -146,6 +146,7 @@ class TestCoreSubpackages:
             "readiness",
             "session_provenance",
             "session_registry",
+            "worktree_gate_lease",
             "_linux_proc",
             "_reclamation",
         }

@@ -360,7 +360,9 @@ class TestBuildTestSourceMap:
         candidate = tmp_path / ".autoskillit" / "temp" / "test-source-map-candidate.json"
         assert result != 0
         assert output_path.read_bytes() == b"canonical sentinel"
-        assert json.loads(candidate.read_text())[str(Path(source_file).relative_to(tmp_path))]
+        assert json.loads(candidate.read_text())[str(Path(source_file).relative_to(tmp_path))] == [
+            "tests/core/test_io.py"
+        ]
 
     @pytest.mark.parametrize("error_kind", ["coverage", "os"])
     def test_build_test_source_map_refuses_on_coverage_read_failure(

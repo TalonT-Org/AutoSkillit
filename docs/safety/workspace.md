@@ -65,6 +65,15 @@ worktree is left intact so the user can re-install from the source path
 before deletion. Without this guard, deleting a worktree that hosted an
 editable install would silently break the user's `autoskillit` CLI.
 
+Interpreter discovery failures, vanished files, unreadable or undecodable
+metadata, and malformed metadata are anticipated probe failures. The scanner
+skips the affected probe, reports its reason in `unverified_scan_reasons`, and
+allows cleanup to proceed when no editable install was actually found. These
+partial-scan reasons are diagnostic and do not weaken a real finding: a found
+editable install still blocks cleanup. Any exception outside the anticipated
+failure classes propagates to the tool boundary as a merge error, before
+worktree cleanup begins.
+
 ## Workspace markers
 
 `autoskillit workspace init` creates a `.autoskillit-workspace` marker file

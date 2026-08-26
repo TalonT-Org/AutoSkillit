@@ -4,37 +4,57 @@ Scans system Python site-packages for editable installs (PEP 610 direct_url.json
 whose source URL points into a given worktree path. If any are found, the merge
 lifecycle is halted before the worktree directory is deleted.
 
-Fail-open design: any read error, JSON parse error, or subprocess failure causes
-that entry to be skipped — the guard never raises.
-
-Zero autoskillit imports — only stdlib.
+Anticipated discovery, read, decode, and metadata failures skip the affected
+probe and are returned as unverified reasons. Unanticipated exceptions propagate
+to the merge tool boundary so cleanup cannot silently proceed after a scanner bug.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
-import logging
 import shutil
 import site
 import subprocess
 from pathlib import Path
 
+from autoskillit.core import get_logger
 
-def _collect_site_packages_for_interpreter(python: str, worktree_path: Path) -> list[Path]:
+logger = get_logger(__name__)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class EditableScanResult:
+    """Editable installs found and probes that could not be completed."""
+
+    findings: tuple[str, ...] = ()
+    unverified: tuple[str, ...] = ()
+
+
+def _collect_site_packages_for_interpreter(
+    python: str, worktree_path: Path
+) -> tuple[list[Path], list[str]]:
     """Return site-packages directories for the given Python interpreter.
 
     Skips interpreters whose executable path lives inside the worktree (i.e. the
     worktree's own venv) — we only want external / system Python interpreters.
-    Returns [] on any subprocess failure.
+    Returns an unverified reason for anticipated resolution or probe failures.
     """
     try:
         python_real = Path(python).resolve()
-    except Exception:
-        logging.debug("_editable_guard: failed to resolve python path %s", python)
-        return []
+    except (OSError, RuntimeError) as exc:
+        # Path.resolve() raises RuntimeError for a symlink loop on Python 3.11.
+        reason = f"interpreter path could not be resolved: {python} ({type(exc).__name__}: {exc})"
+        logger.debug(
+            "editable_guard_interpreter_resolve_failed",
+            interpreter=python,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return [], [reason]
 
     if python_real.is_relative_to(worktree_path):
-        return []
+        return [], []
 
     try:
         result = subprocess.run(
@@ -44,15 +64,32 @@ def _collect_site_packages_for_interpreter(python: str, worktree_path: Path) -> 
             timeout=5,
         )
         if result.returncode != 0:
-            return []
+            reason = f"interpreter probe exited non-zero: {python} (exit {result.returncode})"
+            logger.debug(
+                "editable_guard_interpreter_probe_nonzero",
+                interpreter=python,
+                returncode=result.returncode,
+            )
+            return [], [reason]
         dirs = json.loads(result.stdout.strip())
-        return [Path(d) for d in dirs if isinstance(d, str)]
-    except Exception:
-        logging.debug("_editable_guard: failed to query site-packages for %s", python)
-        return []
+        return [Path(d) for d in dirs if isinstance(d, str)], []
+    except (
+        OSError,
+        subprocess.SubprocessError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        reason = f"interpreter probe failed: {python} ({type(exc).__name__}: {exc})"
+        logger.debug(
+            "editable_guard_interpreter_probe_failed",
+            interpreter=python,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return [], [reason]
 
 
-def _discover_site_packages(worktree_path: Path) -> list[Path]:
+def _discover_site_packages(worktree_path: Path) -> tuple[list[Path], list[str]]:
     """Discover all candidate site-packages directories from Python interpreters on PATH.
 
     Checks python3, python, and python3.8 through python3.15. Also includes the
@@ -62,12 +99,17 @@ def _discover_site_packages(worktree_path: Path) -> list[Path]:
     candidate_names = ["python3", "python"] + [f"python3.{x}" for x in range(8, 16)]
     seen: set[Path] = set()
     dirs: list[Path] = []
+    unverified: list[str] = []
 
     for name in candidate_names:
         exe = shutil.which(name)
         if exe is None:
             continue
-        for d in _collect_site_packages_for_interpreter(exe, worktree_path):
+        interpreter_dirs, interpreter_unverified = _collect_site_packages_for_interpreter(
+            exe, worktree_path
+        )
+        unverified.extend(interpreter_unverified)
+        for d in interpreter_dirs:
             if d not in seen:
                 seen.add(d)
                 dirs.append(d)
@@ -78,10 +120,17 @@ def _discover_site_packages(worktree_path: Path) -> list[Path]:
         if user_site not in seen:
             seen.add(user_site)
             dirs.append(user_site)
-    except Exception:
-        logging.debug("_editable_guard: failed to query user site-packages")
+    except (AttributeError, OSError) as exc:
+        # Some virtualenv shims omit site.getusersitepackages entirely.
+        reason = f"user site-packages probe failed ({type(exc).__name__}: {exc})"
+        logger.debug(
+            "editable_guard_user_site_probe_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        unverified.append(reason)
 
-    return dirs
+    return dirs, unverified
 
 
 def _is_editable_in_worktree(direct_url: dict, worktree_path: Path) -> bool:
@@ -113,7 +162,7 @@ def _is_editable_in_worktree(direct_url: dict, worktree_path: Path) -> bool:
 def scan_editable_installs_for_worktree(
     worktree_path: Path,
     site_packages_dirs: list[Path] | None = None,
-) -> list[str]:
+) -> EditableScanResult:
     """Scan for editable installs whose source URL points into worktree_path.
 
     Args:
@@ -122,25 +171,69 @@ def scan_editable_installs_for_worktree(
             If None (production path), auto-discover via Python interpreters on PATH.
 
     Returns:
-        List of human-readable descriptions of poisoned installs.
-        Empty list means the system is clean.
+        Findings and human-readable reasons for probes that could not be completed.
     """
     if site_packages_dirs is None:
-        site_packages_dirs = _discover_site_packages(worktree_path)
+        site_packages_dirs, unverified = _discover_site_packages(worktree_path)
+    else:
+        unverified = []
 
     findings: list[str] = []
 
     for site_dir in site_packages_dirs:
         if not site_dir.is_dir():
+            reason = f"site-packages directory vanished: {site_dir}"
+            logger.debug("editable_guard_site_directory_missing", path=str(site_dir))
+            unverified.append(reason)
             continue
         for direct_url_file in site_dir.glob("*.dist-info/direct_url.json"):
             try:
                 data = json.loads(direct_url_file.read_text())
-            except Exception:
-                logging.debug("_editable_guard: failed to parse %s", direct_url_file)
+            except OSError as exc:
+                condition = "vanished" if isinstance(exc, FileNotFoundError) else "failed"
+                reason = (
+                    f"metadata read {condition}: {direct_url_file} ({type(exc).__name__}: {exc})"
+                )
+                logger.debug(
+                    "editable_guard_metadata_read_failed",
+                    path=str(direct_url_file),
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                unverified.append(reason)
+                continue
+            except UnicodeDecodeError as exc:
+                reason = (
+                    f"could not decode metadata: {direct_url_file} ({type(exc).__name__}: {exc})"
+                )
+                logger.warning(
+                    "editable_guard_metadata_invalid",
+                    path=str(direct_url_file),
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                unverified.append(reason)
+                continue
+            except json.JSONDecodeError as exc:
+                reason = f"malformed metadata: {direct_url_file} ({type(exc).__name__}: {exc})"
+                logger.warning(
+                    "editable_guard_metadata_invalid",
+                    path=str(direct_url_file),
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                unverified.append(reason)
                 continue
 
             if not isinstance(data, dict):
+                reason = f"metadata is not a JSON object: {direct_url_file}"
+                logger.warning(
+                    "editable_guard_metadata_invalid",
+                    path=str(direct_url_file),
+                    error="top-level JSON value is not an object",
+                    error_type=type(data).__name__,
+                )
+                unverified.append(reason)
                 continue
 
             if _is_editable_in_worktree(data, worktree_path):
@@ -151,4 +244,4 @@ def scan_editable_installs_for_worktree(
                 url = data.get("url", "")
                 findings.append(f"{pkg_name} editable at {url} ({dist_info_name})")
 
-    return findings
+    return EditableScanResult(findings=tuple(findings), unverified=tuple(unverified))

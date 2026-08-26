@@ -1102,12 +1102,6 @@ _ENUMERATION_STAT_ALLOWLIST: dict[Path, TrackedDeferral] = {
         "the whole ticket batch, not just the racing file",
         added_date=date(2026, 8, 25),
     ),
-    SRC_ROOT / "server" / "_editable_guard.py": TrackedDeferral(
-        issue=4773,
-        rationale="unguarded read on a glob()-enumerated direct_url.json inside a broad "
-        "except Exception",
-        added_date=date(2026, 8, 24),
-    ),
     SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py": TrackedDeferral(
         issue=4787,
         rationale="_render_agent_definitions reads a glob()-enumerated agent .md file with "

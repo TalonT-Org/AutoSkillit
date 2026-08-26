@@ -349,6 +349,7 @@ _FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
         "abort_failed",
         "abort_stderr",
         "poisoned_installs",
+        "unverified_scan_reasons",
         "local_sha",
         "remote_sha",
         "remote_is_ancestor",

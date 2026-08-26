@@ -191,6 +191,7 @@ class MergeWorktreeResult(TypedDict, total=False):
     abort_failed: bool
     abort_stderr: str
     poisoned_installs: list[str]
+    unverified_scan_reasons: list[str]
     local_sha: str
     remote_sha: str
     remote_is_ancestor: bool

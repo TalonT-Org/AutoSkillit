@@ -104,6 +104,9 @@ def _collect_doctor_results() -> list[DoctorResult]:
             _backend = None
     else:
         _backend = None
+    from autoskillit.cli._init_helpers import _is_plugin_installed
+
+    plugin_installed = _is_plugin_installed()
     results.extend(
         _run_check(
             lambda: _check_stale_mcp_servers(Path.home() / ".claude.json", backend=_backend),
@@ -134,19 +137,27 @@ def _collect_doctor_results() -> list[DoctorResult]:
     )
     results.extend(
         _run_check(
-            lambda: _check_hook_registration(_claude_settings_path("user", cwd=Path.cwd())),
+            lambda: _check_hook_registration(
+                _claude_settings_path("user", cwd=Path.cwd()),
+                plugin_installed=plugin_installed,
+            ),
             check_name="hook_registration",
         )
     )
     results.extend(
         _run_check(
-            lambda: _check_hook_registry_drift_all_scopes(Path.cwd()),
+            lambda: _check_hook_registry_drift_all_scopes(
+                Path.cwd(), plugin_installed=plugin_installed
+            ),
             check_name="hook_registry_drift_all_scopes",
         )
     )
     results.extend(
         _run_check(
-            lambda: _check_dual_registration(_claude_settings_path("user", cwd=Path.cwd())),
+            lambda: _check_dual_registration(
+                _claude_settings_path("user", cwd=Path.cwd()),
+                plugin_installed=plugin_installed,
+            ),
             check_name="dual_registration",
         )
     )

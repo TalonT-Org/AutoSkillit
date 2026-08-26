@@ -5,12 +5,8 @@ hazards: hardcoded git remotes, blind `git add`, interpreter-mediated writes,
 unauthorized `autoskillit` imports, POSIX bracket expressions, and BRE grep
 alternation.
 
-`_resolve_skill_md` and `load_bundled_manifest` are NOT imported at module
-scope. Every rule body that calls them performs a function-body-scoped lazy
-import against `autoskillit.recipe.rules.rules_skill_content` (the facade)
-so that `patch.object(rules_skill_content, "_resolve_skill_md", ...)` and
-`patch("autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest", ...)`
-continue to redirect rule-body lookups via the facade namespace.
+See `autoskillit.recipe.rules.rules_skill_content` for the facade-mediated
+patchability contract this module participates in.
 """
 
 from __future__ import annotations
@@ -82,7 +78,7 @@ def _has_hardcoded_origin_in_bash(bash_blocks: list[str]) -> bool:
 def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
     """Fire for any run_skill step whose SKILL.md bash blocks hardcode the 'origin' remote."""
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -135,7 +131,7 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
 )
 def _check_blind_git_add_in_skill(ctx: ValidationContext) -> list[RuleFinding]:
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -188,7 +184,7 @@ def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFi
     from autoskillit.hooks import _INTERPRETER_LINE_RE, _WRITE_APIS_RE
     from autoskillit.recipe._skill_placeholder_parser import extract_python_blocks
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -254,7 +250,7 @@ def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFi
 def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
     """Fire for any run_skill step whose SKILL.md bash blocks import the autoskillit package."""
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -309,7 +305,7 @@ def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
 )
 def _check_no_posix_char_class(ctx: ValidationContext) -> list[RuleFinding]:
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -370,7 +366,7 @@ def _check_no_posix_char_class(ctx: ValidationContext) -> list[RuleFinding]:
 )
 def _check_no_grep_bre_alternation(ctx: ValidationContext) -> list[RuleFinding]:
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []

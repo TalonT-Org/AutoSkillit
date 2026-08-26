@@ -1,10 +1,15 @@
-"""Smoke test for the rules_skill_content compatibility facade.
+"""Anchor file for the legacy `tests/recipe/test_rules_skill_content.py` cascade stem.
 
-The bulk of the legacy `tests/recipe/test_rules_skill_content.py` was split
-into four per-family test files in `tests/recipe/rules_skills/` as part of
-the #4852 decomposition. This file retains only the rule-registry smoke
-test that ensures the facade still imports the four sibling rule modules
-and registers all 15 rules exactly once.
+The bulk of this file's tests were split into four per-family test files
+in `tests/recipe/rules_skills/` as part of the #4852 decomposition. The
+15-rule registration contract is now asserted centrally in
+`tests/recipe/rules_skills/test_split_rule_registration.py`; per-rule
+behavior is covered in the per-family files.
+
+This file is retained as a cascade anchor for `rules_skill_content` in
+`tests/_test_filter.py::MODULE_CASCADE_RECIPE` so that the facade's
+filter entry keeps a discoverable target. The single trivial smoke test
+keeps the cascade guard, layer marker, and size marker contracts happy.
 """
 
 from __future__ import annotations
@@ -14,28 +19,6 @@ import pytest
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
-def test_rules_skill_content_facade_registers_all_fifteen_rule_names() -> None:
-    """Importing the facade must register all 15 SKILL.md semantic rules."""
+def test_facade_module_is_importable() -> None:
+    """The `rules_skill_content` facade module must remain importable."""
     import autoskillit.recipe.rules.rules_skill_content  # noqa: F401
-    from autoskillit.recipe.registry import _RULE_REGISTRY
-
-    expected_names = {
-        "undefined-bash-placeholder",
-        "hardcoded-origin-remote",
-        "blind-git-add-in-skill",
-        "interpreter-mediated-write-in-skill",
-        "no-autoskillit-import-in-skill-python-block",
-        "posix-char-class-in-skill",
-        "grep-bre-alternation-in-skill",
-        "output-section-no-markdown-directive",
-        "skill-no-issue-comments",
-        "transition-boundary-anti-confirmation",
-        "executable-field-content-validity",
-        "reviews-post-requires-input-flag",
-        "source-attribution-directive",
-        "graphql-query-requires-shell-invocation",
-        "inline-content-in-subagent-prompt",
-    }
-    registered_names = {r.name for r in _RULE_REGISTRY}
-    missing = expected_names - registered_names
-    assert not missing, f"Facade failed to register these rule names: {missing}"

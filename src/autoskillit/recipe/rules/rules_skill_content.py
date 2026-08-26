@@ -30,22 +30,23 @@ from autoskillit.recipe._git_helpers import (
 )
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe.contracts import load_bundled_manifest
-from autoskillit.recipe.rules import (
-    rules_skill_content_content_structure as _content,  # noqa: E402, F401
-)
-from autoskillit.recipe.rules import (
-    rules_skill_content_github_api_safety as _gh,  # noqa: E402, F401
-)
 
 # Side-effect registration: importing each sibling fires its @semantic_rule
-# decorators, populating the rule registry exactly once per rule name. Placed
-# after the re-export block so any sibling's lazy `from autoskillit.recipe.rules
-# .rules_skill_content import _resolve_skill_md` resolves to fully-bound names.
-from autoskillit.recipe.rules import (
-    rules_skill_content_shell_safety as _shell_safety,  # noqa: E402, F401
+# decorators, populating the rule registry exactly once per rule name. The
+# aliases use a uniform `_rsc_<category>` prefix so the facade's imports stay
+# symmetric with each other; the long form `rules_skill_content_<category>`
+# re-exports the same modules.
+from autoskillit.recipe.rules import (  # noqa: E402, F401
+    rules_skill_content_content_structure as _rsc_content,
 )
-from autoskillit.recipe.rules import (
-    rules_skill_content_skill_contract as _contract,  # noqa: E402, F401
+from autoskillit.recipe.rules import (  # noqa: E402, F401
+    rules_skill_content_github_api_safety as _rsc_gh,
+)
+from autoskillit.recipe.rules import (  # noqa: E402, F401
+    rules_skill_content_shell_safety as _rsc_shell,
+)
+from autoskillit.recipe.rules import (  # noqa: E402, F401
+    rules_skill_content_skill_contract as _rsc_contract,
 )
 from autoskillit.recipe.rules.rules_skill_content_shell_safety import (
     _GIT_GREP_BRE_RE,

@@ -127,13 +127,15 @@ def test_pseudocode_allowlist_reexported() -> None:
     """_PSEUDOCODE_ALLOWLIST must be importable from the facade."""
     from autoskillit.recipe.rules.rules_skill_content import _PSEUDOCODE_ALLOWLIST
 
-    assert _PSEUDOCODE_ALLOWLIST  # non-empty
+    assert len(_PSEUDOCODE_ALLOWLIST) > 0, (
+        "pseudocode allowlist must be non-empty (rules rely on it for placeholder classification)"
+    )
     assert isinstance(_PSEUDOCODE_ALLOWLIST, frozenset)
 
 
 def test_regex_constants_reexported() -> None:
     """_GREP_BRE_ALTERNATION_RE, _GIT_GREP_BRE_RE, _POSIX_CHAR_CLASS_RE are re-exported."""
-    import re as _stdlib_re
+    import regex as _regex_module
 
     from autoskillit.recipe.rules.rules_skill_content import (
         _GIT_GREP_BRE_RE,
@@ -141,9 +143,9 @@ def test_regex_constants_reexported() -> None:
         _POSIX_CHAR_CLASS_RE,
     )
 
-    assert isinstance(_GREP_BRE_ALTERNATION_RE, _stdlib_re.Pattern)
-    assert isinstance(_GIT_GREP_BRE_RE, _stdlib_re.Pattern)
-    assert isinstance(_POSIX_CHAR_CLASS_RE, _stdlib_re.Pattern)
+    assert isinstance(_GREP_BRE_ALTERNATION_RE, _regex_module.Pattern)
+    assert isinstance(_GIT_GREP_BRE_RE, _regex_module.Pattern)
+    assert isinstance(_POSIX_CHAR_CLASS_RE, _regex_module.Pattern)
 
 
 def test_load_bundled_manifest_patch_path_resolves() -> None:

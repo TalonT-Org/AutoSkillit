@@ -53,22 +53,7 @@ def test_e11_entry_removed() -> None:
 
 
 def test_no_src_module_exceeds_1000_lines() -> None:
-    """Mirror of test_no_src_module_exceeds_line_limit after E11 removal."""
-    from tests.arch.test_subpackage_isolation import (
-        _LINE_LIMIT_EXEMPTIONS,
-        test_no_src_module_exceeds_line_limit,
-    )
+    """The architectural enforcer must still pass after E11 removal."""
+    from tests.arch.test_subpackage_isolation import test_no_src_module_exceeds_line_limit
 
-    # The architectural enforcer must still pass; this is an isolation layer.
-    violations: list[str] = []
-    for py_file in sorted(RULES_DIR.parent.parent.rglob("*.py")):
-        line_count = _count_lines(py_file)
-        rel = str(py_file.relative_to(RULES_DIR.parent.parent))
-        limit, _ = _LINE_LIMIT_EXEMPTIONS.get(
-            rel, _LINE_LIMIT_EXEMPTIONS.get(py_file.name, (1000, ""))
-        )
-        if line_count > limit:
-            violations.append(f"{rel}: {line_count} lines (limit {limit})")
-    assert not violations, f"Source modules exceeding line limit after E11 removal: {violations}"
-    # Also assert the architectural enforcer itself runs cleanly.
     test_no_src_module_exceeds_line_limit()

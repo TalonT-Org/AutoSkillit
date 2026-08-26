@@ -25,38 +25,13 @@ import pytest
 import autoskillit.recipe._skill_helpers as _sh
 from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
-from autoskillit.recipe.registry import RuleFinding, run_semantic_rules
+from autoskillit.recipe.registry import run_semantic_rules
+from tests.recipe.rules_skills._helpers import (
+    make_recipe_for_skill,
+    write_skill_and_run_rules,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-
-def _make_recipe_for_skill(skill_name: str, ingredients: dict[str, str]) -> str:
-    """Generate minimal recipe YAML invoking the named skill."""
-    parts = [
-        "name: test-recipe",
-        "kitchen_rules:",
-        '  - "Use run_skill only."',
-    ]
-    if ingredients:
-        parts.append("ingredients:")
-        for k, v in ingredients.items():
-            parts.extend([f"  {k}:", f"    description: {v}", "    required: true"])
-    args = " ".join("${{{{ inputs." + k + " }}}}" for k in ingredients)
-    skill_cmd = f"/autoskillit:{skill_name}"
-    if args:
-        skill_cmd += f" {args}"
-    parts.extend(
-        [
-            "steps:",
-            "  run_impl:",
-            "    tool: run_skill",
-            "    with:",
-            f'      skill_command: "{skill_cmd}"',
-            "    on_success: done",
-            "",
-        ]
-    )
-    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +72,7 @@ def test_hardcoded_origin_fires_for_git_remote_commands(
     )
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
-        _make_recipe_for_skill(
+        make_recipe_for_skill(
             "origin-skill", {"worktree_path": "worktree", "base_branch": "branch"}
         )
     )
@@ -109,7 +84,7 @@ def test_hardcoded_origin_fires_for_git_remote_commands(
     )
 
 
-def test_hardcoded_origin_silent_with_remote_variable(tmp_path: Path) -> None:
+def test_hardcoded_origin_does_not_fire_with_remote_variable(tmp_path: Path) -> None:
     """hardcoded-origin-remote must NOT fire when skill uses $REMOTE variable."""
     skill_dir = tmp_path / "remote-var-skill"
     skill_dir.mkdir()
@@ -136,7 +111,7 @@ def test_hardcoded_origin_silent_with_remote_variable(tmp_path: Path) -> None:
     )
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
-        _make_recipe_for_skill(
+        make_recipe_for_skill(
             "remote-var-skill", {"worktree_path": "worktree", "base_branch": "branch"}
         )
     )
@@ -165,7 +140,7 @@ def test_hardcoded_origin_does_not_fire_on_fixed_resolve_merge_conflicts(tmp_pat
     (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
-        _make_recipe_for_skill(
+        make_recipe_for_skill(
             "resolve-merge-conflicts",
             {"worktree_path": "wt", "plan_path": "plan", "base_branch": "branch"},
         )
@@ -196,7 +171,7 @@ def test_hardcoded_origin_does_not_fire_on_fixed_retry_worktree(tmp_path: Path) 
     (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
-        _make_recipe_for_skill(
+        make_recipe_for_skill(
             "retry-worktree",
             {"plan_path": "plan", "worktree_path": "wt"},
         )
@@ -231,14 +206,14 @@ def test_hardcoded_origin_ignores_comment_lines(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("comment-skill", {"worktree_path": "wt"}))
+    recipe_path.write_text(make_recipe_for_skill("comment-skill", {"worktree_path": "wt"}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings]
 
 
-def test_hardcoded_origin_silent_for_shell_default_value_expression(tmp_path: Path) -> None:
+def test_hardcoded_origin_does_not_fire_for_shell_default_value_expression(tmp_path: Path) -> None:
     """hardcoded-origin-remote must NOT fire for ${REMOTE:-origin} shell default-value syntax.
 
     In `${REMOTE:-origin}`, 'origin' is the fallback in a parameter expansion, not a
@@ -265,7 +240,7 @@ def test_hardcoded_origin_silent_for_shell_default_value_expression(tmp_path: Pa
     )
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
-        _make_recipe_for_skill(
+        make_recipe_for_skill(
             "default-val-skill", {"worktree_path": "worktree", "base_branch": "branch"}
         )
     )
@@ -305,7 +280,7 @@ def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill(skill_name, ingredients))
+    recipe_path.write_text(make_recipe_for_skill(skill_name, ingredients))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -322,17 +297,8 @@ def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
 _PKG_RULE_ID = "no-autoskillit-import-in-skill-python-block"
 
 
-def _write_pkg_skill_and_run(tmp_path: Path, skill_md_content: str) -> list[RuleFinding]:
-    """Write a synthetic skill SKILL.md and a minimal recipe calling it, then run rules."""
-    skill_name = "pkg-skill"
-    skill_dir = tmp_path / skill_name
-    skill_dir.mkdir()
-    (skill_dir / "SKILL.md").write_text(skill_md_content)
-    recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
-    recipe = load_recipe(recipe_path)
-    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
-        return run_semantic_rules(recipe)
+def _write_pkg_skill_and_run(tmp_path: Path, skill_md_content: str):
+    return write_skill_and_run_rules(tmp_path, skill_md_content, skill_name="pkg-skill")
 
 
 def test_no_autoskillit_import_fires_for_from_import(tmp_path: Path) -> None:
@@ -495,7 +461,7 @@ def test_grep_bre_alternation_is_flagged(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -521,7 +487,7 @@ def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -554,7 +520,7 @@ def test_blind_git_add_in_skill_flagged(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("bad-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("bad-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -582,7 +548,7 @@ def test_scoped_git_add_in_skill_allowed(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("good-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("good-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -606,7 +572,7 @@ def test_git_add_u_in_skill_allowed(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("update-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("update-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -630,7 +596,7 @@ def test_git_add_all_long_form_flagged(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("all-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("all-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -644,24 +610,8 @@ def test_git_add_all_long_form_flagged(tmp_path: Path) -> None:
 _INTERP_WRITE_RULE_ID = "interpreter-mediated-write-in-skill"
 
 
-def _write_skill_and_run_rules(tmp_path: Path, skill_md_content: str) -> list[RuleFinding]:
-    skill_name = "interp-skill"
-    skill_dir = tmp_path / skill_name
-    skill_dir.mkdir()
-    (skill_dir / "SKILL.md").write_text(skill_md_content)
-    recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
-    recipe = load_recipe(recipe_path)
-    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
-        return run_semantic_rules(recipe)
-
-
-def test_interpreter_write_rule_registered() -> None:
-    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401
-    from autoskillit.recipe.registry import _RULE_REGISTRY
-
-    rule_names = [r.name for r in _RULE_REGISTRY]
-    assert _INTERP_WRITE_RULE_ID in rule_names
+def _write_skill_and_run_rules(tmp_path: Path, skill_md_content: str):
+    return write_skill_and_run_rules(tmp_path, skill_md_content, skill_name="interp-skill")
 
 
 @pytest.mark.parametrize(
@@ -685,7 +635,7 @@ def test_interpreter_mediated_write_fires(tmp_path: Path, bash_content: str) -> 
         """
     )
     findings = _write_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _INTERP_WRITE_RULE_ID in rule_ids
 
 
@@ -701,7 +651,7 @@ def test_python_block_write_api_fires(tmp_path: Path) -> None:
         """
     )
     findings = _write_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _INTERP_WRITE_RULE_ID in rule_ids
 
 
@@ -726,7 +676,7 @@ def test_interpreter_mediated_write_does_not_fire(tmp_path: Path, bash_content: 
         """
     )
     findings = _write_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _INTERP_WRITE_RULE_ID not in rule_ids
 
 
@@ -742,5 +692,50 @@ def test_python_block_read_only_does_not_fire(tmp_path: Path) -> None:
         """
     )
     findings = _write_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _INTERP_WRITE_RULE_ID not in rule_ids
+
+
+# ---------------------------------------------------------------------------
+# posix-char-class-in-skill tests
+# ---------------------------------------------------------------------------
+
+_POSIX_RULE_ID = "posix-char-class-in-skill"
+
+
+def test_posix_char_class_fires_for_bracket_expression(tmp_path: Path) -> None:
+    """POSIX bracket expression in a bash block must trigger the rule."""
+    skill_md = textwrap.dedent(
+        """\
+        # posix-skill
+
+        ### Step 1
+        ```bash
+        grep -E '[[:space:]]foo[[:space:]]' input.txt
+        ```
+        """
+    )
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="posix-skill")
+    rule_ids = [f.rule for f in findings]
+    assert _POSIX_RULE_ID in rule_ids, (
+        f"Expected '{_POSIX_RULE_ID}' finding for POSIX bracket expression, got: {rule_ids}"
+    )
+
+
+def test_posix_char_class_does_not_fire_for_pcre_only_block(tmp_path: Path) -> None:
+    """A bash block without POSIX bracket expressions must NOT trigger the rule."""
+    skill_md = textwrap.dedent(
+        """\
+        # posix-ok-skill
+
+        ### Step 1
+        ```bash
+        grep -E '[ \\t]foo[ \\t]' input.txt
+        ```
+        """
+    )
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="posix-ok-skill")
+    rule_ids = [f.rule for f in findings]
+    assert _POSIX_RULE_ID not in rule_ids, (
+        f"Rule must not fire when POSIX brackets are absent, got: {rule_ids}"
+    )

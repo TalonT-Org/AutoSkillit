@@ -10,26 +10,9 @@ from __future__ import annotations
 
 import pytest
 
+from tests.recipe.rules_skills._helpers import EXPECTED_RULE_NAMES
+
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-
-EXPECTED_RULE_NAMES = (
-    "undefined-bash-placeholder",
-    "hardcoded-origin-remote",
-    "blind-git-add-in-skill",
-    "interpreter-mediated-write-in-skill",
-    "no-autoskillit-import-in-skill-python-block",
-    "posix-char-class-in-skill",
-    "grep-bre-alternation-in-skill",
-    "output-section-no-markdown-directive",
-    "skill-no-issue-comments",
-    "transition-boundary-anti-confirmation",
-    "executable-field-content-validity",
-    "reviews-post-requires-input-flag",
-    "source-attribution-directive",
-    "graphql-query-requires-shell-invocation",
-    "inline-content-in-subagent-prompt",
-)
 
 
 def test_all_fifteen_rule_names_in_registry() -> None:

@@ -4,12 +4,8 @@ Family of @semantic_rule checks that validate contract fields declared by the
 skill manifest (pseudocode allowlist, output-section directives, executable-field
 content validity, source-attribution directives, inline-content prohibitions).
 
-`_resolve_skill_md` and `load_bundled_manifest` are NOT imported at module
-scope. Every rule body that calls them performs a function-body-scoped lazy
-import against `autoskillit.recipe.rules.rules_skill_content` (the facade) so
-that `patch.object(rules_skill_content, "_resolve_skill_md", ...)` and
-`patch("autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest", ...)`
-continue to redirect rule-body lookups via the facade namespace.
+See `autoskillit.recipe.rules.rules_skill_content` for the facade-mediated
+patchability contract this module participates in.
 """
 
 from __future__ import annotations
@@ -99,7 +95,7 @@ _BANNED_BLOCKQUOTE_VARS: frozenset[str] = frozenset(
 def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFinding]:
     """Fire for any run_skill step whose SKILL.md has undefined bash-block placeholders."""
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -169,8 +165,8 @@ def _check_output_section_no_markdown_directive(ctx: ValidationContext) -> list[
     the model may emit **token_name** = value, causing adjudicated_failure.
     """
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
-        load_bundled_manifest,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
+        load_bundled_manifest,
     )
 
     manifest = load_bundled_manifest()
@@ -240,7 +236,7 @@ def _check_executable_field_content_validity(
     ctx: ValidationContext,
 ) -> list[RuleFinding]:
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -295,8 +291,8 @@ def _check_executable_field_content_validity(
 )
 def _check_source_attribution_directive(ctx: ValidationContext) -> list[RuleFinding]:
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
-        load_bundled_manifest,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
+        load_bundled_manifest,
     )
 
     manifest = load_bundled_manifest()
@@ -364,7 +360,7 @@ def _check_inline_content_in_subagent_prompt(ctx: ValidationContext) -> list[Rul
     prompt incomplete.
     """
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []

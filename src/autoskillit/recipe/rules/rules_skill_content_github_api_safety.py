@@ -5,11 +5,8 @@ misuse patterns: `gh issue comment` invocations (forbidden), missing
 `--input -` on Reviews POSTs, and GraphQL mutations not paired with a
 guard-compatible shell invocation.
 
-`_resolve_skill_md` is NOT imported at module scope. Every rule body that
-calls it performs a function-body-scoped lazy import against
-`autoskillit.recipe.rules.rules_skill_content` (the facade) so that
-`patch.object(rules_skill_content, "_resolve_skill_md", ...)` continues to
-redirect rule-body lookups via the facade namespace.
+See `autoskillit.recipe.rules.rules_skill_content` for the facade-mediated
+patchability contract this module participates in.
 """
 
 from __future__ import annotations
@@ -116,7 +113,7 @@ def _json_payload_binds_variable(section: str, variable: str) -> bool:
 )
 def _check_no_gh_issue_comment(ctx: ValidationContext) -> list[RuleFinding]:
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -165,7 +162,7 @@ def _check_no_gh_issue_comment(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[RuleFinding]:
     """Fire when a SKILL.md ### subsection has a reviews POST endpoint but no --input -."""
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []
@@ -218,7 +215,7 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
 )
 def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> list[RuleFinding]:
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []

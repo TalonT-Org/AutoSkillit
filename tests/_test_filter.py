@@ -779,8 +779,6 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "recipe/rules_skills/test_split_per_family_focused_skill_contract.py",
-            "skills/test_skill_placeholder_contracts.py",
-            "contracts/test_no_interpreter_writes_in_skills.py",
         }
     ),
     "rules_skill_write_path_alignment": frozenset({"recipe"}),

@@ -21,37 +21,9 @@ import autoskillit.recipe._skill_helpers as _sh
 from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+from tests.recipe.rules_skills._helpers import make_recipe_for_skill
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-
-def _make_recipe_for_skill(skill_name: str, ingredients: dict[str, str]) -> str:
-    """Generate minimal recipe YAML invoking the named skill."""
-    parts = [
-        "name: test-recipe",
-        "kitchen_rules:",
-        '  - "Use run_skill only."',
-    ]
-    if ingredients:
-        parts.append("ingredients:")
-        for k, v in ingredients.items():
-            parts.extend([f"  {k}:", f"    description: {v}", "    required: true"])
-    args = " ".join("${{{{ inputs." + k + " }}}}" for k in ingredients)
-    skill_cmd = f"/autoskillit:{skill_name}"
-    if args:
-        skill_cmd += f" {args}"
-    parts.extend(
-        [
-            "steps:",
-            "  run_impl:",
-            "    tool: run_skill",
-            "    with:",
-            f'      skill_command: "{skill_cmd}"',
-            "    on_success: done",
-            "",
-        ]
-    )
-    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +68,7 @@ def test_transition_boundary_anti_confirmation_rule_fires(tmp_path: Path) -> Non
     (skill_dir / "SKILL.md").write_text(_SYNTHETIC_BOUNDARY_SKILL_FIRES)
 
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
 
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
@@ -119,7 +91,7 @@ def test_transition_boundary_anti_confirmation_rule_passes(tmp_path: Path) -> No
     (skill_dir / "SKILL.md").write_text(_SYNTHETIC_BOUNDARY_SKILL_PASSES)
 
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
 
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):

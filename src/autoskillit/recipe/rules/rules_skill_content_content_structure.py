@@ -5,11 +5,8 @@ issues that affect model behavior — currently the
 `transition-boundary-anti-confirmation` rule, which detects unprotected
 phase/group/batch transition boundaries.
 
-`_resolve_skill_md` is NOT imported at module scope. The rule body that
-calls it performs a function-body-scoped lazy import against
-`autoskillit.recipe.rules.rules_skill_content` (the facade) so that
-`patch.object(rules_skill_content, "_resolve_skill_md", ...)` continues to
-redirect rule-body lookups via the facade namespace.
+See `autoskillit.recipe.rules.rules_skill_content` for the facade-mediated
+patchability contract this module participates in.
 """
 
 from __future__ import annotations
@@ -70,7 +67,7 @@ _TRANSITION_ANTI_CONFIRM_RE: re.Pattern[str] = re.compile(
 def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list[RuleFinding]:
     """Fire for any run_skill step whose SKILL.md has unprotected transition boundaries."""
     from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,  # noqa: PLC0415  # lazy import → facade-mediated patchability
+        _resolve_skill_md,
     )
 
     findings: list[RuleFinding] = []

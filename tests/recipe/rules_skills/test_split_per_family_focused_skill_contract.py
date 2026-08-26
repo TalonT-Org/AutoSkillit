@@ -24,37 +24,9 @@ import pytest
 import autoskillit.recipe._skill_helpers as _sh
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+from tests.recipe.rules_skills._helpers import make_recipe_for_skill
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-
-def _make_recipe_for_skill(skill_name: str, ingredients: dict[str, str]) -> str:
-    """Generate minimal recipe YAML invoking the named skill."""
-    parts = [
-        "name: test-recipe",
-        "kitchen_rules:",
-        '  - "Use run_skill only."',
-    ]
-    if ingredients:
-        parts.append("ingredients:")
-        for k, v in ingredients.items():
-            parts.extend([f"  {k}:", f"    description: {v}", "    required: true"])
-    args = " ".join("${{{{ inputs." + k + " }}}}" for k in ingredients)
-    skill_cmd = f"/autoskillit:{skill_name}"
-    if args:
-        skill_cmd += f" {args}"
-    parts.extend(
-        [
-            "steps:",
-            "  run_impl:",
-            "    tool: run_skill",
-            "    with:",
-            f'      skill_command: "{skill_cmd}"',
-            "    on_success: done",
-            "",
-        ]
-    )
-    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +270,7 @@ def test_executable_field_content_validity_fires_for_missing_criteria(tmp_path: 
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
+    recipe_path.write_text(make_recipe_for_skill("plan-experiment", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -324,7 +296,7 @@ def test_executable_field_content_validity_passes_when_criteria_present(tmp_path
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
+    recipe_path.write_text(make_recipe_for_skill("plan-experiment", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -348,7 +320,7 @@ def test_executable_field_content_validity_ignores_non_executable_skills(tmp_pat
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("other-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("other-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -378,7 +350,7 @@ def test_executable_field_content_validity_checks_all_v_rules(tmp_path: Path) ->
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
+    recipe_path.write_text(make_recipe_for_skill("plan-experiment", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -532,10 +504,76 @@ def test_source_attribution_directive_silent_without_source_pin_fields(
     )
 
 
-def test_source_attribution_directive_rule_registered() -> None:
-    """The source-attribution-directive rule must be registered in the rule registry."""
-    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401
-    from autoskillit.recipe.registry import _RULE_REGISTRY
+# ---------------------------------------------------------------------------
+# inline-content-in-subagent-prompt tests
+# ---------------------------------------------------------------------------
 
-    rule_names = [r.name for r in _RULE_REGISTRY]
-    assert "source-attribution-directive" in rule_names
+_INLINE_CONTENT_RULE_ID = "inline-content-in-subagent-prompt"
+
+
+def test_inline_content_in_subagent_prompt_fires_for_banned_var(tmp_path: Path) -> None:
+    """A blockquoted subagent prompt referencing a banned `*_content` variable must fire."""
+    skill_md = textwrap.dedent(
+        """\
+        # subagent-skill
+
+        ## Workflow
+
+        Dispatch a subagent with the diff:
+
+        > Subagent prompt:
+        > Apply the following patch:
+        > {annotated_diff_content}
+
+        ### Step 1
+        ```bash
+        echo "hello"
+        ```
+        """
+    )
+    skill_dir = tmp_path / "subagent-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(skill_md)
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(make_recipe_for_skill("subagent-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    rule_ids = [f.rule for f in findings]
+    assert _INLINE_CONTENT_RULE_ID in rule_ids, (
+        f"Expected '{_INLINE_CONTENT_RULE_ID}' finding for banned {{annotated_diff_content}}, "
+        f"got: {rule_ids}"
+    )
+
+
+def test_inline_content_in_subagent_prompt_passes_with_path_var(tmp_path: Path) -> None:
+    """A subagent prompt referencing `*_path` instead of `*_content` must NOT fire."""
+    skill_md = textwrap.dedent(
+        """\
+        # subagent-ok-skill
+
+        ## Workflow
+
+        Dispatch a subagent with the diff path:
+
+        > Subagent prompt:
+        > Read the patch file at {annotated_diff_path}.
+
+        ### Step 1
+        ```bash
+        echo "hello"
+        ```
+        """
+    )
+    skill_dir = tmp_path / "subagent-ok-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(skill_md)
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(make_recipe_for_skill("subagent-ok-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    rule_ids = [f.rule for f in findings]
+    assert _INLINE_CONTENT_RULE_ID not in rule_ids, (
+        f"Rule must not fire when subagent prompt uses {{annotated_diff_path}}, got: {rule_ids}"
+    )

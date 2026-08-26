@@ -22,46 +22,13 @@ import pytest
 import autoskillit.recipe._skill_helpers as _sh
 from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
-from autoskillit.recipe.registry import RuleFinding, run_semantic_rules
+from autoskillit.recipe.registry import run_semantic_rules
+from tests.recipe.rules_skills._helpers import (
+    make_recipe_for_skill,
+    write_skill_and_run_rules,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-
-def _make_recipe_for_skill(skill_name: str, ingredients: dict[str, str]) -> str:
-    """Generate minimal recipe YAML invoking the named skill."""
-    parts = [
-        "name: test-recipe",
-        "kitchen_rules:",
-        '  - "Use run_skill only."',
-    ]
-    if ingredients:
-        parts.append("ingredients:")
-        for k, v in ingredients.items():
-            parts.extend([f"  {k}:", f"    description: {v}", "    required: true"])
-    args = " ".join("${{{{ inputs." + k + " }}}}" for k in ingredients)
-    skill_cmd = f"/autoskillit:{skill_name}"
-    if args:
-        skill_cmd += f" {args}"
-    parts.extend(
-        [
-            "steps:",
-            "  run_impl:",
-            "    tool: run_skill",
-            "    with:",
-            f'      skill_command: "{skill_cmd}"',
-            "    on_success: done",
-            "",
-        ]
-    )
-    return "\n".join(parts)
-
-
-def test_skill_no_issue_comments_rule_registered() -> None:
-    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401 — triggers decorator registration
-    from autoskillit.recipe.registry import _RULE_REGISTRY
-
-    rule_names = [r.name for r in _RULE_REGISTRY]
-    assert "skill-no-issue-comments" in rule_names
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +56,7 @@ def test_reviews_post_requires_input_flag_rule(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("test-reviews-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("test-reviews-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -122,7 +89,7 @@ def test_reviews_post_requires_input_flag_rule_passes_with_input_flag(
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("good-reviews-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("good-reviews-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -161,7 +128,7 @@ def test_reviews_post_rule_subsection_granularity(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("granularity-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("granularity-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -189,7 +156,7 @@ def test_reviews_post_regex_flag_before_path(tmp_path: Path) -> None:
         )
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill("flag-before-path-skill", {}))
+    recipe_path.write_text(make_recipe_for_skill("flag-before-path-skill", {}))
     recipe = load_recipe(recipe_path)
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
@@ -207,24 +174,8 @@ def test_reviews_post_regex_flag_before_path(tmp_path: Path) -> None:
 _GRAPHQL_RULE_ID = "graphql-query-requires-shell-invocation"
 
 
-def _write_graphql_skill_and_run_rules(tmp_path: Path, skill_md_content: str) -> list[RuleFinding]:
-    skill_name = "graphql-skill"
-    skill_dir = tmp_path / skill_name
-    skill_dir.mkdir()
-    (skill_dir / "SKILL.md").write_text(skill_md_content)
-    recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
-    recipe = load_recipe(recipe_path)
-    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
-        return run_semantic_rules(recipe)
-
-
-def test_graphql_query_requires_shell_invocation_rule_registered() -> None:
-    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401
-    from autoskillit.recipe.registry import _RULE_REGISTRY
-
-    rule_names = [r.name for r in _RULE_REGISTRY]
-    assert _GRAPHQL_RULE_ID in rule_names
+def _write_graphql_skill_and_run_rules(tmp_path: Path, skill_md_content: str):
+    return write_skill_and_run_rules(tmp_path, skill_md_content, skill_name="graphql-skill")
 
 
 def test_graphql_rule_fires_when_no_bash_invocation(tmp_path: Path) -> None:
@@ -243,7 +194,7 @@ def test_graphql_rule_fires_when_no_bash_invocation(tmp_path: Path) -> None:
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
@@ -271,7 +222,7 @@ def test_graphql_rule_does_not_fire_when_bash_invocation_present(tmp_path: Path)
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID not in rule_ids
 
 
@@ -299,7 +250,7 @@ def test_graphql_rule_fires_for_case_mismatched_variable_bindings(tmp_path: Path
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
@@ -318,7 +269,7 @@ def test_graphql_rule_fires_for_fragment_without_same_section_invocation(tmp_pat
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
@@ -343,7 +294,7 @@ def test_graphql_rule_does_not_fire_for_non_parameterized_block_with_invocation(
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID not in rule_ids
 
 
@@ -359,7 +310,7 @@ def test_graphql_rule_fires_for_prose_without_same_section_invocation(tmp_path: 
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
@@ -380,7 +331,7 @@ def test_graphql_rule_fires_for_prose_with_stdin_invocation(
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
@@ -434,7 +385,7 @@ def test_graphql_rule_accepts_literal_payload_with_variables_object(
     )
 
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID not in rule_ids
 
@@ -472,7 +423,7 @@ def test_graphql_rule_rejects_unsafe_mutation_shapes(
     )
 
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -492,7 +443,7 @@ def test_graphql_rule_accepts_fully_literal_inline_mutation(tmp_path: Path) -> N
     )
 
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID not in rule_ids
 
@@ -515,7 +466,7 @@ def test_graphql_rule_rejects_generated_named_mutation_with_dynamic_query(
     )
 
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -548,7 +499,7 @@ def test_graphql_rule_does_not_bind_variables_from_json_without_query(
     )
 
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -573,7 +524,7 @@ def test_graphql_rule_rejects_single_variables_blob(tmp_path: Path) -> None:
     )
 
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -597,7 +548,7 @@ def test_graphql_rule_fires_for_prose_in_different_section_than_invocation(
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
@@ -620,5 +571,5 @@ def test_graphql_rule_fires_for_documentation_schema_reference_without_invocatio
         """
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
-    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids

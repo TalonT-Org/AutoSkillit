@@ -119,8 +119,8 @@ account, organization, and email identifiers are removed. Prompt, assistant,
 tool-content, and raw-API-body capture are not enabled by this integration.
 
 Consumers must preserve raw accounting and stop metadata. Do not add
-cache-read tokens to input tokens again, add reasoning tokens to output tokens
-again, or treat `finish_reasons=["length"]` as proof of context exhaustion.
+cache-read tokens to input tokens, add reasoning tokens to output tokens, or
+treat `finish_reasons=["length"]` as proof of context exhaustion.
 `sessions.jsonl` is still only the retained session projection: #4646 owns the
 future watermark walk and #4647 owns the rebuildable joined index and writer.
 

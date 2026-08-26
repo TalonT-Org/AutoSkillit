@@ -274,6 +274,7 @@ def _reconcile_generation(
             witness_ids=(event.output_usage_witness.witness_id,),
         ),
     )
+    reason_code = "generation-usage-exceeds-allowance" if quarantined else "accepted"
     if quarantined:
         effects += (
             QuarantineRecordedEffect(
@@ -281,7 +282,7 @@ def _reconcile_generation(
                 resulting_aggregate_revision=revision,
                 resulting_admission_sequence=sequence,
                 target_id=generation.generation_reservation_id,
-                reason_code="generation-usage-exceeds-allowance",
+                reason_code=reason_code,
             ),
         )
     return _publish(
@@ -291,7 +292,7 @@ def _reconcile_generation(
         kind=(
             AdmissionDecisionKind.QUARANTINED if quarantined else AdmissionDecisionKind.WOULD_ADMIT
         ),
-        reason_code=("generation-usage-exceeds-allowance" if quarantined else "accepted"),
+        reason_code=reason_code,
         capacity_changed=True,
         effects=effects,
     )

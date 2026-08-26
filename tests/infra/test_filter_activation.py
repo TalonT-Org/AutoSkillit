@@ -109,7 +109,7 @@ def test_backend_gating_source_map_uses_canonical_test_module() -> None:
     assert not (REPO_ROOT / "tests/test_backend_gating_root.py").is_file()
     assert (REPO_ROOT / "tests/test_llm_triage.py").is_file()
 
-    source_map = json.loads((REPO_ROOT / ".autoskillit/test-source-map.json").read_text())
+    source_map = json.loads((REPO_ROOT / ".autoskillit/test-source-map.json").read_text())["map"]
     mapped_tests = {
         test_path for source_tests in source_map.values() for test_path in source_tests
     }

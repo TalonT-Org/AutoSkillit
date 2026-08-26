@@ -42,6 +42,31 @@ class ImportContext(enum.StrEnum):
     IMPORTLIB = "importlib"
 
 
+class SourceMapRejection(enum.StrEnum):
+    MISSING = "missing"
+    UNREADABLE = "unreadable"
+    MALFORMED_JSON = "malformed_json"
+    NOT_AN_OBJECT = "not_an_object"
+    UNKNOWN_SCHEMA_VERSION = "unknown_schema_version"
+    MISSING_PROVENANCE = "missing_provenance"
+    PRODUCER_FAILED = "producer_failed"
+    STALE = "stale"
+    MALFORMED_ENTRY = "malformed_entry"
+
+
+_REJECTION_DETAIL: dict[SourceMapRejection, str] = {
+    SourceMapRejection.MISSING: "coverage map is missing",
+    SourceMapRejection.UNREADABLE: "coverage map cannot be read",
+    SourceMapRejection.MALFORMED_JSON: "coverage map is not valid JSON",
+    SourceMapRejection.NOT_AN_OBJECT: "coverage map is not a JSON object",
+    SourceMapRejection.UNKNOWN_SCHEMA_VERSION: "coverage map has an unknown schema version",
+    SourceMapRejection.MISSING_PROVENANCE: "coverage map is missing successful provenance",
+    SourceMapRejection.PRODUCER_FAILED: "coverage map was produced by a failed pytest run",
+    SourceMapRejection.STALE: "coverage map is stale",
+    SourceMapRejection.MALFORMED_ENTRY: "coverage map has a malformed map entry",
+}
+
+
 BUCKET_A_PATTERNS: frozenset[str] = frozenset(
     {
         "tests/conftest.py",
@@ -1775,42 +1800,65 @@ def load_coverage_map(
         max_age_days: Maximum age in days before the map is considered stale.
                       Defaults to 30 days.
 
-    Returns:
-        dict mapping source file paths to sets of test file paths, or None when:
-        - The file does not exist
-        - The file is older than max_age_days
-        - The file cannot be read or parsed
+    Returns None whenever the artifact is not a successful schema-version-one
+    publication. This preserves the coarser directory-level cascade.
     """
     map_path = Path(map_path)
     try:
         stat = map_path.stat()
     except OSError:
-        return None
+        return _reject_coverage_map(map_path, SourceMapRejection.MISSING)
 
     age = datetime.datetime.now().timestamp() - stat.st_mtime
     if age > max_age_days * 24 * 3600:
-        return None
+        return _reject_coverage_map(map_path, SourceMapRejection.STALE)
 
     try:
         raw = json.loads(map_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        warnings.warn(f"Cannot read coverage map {map_path}: {exc}", stacklevel=2)
-        return None
+    except OSError:
+        return _reject_coverage_map(map_path, SourceMapRejection.UNREADABLE)
+    except json.JSONDecodeError:
+        return _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_JSON)
 
     if not isinstance(raw, dict):
-        warnings.warn(f"Coverage map {map_path} is not a JSON object", stacklevel=2)
-        return None
+        return _reject_coverage_map(map_path, SourceMapRejection.NOT_AN_OBJECT)
+
+    schema_version = raw.get("schema_version")
+    if schema_version is None:
+        return _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE)
+    if schema_version != 1:
+        return _reject_coverage_map(map_path, SourceMapRejection.UNKNOWN_SCHEMA_VERSION)
+    provenance = raw.get("provenance")
+    if not isinstance(provenance, dict) or "pytest_exit_code" not in provenance:
+        return _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE)
+    if provenance.get("pytest_exit_code") != 0:
+        return _reject_coverage_map(map_path, SourceMapRejection.PRODUCER_FAILED)
+
+    source_map = raw.get("map")
+    if not isinstance(source_map, dict):
+        return _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_ENTRY)
 
     result: dict[str, set[str]] = {}
-    for src, tests in raw.items():
-        if not isinstance(tests, list):
-            warnings.warn(
-                f"Coverage map {map_path}: value for {src!r} is not a list",
-                stacklevel=2,
-            )
-            return None
+    for src, tests in source_map.items():
+        if (
+            not isinstance(src, str)
+            or not isinstance(tests, list)
+            or not all(isinstance(test, str) for test in tests)
+        ):
+            return _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_ENTRY)
         result[src] = set(tests)
     return result
+
+
+def _reject_coverage_map(
+    map_path: Path,
+    rejection: SourceMapRejection,
+) -> dict[str, set[str]] | None:
+    warnings.warn(
+        f"Coverage map {map_path}: {_REJECTION_DETAIL[rejection]}",
+        stacklevel=2,
+    )
+    return None
 
 
 def apply_manifest(

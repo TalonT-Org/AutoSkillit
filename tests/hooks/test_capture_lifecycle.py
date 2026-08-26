@@ -13,7 +13,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
@@ -23,6 +23,7 @@ from typing import cast
 import pytest
 
 import autoskillit.hooks._capture._capacity as capture_capacity
+import autoskillit.hooks._capture._ledger_view as capture_ledger_view
 import autoskillit.hooks._capture._orphan_scan as orphan_scan
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._sweep as capture_sweep
@@ -270,6 +271,21 @@ def test_capacity_spec_derives_total_recovery_headroom() -> None:
     assert spec.recovery_headroom_bytes == 7168
 
 
+@contextmanager
+def encode_frame_accounting(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
+    """Record the capture ID of every capture-ledger frame encoding."""
+    with monkeypatch.context() as accounting:
+        original_encode_frame = capture_capacity._ledger.encode_frame
+        encoded_capture_ids: list[str] = []
+
+        def counted_encode_frame(payload: dict[str, object], *, compaction_epoch: int) -> bytes:
+            encoded_capture_ids.append(str(payload["capture_id"]))
+            return original_encode_frame(payload, compaction_epoch=compaction_epoch)
+
+        accounting.setattr(capture_capacity._ledger, "encode_frame", counted_encode_frame)
+        yield encoded_capture_ids
+
+
 def test_compacted_byte_cache_reuses_unchanged_record_frames(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -283,40 +299,225 @@ def test_compacted_byte_cache_reuses_unchanged_record_frames(
         with store._locked():
             records, compaction_epoch, _size = store._load_locked()
 
-        original_encode_frame = capture_capacity._ledger.encode_frame
-        encoded_capture_ids: list[str] = []
-
-        def counted_encode_frame(payload: dict[str, object], *, compaction_epoch: int) -> bytes:
-            encoded_capture_ids.append(str(payload["capture_id"]))
-            return original_encode_frame(payload, compaction_epoch=compaction_epoch)
-
-        monkeypatch.setattr(capture_capacity._ledger, "encode_frame", counted_encode_frame)
-        cache: capture_capacity.CompactedFrameSizeCache = {}
-
-        capture_capacity.compacted_bytes(
-            records,
-            compaction_epoch,
-            store._capacity,
-            frame_size_cache=cache,
-        )
-        candidate = replace(records[_CAPTURE_ID], revision=records[_CAPTURE_ID].revision + 1)
-        projected = dict(records)
-        projected[_CAPTURE_ID] = candidate
-        capture_capacity.compacted_bytes(
-            projected,
-            compaction_epoch,
-            store._capacity,
-            frame_size_cache=cache,
-        )
-        capture_capacity.compacted_bytes(
-            projected,
-            compaction_epoch,
-            store._capacity,
-            frame_size_cache=cache,
-        )
+        with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
+            sizer = capture_capacity.CompactedFrameSizer()
+            sizer.total_bytes(records, compaction_epoch, store._capacity)
+            candidate = replace(records[_CAPTURE_ID], revision=records[_CAPTURE_ID].revision + 1)
+            projected = dict(records)
+            projected[_CAPTURE_ID] = candidate
+            sizer.total_bytes(projected, compaction_epoch, store._capacity)
+            sizer.total_bytes(projected, compaction_epoch, store._capacity)
 
         assert encoded_capture_ids.count(_CAPTURE_ID) == 2
         assert encoded_capture_ids.count("1" * 16) == 1
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_reserve_capture_does_not_reencode_retained_frames(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
+            for index in range(1, 9):
+                before = len(encoded_capture_ids)
+                store.reserve_capture(f"{index:016x}")
+                assert len(encoded_capture_ids) - before <= 2
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_sequential_fresh_store_captures_do_not_reencode_retained_frames(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        for index in range(1, 9):
+            store.reserve_capture(f"{index:016x}")
+    finally:
+        root.close()
+        anchor.close()
+
+    reopened_anchor, reopened_root, reopened_store = _open_store(project, _Clock())
+    try:
+        with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
+            reopened_store.reserve_capture("f" * 16)
+
+        assert len(encoded_capture_ids) <= 2
+    finally:
+        reopened_root.close()
+        reopened_anchor.close()
+
+
+def test_hydrated_frame_sizes_match_reencode(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        for index in range(1, 4):
+            store.reserve_capture(f"{index:016x}")
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+            store._compact_locked(records, compaction_epoch + 1)
+            records, compaction_epoch, _size = store._load_locked()
+
+        for capture_id, record in records.items():
+            hydrated = store._ledger_view.sizer.total_bytes(
+                {capture_id: record},
+                compaction_epoch,
+                store._capacity,
+            )
+            reencoded = len(
+                capture_lifecycle._capture_ledger.encode_frame(
+                    capture_lifecycle._capture_ledger.record_to_dict(record),
+                    compaction_epoch=compaction_epoch,
+                )
+            )
+            assert hydrated == reencoded
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_mutation_then_boundary_admission_matches_uncached_decision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        current = store.reserve_capture(_CAPTURE_ID)
+        for _ in range(8):
+            current = store._transition(
+                store._authority_for(current),
+                allowed_states={CaptureState.RESERVED},
+                transform=lambda record: replace(record, revision=record.revision + 1),
+            )
+        before = len(
+            capture_lifecycle._capture_ledger.encode_frame(
+                capture_lifecycle._capture_ledger.record_to_dict(current),
+                compaction_epoch=current.compaction_epoch,
+            )
+        )
+        current = store._transition(
+            store._authority_for(current),
+            allowed_states={CaptureState.RESERVED},
+            transform=lambda record: replace(record, revision=record.revision + 1),
+        )
+        after = len(
+            capture_lifecycle._capture_ledger.encode_frame(
+                capture_lifecycle._capture_ledger.record_to_dict(current),
+                compaction_epoch=current.compaction_epoch,
+            )
+        )
+        assert after != before
+
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+        candidate = replace(
+            current,
+            capture_id="f" * 16,
+            incarnation="e" * 32,
+            revision=1,
+        )
+        projected = {**records, candidate.capture_id: candidate}
+        projected_bytes = capture_capacity.CompactedFrameSizer().total_bytes(
+            projected,
+            compaction_epoch,
+            store._capacity,
+        )
+        boundary_capacity = replace(
+            store._capacity,
+            compaction_low_bytes=projected_bytes - 1,
+            compaction_high_bytes=projected_bytes,
+            hard_ledger_bytes=projected_bytes + store._capacity.recovery_headroom_bytes + 1,
+        )
+        cold_reason = capture_capacity.admission_reason(
+            records,
+            candidate,
+            compaction_epoch=compaction_epoch,
+            spec=boundary_capacity,
+            active_limit=boundary_capacity.max_operational_records,
+            sizer=capture_capacity.CompactedFrameSizer(),
+        )
+        assert cold_reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+
+        monkeypatch.setattr(store, "_capacity", boundary_capacity)
+        with pytest.raises(CaptureCapacityError) as failure:
+            store.reserve_capture("f" * 16)
+
+        assert failure.value.reason is cold_reason
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_compaction_epoch_change_installs_current_sizes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        for index in range(1, 4):
+            store.reserve_capture(f"{index:016x}")
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+            store._compact_locked(records, compaction_epoch + 1)
+            records, compaction_epoch, _size = store._load_locked()
+
+        with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
+            hydrated_total = store._ledger_view.sizer.total_bytes(
+                records,
+                compaction_epoch,
+                store._capacity,
+            )
+
+        cold_total = capture_capacity.CompactedFrameSizer().total_bytes(
+            records,
+            compaction_epoch,
+            store._capacity,
+        )
+        assert encoded_capture_ids == []
+        assert hydrated_total == cold_total
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_append_and_compaction_preserve_hydrated_sizes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        for index in range(1, 5):
+            store.reserve_capture(f"{index:016x}")
+
+        with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
+            store.reserve_capture("f" * 16)
+            with store._locked():
+                records, compaction_epoch, _size = store._load_locked()
+            store._ledger_view.sizer.total_bytes(records, compaction_epoch, store._capacity)
+
+        assert len(encoded_capture_ids) <= 2
+
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+            store._compact_locked(records, compaction_epoch + 1)
+            records, compaction_epoch, _size = store._load_locked()
+
+        with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
+            store._ledger_view.sizer.total_bytes(records, compaction_epoch, store._capacity)
+
+        assert encoded_capture_ids == []
     finally:
         root.close()
         anchor.close()
@@ -601,6 +802,71 @@ def _legacy_record(
         "staging_name": f".capture-staging-{capture_id}-{'1' * 16}",
         "state": state.value,
     }
+
+
+def test_legacy_and_opaque_frames_do_not_hydrate_sizes() -> None:
+    legacy = _legacy_record(
+        capture_id=_CAPTURE_ID,
+        state=CaptureState.RESERVED,
+        project_identity=(1, 2),
+        root_identity=(3, 4),
+        artifact_identity=None,
+        observed_size=0,
+    )
+    current = capture_lifecycle._capture_ledger.legacy_record_from_dict(
+        legacy,
+        revision=1,
+        compaction_epoch=1,
+    )
+    opaque_record = capture_lifecycle._capture_ledger.record_to_dict(current)
+    opaque_record["state"] = "future-state"
+    opaque = capture_lifecycle._capture_ledger.encode_frame(
+        opaque_record,
+        compaction_epoch=1,
+    )
+
+    decoded = capture_ledger_view._decode_full(_legacy_frame(legacy) + opaque)
+
+    assert decoded.records == {}
+    assert decoded.frame_sizes == {}
+
+
+def test_migrated_legacy_frames_hydrate_current_sizes(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    legacy = _legacy_record(
+        capture_id=_CAPTURE_ID,
+        state=CaptureState.RESERVED,
+        project_identity=(anchor.identity.device, anchor.identity.inode),
+        root_identity=(root.identity.device, root.identity.inode),
+        artifact_identity=None,
+        observed_size=0,
+    )
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    ledger.write_bytes(_legacy_frame(legacy))
+    ledger.chmod(0o600)
+    try:
+        assert store.get_record(_CAPTURE_ID) is not None
+        decoded = capture_lifecycle._capture_ledger.decode_ledger(ledger.read_bytes())
+        assert {frame.format_version for frame in decoded.frames} == {2}
+
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+        hydrated_total = store._ledger_view.sizer.total_bytes(
+            records,
+            compaction_epoch,
+            store._capacity,
+        )
+        cold_total = capture_capacity.CompactedFrameSizer().total_bytes(
+            records,
+            compaction_epoch,
+            store._capacity,
+        )
+
+        assert hydrated_total == cold_total
+    finally:
+        root.close()
+        anchor.close()
 
 
 def test_legacy_tampered_record_receives_forensic_hold_before_migration() -> None:
@@ -926,6 +1192,83 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
             .exists()
         )
     finally:
+        root.close()
+        anchor.close()
+
+
+def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor = open_project_anchor(str(project))
+    root = open_capture_root(anchor, create=True)
+    project_identity = (anchor.identity.device, anchor.identity.inode)
+    root_identity = (root.identity.device, root.identity.inode)
+    capture_ids = tuple(f"{index:016x}" for index in range(1, 65))
+    frames: list[bytes] = []
+    normalized: CaptureLifecycleRecord | None = None
+    for capture_id in capture_ids:
+        legacy = _legacy_record(
+            capture_id=capture_id,
+            state=CaptureState.RESERVED,
+            project_identity=project_identity,
+            root_identity=root_identity,
+            artifact_identity=None,
+            observed_size=0,
+        )
+        frames.append(_legacy_frame(legacy))
+        normalized = capture_lifecycle._capture_ledger.legacy_record_from_dict(
+            legacy,
+            revision=1,
+            compaction_epoch=2,
+        )
+    assert normalized is not None
+    frame_bytes = len(
+        capture_lifecycle._capture_ledger.encode_frame(
+            capture_lifecycle._capture_ledger.record_to_dict(normalized),
+            compaction_epoch=2,
+        )
+    )
+    low = frame_bytes * 4 + 64
+    store = CaptureLifecycleStore(
+        root.fd,
+        project_identity=project_identity,
+        root_identity=root_identity,
+        wall_clock=lambda: 3_000_000.0,
+        capacity=CaptureCapacitySpec(
+            max_operational_records=128,
+            max_retained_records=128,
+            max_evidence_records=128,
+            max_tombstones=1,
+            compaction_low_bytes=low,
+            compaction_high_bytes=low + 4096,
+            hard_ledger_bytes=low + 8192,
+            cursor_headroom_bytes=1024,
+            tamper_headroom_bytes=1024,
+            reclamation_headroom_bytes=1024,
+        ),
+        _factory_token=capture_lifecycle._STORE_FACTORY_TOKEN,
+    )
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    ledger.write_bytes(b"".join(frames))
+    ledger.chmod(0o600)
+    try:
+        store._sweep_budget = SweepBudgetSpec(
+            max_records_inspected=len(capture_ids),
+            max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+            max_attempts=len(capture_ids),
+            max_transitions=len(capture_ids) * 2,
+            max_cursor_writes=len(capture_ids),
+            max_duration_seconds=5.0,
+        )
+        with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
+            store.get_record(capture_ids[-1])
+
+        assert len(encoded_capture_ids) <= len(capture_ids) * 8
+    finally:
+        store._sweep_budget = None
         root.close()
         anchor.close()
 
@@ -2749,7 +3092,6 @@ def _reserve_many(store: CaptureLifecycleStore, count: int, *, offset: int = 0) 
     return ids
 
 
-@pytest.mark.timeout(180)
 def test_production_scale_backlog_converges_within_bounded_invocations(
     tmp_path: Path,
 ) -> None:
@@ -3933,7 +4275,7 @@ def test_recovery_transition_compacts_within_reserved_headroom(
             revision=current.revision + 1,
         )
         projected = {_CAPTURE_ID: candidate}
-        encoded = capture_capacity.compacted_bytes(
+        encoded = capture_capacity.CompactedFrameSizer().total_bytes(
             projected,
             candidate.compaction_epoch + 1,
             store._capacity,

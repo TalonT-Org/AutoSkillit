@@ -7,7 +7,7 @@ import stat
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 
-from . import _ledger
+from . import _capacity, _ledger
 from ._module_identity import register_module_aliases
 from ._types import LedgerIncarnation, LedgerSnapshot
 
@@ -66,6 +66,7 @@ def _current_record(frame: _ledger.LedgerFrame) -> Record:
 @dataclass(frozen=True, slots=True)
 class _DecodedView:
     records: Records
+    frame_sizes: Mapping[str, tuple[int, int]]
     compaction_epoch: int
     saw_legacy: bool
     truncate_at: int | None
@@ -76,6 +77,7 @@ class _DecodedView:
 def _decode_full(data: bytes) -> _DecodedView:
     decoded = _ledger.decode_ledger(data)
     records: Records = {}
+    frame_sizes: dict[str, tuple[int, int]] = {}
     source_versions: dict[str, int] = {}
     opaque_frames: list[bytes] = []
     opaque_capture_ids: set[str] = set()
@@ -111,14 +113,18 @@ def _decode_full(data: bytes) -> _DecodedView:
             if isinstance(raw_capture_id, str):
                 opaque_capture_ids.add(raw_capture_id)
                 records.pop(raw_capture_id, None)
+                frame_sizes.pop(raw_capture_id, None)
                 source_versions.pop(raw_capture_id, None)
             continue
         if previous is not None and frame.format_version != 1:
             _ledger.validate_successor(previous, record)
         records[record.capture_id] = record
+        if frame.format_version != 1:
+            frame_sizes[record.capture_id] = (len(frame.exact_bytes), frame.compaction_epoch)
         source_versions[record.capture_id] = frame.format_version
     return _DecodedView(
         records=records,
+        frame_sizes=frame_sizes,
         compaction_epoch=compaction_epoch,
         saw_legacy=saw_legacy,
         truncate_at=decoded.truncate_at,
@@ -132,10 +138,15 @@ class LedgerView:
 
     def __init__(self) -> None:
         self.records: Records | None = None
+        self._sizer = _capacity.CompactedFrameSizer()
         self.incarnation: LedgerIncarnation | None = None
         self.snapshot: LedgerSnapshot | None = None
         self.opaque_frames: tuple[bytes, ...] = ()
         self.opaque_capture_ids: frozenset[str] = frozenset()
+
+    @property
+    def sizer(self) -> _capacity.CompactedFrameSizer:
+        return self._sizer
 
     def install(
         self,
@@ -146,6 +157,8 @@ class LedgerView:
         decoded_offset: int,
         opaque_frames: tuple[bytes, ...],
         opaque_capture_ids: frozenset[str],
+        frame_sizes: Mapping[str, int],
+        sizes_are_complete: bool,
     ) -> tuple[Records, int, int]:
         self.records = records
         self.opaque_frames = opaque_frames
@@ -160,6 +173,11 @@ class LedgerView:
             ctime_ns=value.st_ctime_ns,
             decoded_offset=decoded_offset,
         )
+        if sizes_are_complete:
+            self._sizer.reset()
+        else:
+            self._sizer.retain_records(records)
+        self._sizer.hydrate(records, compaction_epoch, frame_sizes)
         return records, compaction_epoch, value.st_size
 
     def note_append(
@@ -168,6 +186,7 @@ class LedgerView:
         record: Record,
         compaction_epoch: int,
         value: os.stat_result,
+        frame: bytes,
     ) -> None:
         latest = dict(records)
         latest[record.capture_id] = replace(record, compaction_epoch=compaction_epoch)
@@ -178,6 +197,8 @@ class LedgerView:
             decoded_offset=value.st_size,
             opaque_frames=self.opaque_frames,
             opaque_capture_ids=self.opaque_capture_ids,
+            frame_sizes={record.capture_id: len(frame)},
+            sizes_are_complete=False,
         )
 
     def note_compaction(
@@ -185,6 +206,7 @@ class LedgerView:
         records: Mapping[str, Record],
         compaction_epoch: int,
         value: os.stat_result,
+        actionable_frames: Mapping[str, bytes],
     ) -> None:
         latest = {
             record.capture_id: replace(record, compaction_epoch=compaction_epoch)
@@ -197,6 +219,10 @@ class LedgerView:
             decoded_offset=value.st_size,
             opaque_frames=self.opaque_frames,
             opaque_capture_ids=self.opaque_capture_ids,
+            frame_sizes={
+                capture_id: len(frame) for capture_id, frame in actionable_frames.items()
+            },
+            sizes_are_complete=True,
         )
 
     def _load_full(
@@ -234,6 +260,12 @@ class LedgerView:
             decoded_offset=decoded_offset,
             opaque_frames=decoded.opaque_frames,
             opaque_capture_ids=decoded.opaque_capture_ids,
+            frame_sizes={
+                capture_id: size
+                for capture_id, (size, frame_epoch) in decoded.frame_sizes.items()
+                if frame_epoch == decoded.compaction_epoch
+            },
+            sizes_are_complete=True,
         )
 
     def load(
@@ -296,6 +328,7 @@ class LedgerView:
         latest = dict(records)
         opaque_frames = list(self.opaque_frames)
         opaque_capture_ids = set(self.opaque_capture_ids)
+        frame_sizes: dict[str, int] = {}
         for frame in decoded.frames:
             raw_capture_id = frame.record.get("capture_id")
             if isinstance(raw_capture_id, str) and raw_capture_id in opaque_capture_ids:
@@ -308,11 +341,13 @@ class LedgerView:
                 if isinstance(raw_capture_id, str):
                     opaque_capture_ids.add(raw_capture_id)
                     latest.pop(raw_capture_id, None)
+                    frame_sizes.pop(raw_capture_id, None)
                 continue
             previous = latest.get(record.capture_id)
             if previous is not None:
                 _ledger.validate_successor(previous, record)
             latest[record.capture_id] = record
+            frame_sizes[record.capture_id] = len(frame.exact_bytes)
         decoded_offset = value.st_size
         if decoded.truncate_at is not None:
             decoded_offset = snapshot.decoded_offset + decoded.truncate_at
@@ -326,4 +361,6 @@ class LedgerView:
             decoded_offset=decoded_offset,
             opaque_frames=tuple(opaque_frames),
             opaque_capture_ids=frozenset(opaque_capture_ids),
+            frame_sizes=frame_sizes,
+            sizes_are_complete=False,
         )

@@ -385,6 +385,7 @@ def load_ledger(
             source_stat=source_stat,
             spec=spec,
             budget=budget,
+            sizer=view.sizer,
         )
 
     loaded = view.load(
@@ -432,8 +433,13 @@ def _overlay(records: Mapping[str, Record], txn: LegacyMigrationTxn) -> Records:
     return result
 
 
-def _fits(records: Mapping[str, Record], epoch: int, spec: CaptureCapacitySpec) -> bool:
-    encoded = _capacity.compacted_bytes(records, epoch, spec)
+def _fits(
+    records: Mapping[str, Record],
+    epoch: int,
+    spec: CaptureCapacitySpec,
+    sizer: _capacity.CompactedFrameSizer,
+) -> bool:
+    encoded = sizer.total_bytes(records, epoch, spec)
     return (
         encoded <= spec.compaction_low_bytes
         and encoded + spec.recovery_headroom_bytes <= spec.hard_ledger_bytes
@@ -473,6 +479,7 @@ def migrate_legacy(
     source_stat: os.stat_result,
     spec: CaptureCapacitySpec,
     budget: SweepBudgetSpec,
+    sizer: _capacity.CompactedFrameSizer,
 ) -> None:
     txn = load_transaction(store._root_fd)
     if txn is None:
@@ -488,7 +495,7 @@ def migrate_legacy(
         _validate_source(txn, records, source_bytes, source_stat, spec)
     assert txn is not None
     projected = _overlay(records, txn)
-    if _fits(projected, txn.target_epoch, spec):
+    if _fits(projected, txn.target_epoch, spec, sizer):
         _publish(store, txn, projected, spec)
         return
     candidates = sorted(
@@ -541,7 +548,7 @@ def migrate_legacy(
                     txn = txn.with_entry(replace(entry, phase=MigrationPhase.RETIRED))
                     write_transaction(store._root_fd, txn)
                     projected = _overlay(records, txn)
-                    if _fits(projected, txn.target_epoch, spec):
+                    if _fits(projected, txn.target_epoch, spec, sizer):
                         _publish(store, txn, projected, spec)
                         return
                     continue
@@ -565,7 +572,7 @@ def migrate_legacy(
             txn = txn.with_entry(replace(entry, phase=MigrationPhase.RETIRED))
             write_transaction(store._root_fd, txn)
             projected = _overlay(records, txn)
-            if _fits(projected, txn.target_epoch, spec):
+            if _fits(projected, txn.target_epoch, spec, sizer):
                 _publish(store, txn, projected, spec)
                 return
         except (_sweep.CarrierLeaseLive, _sweep.Tampered):

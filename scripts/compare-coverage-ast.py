@@ -18,10 +18,15 @@ from __future__ import annotations
 
 import argparse
 import ast
+import datetime
 import json
+import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+from autoskillit import __version__
+from autoskillit.core.io import write_versioned_json
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -51,6 +56,10 @@ class Report:
     partial: int = 0
     uncovered: int = 0
     details: dict[str, list[FuncCoverage]] = field(default_factory=dict)
+
+
+class CoverageReadError(RuntimeError):
+    """Coverage evidence could not be read completely."""
 
 
 class _FuncVisitor(ast.NodeVisitor):
@@ -141,11 +150,7 @@ def query_coverage_db(
         cov = coverage.Coverage(data_file=str(db_path))
         cov.load()
     except Exception as exc:
-        print(
-            f"ERROR: Failed to read coverage database {db_path}: {exc}",
-            file=sys.stderr,
-        )
-        return {}, {}
+        raise CoverageReadError(f"Failed to read coverage database {db_path}: {exc}") from exc
     covered_result: dict[str, set[int]] = {}
     executable_result: dict[str, set[int]] = {}
     for measured_file in cov.get_data().measured_files():
@@ -155,8 +160,10 @@ def query_coverage_db(
             continue
         try:
             analysis = cov.analysis2(measured_file)
-        except Exception:
-            continue
+        except Exception as exc:
+            raise CoverageReadError(
+                f"Failed to analyze coverage for {measured_file}: {exc}"
+            ) from exc
         statements = set(analysis[1])
         missing = set(analysis[3])
         covered = statements - missing
@@ -183,8 +190,7 @@ def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
         data = coverage.CoverageData(basename=str(db_path))
         data.read()
     except (OSError, coverage.CoverageException) as exc:
-        print(f"ERROR: Failed to read coverage database {db_path}: {exc}", file=sys.stderr)
-        return {}
+        raise CoverageReadError(f"Failed to read coverage database {db_path}: {exc}") from exc
 
     result: dict[str, set[str]] = {}
     for measured_file in data.measured_files():
@@ -194,7 +200,12 @@ def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
             continue
         if not rel.startswith("src/"):
             continue
-        contexts_by_line = data.contexts_by_lineno(measured_file)
+        try:
+            contexts_by_line = data.contexts_by_lineno(measured_file)
+        except Exception as exc:
+            raise CoverageReadError(
+                f"Failed to read coverage contexts for {measured_file}: {exc}"
+            ) from exc
         test_files: set[str] = set()
         for contexts in contexts_by_line.values():
             for ctx in contexts:
@@ -210,7 +221,10 @@ def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
 def build_test_source_map(
     db_path: Path,
     output_path: Path,
-) -> bool:
+    *,
+    pytest_exit_code: int,
+    source_commit: str,
+) -> int:
     """Build and write {source_file: [test_files]} map from coverage DB.
 
     Args:
@@ -218,20 +232,44 @@ def build_test_source_map(
         output_path: Path where test-source-map.json will be written.
 
     Returns:
-        True on success, False when the coverage DB is not found.
+        Zero after canonical publication, nonzero when publication is refused.
     """
     if not db_path.exists():
         print(f"WARNING: Coverage database not found: {db_path}", file=sys.stderr)
         print("Run 'task coverage-audit' first to generate coverage data.", file=sys.stderr)
-        return False
+        return 1
 
     mapping = query_contexts_map(db_path)
     # Convert sets to sorted lists for stable, human-readable JSON
     serializable = {src: sorted(tests) for src, tests in sorted(mapping.items())}
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(serializable, indent=2) + "\n", encoding="utf-8")
+    candidate_path = PROJECT_ROOT / ".autoskillit" / "temp" / "test-source-map-candidate.json"
+    if pytest_exit_code != 0 or not serializable:
+        candidate_path.parent.mkdir(parents=True, exist_ok=True)
+        candidate_path.write_text(json.dumps(serializable, indent=2) + "\n", encoding="utf-8")
+        reason = "pytest failed" if pytest_exit_code != 0 else "the map is empty"
+        print(
+            f"WARNING: Refusing to publish test-source map because {reason}; "
+            f"diagnostic candidate written to: {candidate_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    write_versioned_json(
+        output_path,
+        {
+            "provenance": {
+                "generated_at": datetime.datetime.now(datetime.UTC).isoformat(),
+                "source_commit": source_commit,
+                "pytest_exit_code": pytest_exit_code,
+                "tool_version": __version__,
+                "source_file_count": len(serializable),
+            },
+            "map": serializable,
+        },
+        schema_version=1,
+    )
     print(f"Test-source map written to: {output_path} ({len(serializable)} source files)")
-    return True
+    return 0
 
 
 def compare(
@@ -355,12 +393,41 @@ def main() -> int:
         default=None,
         help="Path for JSON report output (audit mode) or map output (build-test-source-map mode)",
     )
+    parser.add_argument(
+        "--pytest-status",
+        type=int,
+        default=None,
+        help="Pytest exit code required to publish a test-source map",
+    )
+    parser.add_argument(
+        "--source-commit",
+        default=None,
+        help="Commit from which coverage evidence was collected",
+    )
     args = parser.parse_args()
 
     if args.mode == "build-test-source-map":
+        if args.pytest_status is None:
+            parser.error("--pytest-status is required in build-test-source-map mode")
+        source_commit = args.source_commit
+        if source_commit is None:
+            try:
+                source_commit = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True
+                ).strip()
+            except (OSError, subprocess.CalledProcessError) as exc:
+                parser.error(f"cannot determine source commit: {exc}")
         output_path = args.output or (PROJECT_ROOT / ".autoskillit" / "test-source-map.json")
-        ok = build_test_source_map(args.coverage_db, output_path)
-        return 0 if ok else 1
+        try:
+            return build_test_source_map(
+                args.coverage_db,
+                output_path,
+                pytest_exit_code=args.pytest_status,
+                source_commit=source_commit,
+            )
+        except CoverageReadError as exc:
+            print(f"ERROR: Cannot build test-source map: {exc}", file=sys.stderr)
+            return 1
 
     if not args.src_root.is_dir():
         print(f"ERROR: Source root not found: {args.src_root}", file=sys.stderr)
@@ -377,7 +444,11 @@ def main() -> int:
         )
         return 0
 
-    coverage_map, executable_map = query_coverage_db(args.coverage_db)
+    try:
+        coverage_map, executable_map = query_coverage_db(args.coverage_db)
+    except CoverageReadError as exc:
+        print(f"WARNING: Coverage status unknown: {exc}", file=sys.stderr)
+        return 0
     report = compare(ast_map, coverage_map, executable_map)
     _print_report(report)
 

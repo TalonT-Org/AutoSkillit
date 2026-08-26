@@ -206,7 +206,6 @@ class CaptureLifecycleStore:
         self._monotonic = monotonic
         self._ledger_view = _capture_ledger_view.LedgerView()
         self._capacity = capacity if capacity is not None else _capture_types.CaptureCapacitySpec()
-        self._capacity_frame_sizes: _capture_capacity.CompactedFrameSizeCache = {}
         self._sweep_budget: SweepBudgetSpec | None = None
         self._sweep_started_monotonic: float | None = None
         self._sweep_records_inspected = self._sweep_replay_bytes = 0
@@ -395,7 +394,7 @@ class CaptureLifecycleStore:
             raise CaptureTransitionCommittedError(
                 "lifecycle transition committed before descriptor cleanup failed"
             ) from exc
-        self._ledger_view.note_append(records, record, compaction_epoch, value)
+        self._ledger_view.note_append(records, record, compaction_epoch, value, frame)
 
     def _compact_locked(
         self,
@@ -405,16 +404,16 @@ class CaptureLifecycleStore:
     ) -> None:
         compacted = _capture_capacity.compacted_records(records, self._capacity)
         try:
-            actionable_frames = [
-                _capture_ledger.encode_frame(
+            actionable_frames = {
+                record.capture_id: _capture_ledger.encode_frame(
                     _record_to_dict(record),
                     compaction_epoch=compaction_epoch,
                 )
                 for record in compacted
-            ]
+            }
         except _capture_ledger.LedgerCodecError as exc:
             raise CaptureLedgerError(str(exc)) from exc
-        frames = [*self._ledger_view.opaque_frames, *actionable_frames]
+        frames = [*self._ledger_view.opaque_frames, *actionable_frames.values()]
         compacted_bound = min(
             _MAX_COMPACTION_BYTES,
             _capture_capacity.transition_compaction_bound(candidate, self._capacity),
@@ -459,6 +458,7 @@ class CaptureLifecycleStore:
             {record.capture_id: record for record in compacted},
             compaction_epoch,
             value,
+            actionable_frames,
         )
 
     @staticmethod
@@ -502,7 +502,7 @@ class CaptureLifecycleStore:
             candidate,
             compaction_epoch=compaction_epoch,
             spec=self._capacity,
-            frame_size_cache=self._capacity_frame_sizes,
+            sizer=self._ledger_view.sizer,
         )
         if reason is not None:
             raise CaptureCapacityError(reason)
@@ -611,16 +611,7 @@ class CaptureLifecycleStore:
                 previous = records.get(capture_id)
                 if previous is not None and previous.state is not CaptureState.DELETED:
                     raise CaptureLifecycleError("capture id already reserved")
-                reason = _capture_capacity.admission_reason(
-                    records,
-                    record,
-                    compaction_epoch=compaction_epoch,
-                    spec=self._capacity,
-                    active_limit=min(
-                        _admission.MAX_ACTIVE_RECORDS,
-                        self._capacity.max_operational_records,
-                    ),
-                )
+                reason = self._admission_reason(records, record, compaction_epoch)
                 if reason is not None:
                     raise CaptureCapacityError(reason)
                 self._append_locked(record, records, compaction_epoch, size)

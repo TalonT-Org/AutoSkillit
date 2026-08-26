@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "0 4 * * 1"  # Weekly Monday 4:00 AM UTC
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the regenerated coverage oracle
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: coverage-oracle-refresh
@@ -23,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: develop
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'develop' }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
@@ -52,9 +58,14 @@ jobs:
       - name: Generate coverage oracle
         run: |
           rm -f .coverage .coverage.*
+          set +e
           task coverage-audit
+          TASK_EXIT=$?
+          set -e
+          exit "$TASK_EXIT"
 
       - name: Commit updated oracle
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || inputs.publish) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

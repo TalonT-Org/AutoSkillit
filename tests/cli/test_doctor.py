@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
+from autoskillit.cli._init_helpers import _is_plugin_installed as _real_is_plugin_installed
 from tests.fixtures.plugin_artifact_state import (
     PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactStateKind,
@@ -679,6 +680,67 @@ def _restrict_doctor_collection(
     monkeypatch.setattr(doctor_mod, "_run_check", run_selected)
 
 
+@pytest.mark.parametrize("plugin_installed", [False, True])
+def test_collect_doctor_results_probes_plugin_once_for_all_hook_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    plugin_installed: bool,
+) -> None:
+    from autoskillit.cli import _init_helpers
+    from autoskillit.cli import doctor as doctor_mod
+    from autoskillit.core import Severity
+
+    _restrict_doctor_collection(
+        monkeypatch,
+        doctor_mod,
+        {"hook_registration", "hook_registry_drift_all_scopes", "dual_registration"},
+    )
+    monkeypatch.setattr(_init_helpers, "_is_plugin_installed", _real_is_plugin_installed)
+    mock_run = MagicMock(
+        return_value=MagicMock(
+            returncode=0 if plugin_installed else 1,
+            stdout="autoskillit" if plugin_installed else "",
+        )
+    )
+    monkeypatch.setattr(_init_helpers.subprocess, "run", mock_run)
+
+    home = tmp_path / "home"
+    project_root = tmp_path / "project"
+    home.mkdir()
+    claude_dir = project_root / ".claude"
+    claude_dir.mkdir(parents=True)
+    (claude_dir / "settings.local.json").write_text("{}")
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.chdir(project_root)
+
+    results = doctor_mod._collect_doctor_results()
+
+    assert mock_run.call_count == 1
+    assert mock_run.call_args.args == (["claude", "plugin", "list"],)
+
+    registration = next(result for result in results if result.check == "hook_registration")
+    dual_registration = next(result for result in results if result.check == "dual_registration")
+    drift_results = [result for result in results if result.check == "hook_registry_drift"]
+    assert len(drift_results) == 3
+    for scope in ("user", "project", "local"):
+        assert sum(result.message.startswith(f"[{scope}]") for result in drift_results) == 1
+
+    if plugin_installed:
+        assert registration.severity == Severity.OK
+        assert "plugin cache" in registration.message
+        assert all(result.severity == Severity.OK for result in drift_results)
+        assert all("plugin cache" in result.message for result in drift_results)
+        assert dual_registration.severity == Severity.OK
+        assert "Plugin active" in dual_registration.message
+    else:
+        assert registration.severity == Severity.WARNING
+        assert "Missing hooks" in registration.message
+        assert all(result.severity == Severity.WARNING for result in drift_results)
+        assert all("Hook registry has changed" in result.message for result in drift_results)
+        assert dual_registration.severity == Severity.OK
+        assert "Plugin not active" in dual_registration.message
+
+
 def test_collect_doctor_results_isolates_a_crashing_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1207,6 +1269,23 @@ def test_check_hook_registry_drift_orphaned_still_fires_when_plugin_installed(
     assert result.check == "hook_registry_drift"
     assert "orphaned" in result.message.lower()
     assert "fake_orphan_dispatch.py" in result.message
+
+
+def test_check_dual_registration_resolves_plugin_probe_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli.doctor._doctor_hooks import _check_dual_registration
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"hooks": {}}')
+
+    result = _check_dual_registration(settings)
+
+    assert result.severity == Severity.OK
+    assert result.check == "dual_registration"
+    assert "Plugin active" in result.message
 
 
 class TestEditableInstallSourceExistsCheck:

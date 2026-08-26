@@ -74,7 +74,10 @@ def _contended_inspection(
     )
 
 
-def _inspect_stream(self, stream_key):
+def _inspect_stream(
+    self,
+    stream_key: ContextAdmissionStreamKey,
+) -> ContextAdmissionInspectionResult:
     with self._fence:
         if not self._recovered:
             self.recover_all()
@@ -155,14 +158,18 @@ def _inspect_stream(self, stream_key):
             return inspection
         except _LedgerContended:
             return _contended_inspection(stream_key)
-        except _LedgerContended:
-            return _contended_inspection(stream_key)
         except sqlite3.Error as exc:
             primary_code = _sqlite_primary_code(exc)
             if connection is not None:
                 _rollback(connection)
             if primary_code in _SQLITE_BUSY_CODES:
                 return _contended_inspection(stream_key)
+            if primary_code == sqlite3.SQLITE_TOOBIG:
+                _set_store_failure(
+                    self,
+                    ContextAdmissionStorageFailureReason.INTEGRITY,
+                    "inspection-read-limit-exceeded",
+                )
                 return _empty_inspection(
                     stream_key,
                     ContextAdmissionStreamHealth(

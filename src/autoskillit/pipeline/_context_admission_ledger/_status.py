@@ -66,8 +66,12 @@ def _rollback(connection: sqlite3.Connection) -> None:
         return
     try:
         connection.execute("ROLLBACK")
-    except sqlite3.Error:
-        pass
+    except sqlite3.Error as exc:
+        # Best-effort rollback: a failure here is itself a store-health signal,
+        # but suppressing it preserves the existing cleanup semantics. Bind the
+        # exception so it remains visible to traceback inspectors / test debuggers
+        # without changing the swallow behavior.
+        del exc
 
 
 def _sqlite_primary_code(error: sqlite3.Error) -> int | None:

@@ -21,9 +21,12 @@ from autoskillit.core import (
     AuthorityUnavailableEvent,
     ContextAdmissionAccountingResult,
     ContextAdmissionAccountingStatus,
+    ContextAdmissionEvent,
+    ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     ContextAdmissionStreamHealth,
+    ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
     OpenEpochEvent,
     ReconcileGenerationEvent,
@@ -81,7 +84,11 @@ __all__ = [
 ]
 
 
-def apply(self, stream_key, event):
+def apply(
+    self,
+    stream_key: ContextAdmissionStreamKey,
+    event: ContextAdmissionEvent,
+) -> ContextAdmissionAccountingResult:
     with self._fence:
         if not self._recovered:
             self.recover_all()
@@ -96,6 +103,7 @@ def apply(self, stream_key, event):
         connection = None
         stream_id = _stream_key_bytes(stream_key)
         stream_exists = False
+        current_state: ContextAdmissionState
         try:
             connection = self._connect()
             connection.execute("BEGIN IMMEDIATE")
@@ -449,7 +457,12 @@ def apply(self, stream_key, event):
                 connection.close()
 
 
-def _recover_sqlite_result(self, connection, stream_key, event):
+def _recover_sqlite_result(
+    self,
+    connection: sqlite3.Connection,
+    stream_key: ContextAdmissionStreamKey,
+    event: ContextAdmissionEvent,
+) -> ContextAdmissionAccountingResult:
     _rollback(connection)
     connection.close()
     self._recovered = False
@@ -503,13 +516,21 @@ def _recover_sqlite_result(self, connection, stream_key, event):
     return self._storage_failure_result(stream_key)
 
 
-def reserve(self, stream_key, event):
+def reserve(
+    self,
+    stream_key: ContextAdmissionStreamKey,
+    event: ContextAdmissionEvent,
+) -> ContextAdmissionAccountingResult:
     if not isinstance(event, ReserveRequestEvent):
         raise TypeError("reserve_requires_reserve_request_event")
     return self.apply(stream_key, event)
 
 
-def commit(self, stream_key, event):
+def commit(
+    self,
+    stream_key: ContextAdmissionStreamKey,
+    event: ContextAdmissionEvent,
+) -> ContextAdmissionAccountingResult:
     if not isinstance(
         event,
         AcceptInputEvent | ResolveIndeterminateAcceptedEvent | ReconcileGenerationEvent,
@@ -518,7 +539,11 @@ def commit(self, stream_key, event):
     return self.apply(stream_key, event)
 
 
-def release(self, stream_key, event):
+def release(
+    self,
+    stream_key: ContextAdmissionStreamKey,
+    event: ContextAdmissionEvent,
+) -> ContextAdmissionAccountingResult:
     if not isinstance(
         event,
         ReleaseNonAdmissionEvent
@@ -530,7 +555,7 @@ def release(self, stream_key, event):
     return self.apply(stream_key, event)
 
 
-def _commit(self, connection):
+def _commit(self, connection: sqlite3.Connection) -> None:
     deadline = time.monotonic() + (self._busy_timeout_ms / 1_000)
     while True:
         try:
@@ -544,7 +569,14 @@ def _commit(self, connection):
             time.sleep(min(0.005, max(0.0, deadline - time.monotonic())))
 
 
-def _persist_stream_failure(self, connection, stream_id, stream_key, reason, reason_code):
+def _persist_stream_failure(
+    self,
+    connection: sqlite3.Connection,
+    stream_id: bytes,
+    stream_key: ContextAdmissionStreamKey,
+    reason: ContextAdmissionStorageFailureReason,
+    reason_code: str,
+) -> bool:
     try:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
@@ -580,7 +612,10 @@ def _persist_stream_failure(self, connection, stream_id, stream_key, reason, rea
     return True
 
 
-def _storage_failure_result(self, stream_key):
+def _storage_failure_result(
+    self,
+    stream_key: ContextAdmissionStreamKey,
+) -> ContextAdmissionAccountingResult:
     return ContextAdmissionAccountingResult(
         status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
         stream_key=stream_key,

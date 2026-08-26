@@ -11,6 +11,7 @@ Wavefront 1 of #4667.
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Final, cast
 
 from autoskillit.core import (
@@ -78,7 +79,7 @@ def _stored_stream_health(
 
 
 def _recover_stream_projection(
-    connection,
+    connection: sqlite3.Connection,
     stream_id: bytes,
     stream_key: ContextAdmissionStreamKey,
     *,
@@ -88,7 +89,13 @@ def _recover_stream_projection(
     admission_sequence: int,
     latest_journal_sequence: int,
     read_budget: _LedgerReadBudget,
-):
+) -> tuple[
+    ContextAdmissionState,
+    tuple[ContextAdmissionEvent, ...],
+    tuple[AdmissionDecision, ...],
+    tuple[tuple[AdmissionEffect, ...], ...],
+    tuple[ShadowContextAdmissionRecord, ...],
+]:
     genesis_wrapper = decode_stored_context_admission_envelope(genesis_envelope)
     if not isinstance(genesis_wrapper.payload, UninitializedContextAdmissionState):
         raise _LedgerOpenError(

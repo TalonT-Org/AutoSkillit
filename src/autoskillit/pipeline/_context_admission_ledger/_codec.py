@@ -21,6 +21,7 @@ from autoskillit.core import (
     ContextAdmissionValidationError,
     DurableContextAdmissionPayload,
     ShadowContextAdmissionRecord,
+    UninitializedContextAdmissionState,
     decode_stored_context_admission_envelope,
     encode_stored_context_admission_envelope,
     make_stored_context_admission_envelope,
@@ -44,11 +45,10 @@ def _stream_key_bytes(stream_key: ContextAdmissionStreamKey) -> bytes:
     ).encode("utf-8")
 
 
-def _zero_state(protocol_version: int):
+def _zero_state(protocol_version: int) -> UninitializedContextAdmissionState:
     from autoskillit.core import (
         AdmissionSequence,
         AggregateRevision,
-        UninitializedContextAdmissionState,
         context_admission_reducer_for_protocol,
     )
 

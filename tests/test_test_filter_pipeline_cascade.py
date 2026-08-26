@@ -38,9 +38,23 @@ def _tests_root(tmp_path: Path) -> Path:
 
 
 def test_pipeline_module_cascade_has_exact_context_keys() -> None:
-    # The set must contain at least these keys, and any new keys must target the
-    # same narrow pipeline/server cascade (no expanding the surface).
-    assert {"context", "context_admission_ledger"} <= set(MODULE_CASCADE_PIPELINE)
+    # The set must equal exactly these keys; accidental additions of new keys
+    # to MODULE_CASCADE_PIPELINE are caught here.
+    expected_keys = frozenset(
+        {
+            "context",
+            "context_admission_ledger",
+            "_codec",
+            "_projection",
+            "_shadow",
+            "_state_queries",
+            "_store",
+            "_apply",
+            "_inspection",
+            "_status",
+        }
+    )
+    assert set(MODULE_CASCADE_PIPELINE) == expected_keys
     assert MODULE_CASCADE_PIPELINE["context_admission_ledger"] == frozenset({"pipeline", "server"})
     assert MODULE_CASCADE_PIPELINE["context"] == frozenset(
         {
@@ -55,17 +69,7 @@ def test_pipeline_module_cascade_has_exact_context_keys() -> None:
     )
     # Verify all subpackage stems cascade to the same narrow target.
     narrow_target = frozenset({"pipeline", "server"})
-    for stem in (
-        "facade",
-        "_codec",
-        "_projection",
-        "_shadow",
-        "_state_queries",
-        "_store",
-        "_apply",
-        "_inspection",
-        "_status",
-    ):
+    for stem in expected_keys - {"context"}:
         assert MODULE_CASCADE_PIPELINE[stem] == narrow_target
 
 

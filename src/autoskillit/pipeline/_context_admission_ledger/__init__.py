@@ -24,7 +24,7 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa: F401  (retained for forward compatibility with type stubs)
 
 from autoskillit.core import (
     AcceptInputEvent,
@@ -49,7 +49,15 @@ from autoskillit.core import (
 )
 
 # Internal cross-shard re-exports used by the class body below.
-from ._codec import _stream_key_bytes  # noqa: F401  (used by `_recovery_result`)
+from ._codec import (  # noqa: F401  (used by `recover_all`, `_recovery_result`)
+    _decode_stream_key,
+    _stream_key_bytes,
+)
+from ._projection import (  # noqa: F401  (used by `recover_all`)
+    _recover_stream_projection,
+    _stored_stream_health,
+)
+from ._state_queries import _state_has_unresolved_work  # noqa: F401  (used by `recover_all`)
 from ._status import _ignore_fault, _LedgerFaultPoint, _set_store_failure  # noqa: F401
 
 # Re-exports for cross-package consumers that import from the public surface.
@@ -59,28 +67,15 @@ from ._storage import (
     _LedgerReadBudget,
     _preflight_storage_routes,
     _read_bounded_rows,
-    fsync_directory,
-    fsync_file,
-    reconcile_initialization_links,
-    require_private_file_identity,
-    unlink_initialization_artifact,
+    fsync_directory,  # noqa: F401  (re-exported via package import path)
+    fsync_file,  # noqa: F401  (re-exported via package import path)
+    reconcile_initialization_links,  # noqa: F401  (re-exported via package import path)
+    require_private_file_identity,  # noqa: F401  (re-exported via package import path)
+    unlink_initialization_artifact,  # noqa: F401  (re-exported via package import path)
 )
 from ._storage import (
-    SCHEMA_SQL as _SCHEMA_SQL,
+    validate_sidecars as _validate_sidecars,  # noqa: F401  (rebound at module load)
 )
-from ._storage import (
-    fsync_directory as _fsync_directory,
-)
-from ._storage import (
-    fsync_file as _fsync_file,
-)
-from ._storage import (
-    require_private_file_identity as _private_file_identity,
-)
-from ._storage import (
-    unlink_initialization_artifact as _unlink_initialization_artifact,
-)
-from ._storage import validate_sidecars as _validate_sidecars
 
 __all__ = [
     "DefaultContextAdmissionLedger",
@@ -257,8 +252,6 @@ class DefaultContextAdmissionLedger:
                 _preflight_storage_routes(connection, read_budget)
                 self._stream_health.clear()
                 self._unresolved_streams.clear()
-                from ._codec import _decode_stream_key
-
                 stream_rows = _read_bounded_rows(
                     connection.execute(
                         """
@@ -272,8 +265,6 @@ class DefaultContextAdmissionLedger:
                     ),
                     read_budget,
                 )
-                from ._projection import _recover_stream_projection, _stored_stream_health
-                from ._state_queries import _state_has_unresolved_work
 
                 for row in stream_rows:
                     stream_id = bytes(row[0])
@@ -434,39 +425,39 @@ class DefaultContextAdmissionLedger:
 # and are bound onto the class below. This is the ONLY place methods are
 # rebound (Wavefront 1 of #4667 — Foundation Finding 1 + Interface Finding 3).
 
-from ._apply import (
-    _commit as _commit_internal,
+from ._apply import (  # noqa: E402
+    _commit as _commit_method,
 )
-from ._apply import (
-    _persist_stream_failure as _persist_stream_failure_impl,
+from ._apply import (  # noqa: E402
+    _persist_stream_failure as _persist_stream_failure_method,
 )
-from ._apply import (
-    _recover_sqlite_result as _recover_sqlite_result_impl,
+from ._apply import (  # noqa: E402
+    _recover_sqlite_result as _recover_sqlite_result_method,
 )
-from ._apply import (
-    _storage_failure_result as _storage_failure_result_impl,
+from ._apply import (  # noqa: E402
+    _storage_failure_result as _storage_failure_result_method,
 )
 from ._apply import (  # noqa: E402
     apply as _apply_method,
 )
-from ._apply import (
-    commit as _commit_method,
+from ._apply import (  # noqa: E402
+    commit as _commit_public_method,
 )
-from ._apply import (
+from ._apply import (  # noqa: E402
     release as _release_method,
 )
-from ._apply import (
+from ._apply import (  # noqa: E402
     reserve as _reserve_method,
 )
 
 setattr(DefaultContextAdmissionLedger, "apply", _apply_method)
 setattr(DefaultContextAdmissionLedger, "reserve", _reserve_method)
-setattr(DefaultContextAdmissionLedger, "commit", _commit_method)
+setattr(DefaultContextAdmissionLedger, "commit", _commit_public_method)
 setattr(DefaultContextAdmissionLedger, "release", _release_method)
-setattr(DefaultContextAdmissionLedger, "_commit", _commit_internal)
-setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_stream_failure_impl)
-setattr(DefaultContextAdmissionLedger, "_recover_sqlite_result", _recover_sqlite_result_impl)
-setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result_impl)
+setattr(DefaultContextAdmissionLedger, "_commit", _commit_method)
+setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_stream_failure_method)
+setattr(DefaultContextAdmissionLedger, "_recover_sqlite_result", _recover_sqlite_result_method)
+setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result_method)
 
 from ._status import (  # noqa: E402
     _validate_integrity,
@@ -505,27 +496,27 @@ setattr(DefaultContextAdmissionLedger, "_validate_database_file", _validate_data
 setattr(DefaultContextAdmissionLedger, "_connect", _connect)
 setattr(DefaultContextAdmissionLedger, "_configure_connection", _configure_connection)
 
-from ._inspection import _inspect_stream as _inspect_stream_impl  # noqa: E402
+from ._inspection import _inspect_stream as _inspect_stream_method  # noqa: E402
 
-setattr(DefaultContextAdmissionLedger, "inspect_stream", _inspect_stream_impl)
+setattr(DefaultContextAdmissionLedger, "inspect_stream", _inspect_stream_method)
 
 
 # ── Local re-bind of cross-shard constants used by `recover_all` body ─────
 from ._projection import (  # noqa: E402
     _MAX_RECOVERY_BYTES as _MAX_RECOVERY_BYTES_INT,
 )
-from ._projection import (
+from ._projection import (  # noqa: E402
     _MAX_RECOVERY_ROWS as _MAX_RECOVERY_ROWS_INT,
 )
-from ._status import (
+from ._status import (  # noqa: E402
     _SQLITE_BUSY_CODES as _SQLITE_BUSY_CODES_import,
 )
 from ._status import (  # noqa: E402
     _LedgerContended as _LedgerContended_import,
 )
-from ._status import (
+from ._status import (  # noqa: E402
     _rollback as _rollback_import,
 )
-from ._status import (
+from ._status import (  # noqa: E402
     _sqlite_primary_code as _sqlite_primary_code_import,
 )

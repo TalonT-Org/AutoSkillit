@@ -320,6 +320,16 @@ steps:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def fresh_load_cache(monkeypatch):
+    """Install and return an isolated load cache for one test."""
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache = cache_mod.LoadCache()
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    return cache
+
+
 def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkeypatch):
     """Canonical equal resolved defaults return the warm cached result."""
     import autoskillit.recipe._api as api_mod
@@ -592,13 +602,11 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         )
 
 
-def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, monkeypatch):
+def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, fresh_load_cache):
     """Resolved defaults alter ingredients_table and are canonically cache-keyed."""
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", _CACHE_RECIPE_WITH_BASE_BRANCH)
 
     first = api_mod.load_and_validate(
@@ -624,13 +632,11 @@ def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, 
     assert len(cache._store) == 2
 
 
-def test_load_and_validate_cache_separates_backend_origin_maps(tmp_path, monkeypatch):
+def test_load_and_validate_cache_separates_backend_origin_maps(tmp_path, fresh_load_cache):
     """Distinct backend origins must not reuse the same validated response."""
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", MINIMAL_RECIPE_YAML)
 
     api_mod.load_and_validate(
@@ -657,15 +663,13 @@ def test_load_and_validate_cache_separates_backend_origin_maps(tmp_path, monkeyp
 
 
 def test_load_and_validate_cache_separates_temp_dirs_and_normalizes_defaults(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, fresh_load_cache
 ):
     """Temp-directory cache identity follows the effective path used for staleness."""
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.recipe._contracts_types import StaleItem
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     project_dir = tmp_path / "project"
     _setup_project_recipe(project_dir, "myrecipe", MINIMAL_RECIPE_YAML)
     cwd_a = tmp_path / "cwd-a"
@@ -723,14 +727,12 @@ def test_load_and_validate_cache_separates_temp_dirs_and_normalizes_defaults(
 
 
 def test_load_and_validate_cache_separates_same_relative_project_dir_across_cwds(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, fresh_load_cache
 ):
     """The same relative project path resolves independently in each current directory."""
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     project_a = tmp_path / "project-a"
     project_b = tmp_path / "project-b"
     _setup_project_recipe(project_a, "myrecipe", MINIMAL_RECIPE_YAML)
@@ -754,16 +756,14 @@ def test_load_and_validate_cache_separates_same_relative_project_dir_across_cwds
 
 
 def test_load_and_validate_cache_separates_caller_recipe_info_content_and_hash(
-    tmp_path, monkeypatch
+    tmp_path, fresh_load_cache
 ):
     """A warm cache cannot serve a caller's changed RecipeInfo content or hash."""
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     frozen_recipe_path = tmp_path / "frozen-original.yaml"
@@ -797,16 +797,14 @@ def test_load_and_validate_cache_separates_caller_recipe_info_content_and_hash(
 
 
 def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, fresh_load_cache
 ):
     """Relative RecipeInfo paths use cwd, while an equivalent absolute path hits cache."""
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     cwd_a = tmp_path / "cwd-a"
@@ -869,15 +867,15 @@ def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
     }
 
 
-def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(tmp_path, monkeypatch):
+def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(
+    tmp_path, fresh_load_cache
+):
     """Omitted and supplied inventories stay distinct and use stable name sets."""
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     campaign_path = _setup_project_recipe(
         tmp_path, "test-campaign-no-steps", _RECIPE_CAMPAIGN_NO_STEPS
     )
@@ -937,12 +935,13 @@ def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(tmp_pa
     assert len(cache._store) == 4
 
 
-def test_load_and_validate_bypasses_cache_for_an_explicit_lister(tmp_path, monkeypatch):
+def test_load_and_validate_bypasses_cache_for_an_explicit_lister(
+    tmp_path, monkeypatch, fresh_load_cache
+):
     """Different caller inventories rerun validation and change unknown-skill findings."""
     from types import SimpleNamespace
 
     import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
 
     class InventoryLister:
         def __init__(self, names: list[str]) -> None:
@@ -951,8 +950,7 @@ def test_load_and_validate_bypasses_cache_for_an_explicit_lister(tmp_path, monke
         def list_all(self) -> list[Any]:
             return self._skills
 
-    cache = cache_mod.LoadCache()
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", _CACHE_RECIPE_WITH_SKILL)
     calls = []
     real_validate = api_mod.validate_recipe_structure

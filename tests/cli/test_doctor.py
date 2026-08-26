@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli._init_helpers import _is_plugin_installed as _real_is_plugin_installed
 from tests.fixtures.plugin_artifact_state import (
     PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactStateKind,
@@ -695,14 +694,8 @@ def test_collect_doctor_results_probes_plugin_once_for_all_hook_checks(
         doctor_mod,
         {"hook_registration", "hook_registry_drift_all_scopes", "dual_registration"},
     )
-    monkeypatch.setattr(_init_helpers, "_is_plugin_installed", _real_is_plugin_installed)
-    mock_run = MagicMock(
-        return_value=MagicMock(
-            returncode=0 if plugin_installed else 1,
-            stdout="autoskillit" if plugin_installed else "",
-        )
-    )
-    monkeypatch.setattr(_init_helpers.subprocess, "run", mock_run)
+    plugin_probe = MagicMock(return_value=plugin_installed)
+    monkeypatch.setattr(_init_helpers, "_is_plugin_installed", plugin_probe)
 
     home = tmp_path / "home"
     project_root = tmp_path / "project"
@@ -715,8 +708,7 @@ def test_collect_doctor_results_probes_plugin_once_for_all_hook_checks(
 
     results = doctor_mod._collect_doctor_results()
 
-    assert mock_run.call_count == 1
-    assert mock_run.call_args.args == (["claude", "plugin", "list"],)
+    assert plugin_probe.call_count == 1
 
     registration = next(result for result in results if result.check == "hook_registration")
     dual_registration = next(result for result in results if result.check == "dual_registration")

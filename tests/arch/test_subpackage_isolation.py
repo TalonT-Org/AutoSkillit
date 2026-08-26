@@ -1530,14 +1530,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "row/byte budgets remain beside replay validation so storage and reducer "
         "publication invariants cannot drift across independently mutable modules.",
     ),
-    "pipeline/audit_admission_ledger.py": (
-        2300,
-        "REQ-CNST-010-E17: #4419 keeps installation fencing, reservation and attempt "
-        "transitions, trusted head/preflight publication, disposition CAS, and recovery "
-        "inside one crash-safe SQLite authority. Splitting the transactional state machine "
-        "would let independently mutable storage paths drift from its atomic publication "
-        "and fail-closed health invariants.",
-    ),
     "hook_registry.py": (
         1200,
         "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "

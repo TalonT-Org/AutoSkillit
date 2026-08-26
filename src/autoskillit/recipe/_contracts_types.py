@@ -9,8 +9,8 @@ import regex as re
 
 from autoskillit.core import BoundScalar, PreflightKind
 
-_CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
-INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
+_CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
+INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 

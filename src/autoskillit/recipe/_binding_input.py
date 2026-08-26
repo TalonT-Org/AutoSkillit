@@ -35,12 +35,17 @@ from autoskillit.core import (
     BoundValueOrigin,
     BoundValueState,
 )
-from autoskillit.recipe._contracts_types import SkillContract, SkillInput
+from autoskillit.recipe._contracts_types import (
+    _CONTEXT_REF_RE,
+    SkillContract,
+    SkillInput,
+)
+from autoskillit.recipe._contracts_types import (
+    INPUT_REF_RE as _INPUT_REF_RE,
+)
 
 # === Module-level regex constants ===
 
-_CONTEXT_REF_RE: Final = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
-_INPUT_REF_RE: Final = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _AUTOSKILLIT_TEMPLATE_RE: Final = re.compile(r"\{\{(AUTOSKILLIT_[A-Z0-9_]+)\}\}")
 _EXACT_CONTEXT_REF_RE: Final = re.compile(r"^\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}$")
 _EXACT_INPUT_REF_RE: Final = re.compile(r"^\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}$")

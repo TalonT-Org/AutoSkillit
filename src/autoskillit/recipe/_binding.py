@@ -26,8 +26,6 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._binding_input import (
     _AUTOSKILLIT_TEMPLATE_RE,
-    _CONTEXT_REF_RE,
-    _INPUT_REF_RE,
     _bound_value,
     _failure,
     _inline_skill_inputs,
@@ -43,6 +41,12 @@ from autoskillit.recipe._contracts_manifest import (
     get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
+)
+from autoskillit.recipe._contracts_types import (
+    _CONTEXT_REF_RE,
+)
+from autoskillit.recipe._contracts_types import (
+    INPUT_REF_RE as _INPUT_REF_RE,
 )
 from autoskillit.recipe.schema import RecipeStep
 

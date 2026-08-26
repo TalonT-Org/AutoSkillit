@@ -7,16 +7,8 @@ either a value (``verified_repository_root_from_launch_environment``,
 ``_shared_source_identity``) or mutate the store's state under its
 private lock (``reopen_launch_environment``).
 
-Lock acquisition order is preserved exactly: file I/O via
-``load_from_environment()`` runs BEFORE ``store._lock`` is acquired.  The
-lock covers state mutation only.  This ordering is preserved verbatim
-from the pre-decomposition ``_reopen_launch_environment`` method.
-
-This is the only runtime cross-shard call path besides the
-``_failure_codes → _store`` direction.  The store imports this module
-as ``launch_adapter`` so it can call the helpers via
-``launch_adapter.reopen_launch_environment(self, ...)`` from its
-one-line delegate methods.
+File I/O via ``load_from_environment()`` runs BEFORE ``store._lock`` is
+acquired; the lock covers state mutation only.
 """
 
 from __future__ import annotations
@@ -25,6 +17,7 @@ import hashlib
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any, cast
 
 from autoskillit.core import canonical_json_bytes, get_logger
 from autoskillit.pipeline.exploration_context_durable import (
@@ -74,19 +67,12 @@ def reopen_launch_environment(
 ) -> tuple[str, _ReopenedLaunchAuthority] | None:
     """Reopen only a current, verifier-matched durable child authority.
 
-    The body mirrors the pre-decomposition ``_reopen_launch_environment``
-    instance method verbatim: file I/O via
-    ``store._launch_authorities.load_from_environment()`` happens before
-    ``store._lock`` is acquired; only the state mutation runs inside
-    the lock.
-
     ``max_ttl_seconds`` and ``clock`` are passed explicitly so the
     helper does not reach into the store's instance attributes beyond
     the named list.  The helper does construct a
     :class:`_CapabilityLease` and insert it into ``store._leases`` —
     that is a side effect on the store, not a return value.
     """
-    # File I/O runs BEFORE the lock is acquired (load-outside-lock).
     reopened = store._launch_authorities.load_from_environment()
     if reopened is None:
         return None
@@ -127,7 +113,7 @@ def reopen_launch_environment(
             session_id=authority.session_id,
             expires_at=clock()
             + min(max_ttl_seconds, max(0.0, authority.expires_at - time.time())),
-            value=None,  # type: ignore[arg-type]
+            value=cast(Any, None),
             origin="launch",
             cwd=authority.cwd,
             repository_root=store._trusted_root,

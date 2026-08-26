@@ -21,9 +21,6 @@ from autoskillit.core import (
     ContextAdmissionAccountingResult,
     ContextAdmissionAccountingStatus,
     ContextAdmissionEvent,
-    ContextAdmissionStorageFailureReason,
-    ContextAdmissionStorageHealthStatus,
-    ContextAdmissionStoreHealth,
     ContextAdmissionStreamKey,
     MarkGenerationIndeterminateEvent,
     MarkIndeterminateEvent,
@@ -94,24 +91,9 @@ def _uninitialized_stream_result(
     )
 
 
-def _set_store_failure(
-    self,
-    reason: ContextAdmissionStorageFailureReason,
-    reason_code: str,
-) -> None:
-    """Instance method bound onto DefaultContextAdmissionLedger."""
-    self._store_health = ContextAdmissionStoreHealth(
-        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
-        failure_reason=reason,
-        reason_code=reason_code,
-    )
-    self._recovered = True
-
-
 __all__ = [
     "_LedgerFaultPoint",
     "_ignore_fault",
     "_accounting_status",
     "_uninitialized_stream_result",
-    "_set_store_failure",
 ]

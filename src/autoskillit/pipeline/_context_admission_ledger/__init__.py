@@ -52,7 +52,7 @@ from autoskillit.core import (
 
 # Internal cross-shard re-exports used by the class body below.
 from ._codec import _stream_key_bytes  # used by `_recovery_result`
-from ._status import _ignore_fault, _LedgerFaultPoint, _set_store_failure
+from ._status import _ignore_fault, _LedgerFaultPoint
 
 # Re-exports for cross-package consumers that import from the public surface.
 from ._storage import (
@@ -264,8 +264,6 @@ setattr(
 setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_stream_failure_method)
 setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result_method)
 
-setattr(DefaultContextAdmissionLedger, "_set_store_failure", _set_store_failure)
-
 from ._store import (  # noqa: E402
     _configure_connection,
     _connect,
@@ -305,9 +303,13 @@ setattr(DefaultContextAdmissionLedger, "inspect_stream", _inspect_stream_method)
 from ._recover import (  # noqa: E402
     _recover_sqlite_result as _recover_sqlite_result_method,
 )
+from ._recover import (  # noqa: E402
+    _set_store_failure,
+)
 from ._recover import recover_all as recover_all_method  # noqa: E402
 
-setattr(DefaultContextAdmissionLedger, "recover_all", recover_all_method)
+setattr(DefaultContextAdmissionLedger, "recover_all", recover_all_method)  # noqa: E402
+setattr(DefaultContextAdmissionLedger, "_set_store_failure", _set_store_failure)  # noqa: E402
 
 setattr(
     DefaultContextAdmissionLedger,

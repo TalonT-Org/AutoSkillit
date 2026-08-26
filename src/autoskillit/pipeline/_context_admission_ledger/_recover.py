@@ -284,4 +284,23 @@ def _recover_sqlite_result(
     return self._storage_failure_result(stream_key)
 
 
-__all__ = ["recover_all", "_recover_sqlite_result"]
+def _set_store_failure(
+    self,
+    reason: ContextAdmissionStorageFailureReason,
+    reason_code: str,
+) -> None:
+    """Instance method bound onto DefaultContextAdmissionLedger.
+
+    Owns the FAIL_CLOSED store-health transition. Sibling HEALTHY and
+    UNINITIALIZED transitions are inlined in ``recover_all`` above; this
+    wrapper is the only place where the ledger flips to FAIL_CLOSED.
+    """
+    self._store_health = ContextAdmissionStoreHealth(
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        failure_reason=reason,
+        reason_code=reason_code,
+    )
+    self._recovered = True
+
+
+__all__ = ["recover_all", "_recover_sqlite_result", "_set_store_failure"]

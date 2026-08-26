@@ -24,20 +24,15 @@ Verifies:
 from __future__ import annotations
 
 import ast
+from functools import cache
 from pathlib import Path
 
 import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.large]
 
-SHARDS_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "autoskillit"
-    / "pipeline"
-    / ("_audit_admission_ledger")
-)
 PIPELINE_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "pipeline"
+SHARDS_DIR = PIPELINE_DIR / "_audit_admission_ledger"
 FACADE_PATH = PIPELINE_DIR / "audit_admission_ledger.py"
 
 CEILING_LINES = 750
@@ -79,12 +74,13 @@ READ_METHODS = {
 }
 
 
+@cache
 def _read(path: Path) -> str:
     return path.read_text()
 
 
 def _line_count(path: Path) -> int:
-    return sum(1 for _ in path.read_text().splitlines())
+    return sum(1 for _ in _read(path).splitlines())
 
 
 def _facade_method_body(method_name: str, src: str) -> str:

@@ -188,10 +188,20 @@ def test_accepts_all_signals_and_redacts_nested_otlp_attributes(
         assert value not in serialized
 
 
-def test_sink_env_suppresses_account_uuid_without_enabling_content_capture(
-    local_sink: Any,
-) -> None:
-    assert local_sink.env.get("OTEL_METRICS_INCLUDE_ACCOUNT_UUID") == "false"
+def test_sink_env_enables_native_claude_logs_and_metrics(local_sink: Any) -> None:
+    base_url = local_sink.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
+    assert local_sink.env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
+    assert local_sink.env["OTEL_LOGS_EXPORTER"] == "otlp"
+    assert local_sink.env["OTEL_METRICS_EXPORTER"] == "otlp"
+    assert local_sink.env["OTEL_METRICS_INCLUDE_SESSION_ID"] == "true"
+    assert local_sink.env["OTEL_METRICS_INCLUDE_ACCOUNT_UUID"] == "false"
+    assert local_sink.env["OTEL_EXPORTER_OTLP_PROTOCOL"] == "http/json"
+    assert local_sink.env["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == f"{base_url}/v1/logs"
+    assert local_sink.env["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] == (f"{base_url}/v1/metrics")
+    assert local_sink.env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == (f"{base_url}/v1/traces")
+    assert "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA" not in local_sink.env
+    assert "ENABLE_ENHANCED_TELEMETRY_BETA" not in local_sink.env
+    assert "OTEL_TRACES_EXPORTER" not in local_sink.env
     assert "OTEL_LOG_USER_PROMPTS" not in local_sink.env
     assert "OTEL_LOG_ASSISTANT_RESPONSES" not in local_sink.env
     assert "OTEL_LOG_RAW_API_BODIES" not in local_sink.env

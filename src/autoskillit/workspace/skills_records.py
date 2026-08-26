@@ -3,7 +3,7 @@
 Owns the immutable record types (``SkillInfo``, ``SkillCatalogEntry``,
 ``SkillExclusion``, ``EffectiveSkillCatalog``, ``EffectiveSkillInvocation``) plus the
 diagnostic helpers and the transitive-closure BFS over a captured catalog. These are
-the pure-data shapes that flow through every other shard and the facade.
+the pure-data shapes that flow through the rest of the package.
 ``SkillInfo.__post_init__`` lazily parses frontmatter via ``skill_format`` so the
 data shape still embeds the canonical parsed contract.
 """

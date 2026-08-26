@@ -140,7 +140,7 @@ class SkillCapabilityEvidence:
 def _source_lines(body: str) -> tuple[_SourceLine, ...]:
     """Mark frontmatter, constraint blocks, and documentary fences non-executable."""
     result: list[_SourceLine] = []
-    in_frontmatter = body.startswith("---\n")
+    in_frontmatter = body.startswith("---\n") or body.startswith("---\r\n")
     frontmatter_closed = not in_frontmatter
     fence_delimiter: str | None = None
     in_step_section = False

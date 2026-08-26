@@ -14,7 +14,6 @@ attempts, heads, preflight projections, and committed dispositions.
 from __future__ import annotations
 
 import json
-import secrets
 import sqlite3
 import threading
 from datetime import UTC, datetime
@@ -22,7 +21,6 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from autoskillit.core import (
-    AUDIT_REFERENCE_IDENTITY_PROFILE_V1,
     ArtifactRef,
     AuditAdmissionAuthorityMismatchError,
     AuditAdmissionRecoveryResult,
@@ -53,14 +51,16 @@ from autoskillit.core import (
     InstallationVersion,
     KillReason,
     RecipeExecutionId,
-    ReservationDecision,
     canonical_json_bytes,
-    compute_audit_reference_identity,
-    compute_audit_slot_id,
     compute_bytes_hash,
     compute_canonical_hash,
 )
-from autoskillit.pipeline._audit_admission_ledger import _connections, _installations, _recovery
+from autoskillit.pipeline._audit_admission_ledger import (
+    _connections,
+    _installations,
+    _recovery,
+    _reservations,
+)
 
 __all__ = ["DefaultAuditAdmissionLedger"]
 
@@ -381,7 +381,9 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                outcome = self._reserve_locked(connection, request)
+                outcome = _reservations._reserve_locked(
+                    connection, request, authority_id=self._authority.authority_id
+                )
                 _connections.commit(connection)
                 return outcome
             except BaseException:
@@ -390,330 +392,19 @@ class DefaultAuditAdmissionLedger:
             finally:
                 connection.close()
 
-    def _reserve_locked(
-        self,
-        connection: sqlite3.Connection,
-        request: AuditReservationRequest,
-    ) -> AuditReservationOutcome:
-        installation_row = _installations._installation_row(
-            connection, request.recipe_execution_id
-        )
-        if installation_row is None or installation_row[0] != request.installation_version.value:
-            raise ValueError(
-                "reserve() requires a matching installation created via "
-                "create_or_get_installation()"
-            )
-        if installation_row[1]:
-            return self._conflict_outcome(request, "installation_retired")
-
-        head_key = _head_key(
-            request.recipe_execution_id,
-            request.cycle_id,
-            request.scope_id,
-            request.part_id,
-        )
-        head_row = connection.execute(
-            "SELECT head_json FROM head_claims WHERE head_key = ?",
-            (head_key,),
-        ).fetchone()
-        live_head = _head_from_dict(_json_loads(head_row[0])) if head_row is not None else None
-        # Slot identity is derived from the caller's EXPLICIT attested prior-authority
-        # reference (request.parent_authority_digest), never from the ledger's current
-        # live head: an exact redelivery of the same runtime binding must resolve to the
-        # same slot even after the head has advanced past what this attempt targets.
-        # Liveness against the current head is enforced later, at commit_authority()'s
-        # CAS, not at slot-identity derivation time.
-        current_head = (
-            live_head
-            if live_head is not None
-            and live_head.current_authority_digest == request.parent_authority_digest
-            else None
-        )
-
-        ordered_reference_identity = compute_audit_reference_identity(request.audited_plan_refs)
-        slot_key = AuditSlotKey(
-            recipe_execution_id=request.recipe_execution_id,
-            installation_version=request.installation_version,
-            step_name=request.step_name,
-            invocation_template_digest=request.invocation_template_digest,
-            slot_intent_digest=request.slot_intent_digest,
-            ordered_reference_identity=ordered_reference_identity,
-            prior_authority_digest=request.parent_authority_digest,
-        )
-        slot_id = compute_audit_slot_id(slot_key)
-
-        slot_row = connection.execute(
-            "SELECT current_attempt_id FROM slots WHERE slot_id = ?",
-            (slot_id.value,),
-        ).fetchone()
-
-        if slot_row is None:
-            if request.retry_after_audit_attempt_id is not None:
-                return self._conflict_outcome(
-                    request, "retry_token_unknown_slot", slot_key=slot_key
-                )
-            return self._dispatch_new_slot(
-                connection,
-                request=request,
-                slot_key=slot_key,
-                slot_id=slot_id,
-                head_key=head_key,
-                current_head=current_head,
-            )
-
-        attempt_id = AuditAttemptId(slot_row[0])
-        attempt_row = connection.execute(
-            "SELECT lifecycle, semantic_digest, committed_outcome_json, reservation_json "
-            "FROM attempts WHERE attempt_id = ?",
-            (attempt_id.value,),
-        ).fetchone()
-        assert attempt_row is not None
-        lifecycle = AuditAttemptLifecycle(attempt_row[0])
-        reservation = _reservation_from_dict(_json_loads(attempt_row[3]))
-
-        if request.retry_after_audit_attempt_id is not None:
-            if (
-                lifecycle is not AuditAttemptLifecycle.SEMANTIC_REJECTED
-                or request.retry_after_audit_attempt_id != attempt_id
-            ):
-                return self._conflict_outcome(
-                    request, "retry_token_not_terminal_rejection", slot_key=slot_key
-                )
-            return self._dispatch_correction(
-                connection,
-                request=request,
-                slot_id=slot_id,
-                predecessor_attempt_id=attempt_id,
-                reservation=reservation,
-            )
-
-        if lifecycle is AuditAttemptLifecycle.OPEN:
-            return self._redispatch_open(
-                connection,
-                attempt_id=attempt_id,
-                reservation=reservation,
-            )
-        if lifecycle is AuditAttemptLifecycle.PREPARED:
-            return AuditReservationOutcome(
-                decision=ReservationDecision.RESUME_PREPARED,
-                slot_key=slot_key,
-                attempt_id=attempt_id,
-                reservation=reservation,
-            )
-        if lifecycle is AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION:
-            return AuditReservationOutcome(
-                decision=ReservationDecision.PUBLISHED_PENDING_FINALIZATION,
-                slot_key=slot_key,
-                attempt_id=attempt_id,
-                reservation=reservation,
-            )
-        if lifecycle is AuditAttemptLifecycle.RESPONSE_COMMITTED:
-            outcome = _outcome_from_dict(_json_loads(attempt_row[2]))
-            return AuditReservationOutcome(
-                decision=ReservationDecision.EXACT_REPLAY,
-                slot_key=slot_key,
-                attempt_id=attempt_id,
-                replay_outcome=outcome,
-            )
-        if lifecycle is AuditAttemptLifecycle.SEMANTIC_REJECTED:
-            return self._conflict_outcome(request, "correction_token_required", slot_key=slot_key)
-        return self._conflict_outcome(
-            request, f"attempt_{lifecycle.value.lower()}", slot_key=slot_key
-        )
-
-    def _conflict_outcome(
-        self,
-        request: AuditReservationRequest,
-        detail: str,
-        *,
-        slot_key: AuditSlotKey | None = None,
-    ) -> AuditReservationOutcome:
-        resolved_slot_key = slot_key or AuditSlotKey(
-            recipe_execution_id=request.recipe_execution_id,
-            installation_version=request.installation_version,
-            step_name=request.step_name,
-            invocation_template_digest=request.invocation_template_digest,
-            slot_intent_digest=request.slot_intent_digest,
-            ordered_reference_identity=compute_audit_reference_identity(request.audited_plan_refs),
-            prior_authority_digest=None,
-        )
-        return AuditReservationOutcome(
-            decision=ReservationDecision.CONFLICT,
-            slot_key=resolved_slot_key,
-            attempt_id=AuditAttemptId(secrets.token_hex(16)),
-            conflict_detail=detail,
-        )
-
-    def _build_reservation(
-        self,
-        *,
-        request: AuditReservationRequest,
-        slot_id: AuditSlotId,
-        slot_key: AuditSlotKey,
-        attempt_id: AuditAttemptId,
-        audit_round: AuditRound,
-        current_head: AuditCycleHead | None,
-    ) -> AuditIdentityReservation:
-        ordered_reference_identity = slot_key.ordered_reference_identity
-        root = request.allowed_root / "audit-admission" / slot_id.value / attempt_id.value
-        return AuditIdentityReservation(
-            slot_id=slot_id,
-            slot_key=slot_key,
-            current_attempt_id=attempt_id,
-            runtime_binding_digest=request.runtime_binding_digest,
-            reference_identity_profile_id=AUDIT_REFERENCE_IDENTITY_PROFILE_V1.profile_id,
-            audited_plan_refs=request.audited_plan_refs,
-            plan_set_id=ordered_reference_identity,
-            cycle_id=request.cycle_id,
-            scope_id=request.scope_id,
-            part_id=request.part_id,
-            audit_round=audit_round,
-            parent_authority_digest=slot_key.prior_authority_digest,
-            generated_at=_now_iso(),
-            allowed_root=request.allowed_root,
-            semantic_result_path=root / "semantic.json",
-            inventory_path=root / "inventory.json",
-            authority_path=root / "authority.json",
-            expected_head=current_head,
-            tracker_target_order_id=request.tracker_target_order_id,
-            tracker_expected=request.tracker_expected,
-        )
-
-    def _issue_handle(self, connection: sqlite3.Connection, attempt_id: AuditAttemptId) -> str:
-        secret = secrets.token_hex(32)
-        handle_digest = compute_bytes_hash(secret.encode("utf-8"))
-        connection.execute(
-            "UPDATE attempts SET handle_digest = ? WHERE attempt_id = ?",
-            (f"{_HANDLE_DIGEST_DOMAIN}:{handle_digest}", attempt_id.value),
-        )
-        return f"{_HANDLE_PREFIX}.{self._authority.authority_id}.{secret}"
-
-    def _dispatch_new_slot(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        request: AuditReservationRequest,
-        slot_key: AuditSlotKey,
-        slot_id: AuditSlotId,
-        head_key: str,
-        current_head: AuditCycleHead | None,
-    ) -> AuditReservationOutcome:
-        attempt_id = AuditAttemptId(secrets.token_hex(16))
-        audit_round = AuditRound(1 if current_head is None else current_head.audit_round + 1)
-        reservation = self._build_reservation(
-            request=request,
-            slot_id=slot_id,
-            slot_key=slot_key,
-            attempt_id=attempt_id,
-            audit_round=audit_round,
-            current_head=current_head,
-        )
-        now = _now_iso()
-        connection.execute(
-            "INSERT INTO slots(slot_id, recipe_execution_id, installation_version, "
-            "step_name, head_key, slot_key_json, current_attempt_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                slot_id.value,
-                request.recipe_execution_id.value,
-                request.installation_version.value,
-                request.step_name,
-                head_key,
-                _json_dumps(_slot_key_to_dict(slot_key)),
-                attempt_id.value,
-                now,
-            ),
-        )
-        connection.execute(
-            "INSERT INTO attempts(attempt_id, slot_id, lifecycle, semantic_digest, "
-            "correction_predecessor, handle_digest, reservation_json, "
-            "committed_outcome_json, created_at) "
-            "VALUES (?, ?, ?, NULL, NULL, NULL, ?, NULL, ?)",
-            (
-                attempt_id.value,
-                slot_id.value,
-                AuditAttemptLifecycle.OPEN.value,
-                _json_dumps(_reservation_to_dict(reservation)),
-                now,
-            ),
-        )
-        handle = self._issue_handle(connection, attempt_id)
-        return AuditReservationOutcome(
-            decision=ReservationDecision.DISPATCH_NEW,
-            slot_key=slot_key,
-            attempt_id=attempt_id,
-            reservation=reservation,
-            reservation_handle=handle,
-        )
-
-    def _dispatch_correction(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        request: AuditReservationRequest,
-        slot_id: AuditSlotId,
-        predecessor_attempt_id: AuditAttemptId,
-        reservation: AuditIdentityReservation,
-    ) -> AuditReservationOutcome:
-        attempt_id = AuditAttemptId(secrets.token_hex(16))
-        next_reservation = self._build_reservation(
-            request=request,
-            slot_id=slot_id,
-            slot_key=reservation.slot_key,
-            attempt_id=attempt_id,
-            audit_round=reservation.audit_round,
-            current_head=reservation.expected_head,
-        )
-        now = _now_iso()
-        connection.execute(
-            "UPDATE slots SET current_attempt_id = ? WHERE slot_id = ?",
-            (attempt_id.value, slot_id.value),
-        )
-        connection.execute(
-            "INSERT INTO attempts(attempt_id, slot_id, lifecycle, semantic_digest, "
-            "correction_predecessor, handle_digest, reservation_json, "
-            "committed_outcome_json, created_at) "
-            "VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL, ?)",
-            (
-                attempt_id.value,
-                slot_id.value,
-                AuditAttemptLifecycle.OPEN.value,
-                predecessor_attempt_id.value,
-                _json_dumps(_reservation_to_dict(next_reservation)),
-                now,
-            ),
-        )
-        handle = self._issue_handle(connection, attempt_id)
-        return AuditReservationOutcome(
-            decision=ReservationDecision.DISPATCH_NEW,
-            slot_key=reservation.slot_key,
-            attempt_id=attempt_id,
-            reservation=next_reservation,
-            reservation_handle=handle,
-        )
-
-    def _redispatch_open(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        attempt_id: AuditAttemptId,
-        reservation: AuditIdentityReservation,
-    ) -> AuditReservationOutcome:
-        handle = self._issue_handle(connection, attempt_id)
-        return AuditReservationOutcome(
-            decision=ReservationDecision.REDISPATCH_OPEN,
-            slot_key=reservation.slot_key,
-            attempt_id=attempt_id,
-            reservation=reservation,
-            reservation_handle=handle,
-        )
-
     def resolve_reservation_handle(
         self,
         reservation_handle: str,
     ) -> AuditIdentityReservation | None:
+        from autoskillit.pipeline._audit_admission_ledger._encoders import (
+            _HANDLE_DIGEST_DOMAIN as _handle_digest_domain,
+        )
+        from autoskillit.pipeline._audit_admission_ledger._encoders import (
+            _HANDLE_PREFIX as _handle_prefix,
+        )
+
         parts = reservation_handle.split(".")
-        if len(parts) != 3 or parts[0] != _HANDLE_PREFIX:
+        if len(parts) != 3 or parts[0] != _handle_prefix:
             return None
         handle_authority_id, secret = parts[1:]
         if (
@@ -732,15 +423,11 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 handle_digest = (
-                    f"{_HANDLE_DIGEST_DOMAIN}:{compute_bytes_hash(secret.encode('utf-8'))}"
+                    f"{_handle_digest_domain}:{compute_bytes_hash(secret.encode('utf-8'))}"
                 )
-                row = connection.execute(
-                    "SELECT reservation_json, lifecycle FROM attempts WHERE handle_digest = ?",
-                    (handle_digest,),
-                ).fetchone()
-                if row is None or row[1] != AuditAttemptLifecycle.OPEN.value:
-                    return None
-                return _reservation_from_dict(_json_loads(row[0]))
+                return _reservations._resolve_reservation_handle_read(
+                    connection, handle_digest=handle_digest
+                )
             finally:
                 connection.close()
 

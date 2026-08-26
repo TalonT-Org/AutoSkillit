@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shlex
 import time
 from typing import TYPE_CHECKING
 
@@ -13,7 +12,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import TerminationReason, get_logger
+from autoskillit.core import TerminationReason, contains_test_gate_command, get_logger
 from autoskillit.execution import CaptureSetupError, build_sanitized_env
 from autoskillit.pipeline import ReadyRecipe, gate_error_result
 from autoskillit.server import mcp
@@ -48,47 +47,6 @@ _PURE_SLEEP_RE = re.compile(
     r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
     r"|sleep\s+(?P<sh_secs>\d+(?:\.\d+)?))$"
 )
-_CANONICAL_TEST_GATE_COMMANDS: frozenset[tuple[str, ...]] = frozenset(
-    {
-        ("task", "test-check"),
-        ("task", "test-all"),
-        ("task", "test-filtered"),
-    }
-)
-_SHELL_CONTROL_TOKENS = frozenset({";", "&&", "||", "|", "&"})
-
-
-def _shell_command_segments(cmd: str) -> tuple[tuple[str, ...], ...]:
-    segments: list[tuple[str, ...]] = []
-    for line in cmd.splitlines():
-        try:
-            tokens = shlex.split(line, comments=True, posix=True)
-        except ValueError:
-            continue
-        current: list[str] = []
-        for token in tokens:
-            if token in _SHELL_CONTROL_TOKENS:
-                if current:
-                    segments.append(tuple(current))
-                    current = []
-            else:
-                current.append(token)
-        if current:
-            segments.append(tuple(current))
-    return tuple(segments)
-
-
-def _is_test_gate_command(cmd: str, configured: tuple[list[str], ...]) -> bool:
-    gate_commands = _CANONICAL_TEST_GATE_COMMANDS | {
-        tuple(command) for command in configured if command
-    }
-    for segment in _shell_command_segments(cmd):
-        command = segment
-        while command and "=" in command[0] and not command[0].startswith(("/", "./")):
-            command = command[1:]
-        if any(command[: len(gate)] == gate for gate in gate_commands):
-            return True
-    return False
 
 
 def _trusted_smoke_gate_provenance(
@@ -144,7 +102,7 @@ async def run_cmd(
             tool_ctx = _get_ctx()
             prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
             configured_commands = tuple(tool_ctx.config.test_check.effective_commands)
-            if _is_test_gate_command(cmd, configured_commands) and not (
+            if contains_test_gate_command(cmd, configured_commands) and not (
                 _trusted_smoke_gate_provenance(tool_ctx, step_name)
             ):
                 return gate_error_result(

@@ -7,11 +7,9 @@ Validates that every {placeholder} in a SKILL.md bash block is either:
 
 from __future__ import annotations
 
-import shlex
-
 import regex as re
 
-from autoskillit.core import Severity, load_yaml
+from autoskillit.core import Severity, contains_test_gate_command, load_yaml
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
@@ -1160,18 +1158,8 @@ def _check_inline_content_in_subagent_prompt(ctx: ValidationContext) -> list[Rul
     return findings
 
 
-_CANONICAL_TEST_GATE_COMMANDS: frozenset[tuple[str, ...]] = frozenset(
-    {
-        ("task", "test-check"),
-        ("task", "test-all"),
-        ("task", "test-filtered"),
-    }
-)
-_SHELL_CONTROL_TOKENS = frozenset({";", "&&", "||", "|", "&"})
-
-
 def _configured_test_gate_commands(ctx: ValidationContext) -> frozenset[tuple[str, ...]]:
-    commands = set(_CANONICAL_TEST_GATE_COMMANDS)
+    commands: set[tuple[str, ...]] = set()
     if ctx.project_dir is None:
         return frozenset(commands)
     config_path = ctx.project_dir / ".autoskillit" / "config.yaml"
@@ -1191,52 +1179,6 @@ def _configured_test_gate_commands(ctx: ValidationContext) -> frozenset[tuple[st
         if isinstance(candidate, list) and all(isinstance(token, str) for token in candidate):
             commands.add(tuple(candidate))
     return frozenset(commands)
-
-
-def _iter_shell_command_segments(block: str) -> list[tuple[str, ...]]:
-    segments: list[tuple[str, ...]] = []
-    for line in block.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        try:
-            tokens = shlex.split(stripped, comments=True, posix=True)
-        except ValueError:
-            continue
-        current: list[str] = []
-        for token in tokens:
-            if token in _SHELL_CONTROL_TOKENS:
-                if current:
-                    segments.append(tuple(current))
-                    current = []
-            else:
-                current.append(token)
-        if current:
-            segments.append(tuple(current))
-    return segments
-
-
-def _is_raw_test_gate_segment(
-    segment: tuple[str, ...], gate_commands: frozenset[tuple[str, ...]]
-) -> bool:
-    command = segment
-    while command and "=" in command[0] and not command[0].startswith(("/", "./")):
-        command = command[1:]
-    if command[:2] == ("uv", "run"):
-        command = command[2:]
-    if any(command[: len(gate)] == gate for gate in gate_commands):
-        return True
-    if command and command[0] == "pytest":
-        return True
-    return (
-        len(command) >= 3
-        and command[0].startswith("python")
-        and command[1:3]
-        == (
-            "-m",
-            "pytest",
-        )
-    )
 
 
 @semantic_rule(
@@ -1267,9 +1209,8 @@ def _check_no_raw_shell_test_gate(ctx: ValidationContext) -> list[RuleFinding]:
         except OSError:
             continue
         if any(
-            _is_raw_test_gate_segment(segment, gate_commands)
+            contains_test_gate_command(block, gate_commands)
             for block in extract_bash_blocks(content)
-            for segment in _iter_shell_command_segments(block)
         ):
             findings.append(
                 make_finding(

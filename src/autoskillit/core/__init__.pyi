@@ -176,6 +176,7 @@ from .audit_semantic_codec import (
 from .audit_semantic_codec import (
     load_standalone_audit_evidence as load_standalone_audit_evidence,
 )
+from .bash_write_targets import contains_test_gate_command as contains_test_gate_command
 from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions

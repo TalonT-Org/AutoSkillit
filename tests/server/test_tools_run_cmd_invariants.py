@@ -25,6 +25,10 @@ class TestTestGateBypassRefusal:
             "task test-check",
             "task test-all",
             "task test-filtered",
+            "pytest -q",
+            "python -m pytest -q",
+            "uv run pytest -q",
+            "uv run task test-check",
         ],
     )
     async def test_refuses_test_gate_commands_before_launch(self, tool_ctx_kitchen_open, cmd):

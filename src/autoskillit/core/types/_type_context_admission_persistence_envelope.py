@@ -1,12 +1,9 @@
 """Durable boundary types for context-admission persistence.
 
-This shard defines every type that crosses or lives alongside the durable
-envelope boundary: the canonical byte-stable representation and its
-encoding pipeline, the privacy/safety validator that gates values before
-they reach that boundary, the stream-partition identity, and the shadow
-publication records persisted beside journal rows.  The in-process service
-surface (store authority, operation results, health projections, and the
-ledger Protocol) lives in ``_type_context_admission_persistence`` (the facade).
+Defines the canonical ``StoredContextAdmissionEnvelope`` representation
+and encode/decode pipeline, the stream-partition key, shadow publication
+records, and the privacy/safety validator.  The process-local service
+surface lives in ``_type_context_admission_persistence``.
 """
 
 from __future__ import annotations

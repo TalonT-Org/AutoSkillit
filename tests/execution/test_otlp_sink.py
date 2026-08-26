@@ -24,6 +24,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 
 _SIGNALS = tuple((signal, path) for path, signal in _OTLP_SIGNALS.items())
 _FORBIDDEN = {
+    "enduser.id": "private-enduser-id",
     "user.email": "private-email@example.test",
     "organization.id": "private-organization-id",
     "user.account_id": "private-account-id",

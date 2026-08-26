@@ -38,6 +38,7 @@ _SIGNALS = {
 }
 _FORBIDDEN_KEYS = frozenset(
     {
+        "enduser.id",
         "user.email",
         "organization.id",
         "user.account_id",

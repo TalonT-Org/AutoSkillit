@@ -63,7 +63,7 @@ def _has_production_import(
 
 @pytest.fixture(scope="module")
 def production_importers() -> dict[str, set[Path]]:
-    """Build the production importer index once per worker fixture instance."""
+    """Build the production importer index once per test module per worker process."""
     from autoskillit.core import paths
 
     return _build_production_importers(paths.pkg_root())

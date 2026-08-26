@@ -65,44 +65,6 @@ def _load_guard_detection_frozensets(guard_name: str) -> list[frozenset]:
     return sets
 
 
-def test_every_risky_git_op_has_guard_coverage() -> None:
-    """For each risky git operation tuple, at least one Bash-matching guard detects it.
-
-    Scans source files of guards registered under Bash|run_cmd matchers for
-    string literals matching all tokens of each risky tuple. Also scans the
-    shared authority module `autoskillit.hooks._hook_constants` which holds
-    the canonical tuple literals after the #4853 shared-authority refactor.
-    """
-    guard_scripts = _command_inspecting_guard_scripts()
-    assert guard_scripts, "Expected at least one command-inspecting guard registered for Bash"
-
-    hook_constants_path = (
-        Path(__file__).parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "hooks"
-        / "_hook_constants.py"
-    )
-
-    uncovered: list[tuple[str, ...]] = []
-    for op_tuple in RISKY_GIT_OPERATIONS:
-        covered = False
-        search_paths = [path for _, path in guard_scripts] + [hook_constants_path]
-        for script_path in search_paths:
-            source = script_path.read_text()
-            if all((f'"{token}"' in source or f"'{token}'" in source) for token in op_tuple):
-                covered = True
-                break
-        if not covered:
-            uncovered.append(op_tuple)
-
-    assert not uncovered, (
-        f"Risky git operations without guard coverage: {sorted(uncovered)}. "
-        f"Add detection to an existing guard or create a new one, then register it "
-        f"in HOOK_REGISTRY under a Bash|run_cmd matcher."
-    )
-
-
 def test_risky_git_ops_covered_by_guard_detection_sets() -> None:
     """Guards that expose detection frozensets must include all risky git ops.
 
@@ -140,14 +102,17 @@ def test_legacy_risky_git_tuples_match_git_ops_guard_exactly() -> None:
     assert module._BLOCKED_GIT_OPS == RISKY_GIT_OPERATIONS
 
 
-def test_risky_git_operations_lives_in_hook_constants_module() -> None:
-    """RISKY_GIT_OPERATIONS is importable from autoskillit.hooks._hook_constants
-    and equals the guard-local _BLOCKED_GIT_OPS (value equality, since the guard
-    renames it via `as _BLOCKED_GIT_OPS`)."""
-    from autoskillit.hooks._hook_constants import (
-        RISKY_GIT_OPERATIONS as RISKY_GIT_OPERATIONS_FROM_K,
-    )
+def test_risky_git_operations_authority_is_hook_constants() -> None:
+    """The guard-local _BLOCKED_GIT_OPS must equal the canonical RISKY_GIT_OPERATIONS.
+
+    The guard imports the frozenset from the shared authority module under
+    the local alias ``_BLOCKED_GIT_OPS``; the registry re-exports it from
+    ``autoskillit.hook_registry``. The two paths load the module under
+    different ``sys.modules`` keys (the guard uses the sys.path-bootstrap
+    bare name; the registry uses the package-qualified name), so we assert
+    on value equality rather than identity — they must be the same frozenset.
+    """
+    from autoskillit.hooks._hook_constants import RISKY_GIT_OPERATIONS
     from autoskillit.hooks.guards.git_ops_guard import _BLOCKED_GIT_OPS  # noqa: PLC0415
 
-    assert RISKY_GIT_OPERATIONS_FROM_K == RISKY_GIT_OPERATIONS
-    assert _BLOCKED_GIT_OPS == RISKY_GIT_OPERATIONS_FROM_K
+    assert _BLOCKED_GIT_OPS == RISKY_GIT_OPERATIONS

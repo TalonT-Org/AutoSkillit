@@ -5,11 +5,10 @@ Importing shard symbols directly is fine; importing them through this facade
 guarantees the public surface (``autoskillit.exploration.snapshot.X``) survives
 future shard reorganisation.
 
-This facade re-exports not only the public capture API but also the helpers
-the test suite monkeypatches through the module (``subprocess``, ``time``,
-``_capture_once``, ``activate_repository_profiles``, ``observe_path_mode``,
-``resolve_repository_identity``). Removing any of these re-exports breaks the
-existing test suite.
+The ``# noqa: F401`` re-exports below are test-monkeypatch anchors: the test
+suite reaches into this module via ``snapshot_module.NAME`` to swap helpers
+for test fixtures. Sibling shards import directly from each other rather than
+going through this facade.
 """
 
 from __future__ import annotations
@@ -23,14 +22,8 @@ import time  # noqa: F401
 
 from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 
-# ``read_stable_contained_file`` is imported from ``_artifact`` for the same
-# reason the other helpers are re-exported here: the test suite monkeypatches
-# this name on the facade to simulate post-open mutation. The plan's Test #3
-# facade table omits this name, but the live test exists and the helper must
-# resolve.
 from ._artifact import (
     capture_stable_artifact,
-    read_stable_contained_file,  # noqa: F401
     stable_artifact_matches,
 )
 from ._capture import (  # noqa: F401
@@ -38,7 +31,6 @@ from ._capture import (  # noqa: F401
     activate_repository_profiles,  # noqa: F401
     capture_repository_snapshot,
     observe_path_mode,  # noqa: F401
-    resolve_repository_identity,  # noqa: F401
     resolve_repository_path,
 )
 from ._records import (

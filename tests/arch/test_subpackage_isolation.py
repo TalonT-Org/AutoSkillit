@@ -2570,12 +2570,13 @@ def test_snapshot_facade_all_resolves() -> None:
     """Every public symbol exposed by the original snapshot.py is still resolvable.
 
     Includes the names that test_snapshot.py monkeypatches through the facade:
-    _capture_once, resolve_repository_identity, activate_repository_profiles,
-    observe_path_mode, subprocess, time, read_stable_contained_file,
-    DEFAULT_IGNORE_POLICY. A facade that re-exports the public surface but does
-    not expose these helpers breaks the test suite silently.
+    _capture_once, activate_repository_profiles, observe_path_mode, subprocess,
+    time, DEFAULT_IGNORE_POLICY. A facade that re-exports the public surface but
+    does not expose these helpers breaks the test suite silently.
     """
     import autoskillit.exploration.snapshot as snapshot_module
+    from autoskillit.exploration.snapshot import _capture as capture_shard
+    from autoskillit.exploration.snapshot import _records as records_shard
 
     facade_names = {
         # Public API surface (was 11 names)
@@ -2594,22 +2595,37 @@ def test_snapshot_facade_all_resolves() -> None:
         "_capture_once",
         "activate_repository_profiles",
         "observe_path_mode",
-        "resolve_repository_identity",
         "subprocess",
         "time",
-        # Additional helpers test_snapshot.py monkeypatches via the facade
-        "read_stable_contained_file",
         "DEFAULT_IGNORE_POLICY",
     }
-    expected_modules = {"subprocess", "time"}
+    # Verify each re-export points to the correct source object so a facade
+    # that re-exports ``subprocess = None`` cannot silently satisfy hasattr.
+    stdlib_modules = {"subprocess", "time"}
+    function_anchors = {
+        "_capture_once": capture_shard._capture_once,
+        "activate_repository_profiles": capture_shard.activate_repository_profiles,
+        "observe_path_mode": capture_shard.observe_path_mode,
+    }
+    data_anchors = {
+        "DEFAULT_IGNORE_POLICY": records_shard.DEFAULT_IGNORE_POLICY,
+    }
     for name in facade_names:
         assert hasattr(snapshot_module, name), (
             f"snapshot facade missing {name} — test_snapshot.py monkeypatch sites "
             f"rely on this re-export"
         )
-        if name in expected_modules:
+        if name in stdlib_modules:
             assert getattr(snapshot_module, name) is __import__(name), (
                 f"snapshot facade {name} must re-export the stdlib module"
+            )
+        elif name in function_anchors:
+            assert getattr(snapshot_module, name) is function_anchors[name], (
+                f"snapshot facade {name} must re-export the function defined in its source shard"
+            )
+        elif name in data_anchors:
+            assert getattr(snapshot_module, name) == data_anchors[name], (
+                f"snapshot facade {name} must re-export the value defined in its source shard"
             )
 
 
@@ -2936,9 +2952,14 @@ def test_collector_registry_preserves_13_entries_in_order() -> None:
     )
     actual_ids = tuple(p.collector_id for p in COLLECTOR_PROFILES)
     assert actual_ids == expected_ids
-    assert (
-        collector_manifest_digest()
-        == "0b5d94f7f018c4bf7df84a370cabfb4b5e32c09dfedb6ca3d43e04e1ed2126df"
+    actual_digest = collector_manifest_digest()
+    expected_digest = "0b5d94f7f018c4bf7df84a370cabfb4b5e32c09dfedb6ca3d43e04e1ed2126df"
+    assert actual_digest == expected_digest, (
+        f"COLLECTOR_PROFILES digest drifted from {expected_digest!r} to {actual_digest!r}. "
+        f"This signals a registry change (added/removed collector, reordered tuple, "
+        f"changed method/profile string, or version bump in _COLLECTOR_VERSION). "
+        f"Inspect git log for collector changes; if the change is intentional, "
+        f"update expected_digest in test_collector_registry_preserves_13_entries_in_order."
     )
 
 

@@ -23,6 +23,8 @@ from autoskillit.hooks._hook_constants import (
     RISKY_GIT_OPERATIONS,
 )
 
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
+
 
 def test_risky_git_operations_matches_literal() -> None:
     """RISKY_GIT_OPERATIONS must equal the canonical 9-tuple set the guards duplicated."""

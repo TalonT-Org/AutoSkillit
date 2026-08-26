@@ -51,7 +51,7 @@ from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
-from _hook_constants import (
+from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     RISKY_GIT_OPERATIONS as _BLOCKED_GIT_OPS,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402

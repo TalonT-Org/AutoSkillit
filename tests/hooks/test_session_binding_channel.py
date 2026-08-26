@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +12,10 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import production_feature_env
+from tests.hooks._session_binding_helpers import (
+    copy_projected_hook,
+    write_projection_manifest,
+)
 
 pytestmark = [pytest.mark.medium]
 
@@ -62,58 +65,6 @@ def _run_hook(
     )
 
 
-def _copy_projected_hook(tmp_path: Path, name: str) -> tuple[Path, Path]:
-    """Build a projection-shaped, stdlib-only hook tree."""
-    root = tmp_path / name
-    hooks_dir = root / "hooks"
-    hooks_dir.mkdir(parents=True)
-    for filename in (
-        "skill_load_post_hook.py",
-        "_hook_payload.py",
-        "_hook_settings.py",
-        "_session_binding.py",
-    ):
-        shutil.copy2(_HOOKS_DIR / filename, hooks_dir / filename)
-    return root, hooks_dir / "skill_load_post_hook.py"
-
-
-def _write_manifest(
-    projection_root: Path,
-    *,
-    skill: str = "join-bearing",
-    join_required: bool = True,
-    schema_version: int = 2,
-    artifact_digest: str = "artifact-abc",
-) -> Path:
-    manifest = projection_root.parent / f".{projection_root.name}.autoskillit-projection.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "schema_version": schema_version,
-                "artifact_kind": "projection",
-                "projection_version": 1,
-                "semantic_key": "autoskillit@channel-test:1",
-                "incarnation_id": "00000000000040008000000000000001",
-                "artifact_digest": artifact_digest,
-                "skills": {
-                    skill: {
-                        "join_required": join_required,
-                        "child_spawn_cardinality": {"explicit_slots": 1},
-                        "semantic_digest": "semantic-abc",
-                        "adaptation_digest": "adaptation-abc",
-                        "projected_digest": "projected-abc",
-                        "canonical_digest": "canonical-abc",
-                        "artifact_digest": "",
-                        "artifact_incarnation": "",
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    return manifest
-
-
 def _binding_path(state_root: Path, session_id: str) -> Path:
     return state_root / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
 
@@ -138,8 +89,8 @@ def test_flag_is_written_when_provider_profile_is_absent(tmp_path: Path) -> None
 def test_manifest_resolves_from_the_installed_hook_location(tmp_path: Path) -> None:
     """The hook locates its sidecar from its bound projection, not process CWD."""
     state_root = _state_root(tmp_path)
-    projection_root, hook_path = _copy_projected_hook(tmp_path, "live-projection")
-    _write_manifest(projection_root)
+    projection_root, hook_path = copy_projected_hook(tmp_path, "live-projection")
+    write_projection_manifest(projection_root)
     unrelated_cwd = tmp_path / "unrelated"
     unrelated_cwd.mkdir()
 
@@ -161,8 +112,8 @@ def test_manifest_top_level_artifact_digest_lands_in_the_envelope_top_level(
 ) -> None:
     """The manifest-wide artifact digest is not fabricated per loaded skill."""
     state_root = _state_root(tmp_path)
-    projection_root, hook_path = _copy_projected_hook(tmp_path, "digest-projection")
-    _write_manifest(projection_root, artifact_digest="artifact-top-level")
+    projection_root, hook_path = copy_projected_hook(tmp_path, "digest-projection")
+    write_projection_manifest(projection_root, artifact_digest="artifact-top-level")
 
     result = _run_hook(
         hook_path,
@@ -181,8 +132,8 @@ def test_unknown_manifest_schema_version_is_refused_not_defaulted(tmp_path: Path
     """An unrecognized sidecar version leaves an explicitly unresolved binding."""
     state_root = _state_root(tmp_path)
     log_dir = tmp_path / "logs"
-    projection_root, hook_path = _copy_projected_hook(tmp_path, "unknown-version")
-    _write_manifest(projection_root, schema_version=99)
+    projection_root, hook_path = copy_projected_hook(tmp_path, "unknown-version")
+    write_projection_manifest(projection_root, schema_version=99)
 
     result = _run_hook(
         hook_path,
@@ -208,10 +159,10 @@ def test_orphaned_schema_1_sidecar_is_not_selected_over_the_hook_bound_live_mani
 ) -> None:
     """A live hook resolves only the sidecar adjacent to its own projection root."""
     state_root = _state_root(tmp_path)
-    orphan_root, _ = _copy_projected_hook(tmp_path, "orphaned-projection")
-    _write_manifest(orphan_root, schema_version=1, artifact_digest="orphaned")
-    live_root, hook_path = _copy_projected_hook(tmp_path, "live-projection")
-    _write_manifest(live_root, artifact_digest="live")
+    orphan_root, _ = copy_projected_hook(tmp_path, "orphaned-projection")
+    write_projection_manifest(orphan_root, schema_version=1, artifact_digest="orphaned")
+    live_root, hook_path = copy_projected_hook(tmp_path, "live-projection")
+    write_projection_manifest(live_root, artifact_digest="live")
 
     result = _run_hook(
         hook_path,
@@ -469,8 +420,8 @@ def test_channel_dir_converges_from_every_anchor_including_a_subdirectory(
 def test_skill_load_guard_finds_a_flag_written_from_a_worktree_cwd(tmp_path: Path) -> None:
     """A gated guard permits after the hook writes through the state-root authority."""
     state_root = _state_root(tmp_path)
-    projection_root, hook_path = _copy_projected_hook(tmp_path, "guard-projection")
-    _write_manifest(projection_root)
+    projection_root, hook_path = copy_projected_hook(tmp_path, "guard-projection")
+    write_projection_manifest(projection_root)
     other_cwd = tmp_path / "other-cwd"
     other_cwd.mkdir()
     payload = _skill_event(cwd=state_root)

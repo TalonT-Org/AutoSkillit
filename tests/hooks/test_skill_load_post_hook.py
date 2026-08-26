@@ -6,7 +6,6 @@ import contextlib
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
 import unittest.mock
@@ -16,70 +15,14 @@ from unittest.mock import patch
 import pytest
 
 from tests.conftest import production_interpreter_env
+from tests.hooks._session_binding_helpers import (
+    copy_projected_hook,
+    write_projection_manifest,
+)
 
 pytestmark = [pytest.mark.medium]
 
 _FLAG_RELPATH = ".autoskillit/temp/skill_guard_abc123.flag"
-_HOOKS_SOURCE = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
-
-
-def _copy_projected_hook(tmp_path: Path) -> tuple[Path, Path]:
-    """Copy the stdlib-only hook runtime under a projected plugin root."""
-    projection_root = tmp_path / "join-plugin"
-    hooks_dir = projection_root / "hooks"
-    hooks_dir.mkdir(parents=True)
-    for filename in (
-        "skill_load_post_hook.py",
-        "_hook_payload.py",
-        "_hook_settings.py",
-        "_session_binding.py",
-    ):
-        shutil.copy2(_HOOKS_SOURCE / filename, hooks_dir / filename)
-    return projection_root, hooks_dir / "skill_load_post_hook.py"
-
-
-def _write_join_bearing_projection_manifest(
-    projection_root: Path,
-    *,
-    skill_name: str,
-    join_required: bool = True,
-    artifact_digest: str = "artdigest-1",
-    semantic_digest: str = "sem-1",
-    adaptation_digest: str = "adapt-1",
-    projected_digest: str = "proj-1",
-    canonical_digest: str = "canon-1",
-    child_spawn_cardinality: dict[str, object] | None = None,
-) -> Path:
-    """Write the schema-2 sidecar beside a projected plugin root."""
-    manifest_path = projection_root.parent / (
-        f".{projection_root.name}.autoskillit-projection.json"
-    )
-    payload: dict[str, object] = {
-        "schema_version": 2,
-        "artifact_kind": "projection",
-        "projection_version": 1,
-        "semantic_key": "autoskillit@join-plugin:1",
-        "incarnation_id": "00000000000040008000000000000001",
-        "artifact_digest": artifact_digest,
-        "skills": {
-            skill_name: {
-                "join_required": join_required,
-                "semantic_digest": semantic_digest,
-                "adaptation_digest": adaptation_digest,
-                "projected_digest": projected_digest,
-                "canonical_digest": canonical_digest,
-                "artifact_digest": "",
-                "artifact_incarnation": "",
-                "child_spawn_cardinality": (
-                    child_spawn_cardinality
-                    if child_spawn_cardinality is not None
-                    else {"explicit_slots": 4}
-                ),
-            }
-        },
-    }
-    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
-    return manifest_path
 
 
 def _run_hook(
@@ -364,8 +307,8 @@ def test_skips_flag_write_when_agent_id_present_join_bearing_skill(
     re-load must not produce a new flag that would otherwise orphan the
     parent's join ledger key.
     """
-    projection_root, hook_path = _copy_projected_hook(tmp_path)
-    _write_join_bearing_projection_manifest(
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(
         projection_root,
         skill_name="join-bearing-skill",
         join_required=True,
@@ -465,8 +408,8 @@ def test_skill_load_post_hook_backend_authority_join_bearing(
     admit a join), and Claude must write it. The projection manifest
     sidecar pre-populates the join_required bit.
     """
-    projection_root, hook_path = _copy_projected_hook(tmp_path)
-    _write_join_bearing_projection_manifest(
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(
         projection_root,
         skill_name="implement-worktree-no-merge",
         join_required=True,
@@ -527,8 +470,8 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
     file whose JSON envelope carries the full documented identity,
     including a manifest-wide artifact digest at the envelope level.
     """
-    projection_root, hook_path = _copy_projected_hook(tmp_path)
-    manifest = _write_join_bearing_projection_manifest(
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    manifest = write_projection_manifest(
         projection_root,
         skill_name="implement-worktree-no-merge",
         join_required=True,
@@ -580,8 +523,8 @@ def test_join_false_skill_load_keeps_join_required_false(tmp_path: Path) -> None
     default to True. Downstream join gates (background_exec_guard,
     can_release_stop) key off this bit to allow or deny dispatch.
     """
-    projection_root, hook_path = _copy_projected_hook(tmp_path)
-    _write_join_bearing_projection_manifest(
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(
         projection_root,
         skill_name="implement-worktree-no-merge",
         join_required=False,
@@ -610,9 +553,9 @@ def test_subsequent_join_false_load_does_not_downgrade_join_required(
     is the documented monotonic contract that prevents a join gate
     bypass via a nested child loading a non-join skill.
     """
-    projection_root, hook_path = _copy_projected_hook(tmp_path)
+    projection_root, hook_path = copy_projected_hook(tmp_path)
     # First load: join-bearing.
-    _write_join_bearing_projection_manifest(
+    write_projection_manifest(
         projection_root,
         skill_name="first-skill",
         join_required=True,
@@ -624,7 +567,7 @@ def test_subsequent_join_false_load_does_not_downgrade_join_required(
         hook_path=hook_path,
     )
     # Second load: join-false.
-    _write_join_bearing_projection_manifest(
+    write_projection_manifest(
         projection_root,
         skill_name="second-skill",
         join_required=False,
@@ -658,8 +601,8 @@ def test_fresh_session_without_join_loads_reports_join_required_false(
     join_required=false and binding_valid=true so legitimate
     named/team dispatch proceeds normally.
     """
-    projection_root, hook_path = _copy_projected_hook(tmp_path)
-    _write_join_bearing_projection_manifest(
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(
         projection_root,
         skill_name="non-join-skill",
         join_required=False,

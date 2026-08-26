@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import production_feature_env
+from tests.conftest import production_feature_env, production_interpreter_env
 from tests.hooks._session_binding_helpers import (
     copy_projected_hook,
     write_projection_manifest,
@@ -54,10 +54,14 @@ def _run_hook(
     cwd: Path,
     env: dict[str, str],
 ) -> subprocess.CompletedProcess[str]:
+    run_env = production_interpreter_env()
+    if "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED" not in env:
+        run_env.pop("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", None)
+    run_env.update(env)
     return subprocess.run(
         [sys.executable, str(hook_path)],
         cwd=cwd,
-        env=dict(env),
+        env=run_env,
         input=json.dumps(payload),
         text=True,
         capture_output=True,
@@ -304,7 +308,6 @@ def test_binding_path_ignores_a_relative_payload_cwd(
 
     process_cwd = tmp_path / "process-cwd"
     process_cwd.mkdir()
-    monkeypatch.delenv("AUTOSKILLIT_STATE_ROOT", raising=False)
     monkeypatch.chdir(process_cwd)
 
     assert resolve_binding_path("relative/worktree", "session-1").parent == (

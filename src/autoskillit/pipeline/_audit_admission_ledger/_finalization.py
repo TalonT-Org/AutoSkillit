@@ -1,24 +1,5 @@
 """Finalization effect helpers for the audit admission ledger.
 
-Five free functions:
-
-- `_validate_finalization_effect_name(effect_name)` — pure validator for
-  the effect-name string. Used by both `finalization_effect_result` and
-  `acknowledge_finalization_effect`.
-- `_require_finalization_effect_lifecycle(connection, attempt_id, *,
-  operation, allowed_lifecycles)` — reads the attempt's lifecycle and
-  raises if it is not in `allowed_lifecycles`.
-- `_finalization_effect_result_read(connection, attempt_id, effect_name)`
-  — read-only effect lookup; ``try/finally`` only, no ``BEGIN IMMEDIATE``.
-- `_acknowledge_finalization_effect_locked(connection, attempt_id,
-  effect_name, result_json)` — write effect-acknowledgement with
-  idempotency.
-- `_finalize_response_locked(connection, attempt_id, outcome_json,
-  required_effect_names_json, replay_projection, normalized_effect_names)`
-  — the in-transaction ``finalize_response`` body that handles the
-  RESPONSE_COMMITTED idempotent branch and the
-  PUBLISHED_PENDING_FINALIZATION forward transition.
-
 The shard preserves the load-bearing 4-field idempotent integrity check
 on lines 1437-1442 of the pre-split implementation:
 
@@ -26,11 +7,6 @@ on lines 1437-1442 of the pre-split implementation:
     or row[2] != required_effect_names_json
     or row[3] != outcome_json
     or row[4] != replay_projection
-
-The idempotent branch raises on mismatch and returns ``None`` (no
-signal value); the forward branch issues the writes and returns
-``None``. The facade wrapper calls ``_connections.commit(connection)``
-UNCONDITIONALLY after the shard returns (Decision 4).
 """
 
 from __future__ import annotations
@@ -89,11 +65,6 @@ def _finalization_effect_result_read(
     *,
     allowed_lifecycles: frozenset[AuditAttemptLifecycle],
 ) -> dict[str, Any] | None:
-    """Read-only helper — runs under ``try/finally``, not ``BEGIN IMMEDIATE``.
-
-    Returns ``None`` if the effect is unknown. Raises ``ValueError`` if
-    the attempt is not in ``allowed_lifecycles``.
-    """
     _require_finalization_effect_lifecycle(
         connection,
         attempt_id,
@@ -150,9 +121,8 @@ def _finalize_response_locked(
 ) -> None:
     """In-transaction body of finalize_response.
 
-    Returns ``None`` on either branch (idempotent commit or forward
-    transition). The facade wrapper calls ``_connections.commit`` after
-    the shard returns (Decision 4 — explicit COMMIT on both branches).
+    The facade wrapper calls ``_connections.commit`` after the shard
+    returns (Decision 4 — explicit COMMIT on both branches).
     """
     row = connection.execute(
         "SELECT attempts.lifecycle, attempts.committed_outcome_json, "

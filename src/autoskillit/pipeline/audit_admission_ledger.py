@@ -57,6 +57,12 @@ from autoskillit.pipeline._audit_admission_ledger import (
     _reservations,
 )
 from autoskillit.pipeline._audit_admission_ledger._encoders import (
+    _HANDLE_DIGEST_DOMAIN as _handle_digest_domain,
+)
+from autoskillit.pipeline._audit_admission_ledger._encoders import (
+    _HANDLE_PREFIX as _handle_prefix,
+)
+from autoskillit.pipeline._audit_admission_ledger._encoders import (
     _json_dumps,
     _normalize_required_effect_names,
     _outcome_to_dict,
@@ -126,8 +132,10 @@ class DefaultAuditAdmissionLedger:
             except AuditAdmissionStorageError as exc:
                 return self._fail_closed_recovery(exc.reason, exc.reason_code)
             except (OSError, sqlite3.Error) as exc:
-                reason, reason_code = _recovery._classify_io_failure(exc)
-                return self._fail_closed_recovery(reason, reason_code)
+                return self._fail_closed_recovery(
+                    AuditAdmissionStorageFailureReason.IO,
+                    f"audit-admission-recovery-failed:{type(exc).__name__}",
+                )
             finally:
                 if connection is not None:
                     connection.close()
@@ -237,13 +245,6 @@ class DefaultAuditAdmissionLedger:
         self,
         reservation_handle: str,
     ) -> AuditIdentityReservation | None:
-        from autoskillit.pipeline._audit_admission_ledger._encoders import (
-            _HANDLE_DIGEST_DOMAIN as _handle_digest_domain,
-        )
-        from autoskillit.pipeline._audit_admission_ledger._encoders import (
-            _HANDLE_PREFIX as _handle_prefix,
-        )
-
         parts = reservation_handle.split(".")
         if len(parts) != 3 or parts[0] != _handle_prefix:
             return None

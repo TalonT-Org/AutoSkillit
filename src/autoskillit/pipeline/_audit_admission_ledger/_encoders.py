@@ -1,27 +1,8 @@
 """Pure JSON record encoding helpers and encoding-domain constants for the ledger.
 
-This module centralizes:
-- ``_now_iso`` — the wall-clock helper used by every durable timestamp.
-- ``_head_key`` — the canonical hash for the (cycle, scope, part) head slot.
-- ``_slot_key_to_dict`` / ``_slot_key_from_dict`` — round-trip serializers for
-  ``AuditSlotKey``.
-- ``_head_to_dict`` / ``_head_from_dict`` — round-trip serializers for
-  ``AuditCycleHead``.
-- ``_reservation_to_dict`` / ``_reservation_from_dict`` — round-trip serializers
-  for ``AuditIdentityReservation``.
-- ``_outcome_to_dict`` / ``_outcome_from_dict`` — round-trip serializers for
-  ``AuditOutcome``.
-- ``_normalize_required_effect_names`` / ``_required_effect_names_to_json`` /
-  ``_required_effect_names_from_json`` — tuple canonicalization and JSON
-  round-trip for the ordered effect-name set.
-- ``_validate_replay_projection`` — defensive validation that the
-  ``outcome.replay_response_json`` payload is a JSON object.
-- ``_json_dumps`` / ``_json_loads`` — typed wrappers around the canonical
-  encoding/decoding helpers used throughout the ledger.
-
 The encoding-domain constants (``_HEAD_KEY_DOMAIN``, ``_HANDLE_DIGEST_DOMAIN``,
-``_HANDLE_PREFIX``) live here so ``_reservations`` can import the handle
-constants from one place — the single-source-of-truth invariant verified by
+``_HANDLE_PREFIX``) live here so ``_reservations`` imports the handle
+constants from one place — single-source-of-truth invariant verified by
 ``test_handle_constants_single_source_in_encoders``.
 """
 
@@ -294,5 +275,4 @@ def _json_dumps(payload: dict[str, Any]) -> str:
 
 
 def _json_loads(text: str) -> dict[str, Any]:
-    result: dict[str, Any] = json.loads(text)
-    return result
+    return json.loads(text)

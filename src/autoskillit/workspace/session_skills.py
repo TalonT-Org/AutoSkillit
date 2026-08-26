@@ -1263,12 +1263,19 @@ class DefaultSessionSkillManager:
                 (),
             )
         )
-        profile_compilation = profile_admission_compilation
-        if backend is not None and profile_compilation is not None:
-            admission_compilation = profile_compilation
-            if finalized_native_roles is not None:
+        profile_compilation: CompiledSessionSkillCatalog | None = None
+        if backend is not None and profile_admission_compilation is not None:
+            if finalized_native_roles is None:
+                profile_compilation = _materialize_profile_skill_infos(
+                    generated_home,
+                    profile_skill_infos,
+                    profile_admission_compilation,
+                    backend,
+                    projection_context,
+                )
+            else:
                 profile_reachability_compilation = compile_session_skill_catalog(
-                    admission_compilation.catalog,
+                    profile_admission_compilation.catalog,
                     backend,
                     finalized_native_roles=finalized_native_roles,
                 )
@@ -1278,7 +1285,7 @@ class DefaultSessionSkillManager:
                     unavailable=tuple(
                         sorted(
                             (
-                                *admission_compilation.unavailable,
+                                *profile_admission_compilation.unavailable,
                                 *profile_reachability_compilation.unavailable,
                             ),
                             key=lambda item: item.skill,
@@ -1286,13 +1293,13 @@ class DefaultSessionSkillManager:
                     ),
                     required_native_roles=(profile_reachability_compilation.required_native_roles),
                 )
-            _materialize_profile_skill_infos(
-                generated_home,
-                profile_skill_infos,
-                profile_compilation,
-                backend,
-                projection_context,
-            )
+                _materialize_profile_skill_infos(
+                    generated_home,
+                    profile_skill_infos,
+                    profile_compilation,
+                    backend,
+                    projection_context,
+                )
         unavailability_payload = (
             _merge_skill_unavailability_payloads(
                 backend_name,

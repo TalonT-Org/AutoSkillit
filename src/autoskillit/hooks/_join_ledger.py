@@ -30,6 +30,13 @@ from collections.abc import Generator, Iterable
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from ._session_binding import resolve_channel_dir as _resolve_channel_dir
+else:
+    from _session_binding import (  # type: ignore[import-not-found,no-redef]
+        resolve_channel_dir as _resolve_channel_dir,
+    )
+
 LEDGER_FILENAME = "join_ledger.json"
 LOCK_FILENAME = "join_ledger.lock"
 
@@ -81,13 +88,12 @@ def ledger_paths(flag_dir: Path) -> tuple[Path, Path]:
 
 
 def resolve_flag_dir(project_root: Path) -> Path:
-    """Return ``<project_root>/.autoskillit/temp`` — the canonical join flag dir.
+    """Return the canonical directory shared by join and binding artifacts.
 
     The four join guards and the ``declare_join_batch`` tool all consult the
-    same on-disk ledger; this helper is the single source of truth for the
-    flag directory layout so a future rename only requires one edit.
+    same on-disk ledger.
     """
-    return project_root / ".autoskillit" / "temp"
+    return _resolve_channel_dir(project_root)
 
 
 @contextlib.contextmanager

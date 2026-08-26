@@ -37,7 +37,11 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+    resolve_binding_path,
+    resolve_channel_dir,
+)
 
 SKILL_LOAD_DENY_TRIGGER: str = "SKILL LOADING REQUIRED"
 
@@ -144,9 +148,10 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    project_root = find_project_root()
-    temp_dir = project_root / ".autoskillit" / "temp"
-    flag_path = temp_dir / f"skill_guard_{session_id}.flag"
+    raw_cwd = data.get("cwd", "")
+    payload_cwd = raw_cwd if isinstance(raw_cwd, str) and Path(raw_cwd).is_absolute() else ""
+    temp_dir = resolve_channel_dir(resolve_state_root(payload_cwd))
+    flag_path = resolve_binding_path(payload_cwd, session_id)
     if flag_path.exists():
         # The guard only needs to know that Skill was loaded; treat any
         # non-empty file as evidence. The companion join enforcement reads

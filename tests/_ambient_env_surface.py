@@ -603,23 +603,23 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:396": (
+    "execution/backends/codex.py:414": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:538": (
+    "execution/backends/codex.py:554": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:673": (
+    "execution/backends/codex.py:690": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:793": (
+    "execution/backends/codex.py:810": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/codex.py:866": (
+    "execution/backends/codex.py:877": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),
@@ -2370,6 +2370,33 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
             "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "OTEL_LOGS_EXPORTER": AmbientEnvDisposition(
+        var="OTEL_LOGS_EXPORTER",
+        disposition="scrub",
+        owner="claude-code",
+        justification=(
+            "Claude Code exporter selection is supplied by the invocation-scoped sink; scrubbed"
+            " from ambient test environments to prevent native telemetry leakage between tests."
+        ),
+    ),
+    "OTEL_METRICS_EXPORTER": AmbientEnvDisposition(
+        var="OTEL_METRICS_EXPORTER",
+        disposition="scrub",
+        owner="claude-code",
+        justification=(
+            "Claude Code exporter selection is supplied by the invocation-scoped sink; scrubbed"
+            " from ambient test environments to prevent native telemetry leakage between tests."
+        ),
+    ),
+    "OTEL_METRICS_INCLUDE_SESSION_ID": AmbientEnvDisposition(
+        var="OTEL_METRICS_INCLUDE_SESSION_ID",
+        disposition="scrub",
+        owner="claude-code",
+        justification=(
+            "Claude Code session correlation is enabled by the invocation-scoped sink; scrubbed"
+            " from ambient test environments to prevent telemetry policy leakage between tests."
         ),
     ),
     "OUTPUT": AmbientEnvDisposition(

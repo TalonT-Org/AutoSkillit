@@ -329,9 +329,19 @@ def test_each_guard_script_imports_from_hook_constants() -> None:
             f"{guard_path.name} does not import from _hook_constants"
         )
 
-        # Check that relevant module-level assignments reference _hook_constants (RHS),
-        # not a frozenset literal. We allow Subscript or Attribute references
-        # but NOT ast.Call(func=ast.Name(id="frozenset")).
+        # Collect names imported from _hook_constants at module scope so we can
+        # recognize RHS references like `DENY_REASON_BY_GUARD["git_ops_guard"]`
+        # (a subscript into a value imported from the authority module).
+        hook_constants_names: set[str] = set()
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and node.module == "_hook_constants":
+                for alias in node.names:
+                    hook_constants_names.add(alias.asname or alias.name)
+            if isinstance(node, ast.Import) and any(
+                alias.name == "_hook_constants" for alias in node.names
+            ):
+                hook_constants_names.add("_hook_constants")
+
         target_lhs_names = {
             "_EXEMPT_SKILLS",
             "_EXEMPT_SESSION_TYPES",
@@ -342,6 +352,18 @@ def test_each_guard_script_imports_from_hook_constants() -> None:
             "_DENY_REASON_TEMPLATE",
             "_BLOCKED_GIT_OPS",
         }
+
+        def _rhs_references_hook_constants(node: ast.expr) -> bool:
+            """True when the AST node is a Name/Subscript/Attribute rooted at _hook_constants
+            or at a name imported from _hook_constants."""
+            if isinstance(node, ast.Name):
+                return node.id == "_hook_constants" or node.id in hook_constants_names
+            if isinstance(node, ast.Attribute):
+                return _rhs_references_hook_constants(node.value)
+            if isinstance(node, ast.Subscript):
+                return _rhs_references_hook_constants(node.value)
+            return False
+
         for node in tree.body:
             if not isinstance(node, ast.Assign):
                 continue
@@ -352,12 +374,8 @@ def test_each_guard_script_imports_from_hook_constants() -> None:
                 if lhs_name not in target_lhs_names:
                     continue
                 rhs = node.value
-                # The RHS must not be a frozenset literal call.
-                assert not (
-                    isinstance(rhs, ast.Call)
-                    and isinstance(rhs.func, ast.Name)
-                    and rhs.func.id == "frozenset"
-                ), (
-                    f"{guard_path.name}: {lhs_name} RHS is a frozenset literal; "
-                    "must reference _hook_constants instead."
+                assert _rhs_references_hook_constants(rhs), (
+                    f"{guard_path.name}: {lhs_name} RHS must reference _hook_constants "
+                    "(directly or via a name imported from it); got a literal or "
+                    "unrelated expression."
                 )

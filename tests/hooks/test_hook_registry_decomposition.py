@@ -4,7 +4,6 @@ Asserts the decomposition landed correctly:
 - The package exists at src/autoskillit/hook_registry/ with __init__.py
 - Every extracted module is at most 750 lines (acceptance criterion)
 - HOOK_REGISTRY re-exports the full public API
-- Every module stays under the REQ-CNST-010 1000-line hard cap
 """
 
 from __future__ import annotations
@@ -32,18 +31,10 @@ def test_hook_registry_is_a_package() -> None:
 def test_every_extracted_module_is_at_most_750_lines() -> None:
     """Acceptance criterion: every module under hook_registry/ ≤ 750 lines."""
     for path in sorted(_SRC.glob("*.py")):
-        line_count = sum(1 for _ in path.open())
+        with path.open() as fh:
+            line_count = sum(1 for _ in fh)
         assert line_count <= 750, (
             f"{path.name} is {line_count} lines; must be ≤750 per acceptance criterion"
-        )
-
-
-def test_no_module_in_hook_registry_package_exceeds_1000_lines() -> None:
-    """REQ-CNST-010 hard cap: every module ≤ 1000 lines."""
-    for path in sorted(_SRC.glob("*.py")):
-        line_count = sum(1 for _ in path.open())
-        assert line_count <= 1000, (
-            f"{path.name} is {line_count} lines; must be ≤1000 per REQ-CNST-010"
         )
 
 

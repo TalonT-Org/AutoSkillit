@@ -51,14 +51,15 @@ _BYTECODE_SUPPRESSION_EXEMPT: dict[tuple[str, int], str] = {}
 
 def _target_files() -> list[Path]:
     files = sorted(_HOOKS_DIR.rglob("*.py"))
-    # After #4853, hook_registry is a subpackage. The legacy flat-file
-    # entry point no longer exists; enumerate the package's .py files
-    # instead so interpreter-spawn sites inside the registry are still
-    # covered by this guard.
+    # hook_registry is a subpackage; enumerate its .py files so interpreter-
+    # spawn sites inside the registry remain covered by this guard.
     hook_registry_pkg = _SRC / "hook_registry"
-    if hook_registry_pkg.is_dir():
-        for p in hook_registry_pkg.glob("*.py"):
-            files.append(p)
+    assert hook_registry_pkg.is_dir(), (
+        f"hook_registry package not found at {hook_registry_pkg}; "
+        "this guard must cover its interpreter spawn sites — "
+        "update _target_files() if the package was relocated."
+    )
+    files.extend(hook_registry_pkg.glob("*.py"))
     files.append(_SRC / "execution" / "backends" / "_codex_hooks.py")
     return files
 

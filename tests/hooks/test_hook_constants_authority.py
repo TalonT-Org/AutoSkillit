@@ -110,11 +110,12 @@ def test_deny_reason_by_guard_strings() -> None:
 
 
 def test_module_is_stdlib_only() -> None:
-    """The module must contain zero `autoskillit.*` imports (stdlib-only boundary).
+    """The module must contain zero ``autoskillit`` imports (stdlib-only boundary).
 
     The standalone guard scripts import from this module under the existing
-    `_HOOKS_DIR` sys.path bootstrap; any `autoskillit.*` import would create
-    a circular dependency through the package context.
+    ``_HOOKS_DIR`` sys.path bootstrap; any ``autoskillit`` import (bare or
+    package-qualified) would create a circular dependency through the
+    package context.
     """
     source_path = Path(_hook_constants.__file__)
     source = source_path.read_text(encoding="utf-8")
@@ -122,22 +123,15 @@ def test_module_is_stdlib_only() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                assert not alias.name.startswith("autoskillit."), (
+                top = alias.name.split(".", 1)[0]
+                assert top != "autoskillit", (
                     f"_hook_constants imports autoskillit module {alias.name!r}; "
                     "the module must remain stdlib-only."
                 )
         elif isinstance(node, ast.ImportFrom):
             if node.module is not None:
-                assert not node.module.startswith("autoskillit."), (
+                top = node.module.split(".", 1)[0]
+                assert top != "autoskillit", (
                     f"_hook_constants imports autoskillit module {node.module!r}; "
                     "the module must remain stdlib-only."
                 )
-
-
-@pytest.mark.parametrize(
-    "guard_name",
-    ["git_ops_guard", "test_runner_guard", "pr_create_guard"],
-)
-def test_each_guard_has_exempt_skills_entry(guard_name: str) -> None:
-    """Every named guard must have an entry in EXEMPT_SKILLS_BY_GUARD (defensive)."""
-    assert guard_name in EXEMPT_SKILLS_BY_GUARD

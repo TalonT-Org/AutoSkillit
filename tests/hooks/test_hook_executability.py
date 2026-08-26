@@ -105,24 +105,6 @@ def test_committed_registry_hash_matches_live_registry() -> None:
     )
 
 
-def test_registry_hash_byte_identical_after_decomposition() -> None:
-    """After the #4853 decomposition, HOOK_REGISTRY_HASH must equal the value
-    computed against the pre-decomposition committed registry.sha256 anchor.
-    This is the byte-identical promise made explicit (beyond the committed-
-    file match in test_committed_registry_hash_matches_live_registry).
-    """
-    from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR
-
-    # The pre-decomposition committed value, captured before the package
-    # split landed. The decomposition must preserve this exact hash.
-    expected_pre_decomposition_hash = (HOOKS_DIR / "registry.sha256").read_text().strip()
-
-    assert HOOK_REGISTRY_HASH == expected_pre_decomposition_hash, (
-        f"HOOK_REGISTRY_HASH drifted after decomposition: "
-        f"expected {expected_pre_decomposition_hash}, got {HOOK_REGISTRY_HASH}"
-    )
-
-
 def test_hook_registry_scripts_exist_on_disk() -> None:
     """Every script referenced in HOOK_REGISTRY must exist as a file in hooks/."""
     hooks_dir = pkg_root() / "hooks"

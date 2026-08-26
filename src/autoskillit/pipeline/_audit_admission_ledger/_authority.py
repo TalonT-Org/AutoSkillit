@@ -1,10 +1,9 @@
 """Authority commit & preflight helpers for the audit admission ledger.
 
-The shard preserves the pre-split implementation's reachability check:
-when ``current_head is not None and current_head.verdict is
-AuditVerdict.GO``, the function returns ``terminal_head`` and does NOT
-write. This guard is load-bearing — a terminal head cannot be advanced,
-and this is the only enforcement point (Interface Mapper F2 / Decision 4).
+The reachability check is load-bearing: when ``current_head is not None
+and current_head.verdict is AuditVerdict.GO``, the function returns
+``terminal_head`` and does NOT write. A terminal head cannot be
+advanced, and this is the only enforcement point.
 
 The facade owns the ``BEGIN IMMEDIATE`` / ``COMMIT`` / ``ROLLBACK``
 boundary.

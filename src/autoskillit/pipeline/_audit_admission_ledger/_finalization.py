@@ -1,12 +1,9 @@
 """Finalization effect helpers for the audit admission ledger.
 
-The shard preserves the load-bearing 4-field idempotent integrity check
-on lines 1437-1442 of the pre-split implementation:
-
-    row[1] != outcome_json
-    or row[2] != required_effect_names_json
-    or row[3] != outcome_json
-    or row[4] != replay_projection
+The shard owns the load-bearing 4-field idempotent integrity check on
+the response_commit row (outcome_json, required_effect_names_json,
+outcome_json again, replay_projection) so a duplicated or replayed
+commit cannot be silently absorbed.
 """
 
 from __future__ import annotations
@@ -123,7 +120,8 @@ def _finalize_response_locked(
     """In-transaction body of finalize_response.
 
     The facade wrapper calls ``_connections.commit`` after the shard
-    returns (Decision 4 — explicit COMMIT on both branches).
+    returns. ``_connections.rollback`` runs on any exception before
+    re-raise.
     """
     row = connection.execute(
         "SELECT attempts.lifecycle, attempts.committed_outcome_json, "
